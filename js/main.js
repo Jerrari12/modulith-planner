@@ -15,6 +15,7 @@ import { applyLayerDetail } from './vendor/layer-detail.js';
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { createDimCoverTest } from './dim-cover.js';
+import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
 import { createSettleBench } from './settle-bench.js';
 import { parseSeeInto, parseSeeIntoSkip, parseSeeIntoLattice, createSeeInto } from './see-into.js';
@@ -2854,7 +2855,7 @@ if (IS_PART) {
       'part preview "' + PART_SLUG + '": ' + res.fail.message);
   }
   manifest = res.manifest;
-  PARTS_BASE = 'parts/' + (manifest.collection || '185') + '/';
+  PARTS_BASE = ASSET_BASE + 'parts/' + (manifest.collection || '185') + '/';
 } else if (IS_BENCH) {
   // the orbit benchmark's fixed workload (benchBuild in orbit-bench.js; pinned part for part by test/orbit-bench.test.mjs)
   build = benchBuild();
@@ -2864,7 +2865,7 @@ if (IS_PART) {
   if (!gen.manifest) bootFail('<strong>The benchmark build can’t be shown</strong><br><br>' + gen.errors.map(e => '• ' + e).join('<br>'),
     'benchmark build: ' + gen.errors.join('; '));
   manifest = gen.manifest;
-  PARTS_BASE = 'parts/' + (manifest.collection || '185') + '/';
+  PARTS_BASE = ASSET_BASE + 'parts/' + (manifest.collection || '185') + '/';
 } else if (BUILD_HASH) {
   // The message is the same either way, but the EVENT distinguishes three very
   // different problems: a mangled/truncated hash (the link), a build the
@@ -2893,7 +2894,7 @@ if (IS_PART) {
       'unsupported build: ' + gen.errors.join('; '));
   }
   manifest = gen.manifest;
-  PARTS_BASE = 'parts/' + (manifest.collection || '185') + '/';   // one self-contained pool per collection (parts/165, parts/185)
+  PARTS_BASE = ASSET_BASE + 'parts/' + (manifest.collection || '185') + '/';   // one self-contained pool per collection (parts/165, parts/185)
 } else if (WANTS_OFFICIAL) {
   const GALLERY = '<br><br><a href="builds/">Browse the official GEN2 kits →</a>';
   // `ev` names the failure for analytics — never the id itself, which at this
@@ -2941,7 +2942,7 @@ if (IS_PART) {
       originalBuild = structuredClone(mBuild);
       OFFICIAL = { id: OFFICIAL_TARGET, title: String(file.title || 'GEN2 Kit'), tagline: typeof file.tagline === 'string' ? file.tagline : '' };
       manifest = mGen.manifest;
-      PARTS_BASE = 'parts/' + (manifest.collection || '185') + '/';
+      PARTS_BASE = ASSET_BASE + 'parts/' + (manifest.collection || '185') + '/';
     }
   }
   if (!manifest) await loadStaticKit();   // root fallback only — kitFail threw otherwise
@@ -6001,7 +6002,7 @@ function setSelected(id) {
     dbg.classList.remove('hidden');
   } else dbg.classList.add('hidden');
   const img = $('identify-img');
-  if (info.img) { img.onerror = () => img.classList.add('hidden'); img.src = info.img; img.classList.remove('hidden'); } // hide if the render 404s (e.g. 165 has no renders yet)
+  if (info.img) { img.onerror = () => img.classList.add('hidden'); img.src = assetUrl(info.img); img.classList.remove('hidden'); } // hide if the render 404s (e.g. 165 has no renders yet)
   else img.classList.add('hidden');
   renderIdentifyLinks(info, !selLocked && customColors[selType] ? customColors[selType] : null);
   // handles get a style switcher (Deco / BlockBar A–F); faceplates get the
@@ -7289,7 +7290,7 @@ async function cycleFaceplateStyle(dir) {
   const info = partInfoByNode[inst.cfg.node] || { label: `${next.label} Faceplate` };
   $('identify-name').textContent = info.label;
   $('identify-img').classList.add('hidden');
-  if (info.img) { const img = $('identify-img'); img.onerror = () => img.classList.add('hidden'); img.src = info.img; img.classList.remove('hidden'); }
+  if (info.img) { const img = $('identify-img'); img.onerror = () => img.classList.add('hidden'); img.src = assetUrl(info.img); img.classList.remove('hidden'); }
   renderIdentifyLinks(info);
 }
 // the ◀ ▶ row serves whichever swappable part is selected

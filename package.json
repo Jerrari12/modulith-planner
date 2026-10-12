@@ -1,0 +1,17 @@
+{
+  "name": "modulith-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GEN2 3D Build Studio \u2014 interactive assembly instructions (build-free static web tool).",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node --test test/smoke.mjs",
+    "profile-lands": "node --test test/profile-lands.mjs",
+    "relief-tier": "node --test test/relief-tier.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3",
+    "playwright": "^1.47.0"
+  }
+}

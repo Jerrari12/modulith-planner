@@ -1,0 +1,7 @@
+# Blobs are LF; check them out as LF on every platform so the byte-for-byte vendor pins hold.
+* text=auto eol=lf
+*.png -text
+*.jpg -text
+*.glb -text
+*.ico -text
+*.woff2 -text

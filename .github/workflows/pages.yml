@@ -1,0 +1,237 @@
+name: Deploy to GitHub Pages
+
+# Publishes the app to GitHub Pages on every push to main. Ported from the viewer
+# repo's workflow on 2026-10-12 when this repo was seeded from it: the app now
+# lives at the repo root (not viewer/), the part GLBs and thumbnails come from
+# Jerrari12/gen2-parts (checked out below so the pool-reading tests can run),
+# and the adhesive-foot derivation check stayed behind with the GLB Pipeline,
+# which this repo does not carry. Only the served folders are uploaded.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The part pools. parts/ and img/parts/ moved to Jerrari12/gen2-parts on
+      # 2026-10-12; the tests that open GLBs read them from parts/<length>/, so
+      # the pools are checked out beside the app and linked where they used to be.
+      - uses: actions/checkout@v4
+        with:
+          repository: Jerrari12/gen2-parts
+          path: _parts
+      - name: Link the part pools where the tests read them
+        run: |
+          ln -s "$PWD/_parts/parts" parts
+          ln -s "$PWD/_parts/img/parts" img/parts
+
+      # ⚠ THE GATE. Pushing main IS a deploy, and until 2026-08-22 this workflow
+      # ran no tests at all - checkout, stamp, upload, live. Every protection in
+      # the repo was therefore local-only and optional, which is the same as
+      # absent on the one path that reaches users. The suite is bare `node
+      # --test` with zero dependencies, so it costs a node setup and ~1s.
+      # It runs BEFORE the sed stamping below, so it judges pristine sources.
+      # Of particular note: test/adhesive-foot.test.mjs is what stops a stale
+      # DERIVED asset shipping. Adhesive-Foot.lib.glb is cut from the printed
+      # foot by GLB Pipeline/derive_adhesive_foot.py, so re-exporting the master
+      # silently leaves the derivative wrong - both files still load, both still
+      # look like feet. The test pins both md5s, the semantic tie between them
+      # (same footprint, exactly 3.00mm shorter) and byte-identity across all
+      # six collection pools.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test (blocks the deploy)
+        run: npm test
+
+      # ⚠ THE SUITE ABOVE CANNOT SEE A PIXEL. It runs without a browser, so it passes on a build
+      # whose viewer throws at boot and shows a black canvas forever — every protection in this
+      # repo was blind to the one failure a visitor actually experiences. This opens the two routes
+      # that reach users in a real headless Chrome and asserts they draw: no console errors, a
+      # canvas that is neither black nor a flat fill, and the two cross-repo modules loaded and
+      # doing their job. Mutation-checked both ways before it landed — a planted boot throw fails
+      # all three routes on console noise, and the layer-detail kill switch fails the module check
+      # alone while the picture stays fine.
+      # It is the only step here that needs node_modules, which is why the suite above still does
+      # not, and why this is a separate step rather than folded into npm test.
+      #
+      # profile-lands is the second half and answers a different question: the unit tests prove
+      # partMaterialSpec RETURNS the authored finish, which says nothing about whether anything on
+      # screen wears it. Three things sit between the spec and the picture - activeLabel finding the
+      # label, newPartMaterial passing it, and applyPalette carrying the FINISH and not only the
+      # colour - and the third was missing until it was written. It drives the picker's own sequence
+      # with no rebuild, and is mutation-checked: reverting applyPalette to colour-only fails it.
+      #
+      # relief-tier is the third and guards a number. The printed relief is a per-fragment cost that
+      # the quality ladder did not reach, so `fast` - the tier a struggling device settles on - paid
+      # it in full while paying for nothing else: measured at 0.452x the deployed frame rate on a
+      # software rasteriser, against 0.739x at `high`. Putting relief on the ladder took `fast` back
+      # to 0.973x. The test asserts the material a mesh is WEARING carries no layer program at fast
+      # and does at high, because a flag only the next rebuild would honour saves nothing on the
+      # materials a struggling device already has. Mutation-checked: dropping the rebuild from
+      # applyQuality fails it.
+      - name: Smoke test the deployed routes in a browser (blocks the deploy)
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npm run smoke
+          npm run profile-lands
+          npm run relief-tier
+
+      # Stamp the app's own JS/CSS URLs with the commit SHA. GitHub Pages caches
+      # assets for 10 minutes (max-age=600), so without this a visitor loading
+      # right after a deploy can get NEW index.html + STALE main.js (or css) and
+      # the viewer dies at boot ("Loading parts…" forever). Versioned URLs make
+      # every deploy atomic. Local dev is untouched (stamping happens only here).
+      # ⚠ EVERY module main.js imports must be stamped here, not just the first
+      # one. entry.js was added 2026-08-22 and stamping it is not optional: an
+      # unstamped sibling is cached independently of its stamped importer, which
+      # is precisely the NEW-index/STALE-module split this step exists to stop -
+      # and entry.js decides which kit the front door opens, so a stale copy
+      # would route boots by yesterday's rules. If you add an import to main.js,
+      # add a line here; the guard below fails the deploy if you forget.
+      - name: Cache-proof asset URLs
+        run: |
+          V="${GITHUB_SHA::8}"
+          sed -i "s|css/viewer.css|css/viewer.css?v=$V|; s|js/main.js|js/main.js?v=$V|" index.html
+          # ⚠ the vendored requirement-scope contract is a CLASSIC script tag,
+          # not a module import, so the module-graph guard below cannot see it.
+          # It still caches independently of index.html, which is the same
+          # stale-asset bug in a different shape.
+          sed -i "s|js/vendor/requirement-scope.js|js/vendor/requirement-scope.js?v=$V|" index.html
+          sed -i "s|js/vendor/tabletop-completion.js|js/vendor/tabletop-completion.js?v=$V|" index.html
+          sed -i "s|js/vendor/modulith-feedback.js|js/vendor/modulith-feedback.js?v=$V|" index.html
+          # where the part GLBs and thumbnails live (2026-10-12, the gen2-parts split) - a main.js import
+          sed -i "s|'./config.js'|'./config.js?v=$V'|" js/main.js
+          sed -i "s|'./generate.js'|'./generate.js?v=$V'|" js/main.js
+          sed -i "s|'./entry.js'|'./entry.js?v=$V'|" js/main.js
+          # relay authentication (2026-10-03): who may drive the viewer, and the planner origin its posts target
+          sed -i "s|'./relay-auth.js'|'./relay-auth.js?v=$V'|" js/main.js
+          # ⚠ THE TWO CROSS-REPO MODULES. Both landed 2026-09-05 as new imports in main.js and
+          # neither got a line here, so the guard below has been failing the deploy ever since -
+          # exactly the forgotten-line case the comment above warns about, on the first two files
+          # added after it was written.
+          sed -i "s|'./filament-db.js'|'./filament-db.js?v=$V'|" js/main.js
+          sed -i "s|'./part-material.js'|'./part-material.js?v=$V'|" js/main.js
+          # ⚠ The Lab's renderer, and the first module we carry that another repo AUTHORS as an
+          # ES module - requirement-scope.js and tabletop-completion.js are classic script tags,
+          # stamped against index.html above. This one is a real import and needs a real line.
+          sed -i "s|'./vendor/layer-detail.js'|'./vendor/layer-detail.js?v=$V'|" js/main.js
+          # ⚠ THE FIRST SPECIFIER THAT IS NOT IN main.js. filament-profiles.js is the Lab's authored
+          # per-filament finish, and part-material.js imports it as a SIBLING — so the sed target is
+          # part-material.js, not main.js, and a line copied from the block above would silently
+          # match nothing. The graph guard below walks every module in js/, so a forgotten
+          # line here fails the deploy rather than shipping a module that caches independently of
+          # the importer that reads it.
+          sed -i "s|'./filament-profiles.js'|'./filament-profiles.js?v=$V'|" js/part-material.js
+          # the build plate's bed-surface finish (2026-09-14) - a main.js import like the rest
+          sed -i "s|'./bed-finish.js'|'./bed-finish.js?v=$V'|" js/main.js
+          # the dimension labels' cover test (2026-09-14, the moving-frame savings) - a main.js import too
+          sed -i "s|'./dim-cover.js'|'./dim-cover.js?v=$V'|" js/main.js
+          # the orbit benchmark, ?bench=orbit (2026-09-14) - a main.js import (the version its results report is main.js's
+          # own ?v= stamp from index.html above, read through import.meta.url)
+          sed -i "s|'./orbit-bench.js'|'./orbit-bench.js?v=$V'|" js/main.js
+          # the settle benchmark, ?bench=settle (2026-09-16) - a main.js import, and it imports orbit-bench.js itself
+          sed -i "s|'./settle-bench.js'|'./settle-bench.js?v=$V'|" js/main.js
+          # the see-into translucent filament experiment (2026-09-17) - a main.js import, off unless ?seeinto= asks
+          sed -i "s|'./see-into.js'|'./see-into.js?v=$V'|" js/main.js
+          # each drawer's planner label drawn on its EdgeLabel label (2026-10-01) - a main.js import; it loads its vendored
+          # opentype.js and font itself, by URL relative to import.meta.url, and only when a build has label text
+          sed -i "s|'./label-text.js'|'./label-text.js?v=$V'|" js/main.js
+          # what a label may carry besides its words (2026-10-02) - imported by label-text.js, and since the label panel
+          # (step 2) by main.js and label-panel.js as well: three sed targets, one per importer (the filament-profiles.js case)
+          sed -i "s|'./label-spec.js'|'./label-spec.js?v=$V'|" js/label-text.js
+          sed -i "s|'./label-spec.js'|'./label-spec.js?v=$V'|" js/main.js
+          sed -i "s|'./label-spec.js'|'./label-spec.js?v=$V'|" js/label-panel.js
+          # the label panel's pure parts (label plan step 2) - a main.js import, and since the label icons (7a310a8,
+          # isLabelSvg) a label-text.js import too: one sed target per importer
+          sed -i "s|'./label-panel.js'|'./label-panel.js?v=$V'|" js/main.js
+          sed -i "s|'./label-panel.js'|'./label-panel.js?v=$V'|" js/label-text.js
+          # which drawer wears a part label or a colour stripe (2026-10-10) - a main.js import, and it imports label-spec.js
+          sed -i "s|'./label-look.js'|'./label-look.js?v=$V'|" js/main.js
+          sed -i "s|'./label-spec.js'|'./label-spec.js?v=$V'|" js/label-look.js
+          # ⚠ The Label Studio's part-label files (js/vendor/label-hardware.js, hardware-layout.js, hardware-data.js,
+          # hardware-v5-data.js, hardware-band-data.js) need NO line here: like the core and the icon catalog they are CLASSIC
+          # scripts label-text.js loads itself (vendorUrl), by URL relative to its import.meta.url and carrying ITS OWN ?v=
+          # stamp - so the line stamping './label-text.js' in main.js above stamps all five, loaded only when a build has a
+          # part label or a colour stripe.
+          sed -i "s|'./orbit-bench.js'|'./orbit-bench.js?v=$V'|" js/settle-bench.js
+
+      # Fail the deploy rather than ship a half-stamped module graph. A first
+      # version of this guard was a single grep over main.js for
+      #   ^import .* from './name.js'
+      # which missed every other form that produces the same stale-module bug:
+      # side-effect imports, double quotes, subdirectories, indented or
+      # multi-line imports, `export ... from`, dynamic import(), and - most
+      # importantly - imports inside the OTHER local modules. A freshly stamped
+      # entry.js that imports an unstamped helper.js recreates the exact
+      # mismatch the stamping exists to prevent.
+      # So: scan EVERY local module and flag any relative specifier without ?v=.
+      - name: Verify the whole module graph is stamped
+        run: |
+          node - <<'NODE'
+          const fs = require('fs'), path = require('path');
+          const dir = 'js';
+          // every relative specifier, whatever syntax introduced it
+          const SPEC = /(?:\bfrom\s*|\bimport\s*\(?\s*|\bexport\s+\*\s+from\s*)(['"])(\.[^'"]*)\1/g;
+          let bad = [];
+          // walk js/ AND its subdirectories - vendored code lives in js/vendor/
+          const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
+            e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+          for (const f of walk(dir).filter(n => n.endsWith('.js'))) {
+            const src = fs.readFileSync(f, 'utf8');
+            for (const m of src.matchAll(SPEC)) {
+              const spec = m[2];
+              if (!spec.endsWith('.js') && !spec.includes('.js?')) continue; // not a module path
+              if (!/[?&]v=/.test(spec)) bad.push(`${f} -> ${spec}`);
+            }
+          }
+          /* ⚠ AND the CLASSIC <script src> tags in index.html. A module-graph
+             walk cannot see them, and the vendored requirement-scope contract
+             is exactly that shape - it caches independently of index.html, so
+             an unstamped one ships the same stale-asset failure by another
+             route. Absolute URLs (the analytics beacon) are not ours to stamp. */
+          const html = fs.readFileSync('index.html', 'utf8');
+          for (const m of html.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)) {
+            const src = m[1];
+            if (/^https?:\/\/|^\/\//.test(src)) continue;   // third-party, not cache-stamped by us
+            if (!/[?&]v=/.test(src)) bad.push(`index.html -> <script src="${src}">`);
+          }
+          if (bad.length) {
+            for (const b of bad) console.log('::error::UNSTAMPED module import: ' + b);
+            console.log('::error::Add a sed line for it above. An unstamped module can be served');
+            console.log('::error::from cache against a freshly deployed importer, which is the');
+            console.log('::error::"new index.html + stale module" boot failure this step prevents.');
+            process.exit(1);
+          }
+          console.log('module graph OK: every relative import is version-stamped');
+          NODE
+      # Only the served folders go up: not node_modules, the tests, the docs or the
+      # linked part pools (those are served by gen2-parts' own Pages site).
+      - name: Assemble the site
+        run: |
+          mkdir _site
+          cp -r index.html css js img kits builds stats vendor favicon.ico favicon.svg apple-touch-icon.png part-preview-support.json _site/
+          rm -f _site/img/parts
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
