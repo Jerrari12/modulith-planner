@@ -13,14 +13,17 @@ import { icon } from '../ui/icons.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 
-const SCENES = [['grid', 'Grid'], ['workshop', 'Workshop'], ['office', 'Home office'], ['coffee', 'Coffee bar']];
 
 export function mountAssemble(stage, ctx) {
   const ac = new AbortController();
   const signal = ac.signal;
   const steps = stage.manifest?.steps || [];          // steps[0] is the exploded overview page, 1.. the numbered steps
   const last = stage.pageCount - 1;                     // the outro
-  const pageOf = { overview: 1, first: 2, finished: last - 1, done: last };
+  const pageOf = { overview: 1, first: 2, finished: last - 1 };
+  /* "Done" is the end of the instructions on the finished step's own fitted view, not the viewer's outro cinema
+     (Astra: finish on a fitted front three-quarter view of the whole assembly; reaching Done means "End of
+     instructions"). The outro page is never entered from here. */
+  let done = false;
 
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -40,21 +43,30 @@ export function mountAssemble(stage, ctx) {
   const rows = () => {
     const out = [{ page: pageOf.overview, mark: 'i', name: 'Overview', title: 'All the parts, exploded' }];
     for (let i = 1; i < steps.length; i++) out.push({ page: i + 1, mark: String(i), name: steps[i].title, title: steps[i].note || '' });
-    out.push({ page: pageOf.done, mark: '★', name: 'Done', title: 'The finished build' });
+    out.push({ page: 'done', mark: '■', name: 'Done', title: 'End of instructions' });
     return out;
   };
   function renderList() {
     const cur = stage.cur;
     list.replaceChildren();
     const n = steps.length - 1;
-    const shown = cur >= pageOf.first && cur <= pageOf.finished ? cur - 1 : cur === pageOf.done ? n : 0;
+    const shown = cur >= pageOf.first && cur <= pageOf.finished ? cur - 1 : 0;
     list.appendChild(el('div.head', {}, [el('h2', { text: 'Assembly' }), el('span.count', { text: `${shown} / ${n}` })]));
+    /* a row before the current one is PLAYED, not built: the mark stays its number, muted. "Mark as built" and
+       project progress are the Parts workspace's, kept apart from playback position (Astra). */
     for (const r of rows()) {
-      const isCur = cur === r.page, done = cur > r.page;
-      list.appendChild(el('button.step' + (isCur ? '.cur' : done ? '.done' : ''), { 'aria-current': isCur ? 'step' : null, title: r.title, onclick: () => stage.goTo(r.page, { animate: r.page !== pageOf.done }) },
-        [el('span.mark', { text: done && r.page !== pageOf.done ? '✓' : r.mark }), r.name]));
+      const isCur = r.page === 'done' ? done : (!done && cur === r.page);
+      const past = r.page !== 'done' && (done || cur > r.page);
+      list.appendChild(el('button.step' + (isCur ? '.cur' : past ? '.past' : ''), { 'aria-current': isCur ? 'step' : null, title: r.title, onclick: () => (r.page === 'done' ? finish() : stage.goTo(r.page)) },
+        [el('span.mark', { text: r.mark }), r.name]));
     }
-    list.appendChild(el('button.skip.key', { text: 'Skip to the finished build', onclick: () => stage.skipToEnd() }));
+    list.appendChild(el('button.skip.key', { text: 'Skip to the finished build', onclick: () => { done = false; stage.skipToEnd(); } }));
+  }
+  /* the end of the instructions: the finished step's fitted view, with the player saying so */
+  function finish() {
+    done = true;
+    if (stage.cur !== pageOf.finished) stage.goTo(pageOf.finished, { animate: false });
+    else { renderList(); renderPlayer(); safe(); }
   }
 
   /* ---------------- the step player ---------------- */
@@ -62,11 +74,11 @@ export function mountAssemble(stage, ctx) {
   root.appendChild(player);
   function renderPlayer() {
     const cur = stage.cur;
-    const isDone = cur === pageOf.done, onCover = cur === 0;
+    const isDone = done, onCover = cur === 0;
     const step = cur >= 1 && cur <= pageOf.finished ? steps[cur - 1] : null;
-    const num = cur >= pageOf.first && cur <= pageOf.finished ? String(cur - 1) : isDone ? '★' : 'i';
-    const title = isDone ? 'Done' : onCover ? (stage.manifest?.title || 'Your build') : (step?.title || '');
-    const text = isDone ? 'Here it is, finished. Save an image or share the link; the rooms and the camera tour come with the Done scene.' : onCover ? 'Press Next to begin the step-by-step, or skip to the finished build.' : (step?.note || '');
+    const num = isDone ? '■' : cur >= pageOf.first && cur <= pageOf.finished ? String(cur - 1) : 'i';
+    const title = isDone ? 'End of instructions' : onCover ? (stage.manifest?.title || 'Your build') : (step?.title || '');
+    const text = isDone ? 'The whole assembly, finished. Share the link, or go back to any step.' : onCover ? 'Press Next to begin the step-by-step, or skip to the finished build.' : (step?.note || '');
     player.replaceChildren(
       el('div.row1', {}, [
         el('span.num', { text: num }),
@@ -77,21 +89,18 @@ export function mountAssemble(stage, ctx) {
         ]),
       ]),
       el('div.row2', {}, [
-        el('button.key', { text: '← Back', disabled: cur <= 1, onclick: () => stage.prev() }),
-        el('div.pips', {}, rows().map((r) => el('span.pip' + (cur === r.page ? '.cur' : cur > r.page ? '.done' : '')))),
+        el('button.key', { text: '← Back', disabled: cur <= 1 && !isDone, onclick: () => { if (isDone) { done = false; renderList(); renderPlayer(); } else stage.prev(); } }),
+        el('div.pips', {}, rows().map((r) => el('span.pip' + ((r.page === 'done' ? isDone : !isDone && cur === r.page) ? '.cur' : (r.page !== 'done' && (isDone || cur > r.page)) ? '.done' : '')))),
         el('button.key.sq', { 'aria-label': stage.paused ? 'Play' : 'Pause', title: stage.paused ? 'Play' : 'Pause', disabled: isDone, onclick: () => { stage.setPaused(!stage.paused); renderPlayer(); } }, [icon(stage.paused ? 'play' : 'pause', { fill: true })]),
         el('button.key' + (stage.slowmo ? '.on' : ''), { text: 'Slow-mo', 'aria-pressed': String(!!stage.slowmo), title: 'Slow motion · watch each step at study speed', onclick: () => { stage.setSlow(!stage.slowmo); renderPlayer(); } }),
         el('button.key.sq', { 'aria-label': 'Replay step', title: 'Replay this step', disabled: isDone || onCover, onclick: () => stage.replay() }, [icon('arrow-counter-clockwise')]),
-        el('button.key.next' + (!isDone ? '.on' : ''), { text: isDone ? 'Finished' : 'Next →', disabled: isDone, onclick: () => stage.next() }),
+        el('button.key.next' + (!isDone ? '.on' : ''), { text: isDone ? 'Finished' : 'Next →', disabled: isDone, onclick: () => (cur === pageOf.finished ? finish() : stage.next()) }),
       ]),
     );
     if (isDone) {
       player.appendChild(el('div.row3', {}, [
-        el('div.track', { role: 'group', 'aria-label': 'Scene', style: 'display:flex;gap:3px;padding:3px;border-radius:10px' }, SCENES.map(([k, name]) =>
-          el('button.seg' + (k === 'grid' ? '.on' : ''), { text: name, style: 'height:30px;padding:0 10px;border-radius:8px;font-size:12px', 'aria-pressed': String(k === 'grid'), onclick: k === 'grid' ? null : soon(`The ${name} scene`, 'the Done scene (phase 5b)') }))),
-        el('span.hint', { text: 'Rooms and the camera tour come with the Done scene.' }),
-        el('button.key', { text: 'Share', onclick: async () => { try { await navigator.clipboard.writeText(location.href); say('Link copied.'); } catch { say('Copy the address bar to share this build.'); } } }),
-        el('button.key.on', { text: 'Save image', onclick: soon('Save image', 'the Done scene (phase 5b): the hero shot at golden hour, watermarked') }),
+        el('span.hint', { text: 'End of instructions.' }),
+        el('button.key.on', { text: 'Share', onclick: async () => { try { await navigator.clipboard.writeText(location.href); say('Link copied.'); } catch { say('Copy the address bar to share this build.'); } } }),
       ]));
     }
   }
@@ -101,14 +110,18 @@ export function mountAssemble(stage, ctx) {
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
   setColors(false);
-  // land on the exploded overview when the stage is still on its cover; a deep link into a step keeps its page
-  if (stage.cur === 0) stage.goTo(pageOf.overview);
+  // the step a visitor left on comes back after a trip to another workspace (ctx.memo); a fresh arrival on the
+  // cover lands on the exploded overview; a deep link into a step keeps its page
+  const back = ctx.memo?.assemblePage;
+  if (back != null) { done = !!ctx.memo.assembleDone; stage.goTo(back, { animate: false }); }
+  else if (stage.cur === 0) stage.goTo(pageOf.overview);
   renderList(); renderPlayer(); tb.sync(); safe();
 
   return {
-    onPage() { renderList(); renderPlayer(); tb.sync(); safe(); },
+    onPage(i) { if (i !== pageOf.finished) done = false; renderList(); renderPlayer(); tb.sync(); safe(); },   // a remount's goTo lands on the finished page, so a remembered Done survives it
     unmount() {
       ac.abort();
+      if (ctx.memo) { ctx.memo.assemblePage = stage.cur; ctx.memo.assembleDone = done; }
       stage.setPaused(false);
       if (stage.useCustom !== hadOwnColors) { stage.useCustom = hadOwnColors; stage.applyPalette(); }
       stage.setSafeArea(null);

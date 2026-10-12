@@ -38,6 +38,7 @@ export async function boot() {
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
   const ctx = {
     setMode,
+    memo: {},   // what a workspace wants back when it is remounted (the Assemble step, for one)
     has: (ws) => !!WORKSPACES[ws],
     switchTo(ws) {
       if (!WORKSPACES[ws] || (current && current.name === ws)) return;

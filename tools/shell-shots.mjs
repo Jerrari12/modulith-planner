@@ -71,8 +71,10 @@ try {
     await page.evaluate(() => { const h = window.__GEN2_VIEWER__; h.goTo(6, { animate: false }); });
     await page.waitForTimeout(1200); await settle(); await page.waitForTimeout(600);
     await writeFile(join(OUT, 'assemble-dark-1440-step.png'), await page.screenshot({ type: 'png' }));
-    await page.evaluate(() => { const h = window.__GEN2_VIEWER__; h.goTo(h.pageCount - 1); });
-    await page.waitForTimeout(4000);
+    await page.evaluate(() => { const h = window.__GEN2_VIEWER__; h.goTo(h.pageCount - 2, { animate: false }); });
+    await page.waitForTimeout(1200);
+    await page.click('#ws-player .next');
+    await settle(); await page.waitForTimeout(800);
     await writeFile(join(OUT, 'assemble-dark-1440-done.png'), await page.screenshot({ type: 'png' }));
     console.log('wrote assemble shots');
     await ctx.close();

@@ -184,13 +184,14 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws-steps .step.cur { background: var(--seg-on); box-shadow: var(--seg-on-shadow); color: var(--ink); font-weight: 600; }
 #ws-steps .mark { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex: none; border-radius: 999px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; background: var(--badge-bg); color: var(--badge-fg); }
 #ws-steps .step.cur .mark { background: var(--orange); color: var(--on-orange); }
-#ws-steps .step.done .mark { background: var(--ok-bg); color: var(--ok-fg); }
+#ws-steps .step.past { color: var(--ink-3); }
+#ws-steps .step.past .mark { opacity: .55; }
 #ws-steps .skip { margin-top: 8px; height: 38px; flex: none; border-radius: 10px; font-size: 12px; font-weight: 600; }
 #ws-player { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: 640px; max-width: calc(100% - 40px); box-sizing: border-box; padding: 14px 16px 12px; border-radius: 20px; display: flex; flex-direction: column; gap: 10px; }
 #ws-player .row1 { display: flex; gap: 12px; align-items: flex-start; }
 #ws-player .num { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--orange); color: var(--on-orange); font-family: var(--font-mono); font-weight: 700; }
-#ws-player .title { font-family: var(--font-display); font-weight: 800; font-size: 17px; font-stretch: 108%; }
-#ws-player .text { margin-top: 2px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+#ws-player .title { font-family: var(--font-display); font-weight: 800; font-size: 18px; font-stretch: 108%; }
+#ws-player .text { margin-top: 3px; font-size: 14px; line-height: 1.5; color: var(--ink); }
 #ws-player .colors { margin-left: auto; flex: none; display: flex; gap: 3px; padding: 3px; border-radius: 10px; background: var(--track); }
 #ws-player .colors .seg { height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; }
 #ws-player .row2 { display: flex; align-items: center; gap: 8px; }
