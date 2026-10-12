@@ -232,7 +232,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir _site
-          cp -r index.html css js img kits builds stats vendor favicon.ico favicon.svg apple-touch-icon.png part-preview-support.json _site/
+          cp -r index.html css js img icons kits builds stats vendor favicon.ico favicon.svg apple-touch-icon.png part-preview-support.json _site/
           rm -f _site/img/parts
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
