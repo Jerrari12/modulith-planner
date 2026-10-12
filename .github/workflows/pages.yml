@@ -114,7 +114,7 @@ jobs:
           sed -i "s|'./app.js'|'./app.js?v=$V'|" js/boot.js
           sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|" js/app.js
           sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../ui/icons.js'|'../ui/icons.js?v=$V'|" js/workspaces/build.js
-          sed -i "s|js/catalog/data.js|js/catalog/data.js?v=$V|; s|css/tokens.css|css/tokens.css?v=$V|; s|css/app.css|css/app.css?v=$V|" index.html
+          sed -i "s|js/catalog/data.js|js/catalog/data.js?v=$V|; s|css/tokens.css|css/tokens.css?v=$V|; s|css/app.css|css/app.css?v=$V|; s|css/fonts.css|css/fonts.css?v=$V|" index.html
           # ⚠ the vendored requirement-scope contract is a CLASSIC script tag,
           # not a module import, so the module-graph guard below cannot see it.
           # It still caches independently of index.html, which is the same
@@ -232,7 +232,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir _site
-          cp -r index.html css js img icons kits builds stats vendor favicon.ico favicon.svg apple-touch-icon.png part-preview-support.json _site/
+          cp -r index.html css js img icons fonts kits builds stats vendor favicon.ico favicon.svg apple-touch-icon.png part-preview-support.json _site/
           rm -f _site/img/parts
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

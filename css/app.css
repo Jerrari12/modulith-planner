@@ -66,9 +66,10 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws .h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
 #ws .mono { font-family: var(--font-mono); }
 #ws .badge { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; background: var(--badge-bg); color: var(--badge-fg); }
+#ws .preview { align-self: center; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; cursor: help; }
 #ws .hint { margin: 8px 2px 0; font-size: 12px; color: var(--ink-2); }
 #ws .readout { margin: 4px 2px 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
-#ws .ph { flex: none; }
+#ws .ph { flex: none; fill: currentColor; }
 #ws .well { background: var(--well); border: 1px solid var(--well-border); }
 #ws button:active:not([disabled]):not(.dis) { transform: scale(.97); transition: transform var(--d-press) var(--ease-out); }
 #ws button { transition: background var(--d-hover) var(--ease-out), box-shadow var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out); }
@@ -179,13 +180,22 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws-toast.show { opacity: 1; }
 
 /* ---- narrow desktop (1024-1279): the panels keep their width, the middle gets tight ---- */
+/* up to 1500 px the bar is one row but tight: the printer and Share chips go icon-only and the build name shortens */
+@media (max-width: 1500px) {
+  #ws-top .printer span, #ws-top .share span { display: none; }
+  #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
+  #ws-switch > .chip-btn > span { max-width: 120px; }
+}
+/* narrow desktop (1024-1279): the workspace tabs keep their names on a row of their own under the bar, and the
+   panels start below it; the chips go icon-only */
 @media (max-width: 1279px) {
   #ws-tools .quality span { display: none; }
   #ws-top .printer span, #ws-top .share span { display: none; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
   #ws-switch > .chip-btn > span { max-width: 120px; }
-  #ws-tabs .tab span { display: none; }
-  #ws-tabs .tab { padding: 0 11px; }
+  #ws-tabs { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); }
+  #ws-top .spacer { flex: 1; }
+  #ws-lib, #ws-insp, #ws-tools { top: 134px; }
   #ws-dock { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }

@@ -449,6 +449,11 @@ const STAGE_THEMES = {
   // point of this stage, so this is the brightest rung that keeps it.
   dark:  { bg: 0x0d0e21, bgWall: 0x150f30, table: 0x282c66, wall: 0x50526e,
            surface: 0x6e7090, grid: 0x2b7f9e, dim: 0x8f9ad8 },
+  // the workspace shell's night stage (2026-10-12): the dark stage with the grid two steps quieter and the floor
+  // reflection halved, so the product is the focal point under the glass chrome (Astra's review of the first
+  // Build screen). Everything else is `dark`; the plain viewer never selects it.
+  night: { bg: 0x0d0e21, bgWall: 0x150f30, table: 0x282c66, wall: 0x50526e,
+           surface: 0x6e7090, grid: 0x1f5a70, dim: 0x8f9ad8, refl: 0.08 },
 };
 // DARK IS THE DEFAULT (Joey 2026-08-08). Both choices are stored explicitly,
 // so "no key" can't mean light and a blocked localStorage fails safe to the
@@ -904,6 +909,7 @@ const refl = { rt: null, mesh: null, cam: null, tex: new THREE.Matrix4(), key: '
 /* The reflection's resting opacity. A moving camera sets the uniform to 0 and skips the mirror render
    (see updateReflection), so this is the value it comes back to. */
 const REFL_OPACITY = 0.16;
+const reflOpacity = () => (STAGE_THEMES[stageTheme] && STAGE_THEMES[stageTheme].refl) ?? REFL_OPACITY;   // the night stage asks for less
 function reflectionWanted() {
   if (fxDead.reflection || !QUALITY[quality].reflect) return false;
   if (IS_PART) return false; // no floor to reflect in on the preview's clean float
@@ -937,7 +943,7 @@ function ensureReflector() {
      else, so the reflected feet stay recognisable rather than being cut away. */
   const mat = new THREE.ShaderMaterial({
     uniforms: { tRefl: { value: refl.rt.texture }, textureMatrix: { value: refl.tex },
-                uOpacity: { value: REFL_OPACITY }, uBlur: { value: 1.2 },
+                uOpacity: { value: reflOpacity() }, uBlur: { value: 1.2 },
                 uContact: { value: 0 },
                 uPos: { value: ground.pos }, uSiz: { value: ground.siz },
                 uStr: { value: ground.str }, uCount: { value: 0 } },
@@ -1018,7 +1024,10 @@ function updateReflection(force = false, moving = false) {
      (motionLite); a forced call, from a tier change, always renders. */
   const u = refl.mesh.material.uniforms;
   if (moving && !force) { u.uOpacity.value = 0; refl.key = ''; return; }
-  if (u.uOpacity.value !== REFL_OPACITY) { u.uOpacity.value = REFL_OPACITY; force = true; }
+  // the resting opacity: the theme's own where it has one (the night stage), else the constant. `typeof` because
+  // test/quality-guard.test.mjs runs this function from the source text with only the constant in scope.
+  const resting = typeof reflOpacity === 'function' ? reflOpacity() : REFL_OPACITY;
+  if (u.uOpacity.value !== resting) { u.uOpacity.value = resting; force = true; }
   const key = camera.position.toArray().concat(controls.target.toArray(), refl.mesh.position.toArray())
     .map(v => v.toFixed(1)).join();
   if (!force && key === refl.key) return;
@@ -2715,6 +2724,18 @@ function resize() {
 // framing (fit presets, the faceplate cinematic, isolation) centers itself in
 // the visible band below the note. Projected labels (dims/pointer/measure) go
 // through camera.project(), so they track the shift for free.
+/* The workspace's SAFE AREA (2026-10-12): px bands of the canvas covered by its panels on each side, or null.
+   When set, updateViewInset pans the projection so the model centres in the free region, and fitDistanceFor
+   frames to the free region's size, so a whole-build preset never puts the model under a panel. */
+let safeArea = null;
+function setSafeArea(rect) {
+  const next = rect ? { left: +rect.left || 0, right: +rect.right || 0, top: +rect.top || 0, bottom: +rect.bottom || 0 } : null;
+  const same = (!next && !safeArea) || (next && safeArea && ['left', 'right', 'top', 'bottom'].every(k => next[k] === safeArea[k]));
+  safeArea = next;
+  if (same) return;
+  // re-fit the guided camera to the new free region; a user who has taken the camera keeps it
+  if (!camOverride && curCamPreset) tweenCamera(curCamPreset, 500, true);
+}
 const viewInset = { x: 0, y: 0 }; // APPLIED projection pan in px (lerped toward target each frame)
 const _viCorner = new THREE.Vector3(); // scratch — updateViewInset runs every frame
 function updateViewInset() {
@@ -2738,7 +2759,11 @@ function updateViewInset() {
   let tx = 0, ty = 0;
   if (!cinema.on) {
     const cb = canvas.getBoundingClientRect();
-    if (isMobile()) {
+    if (safeArea) {
+      // centre the composition in the free region: positive offsetX shifts content LEFT, positive offsetY UP
+      tx = (safeArea.right - safeArea.left) / 2;
+      ty = (safeArea.bottom - safeArea.top) / 2;
+    } else if (isMobile()) {
       let top = 0, bottom = 0;
       const note = $('note-panel');
       if (note && !note.classList.contains('hidden') && !note.classList.contains('collapsed')) {
@@ -3860,6 +3885,7 @@ let tileSeen = {};           // per-type tile counter — every second tile shad
 function buildInstances() {
   for (const inst of instances.values()) scene.remove(inst.group); // tear down a previous mount
   instances.clear();
+  clearSelOutline();   // the hull references the old meshes
   tileSeen = {};
   for (const cfg of manifest.instances) {
     const group = new THREE.Group();
@@ -4166,6 +4192,13 @@ function fitDistanceFor(R, fovDeg) {
   // cover (fov 9) straight to a fit step.
   const vFov = THREE.MathUtils.degToRad(fovDeg || camera.fov || 40);
   const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (camera.aspect || 1.6));
+  if (safeArea) {
+    // frame to the FREE region: the fovs that region subtends, never below a tenth of the canvas
+    const W = canvas.clientWidth || 1, H = canvas.clientHeight || 1;
+    const fw = Math.max(0.1, (W - safeArea.left - safeArea.right) / W), fh = Math.max(0.1, (H - safeArea.top - safeArea.bottom) / H);
+    const v2 = 2 * Math.atan(Math.tan(vFov / 2) * fh), h2 = 2 * Math.atan(Math.tan(hFov / 2) * fw);
+    return Math.max(R / Math.sin(v2 / 2), R / Math.sin(h2 / 2));
+  }
   return Math.max(R / Math.sin(vFov / 2), R / Math.sin(hFov / 2));
 }
 const fitDistance = (margin, fovDeg) => fitDistanceFor(buildRadius * margin, fovDeg);
@@ -5922,6 +5955,56 @@ function renderZoneChips(inst) {
 }
 
 let selAnchor = new THREE.Vector3(); // selected part's bbox-center offset from its origin
+/* THE SELECTION OUTLINE (2026-10-12, the brief: "a 2.5 px orange outline + a soft outer glow"). The viewer's
+   highlight is an emissive lift that a chosen filament hides (selGlow returns false once the part wears a
+   custom colour), so a quiet select also draws an inverted hull: every mesh of the unit, re-drawn 3% larger
+   about the unit's centre with back faces only, in orange. Front faces of the real part occlude the hull's
+   interior, leaving a rim. Cleared on deselect and whenever the instances are rebuilt. */
+let selOutline = null;
+/* two rims: a white inner one that reads against an orange filament, an orange outer one that reads against
+   the stage, so the selection is unmistakable whatever the unit wears */
+const selOutlineMats = [
+  { scale: 1.025, mat: new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false }) },
+  { scale: 1.055, mat: new THREE.MeshBasicMaterial({ color: 0xff6a1a, side: THREE.BackSide, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }) },
+];
+function clearSelOutline() { if (selOutline) { scene.remove(selOutline); selOutline = null; } }
+function unitMembers(host) {
+  // the host and every instance whose `rides` chain reaches it (faceplate, handle, accent, label, cover)
+  const out = [host];
+  for (const i of instances.values()) {
+    if (i === host) continue;
+    let o = i, hops = 0;
+    while (o && o.cfg.rides && hops++ < 4) { o = instances.get(o.cfg.rides) || null; if (o === host) { out.push(i); break; } }
+  }
+  return out;
+}
+function showSelOutline(members) {
+  clearSelOutline();
+  const g = new THREE.Group();
+  g.name = 'sel-outline';
+  const box = new THREE.Box3();
+  for (const inst of members) { inst.group.updateWorldMatrix(true, true); box.expandByObject(inst.group); }
+  if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3());
+  const unC = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);
+  for (const { scale, mat } of selOutlineMats) {
+    const layer = new THREE.Group();
+    for (const inst of members) inst.group.traverse(o => {
+      if (!o.isMesh || !o.visible || !o.geometry) return;
+      const m = new THREE.Mesh(o.geometry, mat);
+      m.matrixAutoUpdate = false;
+      m.matrix.copy(o.matrixWorld).premultiply(unC);
+      m.castShadow = false; m.receiveShadow = false;
+      layer.add(m);
+    });
+    layer.scale.setScalar(scale);
+    g.add(layer);
+  }
+  g.position.copy(c);
+  g.renderOrder = -1;
+  scene.add(g);
+  selOutline = g;
+}
 /* The shelf whose lip the identify card is editing (null when the selection is
    anything else). Assigned in setSelected, read by cycleLip further down.
    ⚠ DECLARED HERE, ABOVE its assignment, on purpose: setSelected runs during
@@ -5964,7 +6047,7 @@ function setSelected(id) {
     slideRitual(ritualInst, false); // label/accent/cover reseats in reverse on deselect/switch
     ritualInst = null;
   }
-  if (!id) { if (prevOpen) slideDrawer(prevOpen, false); exitFaceplateFocus(); exitDrawerFocus(); renderLabelEditor(null); card.classList.add('hidden'); $('pointer-line').classList.add('hidden'); if (typeof opts !== 'undefined' && opts.onSelect) opts.onSelect(null); return; }
+  if (!id) { clearSelOutline(); if (prevOpen) slideDrawer(prevOpen, false); exitFaceplateFocus(); exitDrawerFocus(); renderLabelEditor(null); card.classList.add('hidden'); $('pointer-line').classList.add('hidden'); if (typeof opts !== 'undefined' && opts.onSelect) opts.onSelect(null); return; }
   if (isMobile() || IS_EMBED) setChecklist(false); // mobile + narrow dock: parts list & identify card are mutually exclusive
   const inst = instances.get(id);
   inst.group.traverse(o => { if (o.isMesh) o.material = materialFor(inst, selGlow(inst), o.userData.zone); });
@@ -6123,12 +6206,13 @@ function setSelected(id) {
   /* the stage's one outward event so far (phase 0, Build workspace): who is selected, and which unit of the
      build owns it. `typeof opts` because test/shadow-at-rest and swap-shadows slice this function out of the
      source and run it without the factory's parameters. */
-  if (typeof opts !== 'undefined' && opts.onSelect) {
+  if (typeof opts !== 'undefined' && (opts.onSelect || quiet)) {
     // the owning unit: the part's own `owner`, or the owner of what it rides (a faceplate, accent, label or
     // handle rides its drawer, which carries the unit id); covers, rails, feet and QuickLocks have none
     let host = inst, hops = 0;
     while (host && host.cfg.owner == null && host.cfg.rides && hops++ < 4) host = instances.get(host.cfg.rides) || null;
-    opts.onSelect({ id, node: inst.cfg.node, type: selType, owner: host?.cfg.owner ?? null, label: info.label });
+    if (quiet) showSelOutline(host && host.cfg.owner != null ? unitMembers(host) : [inst]);
+    if (opts.onSelect) opts.onSelect({ id, node: inst.cfg.node, type: selType, owner: host?.cfg.owner ?? null, label: info.label });
   }
 }
 
@@ -9543,6 +9627,9 @@ renderer.setAnimationLoop(renderLoop);
     currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
     applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
     setMeasure, setDims, get dimsOn() { return dims.on; }, resetView() { $('btn-cam').click(); },
+    setSafeArea, get safeArea() { return safeArea; },
+    // the filament palette: the presets, the active colour of a part key, and the saved-palette switch
+    applyPreset, PRESETS, activeHex, applyPalette,
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;

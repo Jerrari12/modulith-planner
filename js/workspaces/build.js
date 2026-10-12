@@ -54,7 +54,19 @@ export function mountBuild(stage, { setMode }) {
     printer: 'any', measure: false, menu: false, sel: null,
     name: stage.manifest?.title || 'Workbench build',
   };
-  const colors = { ...DEFAULT_COLORS };
+  /* a representative finished build (Astra, 2026-10-12): the first preset's coordinated filaments unless the
+     visitor already has a saved palette; instruction colours stay available for Assemble */
+  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0]);
+  /* product icons read the LIVE palette, so the tiles, the inspector thumbnail and the model agree */
+  const hex = (key, fallback) => { try { return stage.activeHex(key) || fallback; } catch { return fallback; } };
+  const frontFor = (fill) => fill === 'classic' ? hex('Drawer', DEFAULT_COLORS.front) : hex('Faceplate:FACE', hex('Faceplate', DEFAULT_COLORS.front));
+  const colors = {   // getters, so `{ ...colors }` spreads live values
+    get body() { return hex('Case', DEFAULT_COLORS.body); },
+    get front() { return frontFor(st.unit); },
+    get handle() { return hex('Handle', DEFAULT_COLORS.handle); },
+    get lb() { return hex('Label', DEFAULT_COLORS.lb); },
+    get lt() { return DEFAULT_COLORS.lt; },
+  };
 
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -70,6 +82,7 @@ export function mountBuild(stage, { setMode }) {
     switcher(),
     el('div.spacer'),
     tabs(),
+    el('span.badge.preview', { text: 'Preview', title: 'A visual preview over the real scene. Adding, moving and removing units, per-unit type and the 2D board arrive with the Build rules (phase 3).' }),
     el('div.spacer'),
     el('button.chip.chip-btn.mount', { title: 'Mount and length · opens the setup sheet (phase 0, later)', onclick: soon('The setup sheet', 'the next phase-0 step') }, [
       icon(MOUNT_ICON[build?.mount] || 'table'), `${MOUNT_NAME[build?.mount] || 'Tabletop'} · `, el('span.mono', { text: String(length) }),
@@ -326,7 +339,7 @@ export function mountBuild(stage, { setMode }) {
     insp.append(
       el('div.head', {}, [el('h2.h2', { text: 'This unit only' }), el('span.idx', { text: `Unit ${idx} of ${placed.length}` }), closeBtn]),
       el('div.ident', {}, [
-        el('div.wellbox.well', {}, [glyphEl(kind, 79, 50, colors)]),
+        el('div.wellbox.well', {}, [glyphEl(kind, 79, 50, { ...colors, front: frontFor(unit.fill) })]),   // the SELECTED unit's front, not the palette's unit choice
         el('div.col', {}, [
           el('h3', { text: fill?.label || unit.fill }),
           el('div.dims', { text: `${unit.w}W·${unit.hh / 2}H · inside ${unit.w * 88 - wall.wWall} × ${Math.round((unit.hh / 2) * 56 - wall.hWall)} × ${INSIDE[length] ?? length} mm` }),   // hh is half-rows
@@ -385,7 +398,31 @@ export function mountBuild(stage, { setMode }) {
   root.appendChild(dock);
   root.appendChild(toast);
 
-  function layout() { tools.style.left = (st.collapsed ? 88 + 20 : 304 + 40) + 'px'; }
+  const narrow = () => innerWidth < 1280;
+  function layout() {
+    tools.style.left = (st.collapsed ? 88 + 20 : 304 + 40) + 'px';
+    safe();
+  }
+  /* the canvas bands the panels cover, handed to the stage so the camera frames the free region: the bar, the
+     library, the dock always; the inspector only at narrow widths, where it would otherwise hide the model
+     (at wide widths the model already fits between the panels, and counting the inspector would move the
+     camera on every selection) */
+  function safe() {
+    const libW = st.collapsed ? 68 + 20 : 304 + 20;
+    /* the inspector's band: RESERVED at wide widths whether or not it is up, so a selection never moves the camera
+       and a wide build never ends up under it; at narrow widths counted only while it is up, because space is
+       scarce there and the library collapses to make room (Sol 01a13226) */
+    const inspW = (!narrow() || !insp.hidden) ? 324 + 20 : 0;
+    const top = narrow() ? 134 : 90;
+    stage.setSafeArea({ left: libW + 8, right: inspW + 8, top, bottom: 118 });
+  }
+  /* narrow widths: a selection collapses the library to its rail, a deselect (or widening) restores it */
+  let autoCollapsed = false;
+  function applyNarrow() {
+    if (narrow() && st.sel && !st.collapsed) { st.collapsed = true; autoCollapsed = true; }
+    else if ((!narrow() || !st.sel) && autoCollapsed) { st.collapsed = false; autoCollapsed = false; }
+  }
+  addEventListener('resize', () => { applyNarrow(); renderLib(); layout(); });
 
   /* ---------------- stage ---------------- */
   // the finished build, not the cover: the Build workspace edits what is there
@@ -395,5 +432,12 @@ export function mountBuild(stage, { setMode }) {
   renderLib(); layout(); renderInspector();
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; });
 
-  return (sel) => { st.sel = sel; renderInspector(); };
+  return (sel) => {
+    st.sel = sel;
+    const was = st.collapsed;
+    applyNarrow();
+    if (st.collapsed !== was) renderLib();
+    renderInspector();
+    layout();
+  };
 }

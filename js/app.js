@@ -13,7 +13,9 @@ export function setMode(mode, stage) {
   document.documentElement.dataset.mode = mode;
   // the same two keys the viewer's own button writes: the value, and the stamp a cross-site handoff compares
   try { localStorage.setItem('gen2-theme', mode); localStorage.setItem('gen2-theme:t', String(Date.now())); } catch { /* private mode */ }
-  if (stage && stage.stageTheme !== mode) stage.applyStageTheme(mode);
+  // the workspace's dark mode is the stage's quieter `night` variant (same palette, calmer grid and reflection)
+  const want = mode === 'dark' && document.documentElement.dataset.ws ? 'night' : mode;
+  if (stage && stage.stageTheme !== want) stage.applyStageTheme(want);
 }
 function initialMode() {
   try { return localStorage.getItem('gen2-theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
@@ -25,6 +27,7 @@ export async function boot() {
   document.documentElement.dataset.mode = initialMode();
   const ws = { onSelect: null };
   const stage = await createStage(document, { onSelect: (sel) => ws.onSelect && ws.onSelect(sel), quietSelect: WS === 'build' });
+  setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
   if (WS === 'build') ws.onSelect = mountBuild(stage, { setMode });
 }
 
