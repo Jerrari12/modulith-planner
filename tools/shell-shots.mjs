@@ -79,4 +79,22 @@ try {
     console.log('wrote assemble shots');
     await ctx.close();
   }
+  /* Parts (phase 2): dark 1440, the list with a unit selected, then tracking on with a few counts */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+    const page = await ctx.newPage();
+    await page.goto(`${base}/index.html?ws=parts&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-parts'), null, { timeout: 90_000 });
+    const settle = () => page.waitForFunction(() => { const h = window.__GEN2_VIEWER__; return h.quality !== 'veryhigh' || (h.acc && h.acc.n >= h.ACC_SAMPLES); }, null, { timeout: 30_000 }).catch(() => {});
+    await page.evaluate(() => { const h = window.__GEN2_VIEWER__; const e = [...h.instances.entries()].find(([, i]) => /DecorDrawer_185-2W/.test(i.cfg.node)); if (e) h.setSelected(e[0]); });
+    await settle(); await page.waitForTimeout(800);
+    await writeFile(join(OUT, 'parts-dark-1440.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-parts .row3 > .key');
+    await page.evaluate(() => { const plus = (n) => document.querySelectorAll('#ws-parts .prow')[n].querySelectorAll('.counter')[1].querySelector('button:last-of-type'); plus(0).click(); plus(0).click(); plus(2).click(); });
+    await page.waitForTimeout(500);
+    await writeFile(join(OUT, 'parts-dark-1440-tracking.png'), await page.screenshot({ type: 'png' }));
+    console.log('wrote parts shots');
+    await ctx.close();
+  }
 } finally { await browser.close(); server.close(); }

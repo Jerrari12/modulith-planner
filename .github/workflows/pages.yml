@@ -112,7 +112,8 @@ jobs:
           # index.html loads js/boot.js (phase 0, 2026-10-12), which imports main.js: one stamp per hop
           sed -i "s|css/viewer.css|css/viewer.css?v=$V|; s|js/boot.js|js/boot.js?v=$V|" index.html
           sed -i "s|'./app.js'|'./app.js?v=$V'|" js/boot.js
-          sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|; s|'./workspaces/assemble.js'|'./workspaces/assemble.js?v=$V'|" js/app.js
+          sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|; s|'./workspaces/assemble.js'|'./workspaces/assemble.js?v=$V'|; s|'./workspaces/parts.js'|'./workspaces/parts.js?v=$V'|" js/app.js
+          sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../rules/bom.js'|'../rules/bom.js?v=$V'|" js/workspaces/parts.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|" js/workspaces/assemble.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|" js/ui/toolbar.js
           sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|" js/workspaces/build.js

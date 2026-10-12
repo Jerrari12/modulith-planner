@@ -5,6 +5,7 @@
 import { createStage } from './main.js';
 import { mountBuild } from './workspaces/build.js';
 import { mountAssemble } from './workspaces/assemble.js';
+import { mountParts, printCountOf } from './workspaces/parts.js';
 
 const QS = new URLSearchParams(location.search);
 const WS = QS.get('ws');
@@ -23,7 +24,7 @@ function initialMode() {
 }
 
 /* the workspaces that exist; each mount returns { onSelect?, onPage?, unmount } */
-const WORKSPACES = { build: mountBuild, assemble: mountAssemble };
+const WORKSPACES = { build: mountBuild, assemble: mountAssemble, parts: mountParts };
 
 export async function boot() {
   if (!WS) { await createStage(document); return; }
@@ -36,9 +37,13 @@ export async function boot() {
     quietSelect: true, fillBoost: 1.6,
   });
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
+  /* a representative finished build in every workspace (Astra): the first preset's coordinated filaments unless the
+     visitor already has a saved palette; Assemble switches to Part colors on its own and restores this on leave */
+  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0]);
   const ctx = {
     setMode,
     memo: {},   // what a workspace wants back when it is remounted (the Assemble step, for one)
+    badges: () => { try { return { parts: printCountOf(stage.build) || null }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count)
     has: (ws) => !!WORKSPACES[ws],
     switchTo(ws) {
       if (!WORKSPACES[ws] || (current && current.name === ws)) return;

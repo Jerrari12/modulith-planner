@@ -55,11 +55,12 @@ export function topbar(stage, ctx) {
   }
   function tabs() {
     const nav = el('nav.chip', { id: 'ws-tabs', 'aria-label': 'Workspaces' });
+    const badges = (typeof ctx.badges === 'function' ? ctx.badges() : ctx.badges) || {};
     for (const [id, label, ic] of TABS) {
       const on = id === ctx.active;
       const onclick = on ? null : ctx.has(id) ? () => ctx.switchTo(id) : ctx.soon(`The ${label} workspace`, PHASE[id]);
       nav.appendChild(el('button.tab' + (on ? '.on' : ''), { 'aria-current': on ? 'page' : null, title: on || ctx.has(id) ? null : `${label} comes in ${PHASE[id]}`, onclick },
-        [icon(ic, { fill: on }), el('span', { text: label })]));
+        [icon(ic, { fill: on }), el('span', { text: label }), badges[id] != null ? el('span.badge', { text: String(badges[id]) }) : null]));
     }
     return nav;
   }

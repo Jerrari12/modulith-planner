@@ -37,9 +37,6 @@ export function mountBuild(stage, ctx) {
     unit: 'decor', gf: 'standard', addSize: '1x1',
     printer: 'any', measure: false, sel: null,
   };
-  /* a representative finished build (Astra, 2026-10-12): the first preset's coordinated filaments unless the
-     visitor already has a saved palette; instruction colours stay available for Assemble */
-  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0]);
   /* product icons read the LIVE palette, so the tiles, the inspector thumbnail and the model agree */
   const hex = (key, fallback) => { try { return stage.activeHex(key) || fallback; } catch { return fallback; } };
   const frontFor = (fill) => fill === 'classic' ? hex('Drawer', DEFAULT_COLORS.front) : hex('Faceplate:FACE', hex('Faceplate', DEFAULT_COLORS.front));
@@ -300,7 +297,7 @@ export function mountBuild(stage, ctx) {
     el('button.status', { title: 'Issues · the issue card comes with the Build rules (phase 3)', onclick: soon('The issue card', 'the Build rules (phase 3)') }, [el('span.dot'), 'Ready to build']),
     el('div.group', {}, [el('span.big', { text: String(build?.placed?.length ?? 0) }), el('span.unit-lbl', { text: 'units' })]),
     el('div.group', {}, [el('span.big', { text: dims() }), el('span.unit-lbl', { text: 'mm' })]),
-    el('button.cta', { onclick: soon('The Parts workspace', 'phase 2') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
+    el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
   );
   root.appendChild(dock);
 
