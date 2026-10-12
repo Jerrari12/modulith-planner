@@ -14,6 +14,8 @@
  *
  * ── WHY THIS IS A SOURCE-TEXT GATE AND NOT A COMPILED ONE ────────────────────────────────
  *
+ * (Since the phase-0 wrap, 2026-10-12, main.js CAN be imported - test/stage-import.test.mjs - but its body only
+ * runs inside createStage(), so reading the source as text is still the way to check what it does.)
  * `js/main.js` cannot be imported by `node --test`: it is a browser module that reaches
  * `document` at the top level. So no test here can observe what `newPartMaterial` actually does at
  * runtime, and a compiled-shader test — which would build its own material and its own attach

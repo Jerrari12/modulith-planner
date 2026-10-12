@@ -8,6 +8,8 @@ This repository started on 2026-10-12 as the viewer repository's history (`gen2-
 
 It is a static site: serve the root folder (for example `python -m http.server 8743`) and open it. The part GLBs and thumbnails load from the parts host, so it needs the network even locally.
 
+`index.html` loads `js/boot.js`, which calls `createStage(document)` from `js/main.js`. The stage factory is the whole former viewer; importing `js/main.js` on its own does nothing (`test/stage-import.test.mjs`), which is what lets the workspaces of the redesign drive it.
+
 ## Tests
 
 ```
@@ -16,3 +18,12 @@ node --test
 ```
 
 The tests that open GLBs read them from `parts/<length>/`, which is not in this repository. Make `parts/` a junction (Windows) or a symlink to a checkout of `gen2-parts/parts`; it is ignored by git.
+
+### Golden screenshots
+
+```
+npm run goldens              # compare the stage against test/golden/shots (fails over 0.1% of pixels)
+npm run goldens -- --update  # re-bless after a change that is MEANT to move pixels
+```
+
+`tools/golden-shots.mjs` opens every official kit in headless Chrome at the Very High and Fast tiers, drives it to the cover, a middle step and the finished build through the `?debug=1` hook, and reads the WebGL canvas back. It is the guard for the stage refactors of phase 0, which must not change the picture. Shots take about 20 s each (60 in all).

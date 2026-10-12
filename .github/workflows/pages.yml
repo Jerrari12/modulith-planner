@@ -109,7 +109,9 @@ jobs:
       - name: Cache-proof asset URLs
         run: |
           V="${GITHUB_SHA::8}"
-          sed -i "s|css/viewer.css|css/viewer.css?v=$V|; s|js/main.js|js/main.js?v=$V|" index.html
+          # index.html loads js/boot.js (phase 0, 2026-10-12), which imports main.js: one stamp per hop
+          sed -i "s|css/viewer.css|css/viewer.css?v=$V|; s|js/boot.js|js/boot.js?v=$V|" index.html
+          sed -i "s|'./main.js'|'./main.js?v=$V'|" js/boot.js
           # ⚠ the vendored requirement-scope contract is a CLASSIC script tag,
           # not a module import, so the module-graph guard below cannot see it.
           # It still caches independently of index.html, which is the same

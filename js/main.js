@@ -27,6 +27,17 @@ import { LABEL_STYLE_ROWS, labelOrder, effectiveStyle, labelOptsOf, labelOptsCha
   editCommit, styleEdit, iconGroups, badgeStateText, shownBadge, historyKeyOf, labelSnap, labelUndoPatch, rejectionIsMine,
   labelUploadFor, labelUploadOf, syncLabelList, uploadsKey } from './label-panel.js';
 
+/* ⚠ THE STAGE FACTORY (phase 0 of the planner merge, 2026-10-12). Everything below used to run
+   at module scope: importing this file queried the document, built the renderer and awaited the
+   kit at top level, so nothing could import it (test/stage-import.test.mjs is the proof it now
+   can). The whole former body now runs inside createStage(); js/boot.js calls it for the page,
+   and the object that was the ?debug=1 hook is what it returns (the hook is still installed on
+   window when ?debug=1 is set, unchanged). The body is deliberately NOT re-indented - blame,
+   the text pins in test/ and the deploy's sed stamps all still match - and the function closes
+   on the last line of the file. `container` and `opts` are reserved for the carve-out that
+   follows; the body still reads `document` directly, exactly as before. */
+export async function createStage(container = document, opts = {}) {
+
 /* Every entry-routing boolean below is derived by resolveEntry() in entry.js -
    a pure function of (search, hash) with no DOM or network - so the boot
    matrix is testable in node (test/entry-routes.test.mjs). The names here are
@@ -9420,9 +9431,10 @@ function renderLoop(now) {
 }
 renderer.setAnimationLoop(renderLoop);
 
-// dev-only hook (mirrors the planner's guarded test-hook convention): ?debug=1
-if (new URLSearchParams(location.search).get('debug')) {
-  window.__GEN2_VIEWER__ = { THREE, scene, camera, controls, goTo, applyState, instances, manifest, cinema, updateCinema, cinemaScene, party, confetti, confettiPop, fpFocus, fpEnv,
+// the stage's interface - and, with ?debug=1, the dev-only hook it always was (mirrors the planner's
+// guarded test-hook convention)
+{
+  const stage = { THREE, scene, camera, controls, goTo, applyState, instances, manifest, cinema, updateCinema, cinemaScene, party, confetti, confettiPop, fpFocus, fpEnv,
     // The printed-relief handles, keyed by material key. ⚠ THE ONLY WAY TO REACH THE LAYER
     // UNIFORMS FROM OUTSIDE: they live in the vendored module's closure, so a tool that wants to
     // switch the relief off — the floor arm of any comparison against the Lab, and the one arm
@@ -9501,5 +9513,11 @@ if (new URLSearchParams(location.search).get('debug')) {
     // and that motion would hide an at-rest shadow defect). Takes a style OBJECT from HANDLE_STYLES, like the plates.
     applyHandleStyle, HANDLE_STYLES,
     COLOR_STORE_KEY,
-    trackLog, track };
+    trackLog, track,
+    // the Very High accumulation state and the live tier, so a screenshot harness (tools/golden-shots.mjs) can
+    // wait for a CONVERGED frame (acc.n reaches ACC_SAMPLES) and prove the tier it asked for is the one drawing
+    acc, ACC_SAMPLES, get quality() { return quality; } };
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
+  return stage;
+}
 }
