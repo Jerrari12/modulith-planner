@@ -21,6 +21,10 @@ const stage = await createStage(document);
 | **Theme** | The stage reads `gen2-theme` from localStorage and its own toggle button. | `setMode('light'|'dark')` reading the tokens. |
 | **Safe area for panels** | Internal: `updateViewInset` already offsets the camera to clear the docked panel. | `setSafeArea(rect)` generalising it to the workspaces' panels. |
 
+## Added for the Build workspace (2026-10-12, same day)
+
+`createStage(document, opts)` now reads two options: `opts.onSelect(sel | null)` fires from `setSelected` with `{ id, node, type, owner, label }`, where `owner` is the unit id of the part or of the drawer it rides (covers, rails, feet and QuickLocks give `null`); `opts.quietSelect` makes a selection highlight only (no drawer glide, no removal ritual, no focus camera), which is Build's rule. The returned object also carries `setSelected`, `build`, `selectedId`, the build-wide option setters the viewer's own panel uses (`setAllClosure`, `setAllStoppers`, `setAllVariant`, `setBackCover`, `setFeet`, `applyFaceplateStyle`, `applyHandleStyle`, `currentFaceplateStyle`, `availableFaceplateStyles`, `currentHandleStyle`), `applyStageTheme` / `stageTheme`, `applyQuality` / `QUALITY` / `quality`, `setDims` / `dimsOn` (the W/H/L callouts), `setMeasure`, `resetView`, `buildSize`. These are thin wrappers over existing functions; mounting, dispose, multiple instances and `load(build)` are unchanged from the table above.
+
 ## What the goldens do and do not prove
 
 `npm run goldens` proves the picture is unchanged on 60 scenes: 10 official kits × cover / middle step / finished build × Very High / Fast, at 1200×800. It does not cover: the part-preview embed (`?part=`), the planner relay (`?embed=1` driven by the planner), label text on EdgeLabel drawers, the outro scene, light mode, phone widths, or any interaction after the page change. The smoke, profile-lands and relief-tier gates cover the embed route, the filament picker and the quality ladder in a browser; the relay has no automated check here yet.

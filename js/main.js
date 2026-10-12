@@ -5964,7 +5964,7 @@ function setSelected(id) {
     slideRitual(ritualInst, false); // label/accent/cover reseats in reverse on deselect/switch
     ritualInst = null;
   }
-  if (!id) { if (prevOpen) slideDrawer(prevOpen, false); exitFaceplateFocus(); exitDrawerFocus(); renderLabelEditor(null); card.classList.add('hidden'); $('pointer-line').classList.add('hidden'); return; }
+  if (!id) { if (prevOpen) slideDrawer(prevOpen, false); exitFaceplateFocus(); exitDrawerFocus(); renderLabelEditor(null); card.classList.add('hidden'); $('pointer-line').classList.add('hidden'); if (typeof opts !== 'undefined' && opts.onSelect) opts.onSelect(null); return; }
   if (isMobile() || IS_EMBED) setChecklist(false); // mobile + narrow dock: parts list & identify card are mutually exclusive
   const inst = instances.get(id);
   inst.group.traverse(o => { if (o.isMesh) o.material = materialFor(inst, selGlow(inst), o.userData.zone); });
@@ -6072,6 +6072,9 @@ function setSelected(id) {
   // The card's "Open the drawer" button is the hand-off into the drawer-body
   // focus the peek used to lead to; "Close drawer" is the obvious way back out.
   const isFp = selType === 'Faceplate';
+  /* the Build workspace SELECTS a part (highlight, inspector) and never dives in: no drawer glide, no removal
+     ritual, no focus camera. Peek inside is the explicit way to open one (the brief, Stage > Selection). */
+  const quiet = typeof opts !== 'undefined' && !!opts.quietSelect;
   // tapping the focused plate's own dressing (handle / accent / label / cover)
   // keeps the isolation — those pieces are part of the faceplate there (swap
   // styles / recolor each without leaving)
@@ -6080,7 +6083,7 @@ function setSelected(id) {
   $('identify-close-drawer').classList.toggle('hidden', !(seatable && carrier === inst));
   if (prevOpen && (prevOpen !== carrier || isFp)) slideDrawer(prevOpen, false); // switching drawers (or isolating a plate) → shut the old one
   let drawerGliding = false;
-  if (seatable && !isFp && !keepIso) {
+  if (!quiet && seatable && !isFp && !keepIso) {
     const travel = (parseInt(manifest.collection, 10) || 185) - 20;
     // back-cover work happens on an OPEN drawer — selecting it must not yank an
     // already-open drawer back to the 40 mm peek (Joey); anything else follows
@@ -6097,14 +6100,16 @@ function setSelected(id) {
   // removal rituals (label lift / accent pop / cover pop) — AFTER the drawer
   // glide lands when one is running (Joey: drawer out first, then the part);
   // immediate when nothing moved (isolation tap, exploded page, open drawer)
-  if (RITUALS[selType] && ritualInst !== inst) {
+  if (!quiet && RITUALS[selType] && ritualInst !== inst) {
     slideRitual(inst, true, drawerGliding ? 420 : 0);
     ritualInst = inst;
   }
   // drawer BODY selected → zoom into the open drawer + show its inner dims;
   // faceplate → isolation focus; the focused plate's handle stays inside the
   // isolation; anything else leaves/never enters either focus
-  if (isFp) {
+  if (quiet) {
+    exitFaceplateFocus(); exitDrawerFocus();   // a quiet select leaves any earlier focus too
+  } else if (isFp) {
     exitDrawerFocus(true); // keep the saved pose — the faceplate focus adopts it
     enterFaceplateFocus(inst, seatable);
   } else if (!keepIso) {
@@ -6115,6 +6120,16 @@ function setSelected(id) {
   // the highlight emissive, the pointer line and the drawer/faceplate focus all
   // change the picture without moving the camera or the step
   invalidateFrame();
+  /* the stage's one outward event so far (phase 0, Build workspace): who is selected, and which unit of the
+     build owns it. `typeof opts` because test/shadow-at-rest and swap-shadows slice this function out of the
+     source and run it without the factory's parameters. */
+  if (typeof opts !== 'undefined' && opts.onSelect) {
+    // the owning unit: the part's own `owner`, or the owner of what it rides (a faceplate, accent, label or
+    // handle rides its drawer, which carries the unit id); covers, rails, feet and QuickLocks have none
+    let host = inst, hops = 0;
+    while (host && host.cfg.owner == null && host.cfg.rides && hops++ < 4) host = instances.get(host.cfg.rides) || null;
+    opts.onSelect({ id, node: inst.cfg.node, type: selType, owner: host?.cfg.owner ?? null, label: info.label });
+  }
 }
 
 // ---------- drawer focus: camera zoom + INNER dimensions ----------
@@ -9516,7 +9531,20 @@ renderer.setAnimationLoop(renderLoop);
     trackLog, track,
     // the Very High accumulation state and the live tier, so a screenshot harness (tools/golden-shots.mjs) can
     // wait for a CONVERGED frame (acc.n reaches ACC_SAMPLES) and prove the tier it asked for is the one drawing
-    acc, ACC_SAMPLES, get quality() { return quality; } };
+    acc, ACC_SAMPLES, get quality() { return quality; },
+    // for the workspaces (phase 0): select a part by instance id (null deselects), and read the build and selection
+    setSelected, get build() { return build; }, get selectedId() { return selectedId; },
+    // the build-wide options the viewer's own panel drives, so the Build workspace's "Build style" tab drives the
+    // same functions (phase 0 composition; the planner's rules replace these in phase 3)
+    setAllClosure, setAllStoppers, setAllVariant, drawersInBuild,
+    async setBackCover(v) { track('opt:backcover:' + (v ? 'on' : 'off')); build.backCover = !!v; await regenerate(); },
+    async setFeet(v) { track('opt:feet:' + v); build.feet = v; await regenerate(); },
+    currentFaceplateStyle, availableFaceplateStyles,
+    currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
+    applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
+    setMeasure, setDims, get dimsOn() { return dims.on; }, resetView() { $('btn-cam').click(); },
+    // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
+    buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;
 }

@@ -1,0 +1,51 @@
+/* Checkpoint screenshots of the workspace shell - the brief's phase checkpoint ("screenshot both modes")
+ * made repeatable. Opens `?ws=build&debug=1` on the root kit in headless Chrome, selects a drawer
+ * through the hook so the inspector is up, and writes full-page PNGs for both modes at a wide and a
+ * narrow desktop width into docs/redesign/checkpoints/. Not a test: nothing is compared.
+ *
+ *   node tools/shell-shots.mjs            -> build-screen-{dark,light}-{1440,1024}.png
+ */
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:http';
+import { readFile, stat } from 'node:fs/promises';
+import { extname } from 'node:path';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const OUT = join(root, 'docs', 'redesign', 'checkpoints');
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ico': 'image/x-icon' };
+function serve() {
+  const server = createServer(async (req, res) => {
+    try {
+      let p = decodeURIComponent(new URL(req.url, 'http://x').pathname); if (p.endsWith('/')) p += 'index.html';
+      const f = join(root, p); const s = await stat(f);
+      res.writeHead(200, { 'content-type': MIME[extname(f)] || 'application/octet-stream' }); res.end(await readFile(s.isDirectory() ? join(f, 'index.html') : f));
+    } catch { res.writeHead(404); res.end(); }
+  });
+  return new Promise((ok) => server.listen(0, '127.0.0.1', () => ok(server)));
+}
+
+const { chromium } = await import('playwright');
+await mkdir(OUT, { recursive: true });
+const server = await serve();
+const base = `http://127.0.0.1:${server.address().port}`;
+const browser = await (async () => { for (const o of [{ channel: 'chrome' }, {}]) { try { return await chromium.launch({ ...o, args: ['--enable-unsafe-swiftshader'] }); } catch {} } throw new Error('no browser'); })();
+try {
+  for (const [w, h] of [[1440, 900], [1024, 768]]) {
+    for (const mode of ['dark', 'light']) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+      await ctx.addInitScript((m) => { try { localStorage.setItem('gen2-theme', m); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} }, mode);
+      const page = await ctx.newPage();
+      await page.goto(`${base}/index.html?ws=build&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+      await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-dock'), null, { timeout: 90_000 });
+      await page.evaluate(() => { const h = window.__GEN2_VIEWER__; const e = [...h.instances.entries()].find(([, i]) => /DecorDrawer|ClassicDrawer/.test(i.cfg.node) && i.cfg.owner != null); if (e) h.setSelected(e[0]); });
+      await page.waitForFunction(() => { const h = window.__GEN2_VIEWER__; return h.quality !== 'veryhigh' || (h.acc && h.acc.n >= h.ACC_SAMPLES); }, null, { timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(800);
+      const file = join(OUT, `build-screen-${mode}-${w}.png`);
+      await writeFile(file, await page.screenshot({ type: 'png' }));
+      console.log('wrote', file);
+      await ctx.close();
+    }
+  }
+} finally { await browser.close(); server.close(); }

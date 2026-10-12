@@ -8,10 +8,16 @@
      transparent icon dissolves into a light tab bar — the tile keeps it legible
      in both themes. Root-absolute paths so /builds/ resolves them too. Same
      three files in all four GEN2 repos; source SVG is img/jerrari-logo.svg. -->
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="icon" href="/favicon.ico" sizes="32x32">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="css/viewer.css">
+  <!-- the redesign's tokens and shell (phase 0, Build screen first): inert unless app.js sets data-ws on <html> -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script type="importmap">
 {
   "imports": {
@@ -311,6 +317,9 @@
        pinned by test/tabletop-completion-vendor.test.mjs. Classic script, above
        main.js, for the same reason as the one above. -->
   <script src="js/vendor/tabletop-completion.js"></script>
+  <!-- The planner's catalog, verbatim and sha-pinned (test/catalog-vendor.test.mjs): the Build workspace's units, sizes,
+       printers, mounts and faceplates come from here, never from a second copy. -->
+  <script src="js/catalog/data.js"></script>
   <script type="module" src="js/boot.js"></script>
 <!-- GoatCounter analytics: cookieless, no consent banner. Counts a pageview on
      load; main.js's track() sends custom events (open/step/out/error…).
