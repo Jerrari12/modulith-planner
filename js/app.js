@@ -4,6 +4,7 @@
 // smoke tests still exercise. The default flips once the shell is accepted.
 import { createStage } from './main.js';
 import { mountBuild } from './workspaces/build.js';
+import { mountAssemble } from './workspaces/assemble.js';
 
 const QS = new URLSearchParams(location.search);
 const WS = QS.get('ws');
@@ -21,14 +22,33 @@ function initialMode() {
   try { return localStorage.getItem('gen2-theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
 }
 
+/* the workspaces that exist; each mount returns { onSelect?, onPage?, unmount } */
+const WORKSPACES = { build: mountBuild, assemble: mountAssemble };
+
 export async function boot() {
   if (!WS) { await createStage(document); return; }
   document.documentElement.dataset.ws = WS;
   document.documentElement.dataset.mode = initialMode();
-  const ws = { onSelect: null };
-  const stage = await createStage(document, { onSelect: (sel) => ws.onSelect && ws.onSelect(sel), quietSelect: WS === 'build', fillBoost: 1.6 });
+  let current = null;   // the mounted workspace's handle
+  const stage = await createStage(document, {
+    onSelect: (sel) => current?.onSelect?.(sel),
+    onPage: (i) => current?.onPage?.(i),
+    quietSelect: true, fillBoost: 1.6,
+  });
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
-  if (WS === 'build') ws.onSelect = mountBuild(stage, { setMode });
+  const ctx = {
+    setMode,
+    has: (ws) => !!WORKSPACES[ws],
+    switchTo(ws) {
+      if (!WORKSPACES[ws] || (current && current.name === ws)) return;
+      current?.unmount();
+      document.documentElement.dataset.ws = ws;
+      const q = new URLSearchParams(location.search); q.set('ws', ws);
+      history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`);
+      current = { name: ws, ...WORKSPACES[ws](stage, ctx) };
+    },
+  };
+  ctx.switchTo(WORKSPACES[WS] ? WS : 'build');
 }
 
 await boot();

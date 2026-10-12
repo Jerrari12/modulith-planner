@@ -5568,6 +5568,11 @@ function goTo(i, { animate = true } = {}) {
   // intro, no outro for a kit that is not finished
   if (manifest.incomplete) i = manifest.steps.length;
   cur = Math.max(0, Math.min(PAGES.length - 1, i));
+  // the stage's page event (phase 1, the Assemble workspace): which page is now current - 0 the cover,
+  // 1..steps the instruction pages (1 is the exploded intro), the last one the outro
+  // delivered after goTo has finished every branch (the callouts switch below, the outro's pause lock), so a
+  // workspace that re-reads the stage on the event sees the new page's state, not a mix
+  if (typeof opts !== 'undefined' && opts.onPage) queueMicrotask(() => opts.onPage(cur));
   ghostGroup.visible = !!manifest.incomplete && cur === manifest.steps.length;
   const page = PAGES[cur];
   const isCover = !!page.cover, isOutro = !!page.outro;
@@ -9665,6 +9670,13 @@ renderer.setAnimationLoop(renderLoop);
     applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
     setMeasure, setDims, get dimsOn() { return dims.on; }, get dims() { return dims; }, resetView() { $('btn-cam').click(); },
     setSafeArea, get safeArea() { return safeArea; },
+    // the step player, for the Assemble workspace (phase 1): the page index, the page count, and the viewer's
+    // own controls driven through their buttons so their tracking and state stay in one place
+    get cur() { return cur; }, get pageCount() { return PAGES.length; },
+    get paused() { return paused; }, setPaused, get slowmo() { return slowmo; },
+    setSlow(on) { if (slowmo !== !!on) $('btn-slow').click(); },
+    next() { goTo(cur + 1); }, prev() { goTo(cur - 1, { animate: false }); }, replay() { $('btn-replay').click(); },
+    skipToEnd() { goTo(PAGES.length - 2, { animate: false }); },
     // the filament palette: the presets, the active colour of a part key, and the saved-palette switch
     applyPreset, PRESETS, activeHex, applyPalette,
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows

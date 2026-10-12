@@ -175,6 +175,40 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws-dock .unit-lbl { font-size: 13px; color: var(--ink-2); }
 #ws-dock .cta { display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 22px; border-radius: 14px; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); font-family: var(--font-display); font-weight: 800; font-size: 17px; font-stretch: 110%; cursor: pointer; box-shadow: var(--cta-shadow); }
 
+/* ---- Assemble: the step list and the step player (the artboard's values) ---- */
+#ws-steps { position: absolute; top: 90px; left: 20px; width: 280px; box-sizing: border-box; padding: 14px 12px; border-radius: 18px; display: flex; flex-direction: column; gap: 4px; max-height: calc(100% - 90px - 200px); overflow-y: auto; }
+#ws-steps .head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 6px 8px; }
+#ws-steps h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 18px; font-stretch: 108%; }
+#ws-steps .count { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+#ws-steps .step { display: flex; align-items: center; gap: 10px; height: 38px; flex: none; padding: 0 8px; border-radius: 9px; border: none; text-align: left; font-size: 13px; cursor: pointer; background: transparent; color: var(--ink-2); }
+#ws-steps .step.cur { background: var(--seg-on); box-shadow: var(--seg-on-shadow); color: var(--ink); font-weight: 600; }
+#ws-steps .mark { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex: none; border-radius: 999px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; background: var(--badge-bg); color: var(--badge-fg); }
+#ws-steps .step.cur .mark { background: var(--orange); color: var(--on-orange); }
+#ws-steps .step.done .mark { background: var(--ok-bg); color: var(--ok-fg); }
+#ws-steps .skip { margin-top: 8px; height: 38px; flex: none; border-radius: 10px; font-size: 12px; font-weight: 600; }
+#ws-player { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); width: 640px; max-width: calc(100% - 40px); box-sizing: border-box; padding: 14px 16px 12px; border-radius: 20px; display: flex; flex-direction: column; gap: 10px; }
+#ws-player .row1 { display: flex; gap: 12px; align-items: flex-start; }
+#ws-player .num { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--orange); color: var(--on-orange); font-family: var(--font-mono); font-weight: 700; }
+#ws-player .title { font-family: var(--font-display); font-weight: 800; font-size: 17px; font-stretch: 108%; }
+#ws-player .text { margin-top: 2px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+#ws-player .colors { margin-left: auto; flex: none; display: flex; gap: 3px; padding: 3px; border-radius: 10px; background: var(--track); }
+#ws-player .colors .seg { height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; }
+#ws-player .row2 { display: flex; align-items: center; gap: 8px; }
+#ws-player .row2 .key { height: 40px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-player .row2 .sq { width: 44px; padding: 0; }
+#ws-player .row2 .next { padding: 0 16px; font-weight: 700; }
+#ws-player .row2 .key[disabled] { opacity: .45; cursor: not-allowed; }
+#ws-player .pips { flex: 1; display: flex; justify-content: center; gap: 5px; }
+#ws-player .pip { display: block; width: 7px; height: 7px; border-radius: 99px; background: var(--seg-track); }
+#ws-player .pip.done { background: var(--ink-3); }
+#ws-player .pip.cur { width: 18px; background: var(--orange); }
+#ws-player .row3 { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--hair); padding-top: 10px; }
+#ws-player .row3 .hint { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-player .row3 .seg { white-space: nowrap; }
+#ws-player .row3 .key { height: 36px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+#ws-player .row3 .key.on { font-weight: 700; padding: 0 14px; }
+html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }
@@ -195,7 +229,7 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
   #ws-switch > .chip-btn > span { max-width: 120px; }
   #ws-tabs { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); }
   #ws-top .spacer { flex: 1; }
-  #ws-lib, #ws-insp, #ws-tools { top: 134px; }
+  #ws-lib, #ws-insp, #ws-tools, #ws-steps { top: 134px; }
   #ws-dock { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }

@@ -16,43 +16,26 @@
  */
 import { glyphEl, sizeGlyph, FACEK, DEFAULT_COLORS } from '../ui/glyph.js';
 import { icon } from '../ui/icons.js';
+import { el, makeToast } from '../ui/dom.js';
+import { topbar } from '../ui/topbar.js';
+import { toolbar } from '../ui/toolbar.js';
 
 /* `const GEN2` at a classic script's top level is a global LEXICAL binding: visible to modules by name, absent from globalThis */
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
 const INSIDE = { 59: 45, 115: 101, 165: 151, 185: 171, 240: 226, 270: 256 };   // interior length per collection, mm
-const MOUNT_NAME = { 'under-table': 'Under-Table', tabletop: 'Tabletop', wall: 'Wall Mount' };
-const MOUNT_ICON = { 'under-table': 'desk', tabletop: 'table', wall: 'wall' };
 const FACE_LABEL = Object.fromEntries((G?.faceplateStyles || []).map((f) => [f.id, f.label]));
 const CLUB = { edgelabel: 1, classicpro: 1, chevron: 1 };
-const TABS = [['build', 'Build', 'cube'], ['colors', 'Colors', 'palette'], ['labels', 'Labels', 'tag'], ['parts', 'Parts', 'list-checks'], ['assemble', 'Assemble', 'wrench']];
-const PHASE = { colors: 'phase 4', labels: 'phase 5', parts: 'phase 2', assemble: 'phase 1' };
 
-/* tiny DOM helper: el('button.seg.on', { title }, [children]) */
-function el(spec, attrs = {}, children = []) {
-  const [tag, ...classes] = spec.split('.');
-  const node = document.createElement(tag || 'div');
-  if (classes.length) node.className = classes.join(' ');
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null || v === false) continue;
-    if (k === 'text') node.textContent = v;
-    else if (k === 'html') node.innerHTML = v;
-    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
-    else if (k === 'disabled') node.disabled = true;
-    else node.setAttribute(k, v === true ? '' : v);
-  }
-  for (const c of [].concat(children)) if (c != null) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-  return node;
-}
-
-export function mountBuild(stage, { setMode }) {
+export function mountBuild(stage, ctx) {
+  const ac = new AbortController();   // every window/document listener the workspace adds, dropped on unmount
+  const signal = ac.signal;
   const build = stage.build;
   const length = Number(build?.length || stage.manifest?.collection || 185);
   const st = {
     tab: 'add', collapsed: false,
     unit: 'decor', gf: 'standard', addSize: '1x1',
-    printer: 'any', measure: false, menu: false, sel: null,
-    name: stage.manifest?.title || 'Workbench build',
+    printer: 'any', measure: false, sel: null,
   };
   /* a representative finished build (Astra, 2026-10-12): the first preset's coordinated filaments unless the
      visitor already has a saved palette; instruction colours stay available for Assemble */
@@ -70,69 +53,8 @@ export function mountBuild(stage, { setMode }) {
 
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
-  const toast = el('div', { id: 'ws-toast', class: 'glass' });
-  let toastT = 0;
-  const say = (msg) => { toast.textContent = msg; toast.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toast.classList.remove('show'), 2600); };
-  const soon = (what, when) => () => say(`${what} comes with ${when}.`);
-
-  /* ---------------- top bar ---------------- */
-  const top = el('header', { id: 'ws-top' });
-  top.append(
-    el('a', { id: 'ws-logo', href: 'https://modulith.systems', title: 'MODULITH' }, [el('img', { src: 'img/modulith-logo.svg', alt: 'MODULITH' })]),
-    switcher(),
-    el('div.spacer'),
-    tabs(),
-    el('span.badge.preview', { text: 'Preview', title: 'A visual preview over the real scene. Adding, moving and removing units, per-unit type and the 2D board arrive with the Build rules (phase 3).' }),
-    el('div.spacer'),
-    el('button.chip.chip-btn.mount', { title: 'Mount and length · opens the setup sheet (phase 0, later)', onclick: soon('The setup sheet', 'the next phase-0 step') }, [
-      icon(MOUNT_ICON[build?.mount] || 'table'), `${MOUNT_NAME[build?.mount] || 'Tabletop'} · `, el('span.mono', { text: String(length) }),
-    ]),
-    el('button.chip.chip-btn.printer', { title: 'Printer · optional; only greys out sizes that will not fit', onclick: soon('The printer picker', 'the setup sheet') }, [icon('printer'), el('span', { text: 'Any printer' })]),
-    themeToggle(),
-    el('button.chip.chip-btn.share', { onclick: share, title: 'Share' }, [icon('share-network'), el('span', { text: 'Share' })]),
-  );
-  root.appendChild(top);
-
-  function switcher() {
-    const wrap = el('div', { id: 'ws-switch' });
-    const btn = el('button.chip.chip-btn.strong', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, [icon('folder-simple'), el('span', { text: st.name }), icon('caret-down', { size: 16 })]);
-    const menu = el('div.menu.glass', { role: 'menu', hidden: true });
-    menu.append(
-      el('div.label', { text: 'Current build' }),
-      el('button.item.current', { role: 'menuitem' }, [el('span', { text: st.name }), el('span.meta', { text: `${length} · ${build?.placed?.length ?? 0} units` })]),
-      el('div.divider'),
-      el('div.label', { text: 'Recent builds' }),
-      el('div.meta', { text: 'Autosaved in this browser · arrives with the build store', style: 'padding:4px 10px 8px' }),
-      el('div.divider'),
-      ...[['Rename', 'the build store'], ['Duplicate', 'the build store'], ['Save build file', 'the build store'], ['Load build file', 'the build store'], ['New build', 'the setup sheet']]
-        .map(([t, when]) => el('button.item', { role: 'menuitem', disabled: true, title: `${t} comes with ${when}` }, [el('span', { text: t })])),
-    );
-    btn.addEventListener('click', () => { st.menu = !st.menu; menu.hidden = !st.menu; btn.setAttribute('aria-expanded', String(st.menu)); });
-    document.addEventListener('pointerdown', (e) => { if (st.menu && !wrap.contains(e.target)) { st.menu = false; menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); } });
-    wrap.append(btn, menu);
-    return wrap;
-  }
-  function tabs() {
-    const nav = el('nav.chip', { id: 'ws-tabs', 'aria-label': 'Workspaces' });
-    for (const [id, name, ic] of TABS) {
-      const on = id === 'build';
-      nav.appendChild(el('button.tab' + (on ? '.on' : ''), { 'aria-current': on ? 'page' : null, title: on ? null : `${name} comes in ${PHASE[id]}`, onclick: on ? null : soon(`The ${name} workspace`, PHASE[id]) },
-        [icon(ic, { fill: on }), el('span', { text: name })]));
-    }
-    return nav;
-  }
-  function themeToggle() {
-    const g = el('div.chip', { id: 'ws-theme', role: 'group', 'aria-label': 'Day Grid or Night Grid' });
-    const mk = (mode, ic, label) => el('button', { title: label, 'aria-label': label, 'aria-pressed': String(document.documentElement.dataset.mode === mode), onclick: () => { setMode(mode, stage); sync(); } }, [icon(ic, { fill: mode === 'dark' && document.documentElement.dataset.mode === 'dark' })]);
-    const sun = mk('light', 'sun', 'Day Grid'), moon = mk('dark', 'moon', 'Night Grid');
-    const sync = () => { const m = document.documentElement.dataset.mode; sun.classList.toggle('on', m === 'light'); moon.classList.toggle('on', m === 'dark'); sun.setAttribute('aria-pressed', String(m === 'light')); moon.setAttribute('aria-pressed', String(m === 'dark')); };
-    g.append(sun, moon); sync();
-    return g;
-  }
-  async function share() {
-    try { await navigator.clipboard.writeText(location.href); say('Link copied.'); }
-    catch { say('Copy the address bar to share this build.'); }
-  }
+  const { say, soon } = makeToast(root);
+  root.prepend(topbar(stage, { ...ctx, active: 'build', say, soon, signal }));
 
   /* ---------------- library ---------------- */
   const lib = el('aside.glass', { id: 'ws-lib', 'aria-label': 'Library' });
@@ -363,22 +285,7 @@ export function mountBuild(stage, { setMode }) {
   }
 
   /* ---------------- toolbar + dock ---------------- */
-  const tools = el('div', { id: 'ws-tools', role: 'toolbar', 'aria-label': 'View' });
-  /* Measure = the W/H/L callouts (the inventory's "Measure | W/H/L in mm + in"). Off until asked: their labels
-     are still clamped to the old layout's edges until the stage gets its safe area. */
-  const measureBtn = el('button.chip.icon-btn.measure', { title: 'Measure · W/H/L', 'aria-label': 'Measure', 'aria-pressed': 'false', onclick: () => { st.measure = !st.measure; stage.setDims(st.measure); measureBtn.classList.toggle('on', st.measure); measureBtn.setAttribute('aria-pressed', String(st.measure)); document.documentElement.classList.toggle('ws-measure', st.measure); } }, [icon('ruler')]);
-  const qualityBtn = el('button.chip.quality', { title: 'Render quality · click to cycle' }, [icon('gauge', { size: 16 }), el('span')]);
-  const Q_NAME = { veryhigh: 'Very High', high: 'High', balanced: 'Balanced', fast: 'Fast' };
-  const qLabel = () => { qualityBtn.querySelector('span').textContent = `Quality · ${Q_NAME[stage.quality] || stage.quality}`; };
-  qualityBtn.addEventListener('click', () => { const keys = Object.keys(stage.QUALITY); const i = keys.indexOf(stage.quality); stage.applyQuality(keys[(i + 1) % keys.length], true); qLabel(); });
-  qLabel();
-  tools.append(
-    el('div.chip.view', { role: 'group', 'aria-label': 'View' }, [el('button.on', { text: '3D', 'aria-pressed': 'true' }), el('button', { text: '2D', disabled: true, title: 'The 2D board comes with the Build rules (phase 3)' })]),
-    measureBtn,
-    el('button.chip.icon-btn', { title: 'Explode · comes with Assemble (phase 1)', 'aria-label': 'Explode', onclick: soon('Explode', 'Assemble (phase 1)') }, [icon('arrows-out')]),
-    el('button.chip.icon-btn', { title: 'Reset view', 'aria-label': 'Reset view', onclick: () => stage.resetView() }, [icon('cube-focus')]),
-    qualityBtn,
-  );
+  const tools = toolbar(stage, { soon }).el;
   root.appendChild(tools);
 
   const dock = el('footer.glass', { id: 'ws-dock' });
@@ -396,7 +303,6 @@ export function mountBuild(stage, { setMode }) {
     el('button.cta', { onclick: soon('The Parts workspace', 'phase 2') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
   );
   root.appendChild(dock);
-  root.appendChild(toast);
 
   const narrow = () => innerWidth < 1280;
   function layout() {
@@ -422,7 +328,7 @@ export function mountBuild(stage, { setMode }) {
     if (narrow() && st.sel && !st.collapsed) { st.collapsed = true; autoCollapsed = true; }
     else if ((!narrow() || !st.sel) && autoCollapsed) { st.collapsed = false; autoCollapsed = false; }
   }
-  addEventListener('resize', () => { applyNarrow(); renderLib(); layout(); });
+  addEventListener('resize', () => { applyNarrow(); renderLib(); layout(); }, { signal });
 
   /* ---------------- stage ---------------- */
   // the finished build, not the cover: the Build workspace edits what is there
@@ -430,14 +336,22 @@ export function mountBuild(stage, { setMode }) {
   if (steps) stage.goTo(steps, { animate: false });
   stage.setDims(false);   // the finished page turns the callouts on; Build starts with them off (see the Measure button)
   renderLib(); layout(); renderInspector();
-  document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; });
+  document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
 
-  return (sel) => {
-    st.sel = sel;
-    const was = st.collapsed;
-    applyNarrow();
-    if (st.collapsed !== was) renderLib();
-    renderInspector();
-    layout();
+  return {
+    onSelect(sel) {
+      st.sel = sel;
+      const was = st.collapsed;
+      applyNarrow();
+      if (st.collapsed !== was) renderLib();
+      renderInspector();
+      layout();
+    },
+    unmount() {
+      ac.abort();
+      stage.setSelected(null);
+      stage.setSafeArea(null);
+      root.remove();
+    },
   };
 }
