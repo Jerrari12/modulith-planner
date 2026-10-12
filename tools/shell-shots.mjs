@@ -39,12 +39,24 @@ try {
       const page = await ctx.newPage();
       await page.goto(`${base}/index.html?ws=build&debug=1`, { waitUntil: 'load', timeout: 90_000 });
       await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-dock'), null, { timeout: 90_000 });
+      const settle = () => page.waitForFunction(() => { const h = window.__GEN2_VIEWER__; return h.quality !== 'veryhigh' || (h.acc && h.acc.n >= h.ACC_SAMPLES); }, null, { timeout: 30_000 }).catch(() => {});
+      if (w === 1440 && mode === 'dark') {
+        /* the selection pair Astra asked for: the same camera with nothing selected, then with one unit selected */
+        await settle(); await page.waitForTimeout(600);
+        await writeFile(join(OUT, 'build-screen-dark-1440-selection-off.png'), await page.screenshot({ type: 'png' }));
+      }
       await page.evaluate(() => { const h = window.__GEN2_VIEWER__; const e = [...h.instances.entries()].find(([, i]) => /DecorDrawer|ClassicDrawer/.test(i.cfg.node) && i.cfg.owner != null); if (e) h.setSelected(e[0]); });
       await page.waitForFunction(() => { const h = window.__GEN2_VIEWER__; return h.quality !== 'veryhigh' || (h.acc && h.acc.n >= h.ACC_SAMPLES); }, null, { timeout: 30_000 }).catch(() => {});
       await page.waitForTimeout(800);
       const file = join(OUT, `build-screen-${mode}-${w}.png`);
       await writeFile(file, await page.screenshot({ type: 'png' }));
       console.log('wrote', file);
+      if (w === 1440 && mode === 'dark') {
+        /* the W/H/L callouts inside the safe area: Measure on, same camera */
+        await page.click('#ws-tools .measure');
+        await settle(); await page.waitForTimeout(800);
+        await writeFile(join(OUT, 'build-screen-dark-1440-measure.png'), await page.screenshot({ type: 'png' }));
+      }
       await ctx.close();
     }
   }

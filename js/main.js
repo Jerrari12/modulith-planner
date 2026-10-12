@@ -691,7 +691,9 @@ function applyQuality(name) {
   baseHemi = rig.hemi;
   if (!cinema.on) hemi.intensity = rig.hemi;
   sun.intensity = rig.sun;
-  fill.intensity = rig.fill;
+  /* the workspace asks for more fill (opts.fillBoost, 2026-10-12): a black shell in the Jerrari palette lost its
+     side faces at the stage's resting fill; the boost reveals the shape without changing the filament colour */
+  fill.intensity = rig.fill * ((typeof opts !== 'undefined' && opts.fillBoost) || 1);
 
   // The outro owns scene.environment while it runs — don't stomp the party room.
   if (!cinema.on) scene.environment = q.env ? studioEnv() : null;
@@ -4622,6 +4624,34 @@ async function playStep(i) {
 }
 
 // ---------- camera ----------
+/* The workspace's framing (2026-10-12, Astra: "fit the projected model bounds with modest padding, rather than
+   treating 'nothing overlaps' as the only success criterion"). The sphere fit above is the start; this walks
+   the distance in so the PROJECTED box of the build fills FILL of the free region (the canvas minus the safe
+   area's bands), whichever axis is tighter. Three refinements are enough for a perspective camera. */
+const FIT_FILL = 0.84;
+const _fitProbe = new THREE.PerspectiveCamera(40, 1.6, 1, 1e5);
+const _fitV = new THREE.Vector3();
+function fitProjected(r, t, p, target, fov) {
+  const W = canvas.clientWidth || 1, H = canvas.clientHeight || 1;
+  const fw = Math.max(0.1, (W - safeArea.left - safeArea.right) / W), fh = Math.max(0.1, (H - safeArea.top - safeArea.bottom) / H);
+  const dir = new THREE.Vector3(Math.sin(p) * Math.sin(t), Math.cos(p), Math.sin(p) * Math.cos(t));
+  _fitProbe.fov = fov; _fitProbe.aspect = camera.aspect || 1.6; _fitProbe.updateProjectionMatrix();
+  const b = assembledBox, floor = r * 0.25;   // never closer than a quarter of the sphere fit
+  for (let k = 0; k < 3; k++) {
+    _fitProbe.position.copy(dir).multiplyScalar(r).add(target); _fitProbe.lookAt(target); _fitProbe.updateMatrixWorld();
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      _fitV.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(_fitProbe);
+      if (_fitV.z > 1) return r;   // a corner behind the probe: keep the sphere fit
+      x0 = Math.min(x0, _fitV.x); x1 = Math.max(x1, _fitV.x); y0 = Math.min(y0, _fitV.y); y1 = Math.max(y1, _fitV.y);
+    }
+    const need = Math.max((x1 - x0) / (2 * fw), (y1 - y0) / (2 * fh)) / FIT_FILL;
+    if (!isFinite(need) || need <= 0) return r;
+    r = Math.max(floor, r * need);
+    if (Math.abs(need - 1) < 0.01) break;
+  }
+  return r;
+}
 function camPos(preset) {
   const t = THREE.MathUtils.degToRad(preset.t), p = THREE.MathUtils.degToRad(preset.p);
   const target = new THREE.Vector3(...preset.target);
@@ -4632,9 +4662,10 @@ function camPos(preset) {
   // `coverBox` frames the cover's OFF-CENTRE composition: a plain `fit` would
   // re-centre the build and throw the box-art layout away, so fit the stated
   // half-extents at the live aspect and never come closer than the tuned r.
-  const r = preset.coverBox ? coverDistance(preset.coverBox, preset.fov || 40, preset.r)
+  let r = preset.coverBox ? coverDistance(preset.coverBox, preset.fov || 40, preset.r)
     : preset.fitR ? fitDistanceFor(preset.fitR, preset.fov || 40)
     : preset.fit ? fitDistance(preset.fit, preset.fov || 40) : preset.r;
+  if (safeArea && preset.fit && !assembledBox.isEmpty()) r = fitProjected(r, t, p, target, preset.fov || 40);
   const pos = new THREE.Vector3(
     r * Math.sin(p) * Math.sin(t),
     r * Math.cos(p),
@@ -8030,9 +8061,15 @@ function updateDims() { // render-loop: pick edges for the camera, then place la
   const cx = (rx0 + rx1) / 2, cy = (ry0 + ry1) / 2;
   // the desktop parts panel overlays the canvas's right side when open — keep
   // the H line (and clamp all labels) clear of it
-  const cp = $('checklist-panel');
-  const panelLeft = (!cp.classList.contains('hidden') && !isMobile())
-    ? cp.getBoundingClientRect().left - r.left : Infinity;
+  const cp = $('checklist-panel'), cpRect = cp.getBoundingClientRect();
+  // a panel the stylesheet has removed (the workspace shell hides the viewer's chrome by display:none, which
+  // leaves its class list alone) measures 0 wide at x 0: treat it as absent, or every label clamps to the left edge
+  let panelLeft = (!cp.classList.contains('hidden') && !isMobile() && cpRect.width > 0)
+    ? cpRect.left - r.left : Infinity;
+  // the workspace's safe area (2026-10-12): the labels stay inside it, and corners whose label would land under
+  // a panel score as if under the parts panel
+  let minX = 40, minY = 24, maxY = r.height - 24;
+  if (safeArea) { panelLeft = Math.min(panelLeft, r.width - safeArea.right); minX = safeArea.left + 8; minY = safeArea.top + 8; maxY = r.height - safeArea.bottom - 8; }
   // ---- choose the edges for this view --------------------------------------
   const wFront = camera.position.z >= ctr.z;
   const lRight = camera.position.x >= ctr.x;
@@ -8046,7 +8083,7 @@ function updateDims() { // render-loop: pick edges for the camera, then place la
     const px = (p.x + 1) / 2 * r.width;
     // penalize corners whose LABEL would have no room before the panel (pill
     // needs ~90px) — not just corners literally under it
-    const score = Math.abs(px - cx) * (px > panelLeft - 90 ? 0.25 : 1);
+    const score = Math.abs(px - cx) * (px > panelLeft - 90 || (safeArea && px < minX + 90) ? 0.25 : 1);   // the left-edge penalty is the workspace's only
     const cand = { sx, sz, score };
     if (!hBest || score > hBest.score) hBest = cand;
     if (dims.hCorner && sx === dims.hCorner.sx && sz === dims.hCorner.sz) hCur = cand;
@@ -8094,7 +8131,7 @@ function updateDims() { // render-loop: pick edges for the camera, then place la
     // clamp to the viewport (and clear of the parts panel) — the label pins to
     // the edge if a tight crop pushes its line point off-screen
     const maxX = Math.min(r.width - 40, panelLeft - hw);
-    const fx = Math.min(Math.max(pos.x, 40), Math.max(40, maxX)), fy = Math.min(Math.max(pos.y, 24), r.height - 24);
+    const fx = Math.min(Math.max(pos.x, minX), Math.max(minX, maxX)), fy = Math.min(Math.max(pos.y, minY), Math.max(minY, maxY));
     placedRects.push({ x0: fx - hw, x1: fx + hw, y0: fy - hh, y1: fy + hh });
     el.style.left = fx + 'px';
     el.style.top = fy + 'px';
@@ -9626,7 +9663,7 @@ renderer.setAnimationLoop(renderLoop);
     currentFaceplateStyle, availableFaceplateStyles,
     currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
     applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
-    setMeasure, setDims, get dimsOn() { return dims.on; }, resetView() { $('btn-cam').click(); },
+    setMeasure, setDims, get dimsOn() { return dims.on; }, get dims() { return dims; }, resetView() { $('btn-cam').click(); },
     setSafeArea, get safeArea() { return safeArea; },
     // the filament palette: the presets, the active colour of a part key, and the saved-palette switch
     applyPreset, PRESETS, activeHex, applyPalette,

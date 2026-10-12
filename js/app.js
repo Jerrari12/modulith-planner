@@ -26,7 +26,7 @@ export async function boot() {
   document.documentElement.dataset.ws = WS;
   document.documentElement.dataset.mode = initialMode();
   const ws = { onSelect: null };
-  const stage = await createStage(document, { onSelect: (sel) => ws.onSelect && ws.onSelect(sel), quietSelect: WS === 'build' });
+  const stage = await createStage(document, { onSelect: (sel) => ws.onSelect && ws.onSelect(sel), quietSelect: WS === 'build', fillBoost: 1.6 });
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
   if (WS === 'build') ws.onSelect = mountBuild(stage, { setMode });
 }
