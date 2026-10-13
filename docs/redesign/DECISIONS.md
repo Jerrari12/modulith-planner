@@ -148,3 +148,8 @@ Dated calls made while building, with who made them. The brief and the inventory
 
 - **The drawer under the pointer wears the armed label before the click** (a phase-5 deferral). The stage gained a hover watch (`watchHover(on)`, `opts.onHover(unitId | null)`): off by default, so no pointer move casts a ray unless a workspace asks; the Labels workspace turns it on while a label is armed and never on touch. The preview goes through the stage's mirror alone (`setLabels` on a copy of the record): the record does not change, nothing is placed, and leaving the drawer or placing puts the record's own mirror back. Only an eligible, empty drawer previews; a labelled or ineligible one shows nothing, as the tap would refuse it. Proved in the Labels e2e case: hover shows the words with no assignment, leaving clears them.
 
+## 2026-10-13 (the redirect carries the last build; the goldens)
+
+- **The old address forwards the build the browser had open last.** The cutover-redirect branch's script (087c78b) reads the old planner's `gen2-last-build` slot when the address carries no kit and no build, and forwards it as the share-link form; a labels link rides beside it. The one migration the plan had left to a sentence on the page is a mechanism now; the colour stores and the tracker still stay behind (CUTOVER.md).
+- **The golden screenshots still match after phases 3 to 5**: 60 shots (every official kit, cover, a middle step and the end, Very High and Fast), 0 differ. The stage refactors, the hover watch and the label mirror changes moved no pixel of the old viewer's pages.
+
