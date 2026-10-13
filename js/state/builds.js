@@ -87,7 +87,9 @@ function idb() {
 const tx = (db, mode, fn) => new Promise((ok, no) => { const t = db.transaction(STORE, mode); const r = fn(t.objectStore(STORE)); t.oncomplete = () => ok(r && 'result' in r ? r.result : undefined); t.onerror = () => no(t.error); t.onabort = () => no(t.error); });
 
 /* open the store: IndexedDB, or a localStorage list when the browser refuses it. Every method returns a promise. */
-export async function openBuilds({ storage = globalThis.localStorage } = {}) {
+export async function openBuilds({ storage = null } = {}) {
+  if (!storage) { try { storage = globalThis.localStorage; } catch { storage = null; } }   // a browser that blocks storage throws on the read itself
+  if (!storage) storage = { getItem: () => null, setItem() {}, removeItem() {} };
   let db = null;
   try { db = await idb(); } catch { db = null; }
   const readFallback = () => { try { const v = JSON.parse(storage.getItem(FALLBACK_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
@@ -130,6 +132,9 @@ export async function openBuilds({ storage = globalThis.localStorage } = {}) {
       writeFallback(readFallback().filter((e) => e.id !== id));
       try { const raw = storage.getItem(SLOT_KEY); if (raw && JSON.parse(raw).buildId === id) storage.removeItem(SLOT_KEY); } catch { /* a damaged slot stays */ }   // a deleted build never comes back through the slot
     },
+    /* the planner's slot through the same storage, so callers never touch localStorage themselves (the storage guard test) */
+    writeSlot: (record) => writeSlot(storage, record),
+    readSlot: () => readSlot(storage),
     get currentId() { try { return storage.getItem(CURRENT_KEY) || null; } catch { return null; } },
     set currentId(id) { try { if (id) storage.setItem(CURRENT_KEY, id); else storage.removeItem(CURRENT_KEY); } catch { /* private */ } },
     /* the browser is asked to keep this origin's storage under pressure, once, after the first save */
