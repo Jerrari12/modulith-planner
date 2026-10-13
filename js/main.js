@@ -6178,6 +6178,16 @@ function unitBox(unitId) {
   for (const i of unitInstances(unitId)) if (i.group.visible) { i.group.updateWorldMatrix(true, true); box.expandByObject(i.group); }
   return box;
 }
+/* where a unit sits on the page (CSS px of its bounding box's centre), for harnesses that drive a pointer - the hint-clip
+   recorder (tools/hint-clips.mjs) moves a cursor to a drawer the way a visitor would. null when the unit is not on screen. */
+function unitScreen(unitId) {
+  const b = unitBox(unitId);
+  if (b.isEmpty()) return null;
+  // the FRONT face's centre, not the box's: the box centre sits inside the case, and a ray to it can land on a neighbour
+  const c = b.getCenter(new THREE.Vector3()); c.z = b.max.z; c.project(camera);
+  const r = renderer.domElement.getBoundingClientRect();
+  return { x: r.left + (c.x + 1) / 2 * r.width, y: r.top + (1 - c.y) / 2 * r.height };
+}
 function setSelected(id) {
   if (selectedId === id) return;
   schedulePaidNote(); // the card's paid links come and go with the selection
@@ -10250,7 +10260,7 @@ renderer.setAnimationLoop(renderLoop);
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits,
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,
