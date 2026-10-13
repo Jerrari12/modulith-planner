@@ -567,6 +567,61 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 @media (max-width: 1279px) { #ws-labels, #ws-labeledit { top: 134px; } }
 
+/* ---- the setup sheet: mount, length, printer, the name (js/ui/setup.js) ---- */
+#ws-setup { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .4); font-family: var(--font-ui); color: var(--ink); font-size: 13px; }
+#ws-setup .sheet { width: 680px; max-width: 100%; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 18px 20px 16px; border-radius: 20px; display: flex; flex-direction: column; gap: 12px; }
+#ws-setup .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+#ws-setup h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 22px; font-stretch: 108%; }
+#ws-setup .sub { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
+#ws-setup .x { width: 32px; height: 32px; padding: 0; border: none; background: transparent; color: var(--ink-3); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-setup .namerow { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-2); }
+#ws-setup .namerow input { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; }
+#ws-setup .track.steps { grid-template-columns: 1fr 1fr 1fr; }
+#ws-setup .steps .seg { height: auto; padding: 8px 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; }
+#ws-setup .steps .seg b { font-size: 12px; }
+#ws-setup .steps .seg span { font-size: 11px; font-weight: 500; color: var(--ink-2); }
+#ws-setup .steps .seg.on span { color: var(--ink); }
+#ws-setup .body { display: flex; flex-direction: column; gap: 10px; }
+#ws-setup .cards { display: grid; gap: 8px; }
+#ws-setup .cards.mounts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#ws-setup .cards.lengths { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#ws-setup .card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; border-radius: 14px; border: 1px solid var(--hair); background: var(--input-bg); color: var(--ink); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+#ws-setup .card:hover { background: var(--track); }
+#ws-setup .card.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
+#ws-setup .card.dis { opacity: .5; cursor: not-allowed; }
+#ws-setup .card .ico { color: var(--ink-2); margin-bottom: 2px; }
+#ws-setup .card b { font-size: 14px; }
+#ws-setup .card .blurb, #ws-setup .card .use { font-size: 11px; color: var(--ink-2); line-height: 1.35; }
+#ws-setup .card .note { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+#ws-setup .card .stripe { display: block; width: 100%; height: 6px; border-radius: 3px; margin-bottom: 4px; }
+#ws-setup .card .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; }
+#ws-setup .card .lname { font-size: 12px; font-weight: 600; }
+#ws-setup .card .badge { font-size: 9px; letter-spacing: .06em; padding: 2px 6px; border-radius: 5px; font-weight: 700; }
+#ws-setup .card .badge.rec { background: var(--orange); color: var(--on-orange); }
+#ws-setup .card .badge.warn { background: var(--warn-bg); color: var(--warn-fg); }
+#ws-setup .card .lost { font-size: 11px; color: var(--warn-fg); }
+#ws-setup .space .hint, #ws-setup .hint, #ws-setup .tip { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-setup .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#ws-setup .num { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+#ws-setup input[type="number"] { width: 90px; height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-setup .unit { font-size: 11px; color: var(--ink-3); }
+#ws-setup .selrow { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-2); }
+#ws-setup select { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-setup .foot { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hair); }
+#ws-setup .fit { margin: 0; font-size: 12px; font-weight: 600; }
+#ws-setup .warn { margin: 0; font-size: 12px; color: var(--warn-fg); }
+#ws-setup .btns { display: flex; align-items: center; gap: 6px; }
+#ws-setup .btns .spacer { flex: 1; }
+#ws-setup .btns .key { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-setup .cta { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 12px; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); font-family: var(--font-display); font-weight: 800; font-size: 15px; font-stretch: 110%; cursor: pointer; box-shadow: var(--cta-shadow); }
+@media (max-width: 1023px) {
+  #ws-setup { padding: 0; align-items: flex-end; }
+  #ws-setup .sheet { width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  #ws-setup .cards.mounts { grid-template-columns: 1fr; }
+  #ws-setup .cards.mounts .card { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+  #ws-setup .cards.lengths { grid-template-columns: 1fr 1fr; }
+}
+
 /* ---- the phone layout (<= 1023 px): a bottom tab bar, panels as bottom sheets, a slim dock (the brief §2) ---- */
 #ws-tabbar { display: none; }
 @media (max-width: 1023px) {

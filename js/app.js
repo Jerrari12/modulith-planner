@@ -11,6 +11,7 @@ import { mountLabels, labelsBadge } from './workspaces/labels.js';
 import { createStore } from './state/store.js';
 import { openBuilds, entryOf, hashOf, fileOf, fileName, parseBuildFile, cleanName } from './state/builds.js';
 import { isPhone, PHONE_MAX } from './ui/phone.js';
+import { openSetup } from './ui/setup.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog, a classic-script lexical global
@@ -19,6 +20,7 @@ const QS = new URLSearchParams(location.search);
 const WS = QS.get('ws');
 const KIT = QS.get('build');   // the official kit this page opened with, kept in the address through every edit
 const FRESH = QS.get('new') === '1';   // New build: a fresh copy of the kit, never the build this browser had open
+const SETUP = QS.get('setup') === '1';   // ...and the setup sheet open on it
 /* THE PALETTE BELONGS TO A BUILD (Astra, 2026-10-14: two projects from one kit must keep different colours). A page opened
    on a #build= hash whose record carries an id keys its palette by that id; a kit page keys by the kit until its first
    edit, when the store's record (minted an id by the sanitiser) takes the kit's palette with it under its own key. */
@@ -56,7 +58,7 @@ export async function boot() {
      the planner's slot) by putting its record in the address before the stage boots from it; `?new=1` skips that. */
   const builds = await openBuilds();
   let entry = null;   // the Recent entry of the build on this page, once known
-  if (FRESH) { const q = new URLSearchParams(location.search); q.delete('new'); history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`); }
+  if (FRESH || SETUP) { const q = new URLSearchParams(location.search); q.delete('new'); q.delete('setup'); history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`); }
   else if (!/(^#|&)build=/.test(location.hash) && !KIT) {
     const cur = await builds.get(builds.currentId); const rec = cur ? cur.record : builds.readSlot();
     if (rec) { entry = cur; history.replaceState(null, '', location.pathname + location.search + hashOf(rec) + (location.hash ? '&' + location.hash.slice(1) : '')); }
@@ -93,6 +95,8 @@ export async function boot() {
     }).catch((e) => console.warn('[builds] save failed', e));
     return saving;
   }
+  /* the mounted workspace's toast (every workspace makes one as #ws-toast) */
+  const toast = (m) => { const t = document.getElementById('ws-toast'); if (!t) return; t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); };
   const go = (q, hash = '') => { const u = new URLSearchParams(q); location.href = `${location.pathname}?${u}${hash}`; };
   const wsNow = () => document.documentElement.dataset.ws || 'build';
   /* a shared scheme (#scheme= beside #build=, the Colors workspace's Share): applied once, then dropped from the address */
@@ -141,12 +145,14 @@ export async function boot() {
         builds.currentId = e.id; builds.writeSlot(e.record); go({ ws: wsNow() }, hashOf(e.record)); return null;
       },
       async remove(id) { await builds.remove(id); if (entry && entry.id === id) { entry = null; builds.currentId = null; go({ ws: 'build', new: '1', ...(KIT ? { build: KIT } : {}) }); } },
-      newBuild() { go({ ws: 'build', new: '1', ...(KIT ? { build: KIT } : {}) }); },
+      newBuild() { go({ ws: 'build', new: '1', setup: '1', ...(KIT ? { build: KIT } : {}) }); },   // a fresh kit page with the setup sheet open
       /* the cap: save the oldest as a file, or drop it; either way the held build is saved next */
       async capSave() { if (!capPending) return; const e = capPending.drop; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([fileOf(e)], { type: 'application/json' })); a.download = fileName(e); document.body.appendChild(a); a.click(); a.remove(); },
       async capDrop() { if (!capPending) return; const p = capPending; capPending = null; await builds.remove(p.drop.id); if (p.name) { const e = entryOf(JSON.parse(p.snap), { name: p.name, kit: KIT }); await builds.put(e); builds.currentId = e.id; builds.writeSlot(e.record); go({ ws: wsNow(), ...(KIT ? { build: KIT } : {}) }, hashOf(e.record)); } else await saveBuild(p.snap); },
       capKeep() { capPending = null; },
     },
+    /* the setup sheet: mount, length, printer and the name; `fresh` = a New build (mount and length reload the page on the record) */
+    openSetup: (step, fresh = false) => openSetup(stage, { store, builds: ctx.builds, say: toast, remount: () => ctx.remount() }, { step, fresh }),
     remount() { if (current) { const ws = current.name; current.unmount(); current = { name: ws, ...WORKSPACES[ws](stage, ctx) }; } },
     switchTo(ws) {
       if (!WORKSPACES[ws] || (current && current.name === ws)) return;
@@ -162,6 +168,7 @@ export async function boot() {
   const labelsLink = /(^#|&)labels-(add=|open)/.test(location.hash);
   if (/(^#|&)labels-open(&|$)/.test(location.hash)) history.replaceState(null, '', location.href.replace(/[#&]labels-open(?=&|$)/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
   ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
+  if (SETUP) ctx.openSetup('mount', FRESH);   // New build: the sheet opens over the fresh kit
   /* crossing the phone breakpoint re-mounts the workspace in the other chrome (its memo keeps the selection and step) */
   let wasPhone = isPhone(), resizeT = 0;
   addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { const now = isPhone(); document.documentElement.classList.toggle('ws-phone', now); if (now !== wasPhone) { wasPhone = now; ctx.remount(); } }, 150); });

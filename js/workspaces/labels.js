@@ -18,7 +18,8 @@ import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle } from '../labe
 import { loadLabelFont, labelIcons } from '../label-text.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
-const G = globalThis.GEN2;
+// eslint-disable-next-line no-undef
+const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog: a classic-script LEXICAL global, not a globalThis property
 
 /* ---- the brand icons of the two Label Studio tiles (its own tag and the Part Picker's bolt), and the hover scenes ---- */
 const STUDIO_ICON = () => scene('0 0 16 16', '<path fill="currentColor" fill-rule="evenodd" d="M2 2h6l6.3 6.3a1.5 1.5 0 0 1 0 2.1l-3.9 3.9a1.5 1.5 0 0 1-2.1 0L2 8V2zm3.2 1.9a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/>');
