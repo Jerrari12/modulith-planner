@@ -149,6 +149,13 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   await btn(page, 'Place several', '#ws-labels').click();
   await settle(page, 200);
   const ids = await page.evaluate(() => window.__GEN2_STORE__.state.placed.map((u) => u.id));
+  // the preview: the drawer under the pointer wears the armed label's words before any click, and loses them on leave
+  const at = await page.evaluate((id) => window.__GEN2_VIEWER__.unitScreen(id), ids[0]);
+  await page.mouse.move(at.x, at.y);
+  await page.waitForFunction((id) => { const u = window.__GEN2_VIEWER__.build.placed.find((x) => x.id === id); return !!(u && u.label); }, ids[0], { timeout: 15_000 });
+  assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign || {}).length), 0, 'the preview places nothing');
+  await page.mouse.move(5, 5);
+  await page.waitForFunction((id) => { const u = window.__GEN2_VIEWER__.build.placed.find((x) => x.id === id); return !(u && u.label); }, ids[0], { timeout: 15_000 });
   await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), ids[0]); await settle(page, 500);
   await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), ids[1]); await settle(page, 500);
   assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 2, 'two placed');

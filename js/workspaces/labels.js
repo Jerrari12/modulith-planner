@@ -107,7 +107,7 @@ export function mountLabels(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
   const S = () => store.state;
-  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set() };
+  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null };
   let L = null;   // the label-list module once loaded
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -162,6 +162,7 @@ export function mountLabels(stage, ctx) {
 
   /* ---------------- placing ---------------- */
   function tapDrawer(unitId) {
+    st.hover = null;   // the record's own mirror follows the commit (syncStage); a refused tap keeps nothing of the preview either
     const u = unit(unitId); if (!u || !st.pick) return;
     if (!R.eligible(S(), u)) { status(u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : R.NO_FACE_MSG, true); renderAll(); return; }
     const prev = assignOf()[u.id] || null;
@@ -184,7 +185,23 @@ export function mountLabels(stage, ctx) {
     const l = id ? R.labelById(S(), id) : null;
     st.pick = l && L.assignable(l) ? id : null;
     if (st.pick) { st.selId = null; st.edit = null; status(''); stage.setSelected(null); if (phone) phone.collapse(panel); }   // the model stays uncovered while placing (Joey's phone finding)
+    hoverPreview(null); stage.watchHover(!!st.pick);
     renderAll();
+  }
+  /* THE PREVIEW WHILE PLACING (a phase-5 deferral): the empty drawer under the pointer wears the armed label's words before the
+     click, through the stage's mirror alone (setLabels on a copy of the record; the record itself does not change). Leaving
+     the drawer, or placing, puts the record's own mirror back. */
+  function hoverPreview(unitId) {
+    const u = unitId != null && st.pick ? unit(unitId) : null;
+    const l = u ? R.labelById(S(), st.pick) : null;
+    const show = !!(u && l && R.eligible(S(), u) && !assignOf()[u.id]);
+    if (!show) { if (st.hover != null) { st.hover = null; stage.setLabels(store.serialize()); } return; }
+    if (st.hover === u.id) return;
+    st.hover = u.id;
+    const rec = store.serialize(); const m = L.mirrorOfLabel(l);
+    const p = rec.placed.find((x) => x.id === u.id);
+    if (p && m) { p.label = m.label; if (m.labelBadge) p.labelBadge = m.labelBadge; else delete p.labelBadge; }
+    stage.setLabels(rec);
   }
   let pendingReplace = null;
   function askReplace(unitId, labelId, expect, mode) {
@@ -578,6 +595,7 @@ export function mountLabels(stage, ctx) {
   }).catch((e) => { status(`The label tools did not load (${e.message}). Reload the page to try again.`, true); renderAll(); });
 
   return {
+    onHover(unitId) { if (L) hoverPreview(unitId); },
     onSelect(sel) {
       st.sel = sel;
       const owner = sel ? (sel.owner ?? stage.partInfo?.(sel.id)?.owner ?? null) : null;
@@ -590,7 +608,7 @@ export function mountLabels(stage, ctx) {
     unmount() {
       ac.abort(); unsub();
       if (ctx.memo) ctx.memo.labelsSel = st.selId;
-      stage.setSelected(null); stage.setSafeArea(null);
+      stage.setSelected(null); stage.setSafeArea(null); stage.watchHover(false);
       hideHint();
       if (phone) phone.destroy(); root.remove();
     },

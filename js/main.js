@@ -8289,11 +8289,27 @@ function endCarry(drop) {
   invalidateFrame();
   return moved;
 }
+/* the hover watch (the Labels workspace's preview while placing): while on, every pointer move names the unit under the
+   pointer through opts.onHover(unitId | null), once per change; off, nothing is cast. Never on touch (no hover there). */
+let hoverWatch = false, hoverId = null;
+function watchHover(on) {
+  hoverWatch = !!on;
+  if (!hoverWatch && hoverId != null) { hoverId = null; if (typeof opts !== 'undefined' && opts.onHover) opts.onHover(null); }
+}
+function hoverAt(e) {
+  if (!hoverWatch || typeof opts === 'undefined' || !opts.onHover) return;
+  const id = e && e.pointerType !== 'touch' && build ? unitAtEvent(e) : null;
+  if (id === hoverId) return;
+  hoverId = id; opts.onHover(id);
+  if (!carry && !eraser) canvas.style.cursor = id != null ? 'pointer' : '';
+}
 canvas.addEventListener('pointermove', e => {
   if (carry) { dragMove(e); return; }
   if (eraser) { const id = unitAtEvent(e); if (id !== eraseId) eraseBox(id); canvas.style.cursor = id != null ? 'pointer' : ''; return; }
   if (spotSpec && e.pointerType !== 'touch') { const g = spotAt(e); if (g !== spotHover) { spotHover = g; spotStyle(); canvas.style.cursor = g ? 'pointer' : ''; } }
+  hoverAt(e);
 });
+canvas.addEventListener('pointerleave', () => hoverAt(null));
 canvas.addEventListener('pointercancel', () => endCarry(false));
 canvas.addEventListener('contextmenu', e => {
   if (typeof opts === 'undefined' || !opts.onContext || !build) return;
@@ -10261,7 +10277,7 @@ renderer.setAnimationLoop(renderLoop);
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
     update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotWorld,
-    setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits,
+    setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
