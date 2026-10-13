@@ -48,6 +48,8 @@ Phase 1 (Assemble, same day): `opts.onPage(i)` fires from `goTo` with the new pa
 
 `createStage(document, { colorStoreKey })` lets the shell key the saved palette per build (default: the viewer's URL-derived key). The object carries `palette()` ({ on, colors, user }, copies), `setColor(key, filament | null)` (one region; the filament is `{ name, hex, url }`), `setPalette({ colors, on, user? })` (the whole working palette), `setUseCustom(on)`, `restoreUserPalette()`, `applyPreset(p)` / `PRESETS` (as before), `keysInBuild()` (every type and Type:zone a mounted part draws, with its part count and whether it is purchased hardware), `partInfo(instanceId)` (label, qty, type, zones, primaryKey, locked, links, owner, ridesDrawer), `setBuildPlate(key)` and `colorLocked(key)`. Every setter saves to the colour store and repaints; none touches history (the workspace commits to the store, whose `extra` snapshots the palette).
 
+Phase 4b adds the per-unit layer: `setOverride(unitId, key, filament | null)`, `clearOverrides(unitId?, key?)`, `overrideFor(unitId, key)`; `palette()` carries `over`; `setPalette({ over })` restores or clears it (a scheme clears it); `keysInBuild()` entries carry `own` (units with their own pick for the key) and `partInfo` carries `own` (this unit's overridden keys); `thumb({ unitId })` renders a unit with its own picks; `setColorStoreKey(key)` moves the saved palette to another key (a build's own).
+
 All overlays live in one `edit-overlays` group outside `instances` (flagged `userData.ghost`), so the BOM, the callouts, measuring, shadows, AO and the reflection never see them. `regenerate(pre)` takes an optional pre-generated result.
 
 ## What the goldens do and do not prove

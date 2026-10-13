@@ -3442,6 +3442,7 @@ function buildAxisForKey(key) {
    they used to know about only one. The build PLATE decides the impression on a face-down plate;
    the FAMILY decides which way the plate prints at all, and therefore which way its layers run. */
 function dropFaceplateMaterials(types = ['Faceplate']) {
+  purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
   const drop = new Set(types);   // the see-into rebuild also names 'Accent', a part of its own that a pick can make translucent
   for (const k of Object.keys(materials)) if (drop.has(k.split(':')[0])) delete materials[k];
   for (const k of Object.keys(highlightMats)) if (drop.has(k.split(':')[0])) delete highlightMats[k];
@@ -3524,6 +3525,7 @@ function syncRelief() {
    does that itself, and the plate switch runs inside mountManifest, whose applyState reassigns every
    mesh from the rebuilt registries. */
 function purgePartMaterials() {
+  purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
   for (const map of [materials, highlightMats, altMaterials, altHighlightMats,
     plannedMats, plannedHighlightMats]) {
     for (const k of Object.keys(map)) delete map[k];
@@ -5847,9 +5849,33 @@ function plannedMatFor(src, cacheKey) {
   }
   return plannedMats[cacheKey].mat;
 }
+/* A unit's own pick wins over the palette (phase 4b, "This drawer only"): an exact key, or - for a zone with no
+   build-level pick - the unit's Body pick, the way a zone follows its type in activeHex. */
+function overrideFor(uid, key) {
+  if (uid == null || !useCustom) return null;
+  const o = overrides[uid]; if (!o) return null;
+  if (o[key]) return o[key];
+  const base = key.split(':')[0];
+  return (base !== key && !customColors[key] && o[base]) ? o[base] : null;
+}
+const overrideMats = {};
+function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } }
+function overrideMatFor(key, ov, zone, alt) {
+  const type = key.split(':')[0];
+  const base = (alt && !zone) ? altMatFor(type) : baseMatFor(type, zone);
+  const k = key + '|' + ov.hex + '|' + (ov.name || '') + (alt && !zone ? '|alt' : '');
+  if (!overrideMats[k]) {
+    const m = cloneMaterial(base); m.color.set(ov.hex);
+    const spec = partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label: ov.name || null });
+    m.roughness = spec.roughness; m.metalness = spec.metalness;
+    overrideMats[k] = m;
+  }
+  return overrideMats[k];
+}
 function materialFor(inst, highlighted, zone = '') {
   const type = typeByNode[inst.cfg.node];
   const key = zoneKey(type, zone);
+  if (!inst.cfg.planned && !colorLocked(key)) { const ov = overrideFor(unitOf(inst), key); if (ov) return overrideMatFor(key, ov, zone, inst.alt); }
   const solid = (inst.alt && !zone) ? altMatFor(type) : baseMatFor(type, zone); // zoned types aren't tiled — alt is a body-only concept
   const planned = !!inst.cfg.planned;
   const pKey = key + (inst.alt && !zone ? '|alt' : '');
@@ -6742,7 +6768,8 @@ const PRESETS = [
 // official kits get their own palette slot (keyed by kit id) so a saved color
 // scheme sticks to THAT kit — planner hand-offs share one 'custom-build' slot
 // the benchmark keeps its own key, so a palette saved for the demo kit never repaints the benchmark's build
-const COLOR_STORE_KEY = (typeof opts !== 'undefined' && opts && opts.colorStoreKey) || ('gen2-colors:' + (IS_BENCH ? 'bench' : BUILD_HASH ? 'custom-build' : OFFICIAL ? 'official-' + OFFICIAL.id : KIT));   // the workspace shell keys the palette per build (phase 4)
+let COLOR_STORE_KEY = (typeof opts !== 'undefined' && opts && opts.colorStoreKey) || ('gen2-colors:' + (IS_BENCH ? 'bench' : BUILD_HASH ? 'custom-build' : OFFICIAL ? 'official-' + OFFICIAL.id : KIT));   // the workspace shell keys the palette per build (phase 4); setColorStoreKey moves it
+let overrides = {};   // per-unit picks on top of the palette: unitId -> { key -> { name, hex, url } } (phase 4b); cleared by a scheme or a preset
 let customColors = {}, useCustom = false; // customColors: type -> {name, hex, url}
 // userPalette = the last palette the user built BY HAND (individual swatch
 // picks / per-type resets / file upload). Hand edits mirror the whole working
@@ -6756,6 +6783,7 @@ if (!IS_PART) try {
   const saved = JSON.parse(localStorage.getItem(COLOR_STORE_KEY) || 'null');
   if (saved) {
     customColors = saved.colors || {};
+    overrides = (saved.over && typeof saved.over === 'object') ? saved.over : {};
     useCustom = !!saved.on;
     // migration: pre-userPalette saves treat the current colors as hand-picked
     userPalette = saved.user || structuredClone(customColors);
@@ -6765,7 +6793,7 @@ if (!IS_PART) try {
 // persist without re-stamping (remote applies adopt the sender's stamp so the
 // exchange converges); saveColors = a LOCAL edit → new stamp + tell the planner
 const persistColors = () => {
-  try { localStorage.setItem(COLOR_STORE_KEY, JSON.stringify({ colors: customColors, on: useCustom, user: userPalette, t: colorsT })); }
+  try { localStorage.setItem(COLOR_STORE_KEY, JSON.stringify({ colors: customColors, on: useCustom, user: userPalette, over: overrides, t: colorsT })); }
   catch (e) { /* storage unavailable (private mode) — the planner relay still works */ }
 };
 const saveColors = () => { colorsT = Date.now(); persistColors(); postColorsToPlanner(); };
@@ -6892,9 +6920,11 @@ function applyPreset(p) {
   track('preset:' + slug(p.name)); // preset names are OURS — a fixed, tiny vocabulary
   customColors = {};
   for (const [type, f] of Object.entries(p.colors)) customColors[type] = { ...f };
+  overrides = {};
   useCustom = true;
   saveColors();
   applyPalette();
+  refreshMaterials();
 }
 function restoreUserPalette() {
   track('preset:my-palette');
@@ -8269,13 +8299,13 @@ canvas.addEventListener('contextmenu', e => {
 const THUMB_TYPES = new Set(['Case', 'CaseExtender', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip']);
 const thumbCache = new Map();
 let thumbScene = null, thumbCam = null, thumbRT = null;
-function paletteSig() { return Object.keys(manifest.colors || {}).sort().map(k => k + '=' + activeHex(k)).join(',') + '|' + stageTheme + '|' + (useCustom ? 1 : 0); }
+function paletteSig() { return Object.keys(manifest.colors || {}).sort().map(k => k + '=' + activeHex(k)).join(',') + '|' + stageTheme + '|' + (useCustom ? 1 : 0) + '|' + JSON.stringify(overrides); }
 async function renderThumb(opts = {}) {
   if (!build) return null;
-  const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08 } = opts;
+  const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08, unitId = null } = opts;
   const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
   const sig = paletteSig();
-  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, handle && handle.node, build.buildPlate, sig]);
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, sig]);
   if (thumbCache.has(key)) return thumbCache.get(key);
   const job = (async () => {
     const gridH = Math.max(1, Math.ceil(hh / 2));
@@ -8318,7 +8348,7 @@ async function renderThumb(opts = {}) {
       const rot = c.rot || [0, c.yaw || 0, 0];
       g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
       const t = typeByNode[node];
-      g.traverse(o => { if (o.isMesh) { o.material = baseMatFor(t, o.userData.zone || ''); o.castShadow = false; o.receiveShadow = false; } });
+      g.traverse(o => { if (o.isMesh) { const z = o.userData.zone || ''; const ov = unitId != null ? overrideFor(unitId, zoneKey(t, z)) : null; o.material = ov ? overrideMatFor(zoneKey(t, z), ov, z, false) : baseMatFor(t, z); o.castShadow = false; o.receiveShadow = false; } });
       group.add(g);
     }
     thumbScene.add(group); group.updateWorldMatrix(true, true);
@@ -8363,20 +8393,45 @@ async function renderThumb(opts = {}) {
    The palette stays the viewer's own (customColors keyed by part type or Type:zone, useCustom, userPalette); the
    workspace reads and writes it through these, so the model, the product previews (keyed on paletteSig) and
    every panel read one source. */
-function palette() { return { on: useCustom, colors: structuredClone(customColors), user: structuredClone(userPalette) }; }
-function setColor(key, f) {   // one region: a filament { name, hex, url }, or null for the instruction colour
+function palette() { return { on: useCustom, colors: structuredClone(customColors), user: structuredClone(userPalette), over: structuredClone(overrides) }; }
+/* re-assign every instance's materials (an override came or went; a scheme replaced the layer) */
+function refreshMaterials() {
+  for (const inst of instances.values()) inst.group.traverse(o => { if (o.isMesh && !(o.material && o.material.userData && o.material.userData.fpFade)) o.material = materialFor(inst, inst.cfg.id === selectedId && selGlow(inst), o.userData.zone); });
+  invalidateFrame();
+}
+function setOverride(uid, key, f) {   // one unit, one region: a filament, or null for "use the build colour"
+  if (uid == null) return;
+  overrides[uid] = overrides[uid] || {};
+  if (f) overrides[uid][key] = { name: f.name, hex: f.hex, url: f.url }; else delete overrides[uid][key];
+  if (!Object.keys(overrides[uid]).length) delete overrides[uid];
+  useCustom = Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0;
+  saveColors(); applyPalette(); refreshMaterials();
+}
+function clearOverrides(uid = null, key = null) {   // every unit's own pick for one key, or one unit's picks, or all
+  for (const u of Object.keys(overrides)) {
+    if (uid != null && String(u) !== String(uid)) continue;
+    if (key) delete overrides[u][key]; else delete overrides[u];
+    if (overrides[u] && !Object.keys(overrides[u]).length) delete overrides[u];
+  }
+  useCustom = useCustom && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0);
+  saveColors(); applyPalette(); refreshMaterials();
+}
+function setColorStoreKey(key) { if (!key || key === COLOR_STORE_KEY) return; COLOR_STORE_KEY = key; persistColors(); }
+function setColor(key, f) {   // one region, build-wide: a filament { name, hex, url }, or null for the instruction colour; units' own picks stay
   if (f) customColors[key] = { name: f.name, hex: f.hex, url: f.url }; else delete customColors[key];
-  useCustom = Object.keys(customColors).length > 0;
+  useCustom = Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0;
   snapshotUserPalette(); saveColors(); applyPalette();
+  refreshMaterials();   // a zone that FOLLOWED a unit's Body pick stops following once the build picks that zone (Sol 01a13359)
   if (selectedId && instances.has(selectedId)) refreshSelHighlight();
 }
 function setPalette(p) {   // the whole working palette (a scheme, an upload, an undo)
   customColors = {}; for (const [k, v] of Object.entries((p && p.colors) || {})) if (v && v.hex) customColors[k] = { name: v.name, hex: v.hex, url: v.url };
-  useCustom = !!(p && p.on) && Object.keys(customColors).length > 0;
+  overrides = (p && p.over && typeof p.over === 'object') ? structuredClone(p.over) : {};   // a scheme replaces the layer; an undo restores it
+  useCustom = !!(p && p.on) && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0);
   if (p && p.user) userPalette = structuredClone(p.user);
-  saveColors(); applyPalette();
+  saveColors(); applyPalette(); refreshMaterials();
 }
-function setUseCustom(on) { useCustom = !!on && Object.keys(customColors).length > 0; saveColors(); applyPalette(); }
+function setUseCustom(on) { useCustom = !!on && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0); saveColors(); applyPalette(); refreshMaterials(); }
 /* every (type, zone) a mounted part draws, with how many parts carry it and whether it is purchased hardware */
 function keysInBuild() {
   const out = new Map();
@@ -8385,7 +8440,7 @@ function keysInBuild() {
     const zones = new Set(); inst.group.traverse(o => { if (o.isMesh && o.userData.zone && !isStripeZone(o.userData.zone)) zones.add(o.userData.zone); });
     for (const key of [t, ...[...zones].map(z => zoneKey(t, z))]) { const e = out.get(key) || { key, type: t, zone: key.includes(':') ? key.split(':')[1] : '', count: 0, locked: colorLocked(t) }; if (!key.includes(':')) e.count++; out.set(key, e); }
   }
-  for (const e of out.values()) if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0;
+  for (const e of out.values()) { if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0; e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0; }
   const order = ['Case', 'CaseExtender', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
@@ -8396,7 +8451,8 @@ function partInfo(instId) {
   const type = typeByNode[inst.cfg.node]; const row = partInfoByNode[inst.cfg.node] || { label: inst.cfg.node, qty: 0 };
   const zones = new Set(); inst.group.traverse(o => { if (o.isMesh && o.userData.zone && !isStripeZone(o.userData.zone)) zones.add(o.userData.zone); });
   let host = inst, hops = 0; while (host && host.cfg.owner == null && host.cfg.rides && hops++ < 4) host = instances.get(host.cfg.rides) || null;
-  return { id: instId, node: inst.cfg.node, type, label: row.label, qty: row.qty, zones: [...zones].sort(), primaryKey: primaryKey(inst.cfg.node), locked: colorLocked(type), links: Array.isArray(row.links) ? row.links : [], owner: unitOf(inst), ridesDrawer: !!(host && typeByNode[host.cfg.node] === 'Drawer') };
+  const owner = unitOf(inst);
+  return { id: instId, node: inst.cfg.node, type, label: row.label, qty: row.qty, zones: [...zones].sort(), primaryKey: primaryKey(inst.cfg.node), locked: colorLocked(type), links: Array.isArray(row.links) ? row.links : [], owner, ridesDrawer: !!(host && typeByNode[host.cfg.node] === 'Drawer'), own: owner != null && overrides[owner] ? Object.keys(overrides[owner]) : [] };
 }
 /* swap the record and rebuild the scene (the Build workspace's every edit): the generator judges first, so an
    unshowable layout leaves the last good scene standing and returns its reasons for the issue card */
@@ -10189,6 +10245,7 @@ renderer.setAnimationLoop(renderLoop);
     thumb: renderThumb,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
     palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
+    setOverride, clearOverrides, overrideFor, setColorStoreKey,
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;

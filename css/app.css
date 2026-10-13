@@ -418,6 +418,12 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 @media (max-width: 1279px) { #ws-colors, #ws-picker { top: 134px; } }
 
+/* ---- Colors, the per-unit layer ---- */
+#ws-picker .head .region { font-size: 13px; color: var(--orange); }
+#ws-picker .resets { display: flex; gap: 6px; }
+#ws-colors .crow .own, #ws-partcard .zchip .tag { margin-left: 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; background: var(--orange); color: var(--on-orange); font-weight: 700; }
+#ws-partcard .zchip.own { border-color: var(--orange); }
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }

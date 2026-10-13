@@ -26,6 +26,10 @@ const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved schemes, in thi
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : z.charAt(0) + z.slice(1).toLowerCase();
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
+const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
+const typePlural = (key) => TYPE_PLURAL[key.split(':')[0]] || (key.split(':')[0].toLowerCase() + 's');
+const regionOf = (key) => key.includes(':') ? ZONE_LABEL(key.split(':')[1]) : 'Body';
+const FILL_WORD = { classic: 'drawer', decor: 'drawer', shelf: 'shelf', cabinet: 'cabinet' };
 const PAID = [/(^|\.)amazon\./, /(^|\.)amzn\.to$/, /(^|\.)shop\.polymaker\.com$/];
 const isPaid = (href) => { try { return PAID.some((re) => re.test(new URL(href).hostname.toLowerCase())); } catch { return false; } };
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
@@ -33,7 +37,7 @@ const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 export function mountColors(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
-  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, mine: true };
+  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, mine: true, scope: 'all' };   // scope: 'all' (the build) | 'unit' (the clicked unit only)
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
@@ -42,9 +46,16 @@ export function mountColors(stage, ctx) {
   /* ---------------- the palette, as one undo step each ---------------- */
   const pal = () => stage.palette();
   const worn = (key) => { const p = pal(); return p.on && p.colors[key] ? p.colors[key] : null; };
-  function commitColors(why, fn) { fn(); store.commit(() => {}, why); }   // the store snapshots the palette with the build
+  function commitColors(why, fn) { if (ctx.ownPaletteKey) ctx.ownPaletteKey(); fn(); store.commit(() => {}, why); }   // the key is the build's own first; the store snapshots the palette with the build
   const unsub = store.subscribe((state, why) => { if (why === 'adopt') return; renderAll(); });
-  function pick(key, f) { commitColors('color', () => stage.setColor(key, f ? { name: f.label || f.name, hex: f.hex, url: f.url } : null)); }
+  const unitOfSel = () => { const info = st.sel ? stage.partInfo(st.sel.id) : null; return info && info.owner != null ? info.owner : null; };
+  const unitWord = () => { const u = store.state.placed.find((p) => p.id === unitOfSel()); return FILL_WORD[u?.fill] || 'unit'; };
+  const unitNo = () => { const i = store.state.placed.findIndex((p) => p.id === unitOfSel()); return i < 0 ? '' : ` (unit ${i + 1})`; };
+  function pick(key, f) {
+    const fil = f ? { name: f.label || f.name, hex: f.hex, url: f.url } : null;
+    if (st.scope === 'unit' && unitOfSel() != null) commitColors('color-unit', () => stage.setOverride(unitOfSel(), key, fil));
+    else commitColors('color', () => stage.setColor(key, fil));
+  }
 
   /* ---------------- left panel ---------------- */
   const panel = el('aside.glass', { id: 'ws-colors', 'aria-label': 'Colors' });
@@ -103,7 +114,7 @@ export function mountColors(stage, ctx) {
       pre.appendChild(el('div.scheme.key' + (on ? '.on' : ''), {}, [
         el('button.apply', { title: `Apply the “${preset.name}” preset`, onclick: () => commitColors('preset', () => stage.applyPreset(preset)) }, [el('span.strip', {}, preset.swatches.map((h) => el('i', { style: `background:${h}` }))), el('span.name', { text: preset.name })]),
         on ? el('span.badge', { text: 'ACTIVE' }) : null,
-        el('button.shop', { title: 'The filaments this look uses, with buy links', onclick: () => { st.shop = preset; renderShop(); } }, ['Shop this look ↗']),
+        el('button.shop', { title: 'The filaments this look uses, with buy links', onclick: () => { st.shop = preset; renderShop(); renderCard(); } }, ['Shop this look ↗']),
       ]));
     }
     panel.appendChild(pre);
@@ -117,7 +128,7 @@ export function mountColors(stage, ctx) {
       rows.appendChild(el('button.crow.key' + (st.key === k.key ? '.on' : ''), { disabled: k.locked, title: k.locked ? 'Purchased hardware, not printed · no filament to pick' : `Pick a filament for ${keyLabel(k.key).toLowerCase()}`, onclick: () => openPicker(k.key) }, [
         el('span.sw', { style: `background:${hex}` }),
         el('span.lbl', {}, [el('b', { text: keyLabel(k.key) }), el('span.cnt', { text: ` ×${k.count}` })]),
-        el('span.fil', { text: k.locked ? 'Bought' : w ? w.name.replace('Panchroma ', '') : p.on && k.key.includes(':') ? 'follows Body' : 'Instruction colour' }),
+        el('span.fil', {}, [k.locked ? 'Bought' : w ? w.name.replace('Panchroma ', '') : p.on && k.key.includes(':') ? 'follows Body' : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
       ]));
     }
     inb.appendChild(rows);
@@ -166,14 +177,19 @@ export function mountColors(stage, ctx) {
     const key = st.key;
     if (!key) { picker.hidden = true; return; }
     picker.hidden = false;
-    const keys = stage.keysInBuild(); const k = keys.find((x) => x.key === key); const count = k ? k.count : 0;
-    const w = worn(key); const q = st.query.trim().toLowerCase();
+    const keys = stage.keysInBuild(); const k = keys.find((x) => x.key === key); const count = k ? k.count : 0; const own = k ? k.own : 0;
+    const uid = unitOfSel(); if (uid == null) st.scope = 'all';
+    const unitPick = uid != null ? (pal().on && pal().over[uid] && pal().over[uid][key]) || null : null;
+    const w = st.scope === 'unit' ? (unitPick || null) : worn(key);   // what the chosen scope is wearing
+    const q = st.query.trim().toLowerCase();
+    const scopeText = st.scope === 'unit' ? `This ${unitWord()} only${unitNo()}` : `All ${typePlural(key)} · ${count}`;
     picker.append(
-      el('div.head', {}, [el('h2.h2', { text: `${keyLabel(key)} · ${count ? `all ${n(count, 'part')}` : 'this build'}` }), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
+      el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: regionOf(key) }), ` · ${scopeText}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
       el('div.track.seg2', { role: 'group', 'aria-label': 'Apply to' }, [
-        el('button.seg.on', { text: count ? `All ${count}` : 'All' }),
-        el('button.seg', { text: 'Only this one', disabled: true, title: 'Per-unit colour overrides come next in this phase' }),
+        el('button.seg' + (st.scope === 'all' ? '.on' : ''), { text: `All ${typePlural(key)} · ${count}`, onclick: () => { st.scope = 'all'; renderAll(); } }),
+        el('button.seg' + (st.scope === 'unit' ? '.on' : ''), { text: uid != null ? `This ${unitWord()} only` : 'This unit only', disabled: uid == null, title: uid == null ? 'Click a part of a unit on the model first' : `Only unit ${unitNo().replace(/[() ]|unit /g, '')} keeps this pick; the other ${typePlural(key)} follow the build colour`, onclick: () => { st.scope = 'unit'; renderAll(); } }),
       ]),
+      st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? worn(key).name.replace('Panchroma ', '') : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
       el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
     );
     const brands = el('div.brands');
@@ -205,7 +221,9 @@ export function mountColors(stage, ctx) {
     picker.appendChild(el('div.foot', {}, [
       el('a.buy', { href: buyUrl, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: (w ? `Buy ${w.name.replace('Panchroma ', '')} →` : 'Shop filament →') + (paid ? ' · paid link' : '') }),
       el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
-      el('button.key.sm', { text: 'Reset', title: 'Back to the instruction colour for this region', disabled: !w, onclick: () => pick(key, null) }),
+      el('div.resets', {}, st.scope === 'unit'
+        ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]
+        : [el('button.key.sm', { text: 'Reset to instruction colour', title: `Every ${typePlural(key).replace(/s$/, '')} ${regionOf(key).toLowerCase()} back to the kit’s colour, own colours included`, disabled: !w && !own, onclick: () => commitColors('color', () => { stage.setColor(key, null); if (own) stage.clearOverrides(null, key); }) })]),
     ]));
   }
 
@@ -215,21 +233,24 @@ export function mountColors(stage, ctx) {
   function renderCard() {
     const sel = st.sel;
     card.replaceChildren();
-    if (!sel) { card.hidden = true; return; }
+    if (!sel || st.shop) { card.hidden = true; return; }   // the shopping list takes the card's place while it is open (Astra)
     card.hidden = false;
     const info = stage.partInfo(sel.id);
     if (!info) { card.hidden = true; return; }
     const primary = info.primaryKey; const w = worn(primary);
+    const total = (stage.keysInBuild().find((k) => k.key === info.type) || {}).count || info.qty;
+    const ownPick = info.owner != null ? stage.overrideFor(info.owner, primary) : null;
+    const unitIdx = info.owner != null ? store.state.placed.findIndex((p) => p.id === info.owner) + 1 : 0;
     card.append(
       el('div.chead', {}, [
-        el('span.sw', { style: `background:${stage.activeHex(primary)}` }),
-        el('div.col', {}, [el('b', { text: info.label }), el('span.meta', { text: `×${info.qty} in this build · ${info.locked ? 'bought, not printed' : w ? w.name : 'instruction colour'}` })]),
+        el('span.sw', { style: `background:${ownPick ? ownPick.hex : stage.activeHex(primary)}` }),
+        el('div.col', {}, [el('b', { text: info.label }), el('span.meta', { text: `${n(info.qty, 'of this size')} · ${n(total, TYPE_PLURAL[info.type] ? TYPE_PLURAL[info.type].replace(/s$/, '') : info.type.toLowerCase(), TYPE_PLURAL[info.type] || info.type.toLowerCase() + 's')} in the build${unitIdx ? ` · unit ${unitIdx}` : ''} · ${info.locked ? 'bought, not printed' : ownPick ? `${ownPick.name} (this ${unitWord()}’s own)` : w ? w.name : 'instruction colour'}` })]),
         el('button.x', { title: 'Deselect', 'aria-label': 'Deselect', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })]),
       ]),
     );
     if (!info.locked) {
       const chips = el('div.chips');
-      const chip = (label, key) => chips.appendChild(el('button.zchip' + (st.key === key ? '.on' : ''), { title: `Pick a filament for the ${label.toLowerCase()}`, onclick: () => openPicker(key) }, [el('i', { style: `background:${stage.activeHex(key)}` }), label]));
+      const chip = (label, key) => { const ov = info.owner != null ? stage.overrideFor(info.owner, key) : null; chips.appendChild(el('button.zchip' + (st.key === key ? '.on' : '') + (ov ? '.own' : ''), { title: ov ? `${label} · this ${unitWord()}’s own colour (${ov.name})` : `Pick a filament for the ${label.toLowerCase()}`, onclick: () => openPicker(key) }, [el('i', { style: `background:${ov ? ov.hex : stage.activeHex(key)}` }), label, ov ? el('span.tag', { text: 'OWN' }) : null])); };
       chip('Body', info.type);
       for (const z of info.zones) chip(ZONE_LABEL(z), `${info.type}:${z}`);
       card.appendChild(chips);
@@ -245,12 +266,12 @@ export function mountColors(stage, ctx) {
   root.appendChild(bar.el);
   const dock = el('footer.glass', { id: 'ws-dock' });
   root.appendChild(dock);
-  const filamentsOf = (colors) => { const seen = new Map(); for (const [k, c] of Object.entries(colors || {})) { if (!c || !c.name) continue; if (!seen.has(c.name)) seen.set(c.name, { ...c, keys: [] }); seen.get(c.name).keys.push(k); } return [...seen.values()]; };
+  const filamentsOf = (colors, over = null) => { const seen = new Map(); const add = (k, c) => { if (!c || !c.name) return; if (!seen.has(c.name)) seen.set(c.name, { ...c, keys: [] }); if (!seen.get(c.name).keys.includes(k)) seen.get(c.name).keys.push(k); }; for (const [k, c] of Object.entries(colors || {})) add(k, c); for (const o of Object.values(over || {})) for (const [k, c] of Object.entries(o || {})) add(k, c); return [...seen.values()]; };
   function renderDock() {
-    const p = pal(); const fils = p.on ? filamentsOf(p.colors).filter((f) => stage.keysInBuild().some((k) => f.keys.includes(k.key))) : [];
+    const p = pal(); const fils = p.on ? filamentsOf(p.colors, p.over).filter((f) => stage.keysInBuild().some((k) => f.keys.includes(k.key))) : [];
     const s = stage.buildSize?.(); const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
     dock.replaceChildren(
-      el('button.status.stack', { title: fils.length ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !fils.length, onclick: () => { st.shop = st.shop ? false : 'build'; renderShop(); } }, [el('span.stacks', {}, fils.slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), fils.length ? n(fils.length, 'filament') : 'Instruction colors']),
+      el('button.status.stack', { title: fils.length ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !fils.length, onclick: () => { st.shop = st.shop ? false : 'build'; renderShop(); renderCard(); } }, [el('span.stacks', {}, fils.slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), fils.length ? n(fils.length, 'filament') : 'Instruction colors']),
       el('div.group', {}, [el('span.big', { text: String(store.state.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
       el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
@@ -263,10 +284,10 @@ export function mountColors(stage, ctx) {
     const preset = st.shop === 'build' ? null : st.shop;
     const colors = preset ? preset.colors : pal().colors;
     const inBuild = new Set(stage.keysInBuild().map((k) => k.key));
-    const fils = filamentsOf(colors).map((f) => ({ ...f, uses: f.keys.filter((k) => preset ? true : inBuild.has(k)) })).filter((f) => f.uses.length);
+    const fils = filamentsOf(colors, preset ? null : pal().over).map((f) => ({ ...f, uses: f.keys.filter((k) => preset ? true : inBuild.has(k)) })).filter((f) => f.uses.length);
     shop.hidden = false;
     shop.replaceChildren(
-      el('div.ihead', {}, [el('b', { text: preset ? `Shop “${preset.name}”` : 'Filaments in this build' }), el('button.x', { 'aria-label': 'Close', onclick: () => { st.shop = false; renderShop(); } }, [icon('x', { size: 16 })])]),
+      el('div.ihead', {}, [el('b', { text: preset ? `Shop “${preset.name}”` : 'Filaments in this build' }), el('button.x', { 'aria-label': 'Close', onclick: () => { st.shop = false; renderShop(); renderCard(); } }, [icon('x', { size: 16 })])]),
       ...fils.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw', { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.uses.map(keyLabel).join(' · ') })]), el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' })]); }),
       el('span.disc', { text: fils.some((f) => /polymaker/i.test(f.url)) ? 'Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission at no extra cost to you.' : fils.some((f) => isPaid(f.url)) ? 'Paid links · I earn a small commission at no extra cost to you.' : '' }),
     );
@@ -280,7 +301,7 @@ export function mountColors(stage, ctx) {
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
-    if (e.key === 'Escape') { if (st.shop) { st.shop = false; renderShop(); return; } if (st.key) { closePicker(); return; } stage.setSelected(null); return; }
+    if (e.key === 'Escape') { if (st.shop) { st.shop = false; renderShop(); renderCard(); return; } if (st.key) { closePicker(); return; } stage.setSelected(null); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); store.redo(); }
   }, { signal });
@@ -293,7 +314,7 @@ export function mountColors(stage, ctx) {
   renderAll();
 
   return {
-    onSelect(sel) { st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; } renderAll(); },
+    onSelect(sel) { st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; } renderAll(); },
     unmount() { ac.abort(); unsub(); stage.setSelected(null); stage.setSafeArea(null); root.remove(); },
   };
 }

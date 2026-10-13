@@ -68,3 +68,11 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Build plate finish lives here** (the inventory's placement), still a field of the build record; the choice is adopted into the store as one undo step.
 - **Disclosure stays at the link.** "· paid link" on paid buy links with `rel="sponsored"`, the Polymaker Ambassador line under a Polymaker link and the Amazon Associates line under an Amazon one, in the picker's pinned footer and under the shopping list.
 
+## 2026-10-15 (phase 4b, the per-unit layer; Astra's review of Colors applied)
+
+- **Edit scope is explicit.** (Astra.) The picker's title is the region and the scope: "Face · All faceplates · 3" or "Face · This drawer only (unit 3)"; the Apply-to track says "All faceplates · 3" and "This drawer only"; the part card says "1 of this size · 3 faceplates in the build · unit 3 · <filament>".
+- **A unit's own pick wins over the build colour** (the plan's override layer `{ unitId: { region: filament } }`), resolved inside the stage's one material choke point, so every pass (identify, fades, the previews) sees it; a zone with no own pick and no build-level pick follows the unit's own Body pick, as a zone follows its type. Own picks are marked OWN on the card's chips, counted ("1 own") on the Colors-in-this-build rows, and listed in the shopping list.
+- **Two resets, named for what they do.** In unit scope, "Use build colour" drops that unit's own pick for the region. In build scope, "Reset to instruction colour" returns every part of the region to the kit's colour, own colours included (the brief: per-unit picks are cleared by Reset or by applying a scheme). Changing the build colour leaves own picks in place; the picker says how many units keep their own.
+- **A palette belongs to a build, not a kit.** (Astra: two projects from one kit must keep different colours.) A page opened on a `#build=` hash whose record carries an id keys its palette by that id; a kit page keys by the kit until the first edit, when the record's new id takes the kit's palette along under its own key. Two edited builds from the 185 kit keep Blue and Red cases respectively across reloads; the kit page itself keeps the kit's.
+- **The shopping list takes the part card's place while it is open** (Astra: contextual panels must not accumulate over the model).
+

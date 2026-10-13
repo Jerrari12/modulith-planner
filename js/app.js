@@ -15,6 +15,15 @@ const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog,
 const QS = new URLSearchParams(location.search);
 const WS = QS.get('ws');
 const KIT = QS.get('build');   // the official kit this page opened with, kept in the address through every edit
+/* THE PALETTE BELONGS TO A BUILD (Astra, 2026-10-14: two projects from one kit must keep different colours). A page opened
+   on a #build= hash whose record carries an id keys its palette by that id; a kit page keys by the kit until its first
+   edit, when the store's record (minted an id by the sanitiser) takes the kit's palette with it under its own key. */
+const buildKey = (id) => 'gen2-colors:build-' + id;
+function colorKeyAtBoot() {
+  const m = /#build=([^&]+)/.exec(location.hash);
+  if (m) { try { const raw = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); const rec = raw.data || raw; if (typeof rec.buildId === 'string' && /^[a-z0-9]{8,32}$/.test(rec.buildId)) return buildKey(rec.buildId); } catch { /* a damaged hash: the stage reports it */ } }
+  return 'gen2-colors:' + (KIT ? 'official-' + KIT : 'custom-build');
+}
 
 /* theme: the brief's data-mode on <html>, kept in step with the stage's own light/dark */
 export function setMode(mode, stage) {
@@ -43,12 +52,12 @@ export async function boot() {
     onContext: (info) => current?.onContext?.(info),
     quietSelect: true, fillBoost: 1.6,
     // the palette is per BUILD: the kit this page opened with keeps its own (the Studio's own key for official kits)
-    colorStoreKey: 'gen2-colors:' + (KIT ? 'official-' + KIT : 'custom-build'),
+    colorStoreKey: colorKeyAtBoot(),
   });
   /* THE STORE (phase 3): the build record with the planner's rules and undo history. It opens on the record the
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
-  const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette rides along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); } catch { /* a very old browser */ } } });
+  const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user, over: p.over }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette and the per-unit layer ride along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); stage.setColorStoreKey(buildKey(store.state.buildId)); } catch { /* a very old browser */ } } });
   /* a shared scheme (#scheme= beside #build=, the Colors workspace's Share): applied once, then dropped from the address */
   { const m = /[#&]scheme=([^&]+)/.exec(location.hash); if (m) { try { const colors = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); stage.setPalette({ colors, on: true }); } catch { /* a damaged scheme link: the build still opens */ } history.replaceState(null, '', location.href.replace(/[#&]scheme=[^&]+/, (x) => x.startsWith('#') ? '#' : '').replace(/#&/, '#').replace(/#$/, '')); } }
   if (stage.build) store.load(stage.build);
@@ -63,6 +72,9 @@ export async function boot() {
     setMode,
     memo: {},   // what a workspace wants back when it is remounted (the Assemble step, for one)
     store, kitId: KIT, get kitTitle() { return kitTitle; },
+    /* the palette moves to the build's own key BEFORE the first colour write (and on the first build edit), so a kit
+       page's saved palette never takes a project's picks with it (Astra's two-projects-one-kit check) */
+    ownPaletteKey: () => stage.setColorStoreKey(buildKey(store.state.buildId)),
     badges: () => { try { return { parts: printCountOf(stage.build) || null }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count)
     has: (ws) => !!WORKSPACES[ws],
     switchTo(ws) {
