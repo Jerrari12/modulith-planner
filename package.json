@@ -8,6 +8,7 @@
     "test": "node --test",
     "smoke": "node --test test/smoke.mjs",
     "e2e": "node --test e2e/workspaces.mjs",
+    "drift": "node tools/port-rules.mjs --check",
     "profile-lands": "node --test test/profile-lands.mjs",
     "relief-tier": "node --test test/relief-tier.mjs",
     "goldens": "node tools/golden-shots.mjs"

@@ -15,9 +15,14 @@
  *   js/rules/schema.js   BUILD_FIELDS, BUILD_SCHEMA, buildTooNew, serializeBuild, sanitizeBuild, the label cleaners
  *
  *   node tools/port-rules.mjs            (writes the three files)
+ *   node tools/port-rules.mjs --check    (writes nothing: says whether the planner checkout has DRIFTED from the pinned
+ *                                         text of each module, with a count of the differing lines; exit 1 on drift. The
+ *                                         plan's weekly bump: run it, read the diff, port and re-check parity, or record
+ *                                         why the change stays in the old planner only)
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 
@@ -27,6 +32,25 @@ if (!existsSync(join(PLANNER, 'js', 'app.js'))) { console.error('planner checkou
 const app = readFileSync(join(PLANNER, 'js', 'app.js'), 'utf8').split('\n');
 let commit = 'unknown';
 try { commit = execSync('git log -1 --format=%h_%ad --date=short -- js/app.js', { cwd: PLANNER }).toString().trim().replace('_', ' '); } catch {}
+const CHECK = process.argv.includes('--check');
+let drift = 0;
+/* write a module, or in --check mode compare it with the committed one (the pin line aside) and report the drift */
+function put(rel, out) {
+  const path = join(root, ...rel.split('/'));
+  if (!CHECK) { writeFileSync(path, out); console.log(`${rel} written from planner ${commit}`); return; }
+  // the pin line aside: its commit, its date and the source line numbers (an edit ABOVE a rule moves them without touching it)
+  const norm = (t) => t.split('\n').map((l) => (/^ \* Source: /.test(l) ? l.replace(/@ \S+( \d{4}-\d{2}-\d{2})?,/, '@ PIN,').replace(/(\w+) \d+-\d+/g, '$1 L') : l)).join('\n');   // that one line only: a range-like token in the code must still count (Terra 01a136ba)
+  const cur = existsSync(path) ? readFileSync(path, 'utf8') : '';
+  if (norm(cur) === norm(out)) { console.log(`${rel}: no drift (planner app.js now at ${commit})`); return; }
+  drift++;
+  const tmp = join(tmpdir(), 'port-check-' + basename(rel));
+  writeFileSync(tmp, norm(out));
+  const pinned = join(tmpdir(), 'port-pinned-' + basename(rel));
+  writeFileSync(pinned, norm(cur));
+  let n = '';
+  try { execSync(`git diff --no-index --numstat -- "${pinned}" "${tmp}"`); } catch (e) { n = e.stdout ? e.stdout.toString().trim().split(/\s+/) : []; }
+  console.log(`${rel}: DRIFT - the planner's text at ${commit} differs from the pinned module: ${n[0] || '?'} lines added, ${n[1] || '?'} removed\n  git diff --no-index "${pinned}" "${tmp}"`);
+}
 
 /* slice one top-level-in-IIFE function or const by its first line, to the matching close at the same indent */
 function slice(startRe) {
@@ -98,8 +122,7 @@ export function bomRows(sections, partLinks) {
   return out;
 }
 `;
-  writeFileSync(join(root, 'js', 'rules', 'bom.js'), out);
-  console.log(`js/rules/bom.js written from planner ${commit}`);
+  put('js/rules/bom.js', out);
 }
 
 /* ------------------------------------------------- 2. fit, placement, validity, fixes, conversion (phase 3) ---- */
@@ -141,8 +164,7 @@ ${body}
   return { ${names.join(', ')} };
 }
 `;
-  writeFileSync(join(root, 'js', 'rules', 'layout.js'), out);
-  console.log(`js/rules/layout.js written from planner ${commit}`);
+  put('js/rules/layout.js', out);
 }
 
 /* ---------------------------------------------------------------- 3. the build record's schema (phase 3) ---- */
@@ -172,6 +194,6 @@ ${inner}`);
 ${ser}
 ${san}
 `;
-  writeFileSync(join(root, 'js', 'rules', 'schema.js'), out);
-  console.log(`js/rules/schema.js written from planner ${commit}`);
+  put('js/rules/schema.js', out);
 }
+if (CHECK && drift) process.exit(1);
