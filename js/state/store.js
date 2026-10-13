@@ -17,6 +17,9 @@ const HISTORY_MAX = 50, COALESCE_MS = 350;
 
 export function createStore(GEN2, opts = {}) {
   const tabletop = opts.tabletop || globalThis.GEN2_TABLETOP;
+  /* `opts.extra` = { get(), set(v) }: state that rides along in every history entry beside the record and is restored
+     with it on undo and redo (the palette, phase 4), but never enters the record, the hash or the planner's form */
+  const extra = opts.extra || null;
   const state = {
     mount: null, length: null, fill: 'decor',
     faceStyle: GEN2.faceplateStyles[0].id, doorStyle: GEN2.doorStyles[0].id, handleStyle: GEN2.handleStyles[0].id,
@@ -58,13 +61,13 @@ export function createStore(GEN2, opts = {}) {
   const serialize = () => serializeBuild(state);
   function pushNow() {
     clearTimeout(history.timer); history.timer = null;
-    const snap = JSON.stringify(serialize());
+    const snap = JSON.stringify(extra ? { b: serialize(), x: extra.get() } : serialize());
     if (history.stack[history.idx] === snap) return;
     history.stack = history.stack.slice(0, history.idx + 1);
     history.stack.push(snap);
     if (history.stack.length > HISTORY_MAX) history.stack.shift();
     history.idx = history.stack.length - 1;
-    if (opts.onSave && history.idx > 0) opts.onSave(snap);   // the baseline is the record the page opened with: nothing to write back yet
+    if (opts.onSave && history.idx > 0) opts.onSave(JSON.stringify(serialize()));   // the baseline is the record the page opened with: nothing to write back yet
   }
   function snapshot() {
     if (history.restoring) return;
@@ -78,11 +81,12 @@ export function createStore(GEN2, opts = {}) {
     if (to < 0 || to >= history.stack.length) return false;
     history.idx = to;
     const prevNext = state.nextId, prevBuildId = state.buildId;
+    const entry = JSON.parse(history.stack[to]);
     history.restoring = true;
-    try { load(JSON.parse(history.stack[to])); } finally { history.restoring = false; }
+    try { load(extra ? entry.b : entry); if (extra && entry.x !== undefined) extra.set(entry.x); } finally { history.restoring = false; }
     if (state.buildId === prevBuildId) state.nextId = Math.max(state.nextId, prevNext);
-    history.stack[history.idx] = JSON.stringify(serialize());   // the restore normalises; the entry follows the actual state
-    if (opts.onSave) opts.onSave(history.stack[history.idx]);
+    history.stack[history.idx] = JSON.stringify(extra ? { b: serialize(), x: extra.get() } : serialize());   // the restore normalises; the entry follows the actual state
+    if (opts.onSave) opts.onSave(JSON.stringify(serialize()));
     notify(d < 0 ? 'undo' : 'redo');
     return true;
   }

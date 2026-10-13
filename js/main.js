@@ -6742,7 +6742,7 @@ const PRESETS = [
 // official kits get their own palette slot (keyed by kit id) so a saved color
 // scheme sticks to THAT kit — planner hand-offs share one 'custom-build' slot
 // the benchmark keeps its own key, so a palette saved for the demo kit never repaints the benchmark's build
-const COLOR_STORE_KEY = 'gen2-colors:' + (IS_BENCH ? 'bench' : BUILD_HASH ? 'custom-build' : OFFICIAL ? 'official-' + OFFICIAL.id : KIT);
+const COLOR_STORE_KEY = (typeof opts !== 'undefined' && opts && opts.colorStoreKey) || ('gen2-colors:' + (IS_BENCH ? 'bench' : BUILD_HASH ? 'custom-build' : OFFICIAL ? 'official-' + OFFICIAL.id : KIT));   // the workspace shell keys the palette per build (phase 4)
 let customColors = {}, useCustom = false; // customColors: type -> {name, hex, url}
 // userPalette = the last palette the user built BY HAND (individual swatch
 // picks / per-type resets / file upload). Hand edits mirror the whole working
@@ -8358,6 +8358,45 @@ async function renderThumb(opts = {}) {
   thumbCache.set(key, job);
   job.catch(() => thumbCache.delete(key));
   return job;
+}
+/* ---- the palette API for the Colors workspace (phase 4) ---------------------------------------------------
+   The palette stays the viewer's own (customColors keyed by part type or Type:zone, useCustom, userPalette); the
+   workspace reads and writes it through these, so the model, the product previews (keyed on paletteSig) and
+   every panel read one source. */
+function palette() { return { on: useCustom, colors: structuredClone(customColors), user: structuredClone(userPalette) }; }
+function setColor(key, f) {   // one region: a filament { name, hex, url }, or null for the instruction colour
+  if (f) customColors[key] = { name: f.name, hex: f.hex, url: f.url }; else delete customColors[key];
+  useCustom = Object.keys(customColors).length > 0;
+  snapshotUserPalette(); saveColors(); applyPalette();
+  if (selectedId && instances.has(selectedId)) refreshSelHighlight();
+}
+function setPalette(p) {   // the whole working palette (a scheme, an upload, an undo)
+  customColors = {}; for (const [k, v] of Object.entries((p && p.colors) || {})) if (v && v.hex) customColors[k] = { name: v.name, hex: v.hex, url: v.url };
+  useCustom = !!(p && p.on) && Object.keys(customColors).length > 0;
+  if (p && p.user) userPalette = structuredClone(p.user);
+  saveColors(); applyPalette();
+}
+function setUseCustom(on) { useCustom = !!on && Object.keys(customColors).length > 0; saveColors(); applyPalette(); }
+/* every (type, zone) a mounted part draws, with how many parts carry it and whether it is purchased hardware */
+function keysInBuild() {
+  const out = new Map();
+  for (const inst of instances.values()) {
+    const t = typeByNode[inst.cfg.node]; if (!t || !inst.group) continue;
+    const zones = new Set(); inst.group.traverse(o => { if (o.isMesh && o.userData.zone && !isStripeZone(o.userData.zone)) zones.add(o.userData.zone); });
+    for (const key of [t, ...[...zones].map(z => zoneKey(t, z))]) { const e = out.get(key) || { key, type: t, zone: key.includes(':') ? key.split(':')[1] : '', count: 0, locked: colorLocked(t) }; if (!key.includes(':')) e.count++; out.set(key, e); }
+  }
+  for (const e of out.values()) if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0;
+  const order = ['Case', 'CaseExtender', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
+  const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
+  return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
+}
+/* what the part card needs about one instance: its name, count, type, zones, the primary key, links, the unit it rides */
+function partInfo(instId) {
+  const inst = instances.get(instId); if (!inst) return null;
+  const type = typeByNode[inst.cfg.node]; const row = partInfoByNode[inst.cfg.node] || { label: inst.cfg.node, qty: 0 };
+  const zones = new Set(); inst.group.traverse(o => { if (o.isMesh && o.userData.zone && !isStripeZone(o.userData.zone)) zones.add(o.userData.zone); });
+  let host = inst, hops = 0; while (host && host.cfg.owner == null && host.cfg.rides && hops++ < 4) host = instances.get(host.cfg.rides) || null;
+  return { id: instId, node: inst.cfg.node, type, label: row.label, qty: row.qty, zones: [...zones].sort(), primaryKey: primaryKey(inst.cfg.node), locked: colorLocked(type), links: Array.isArray(row.links) ? row.links : [], owner: unitOf(inst), ridesDrawer: !!(host && typeByNode[host.cfg.node] === 'Drawer') };
 }
 /* swap the record and rebuild the scene (the Build workspace's every edit): the generator judges first, so an
    unshowable layout leaves the last good scene standing and returns its reasons for the issue card */
@@ -10148,6 +10187,8 @@ renderer.setAnimationLoop(renderLoop);
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits,
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,
+    // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
+    palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;

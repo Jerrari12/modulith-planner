@@ -348,6 +348,76 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws .pv.handle img { width: 64px; height: 48px; margin: -10px 0 -10px; }
 #ws .pv.insp img { width: 124px; height: 93px; }
 
+/* ---- Colors (phase 4): the schemes panel, the picker, the part card, the shopping list ---- */
+#ws-colors { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 304px; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 18px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+#ws-colors .head { display: flex; flex-direction: column; gap: 4px; }
+#ws-colors h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
+#ws-colors .head .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-colors section { display: flex; flex-direction: column; gap: 6px; }
+#ws-colors .schemes { display: flex; flex-direction: column; gap: 4px; }
+#ws-colors .scheme { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 10px; border-radius: 12px; font-size: 13px; font-weight: 600; text-align: left; }
+#ws-colors .scheme .apply { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0; border: none; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+#ws-colors button.scheme { flex-direction: row; }
+#ws-colors .strip { display: inline-flex; gap: 2px; flex: none; }
+#ws-colors .strip i, #ws-dock .stacks i { display: inline-block; width: 12px; height: 18px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
+#ws-colors .scheme .name { flex: 1; }
+#ws-colors .scheme .badge { font-size: 9px; letter-spacing: .06em; }
+#ws-colors .scheme .x { width: 26px; height: 26px; padding: 0; border: none; background: transparent; color: var(--ink-3); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-colors .scheme .shop { height: 28px; padding: 0 8px; border: none; background: transparent; color: var(--ink-2); font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+#ws-colors .row4 { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-colors .saverow { display: flex; gap: 6px; }
+#ws-colors .saverow input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-colors .crows { display: flex; flex-direction: column; gap: 3px; }
+#ws-colors .crow { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 10px; font-size: 12px; text-align: left; }
+#ws-colors .crow .sw, #ws-partcard .sw, #ws-shop .sw { display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(128,128,128,.35); }
+#ws-colors .crow .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-colors .crow .cnt { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+#ws-colors .crow .fil { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+#ws-colors .note, #ws-picker .note { margin: 2px 2px 0; font-size: 12px; color: var(--ink-2); }
+#ws-picker { position: absolute; top: 90px; right: 20px; bottom: 116px; width: 324px; box-sizing: border-box; padding: 14px 16px 12px 19px; border-radius: 18px; display: flex; flex-direction: column; gap: 10px; }
+#ws-picker[hidden] { display: none; }
+#ws-picker .head { display: flex; align-items: center; gap: 8px; }
+#ws-picker .head .h2 { margin: 0; flex: 1; font-size: 12px; text-transform: none; letter-spacing: 0; color: var(--ink); font-weight: 700; }
+#ws-picker .x, #ws-partcard .x, #ws-shop .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-picker .search { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-picker .brands { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+#ws-picker .bhead { display: flex; justify-content: space-between; align-items: center; padding: 6px 2px 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; border: none; background: transparent; cursor: default; text-align: left; }
+#ws-picker .bhead.toggle { cursor: pointer; color: var(--ink-2); }
+#ws-picker .bhead i { font-style: normal; color: var(--ink-3); font-weight: 500; letter-spacing: 0; text-transform: none; }
+#ws-picker .swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 5px; }
+#ws-picker .sw { aspect-ratio: 1; border-radius: 7px; border: 1px solid rgba(128,128,128,.35); cursor: pointer; padding: 0; position: relative; }
+#ws-picker .sw.active { outline: 2px solid var(--orange); outline-offset: 2px; }
+#ws-picker .sw.pick::after { content: '★'; position: absolute; right: 1px; bottom: -1px; font-size: 9px; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.8); }
+#ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
+#ws-picker .foot .buy { font-size: 13px; font-weight: 700; color: var(--ink); text-decoration: none; }
+#ws-picker .foot .disc, #ws-shop .disc { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
+#ws-picker .foot .key { align-self: flex-start; }
+#ws-partcard { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 440px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#ws-partcard[hidden] { display: none; }
+#ws-partcard .chead { display: flex; align-items: center; gap: 10px; }
+#ws-partcard .chead .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ws-partcard .chead b { font-size: 14px; }
+#ws-partcard .meta, #ws-shop .meta { font-size: 11px; color: var(--ink-2); }
+#ws-partcard .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-partcard .zchip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--key-border); background: var(--key-bg); color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+#ws-partcard .zchip.on { border-color: var(--orange); box-shadow: var(--key-on-shadow); }
+#ws-partcard .zchip i { width: 12px; height: 12px; border-radius: 999px; border: 1px solid rgba(128,128,128,.4); }
+#ws-partcard .cacts { display: flex; gap: 6px; }
+#ws-partcard a.key { display: inline-flex; align-items: center; text-decoration: none; }
+#ws-shop { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 420px; max-height: 60vh; overflow-y: auto; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 6; }
+#ws-shop[hidden] { display: none; }
+#ws-shop .ihead { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+#ws-shop .frow { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; border-radius: 10px; }
+#ws-shop .frow .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ws-shop .frow b { font-size: 13px; }
+#ws-shop .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); }
+#ws-dock .status.stack { gap: 10px; }
+#ws-dock .status.stack[disabled] { cursor: default; }
+#ws-dock .stacks { display: inline-flex; gap: 2px; }
+#ws-dock .stacks:empty { display: none; }
+html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
+@media (max-width: 1279px) { #ws-colors, #ws-picker { top: 134px; } }
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }

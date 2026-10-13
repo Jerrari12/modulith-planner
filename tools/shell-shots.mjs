@@ -151,4 +151,21 @@ try {
     console.log('wrote previews shot');
     await ctx.close();
   }
+  /* Colors (phase 4): dark 1440, a faceplate selected with the picker open on its face, and the shopping list */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+    const page = await ctx.newPage();
+    await page.goto(`${base}/index.html?ws=colors&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-colors'), null, { timeout: 90_000 });
+    await page.evaluate(() => { const h = window.__GEN2_VIEWER__; const e = [...h.instances.entries()].find(([, i]) => /Faceplate/.test(i.cfg.node) && i.group.visible); if (e) h.setSelected(e[0]); });
+    await page.waitForFunction(() => { const h = window.__GEN2_VIEWER__; return h.quality !== 'veryhigh' || (h.acc && h.acc.n >= h.ACC_SAMPLES); }, null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    await writeFile(join(OUT, 'colors-dark-1440.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-dock .status');
+    await page.waitForTimeout(400);
+    await writeFile(join(OUT, 'colors-dark-1440-shop.png'), await page.screenshot({ type: 'png' }));
+    console.log('wrote colors shots');
+    await ctx.close();
+  }
 } finally { await browser.close(); server.close(); }

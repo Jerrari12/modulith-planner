@@ -44,6 +44,10 @@ Phase 1 (Assemble, same day): `opts.onPage(i)` fires from `goTo` with the new pa
 
 - `thumb({ fill, w, hh, faceStyle?, handleStyle?, handle?, variant?, lip?, view: 'front' | 'three', size? })`: a product-faithful preview. Builds a one-unit tabletop record, runs the generator, loads any part model not yet in the template cache, clones the unit's parts (cases, extenders, drawer, faceplate, accent, label, handle, shelf insert and lips; never covers, rails, feet, QuickLocks or stoppers) with the shared live materials, frames them front-on or three-quarter in an offscreen render target and resolves a PNG data URL. Cached per option set, handle node, plate and palette signature; a failed render is dropped from the cache so it can be retried.
 
+## Added for Colors (phase 4, 2026-10-14)
+
+`createStage(document, { colorStoreKey })` lets the shell key the saved palette per build (default: the viewer's URL-derived key). The object carries `palette()` ({ on, colors, user }, copies), `setColor(key, filament | null)` (one region; the filament is `{ name, hex, url }`), `setPalette({ colors, on, user? })` (the whole working palette), `setUseCustom(on)`, `restoreUserPalette()`, `applyPreset(p)` / `PRESETS` (as before), `keysInBuild()` (every type and Type:zone a mounted part draws, with its part count and whether it is purchased hardware), `partInfo(instanceId)` (label, qty, type, zones, primaryKey, locked, links, owner, ridesDrawer), `setBuildPlate(key)` and `colorLocked(key)`. Every setter saves to the colour store and repaints; none touches history (the workspace commits to the store, whose `extra` snapshots the palette).
+
 All overlays live in one `edit-overlays` group outside `instances` (flagged `userData.ghost`), so the BOM, the callouts, measuring, shadows, AO and the reflection never see them. `regenerate(pre)` takes an optional pre-generated result.
 
 ## What the goldens do and do not prove

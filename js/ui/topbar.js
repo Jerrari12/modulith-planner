@@ -8,7 +8,7 @@ import { icon } from './icons.js';
 const MOUNT_NAME = { 'under-table': 'Under-Table', tabletop: 'Tabletop', wall: 'Wall Mount' };
 const MOUNT_ICON = { 'under-table': 'desk', tabletop: 'table', wall: 'wall' };
 export const TABS = [['build', 'Build', 'cube'], ['colors', 'Colors', 'palette'], ['labels', 'Labels', 'tag'], ['parts', 'Parts', 'list-checks'], ['assemble', 'Assemble', 'wrench']];
-const PHASE = { colors: 'phase 4', labels: 'phase 5', parts: 'phase 2', assemble: 'phase 1', build: 'phase 0' };
+const PHASE = { colors: 'phase 4', labels: 'phase 5', parts: 'phase 2', assemble: 'phase 1', build: 'phase 0' };   // what a missing workspace says it waits for
 
 /* ctx: { active, setMode, switchTo(ws), has(ws), say, soon, signal } */
 export function topbar(stage, ctx) {

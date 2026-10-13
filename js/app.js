@@ -6,6 +6,7 @@ import { createStage } from './main.js';
 import { mountBuild } from './workspaces/build.js';
 import { mountAssemble } from './workspaces/assemble.js';
 import { mountParts, printCountOf } from './workspaces/parts.js';
+import { mountColors } from './workspaces/colors.js';
 import { createStore } from './state/store.js';
 
 // eslint-disable-next-line no-undef
@@ -29,7 +30,7 @@ function initialMode() {
 }
 
 /* the workspaces that exist; each mount returns { onSelect?, onPage?, unmount } */
-const WORKSPACES = { build: mountBuild, assemble: mountAssemble, parts: mountParts };
+const WORKSPACES = { build: mountBuild, assemble: mountAssemble, parts: mountParts, colors: mountColors };
 
 export async function boot() {
   if (!WS) { await createStage(document); return; }
@@ -41,11 +42,15 @@ export async function boot() {
     onPage: (i) => current?.onPage?.(i),
     onContext: (info) => current?.onContext?.(info),
     quietSelect: true, fillBoost: 1.6,
+    // the palette is per BUILD: the kit this page opened with keeps its own (the Studio's own key for official kits)
+    colorStoreKey: 'gen2-colors:' + (KIT ? 'official-' + KIT : 'custom-build'),
   });
   /* THE STORE (phase 3): the build record with the planner's rules and undo history. It opens on the record the
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
-  const store = createStore(G, { onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); } catch { /* a very old browser */ } } });
+  const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette rides along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); } catch { /* a very old browser */ } } });
+  /* a shared scheme (#scheme= beside #build=, the Colors workspace's Share): applied once, then dropped from the address */
+  { const m = /[#&]scheme=([^&]+)/.exec(location.hash); if (m) { try { const colors = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); stage.setPalette({ colors, on: true }); } catch { /* a damaged scheme link: the build still opens */ } history.replaceState(null, '', location.href.replace(/[#&]scheme=[^&]+/, (x) => x.startsWith('#') ? '#' : '').replace(/#&/, '#').replace(/#$/, '')); } }
   if (stage.build) store.load(stage.build);
   if (QS.get('debug')) window.__GEN2_STORE__ = store;   // for the shot tool and end-to-end checks, like the stage's own hook
   let kitTitle = stage.manifest?.title || null;
