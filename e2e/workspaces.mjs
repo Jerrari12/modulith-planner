@@ -196,6 +196,24 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   assert.equal(await p2.locator('#ws-labels .banner.copy').count(), 0, 'the offer is over');
   assert.equal(await p2.evaluate(() => window.__GEN2_VIEWER__.build.placed.filter((u) => u.label).length), 2, 'the stage wears them again');
   assert.equal(await p2.evaluate(() => localStorage.getItem('gen2-label-copies')), null, 'the copy is spent');
+  // DRAG AND DROP: a waiting label's chip dragged onto an empty drawer places it (the drawer-first rule: no placing mode after)
+  const empty = await p2.evaluate(() => { const s = window.__GEN2_STORE__.state; const u = s.placed.find((x) => x.fill === 'decor' && !(s.labelAssign || {})[x.id]); return u && u.id; });
+  assert.ok(empty != null, 'an empty drawer to drop on');
+  const chip = p2.locator('#ws-labels .list .chip-l:not([disabled])').first();
+  const chipText = (await chip.textContent()).trim();
+  const from = await chip.boundingBox();
+  const to = await p2.evaluate((id) => window.__GEN2_VIEWER__.unitScreen(id), empty);
+  await p2.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await p2.mouse.down();
+  for (let i = 1; i <= 8; i++) await p2.mouse.move(from.x + ((to.x - from.x) * i) / 8, from.y + ((to.y - from.y) * i) / 8);
+  await p2.waitForFunction((id) => { const u = window.__GEN2_VIEWER__.build.placed.find((x) => x.id === id); return !!(u && u.label); }, empty, { timeout: 15_000 });   // the preview while carrying
+  assert.ok(await p2.locator('#ws .drag-ghost').count(), 'a ghost follows the pointer');
+  await p2.mouse.up();
+  await p2.waitForFunction((id) => !!(window.__GEN2_STORE__.state.labelAssign || {})[id], empty, { timeout: 15_000 });
+  assert.equal(await p2.locator('#ws .drag-ghost').count(), 0, 'the ghost is gone');
+  assert.equal(await p2.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 3, 'the drop placed one more');
+  assert.equal(await p2.evaluate(() => !!document.querySelector('#ws-labels.placing')), false, 'a drop does not enter placing mode');
+  assert.match(await text(p2, '#ws-labels .last'), /on drawer \d/, 'the drop is one label change: ' + chipText.slice(0, 30));
   assert.deepEqual(clean(errors), []);
   assert.deepEqual(clean(errors2), []);
   await ctx.close();

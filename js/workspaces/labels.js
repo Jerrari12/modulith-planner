@@ -107,7 +107,7 @@ export function mountLabels(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
   const S = () => store.state;
-  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null };
+  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null };
   let L = null;   // the label-list module once loaded
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -192,8 +192,9 @@ export function mountLabels(stage, ctx) {
      click, through the stage's mirror alone (setLabels on a copy of the record; the record itself does not change). Leaving
      the drawer, or placing, puts the record's own mirror back. */
   function hoverPreview(unitId) {
-    const u = unitId != null && st.pick ? unit(unitId) : null;
-    const l = u ? R.labelById(S(), st.pick) : null;
+    const pick = st.drag || st.pick;   // the label being dragged from the list, else the armed one (Terra 01a136e5)
+    const u = unitId != null && pick ? unit(unitId) : null;
+    const l = u ? R.labelById(S(), pick) : null;
     const show = !!(u && l && R.eligible(S(), u) && !assignOf()[u.id]);
     if (!show) { if (st.hover != null) { st.hover = null; stage.setLabels(store.serialize()); } return; }
     if (st.hover === u.id) return;
@@ -202,6 +203,45 @@ export function mountLabels(stage, ctx) {
     const p = rec.placed.find((x) => x.id === u.id);
     if (p && m) { p.label = m.label; if (m.labelBadge) p.labelBadge = m.labelBadge; else delete p.labelBadge; }
     stage.setLabels(rec);
+  }
+  /* DRAG A LABEL ONTO A DRAWER (a phase-5 deferral): a mouse or pen drag from a waiting label's chip (never touch: the sheet
+     scrolls) carries a ghost of its words; over the model the drawer under the pointer previews it, and letting go places
+     it by the drawer-first rule (a labelled drawer asks to replace, as a tap does). Escape or a drop elsewhere cancels. */
+  function dragFrom(chip, labelId) {
+    chip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.pointerType === 'touch' || chip.disabled) return;
+      const x0 = e.clientX, y0 = e.clientY; let ghost = null, over = null;
+      try { chip.setPointerCapture(e.pointerId); } catch { /* a browser without capture: the move reaches us while over the chip */ }   // from the press, so a pointer that slips off the chip before the threshold still drags (Terra 01a136e5)
+      const move = (ev) => {
+        if (!ghost) {
+          if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+          const l = R.labelById(S(), labelId); if (!l) return;
+          ghost = el('div.drag-ghost.glass', { text: R.labelShort(l) || 'label' }); root.appendChild(ghost);
+          st.drag = labelId; st.dragEnd = () => end(false); document.body.classList.add('dragging-label');
+        }
+        ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 12}px)`;
+        const target = document.elementFromPoint(ev.clientX, ev.clientY);
+        over = target && target.tagName === 'CANVAS' ? stage.unitAt(ev.clientX, ev.clientY) : null;
+        hoverPreview(over);
+      };
+      const end = (drop) => {
+        chip.removeEventListener('pointermove', move); chip.removeEventListener('pointerup', up); chip.removeEventListener('pointercancel', cancel); document.removeEventListener('keydown', key);
+        if (!ghost) return;
+        ghost.remove(); ghost = null; st.drag = null; st.dragEnd = null; st.hover = null; document.body.classList.remove('dragging-label');
+        stage.setLabels(store.serialize());   // the preview goes, whatever happens next
+        if (drop && over != null) dropOn(over, labelId);
+      };
+      const up = () => end(true), cancel = () => end(false);
+      const key = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); end(false); } };
+      chip.addEventListener('pointermove', move); chip.addEventListener('pointerup', up); chip.addEventListener('pointercancel', cancel); document.addEventListener('keydown', key);
+    });
+  }
+  function dropOn(unitId, labelId) {
+    const u = unit(unitId); if (!u) return;
+    if (!R.eligible(S(), u)) { status(u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : R.NO_FACE_MSG, true); renderAll(); return; }
+    const prev = assignOf()[u.id] || null;
+    if (prev === labelId) return;
+    if (prev) askReplace(u.id, labelId, prev, 'drawer'); else labelCommit(R.place(L, S(), u.id, labelId, null, 'drawer'));
   }
   let pendingReplace = null;
   function askReplace(unitId, labelId, expect, mode) {
@@ -326,6 +366,7 @@ export function mountLabels(stage, ctx) {
   const ident = (l, ok = true) => el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (ok ? (L.iconOnly(l) ? 'Icon only' : '(empty)') : '(empty)') }), el('span.detail', { text: detail(l) })]);
 
   function renderPanel() {
+    if (st.dragEnd) st.dragEnd();   // a rebuild detaches the chip being dragged and its capture with it: the drag ends here, never orphaned (Terra 01a136e5)
     hideHint();   // the control under a bubble is about to be rebuilt; a removed button never fires mouseleave (Terra 01a13529)
     panel.replaceChildren();
     if (!L) { panel.append(el('div.head', {}, [el('h2', { text: 'Labels' })]), el('p.hint', { text: 'Loading the label tools…' })); return; }
@@ -404,6 +445,7 @@ export function mountLabels(stage, ctx) {
       const onPick = l.id === st.pick;
       const b = el('button.chip-l' + (onPick ? '.on' : '') + (l.hardware ? '.hw' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
       if (l.hardware && R.hwNotReady(l)) b.appendChild(el('span.tag', { text: 'not ready' }));
+      if (ok) dragFrom(b, l.id);
       return el('div.item', {}, [b,
         el('button.mini', { title: 'Edit this label', 'aria-label': 'Edit ' + (R.labelWords(l) || 'this label'), onclick: () => openEdit(l.id, null) }, [icon('pencil-simple', { size: 15 })]),
         el('button.mini', { title: 'Remove from this build', 'aria-label': 'Remove ' + (R.labelWords(l) || 'this label') + ' from this build', onclick: () => labelCommit(R.remove(L, s, l.id)) }, [icon('x', { size: 15 })])]);

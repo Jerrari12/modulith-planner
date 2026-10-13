@@ -486,6 +486,9 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels .chip-l:hover { background: var(--track); }
 #ws-labels .chip-l.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
 #ws-labels .chip-l[disabled] { opacity: .5; cursor: not-allowed; }
+/* a label dragged from the list: the ghost follows the pointer; the page says it is carrying something */
+#ws .drag-ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; padding: 6px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--ink); white-space: nowrap; }
+body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-select: none; }
 #ws-labels .chip-l .tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-fg); flex: none; }
 #ws-labels .mini { width: 28px; height: 28px; padding: 0; border: none; border-radius: 7px; background: transparent; color: var(--ink-3); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 #ws-labels .mini:hover { background: var(--track); color: var(--ink); }

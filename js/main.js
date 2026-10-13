@@ -10278,6 +10278,7 @@ renderer.setAnimationLoop(renderLoop);
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
     update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
+    unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
