@@ -429,7 +429,15 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 324px; box-sizing: border-box; padding: 14px 16px 12px; border-radius: 18px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
 #ws-labels .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 #ws-labels h2, #ws-labeledit h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
-#ws-labels .count { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+#ws-labels .count { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+#ws-labels .head .tools { display: inline-flex; gap: 2px; align-self: center; }
+#ws-labels .ways { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#ws-labels .key.tile { display: flex; align-items: center; justify-content: flex-start; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+#ws-labels .key.tile svg { flex: none; color: var(--ink-2); }
+#ws-labels .key.tile[disabled] { opacity: .45; cursor: not-allowed; }
+#ws-labels .fillrow { display: flex; flex-direction: column; gap: 3px; }
+#ws-labels .fillrow .wide { width: 100%; }
+#ws-labels .fillrow .why { padding-left: 2px; }
 #ws-labels .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 #ws-labels .row.top:empty { display: none; }
 #ws-labels .key.sm, #ws-labeledit .key.sm, #ws-modal .key { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -602,7 +610,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-colors .scheme .shop { display: none; }
   /* Labels: the panel and the editor are sheets; the list scrolls with the sheet, not inside it */
   #ws-labels .scroll { flex: none; overflow: visible; min-height: 0; margin: 0; padding: 0; }
-  #ws-labels .foot .row { gap: 4px; }
+  #ws-labels .key.tile { height: 42px; }
   #ws-modal { position: fixed; z-index: 40; }
   #ws-modal .box { width: 100%; }
   /* Assemble: the player sits on the bar as a compact card (the note gets the width, the colour switch and the

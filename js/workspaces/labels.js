@@ -268,6 +268,10 @@ export function mountLabels(stage, ctx) {
     panel.appendChild(el('div.head', {}, [
       el('h2', { text: 'Labels' }),
       el('span.count', { text: ready.length ? `${n(ready.length, 'label')} ready to place` : labels.length ? (slots ? `${onN} of ${slots} drawers labelled` : `${n(labels.length, 'label')}`) : '' }),
+      labels.length ? el('span.tools', {}, [
+        el('button.mini', { title: 'Download the list · a MODULITH label list (.json) the Label Studio opens', 'aria-label': 'Download the label list', onclick: () => download(`modulith-${s.length}-labels.json`, JSON.stringify(R.exportDoc(L, s), null, 2), 'application/json') }, [icon('download-simple', { size: 16 })]),
+        el('button.mini', { title: 'Copy the labels as text, in drawer order', 'aria-label': 'Copy the labels as text', onclick: async () => { try { await navigator.clipboard.writeText(R.exportText(L, s)); say('Labels copied.'); } catch { say('Could not reach the clipboard.'); } } }, [icon('copy', { size: 16 })]),
+      ]) : null,
     ]));
     const last = lastChange();
     panel.appendChild(el('div.row.top', {}, [
@@ -317,19 +321,17 @@ export function mountLabels(stage, ctx) {
     // the foot: ways in, fill, exports, settings, status
     const pairs = R.fillPairs(L, s);
     const foot = el('div.foot');
-    foot.appendChild(el('div.row', {}, [
-      el('button.key.sm', { onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Add label']),
-      el('button.key.sm', { title: 'Opens the Label Studio’s Part Picker in a new tab: choose screws, nuts and washers; save or download its label list and add it here from the file', onclick: () => openStudio(true) }, ['Part Picker', icon('arrow-square-out', { size: 14 })]),
-      el('button.key.sm', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate', onclick: () => openStudio(false) }, ['Make labels', icon('arrow-square-out', { size: 14 })]),
+    /* the ways in, as four equal tiles (Joey 2026-10-13: a pile of mismatched buttons read as messy); Fill is an action on the
+       build and gets a row of its own; the exports are the two icon buttons in the head; the settings stay last, collapsed */
+    foot.appendChild(el('div.ways', { role: 'group', 'aria-label': 'Add labels' }, [
+      el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']),
+      el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']),
+      el('button.key.tile', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', onclick: () => openStudio(false) }, [icon('arrow-square-out', { size: 16 }), 'Label Studio']),
+      el('button.key.tile', { title: 'Opens the Label Studio’s Part Picker in a new tab: choose screws, nuts and washers; download its label list and add it here', onclick: () => openStudio(true) }, [icon('arrow-square-out', { size: 16 }), 'Part Picker']),
     ]));
-    if (labels.length) foot.appendChild(el('div.row', {}, [
-      el('button.key.sm', { disabled: !pairs.length, onclick: openFill }, ['Fill empty drawers…']),
-      el('span.why', { text: pairs.length ? '' : !faceOk ? 'Needs an EdgeLabel or Classic Pro faceplate' : !ready.length ? 'No labels ready to place' : 'No empty drawers' }),
-    ]));
-    foot.appendChild(el('div.row', {}, [
-      el('button.key.sm', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'Add from a file…']),
-      labels.length ? el('button.key.sm', { title: 'This build’s labels as a MODULITH label list (.json): the Label Studio opens it', onclick: () => download(`modulith-${s.length}-labels.json`, JSON.stringify(R.exportDoc(L, s), null, 2), 'application/json') }, [icon('download-simple', { size: 16 }), 'Download list']) : null,
-      labels.length ? el('button.key.sm', { title: 'The labels as text, in drawer order', onclick: async () => { try { await navigator.clipboard.writeText(R.exportText(L, s)); say('Labels copied.'); } catch { say('Could not reach the clipboard.'); } } }, [icon('copy', { size: 16 }), 'Copy as text']) : null,
+    if (labels.length) foot.appendChild(el('div.fillrow', {}, [
+      el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']),
+      pairs.length ? null : el('span.why', { text: !faceOk ? 'Needs an EdgeLabel or Classic Pro faceplate' : !ready.length ? 'No labels ready to place' : 'No empty drawers' }),
     ]));
     foot.appendChild(renderSettings());
     if (st.status) foot.appendChild(el('p.status' + (st.warn ? '.warn' : ''), { role: 'status', text: st.status }));

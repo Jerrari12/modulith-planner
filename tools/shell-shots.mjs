@@ -180,7 +180,7 @@ try {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const btn = (t, root = document) => [...root.querySelectorAll('button')].find((b) => !b.closest('[hidden]') && b.textContent.trim().startsWith(t));
       const sw = btn('Switch to EdgeLabel'); if (sw) { sw.click(); await sleep(3500); }
-      for (const w of ['M3 screws', 'Hex keys', 'Solder', 'Fuses']) { btn('Add label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = w; btn('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); }
+      for (const w of ['M3 screws', 'Hex keys', 'Solder', 'Fuses']) { btn('Type a label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = w; btn('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); }
       const ids = window.__GEN2_STORE__.state.placed.map((u) => u.id);
       btn('Place several').click(); await sleep(80);
       window.__GEN2_VIEWER__.selectUnit(ids[0]); await sleep(300); window.__GEN2_VIEWER__.selectUnit(ids[1]); await sleep(300);
@@ -227,7 +227,7 @@ try {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const btn = (t, root = document) => [...root.querySelectorAll('button')].find((b) => !b.closest('[hidden]') && b.textContent.trim().startsWith(t));
       const sw = btn('Switch to EdgeLabel'); if (sw) { sw.click(); await sleep(3500); }
-      for (const w of ['M3 screws', 'Hex keys', 'Solder']) { btn('Add label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = w; btn('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); }
+      for (const w of ['M3 screws', 'Hex keys', 'Solder']) { btn('Type a label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = w; btn('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); }
       btn('Place several').click(); await sleep(80);
       window.__GEN2_VIEWER__.selectUnit(window.__GEN2_STORE__.state.placed[0].id); await sleep(300);
     });
