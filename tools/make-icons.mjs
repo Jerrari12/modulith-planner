@@ -23,7 +23,7 @@ const ICONS = {
   'desk': ['regular'], 'wall': ['regular'], 'table': ['regular'],
   // library + inspector
   'plus': ['regular'], 'minus': ['regular'], 'x': ['regular'], 'copy': ['regular'], 'trash': ['regular'],
-  'arrows-out-simple': ['regular'], 'eye': ['regular'], 'sparkle': ['regular', 'fill'], 'play': ['regular', 'fill'],
+  'arrows-out-simple': ['regular'], 'arrows-in-simple': ['regular'], 'eye': ['regular'], 'sparkle': ['regular', 'fill'], 'play': ['regular', 'fill'],
   'warning': ['regular', 'fill'], 'check': ['regular'], 'info': ['regular'], 'lock-simple': ['regular'], 'pause': ['regular', 'fill'], 'skip-forward': ['regular'], 'image': ['regular'],
   // toolbar + dock
   'cube-focus': ['regular'], 'arrows-out': ['regular'], 'crosshair-simple': ['regular'], 'grid-four': ['regular', 'fill'],

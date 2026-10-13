@@ -90,6 +90,7 @@ export function board(opts) {
         svgEl('text', { x: bx, y: by + 4, class: 'b-flag-txt', 'text-anchor': 'middle' }, ug).textContent = '!';
       }
       if (isSel) svgEl('rect', { x: x - 2, y: y - 2, width: w + 4, height: h + 4, rx: 7, class: 'b-sel' }, ug);
+      if (flashing.has(u.id)) svgEl('rect', { x: x - 3, y: y - 3, width: w + 6, height: h + 6, rx: 8, class: 'b-pulse' }, ug);
     }
     renderGhost();
   }
@@ -135,5 +136,7 @@ export function board(opts) {
     press = null;
   });
   svg.addEventListener('pointerleave', () => { hover = null; if (drag) { drag = null; render(); } else renderGhost(); });
-  return { el: host, render, layout, cancel() { drag = null; press = null; hover = null; } };
+  let flashing = new Set();
+  function flash(ids) { flashing = new Set(ids); render(); setTimeout(() => { flashing = new Set(); render(); }, 1500); }
+  return { el: host, render, layout, flash, cancel() { drag = null; press = null; hover = null; } };
 }

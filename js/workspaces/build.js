@@ -54,7 +54,7 @@ export function mountBuild(stage, ctx) {
   const st = {
     tab: 'add', collapsed: false,
     unit: S().fill || 'decor', gf: 'standard', addSize: `${S().selected?.w || 1}x${S().selected?.h || 1}`, armed: false,
-    view: '3d', eraser: false, sel: null, selId: ctx.memo.buildSel ?? null, issuesOpen: false, stageErrors: null, peeking: null, menu: null,
+    view: '3d', eraser: false, sel: null, selId: ctx.memo.buildSel ?? null, issuesOpen: false, stageErrors: null, peeking: null, menu: null, chosen: null, pulse: null,
   };
   /* product icons read the LIVE palette, so the tiles, the inspector thumbnail and the model agree */
   const hex = (key, fallback) => { try { return stage.activeHex(key) || fallback; } catch { return fallback; } };
@@ -95,6 +95,7 @@ export function mountBuild(stage, ctx) {
         if (st.selId != null && !stage.selectUnit(st.selId)) { st.selId = null; st.sel = null; }
       }
       renderAll();
+      if (st.pulse && st.pulse.length) { if (st.view !== '2d') stage.pulseUnits(st.pulse); brd.flash(st.pulse); st.pulse = null; }
     }).catch((e) => { console.error(e); st.stageErrors = [String(e?.message || e)]; renderAll(); });
     return queue;
   }
@@ -109,22 +110,30 @@ export function mountBuild(stage, ctx) {
   }
   /* gravity (Joey: drop only): every unsupported unit falls toward the mount surface until something holds it */
   function settle(s, Rs) {
-    let moved = 0; const dir = s.mount === 'tabletop' ? 1 : -1;
+    const moved = new Map();   // id -> half-rows travelled
+    const dir = s.mount === 'tabletop' ? 1 : -1;
     for (let pass = 0; pass < 24; pass++) {
       const uns = new Set(Rs.unsupportedUnits().map((u) => u.id)); if (!uns.size) break;
       let any = false;
       for (const u of s.placed.filter((u) => uns.has(u.id)).sort((a, b) => dir === 1 ? b.y - a.y : a.y - b.y)) {
         let ny = u.y; while (Rs.canPlace(u.x, ny + dir, u.w, u.hh, u.id)) ny += dir;
-        if (ny !== u.y) { u.y = ny; any = true; moved++; }
+        if (ny !== u.y) { moved.set(u.id, (moved.get(u.id) || 0) + Math.abs(ny - u.y)); u.y = ny; any = true; }
       }
       if (!any) break;
     }
     return moved;
   }
+  /* every edit is ONE undo step, gravity included (Astra: make the whole action one Undo step and show which units
+     moved): the moved units are named in the toast, pulsed on the model and flashed on the board */
   function edit(fn, why = 'edit', { gravity = true } = {}) {
-    let dropped = 0;
+    let dropped = new Map();
     const r = store.commit((s, Rs) => { const out = fn(s, Rs); if (gravity) dropped = settle(s, Rs); return out; }, why);
-    if (dropped) say(`Gravity · ${n(dropped, 'unit')} dropped onto what is below · Undo puts it back.`);
+    if (dropped.size) {
+      const s = S();
+      const names = [...dropped.keys()].map((id) => { const u = s.placed.find((p) => p.id === id); return `${u ? `${u.w}W·${u.hh / 2}H` : 'unit'} (unit ${s.placed.indexOf(u) + 1})`; });
+      say(`Gravity · ${names.join(', ')} dropped onto what is below · one Undo puts it all back.`);
+      st.pulse = [...dropped.keys()];
+    }
     return r;
   }
   /* a trial on a clone: the layout stays showable, no structural problem appears that is not there already, and
@@ -577,7 +586,7 @@ export function mountBuild(stage, ctx) {
   function renderDock() {
     const list = issues(); const k = list.length;
     dock.replaceChildren(
-      el('button.status' + (k ? '.issue' : ''), { title: k ? 'Open the issue card' : 'No issues', 'aria-expanded': String(st.issuesOpen), onclick: () => { st.issuesOpen = !st.issuesOpen; renderIssues(); renderDock(); } }, [el('span.dot'), k ? n(k, 'issue') : 'Ready to build']),
+      el('button.status' + (k ? '.issue' : ''), { title: k ? 'Open the issue card' : 'Every unit is supported and in the collection', 'aria-expanded': String(st.issuesOpen), onclick: () => { st.issuesOpen = !st.issuesOpen; renderIssues(); renderDock(); } }, [el('span.dot'), k ? n(k, 'issue') : 'Layout valid']),
       el('div.group', {}, [el('span.big', { text: String(S().placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims() }), el('span.unit-lbl', { text: 'mm' })]),
       el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
@@ -597,6 +606,20 @@ export function mountBuild(stage, ctx) {
         i.ids.length ? el('button.key.sm', { text: 'Show me', onclick: () => { const id = i.ids[showIdx++ % i.ids.length]; select(id); } }) : null,
         i.fix ? el('button.key.sm.strong', { text: i.fix.label, onclick: i.fix.run }) : null,
       ])])),
+    );
+  }
+  /* the touch path's confirmation (Astra: preview and confirm without a panel covering the target): a chip above the dock */
+  const choice = el('div.glass', { id: 'ws-choice', role: 'status', hidden: true });
+  root.appendChild(choice);
+  function renderChoice() {
+    const sp = st.chosen;
+    if (!sp) { choice.hidden = true; return; }
+    const a = armedSize(); const w = sp.w || a.w, hh = sp.hh || a.hh;
+    choice.hidden = false;
+    choice.replaceChildren(
+      el('span', { text: sp.kind === 'need' ? `Add the ${w}W·${hh / 2}H support case here?` : `Place the ${w}W·${hh / 2}H here?` }),
+      el('button.key.sm.strong', { text: 'Place', onclick: () => stage.confirmSpot() }),
+      el('button.key.sm', { text: 'Cancel', onclick: () => { stage.clearSpotChoice(); st.chosen = null; renderChoice(); } }),
     );
   }
   const menu = el('div.glass', { id: 'ws-menu', role: 'menu', hidden: true });
@@ -628,7 +651,9 @@ export function mountBuild(stage, ctx) {
     for (const sp of neededSpots()) spots.push(sp);
     if (st.armed) { const a = armedSize(); for (const sp of addSpots(a.w, a.hh, st.unit)) spots.push(sp); }
     const a = armedSize();
-    stage.setSpots(spots.length ? { spots, w: a.w, hh: a.hh, rows: s.gridH * 2, onPick: (sp) => { if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); } } : null);
+    stage.setSpots(spots.length ? { spots, w: a.w, hh: a.hh, rows: s.gridH * 2,
+      onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
+      onChoose: (sp) => { st.chosen = sp; renderChoice(); } } : null);
     const u = st.selId != null ? s.placed.find((p) => p.id === st.selId) : null;
     stage.setDrag(u && !st.armed ? { unitId: u.id, get rows() { return S().gridH * 2; }, spots: () => moveSpots(u), onDrop: (sp, id) => moveTo(id, sp.x, sp.y, { exact: true }), onCancel: () => renderAll() } : null);
   }
@@ -668,7 +693,7 @@ export function mountBuild(stage, ctx) {
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
-    if (e.key === 'Escape') { closeMenu(); stage.cancelDrag(); brd.cancel(); if (st.armed || st.eraser || st.issuesOpen) { st.armed = false; st.eraser = false; st.issuesOpen = false; } else select(null); renderAll(); return; }
+    if (e.key === 'Escape') { closeMenu(); stage.cancelDrag(); brd.cancel(); if (st.chosen) { stage.clearSpotChoice(); st.chosen = null; renderChoice(); return; } if (st.armed || st.eraser || st.issuesOpen) { st.armed = false; st.eraser = false; st.issuesOpen = false; } else select(null); renderAll(); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && st.selId != null) { e.preventDefault(); removeUnit(st.selId); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); store.redo(); return; }
@@ -695,7 +720,7 @@ export function mountBuild(stage, ctx) {
     onContext: openMenu,
     unmount() {
       ac.abort(); unsub();
-      stage.setSpots(null); stage.setFlags([]); stage.setDrag(null); stage.setEraser(null); stage.cancelDrag(); stage.unpeek();
+      stage.setSpots(null); stage.setFlags([]); stage.setDrag(null); stage.setEraser(null); stage.cancelDrag(); stage.unpeek(); stage.clearSpotChoice();
       stage.setSelected(null); stage.setSafeArea(null);
       document.documentElement.classList.remove('ws-2d');
       root.remove();

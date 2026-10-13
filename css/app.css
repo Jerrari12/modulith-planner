@@ -315,6 +315,31 @@ html[data-ws="parts"] #ws-tools { left: 480px; right: 364px; }
 html.ws-2d #ws-tools .measure { visibility: hidden; }
 @media (max-width: 1279px) { #ws-board { top: 194px; } }
 
+/* ---- Astra's phase-3 corrections: the touch choice chip, the gravity flash, the wide Parts table ---- */
+#ws-choice { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; border-radius: 14px; font-size: 13px; font-weight: 600; white-space: nowrap; z-index: 6; }
+#ws-choice[hidden] { display: none; }
+#ws-board .b-pulse { fill: none; stroke: var(--orange); stroke-width: 3; opacity: .9; pointer-events: none; animation: b-pulse 1.5s ease-out forwards; }
+@keyframes b-pulse { from { opacity: .95; } to { opacity: 0; } }
+#ws-parts .row1 .expand { margin-left: auto; width: 32px; height: 32px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-parts .row1 .expand[aria-pressed="true"] { color: var(--ink); background: var(--track); }
+#ws-parts .row1 .mono { margin-left: 10px; }
+#ws-parts.wide { width: 820px; }
+html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
+#ws-parts .rows.table { gap: 2px; }
+#ws-parts .thead { display: grid; grid-template-columns: 14px minmax(0, 1fr) 64px 118px 118px 90px 120px; gap: 10px; align-items: center; padding: 4px 8px 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+#ws-parts .thead span:nth-child(n+3) { text-align: center; }
+#ws-parts .prow.trow { display: grid; grid-template-columns: 14px minmax(0, 1fr) 64px 118px 118px 90px 120px; gap: 10px; align-items: center; min-height: 48px; }
+#ws-parts .prow.trow .need, #ws-parts .prow.trow .left { text-align: center; font-size: 14px; font-weight: 600; }
+#ws-parts .prow.trow .left.ok { color: var(--success); font-size: 12px; }
+#ws-parts .prow.trow .link { justify-self: end; }
+#ws-parts .prow.trow .name .badge { margin-left: 6px; }
+#ws-parts .prow.done { opacity: 1; }
+#ws-parts .prow.done .name { color: var(--ink-2); }
+#ws-parts .prow.done .chip { opacity: .6; }
+#ws-parts .counter.big { justify-self: center; gap: 4px; padding: 3px; border-radius: 9px; }
+#ws-parts .counter.big button { width: 30px; height: 30px; font-size: 15px; }
+#ws-parts .counter.big .mono { min-width: 24px; font-size: 14px; }
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }

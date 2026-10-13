@@ -7936,7 +7936,14 @@ canvas.addEventListener('pointerup', e => {
   if ((PAGES[cur]?.cover || PAGES[cur]?.outro) && !(IS_PART && measure.on)) return;
   if (!downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 6) return;
   // a TAP, never an orbit's release (Sol 01a132aa): a spot places, the eraser removes - the Build workspace's overlays
-  if (spotSpec) { const g = spotAt(e); if (g) { if (spotSpec.onPick) spotSpec.onPick(g.userData.spot); return; } }
+  if (spotSpec) {
+    const g = spotAt(e);
+    if (g) {
+      if (e.pointerType === 'touch' && spotChosen !== g) { chooseSpot(g); return; }   // first tap: show the ghost, offer Place / Cancel
+      const sp = g.userData.spot; chooseSpot(null); if (spotSpec.onPick) spotSpec.onPick(sp); return;
+    }
+    if (spotChosen) { chooseSpot(null); return; }   // a tap elsewhere clears a choice
+  }
   if (eraser) { const id = unitAtEvent(e); if (id != null) eraser(id); return; }
   const r = canvas.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(
@@ -7995,11 +8002,11 @@ function spotWorld(sp, w, hh, rows) {
   const bottom = ref.i.group.position.y + (spotIdx - refIdx) * 28;
   return { x: cx, y: bottom + hh * 28 / 2, z: zc, depth };
 }
-/* a "+" on the top and front faces of a spot box, so it reads as "add" from the usual camera angles */
-function plusMark(w, h, d) {
+/* a "+" on the top and front faces of a box, so it reads as "add" from the usual camera angles */
+function plusMark(w, h, d, opacity = 0.85) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false });
-  const L = Math.min(w, h, d) * 0.45, t = 2.2;
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity, depthWrite: false, depthTest: false });
+  const L = Math.min(w, h, d) * 0.45, t = Math.max(1.6, Math.min(w, h, d) * 0.1);
   const top1 = new THREE.Mesh(new THREE.BoxGeometry(L, 1.2, t), mat), top2 = new THREE.Mesh(new THREE.BoxGeometry(t, 1.2, L), mat);
   top1.position.y = top2.position.y = h / 2 + 0.6;
   const fr1 = new THREE.Mesh(new THREE.BoxGeometry(L, t, 1.2), mat), fr2 = new THREE.Mesh(new THREE.BoxGeometry(t, L, 1.2), mat);
@@ -8007,22 +8014,37 @@ function plusMark(w, h, d) {
   [top1, top2, fr1, fr2].forEach(m => { m.renderOrder = 999; m.userData.ghost = true; g.add(m); });
   return g;
 }
-function spotBox(w, hh, world, color, opacity) {
+/* A SPOT is a small marker at the centre of the cell it names (Astra: quiet targets, never volumes that overlap and hide
+   the build) plus a full-size translucent ghost of the unit that shows only for the hovered or chosen spot. The marker
+   is drawn through everything (no depth test) so it is never lost behind a drawer; the ghost is the volume. */
+const SPOT_MARK = 18;
+function spotBox(w, hh, world, color) {
   const d = Math.max(20, world.depth - 6);
-  const g = new THREE.Mesh(new THREE.BoxGeometry(w * 88 - 6, hh * 28 - 6, d), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
-  g.position.set(world.x, world.y, world.z);
-  g.userData.ghost = true; g.renderOrder = 998;
-  g.add(plusMark(w * 88 - 6, hh * 28 - 6, d));
-  return g;
+  const spot = new THREE.Group();
+  spot.position.set(world.x, world.y, world.z);
+  const marker = new THREE.Mesh(new THREE.BoxGeometry(SPOT_MARK, SPOT_MARK, SPOT_MARK), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, depthTest: false }));
+  marker.renderOrder = 998; marker.userData.ghost = true; marker.userData.marker = true;
+  marker.add(plusMark(SPOT_MARK, SPOT_MARK, SPOT_MARK, 0.95));
+  const ghost = new THREE.Mesh(new THREE.BoxGeometry(w * 88 - 6, hh * 28 - 6, d), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false }));
+  ghost.renderOrder = 997; ghost.userData.ghost = true; ghost.visible = false;
+  ghost.add(new THREE.LineSegments(new THREE.EdgesGeometry(ghost.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false })));
+  spot.add(marker, ghost);
+  spot.userData.marker = marker; spot.userData.ghost = ghost; spot.userData.ghostShape = true;
+  return spot;
 }
-/* spec: { spots: [{ x, y, w?, hh?, kind?: 'add' | 'need' }], w, hh, rows, onPick(spot) } | null - `rows` is the caller's grid height in half-rows */
+/* spec: { spots: [{ x, y, w?, hh?, kind?: 'add' | 'need' }], w, hh, rows, onPick(spot), onChoose?(spot | null) } | null -
+   `rows` is the caller's grid height in half-rows. On touch a first tap CHOOSES a spot (its ghost shows, onChoose fires,
+   the workspace offers Place / Cancel), a second tap on the same marker places; on a mouse, hover shows the ghost and
+   a click places. */
+let spotChosen = null;
 function setSpots(spec) {
+  if (spotChosen && spotSpec && spotSpec.onChoose) spotSpec.onChoose(null);   // a rebuild ends a pending choice, and says so (Sol 01a132ce)
   for (const o of [...editGroup.children].filter(o => o.userData.spot)) { editGroup.remove(o); disposeObj(o); }
-  spotHover = null; spotSpec = spec || null;
+  spotHover = null; spotChosen = null; spotSpec = spec || null;
   if (spec) for (const sp of spec.spots) {
     const w = sp.w || spec.w, hh = sp.hh || spec.hh;
     const world = spotWorld(sp, w, hh, spec.rows); if (!world) break;
-    const g = spotBox(w, hh, world, SPOT_COLORS[sp.kind || 'add'], sp.kind === 'need' ? 0.38 : 0.28);
+    const g = spotBox(w, hh, world, SPOT_COLORS[sp.kind || 'add']);
     g.userData.spot = sp; editGroup.add(g);
   }
   invalidateFrame();
@@ -8030,17 +8052,47 @@ function setSpots(spec) {
 function spotStyle() {
   for (const g of editGroup.children) {
     if (!g.userData.spot) continue;
-    const sp = g.userData.spot, hov = spotHover === g;
-    g.material.opacity = hov ? 0.7 : sp.kind === 'need' ? 0.38 : 0.28;
-    g.material.color.setHex(hov ? SPOT_COLORS.hover : SPOT_COLORS[sp.kind || 'add']);
+    const sp = g.userData.spot, hov = spotHover === g, chosen = spotChosen === g;
+    const col = hov || chosen ? SPOT_COLORS.hover : SPOT_COLORS[sp.kind || 'add'];
+    g.userData.marker.material.color.setHex(col);
+    g.userData.ghost.material.color.setHex(col);
+    g.userData.ghost.visible = hov || chosen;
+    g.userData.marker.visible = !(hov || chosen);
   }
   invalidateFrame();
 }
+function chooseSpot(g) {
+  if (spotChosen === g) return;
+  spotChosen = g; spotStyle();
+  if (spotSpec && spotSpec.onChoose) spotSpec.onChoose(g ? g.userData.spot : null);
+}
+function confirmSpot() { const g = spotChosen; if (!g || !spotSpec) return false; const sp = g.userData.spot; chooseSpot(null); if (spotSpec.onPick) spotSpec.onPick(sp); return true; }
 function castAt(e) {
   const r = canvas.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
 }
-function spotAt(e) { if (!spotSpec) return null; castAt(e); const hits = ray.intersectObjects(editGroup.children.filter(o => o.userData.spot), false); return hits.length ? hits[0].object : null; }
+function spotAt(e) {
+  if (!spotSpec) return null;
+  castAt(e);
+  editGroup.updateMatrixWorld(true);   // markers added since the last frame have no world matrix yet (the loop idles while hidden)
+  const targets = []; for (const g of editGroup.children) if (g.userData.spot) targets.push(g.userData.marker, g.userData.ghost);
+  const hits = ray.intersectObjects(targets, false);
+  return hits.length ? hits[0].object.parent : null;
+}
+/* a short orange pulse around units, for what gravity just moved (Astra: show which units moved) */
+let pulseHelpers = [], pulseTimer = 0;
+function pulseUnits(ids, ms = 1500) {
+  clearTimeout(pulseTimer);   // a pulse that follows another within its window must not be cut short by it (Sol 01a132ce)
+  for (const h of pulseHelpers) { editGroup.remove(h); disposeObj(h); } pulseHelpers = [];
+  for (const id of ids || []) {
+    const box = unitBox(id); if (box.isEmpty()) continue;
+    box.expandByScalar(3);
+    const h = new THREE.Box3Helper(box, 0xff8a40); h.material.depthTest = false; h.material.transparent = true; h.renderOrder = 999; h.userData.ghost = true;
+    editGroup.add(h); pulseHelpers.push(h);
+  }
+  invalidateFrame();
+  if (pulseHelpers.length) pulseTimer = setTimeout(() => { for (const h of pulseHelpers) { editGroup.remove(h); disposeObj(h); } pulseHelpers = []; invalidateFrame(); }, ms);
+}
 function unitAtEvent(e) {
   castAt(e);
   const pick = [...instances.values()].filter(i => i.group.visible);
@@ -8111,6 +8163,7 @@ function dragMove(e) {
   }
   const snap = best && bd <= 70 ? best : null;
   if (snap !== spotHover) { spotHover = snap; spotStyle(); }
+  if (carry.mesh) carry.mesh.visible = !snap;   // on a spot the spot's own ghost stands in for the carried box
   carry.snap = snap;
   if (snap) carry.mesh.position.copy(snap.position);
   else {
@@ -8133,7 +8186,7 @@ function endCarry(drop) {
 canvas.addEventListener('pointermove', e => {
   if (carry) { dragMove(e); return; }
   if (eraser) { const id = unitAtEvent(e); if (id !== eraseId) eraseBox(id); canvas.style.cursor = id != null ? 'pointer' : ''; return; }
-  if (spotSpec) { const g = spotAt(e); if (g !== spotHover) { spotHover = g; spotStyle(); canvas.style.cursor = g ? 'pointer' : ''; } }
+  if (spotSpec && e.pointerType !== 'touch') { const g = spotAt(e); if (g !== spotHover) { spotHover = g; spotStyle(); canvas.style.cursor = g ? 'pointer' : ''; } }
 });
 canvas.addEventListener('pointercancel', () => endCarry(false));
 canvas.addEventListener('contextmenu', e => {
@@ -9926,7 +9979,7 @@ renderer.setAnimationLoop(renderLoop);
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
     update: updateBuild, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, spotWorld,
-    setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser,
+    setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits,
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;

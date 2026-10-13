@@ -15,6 +15,7 @@ import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 import { glyphEl, FACEK, DEFAULT_COLORS } from '../ui/glyph.js';
 import { computeBom, bomRows } from '../rules/bom.js';
+import { layoutRules } from '../rules/layout.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -46,6 +47,25 @@ export function chipFor(name) {
 
 /* the four numbers of one row, from the stored progress */
 const rowKey = (r) => `${r.section}|${r.name}`;
+/* SIDE COVERS ARE RELEASED (v2609, 2026-10-10: Printables and Thangs pages live, one per collection; the site ticket
+   TICKET-side-covers-2026-10-10.md carries the ids). The planner's catalog, vendored here verbatim and sha-pinned,
+   still lists `sideCover` under `unreleased` until the planner's own commit lands and the catalog is re-vendored
+   (tools/port-rules.mjs + test/catalog-vendor.test.mjs). Until then this override, and nothing else, says so: the row
+   loses SOON and "Not released", links to the live pages, and counts as available. Delete it with the re-vendor. */
+const SIDE_COVER_PAGES = {
+  59: { printables: 'https://www.printables.com/model/1872093-modulith-59-side-covers', thangs: 'https://than.gs/m/1619983' },
+  115: { printables: 'https://www.printables.com/model/1872105-modulith-115-side-covers', thangs: 'https://than.gs/m/1619981' },
+  165: { printables: 'https://www.printables.com/model/1872112-modulith-165-side-covers', thangs: 'https://than.gs/m/1619978' },
+  185: { printables: 'https://www.printables.com/model/1872115-modulith-185-side-covers', thangs: 'https://than.gs/m/1619982' },
+  240: { printables: 'https://www.printables.com/model/1872120-modulith-240-side-covers', thangs: 'https://than.gs/m/1619980' },
+  270: { printables: 'https://www.printables.com/model/1872123-modulith-270-side-covers', thangs: 'https://than.gs/m/1619979' },
+};
+function releasedOverride(r, length) {
+  const m = /^GEN2 (\d+) Side Cover - /.exec(r.name); if (!m) return r;
+  const pages = SIDE_COVER_PAGES[+m[1]] || SIDE_COVER_PAGES[length]; if (!pages) return r;
+  const stores = [{ id: 'printables', label: 'Printables', url: pages.printables, exact: true }, { id: 'thangs', label: 'Thangs', url: pages.thangs, exact: true }];
+  return { ...r, unreleased: false, links: { stores, printables: pages.printables, thangs: pages.thangs } };
+}
 const remaining = (r, p) => Math.max(0, r.qty - (p?.had || 0) - (p?.made || 0));
 
 export function mountParts(stage, ctx) {
@@ -56,7 +76,7 @@ export function mountParts(stage, ctx) {
   // progress is per BUILD: the kit this page opened with (kept in the address through every edit), else the record's own id
   const buildId = ctx.kitId || stage.manifest?.id || build?.buildId || 'build';
   const PROGRESS_KEY = `gen2-parts-progress:${buildId}`;
-  const st = { site: readStore(), tracking: false, progress: readProgress(), sel: null };
+  const st = { site: readStore(), tracking: false, progress: readProgress(), sel: null, wide: false };
 
   function readStore() { try { const v = localStorage.getItem(STORE_KEY); return STORES.some(([id]) => id === v) ? v : 'printables'; } catch { return 'printables'; } }
   function readProgress() { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}').rows || {}; } catch { return {}; } }
@@ -71,7 +91,7 @@ export function mountParts(stage, ctx) {
 
   /* ---------------- the list ---------------- */
   const sections = () => computeBom(build, G) || [];
-  const rows = () => bomRows(sections(), LINKS);
+  const rows = () => bomRows(sections(), LINKS).map((r) => releasedOverride(r, length));
   const counts = () => {
     const rs = rows();
     const print = rs.filter((r) => !r.hardware);
@@ -88,7 +108,8 @@ export function mountParts(stage, ctx) {
     panel.replaceChildren();
     const head = el('div.head');
     head.append(
-      el('div.row1', {}, [el('h2', { text: 'Parts list' }), el('span.mono', { text: `${printCount} to print · ${files} files` })]),
+      el('div.row1', {}, [el('h2', { text: 'Parts list' }), el('span.mono', { text: `${printCount} to print · ${files} files` }),
+        el('button.expand', { title: st.wide ? 'Narrow the list' : 'Expand the list · readable columns for tracking', 'aria-pressed': String(st.wide), onclick: () => { st.wide = !st.wide; panel.classList.toggle('wide', st.wide); document.documentElement.classList.toggle('ws-parts-wide', st.wide); renderPanel(); safe(); } }, [icon(st.wide ? 'arrows-in-simple' : 'arrows-out-simple', { size: 18 })])]),
       el('div.row2', {}, [
         missing ? el('span.warn', { text: `⚠ ${missing} required part${missing === 1 ? '' : 's'} not released yet` })
           : el('span.ok', { text: optMissing ? `✓ All required parts are available · ${optMissing} optional in development` : '✓ All required parts are available.' }),
@@ -110,9 +131,13 @@ export function mountParts(stage, ctx) {
     panel.appendChild(head);
     const body = el('div.body');
     let last = null, group = null;
+    const table = st.wide && st.tracking;
     for (const r of rs) {
-      if (r.section !== last) { last = r.section; body.appendChild(el('h3', { text: r.section })); group = el('div.rows'); body.appendChild(group); }
-      group.appendChild(renderRow(r));
+      if (r.section !== last) {
+        last = r.section; body.appendChild(el('h3', { text: r.section })); group = el('div.rows' + (table ? '.table' : '')); body.appendChild(group);
+        if (table) group.appendChild(el('div.thead', {}, [el('span'), el('span', { text: 'Part' }), el('span', { text: 'Needed' }), el('span', { text: 'Already have' }), el('span', { text: 'Printed / bought' }), el('span', { text: 'Remaining' }), el('span')]));
+      }
+      group.appendChild(table ? renderTableRow(r) : renderRow(r));
     }
     body.appendChild(el('p.foot', { text: rs.some((r) => r.hardware && BUY[r.name]) ? 'Hardware links are Amazon affiliate links (as an Amazon Associate I earn from qualifying purchases) · any equivalent hardware works.' : 'Any equivalent hardware works.' }));
     panel.appendChild(body);
@@ -144,6 +169,30 @@ export function mountParts(stage, ctx) {
     const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site);
     if (link) row.appendChild(el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗` }));
     else if (r.unreleased) row.appendChild(el('span.link.dim', { text: 'Not released' }));
+    return row;
+  }
+  /* the wide list's row: one column per quantity, the counters readable, a finished row still editable */
+  function renderTableRow(r) {
+    const p = st.progress[rowKey(r)] || { had: 0, made: 0 };
+    const left = remaining(r, p);
+    const row = el('div.prow.trow.well' + (left === 0 ? '.done' : ''));
+    const chip = el('span.chip' + (r.hardware ? '.buy' : ''), { title: r.hardware ? 'Bought, not printed' : 'Part color in Assemble' });
+    if (!r.hardware) chip.style.background = chipFor(r.name);
+    const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
+    const mid = el('div.mid', {}, [el('div.name', {}, [r.name, badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
+    if (r.note) mid.appendChild(el('div.note', { text: r.note }));
+    const counter = (field, label) => {
+      const v = p[field] || 0;
+      return el('div.counter.big', { title: label }, [
+        el('button', { text: '−', 'aria-label': `${label}: one fewer`, disabled: v <= 0, onclick: () => bump(r, field, -1) }),
+        el('span.mono', { text: String(v) }),
+        el('button', { text: '+', 'aria-label': `${label}: one more`, disabled: (p.had || 0) + (p.made || 0) >= r.qty, onclick: () => bump(r, field, 1) }),
+      ]);
+    };
+    const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site) || r.links?.stores?.[0];
+    row.append(chip, mid, el('span.mono.need', { text: String(r.qty) }), counter('had', 'Already have'), counter('made', r.hardware ? 'Bought' : 'Printed'),
+      el('span.mono.left' + (left ? '' : '.ok'), { text: left ? String(left) : '✓ done' }),
+      link ? el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗` }) : r.unreleased ? el('span.link.dim', { text: 'Not released' }) : el('span'));
     return row;
   }
   function bump(r, field, d) {
@@ -236,8 +285,12 @@ export function mountParts(stage, ctx) {
     const { printCount, toGo, missing } = counts();
     const s = stage.buildSize?.();
     const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
+    /* the status is STRUCTURAL validity (Astra: "Ready to build" beside "40 to go" read as two claims about one thing);
+       what is not released is the head line's business, what is still to print the progress bar's */
+    let block = null; try { block = build ? layoutRules({ ...build, fill: 'decor', selected: { w: 1, h: 1 }, selectedUnit: null }, G, { tabletop: globalThis.GEN2_TABLETOP }).instructionsBlockReason() : null; } catch { block = null; }
+    const bad = block && block.code !== 'cabinet' && block.code !== 'no-ut-rails';
     dock.replaceChildren(
-      el('button.status' + (missing ? '.issue' : ''), { text: missing ? `${missing} not released` : 'Ready to build', title: missing ? 'Some required parts are not released yet' : 'Every required part is available' }),
+      el('button.status' + (bad ? '.issue' : ''), { text: bad ? 'Fix the layout' : 'Layout valid', title: bad ? block.text : 'Every unit is supported and in the collection', onclick: bad ? () => ctx.switchTo('build') : null }),
       el('div.group', {}, [el('span.big', { text: String(build?.placed?.length ?? 0) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
     );
@@ -250,7 +303,7 @@ export function mountParts(stage, ctx) {
   }
 
   /* ---------------- stage ---------------- */
-  const safe = () => stage.setSafeArea({ left: 440 + 20 + 8, right: 324 + 20 + 8, top: innerWidth < 1280 ? 134 : 90, bottom: 118 });
+  const safe = () => stage.setSafeArea({ left: (st.wide ? 820 : 440) + 20 + 8, right: 324 + 20 + 8, top: innerWidth < 1280 ? 134 : 90, bottom: 118 });
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
   const steps = stage.manifest?.steps?.length ?? 0;

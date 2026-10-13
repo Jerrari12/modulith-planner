@@ -21,14 +21,14 @@ export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode �
   const undoBtn = history ? el('button.chip.icon-btn', { title: 'Undo · Ctrl+Z', 'aria-label': 'Undo', onclick: () => { history.undo(); sync(); } }, [icon('arrow-counter-clockwise')]) : null;
   const redoBtn = history ? el('button.chip.icon-btn', { title: 'Redo · Ctrl+Y', 'aria-label': 'Redo', onclick: () => { history.redo(); sync(); } }, [icon('arrow-clockwise')]) : null;
   const eraseBtn = eraser ? el('button.chip.icon-btn.erase', { title: 'Remove units · click a unit to remove it · Esc ends', 'aria-label': 'Remove units', 'aria-pressed': 'false', onclick: () => { eraser.set(!eraser.get()); sync(); } }, [icon('trash')]) : null;
-  tools.append(
+  tools.append(...[
     el('div.chip.view', { role: 'group', 'aria-label': 'View' }, [b3, b2]),
     measureBtn,
     el('button.chip.icon-btn', { title: explode ? 'Exploded overview' : explodeTitle, 'aria-label': 'Explode', onclick: explode || soon('Explode', 'Assemble (phase 1)') }, [icon('arrows-out')]),
     el('button.chip.icon-btn', { title: 'Reset view', 'aria-label': 'Reset view', onclick: () => stage.resetView() }, [icon('cube-focus')]),
     undoBtn, redoBtn, eraseBtn,
     qualityBtn,
-  );
+  ].filter(Boolean));   // append(null) would write the text "null" into the bar (seen in Parts)
   function sync() {
     const on = !!stage.dimsOn;
     measureBtn.classList.toggle('on', on); measureBtn.setAttribute('aria-pressed', String(on));
