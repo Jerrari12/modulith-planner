@@ -25,10 +25,15 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDORED = join(root, 'js', 'vendor', 'edgelabel-core.js');
+/* the generator's checkout: the Label Studio's live source first (`GEN2 label-types/...`, branch label-studio), then the
+   older sibling folders. A folder whose index.html has no generator inputs is the retired edgelabel.jerrari3d.com forwarding
+   page (branch moved-to-modulith) and is skipped, or the DEFAULTS tests below fail on "no #font-size in the generator"
+   while the checkout they want sits one folder over (2026-10-13). */
 const GEN = process.env.GEN2_EDGELABEL_ROOT
   ? [process.env.GEN2_EDGELABEL_ROOT]
-  : [join(root, '..', 'GEN2 EdgeLabel Label Generator'), join(root, '..', '..', 'GEN2 EdgeLabel Label Generator')];
-const GEN_ROOT = GEN.find((d) => existsSync(join(d, 'label-core.js')));
+  : [join(root, '..', 'GEN2 label-types', 'GEN2 EdgeLabel Label Generator'), join(root, '..', 'GEN2 EdgeLabel Label Generator'), join(root, '..', '..', 'GEN2 EdgeLabel Label Generator')];
+const isGenerator = (d) => { try { return existsSync(join(d, 'label-core.js')) && /id="font-size"/.test(readFileSync(join(d, 'index.html'), 'utf8')); } catch { return false; } };
+const GEN_ROOT = GEN.find(isGenerator);
 const PINNED_SHA256 = 'c5e7fb96a93a2670c079781cfeec5909930dadacf379fe81bbb156b6672448ac';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 

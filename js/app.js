@@ -71,6 +71,10 @@ export async function boot() {
     // the palette is per BUILD: the kit this page opened with keeps its own (the Studio's own key for official kits)
     colorStoreKey: colorKeyAtBoot(),
   });
+  /* a representative finished build in every workspace (Astra): the first preset's coordinated filaments unless the
+     visitor already has a saved palette; Assemble switches to Part colors on its own and restores this on leave. Applied
+     BEFORE the store captures its baseline, so the first Undo returns to this palette and not to none (e2e, 2026-10-13). */
+  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0]);
   /* THE STORE (phase 3): the build record with the planner's rules and undo history. It opens on the record the
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
@@ -97,7 +101,16 @@ export async function boot() {
   }
   /* the mounted workspace's toast (every workspace makes one as #ws-toast) */
   const toast = (m) => { const t = document.getElementById('ws-toast'); if (!t) return; t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); };
-  const go = (q, hash = '') => { const u = new URLSearchParams(q); location.href = `${location.pathname}?${u}${hash}`; };
+  /* reload the page on another record. A URL that differs from the current one only in its hash is a hash change, not a
+     navigation (the e2e suite caught Duplicate staying on the old build, 2026-10-13), so that case reloads explicitly - the
+     old viewer's own rule for a mount or length change. A harness keeps its ?debug hooks across it. */
+  const go = (q, hash = '') => {
+    const u = new URLSearchParams(q); if (QS.get('debug')) u.set('debug', QS.get('debug'));
+    const url = `${location.pathname}?${u}${hash}`;
+    const sameDocument = url.split('#')[0] === location.pathname + location.search;
+    location.href = url;
+    if (sameDocument) location.reload();
+  };
   const wsNow = () => document.documentElement.dataset.ws || 'build';
   /* a shared scheme (#scheme= beside #build=, the Colors workspace's Share): applied once, then dropped from the address */
   { const m = /[#&]scheme=([^&]+)/.exec(location.hash); if (m) { try { const colors = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); stage.setPalette({ colors, on: true }); } catch { /* a damaged scheme link: the build still opens */ } history.replaceState(null, '', location.href.replace(/[#&]scheme=[^&]+/, (x) => x.startsWith('#') ? '#' : '').replace(/#&/, '#').replace(/#$/, '')); } }
@@ -108,9 +121,6 @@ export async function boot() {
   if (!entry && typeof store.state.buildId === 'string') entry = await builds.get(store.state.buildId);   // our own build, reopened from the address
   if (entry) { document.title = entry.name; builds.currentId = entry.id; builds.writeSlot(entry.record); }   // the slot follows what is open, not only what is edited
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
-  /* a representative finished build in every workspace (Astra): the first preset's coordinated filaments unless the
-     visitor already has a saved palette; Assemble switches to Part colors on its own and restores this on leave */
-  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0]);
   const ctx = {
     setMode,
     memo: {},   // what a workspace wants back when it is remounted (the Assemble step, for one)

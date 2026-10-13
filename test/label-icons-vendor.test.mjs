@@ -24,7 +24,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const V = (f) => join(root, 'js', 'vendor', f);
 const GEN = process.env.GEN2_EDGELABEL_ROOT
   ? [process.env.GEN2_EDGELABEL_ROOT]
-  : [join(root, '..', 'GEN2 EdgeLabel Label Generator'), join(root, '..', '..', 'GEN2 EdgeLabel Label Generator')];
+  : [join(root, '..', 'GEN2 label-types', 'GEN2 EdgeLabel Label Generator'), join(root, '..', 'GEN2 EdgeLabel Label Generator'), join(root, '..', '..', 'GEN2 EdgeLabel Label Generator')]   /* the Studio's live source first; the plain sibling is the retired forwarding page */;
 const GEN_ROOT = GEN.find((d) => existsSync(join(d, 'label-icons.js')));
 const PINS = {
   'label-icons.js': '8db74ae1c267fbae7f5946b4521d9744f72453cc5fea8f78cb4c8788883f408b',

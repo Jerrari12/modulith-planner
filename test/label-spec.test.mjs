@@ -20,7 +20,7 @@ const firstDir = (cands, file) => cands.find((d) => existsSync(join(d, file)));
 const PLANNER = firstDir(process.env.GEN2_PLANNER_ROOT ? [process.env.GEN2_PLANNER_ROOT]
   : [join(root, '..', 'GEN2 Planner', 'gen2-planner-main'), join(root, '..', '..', 'GEN2 Planner', 'gen2-planner-main')], join('js', 'app.js'));
 const GENERATOR = firstDir(process.env.GEN2_EDGELABEL_ROOT ? [process.env.GEN2_EDGELABEL_ROOT]
-  : [join(root, '..', 'GEN2 EdgeLabel Label Generator'), join(root, '..', '..', 'GEN2 EdgeLabel Label Generator')], 'index.html');
+  : [join(root, '..', 'GEN2 label-types', 'GEN2 EdgeLabel Label Generator'), join(root, '..', 'GEN2 EdgeLabel Label Generator'), join(root, '..', '..', 'GEN2 EdgeLabel Label Generator')]   /* the Studio's live source first; the plain sibling is the retired forwarding page */, 'index.html');
 
 const BADGES = [
   { type: 'icon', value: 'screw-torx-head' }, { type: 'none' }, { type: 'char', value: ' m3 ' }, { type: 'char', value: 'ABCD' },

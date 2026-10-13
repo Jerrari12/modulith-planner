@@ -93,6 +93,8 @@ jobs:
           npm run smoke
           npm run profile-lands
           npm run relief-tier
+          # the merged planner's five workspaces, the store and the setup sheet, driven end to end (2026-10-13)
+          npm run e2e
 
       # Stamp the app's own JS/CSS URLs with the commit SHA. GitHub Pages caches
       # assets for 10 minutes (max-age=600), so without this a visitor loading
