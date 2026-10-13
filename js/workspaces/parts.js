@@ -53,7 +53,8 @@ export function mountParts(stage, ctx) {
   const signal = ac.signal;
   const build = stage.build;
   const length = Number(build?.length || 185);
-  const buildId = build?.buildId || stage.manifest?.id || 'build';
+  // progress is per BUILD: the kit this page opened with (kept in the address through every edit), else the record's own id
+  const buildId = ctx.kitId || stage.manifest?.id || build?.buildId || 'build';
   const PROGRESS_KEY = `gen2-parts-progress:${buildId}`;
   const st = { site: readStore(), tracking: false, progress: readProgress(), sel: null };
 

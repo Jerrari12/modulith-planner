@@ -3887,6 +3887,7 @@ let tileSeen = {};           // per-type tile counter — every second tile shad
 function buildInstances() {
   for (const inst of instances.values()) scene.remove(inst.group); // tear down a previous mount
   instances.clear();
+  caseOwnerCache = null;   // the case index -> unit map follows the mount
   clearSelOutline();   // the hull references the old meshes
   tileSeen = {};
   for (const cfg of manifest.instances) {
@@ -6065,6 +6066,37 @@ let relayRejected = null;   // { buildId, words } while the "not saved" note is 
 const LABEL_REJECTED_STATUS = 'Not saved - see the note at the top';
 let labelPreviewTimer = 0, labelStatusTimer = 0, labelUndoTimer = 0, labelMismatchWarned = false;
 const LABEL_PREVIEW_MS = 350;   // the draft preview's debounce - see the label-edit-text `input` handler for the measurement
+
+/* ---- the build's units (phase 3, the Build workspace) -------------------------------------------------------
+   Which planner unit an instance belongs to: its own `owner` (drawer bodies, extenders, shelf parts, clips), the
+   owner of what it rides (faceplate, handle, accent, label), a stopper's key, or - for a case or a QuickLock, which
+   the generator names by the unit's index in ITS order (rowIdx, then col; generate.js `units`) - that index mapped
+   back to the record. The map is rebuilt per mount (buildInstances clears it). */
+let caseOwnerCache = null;
+function caseOwnerMap() {
+  if (caseOwnerCache) return caseOwnerCache;
+  if (!build || !Array.isArray(build.placed) || !build.placed.length) return new Map();
+  const gb = build.gridH * 2, minCol = Math.min(...build.placed.map(u => u.x));
+  const units = build.placed.map(u => ({ id: u.id, col: u.x - minCol, rowIdx: gb - (u.y + u.hh) })).sort((a, b) => a.rowIdx - b.rowIdx || a.col - b.col);
+  caseOwnerCache = new Map(units.map((u, i) => [i, u.id]));
+  return caseOwnerCache;
+}
+function unitOf(inst, hops = 0) {
+  if (!inst || hops > 4) return null;
+  const c = inst.cfg;
+  if (c.owner != null) return c.owner;
+  if (c.rides) return unitOf(instances.get(c.rides), hops + 1);
+  if (typeof c.stopperKey === 'string') { const n = +c.stopperKey.split(':')[0]; if (Number.isFinite(n)) return n; }
+  const m = /^case(\d+)$/.exec(c.id) || /^ql(\d+)[LR]$/.exec(c.id);
+  if (m) { const id = caseOwnerMap().get(+m[1]); return id == null ? null : id; }
+  return null;
+}
+function unitInstances(unitId) { const out = []; for (const i of instances.values()) if (unitOf(i) === unitId) out.push(i); return out; }
+function unitBox(unitId) {
+  const box = new THREE.Box3();
+  for (const i of unitInstances(unitId)) if (i.group.visible) { i.group.updateWorldMatrix(true, true); box.expandByObject(i.group); }
+  return box;
+}
 function setSelected(id) {
   if (selectedId === id) return;
   schedulePaidNote(); // the card's paid links come and go with the selection
@@ -6245,10 +6277,9 @@ function setSelected(id) {
   if (typeof opts !== 'undefined' && (opts.onSelect || quiet)) {
     // the owning unit: the part's own `owner`, or the owner of what it rides (a faceplate, accent, label or
     // handle rides its drawer, which carries the unit id); covers, rails, feet and QuickLocks have none
-    let host = inst, hops = 0;
-    while (host && host.cfg.owner == null && host.cfg.rides && hops++ < 4) host = instances.get(host.cfg.rides) || null;
-    if (quiet) showSelOutline(host && host.cfg.owner != null ? unitMembers(host) : [inst]);
-    if (opts.onSelect) opts.onSelect({ id, node: inst.cfg.node, type: selType, owner: host?.cfg.owner ?? null, label: info.label });
+    const owner = unitOf(inst);
+    if (quiet) showSelOutline(owner != null ? unitInstances(owner).filter(i => i.group.visible) : [inst]);
+    if (opts.onSelect) opts.onSelect({ id, node: inst.cfg.node, type: selType, owner, label: info.label });
   }
 }
 
@@ -7890,6 +7921,8 @@ function noteBuildMismatch(o) {
 
 canvas.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerup', e => {
+  // the Build workspace's carry (phase 3) ends on release wherever the pointer is: a drop on a spot, else a cancel
+  if (carry) { if (endCarry(true)) return; }
   // The cover and outro are PRESENTATION pages (box art / end-credits cinema) —
   // taps there must not identify parts: a stray cover click used to raycast the
   // model and ISOLATE a faceplate underneath the cover chrome (Joey's official-
@@ -7902,6 +7935,9 @@ canvas.addEventListener('pointerup', e => {
   // inspection view)
   if ((PAGES[cur]?.cover || PAGES[cur]?.outro) && !(IS_PART && measure.on)) return;
   if (!downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 6) return;
+  // a TAP, never an orbit's release (Sol 01a132aa): a spot places, the eraser removes - the Build workspace's overlays
+  if (spotSpec) { const g = spotAt(e); if (g) { if (spotSpec.onPick) spotSpec.onPick(g.userData.spot); return; } }
+  if (eraser) { const id = unitAtEvent(e); if (id != null) eraser(id); return; }
   const r = canvas.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(
     ((e.clientX - r.left) / r.width) * 2 - 1,
@@ -7928,6 +7964,213 @@ canvas.addEventListener('pointerup', e => {
   while (o && !o.userData.instanceId) o = o.parent;
   setSelected(o ? o.userData.instanceId : null);
 });
+
+/* ---- editing overlays for the Build workspace (phase 3): spots, flags, the carry, the eraser ----------------
+   All of it lives in one group outside `instances`, so the BOM, the callouts, measuring, shadows, AO and the
+   reflection never see it (the passes skip userData.ghost like the tabletop ghosts). The workspace decides WHAT is
+   valid (the planner's rules); the stage only draws it and reports the pick. */
+const editGroup = new THREE.Group(); editGroup.name = 'edit-overlays'; scene.add(editGroup);
+const SPOT_COLORS = { add: 0xffcf5a, need: 0xff5a5a, hover: 0x5ad67a };
+let spotSpec = null, spotHover = null, flagHelpers = [], carry = null, dragSpec = null, eraser = null, eraseHelper = null, eraseId = null;
+function disposeObj(o) { o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); }
+/* a cell's place in the world comes from a case the scene already holds: 88 mm per column, 28 mm per half row from it.
+   Heights are compared as half-rows ABOVE THE MOUNT FRAME (the generator's own normalisation), because the caller's
+   grid can differ from this record's (the store's tabletop grid tracks the build; the kit file's does not):
+   `rows` is the caller's grid height in half-rows, so a spot's bottom = rows - (y + hh). */
+function spotWorld(sp, w, hh, rows) {
+  if (!build) return null;
+  let ref = null;
+  for (const [id, i] of instances) {
+    const m = /^case(\d+)$/.exec(id); if (!m || !i.group) continue;
+    const uid = caseOwnerMap().get(+m[1]); const u = build.placed.find(p => p.id === uid);
+    if (u) { ref = { i, u }; break; }
+  }
+  if (!ref) return null;
+  ref.i.group.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(ref.i.group);
+  const depth = box.max.z - box.min.z, zc = (box.min.z + box.max.z) / 2;
+  const cx = ref.i.group.position.x + ((sp.x + w / 2) - (ref.u.x + ref.u.w / 2)) * 88;
+  const stageRows = build.gridH * 2, callerRows = rows || stageRows;
+  const refIdx = stageRows - (ref.u.y + ref.u.hh), spotIdx = callerRows - (sp.y + hh);   // half-rows above the frame
+  const bottom = ref.i.group.position.y + (spotIdx - refIdx) * 28;
+  return { x: cx, y: bottom + hh * 28 / 2, z: zc, depth };
+}
+/* a "+" on the top and front faces of a spot box, so it reads as "add" from the usual camera angles */
+function plusMark(w, h, d) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false });
+  const L = Math.min(w, h, d) * 0.45, t = 2.2;
+  const top1 = new THREE.Mesh(new THREE.BoxGeometry(L, 1.2, t), mat), top2 = new THREE.Mesh(new THREE.BoxGeometry(t, 1.2, L), mat);
+  top1.position.y = top2.position.y = h / 2 + 0.6;
+  const fr1 = new THREE.Mesh(new THREE.BoxGeometry(L, t, 1.2), mat), fr2 = new THREE.Mesh(new THREE.BoxGeometry(t, L, 1.2), mat);
+  fr1.position.z = fr2.position.z = d / 2 + 0.6;
+  [top1, top2, fr1, fr2].forEach(m => { m.renderOrder = 999; m.userData.ghost = true; g.add(m); });
+  return g;
+}
+function spotBox(w, hh, world, color, opacity) {
+  const d = Math.max(20, world.depth - 6);
+  const g = new THREE.Mesh(new THREE.BoxGeometry(w * 88 - 6, hh * 28 - 6, d), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+  g.position.set(world.x, world.y, world.z);
+  g.userData.ghost = true; g.renderOrder = 998;
+  g.add(plusMark(w * 88 - 6, hh * 28 - 6, d));
+  return g;
+}
+/* spec: { spots: [{ x, y, w?, hh?, kind?: 'add' | 'need' }], w, hh, rows, onPick(spot) } | null - `rows` is the caller's grid height in half-rows */
+function setSpots(spec) {
+  for (const o of [...editGroup.children].filter(o => o.userData.spot)) { editGroup.remove(o); disposeObj(o); }
+  spotHover = null; spotSpec = spec || null;
+  if (spec) for (const sp of spec.spots) {
+    const w = sp.w || spec.w, hh = sp.hh || spec.hh;
+    const world = spotWorld(sp, w, hh, spec.rows); if (!world) break;
+    const g = spotBox(w, hh, world, SPOT_COLORS[sp.kind || 'add'], sp.kind === 'need' ? 0.38 : 0.28);
+    g.userData.spot = sp; editGroup.add(g);
+  }
+  invalidateFrame();
+}
+function spotStyle() {
+  for (const g of editGroup.children) {
+    if (!g.userData.spot) continue;
+    const sp = g.userData.spot, hov = spotHover === g;
+    g.material.opacity = hov ? 0.7 : sp.kind === 'need' ? 0.38 : 0.28;
+    g.material.color.setHex(hov ? SPOT_COLORS.hover : SPOT_COLORS[sp.kind || 'add']);
+  }
+  invalidateFrame();
+}
+function castAt(e) {
+  const r = canvas.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+}
+function spotAt(e) { if (!spotSpec) return null; castAt(e); const hits = ray.intersectObjects(editGroup.children.filter(o => o.userData.spot), false); return hits.length ? hits[0].object : null; }
+function unitAtEvent(e) {
+  castAt(e);
+  const pick = [...instances.values()].filter(i => i.group.visible);
+  const hits = ray.intersectObjects(pick.map(i => i.group), true);
+  if (!hits.length) return null;
+  let o = hits[0].object; while (o && !o.userData.instanceId) o = o.parent;
+  return o ? unitOf(instances.get(o.userData.instanceId)) : null;
+}
+/* amber dashed outlines around the units the issue card names (the brief: dashed amber, never orange) */
+function setFlags(ids) {
+  for (const h of flagHelpers) { editGroup.remove(h); disposeObj(h); } flagHelpers = [];
+  for (const id of ids || []) {
+    const box = unitBox(id); if (box.isEmpty()) continue;
+    box.expandByScalar(2.5);
+    const h = new THREE.Box3Helper(box, 0xe3a21a);
+    h.geometry = h.geometry.toNonIndexed();
+    h.material = new THREE.LineDashedMaterial({ color: 0xe3a21a, dashSize: 8, gapSize: 5, depthTest: false, transparent: true });
+    h.computeLineDistances();
+    h.renderOrder = 997; h.userData.ghost = true;
+    editGroup.add(h); flagHelpers.push(h);
+  }
+  invalidateFrame();
+}
+/* the eraser: a red box under the cursor, a click hands the unit to the callback */
+function eraseBox(id) {
+  if (eraseHelper) { editGroup.remove(eraseHelper); disposeObj(eraseHelper); eraseHelper = null; }
+  eraseId = id;
+  if (id != null) {
+    const box = unitBox(id);
+    if (!box.isEmpty()) { box.expandByScalar(2); const h = new THREE.Box3Helper(box, 0xf06c5f); h.material.depthTest = false; h.renderOrder = 999; h.userData.ghost = true; editGroup.add(h); eraseHelper = h; }
+  }
+  invalidateFrame();
+}
+function setEraser(cb) { eraser = cb || null; eraseBox(null); canvas.style.cursor = ''; }
+/* the carry: pointerdown on the dragged unit lifts a white ghost of it; it snaps to the nearest valid spot within
+   reach on screen (the workspace supplies the spots when the press starts), else rides the camera plane; release on
+   a spot drops it there. Orbit is off for the duration. */
+function setDrag(spec) { dragSpec = spec || null; }   // { unitId, spots(): [{x,y}] | Promise, onDrop(spot, unitId), onCancel() }
+canvas.addEventListener('pointerdown', e => {
+  if (!dragSpec || e.button !== 0 || carry || eraser) return;
+  const id = unitAtEvent(e); if (id == null || id !== dragSpec.unitId) return;
+  const box = unitBox(id); if (box.isEmpty()) return;
+  controls.enabled = false;
+  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  const m = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false }));
+  m.position.copy(c); m.renderOrder = 1000; m.userData.ghost = true;
+  m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthTest: false })));
+  editGroup.add(m);
+  carry = { id, mesh: m, origin: c.clone(), moved: false, start: [e.clientX, e.clientY], snap: null };
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* no capture */ }
+  Promise.resolve(dragSpec.spots()).then(spots => {
+    if (!carry || carry.id !== id) return;
+    const u = build.placed.find(p => p.id === id);
+    if (u) setSpots({ spots: spots || [], w: u.w, hh: u.hh, rows: dragSpec.rows });
+  });
+});
+function dragMove(e) {
+  if (!carry) return;
+  if (!carry.moved && Math.hypot(e.clientX - carry.start[0], e.clientY - carry.start[1]) < 4) return;
+  carry.moved = true;
+  const r = canvas.getBoundingClientRect();
+  let best = null, bd = Infinity;
+  for (const g of editGroup.children) {
+    if (!g.userData.spot) continue;
+    const p = g.position.clone().project(camera); if (!(p.z > -1 && p.z < 1)) continue;
+    const sx = r.left + (p.x + 1) / 2 * r.width, sy = r.top + (1 - p.y) / 2 * r.height;
+    const d = Math.hypot(sx - e.clientX, sy - e.clientY); if (d < bd) { bd = d; best = g; }
+  }
+  const snap = best && bd <= 70 ? best : null;
+  if (snap !== spotHover) { spotHover = snap; spotStyle(); }
+  carry.snap = snap;
+  if (snap) carry.mesh.position.copy(snap.position);
+  else {
+    castAt(e);
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()), carry.origin);
+    const hit = new THREE.Vector3(); if (ray.ray.intersectPlane(plane, hit)) carry.mesh.position.copy(hit);
+  }
+  invalidateFrame();
+}
+function endCarry(drop) {
+  if (!carry) return false;
+  const { snap, moved, id } = carry;
+  editGroup.remove(carry.mesh); disposeObj(carry.mesh); carry = null; controls.enabled = true;
+  setSpots(null);
+  if (drop && moved && snap && dragSpec && dragSpec.onDrop) dragSpec.onDrop(snap.userData.spot, id);
+  else if (moved && dragSpec && dragSpec.onCancel) dragSpec.onCancel();
+  invalidateFrame();
+  return moved;
+}
+canvas.addEventListener('pointermove', e => {
+  if (carry) { dragMove(e); return; }
+  if (eraser) { const id = unitAtEvent(e); if (id !== eraseId) eraseBox(id); canvas.style.cursor = id != null ? 'pointer' : ''; return; }
+  if (spotSpec) { const g = spotAt(e); if (g !== spotHover) { spotHover = g; spotStyle(); canvas.style.cursor = g ? 'pointer' : ''; } }
+});
+canvas.addEventListener('pointercancel', () => endCarry(false));
+canvas.addEventListener('contextmenu', e => {
+  if (typeof opts === 'undefined' || !opts.onContext || !build) return;
+  const id = unitAtEvent(e); if (id == null) return;
+  e.preventDefault(); opts.onContext({ unitId: id, x: e.clientX, y: e.clientY });
+});
+/* swap the record and rebuild the scene (the Build workspace's every edit): the generator judges first, so an
+   unshowable layout leaves the last good scene standing and returns its reasons for the issue card */
+async function updateBuild(nb, pre) {
+  if (!build) return { ok: false, errors: ['This page shows a static kit.'] };
+  let gen = pre;
+  if (!gen) { try { gen = generateManifest(nb); } catch (err) { return { ok: false, errors: [String((err && err.message) || err)] }; } }
+  if (!gen.manifest) return { ok: false, errors: gen.errors && gen.errors.length ? gen.errors : ['This layout can’t be shown.'] };
+  while (regenBusy) await new Promise(r => setTimeout(r, 16));
+  build = nb; originalBuild = structuredClone(nb);
+  setSpots(null); setFlags([]);
+  await regenerate(gen);
+  return { ok: true };
+}
+const UNIT_PICK = ['Drawer', 'ShelfInsert', 'Case', 'CaseExtender'];
+function selectUnit(unitId) {
+  if (unitId == null) { setSelected(null); return false; }
+  const rank = i => { const k = UNIT_PICK.indexOf(typeByNode[i.cfg.node]); return k < 0 ? 9 : k; };
+  const list = unitInstances(unitId).filter(i => i.group.visible).sort((a, b) => rank(a) - rank(b));
+  if (!list.length) return false;
+  setSelected(list[0].cfg.id);
+  return true;
+}
+function peekUnit(unitId) {
+  const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
+  if (!d) return false;
+  if (openCarrier && openCarrier !== d) slideDrawer(openCarrier, false);
+  openCarrier = d; slideDrawer(d, true); invalidateFrame();
+  return true;
+}
+function unpeek() { if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; invalidateFrame(); } }
 
 // ---------- measure tool ----------
 // PrusaSlicer-lite: two taps on part surfaces → markers + a line + a floating
@@ -8995,9 +9238,9 @@ async function mountManifest(m) {
 // regenerate: re-run the generator on the (mutated) build and re-mount, keeping
 // the current step. Generated builds only — static kits have no `build`.
 let regenBusy = false;
-async function regenerate() {
+async function regenerate(pre) {
   if (!build || regenBusy) return;
-  const gen = generateManifest(build);
+  const gen = pre || generateManifest(build);
   if (!gen.manifest) return; // valid toggles can't make an unbuildable build; ignore defensively
   regenBusy = true;
   setSelected(null);
@@ -9680,7 +9923,11 @@ renderer.setAnimationLoop(renderLoop);
     // the filament palette: the presets, the active colour of a part key, and the saved-palette switch
     applyPreset, PRESETS, activeHex, applyPalette,
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
-    buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); } };
+    buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
+    // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
+    update: updateBuild, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, spotWorld,
+    setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser,
+    get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;
 }

@@ -29,6 +29,21 @@ Second pass (Astra's review of the first Build screen, same day): `setSafeArea({
 
 Phase 1 (Assemble, same day): `opts.onPage(i)` fires from `goTo` with the new page index (0 the cover, 1 the exploded overview, then the numbered steps, last the outro); the object carries `cur`, `pageCount`, `paused` / `setPaused`, `slowmo` / `setSlow`, `next`, `prev`, `replay`, `skipToEnd`, all driven through the viewer's own buttons so their tracking stays in one place. Workspaces mount and unmount in place (`js/app.js` router): each mount returns `{ onSelect?, onPage?, unmount }`, and the stage is shared across them. Still missing: `load(build)`, dispose, multiple instances, mounting into a container.
 
+## Added for the Build rules (phase 3, 2026-10-14)
+
+`createStage(document, opts)` reads `opts.onContext({ unitId, x, y })` (a right-click or long-press on a unit's part). The returned object carries:
+
+- `update(record, pre?)`: swap the build record and rebuild the scene. The generator judges first (or takes a pre-generated result), so an unshowable layout leaves the last good scene standing and returns `{ ok: false, errors }`; otherwise `regenerate()` runs with that manifest and it returns `{ ok: true }`. Waits out a regenerate already in flight. `manifest` on the object is now a getter, so it follows every rebuild.
+- `selectUnit(unitId)`: select a unit by its planner id (the drawer body first, else the shelf insert, case or extender); `unitOf(instanceId)` resolves any instance to its unit, including cases and QuickLocks, which the generator names by the unit's index in its own order (rowIdx, then col) - the stage rebuilds that map per mount. The `onSelect` event's `owner` now uses the same resolution, so a case click selects its unit and the quiet outline wraps every part of it.
+- `peekUnit(unitId)` / `unpeek()`: slide a drawer open and closed without the focus camera.
+- `unitBox(unitId)`: the world bounds of a unit's visible parts.
+- `setSpots({ spots: [{ x, y, w?, hh?, kind? }], w, hh, rows, onPick })`: amber (or red, `kind: 'need'`) translucent boxes with a plus mark at planner cells; hover turns one green; a click calls `onPick(spot)`. `rows` is the caller's grid height in half-rows: heights are placed as half-rows above the mount frame, so the caller's grid may differ from the record's (the store's tabletop grid tracks the build). `spotWorld(spot, w, hh, rows)` is the mapping on its own, taken from a case the scene already holds (88 mm per column, 28 mm per half-row).
+- `setFlags([unitIds])`: dashed amber outlines around units (the issue card's).
+- `setDrag({ unitId, rows, spots(), onDrop(spot, unitId), onCancel() })`: a pointerdown on that unit lifts a white ghost of it with orbit off; `spots()` (sync or a promise) supplies the valid spots, which appear as the carry starts; the ghost snaps to the nearest spot within 70 px on screen, else rides the camera plane; release on a spot calls `onDrop`. `cancelDrag()` ends a carry without a drop (Escape).
+- `setEraser(cb)`: the remove mode - a red box under the cursor, a click hands the unit id to `cb`.
+
+All overlays live in one `edit-overlays` group outside `instances` (flagged `userData.ghost`), so the BOM, the callouts, measuring, shadows, AO and the reflection never see them. `regenerate(pre)` takes an optional pre-generated result.
+
 ## What the goldens do and do not prove
 
 `npm run goldens` proves the picture is unchanged on 60 scenes: 10 official kits × cover / middle step / finished build × Very High / Fast, at 1200×800. It does not cover: the part-preview embed (`?part=`), the planner relay (`?embed=1` driven by the planner), label text on EdgeLabel drawers, the outro scene, light mode, phone widths, or any interaction after the page change. The smoke, profile-lands and relief-tier gates cover the embed route, the filament picker and the quality ladder in a browser; the relay has no automated check here yet.

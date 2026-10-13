@@ -260,6 +260,61 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 html[data-ws="parts"] #ws-tools { left: 480px; right: 364px; }
 @media (max-width: 1279px) { #ws-parts { top: 134px; width: 400px; } html[data-ws="parts"] #ws-tools { left: 440px; } }
 
+/* ---- Build (phase 3): the 2D board, the issue card, the context menu, the inspector's steppers ---- */
+#ws-board { position: absolute; top: 150px; left: 344px; right: 364px; bottom: 116px; border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; }
+#ws-board[hidden] { display: none; }
+#ws-board .bhead { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--hair); }
+#ws-board .bttl { font-family: var(--font-display); font-weight: 800; font-size: 16px; font-stretch: 108%; }
+#ws-board .bhint { flex: 1; font-size: 12px; color: var(--ink-2); }
+#ws-board .bgrid { display: flex; gap: 4px; }
+#ws .key.sm { height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+#ws .key.strong { background: var(--orange); color: var(--on-orange); border-color: var(--orange-edge); }
+#ws-board .bsvg { flex: none; display: block; margin: auto; touch-action: none; cursor: crosshair; }   /* drawn at its natural size (layout() fits the viewBox to the panel), so a pointer position maps 1:1 */
+#ws-board .b-grid line { stroke: var(--ink-3); stroke-opacity: .28; stroke-width: 1; }
+#ws-board .b-grid line.half { stroke-opacity: .12; }
+#ws-board .b-mount { stroke: var(--orange); stroke-width: 3; stroke-linecap: round; }
+#ws-board .b-mount-lbl { font-family: var(--font-mono); font-size: 10px; fill: var(--ink-2); }
+#ws-board .b-hatch { stroke: var(--orange); stroke-width: 1.5; stroke-opacity: .7; }
+#ws-board .b-deficit { stroke: var(--orange); stroke-opacity: .5; stroke-dasharray: 4 3; }
+#ws-board .b-unit { cursor: grab; }
+#ws-board .b-unit.dragging { opacity: .35; }
+#ws-board .b-body { stroke: rgba(0,0,0,.35); stroke-width: 1; }
+#ws-board .b-cap { font-family: var(--font-mono); font-size: 10px; font-weight: 600; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 2.5px; pointer-events: none; }
+#ws-board .b-sel { fill: none; stroke: var(--orange); stroke-width: 2.5; pointer-events: none; }
+#ws-board .b-flag { fill: none; stroke: var(--warning); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }
+#ws-board .b-flag-dot { fill: var(--warning); pointer-events: none; }
+#ws-board .b-flag-txt { font-family: var(--font-mono); font-size: 12px; font-weight: 700; fill: #1D1E20; pointer-events: none; }
+#ws-board .b-ghost { pointer-events: none; stroke-width: 2; stroke-dasharray: 5 4; }
+#ws-board .b-ghost.ok { fill: rgba(90,214,122,.25); stroke: #2E9E63; }
+#ws-board .b-ghost.no { fill: rgba(240,108,95,.22); stroke: #D64545; }
+#ws .armed { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 10px; font-size: 12px; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-border); }
+#ws-tools .erase.on { color: var(--danger); }
+#ws-tools .icon-btn[disabled] { opacity: .4; cursor: not-allowed; }
+#ws-insp .stepper { display: inline-flex; align-items: center; gap: 6px; }
+#ws-insp .stepper .key { width: 30px; height: 30px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; }
+#ws-insp .stepper b { min-width: 34px; text-align: center; font-size: 12px; }
+#ws-insp .track.mini { padding: 3px; gap: 3px; border-radius: 9px; min-width: 150px; }
+#ws-insp .track.mini .seg { height: 28px; font-size: 11px; }
+#ws-insp .seg[disabled] { opacity: .45; }
+#ws-issues { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 460px; max-height: 60vh; overflow-y: auto; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#ws-issues[hidden] { display: none; }
+#ws-issues .ihead { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+#ws-issues .ihead .x { width: 32px; height: 32px; border: none; background: transparent; color: var(--ink-2); cursor: pointer; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; }
+#ws-issues .issue { padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 8px; }
+#ws-issues .issue.hard, #ws-issues .issue.soft { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-border); }
+#ws-issues .issue.guide { background: var(--well); border: 1px solid var(--well-border); color: var(--ink); }
+#ws-issues .iact { display: flex; gap: 8px; justify-content: flex-end; }
+#ws-issues .iact:empty { display: none; }
+#ws-menu { position: fixed; width: 200px; padding: 8px; border-radius: 14px; display: flex; flex-direction: column; gap: 2px; z-index: 30; }
+#ws-menu[hidden] { display: none; }
+#ws-menu .label { padding: 6px 10px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+#ws-menu .item { height: 36px; padding: 0 10px; border-radius: 9px; border: none; background: transparent; text-align: left; font-size: 13px; cursor: pointer; color: inherit; }
+#ws-menu .item:hover { background: var(--seg-on); }
+#ws-menu .item[disabled] { opacity: .45; cursor: not-allowed; }
+#ws-menu .item.danger { color: var(--danger); }
+html.ws-2d #ws-tools .measure { visibility: hidden; }
+@media (max-width: 1279px) { #ws-board { top: 194px; } }
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }

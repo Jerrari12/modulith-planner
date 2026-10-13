@@ -14,7 +14,7 @@ const PHASE = { colors: 'phase 4', labels: 'phase 5', parts: 'phase 2', assemble
 export function topbar(stage, ctx) {
   const build = stage.build;
   const length = Number(build?.length || stage.manifest?.collection || 185);
-  const name = stage.manifest?.title || 'Workbench build';
+  const name = ctx.kitTitle || stage.manifest?.title || 'Workbench build';
   const top = el('header', { id: 'ws-top' });
   top.append(
     el('a', { id: 'ws-logo', href: 'https://modulith.systems', title: 'MODULITH' }, [el('img', { src: 'img/modulith-logo.svg', alt: 'MODULITH' })]),

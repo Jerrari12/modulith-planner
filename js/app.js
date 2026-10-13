@@ -6,9 +6,14 @@ import { createStage } from './main.js';
 import { mountBuild } from './workspaces/build.js';
 import { mountAssemble } from './workspaces/assemble.js';
 import { mountParts, printCountOf } from './workspaces/parts.js';
+import { createStore } from './state/store.js';
+
+// eslint-disable-next-line no-undef
+const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog, a classic-script lexical global
 
 const QS = new URLSearchParams(location.search);
 const WS = QS.get('ws');
+const KIT = QS.get('build');   // the official kit this page opened with, kept in the address through every edit
 
 /* theme: the brief's data-mode on <html>, kept in step with the stage's own light/dark */
 export function setMode(mode, stage) {
@@ -34,8 +39,17 @@ export async function boot() {
   const stage = await createStage(document, {
     onSelect: (sel) => current?.onSelect?.(sel),
     onPage: (i) => current?.onPage?.(i),
+    onContext: (info) => current?.onContext?.(info),
     quietSelect: true, fillBoost: 1.6,
   });
+  /* THE STORE (phase 3): the build record with the planner's rules and undo history. It opens on the record the
+     stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
+     planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
+  const store = createStore(G, { onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); } catch { /* a very old browser */ } } });
+  if (stage.build) store.load(stage.build);
+  if (QS.get('debug')) window.__GEN2_STORE__ = store;   // for the shot tool and end-to-end checks, like the stage's own hook
+  let kitTitle = stage.manifest?.title || null;
+  if (KIT && location.hash.startsWith('#build=')) { try { kitTitle = (await (await fetch(`builds/${encodeURIComponent(KIT)}.json`)).json()).title || kitTitle; document.title = kitTitle; } catch { /* the hash's own name stands */ } }
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
   /* a representative finished build in every workspace (Astra): the first preset's coordinated filaments unless the
      visitor already has a saved palette; Assemble switches to Part colors on its own and restores this on leave */
@@ -43,6 +57,7 @@ export async function boot() {
   const ctx = {
     setMode,
     memo: {},   // what a workspace wants back when it is remounted (the Assemble step, for one)
+    store, kitId: KIT, get kitTitle() { return kitTitle; },
     badges: () => { try { return { parts: printCountOf(stage.build) || null }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count)
     has: (ws) => !!WORKSPACES[ws],
     switchTo(ws) {

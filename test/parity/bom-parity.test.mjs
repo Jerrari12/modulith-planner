@@ -12,40 +12,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import vm from 'node:vm';
-
-const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const PLANNER = process.env.PLANNER_REPO || join(root, '..', 'GEN2 Planner', 'gen2-planner-main');
-const havePlanner = existsSync(join(PLANNER, 'js', 'app.js'));
+import { root, havePlanner, loadCatalog, bootPlanner, canon, kitFiles, readKit } from './lib.mjs';
+import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 const read = (p) => readFileSync(p, 'utf8');
-
-/* the catalog the NEW rule takes: data.js evaluated in a vm with requirement-scope first (data.js reads GEN2_REQ) */
-function loadCatalog() {
-  const ctx = vm.createContext({ console });
-  vm.runInContext(read(join(root, 'js', 'vendor', 'requirement-scope.js')), ctx);
-  return vm.runInContext(read(join(root, 'js', 'catalog', 'data.js')) + '\n;({ GEN2, partLinks })', ctx);
-}
-
-/* the OLD planner, booted the way its own tests boot it (test/planner.test.mjs): jsdom, a localStorage stub, the
-   four scripts evaluated in order, the test hook as the API */
-async function bootPlanner(seed) {
-  const { JSDOM } = await import('jsdom');
-  const dom = new JSDOM(read(join(PLANNER, 'index.html')), { runScripts: 'outside-only', url: 'http://localhost/' });
-  const w = dom.window;
-  const mem = new Map();
-  Object.defineProperty(w, 'localStorage', { value: { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)), removeItem: (k) => mem.delete(k), clear: () => mem.clear() } });
-  w.__GEN2_PLANNER_TEST__ = true;
-  /* a seeded Math.random so surpriseMe is reproducible run to run (mulberry32) */
-  let s = seed >>> 0;
-  w.Math.random = () => { s += 0x6D2B79F5; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  w.eval(read(join(PLANNER, 'js', 'requirement-scope.js')) + '\n' + read(join(PLANNER, 'js', 'tabletop-completion.js')) + '\n' + read(join(PLANNER, 'js', 'data.js')) + '\n' + read(join(PLANNER, 'js', 'app.js')));
-  return { app: w.__GEN2_PLANNER_TEST__, window: w };
-}
-
-const canon = (v) => JSON.stringify(v, (k, val) => (val && typeof val === 'object' && !Array.isArray(val)) ? Object.fromEntries(Object.keys(val).sort().map((x) => [x, val[x]])) : val);
 
 test('the ported computeBom matches the planner on the official kits and on seeded random builds with option sweeps', { skip: !havePlanner && 'planner checkout not present - pin-only' }, async (t) => {
   const { computeBom } = await import('../../js/rules/bom.js');
@@ -60,9 +30,9 @@ test('the ported computeBom matches the planner on the official kits and on seed
     if (a !== b) mismatches.push({ label, theirs: a.slice(0, 400), mine: b.slice(0, 400) });
   };
   /* 1. the official kits */
-  const kits = readdirSync(join(root, 'builds')).filter((f) => f.endsWith('.json') && f !== 'index.json');
+  const kits = kitFiles();
   for (const f of kits) {
-    const kit = JSON.parse(read(join(root, 'builds', f)));
+    const kit = readKit(f);
     app.applyBuild(kit.build);
     compare('kit ' + f);
   }

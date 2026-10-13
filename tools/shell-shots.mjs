@@ -97,4 +97,38 @@ try {
     console.log('wrote parts shots');
     await ctx.close();
   }
+  /* Build rules (phase 3): dark 1440 - the armed size with its spots on the model, the 2D board, and the issue
+     card after a support is dragged out from under a unit */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+    const page = await ctx.newPage();
+    await page.goto(`${base}/index.html?ws=build&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-dock'), null, { timeout: 90_000 });
+    const settle = () => page.waitForFunction(() => { const h = window.__GEN2_VIEWER__; return h.quality !== 'veryhigh' || (h.acc && h.acc.n >= h.ACC_SAMPLES); }, null, { timeout: 30_000 }).catch(() => {});
+    await page.click('#ws-lib .size:not(.dis) >> nth=5');   // a size tile arms placing: the valid spots appear
+    await page.waitForTimeout(600); await settle(); await page.waitForTimeout(600);
+    await writeFile(join(OUT, 'build-rules-dark-1440-spots.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-tools .view button:has-text("2D")');
+    await page.waitForTimeout(400);
+    await writeFile(join(OUT, 'build-rules-dark-1440-board.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws .armed button');   // stop placing
+    // drag the bottom-left support out from under the stack on the board (the board draws the STORE's grid), then open the issue card
+    await page.evaluate(() => {
+      const board = document.querySelector('#ws-board'); const svg = board.querySelector('svg'); const vb = svg.viewBox.baseVal; const r = svg.getBoundingClientRect();
+      const b = window.__GEN2_STORE__.state; const rows = b.gridH * 2; const PAD = 18; const cell = (vb.width - 2 * PAD) / b.gridW; const half = cell * 28 / 88;
+      const k = Math.min(r.width / vb.width, r.height / vb.height); const ox = (r.width - vb.width * k) / 2, oy = (r.height - vb.height * k) / 2;
+      const at = (x, y) => ({ clientX: r.left + ox + (PAD + (x + 0.5) * cell) * k, clientY: r.top + oy + (PAD + (y + 0.5) * half) * k });
+      const ev = (t, p) => svg.dispatchEvent(new PointerEvent(t, { ...p, button: 0, pointerId: 1, bubbles: true, isPrimary: true }));
+      const bottom = b.placed.filter((u) => u.y + u.hh === rows).sort((p, q) => p.x - q.x)[0];
+      const a = at(bottom.x, bottom.y), d = at(0, bottom.y);
+      ev('pointerdown', a); ev('pointermove', { clientX: a.clientX + 12, clientY: a.clientY }); ev('pointermove', d); ev('pointerup', d);
+    });
+    await page.waitForTimeout(800);
+    await page.click('#ws-dock .status');
+    await page.waitForTimeout(400);
+    await writeFile(join(OUT, 'build-rules-dark-1440-issue.png'), await page.screenshot({ type: 'png' }));
+    console.log('wrote build-rules shots');
+    await ctx.close();
+  }
 } finally { await browser.close(); server.close(); }
