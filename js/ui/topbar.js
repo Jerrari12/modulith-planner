@@ -44,6 +44,7 @@ export function topbar(stage, ctx) {
       el('div.label', { text: 'Recent builds' }),
       el('div.meta', { text: 'Autosaved in this browser · arrives with the build store', style: 'padding:4px 10px 8px' }),
       el('div.divider'),
+      el('button.item', { role: 'menuitem', onclick: () => { set(false); share(); } }, [el('span', { text: 'Share link' }), icon('share-network', { size: 16 })]),
       ...[['Rename', 'the build store'], ['Duplicate', 'the build store'], ['Save build file', 'the build store'], ['Load build file', 'the build store'], ['New build', 'the setup sheet']]
         .map(([t, when]) => el('button.item', { role: 'menuitem', disabled: true, title: `${t} comes with ${when}` }, [el('span', { text: t })])),
     );

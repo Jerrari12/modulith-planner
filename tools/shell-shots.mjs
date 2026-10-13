@@ -188,6 +188,14 @@ try {
     await writeFile(join(OUT, 'phone-parts-dark-390.png'), await page.screenshot({ type: 'png' }));
     await page.click('#ws-tabbar .tab:has-text("Colors")'); await settle();
     await writeFile(join(OUT, 'phone-colors-dark-390.png'), await page.screenshot({ type: 'png' }));
+    // the Colors sheet opens on arrival; scrolled, its handle must stay put
+    await page.$eval('#ws-colors', (n) => { n.scrollTop = 400; }); await page.waitForTimeout(300);
+    await writeFile(join(OUT, 'phone-colors-dark-390-scrolled.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-tabbar .tab:has-text("Assemble")'); await settle();
+    await page.click('#ws-player .next'); await settle(); await settle();
+    await writeFile(join(OUT, 'phone-assemble-dark-390.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-steps .sheet-handle'); await page.waitForTimeout(500);
+    await writeFile(join(OUT, 'phone-assemble-dark-390-steps.png'), await page.screenshot({ type: 'png' }));
     console.log('wrote phone shots');
     await ctx.close();
   }

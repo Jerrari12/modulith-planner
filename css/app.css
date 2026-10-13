@@ -256,6 +256,7 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-dock .pbar .track { display: block; height: 6px; border-radius: 3px; background: var(--seg-track); overflow: hidden; padding: 0; }
 #ws-dock .pbar .fill { display: block; height: 6px; background: var(--orange); }
 #ws-dock .pbar .mono { font-size: 11px; color: var(--ink-2); }
+#ws-dock .pbar .short { display: none; }
 #ws-tabs .tab .badge { font-size: 10px; padding: 1px 6px; }
 html[data-ws="parts"] #ws-tools { left: 480px; right: 364px; }
 @media (max-width: 1279px) { #ws-parts { top: 134px; width: 400px; } html[data-ws="parts"] #ws-tools { left: 440px; } }
@@ -427,34 +428,46 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 /* ---- the phone layout (<= 1023 px): a bottom tab bar, panels as bottom sheets, a slim dock (the brief §2) ---- */
 #ws-tabbar { display: none; }
 @media (max-width: 1023px) {
+  /* the bar (Joey's phone, 2026-10-13: at 390-412 px the switcher was a sliver under the wordmark): the wordmark,
+     the build name with its caret, mount·length as icon + number, and ONE theme button (the other mode's icon);
+     Share lives in the switcher menu, the printer chip waits for the setup sheet, the tabs are the bottom bar */
   #ws-top { top: 10px; left: 10px; right: 10px; gap: 6px; }
-  #ws-top #ws-tabs, #ws-top .preview, #ws-top .printer, #ws-top .share span, #ws-top .spacer { display: none; }
-  #ws-top .chip-btn.share { padding: 0 12px; }
+  #ws-top #ws-tabs, #ws-top .preview, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
   #ws-top #ws-switch { flex: 1; min-width: 0; margin-left: 0; }
-  #ws-top #ws-switch > .chip-btn { width: 100%; }
-  #ws-top #ws-switch > .chip-btn > span { flex: 1; max-width: none; }
-  #ws-top .chip-btn.mount { padding: 0 10px; }
+  #ws-top #ws-switch > .chip-btn { width: 100%; padding: 0 10px; gap: 6px; }
+  #ws-top #ws-switch > .chip-btn > :first-child { display: none; }
+  #ws-top #ws-switch > .chip-btn > span { flex: 1; max-width: none; text-align: left; }
+  #ws-switch .menu { width: min(260px, calc(100vw - 20px)); }
+  #ws-top .chip-btn.mount { padding: 0 10px; flex: none; }
   #ws-top .chip-btn.mount .lbl { display: none; }
+  #ws-theme button.on { display: none; }
   #ws-logo img { height: 22px; }
   #ws-tabbar { display: flex; position: absolute; left: 0; right: 0; bottom: 0; height: 64px; justify-content: space-around; align-items: stretch; padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px)); border-radius: 0; border-width: 1px 0 0 0; z-index: 12; }
   #ws-tabbar .tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: none; background: transparent; color: var(--ink-2); font-size: 10px; font-weight: 600; position: relative; border-radius: 10px; }
   #ws-tabbar .tab.on { color: var(--orange); }
   #ws-tabbar .tab .badge { position: absolute; top: 3px; right: 8%; font-size: 9px; padding: 1px 5px; }
-  #ws-tools { top: 64px; left: 10px; right: 10px; gap: 6px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  /* the tools row: every workspace's desktop offset (left: 320/344/480/860 px) loses to the phone's full row */
+  #ws-tools, html[data-ws] #ws-tools, html.ws-parts-wide[data-ws="parts"] #ws-tools { top: 64px; left: 10px; right: 10px; gap: 6px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   #ws-tools .quality { display: none; }
-  #ws-dock { left: 10px; right: 10px; bottom: 70px; transform: none; padding: 6px 6px 6px 8px; gap: 8px; justify-content: space-between; border-radius: 14px; z-index: 11; }
+  /* the dock: status and the CTA always fit; the units·mm group yields to a progress bar or a filament stack */
+  #ws-dock { left: 10px; right: 10px; bottom: 70px; transform: none; padding: 6px 6px 6px 8px; gap: 8px; justify-content: space-between; border-radius: 14px; z-index: 11; min-width: 0; }
   #ws-dock .group { gap: 4px; }
-  #ws-dock .group:nth-of-type(2) { display: none; }
+  #ws-dock .group:nth-of-type(2), #ws-dock:has(.pbar) .group, #ws-dock:has(.status.stack) .group { display: none; }
   #ws-dock .big { font-size: 16px; }
   #ws-dock .unit-lbl { font-size: 11px; }
-  #ws-dock .status { height: 34px; padding: 0 10px; font-size: 12px; }
-  #ws-dock .cta { height: 40px; padding: 0 12px; font-size: 13px; gap: 6px; }
-  #ws-dock .pbar { width: 90px; }
-  /* sheets */
-  #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px))); transition: transform var(--d-pop) var(--ease-out); z-index: 10; animation: none; }
-  #ws .sheet.open { transform: none; overflow-y: auto; z-index: 13; }
+  #ws-dock .status { height: 36px; padding: 0 10px; font-size: 12px; flex: none; }
+  #ws-dock .status.stack .stacks i:nth-child(n+5) { display: none; }
+  #ws-dock .cta { height: 40px; padding: 0 12px; font-size: 13px; gap: 6px; flex: none; }
+  #ws-dock .pbar { flex: 1; width: auto; min-width: 56px; }
+  #ws-dock .pbar .mono { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #ws-dock .pbar .long { display: none; }
+  #ws-dock .pbar .short { display: block; }
+  /* sheets: the handle stays put while the sheet scrolls under it; the sheet manager sets bottom and max-height
+     inline from the live dock height (the Assemble player is taller than the dock) */
+  #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
+  #ws .sheet.open { transform: none; clip-path: inset(0); overflow-y: auto; z-index: 13; }
   #ws .sheet[hidden] { display: none; }
-  #ws .sheet-handle { flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
+  #ws .sheet-handle { position: sticky; top: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; background: var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
   #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; }
   #ws .sheet-handle .ttl { flex: 1; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #ws .sheet-handle .chev { color: var(--ink-3); display: inline-flex; }
@@ -465,12 +478,35 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
   #ws-board { top: 110px; left: 10px; right: 10px; bottom: 176px; }
   #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: 132px; max-height: 44vh; }
   #ws-menu { width: 180px; }
+  /* Parts: the head wraps (the four download sites on a row of their own, Track under them); Expand is a desktop
+     control */
   #ws-parts.wide { width: auto; }
+  #ws-parts .head { padding: 0 0 10px; gap: 8px; }
+  #ws-parts .row1 .expand { display: none; }
+  #ws-parts .row2 { flex-wrap: wrap; gap: 2px 8px; }
+  #ws-parts .row2 .dim { text-align: left; }
+  #ws-parts .row3 { flex-wrap: wrap; }
+  #ws-parts .sites { flex: 1 1 100%; }
+  #ws-parts .sites .seg { padding: 0 2px; min-width: 0; overflow: hidden; }
+  #ws-parts .row3 > .key { flex: 1; }
+  #ws-parts .body { padding: 0 0 8px; }
   #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
   #ws-colors .scheme .shop { display: none; }
-  #ws-player { left: 10px; right: 10px; width: auto; transform: none; bottom: 70px; }
-  #ws-steps.sheet { bottom: 126px; }
+  /* Assemble: the player sits on the bar as a compact card (the note gets the width, the colour switch and the
+     pips take rows of their own); the steps sheet stacks above it */
+  #ws-player { left: 10px; right: 10px; width: auto; transform: none; bottom: 70px; padding: 10px 12px; gap: 8px; border-radius: 16px; z-index: 11; }
+  #ws-player .row1 { flex-wrap: wrap; gap: 8px 10px; }
+  #ws-player .row1 > div:not(.colors) { flex: 1; min-width: 0; }
+  #ws-player .row1 .colors { flex: 1 1 100%; margin-left: 0; display: grid; grid-template-columns: 1fr 1fr; }
+  #ws-player .colors .seg { height: 28px; padding: 0; }
+  #ws-player .num { width: 30px; height: 30px; font-size: 13px; }
+  #ws-player .title { font-size: 16px; }
+  #ws-player .text { font-size: 13px; line-height: 1.45; max-height: 24vh; overflow-y: auto; }
+  #ws-player .row2 { flex-wrap: wrap; gap: 6px; }
+  #ws-player .pips { flex: 1 1 100%; order: -1; }
+  #ws-player .row2 .key { height: 38px; padding: 0 10px; flex: 1; font-size: 12px; }
+  #ws-player .row2 .sq { flex: none; width: 40px; }
 }
 
 /* ---- toast ---- */

@@ -298,7 +298,7 @@ export function mountParts(stage, ctx) {
     dock.firstChild.prepend(el('span.dot'));
     if (st.tracking) {
       const done = printCount - toGo;
-      dock.appendChild(el('div.pbar', {}, [el('span.track', {}, [el('span.fill', { style: `width:${printCount ? Math.round(done / printCount * 100) : 0}%` })]), el('span.mono', { text: `${done} of ${printCount} in hand · ${toGo} to go` })]));
+      dock.appendChild(el('div.pbar', {}, [el('span.track', {}, [el('span.fill', { style: `width:${printCount ? Math.round(done / printCount * 100) : 0}%` })]), el('span.mono.long', { text: `${done} of ${printCount} in hand · ${toGo} to go` }), el('span.mono.short', { text: `${done} of ${printCount}` })]));
     }
     dock.appendChild(el('button.cta', { onclick: () => { if (ctx.memo) ctx.memo.assemblePage = 1; ctx.switchTo('assemble'); } }, ['Start assembly', icon('arrow-right', { size: 20 })]));
   }

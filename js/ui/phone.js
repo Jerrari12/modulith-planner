@@ -12,8 +12,12 @@ export const PHONE_MAX = 1023;
 export const isPhone = () => innerWidth <= PHONE_MAX;
 const TABBAR = 64, DOCK = 56, HANDLE = 44;
 
-/* ctx: { active, has, switchTo, badges, soon }; panels: [{ el, title, peek?() -> node | string | null, open?: boolean }] */
-export function phoneChrome(root, ctx, { panels = [] } = {}) {
+/* ctx: { active, has, switchTo, badges, soon }; panels: [{ el, title, peek?() -> node | string | null, open?: boolean }];
+   dock: the height of whatever sits on the bar (the dock by default; Assemble passes its player's live height) */
+export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
+  const dockH = () => Math.max(0, Math.round(typeof dock === 'function' ? dock() : dock));
+  const base = () => TABBAR + dockH() + 6;   // where the lowest sheet's bottom edge sits
+  const openHeight = () => Math.max(160, Math.min(Math.round(innerHeight * 0.56), innerHeight - base() - 110));
   const badges = (typeof ctx.badges === 'function' ? ctx.badges() : ctx.badges) || {};
   const bar = el('nav.glass', { id: 'ws-tabbar', 'aria-label': 'Workspaces' });
   for (const [id, label, ic] of TABS) {
@@ -38,11 +42,12 @@ export function phoneChrome(root, ctx, { panels = [] } = {}) {
      (Sol 01a13367); an open sheet rises from the dock over them */
   const collapsedHeight = (e) => HANDLE + (e.peek && e.peek() ? 40 : 0);
   function stack() {
-    let off = 0;
+    let off = 0; const b = base();
     for (const e of sheets.values()) {
       if (e.el.hidden) continue;
-      if (e.open) { e.el.style.bottom = ''; continue; }
-      e.el.style.bottom = `${TABBAR + DOCK + 6 + off}px`;
+      if (e.open) { e.el.style.bottom = `${b}px`; e.el.style.maxHeight = `${openHeight()}px`; continue; }
+      e.el.style.maxHeight = '';
+      e.el.style.bottom = `${b + off}px`;
       off += collapsedHeight(e);
     }
   }
@@ -75,7 +80,6 @@ export function phoneChrome(root, ctx, { panels = [] } = {}) {
   }
   stack();
   let onLayout = null;
-  const peekOf = (panel) => { const e = sheets.get(panel); if (!e || panel.hidden) return 0; return e.open ? Math.round(innerHeight * 0.56) : collapsedHeight(e); };
   return {
     bar,
     open: (panel) => open(panel, true),
@@ -83,9 +87,9 @@ export function phoneChrome(root, ctx, { panels = [] } = {}) {
     isOpen: (panel) => !!sheets.get(panel)?.open,
     refresh: () => { for (const e of sheets.values()) render(e); stack(); },
     /* the stage's safe area under the chrome: the tallest visible sheet (collapsed = its handle and peek), the dock, the bar */
-    bottom: () => { stack(); const vis = [...sheets.values()].filter((e) => !e.el.hidden); const openOne = vis.find((e) => e.open); return TABBAR + DOCK + (openOne ? Math.round(innerHeight * 0.56) : vis.reduce((n, e) => n + collapsedHeight(e), 0)); },
+    bottom: () => { stack(); const vis = [...sheets.values()].filter((e) => !e.el.hidden); const openOne = vis.find((e) => e.open); return base() + (openOne ? openHeight() : vis.reduce((n, e) => n + collapsedHeight(e), 0)); },
     top: () => 110,
     onLayout: (fn) => { onLayout = fn; },
-    destroy() { bar.remove(); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); } sheets.clear(); },
+    destroy() { bar.remove(); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
   };
 }
