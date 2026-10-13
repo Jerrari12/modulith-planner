@@ -250,7 +250,9 @@ export function mountLabels(stage, ctx) {
     importDoc(doc, 'link');
   }
   function openStudio(parts) {
-    const q = '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '');
+    // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
+    // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
+    const q = '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels');
     try { window.open(LABEL_STUDIO_URL + q + (parts ? '#parts' : ''), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
   }
   /* Print labels: the Studio's one-way link, the drawers' words in drawer order (what it lays out and exports; icons, stripes and
