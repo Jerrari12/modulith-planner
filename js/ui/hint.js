@@ -7,6 +7,7 @@ import { el } from './dom.js';
 const SVG = 'http://www.w3.org/2000/svg';
 const DWELL = 380;
 let bubble = null, timer = 0, current = null;
+const videoGone = new Set();   // clips that failed to load this session: the scene stands in without asking again
 
 /* an SVG scene from markup this app authored (no outside strings ever reach it) */
 export function scene(viewBox, markup) {
@@ -43,7 +44,17 @@ function place(target, anchor) {
 function show(target, spec, anchor) {
   const b = ensure();
   current = target;
-  b.replaceChildren(el('div.scene', {}, [spec.scene()]), el('div.t', { text: spec.title }), spec.text ? el('div.d', { text: spec.text }) : null);
+  /* a real clip when the hint has one (img/hints/*.mp4: a 10-15 s muted screen recording, loaded only on first hover); the
+     SVG scene is the placeholder and the fallback while the clip is missing or fails */
+  let media;
+  if (spec.video && !videoGone.has(spec.video)) {
+    media = el('video', { muted: true, loop: true, autoplay: true, playsinline: true, preload: 'none', 'aria-hidden': 'true' });
+    media.muted = true;
+    media.addEventListener('error', () => { videoGone.add(spec.video); if (current === target) show(target, spec, anchor); });
+    media.src = spec.video;
+    media.play?.().catch(() => {});
+  } else media = spec.scene();
+  b.replaceChildren(el('div.scene', {}, [media]), el('div.t', { text: spec.title }), spec.text ? el('div.d', { text: spec.text }) : null);
   b.hidden = false;
   place(target, anchor);
   void b.offsetWidth;   // a reflow between unhide and show, so the fade runs (a frame callback can stall in a background tab)
@@ -53,7 +64,7 @@ export function hideHint() {
   clearTimeout(timer); timer = 0; current = null;
   if (bubble) { bubble.classList.remove('show'); bubble.hidden = true; bubble.replaceChildren(); }
 }
-/* target: the control; spec: { title, text?, scene() -> svg }; anchor: the panel the bubble sits beside (default: the control) */
+/* target: the control; spec: { title, text?, scene() -> svg, video?: url }; anchor: the panel the bubble sits beside (default: the control) */
 export function attachHint(target, spec, anchor = null) {
   if (!canHover()) return target;
   const arm = () => { clearTimeout(timer); timer = setTimeout(() => show(target, spec, anchor), DWELL); };

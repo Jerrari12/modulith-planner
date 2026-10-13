@@ -66,13 +66,15 @@ const SCENES = {
     <g>${moveTo(52, 92, 52, 50, 0.04, 0.1)}${moveTo(52, 50, 118, 50, 0.3, 0.12)}<circle r="9" fill="none" stroke="#FF6A1A" stroke-width="2"><animate attributeName="r" values="9;9;4;9;9;4;9;9;4;9" keyTimes="0;.1;.14;.2;.38;.42;.48;.66;.7;.76" dur="4s" repeatCount="indefinite"/></circle></g>
     <text x="120" y="102" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a">tap a drawer, the next label follows</text>`),
 };
+/* a hint plays img/hints/labels-<key>.mp4 when that clip exists (Joey: a 10-15 s recording, as for 3D Printopia); the SVG
+   scene is the placeholder until then - see img/hints/README.md */
 const HINTS = {
-  type: { title: 'Type a label', text: 'Words for one drawer; the icon is guessed, or pick one after.', scene: SCENES.type },
-  file: { title: 'Add from a file', text: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set.', scene: SCENES.file },
-  studio: { title: 'Label Studio', text: 'Make labels with icons, stripes and uploads, and print the plate. Opens in a new tab.', scene: SCENES.studio },
-  picker: { title: 'Part Picker', text: 'Choose screws, nuts, washers and inserts; each becomes a label laid out from its part record.', scene: SCENES.picker },
-  fill: { title: 'Fill empty drawers', text: 'Every waiting label onto an empty drawer, top row first, left to right. One Undo takes it back.', scene: SCENES.fill },
-  several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several },
+  type: { title: 'Type a label', text: 'Words for one drawer; the icon is guessed, or pick one after.', scene: SCENES.type, video: `img/hints/labels-type.mp4` },
+  file: { title: 'Add from a file', text: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set.', scene: SCENES.file, video: `img/hints/labels-file.mp4` },
+  studio: { title: 'Label Studio', text: 'Make labels with icons, stripes and uploads, and print the plate. Opens in a new tab.', scene: SCENES.studio, video: `img/hints/labels-studio.mp4` },
+  picker: { title: 'Part Picker', text: 'Choose screws, nuts, washers and inserts; each becomes a label laid out from its part record.', scene: SCENES.picker, video: `img/hints/labels-picker.mp4` },
+  fill: { title: 'Fill empty drawers', text: 'Every waiting label onto an empty drawer, top row first, left to right. One Undo takes it back.', scene: SCENES.fill, video: `img/hints/labels-fill.mp4` },
+  several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several, video: `img/hints/labels-several.mp4` },
 };
 const LABEL_STUDIO_URL = 'https://labels.modulith.systems/';
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;

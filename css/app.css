@@ -442,7 +442,7 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-hint[hidden] { display: none; }
 #ws-hint.show { opacity: 1; transform: none; }
 #ws-hint .scene { border-radius: 9px; overflow: hidden; background: #1d2230; }
-#ws-hint .scene svg { display: block; width: 100%; height: auto; }
+#ws-hint .scene svg, #ws-hint .scene video { display: block; width: 100%; height: auto; aspect-ratio: 240 / 110; object-fit: cover; }
 #ws-hint .t { margin: 8px 4px 0; font-size: 12px; font-weight: 700; }
 #ws-hint .d { margin: 2px 4px 0; font-size: 11px; line-height: 1.4; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { #ws-hint .scene svg animate, #ws-hint .scene svg animateTransform { display: none; } }
