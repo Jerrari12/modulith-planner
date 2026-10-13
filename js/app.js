@@ -9,6 +9,7 @@ import { mountParts, printCountOf } from './workspaces/parts.js';
 import { mountColors } from './workspaces/colors.js';
 import { mountLabels, labelsBadge } from './workspaces/labels.js';
 import { createStore } from './state/store.js';
+import { openBuilds, entryOf, hashOf, fileOf, fileName, parseBuildFile, writeSlot, readSlot, cleanName } from './state/builds.js';
 import { isPhone, PHONE_MAX } from './ui/phone.js';
 
 // eslint-disable-next-line no-undef
@@ -17,6 +18,7 @@ const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog,
 const QS = new URLSearchParams(location.search);
 const WS = QS.get('ws');
 const KIT = QS.get('build');   // the official kit this page opened with, kept in the address through every edit
+const FRESH = QS.get('new') === '1';   // New build: a fresh copy of the kit, never the build this browser had open
 /* THE PALETTE BELONGS TO A BUILD (Astra, 2026-10-14: two projects from one kit must keep different colours). A page opened
    on a #build= hash whose record carries an id keys its palette by that id; a kit page keys by the kit until its first
    edit, when the store's record (minted an id by the sanitiser) takes the kit's palette with it under its own key. */
@@ -49,6 +51,16 @@ export async function boot() {
   document.documentElement.dataset.mode = initialMode();
   document.documentElement.classList.toggle('ws-phone', isPhone());   // the phone chrome (bottom tabs, sheets) below 1024 px
   let current = null;   // the mounted workspace's handle
+  /* THE BUILD STORE (the plan §1.3): Recent builds in IndexedDB, the planner's autosave slot dual-written. With no build in
+     the address and no kit asked for, the page reopens the build this browser had open last (the current Recent entry, else
+     the planner's slot) by putting its record in the address before the stage boots from it; `?new=1` skips that. */
+  const builds = await openBuilds();
+  let entry = null;   // the Recent entry of the build on this page, once known
+  if (FRESH) { const q = new URLSearchParams(location.search); q.delete('new'); history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`); }
+  else if (!/(^#|&)build=/.test(location.hash) && !KIT) {
+    const cur = await builds.get(builds.currentId); const rec = cur ? cur.record : readSlot(localStorage);
+    if (rec) { entry = cur; history.replaceState(null, '', location.pathname + location.search + hashOf(rec) + (location.hash ? '&' + location.hash.slice(1) : '')); }
+  }
   const stage = await createStage(document, {
     onSelect: (sel) => current?.onSelect?.(sel),
     onPage: (i) => current?.onPage?.(i),
@@ -60,13 +72,37 @@ export async function boot() {
   /* THE STORE (phase 3): the build record with the planner's rules and undo history. It opens on the record the
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
-  const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user, over: p.over }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette and the per-unit layer ride along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); stage.setColorStoreKey(buildKey(store.state.buildId)); } catch { /* a very old browser */ } } });
+  const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user, over: p.over }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette and the per-unit layer ride along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); stage.setColorStoreKey(buildKey(store.state.buildId)); } catch { /* a very old browser */ } saveBuild(snap); } });
+  /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
+     silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
+  let capPending = null;   // { drop: entry } while a new build is held back by the cap
+  let persisted = false, saving = Promise.resolve();
+  function saveBuild(snap) {
+    saving = saving.then(async () => {
+      const rec = JSON.parse(snap);
+      if (!(typeof rec.buildId === 'string' && rec.buildId)) return;
+      const prev = entry && entry.id === rec.buildId ? entry : await builds.get(rec.buildId);
+      const next = entryOf(rec, { name: prev ? undefined : kitTitle, kit: KIT, prev });
+      const r = await builds.put(next);   // the cap is the write's own check (Terra 01a13578)
+      if (!r.ok) { capPending = { drop: r.drop, snap }; writeSlot(localStorage, rec); return; }
+      entry = next;
+      builds.currentId = entry.id;
+      writeSlot(localStorage, rec);
+      document.title = entry.name;
+      if (!persisted) { persisted = true; builds.persist(); }
+    }).catch((e) => console.warn('[builds] save failed', e));
+    return saving;
+  }
+  const go = (q, hash = '') => { const u = new URLSearchParams(q); location.href = `${location.pathname}?${u}${hash}`; };
+  const wsNow = () => document.documentElement.dataset.ws || 'build';
   /* a shared scheme (#scheme= beside #build=, the Colors workspace's Share): applied once, then dropped from the address */
   { const m = /[#&]scheme=([^&]+)/.exec(location.hash); if (m) { try { const colors = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); stage.setPalette({ colors, on: true }); } catch { /* a damaged scheme link: the build still opens */ } history.replaceState(null, '', location.href.replace(/[#&]scheme=[^&]+/, (x) => x.startsWith('#') ? '#' : '').replace(/#&/, '#').replace(/#$/, '')); } }
   if (stage.build) store.load(stage.build);
-  if (QS.get('debug')) window.__GEN2_STORE__ = store;   // for the shot tool and end-to-end checks, like the stage's own hook
+  if (QS.get('debug')) { window.__GEN2_STORE__ = store; window.__GEN2_CTX__ = () => ctx; }   // for the shot tool and end-to-end checks, like the stage's own hook
   let kitTitle = stage.manifest?.title || null;
   if (KIT && location.hash.startsWith('#build=')) { try { kitTitle = (await (await fetch(`builds/${encodeURIComponent(KIT)}.json`)).json()).title || kitTitle; document.title = kitTitle; } catch { /* the hash's own name stands */ } }
+  if (!entry && typeof store.state.buildId === 'string') entry = await builds.get(store.state.buildId);   // our own build, reopened from the address
+  if (entry) { document.title = entry.name; builds.currentId = entry.id; writeSlot(localStorage, entry.record); }   // the slot follows what is open, not only what is edited
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
   /* a representative finished build in every workspace (Astra): the first preset's coordinated filaments unless the
      visitor already has a saved palette; Assemble switches to Part colors on its own and restores this on leave */
@@ -80,6 +116,37 @@ export async function boot() {
     ownPaletteKey: () => stage.setColorStoreKey(buildKey(store.state.buildId)),
     badges: () => { try { return { parts: printCountOf(stage.build) || null, labels: labelsBadge(store.state) }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count, Labels labelled/slots)
     has: (ws) => !!WORKSPACES[ws],
+    /* the switcher's builds: all of it reloads the page on the chosen record (the stage boots from the address), except
+       Rename, which is in place */
+    builds: {
+      get entry() { return entry; },
+      get name() { return entry ? entry.name : kitTitle || 'Workbench build'; },
+      get capPending() { return capPending; },
+      list: () => builds.list(),
+      async rename(v) { const name = cleanName(v); if (!name) return false; if (!entry) { await saveBuild(JSON.stringify(store.serialize())); } if (!entry) return false; entry = { ...entry, name }; await builds.put(entry, { force: true }); document.title = name; return true; },
+      async open(id) { const e = await builds.get(id); if (!e) return; builds.currentId = id; e.openedAt = Date.now(); await builds.put(e, { force: true }); writeSlot(localStorage, e.record); go({ ws: wsNow(), ...(e.kit ? { build: e.kit } : {}) }, hashOf(e.record)); },
+      async duplicate() {
+        const rec = store.serialize(); const copy = { ...rec, buildId: undefined };
+        const e = entryOf(copy, { name: `Copy of ${entry ? entry.name : kitTitle || 'build'}`, kit: KIT });
+        try { const pal = localStorage.getItem(buildKey(rec.buildId)); if (pal) localStorage.setItem(buildKey(e.id), pal); } catch { /* private */ }
+        const r = await builds.put(e); if (!r.ok) { capPending = { drop: r.drop, snap: JSON.stringify(e.record), name: e.name }; return false; }
+        builds.currentId = e.id; writeSlot(localStorage, e.record); go({ ws: wsNow(), ...(KIT ? { build: KIT } : {}) }, hashOf(e.record)); return true;
+      },
+      saveFile() { const e = entry || entryOf(store.serialize(), { name: kitTitle, kit: KIT }); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([fileOf(e)], { type: 'application/json' })); a.download = fileName(e); document.body.appendChild(a); a.click(); a.remove(); },
+      async loadFile(file) {
+        const got = parseBuildFile(await file.text()); if (got.problem) return got.problem;
+        const prev = typeof got.record.buildId === 'string' ? await builds.get(got.record.buildId) : null;
+        const e = entryOf(got.record, { name: got.name || (prev ? prev.name : null) || file.name.replace(/\.json$/i, ''), prev });
+        const r = await builds.put(e); if (!r.ok) { capPending = { drop: r.drop, snap: JSON.stringify(e.record), name: e.name }; return 'cap'; }
+        builds.currentId = e.id; writeSlot(localStorage, e.record); go({ ws: wsNow() }, hashOf(e.record)); return null;
+      },
+      async remove(id) { await builds.remove(id); if (entry && entry.id === id) { entry = null; builds.currentId = null; go({ ws: 'build', new: '1', ...(KIT ? { build: KIT } : {}) }); } },
+      newBuild() { go({ ws: 'build', new: '1', ...(KIT ? { build: KIT } : {}) }); },
+      /* the cap: save the oldest as a file, or drop it; either way the held build is saved next */
+      async capSave() { if (!capPending) return; const e = capPending.drop; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([fileOf(e)], { type: 'application/json' })); a.download = fileName(e); document.body.appendChild(a); a.click(); a.remove(); },
+      async capDrop() { if (!capPending) return; const p = capPending; capPending = null; await builds.remove(p.drop.id); if (p.name) { const e = entryOf(JSON.parse(p.snap), { name: p.name, kit: KIT }); await builds.put(e); builds.currentId = e.id; writeSlot(localStorage, e.record); go({ ws: wsNow(), ...(KIT ? { build: KIT } : {}) }, hashOf(e.record)); } else await saveBuild(p.snap); },
+      capKeep() { capPending = null; },
+    },
     remount() { if (current) { const ws = current.name; current.unmount(); current = { name: ws, ...WORKSPACES[ws](stage, ctx) }; } },
     switchTo(ws) {
       if (!WORKSPACES[ws] || (current && current.name === ws)) return;

@@ -81,7 +81,7 @@ export function mountBuild(stage, ctx) {
   }
   const top = topbar(stage, { ...ctx, active: 'build', say, soon, signal });
   root.prepend(top);
-  const baseName = ctx.kitTitle || stage.manifest?.title || 'Workbench build';
+  const baseName = () => (ctx.builds ? ctx.builds.name : ctx.kitTitle || stage.manifest?.title || 'Workbench build');   // the build store's name (a rename shows at once)
   const nameEl = top.querySelector('#ws-switch > .chip-btn > span');
 
   /* ---------------- the record ↔ the stage ---------------- */
@@ -705,7 +705,7 @@ export function mountBuild(stage, ctx) {
     brd.el.hidden = st.view !== '2d'; if (st.view === '2d') brd.render();
     document.documentElement.classList.toggle('ws-2d', st.view === '2d');
     renderOverlays(); layout();
-    if (nameEl) nameEl.textContent = baseName + (store.canUndo ? ' · edited' : '');
+    if (nameEl) nameEl.textContent = baseName() + (store.canUndo && !ctx.builds ? ' · edited' : '');   // autosaved builds need no 'edited' mark
   }
 
   /* ---------------- keys ---------------- */

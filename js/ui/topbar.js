@@ -34,24 +34,53 @@ export function topbar(stage, ctx) {
 
   function switcher() {
     const wrap = el('div', { id: 'ws-switch' });
-    let open = false;
-    const btn = el('button.chip.chip-btn.strong', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, [icon('folder-simple'), el('span', { text: name }), icon('caret-down', { size: 16 })]);
+    const B = ctx.builds;
+    let open = false, renaming = false, confirmId = null;
+    const nameEl = el('span', { text: B ? B.name : name });
+    const btn = el('button.chip.chip-btn.strong', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, [icon('folder-simple'), nameEl, icon('caret-down', { size: 16 })]);
     const menu = el('div.menu.glass', { role: 'menu', hidden: true });
-    menu.append(
-      el('div.label', { text: 'Current build' }),
-      el('button.item.current', { role: 'menuitem' }, [el('span', { text: name }), el('span.meta', { text: `${length} · ${build?.placed?.length ?? 0} units` })]),
-      el('div.divider'),
-      el('div.label', { text: 'Recent builds' }),
-      el('div.meta', { text: 'Autosaved in this browser · arrives with the build store', style: 'padding:4px 10px 8px' }),
-      el('div.divider'),
-      el('button.item', { role: 'menuitem', onclick: () => { set(false); share(); } }, [el('span', { text: 'Share link' }), icon('share-network', { size: 16 })]),
-      ...[['Rename', 'the build store'], ['Duplicate', 'the build store'], ['Save build file', 'the build store'], ['Load build file', 'the build store'], ['New build', 'the setup sheet']]
-        .map(([t, when]) => el('button.item', { role: 'menuitem', disabled: true, title: `${t} comes with ${when}` }, [el('span', { text: t })])),
-    );
-    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); };
+    const fileIn = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
+    fileIn.addEventListener('change', async () => { const f = fileIn.files && fileIn.files[0]; fileIn.value = ''; if (!f || !B) return; const problem = await B.loadFile(f); if (problem === 'cap') { await render(); } else if (problem) ctx.say(problem); });
+    const when = (ts) => { const d = Date.now() - ts; if (d < 60e3) return 'just now'; if (d < 3600e3) return `${Math.round(d / 60e3)} min ago`; if (d < 86400e3) return `${Math.round(d / 3600e3)} h ago`; return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
+    const units = build?.placed?.length ?? 0;
+    const item = (text, onclick, title = null) => el('button.item', { role: 'menuitem', title, onclick }, [el('span', { text })]);
+    async function render() {
+      const list = B ? await B.list() : [];
+      const cur = B ? B.entry : null;
+      const cap = B ? B.capPending : null;
+      const others = list.filter((e) => !cur || e.id !== cur.id);
+      menu.replaceChildren(...[
+        el('div.label', { text: 'Current build' }),
+        renaming ? (() => { const inp = el('input.rename', { type: 'text', maxlength: '60', value: B.name, 'aria-label': 'Build name', autocomplete: 'off' });
+          const done = async () => { const v = inp.value; renaming = false; if (await B.rename(v)) { nameEl.textContent = B.name; ctx.say('Renamed.'); } await render(); };
+          inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') { e.stopPropagation(); renaming = false; render(); } });
+          const row = el('div.renamerow', {}, [inp, el('button.key.sm', { text: 'Save', onclick: done })]); setTimeout(() => { inp.focus(); inp.select(); }, 0); return row; })()
+          : el('button.item.current', { role: 'menuitem', title: 'Rename', onclick: () => { renaming = true; render(); } }, [el('span', { text: B ? B.name : name }), el('span.meta', { text: `${length} · ${units} units` })]),
+        el('div.divider'),
+        el('div.label', { text: 'Recent builds' }),
+        cap ? el('div.notice', {}, [el('p', { text: `Recent builds is full (20). “${cap.drop.name}”, opened longest ago, would be dropped to make room for this one.` }),
+          el('div.row', {}, [el('button.key.sm', { text: 'Save it as a file', onclick: () => B.capSave() }), el('button.key.sm', { text: 'Drop it', onclick: () => B.capDrop() }), el('button.key.sm', { text: 'Not now', onclick: () => { B.capKeep(); render(); } })])]) : null,
+        ...others.map((e) => confirmId === e.id
+          ? el('div.item.confirm', {}, [el('span', { text: `Delete “${e.name}”?` }), el('button.key.sm', { text: 'Delete', onclick: async () => { confirmId = null; await B.remove(e.id); ctx.say('Build deleted.'); render(); } }), el('button.key.sm', { text: 'Keep', onclick: () => { confirmId = null; render(); } })])
+          : el('div.item.recent', {}, [
+            el('button.open', { role: 'menuitem', title: 'Open this build', onclick: () => B.open(e.id) }, [el('span', { text: e.name }), el('span.meta', { text: `${e.length} · ${e.units} ${e.units === 1 ? 'unit' : 'units'} · ${when(e.savedAt)}` })]),
+            el('button.x', { title: 'Delete build', 'aria-label': `Delete ${e.name}`, onclick: () => { confirmId = e.id; render(); } }, [icon('x', { size: 14 })]),
+          ])),
+        others.length ? null : el('div.meta', { text: cur ? 'Other builds you open or start appear here.' : 'This build joins the list at its first change.', style: 'padding:4px 10px 8px' }),
+        el('div.meta', { text: 'Autosaved in this browser · save a file or copy a link for builds that matter', style: 'padding:2px 10px 8px' }),
+        el('div.divider'),
+        el('button.item', { role: 'menuitem', onclick: () => { set(false); share(); } }, [el('span', { text: 'Share link' }), icon('share-network', { size: 16 })]),
+        item('Rename', () => { renaming = true; render(); }),
+        item('Duplicate', async () => { set(false); if (B && !(await B.duplicate())) { set(true); render(); } }, 'A copy of this build, with its colours, as a new Recent build'),
+        item('Save build file', () => { set(false); B && B.saveFile(); }, 'A .json file of this build; Load build file opens it anywhere'),
+        item('Load build file…', () => fileIn.click(), 'A build saved from this planner or the old one, or an official kit file'),
+        item('New build', () => { set(false); B && B.newBuild(); }, 'A fresh copy of this kit; this build stays in Recent builds (the setup sheet for mount, length and printer comes later)'),
+      ].filter(Boolean));   // replaceChildren would print a null as the word
+    }
+    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) render(); else { renaming = false; confirmId = null; } };
     btn.addEventListener('click', () => set(!open));
     document.addEventListener('pointerdown', (e) => { if (open && !wrap.contains(e.target)) set(false); }, { signal: ctx.signal });
-    wrap.append(btn, menu);
+    wrap.append(btn, menu, fileIn);
     return wrap;
   }
   function tabs() {
