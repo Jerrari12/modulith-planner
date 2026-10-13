@@ -15,7 +15,7 @@
  * a gesture would need the 3D hit test (the markers are raycast against the live scene, which a synthetic pointer cannot
  * reach reliably headless); everything else is the real DOM.
  */
-import { test } from 'node:test';
+import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -41,13 +41,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const { chromium } = await import('playwright');
 const server = await serve();
 const base = `http://127.0.0.1:${server.address().port}`;
-const browser = await (async () => { for (const o of [{ channel: 'chrome' }, {}]) { try { return await chromium.launch({ ...o, args: ['--enable-unsafe-swiftshader'] }); } catch {} } throw new Error('no Chromium'); })();
+/* E2E_SOFT=1 reproduces the CI runner's rendering here: the SwiftShader software rasteriser, no GPU */
+const SOFT = process.env.E2E_SOFT === '1';
+const launchArgs = ['--enable-unsafe-swiftshader', ...(SOFT ? ['--disable-gpu', '--use-angle=swiftshader'] : [])];
+const browser = await (async () => { for (const o of [{ channel: 'chrome' }, {}]) { try { return await chromium.launch({ ...o, args: launchArgs }); } catch {} } throw new Error('no Chromium'); })();
 test.after(async () => { await browser.close(); server.close(); });
+/* a case that fails before its own ctx.close() must not leave a page rendering: on the CI runner's software rasteriser
+   one leftover render loop starved every boot after it, so each case's contexts are closed here whatever happened */
+const contexts = new Set();
+afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}); contexts.clear(); });
 
-/* a page on a workspace: booted (the stage has its manifest, the workspace its dock), errors collected */
+/* a page on a workspace: booted (the stage has its manifest, the workspace its dock), errors collected.
+   The quality tier is pinned to `fast` (no shadows, dpr 1) and the desktop viewport is the smallest desktop layout: the
+   suite proves behaviour, not pixels, and on the CI runner's software rasteriser the balanced tier at 1440x900 kept the
+   main thread so busy that a click took longer than its 30 s to be acknowledged (run 38426597075, 2026-10-13) */
 async function open(ws, { query = '', phone = false, context = null } = {}) {
-  const ctx = context || await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1440, height: 900 } });
-  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const ctx = context || await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
+  contexts.add(ctx);
+  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
@@ -215,8 +226,7 @@ test('the build store: an edit autosaves, a bare address reopens the build, Rena
   await p2.getByRole('menuitem', { name: 'Rename', exact: true }).click();
   await p2.fill('#ws-switch input.rename', 'E2E bench');
   await p2.keyboard.press('Enter');
-  await settle(p2, 500);
-  assert.equal(await p2.evaluate(() => document.title), 'E2E bench');
+  await p2.waitForFunction(() => document.title === 'E2E bench', null, { timeout: 30_000 });   // the rename lands after an IndexedDB write
   // duplicate (navigates), then delete the original from the copy's menu
   await p2.getByRole('menuitem', { name: 'Duplicate', exact: true }).click();
   await p2.waitForFunction((old) => window.__GEN2_STORE__ && window.__GEN2_STORE__.state.buildId !== old, id, { timeout: 60_000 });
@@ -225,8 +235,10 @@ test('the build store: an edit autosaves, a bare address reopens the build, Rena
   await p2.click('#ws-switch .chip-btn');
   await p2.locator('#ws-switch .item.recent .x').first().click();
   await p2.locator('#ws-switch .item.confirm button:text-is("Delete")').click();
-  await settle(p2, 500);
-  const left = await p2.evaluate(() => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds').objectStore('builds').getAll(); t.onsuccess = () => r(t.result.map((e) => e.name)); }; }));
+  // the delete is an IndexedDB write with nothing in the DOM to wait on: poll the store from here, as for the autosave
+  const names = () => p2.evaluate(() => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds').objectStore('builds').getAll(); t.onsuccess = () => r(t.result.map((e) => e.name)); }; }));
+  let left = await names();
+  for (let i = 0; i < 60 && left.length !== 1; i++) { await settle(p2, 250); left = await names(); }
   assert.deepEqual(left, ['Copy of E2E bench']);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
@@ -234,7 +246,7 @@ test('the build store: an edit autosaves, a bare address reopens the build, Rena
 
 test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build rebuilds on the record', async () => {
   const { ctx, page } = await open('build', { query: '&new=1&setup=1' });
-  await page.waitForSelector('#ws-setup .card', { timeout: 15_000 });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
   await page.fill('#ws-setup input.name', 'E2E wall');
   await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
   await btn(page, 'Next', '#ws-setup').click();
@@ -257,16 +269,14 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
 test('the phone: the Build library sheet opens on its handle; the Labels sheet collapses while placing', async () => {
   const { ctx, page, errors } = await open('build', { phone: true });
   await page.click('#ws-lib .sheet-handle');
-  await settle(page, 500);
-  assert.ok(await page.evaluate(() => document.querySelector('#ws-lib').classList.contains('open')), 'the library sheet opened');
+  await page.waitForFunction(() => document.querySelector('#ws-lib').classList.contains('open'), null, { timeout: 30_000 });   // the library sheet opened
   await page.click('#ws-tabbar .tab:has-text("Labels")');
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 600);
   await page.evaluate(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const b = (t, root = document) => [...root.querySelectorAll('button')].find((x) => !x.closest('[hidden]') && x.textContent.trim().startsWith(t)); b('Type a label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = 'Phone'; b('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); document.querySelector('#ws-labels .sheet-handle').click(); await sleep(300); b('Place several').click(); });
-  await settle(page, 400);
-  assert.equal(await page.evaluate(() => document.querySelector('#ws-labels').classList.contains('open')), false, 'the sheet collapsed while placing');
+  await page.waitForFunction(() => !document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 30_000 });   // the sheet collapsed while placing
   assert.match(await text(page, '#ws-labels .sheet-handle .ttl'), /Placing/);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
