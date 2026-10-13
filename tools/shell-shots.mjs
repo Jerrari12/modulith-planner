@@ -131,4 +131,24 @@ try {
     console.log('wrote build-rules shots');
     await ctx.close();
   }
+  /* the product-faithful previews (phase 3): the Build style tab on Essential with every faceplate and handle tile
+     rendered from the GLBs, and the inspector's preview of a selected unit */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+    const page = await ctx.newPage();
+    await page.goto(`${base}/index.html?ws=build&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-dock'), null, { timeout: 90_000 });
+    await page.evaluate(async () => { const h = window.__GEN2_VIEWER__; await h.applyFaceplateStyle(h.FACEPLATE_STYLES.find((s) => s.key === 'essential')); });
+    await page.waitForTimeout(800);
+    await page.click('#ws-lib .seg:has-text("Build style")');
+    await page.waitForFunction(() => document.querySelectorAll('#ws-lib .pv.face img').length >= 5 && document.querySelectorAll('#ws-lib .pv.handle img').length >= 3, null, { timeout: 60_000 }).catch(() => {});
+    await page.evaluate(() => { const h = window.__GEN2_VIEWER__; h.selectUnit(3); });
+    await page.waitForFunction(() => document.querySelector('#ws-insp .pv.insp img'), null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForFunction(() => { const h = window.__GEN2_VIEWER__; return h.quality !== 'veryhigh' || (h.acc && h.acc.n >= h.ACC_SAMPLES); }, null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    await writeFile(join(OUT, 'build-previews-dark-1440.png'), await page.screenshot({ type: 'png' }));
+    console.log('wrote previews shot');
+    await ctx.close();
+  }
 } finally { await browser.close(); server.close(); }

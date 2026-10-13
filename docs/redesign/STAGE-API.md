@@ -42,6 +42,8 @@ Phase 1 (Assemble, same day): `opts.onPage(i)` fires from `goTo` with the new pa
 - `setDrag({ unitId, rows, spots(), onDrop(spot, unitId), onCancel() })`: a pointerdown on that unit lifts a white ghost of it with orbit off; `spots()` (sync or a promise) supplies the valid spots, which appear as the carry starts; the ghost snaps to the nearest spot within 70 px on screen, else rides the camera plane; release on a spot calls `onDrop`. `cancelDrag()` ends a carry without a drop (Escape).
 - `setEraser(cb)`: the remove mode - a red box under the cursor, a click hands the unit id to `cb`.
 
+- `thumb({ fill, w, hh, faceStyle?, handleStyle?, handle?, variant?, lip?, view: 'front' | 'three', size? })`: a product-faithful preview. Builds a one-unit tabletop record, runs the generator, loads any part model not yet in the template cache, clones the unit's parts (cases, extenders, drawer, faceplate, accent, label, handle, shelf insert and lips; never covers, rails, feet, QuickLocks or stoppers) with the shared live materials, frames them front-on or three-quarter in an offscreen render target and resolves a PNG data URL. Cached per option set, handle node, plate and palette signature; a failed render is dropped from the cache so it can be retried.
+
 All overlays live in one `edit-overlays` group outside `instances` (flagged `userData.ghost`), so the BOM, the callouts, measuring, shadows, AO and the reflection never see them. `regenerate(pre)` takes an optional pre-generated result.
 
 ## What the goldens do and do not prove

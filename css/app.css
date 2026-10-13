@@ -340,6 +340,14 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-parts .counter.big button { width: 30px; height: 30px; font-size: 15px; }
 #ws-parts .counter.big .mono { min-width: 24px; font-size: 14px; }
 
+/* ---- product-faithful previews: the real part from its GLB, the glyph until it arrives ---- */
+#ws .pv { display: flex; align-items: center; justify-content: center; }
+#ws .pv img { display: block; object-fit: contain; }
+#ws .pv.tile img { width: 60px; height: 45px; margin: -8px 0 -6px; }
+#ws .pv.face img { width: 60px; height: 45px; margin: -8px 0 -8px; }
+#ws .pv.handle img { width: 64px; height: 48px; margin: -10px 0 -10px; }
+#ws .pv.insp img { width: 96px; height: 72px; }
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }

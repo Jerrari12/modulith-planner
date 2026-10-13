@@ -70,6 +70,14 @@ export function mountBuild(stage, ctx) {
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
+  /* a product-faithful preview (the stage renders one unit from the real GLBs): the generated glyph stands in until the
+     image is ready, and stays when there is no model for it (Cabinet; a part missing from the library) */
+  function preview(glyphNode, spec, cls = '') {
+    const holder = el('div.pv' + (cls ? '.' + cls : ''), {}, [glyphNode]);
+    if (!stage.thumb) return holder;
+    stage.thumb(spec).then((url) => { if (url && holder.isConnected !== false) holder.replaceChildren(el('img', { src: url, alt: '' })); }).catch(() => {});
+    return holder;
+  }
   const top = topbar(stage, { ...ctx, active: 'build', say, soon, signal });
   root.prepend(top);
   const baseName = ctx.kitTitle || stage.manifest?.title || 'Workbench build';
@@ -355,7 +363,7 @@ export function mountBuild(stage, ctx) {
       const b = el('button.unit.key' + (soonUnit ? '.dis' : on ? '.on' : ''), {
         'aria-disabled': soonUnit ? 'true' : null, 'aria-pressed': String(on), title: f.blurb,
         onclick: soonUnit ? null : () => { setPalette(f.id); if (sizeWhy(...st.addSize.split('x').map(Number))) { st.armed = false; } renderAll(); },
-      }, [glyphEl(kindOf(f.id), 36, 24, colors), el('span', { text: f.label })]);
+      }, [soonUnit ? glyphEl(kindOf(f.id), 36, 24, colors) : preview(glyphEl(kindOf(f.id), 36, 24, colors), { fill: f.id, w: 1, hh: 2, variant: f.id === 'decor' && st.gf === 'gridfinity' ? 'gridfinity' : null, view: 'front' }, 'tile'), el('span', { text: f.label })]);
       if (soonUnit) b.appendChild(el('span.soon', { text: 'SOON' }));
       grid.appendChild(b);
     }
@@ -411,7 +419,7 @@ export function mountBuild(stage, ctx) {
       const b = el('button.face.key' + (!ok ? '.dis' : cur?.key === x.key ? '.on' : ''), {
         'aria-disabled': ok ? null : 'true', title: ok ? `${FACE_LABEL[x.key] || x.label}${CLUB[x.key] ? ' · ✦ Club' : ' · Core, free'}` : 'Not in this collection, or no Decor drawers',
         onclick: ok ? async () => { await stage.applyFaceplateStyle(x); await adopt(); } : null,
-      }, [glyphEl(FACEK[x.key] || 'essential', 40, 26, colors), FACE_LABEL[x.key] || x.label]);
+      }, [ok ? preview(glyphEl(FACEK[x.key] || 'essential', 40, 26, colors), { fill: 'decor', w: 1, hh: 2, faceStyle: x.key, view: 'front' }, 'face') : glyphEl(FACEK[x.key] || 'essential', 40, 26, colors), FACE_LABEL[x.key] || x.label]);
       if (CLUB[x.key]) b.appendChild(el('span.club', { text: '✦', title: 'Club' }));
       return b;
     })));
@@ -424,7 +432,7 @@ export function mountBuild(stage, ctx) {
       const curH = stage.currentHandleStyle();
       const shape = (label) => /crystal/i.test(label) ? 'crystal' : /block/i.test(label) ? 'blockbar' : 'deco';
       hs.appendChild(el('div.handles', {}, stage.HANDLE_STYLES.map((h) => el('button.handle.key' + (curH?.node === h.node ? '.on' : ''), { onclick: async () => { await stage.applyHandleStyle(h); await adopt(); } },
-        [el('span.shape.' + shape(h.label), { style: `background:${colors.handle}` }), h.label]))));
+        [preview(el('span.shape.' + shape(h.label), { style: `background:${colors.handle}` }), { fill: 'decor', w: 1, hh: 2, faceStyle: cur.key, handleStyle: h.planner, handle: h, view: 'three' }, 'handle'), h.label]))));
       lib.appendChild(hs);
     }
 
@@ -505,7 +513,7 @@ export function mountBuild(stage, ctx) {
     insp.append(
       el('div.head', {}, [el('h2.h2', { text: 'This unit only' }), el('span.idx', { text: `Unit ${idx} of ${s.placed.length}` }), closeBtn]),
       el('div.ident', {}, [
-        el('div.wellbox.well', {}, [glyphEl(kind, 79, 50, { ...colors, front: frontFor(unit.fill) })]),
+        el('div.wellbox.well', {}, [preview(glyphEl(kind, 79, 50, { ...colors, front: frontFor(unit.fill) }), { fill: unit.fill, w: unit.w, hh: unit.hh, variant: unit.variant || null, lip: unit.lip || null, view: 'three' }, 'insp')]),
         el('div.col', {}, [
           el('h3', { text: fill?.label || unit.fill }),
           el('div.dims', { text: `${unit.w}W·${unit.hh / 2}H · inside ${unit.w * 88 - wall.wWall} × ${Math.round((unit.hh / 2) * 56 - wall.hWall)} × ${INSIDE[length] ?? length} mm` }),

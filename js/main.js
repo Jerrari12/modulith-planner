@@ -8194,6 +8194,99 @@ canvas.addEventListener('contextmenu', e => {
   const id = unitAtEvent(e); if (id == null) return;
   e.preventDefault(); opts.onContext({ unitId: id, x: e.clientX, y: e.clientY });
 });
+/* ---- product-faithful previews (phase 3; Astra's standing requirement, DECISIONS.md 2026-10-12) ---------------
+   One unit of the asked size, fill, faceplate family, handle and drawer variant, built by the real generator and
+   drawn from the real GLBs with the SAME shared materials the model wears (so a filament pick, the dark-stage
+   palette and the plate finish all follow), rendered once into an offscreen target and cached as a PNG data URL.
+   A front view for comparing faceplate styles; a slight three-quarter where depth or grip shape matters. Covers,
+   rails, feet, QuickLocks and stoppers are left out: the preview is the unit, not the kit around it. */
+const THUMB_TYPES = new Set(['Case', 'CaseExtender', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip']);
+const thumbCache = new Map();
+let thumbScene = null, thumbCam = null, thumbRT = null;
+function paletteSig() { return Object.keys(manifest.colors || {}).sort().map(k => k + '=' + activeHex(k)).join(',') + '|' + stageTheme + '|' + (useCustom ? 1 : 0); }
+async function renderThumb(opts = {}) {
+  if (!build) return null;
+  const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384 } = opts;
+  const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
+  const sig = paletteSig();
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, handle && handle.node, build.buildPlate, sig]);
+  if (thumbCache.has(key)) return thumbCache.get(key);
+  const job = (async () => {
+    const gridH = Math.max(1, Math.ceil(hh / 2));
+    const unit = { id: 1, x: 0, y: gridH * 2 - hh, w, hh, fill, shelves: 0 };
+    if (variant) unit.variant = variant; if (lip) unit.lip = lip;
+    const rec = { mount: 'tabletop', length: build.length, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null, faceStyle, doorStyle: build.doorStyle, handleStyle, wallStagger: false, backCover: false, feet: 'tpu', buildPlate: build.buildPlate, removedStoppers: [], gridW: w, gridH, placed: [unit], nextId: 2 };
+    const gen = generateManifest(rec);
+    if (!gen.manifest) throw new Error((gen.errors || []).join(' · ') || 'no preview');
+    const m = gen.manifest;
+    for (const part of m.parts) { if (!typeByNode[part.node]) typeByNode[part.node] = part.type; if (!partInfoByNode[part.node]) partInfoByNode[part.node] = part; }
+    const keep = m.instances.filter(c => THUMB_TYPES.has(typeByNode[c.node]));
+    if (handle && !typeByNode[handle.node]) typeByNode[handle.node] = 'Handle';   // a variant the build has never worn (applyHandleStyle does the same)
+    const nodes = [...new Set(keep.map(c => c.node).concat(handle ? [handle.node] : []))];
+    const missing = [];
+    await Promise.all(nodes.filter(n => !templates[n]).map(async node => {
+      try { const gltf = await loader.loadAsync(`${PARTS_BASE}${node}.lib.glb`); templates[node] = adoptTemplate(gltf.scene, typeByNode[node] || 'Handle', node); }
+      catch (e) { missing.push(node); }
+    }));
+    if (missing.length) throw new Error('part models missing: ' + missing.join(', '));
+    if (paletteSig() !== sig) throw new Error('palette changed while loading');   // the shared materials now wear another palette: this key must not cache them (Sol 01a132de)
+    if (!thumbScene) {
+      thumbScene = new THREE.Scene();
+      const h = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.1);
+      const s1 = new THREE.DirectionalLight(0xffffff, 1.6); s1.position.set(300, 600, 400);
+      const s2 = new THREE.DirectionalLight(0xffffff, 0.5); s2.position.set(-400, 200, -300);
+      thumbScene.add(h, s1, s2);
+      thumbCam = new THREE.PerspectiveCamera(22, 4 / 3, 1, 6000);
+    }
+    const group = new THREE.Group();
+    for (const c of keep) {
+      let node = c.node, pos = c.pos;
+      if (handle && typeByNode[c.node] === 'Handle') {   // the handle VARIANT in use lives outside the generator (applyHandleStyle)
+        const fp = keep.find(x => x.rides && x.rides === c.rides && typeByNode[x.node] === 'Faceplate');
+        node = handle.node;
+        if (fp && templates[fp.node]) pos = [c.pos[0], fp.pos[1] + (faceplateHeightOf(fp.node) - handle.h) / 2 - 0.5, fp.pos[2] + nodeDepth(fp.node) / 2 + handle.d / 2];
+      }
+      const g = templates[node].clone(true);
+      g.position.set(pos[0], pos[1], pos[2]);
+      const rot = c.rot || [0, c.yaw || 0, 0];
+      g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
+      const t = typeByNode[node];
+      g.traverse(o => { if (o.isMesh) { o.material = baseMatFor(t, o.userData.zone || ''); o.castShadow = false; o.receiveShadow = false; } });
+      group.add(g);
+    }
+    thumbScene.add(group); group.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(group);
+    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    const W = size, H = Math.round(size * 3 / 4);
+    if (!thumbRT || thumbRT.width !== W || thumbRT.height !== H) {
+      if (thumbRT) thumbRT.dispose();
+      thumbRT = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true });
+      thumbRT.texture.colorSpace = THREE.SRGBColorSpace;   // the output transform the canvas gets, so the PNG matches the screen (Sol 01a132de)
+    }
+    thumbCam.aspect = W / H; thumbCam.updateProjectionMatrix();
+    const fovV = THREE.MathUtils.degToRad(thumbCam.fov), fovH = 2 * Math.atan(Math.tan(fovV / 2) * thumbCam.aspect);
+    const dir = (view === 'front' ? new THREE.Vector3(0, 0.1, 1) : new THREE.Vector3(0.6, 0.35, 1)).normalize();
+    const fitW = view === 'front' ? sz.x : sz.x * 0.85 + sz.z * 0.55;
+    const dist = Math.max((sz.y / 2) / Math.tan(fovV / 2), (fitW / 2) / Math.tan(fovH / 2)) * 1.12 + sz.z / 2;
+    thumbCam.position.copy(c).add(dir.multiplyScalar(dist)); thumbCam.lookAt(c); thumbCam.updateMatrixWorld(true);
+    const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(thumbRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+    renderer.render(thumbScene, thumbCam);
+    const px = new Uint8Array(W * H * 4);
+    renderer.readRenderTargetPixels(thumbRT, 0, 0, W, H, px);
+    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
+    thumbScene.remove(group);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx2 = cv.getContext('2d'); const img = ctx2.createImageData(W, H);
+    for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);   // GL rows run bottom-up
+    ctx2.putImageData(img, 0, 0);
+    invalidateFrame();
+    return cv.toDataURL('image/png');
+  })();
+  thumbCache.set(key, job);
+  job.catch(() => thumbCache.delete(key));
+  return job;
+}
 /* swap the record and rebuild the scene (the Build workspace's every edit): the generator judges first, so an
    unshowable layout leaves the last good scene standing and returns its reasons for the issue card */
 async function updateBuild(nb, pre) {
@@ -9980,6 +10073,8 @@ renderer.setAnimationLoop(renderLoop);
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
     update: updateBuild, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits,
+    // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
+    thumb: renderThumb,
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;
