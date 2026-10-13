@@ -29,6 +29,8 @@ const ICONS = {
   'cube-focus': ['regular'], 'arrows-out': ['regular'], 'crosshair-simple': ['regular'], 'grid-four': ['regular', 'fill'],
   'gauge': ['regular'], 'arrow-right': ['regular'], 'arrow-counter-clockwise': ['regular'], 'arrow-clockwise': ['regular'],
   'magnifying-glass': ['regular'], 'sliders-horizontal': ['regular'], 'stack': ['regular'],
+  // the Labels workspace (phase 5)
+  'upload-simple': ['regular'], 'download-simple': ['regular'], 'arrow-square-out': ['regular'], 'pencil-simple': ['regular'], 'hand-pointing': ['regular'], 'text-aa': ['regular'],
 };
 
 const body = (svg) => svg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim();

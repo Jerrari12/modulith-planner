@@ -39,18 +39,18 @@ Classes:
 | `buildMeta` | UI-only | the footprint line under the board; the dock's `W × H × L` reads the stage's bounds |
 | `partLinks`, `setLinkSite`, `applyRemoteSite`, `linkSite` | moved / UI-only | `partLinks` is data.js's; the store switch is the Parts workspace (phase 2, `gen2-link-store`); `applyRemoteSite` was relay |
 | `cleanLabelBadge`, `cleanLabelStyle`, `cleanLabelText` | moved | `schema.js` |
-| `labelOrder`, `shownLabel` | later | the Labels workspace (phase 5) |
+| `labelOrder`, `shownLabel` | moved | `label-panel.js` (`labelOrder`, the stage's own copy) and the Labels workspace's caps rule (`effectiveStyle().allCaps`) |
 | `layoutSig` | dropped | replaced by the stage signature (a hash of the generated manifest, plan §1.3) |
 | `newBuildId` | moved | `schema.js` |
 | `syncOptionsToViewer` | relay | the stage reads the record directly |
 | `carryLabelData`, `LABEL_DATA_MAX` | moved | `schema.js` |
 | `BUILD_SCHEMA`, `buildTooNew`, `sessionHoldsNewer` | moved / later | `schema.js`; the saved-session slot guard belongs to the build store (plan §1.3, IndexedDB) |
 | `deploy`, `checkDeploy`, `deployBaseline`, `refreshKeepingBuild`, `REFRESH_KEY` | dropped | the planner's deploy-newer check; the merged app deploys as one unit through Pages (the plan's cutover retires the check) |
-| `labelCopyOffer`, `readCopies`, `COPIES_KEY`, `COPIES_MAX`, `COPY_MAX_CHARS`, `rememberLabelCopy`, `restoreLabelCopy`, `discardLabelCopy` | later | label copies in this browser: the Labels workspace (phase 5) |
+| `labelCopyOffer`, `readCopies`, `COPIES_KEY`, `COPIES_MAX`, `COPY_MAX_CHARS`, `rememberLabelCopy`, `restoreLabelCopy`, `discardLabelCopy` | later | label copies in this browser: a defence against an OLD planner tab dropping the list from the shared session slot; the merged app has no shared slot yet, so it waits for the build store (Recent builds) |
 | `shareLink`, `SHARE_LINK_LONG`, `SHARE_LINK_MAX` | later | the Share button copies `location.href` today (phase 0 shell); the long-link guard and the file fallback come with the build store |
-| `iconHoldNow` | later | the "keep the icon?" question when a label is cleared: Labels (phase 5) |
-| `syncLabels`, `trayTap`, `trayUnassign`, `trayRemove`, `setPick`, `importLabels`, `importFromHash`, `itemWords`, `hardwareByUnit`, `tray`, `drawerNumber` | later | the label tray and its imports: Labels (phase 5) |
-| `labelGenOrigins`, `plannerTabId`, `loadIdNow`, `labelQueueLength`, `labelOpenItem` | relay | the Label Studio job protocol; phase 5 replaces it with the embedded Studio (`?embed=planner`) |
+| `iconHoldNow` | dropped | the merged app has no free-text label field on a drawer (words are edited in the Labels editor, where clearing them with an icon kept is refused in words: "A label needs words, an icon or a letter") |
+| `syncLabels`, `trayTap`, `trayUnassign`, `trayRemove`, `setPick`, `importLabels`, `importFromHash`, `itemWords`, `hardwareByUnit`, `tray`, `drawerNumber` | moved | `js/rules/labels.js` (`reconcileLoad`, `place`, `unassign`, `remove`, `importLabels`, `labelsFromDoc`, `itemWords`, `drawerNumber`; the label-place branch's `placeLabel` / `askReplace` / `fillPairsNow` / `applyFill` as `place`, `fillPairs`, `fill`) over the vendored `js/vendor/label-list.js` (planner `7beb165`); the armed label (`tray.pick`) and the hash import live in `js/workspaces/labels.js`. `hardwareByUnit` is the job protocol's (see the relay row) |
+| `labelGenOrigins`, `plannerTabId`, `loadIdNow`, `labelQueueLength`, `labelOpenItem` | relay | the Label Studio job protocol (`gen2label` hello / return / applied, `label-return.js`). Not ported: the Studio allows only the OLD planner's origin and its "Add to planner build" targets the old planner's address, so a two-way session from the merged app needs a Studio change first (DECISIONS.md 2026-10-13, blocked-on with dates). Phase 5 ships the one-way paths: Print labels hands the Studio the words (`#labels=`), labels come back as files and `#labels-add=` links |
 | `viewerWinInfo` | relay | the viewer window handle; there is no second window in the merged app |
 
 ## What the parity gates cover

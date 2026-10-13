@@ -8467,6 +8467,17 @@ async function updateBuild(nb, pre) {
   await regenerate(gen);
   return { ok: true };
 }
+/* Only the labels changed (the words and badges on the drawers, the label list, the style): copy them into the build and
+   redraw the label meshes in place - no regenerate, since the manifest does not depend on them and regenerate() would
+   deselect under the visitor's cursor. The Labels workspace (phase 5) calls this after every label commit and on undo; a
+   change to the layout itself still goes through update(). */
+function setLabels(nb) {
+  if (!build || !nb || !Array.isArray(nb.placed)) return false;
+  copyLabelFields(nb, build);
+  originalBuild = structuredClone(build);
+  refreshLabelTexts();
+  return true;
+}
 const UNIT_PICK = ['Drawer', 'ShelfInsert', 'Case', 'CaseExtender'];
 function selectUnit(unitId) {
   if (unitId == null) { setSelected(null); return false; }
@@ -10239,7 +10250,7 @@ renderer.setAnimationLoop(renderLoop);
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits,
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,

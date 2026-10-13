@@ -425,6 +425,113 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-colors .crow .own, #ws-partcard .zchip .tag { margin-left: 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; background: var(--orange); color: var(--on-orange); font-weight: 700; }
 #ws-partcard .zchip.own { border-color: var(--orange); }
 
+/* ---- Labels (phase 5): the list panel, the selected drawer, the editor card, the dialog, the previews ---- */
+#ws-labels { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 324px; box-sizing: border-box; padding: 14px 16px 12px; border-radius: 18px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#ws-labels .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+#ws-labels h2, #ws-labeledit h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
+#ws-labels .count { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
+#ws-labels .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+#ws-labels .row.top:empty { display: none; }
+#ws-labels .key.sm, #ws-labeledit .key.sm, #ws-modal .key { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-labels .key.sm[disabled] { opacity: .45; cursor: not-allowed; }
+#ws-labels .last { margin: -2px 0 0; font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-labels .banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--orange); color: var(--on-orange); font-size: 12px; font-weight: 700; }
+#ws-labels .banner .key.sm { height: 28px; }
+#ws-labels .callout { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-fg); font-size: 12px; }
+#ws-labels .callout p { margin: 0; }
+#ws-labels .callout .dim, #ws-labels .why, #ws-labels .dim, #ws-labeledit .dim { font-size: 11px; color: var(--ink-3); }
+#ws-labels .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-labels .scroll { flex: 1; min-height: 60px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin: 0 -6px; padding: 0 6px; }
+#ws-labels .list { display: flex; flex-direction: column; gap: 4px; }
+#ws-labels .item { display: flex; align-items: center; gap: 4px; }
+#ws-labels .chip-l { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 5px 8px; border-radius: 12px; border: 1px solid var(--hair); background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+#ws-labels .chip-l:hover { background: var(--track); }
+#ws-labels .chip-l.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
+#ws-labels .chip-l[disabled] { opacity: .5; cursor: not-allowed; }
+#ws-labels .chip-l .tag { font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: var(--warn-bg); color: var(--warn-fg); flex: none; }
+#ws-labels .mini { width: 28px; height: 28px; padding: 0; border: none; border-radius: 7px; background: transparent; color: var(--ink-3); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-labels .mini:hover { background: var(--track); color: var(--ink); }
+#ws-labels .ident, #ws-labeledit .ident { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+#ws-labels .ident .words, #ws-labeledit .ident .words { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-labels .ident .detail, #ws-labeledit .ident .detail { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-labels .ident .src { font-size: 10px; color: var(--ink-3); }
+#ws-labels .placed h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+#ws-labels .rows { display: flex; flex-direction: column; gap: 4px; }
+#ws-labels .prow { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 8px; border-radius: 10px; border: 1px solid var(--hair); background: transparent; color: var(--ink); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+#ws-labels .prow .lprev { width: 56px; }
+#ws-labels .prow .words { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+#ws-labels .prow .where { font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+#ws-labels .prow.sel { border-color: var(--orange); background: var(--key-on-bg); }
+#ws-labels .prow.sel .where { padding: 1px 6px; border-radius: 5px; background: var(--orange); color: var(--on-orange); font-weight: 700; }
+#ws-labels .drawer { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 8px; border-radius: 12px; border: 1px solid var(--orange); background: var(--key-on-bg); }
+#ws-labels .dhead { display: flex; align-items: center; gap: 8px; }
+#ws-labels .dhead .tag { padding: 2px 7px; border-radius: 6px; background: var(--orange); color: var(--on-orange); font-size: 11px; font-weight: 700; }
+#ws-labels .dhead .size { flex: 1; min-width: 0; font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-labels .x, #ws-labeledit .x { width: 26px; height: 26px; padding: 0; border: none; background: transparent; color: var(--ink-3); border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-labels .none { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-labels .dlabel { display: flex; align-items: center; gap: 10px; }
+#ws-labels .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-labels .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
+#ws-labels .status { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-labels .status.warn { color: var(--warn-fg); }
+#ws-labels .settings summary { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; list-style: none; padding: 4px 0; }
+#ws-labels .settings summary::-webkit-details-marker { display: none; }
+#ws-labels .settings summary .dim { margin-left: auto; font-weight: 500; }
+#ws-labels .srow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; font-size: 12px; }
+#ws-labels .srow .unit { display: inline-flex; align-items: center; gap: 4px; }
+#ws-labels .srow input { width: 64px; height: 28px; padding: 0 6px; border-radius: 7px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 12px; }
+#ws-labels .srow .track { grid-template-columns: 1fr 1fr; padding: 3px; gap: 3px; border-radius: 9px; }
+#ws-labels .srow .seg.sm { height: 26px; padding: 0 10px; font-size: 11px; }
+/* the previews: the real outline (EdgeLabel's slanted edge; Classic Pro's bar), the icon art as a mask, the words */
+.lprev { flex: none; width: 84px; aspect-ratio: 55.6 / 27; position: relative; display: flex; align-items: center; gap: 3px; padding: 3px 4px; box-sizing: border-box; background: #f4f1ec; color: #1b1b1b; clip-path: polygon(0 0, 100% 0, 53.3% 100%, 0 100%); overflow: hidden; }
+.lprev.cp { aspect-ratio: 47 / 18; clip-path: none; border-radius: 3px; }
+.lprev.big { width: 120px; }
+.lprev .lico { flex: 0 0 auto; width: 34%; height: 78%; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+.lprev .lch { flex: 0 0 auto; width: 30%; font-weight: 800; font-size: 13px; text-align: center; line-height: 1; }
+.lprev .lw { font-weight: 800; font-size: 8.5px; line-height: 1.05; text-transform: uppercase; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; max-width: 64%; }
+.lprev.big .lw { font-size: 11.5px; }
+.lprev.nocaps .lw { text-transform: none; }
+.lprev .lw small { display: block; font-weight: 600; font-size: .82em; }
+/* the editor card */
+#ws-labeledit { position: absolute; top: 90px; right: 20px; bottom: 116px; width: 304px; box-sizing: border-box; padding: 14px 16px 12px 19px; border-radius: 18px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+#ws-labeledit[hidden] { display: none; }
+#ws-labeledit .head { display: flex; align-items: center; justify-content: space-between; }
+#ws-labeledit .prev { display: flex; justify-content: center; padding: 6px 0; }
+#ws-labeledit .note { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-labeledit .frow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+#ws-labeledit .frow > span:first-child { flex: none; width: 48px; color: var(--ink-2); }
+#ws-labeledit input.words, #ws-labeledit input.search, #ws-modal input.field { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-labeledit input.letter { width: 64px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; font-weight: 700; text-transform: uppercase; }
+#ws-labeledit .track { padding: 3px; gap: 3px; border-radius: 9px; }
+#ws-labeledit .track.seg2 { grid-template-columns: 1fr 1fr; }
+#ws-labeledit .track.seg3 { grid-template-columns: 1fr 1fr 1fr; }
+#ws-labeledit .seg.sm { height: 28px; font-size: 11px; }
+#ws-labeledit .igrid { display: flex; flex-direction: column; gap: 4px; }
+#ws-labeledit .igroup .ghead { display: flex; align-items: center; gap: 6px; width: 100%; height: 30px; padding: 0 6px; border: none; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; }
+#ws-labeledit .igroup .ghead:hover { background: var(--track); }
+#ws-labeledit .igroup .ghead .dim { margin-left: auto; }
+#ws-labeledit .igroup .ghead svg { transition: transform var(--d-pop) var(--ease-out); }
+#ws-labeledit .igroup.open .ghead svg { transform: rotate(90deg); }
+#ws-labeledit .cells { display: none; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; padding: 2px 0 6px; }
+#ws-labeledit .igroup.open .cells { display: grid; }
+#ws-labeledit .cell { aspect-ratio: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--hair); background: var(--input-bg); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-labeledit .cell svg { width: 100%; height: 100%; }
+#ws-labeledit .cell:hover { background: var(--track); }
+#ws-labeledit .cell.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
+#ws-labeledit .row { display: flex; gap: 6px; }
+/* the dialog: Replace, Fill, Use custom wording, Add a label */
+#ws-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .35); z-index: 30; }
+#ws-modal[hidden] { display: none; }
+#ws-modal .box { width: 380px; max-width: 100%; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 16px 18px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; }
+#ws-modal h3 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 17px; font-stretch: 108%; }
+#ws-modal p { margin: 0; font-size: 13px; color: var(--ink-2); }
+#ws-modal .pairs { display: flex; flex-direction: column; gap: 3px; max-height: 32vh; overflow-y: auto; }
+#ws-modal .pair { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 4px 8px; border-radius: 7px; background: var(--track); }
+#ws-modal .rest { font-size: 12px; }
+#ws-modal .btns { display: flex; justify-content: flex-end; gap: 6px; padding-top: 4px; }
+html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
+@media (max-width: 1279px) { #ws-labels, #ws-labeledit { top: 134px; } }
+
 /* ---- the phone layout (<= 1023 px): a bottom tab bar, panels as bottom sheets, a slim dock (the brief §2) ---- */
 #ws-tabbar { display: none; }
 @media (max-width: 1023px) {
@@ -493,6 +600,11 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
   #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
   #ws-colors .scheme .shop { display: none; }
+  /* Labels: the panel and the editor are sheets; the list scrolls with the sheet, not inside it */
+  #ws-labels .scroll { flex: none; overflow: visible; min-height: 0; margin: 0; padding: 0; }
+  #ws-labels .foot .row { gap: 4px; }
+  #ws-modal { position: fixed; z-index: 40; }
+  #ws-modal .box { width: 100%; }
   /* Assemble: the player sits on the bar as a compact card (the note gets the width, the colour switch and the
      pips take rows of their own); the steps sheet stacks above it */
   #ws-player { left: 10px; right: 10px; width: auto; transform: none; bottom: 70px; padding: 10px 12px; gap: 8px; border-radius: 16px; z-index: 11; }

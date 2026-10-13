@@ -168,6 +168,31 @@ try {
     console.log('wrote colors shots');
     await ctx.close();
   }
+  /* the Labels workspace (phase 5): 1440 x 900 dark, EdgeLabel faceplates, four typed labels, two placed through Place several,
+     the third drawer selected with its editor open */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+    const page = await ctx.newPage();
+    await page.goto(`${base}/index.html?ws=labels&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-labels .foot'), null, { timeout: 90_000 });
+    await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const btn = (t, root = document) => [...root.querySelectorAll('button')].find((b) => !b.closest('[hidden]') && b.textContent.trim().startsWith(t));
+      const sw = btn('Switch to EdgeLabel'); if (sw) { sw.click(); await sleep(3500); }
+      for (const w of ['M3 screws', 'Hex keys', 'Solder', 'Fuses']) { btn('Add label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = w; btn('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); }
+      const ids = window.__GEN2_STORE__.state.placed.map((u) => u.id);
+      btn('Place several').click(); await sleep(80);
+      window.__GEN2_VIEWER__.selectUnit(ids[0]); await sleep(300); window.__GEN2_VIEWER__.selectUnit(ids[1]); await sleep(300);
+      btn('Done placing').click(); await sleep(80);
+      window.__GEN2_VIEWER__.selectUnit(ids[1]); await sleep(300);
+      btn('Edit', document.querySelector('#ws-labels .drawer')).click(); await sleep(300);
+    });
+    await page.waitForTimeout(1500);
+    await writeFile(join(OUT, 'labels-dark-1440.png'), await page.screenshot({ type: 'png' }));
+    console.log('wrote labels shot');
+    await ctx.close();
+  }
   /* the phone layout (the mobile phase): 390 x 844 dark, Build with the library sheet open, Build placing (sheet
      collapsed, markers up), Parts with its sheet open, Colors */
   {
@@ -196,6 +221,18 @@ try {
     await writeFile(join(OUT, 'phone-assemble-dark-390.png'), await page.screenshot({ type: 'png' }));
     await page.click('#ws-steps .sheet-handle'); await page.waitForTimeout(500);
     await writeFile(join(OUT, 'phone-assemble-dark-390-steps.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-tabbar .tab:has-text("Labels")'); await settle();
+    await page.waitForFunction(() => document.querySelector('#ws-labels .foot'), null, { timeout: 30_000 });
+    await page.evaluate(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const btn = (t, root = document) => [...root.querySelectorAll('button')].find((b) => !b.closest('[hidden]') && b.textContent.trim().startsWith(t));
+      const sw = btn('Switch to EdgeLabel'); if (sw) { sw.click(); await sleep(3500); }
+      for (const w of ['M3 screws', 'Hex keys', 'Solder']) { btn('Add label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = w; btn('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); }
+      btn('Place several').click(); await sleep(80);
+      window.__GEN2_VIEWER__.selectUnit(window.__GEN2_STORE__.state.placed[0].id); await sleep(300);
+    });
+    await page.waitForTimeout(1200);
+    await writeFile(join(OUT, 'phone-labels-dark-390.png'), await page.screenshot({ type: 'png' }));
     console.log('wrote phone shots');
     await ctx.close();
   }

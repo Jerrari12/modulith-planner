@@ -112,9 +112,12 @@ jobs:
           # index.html loads js/boot.js (phase 0, 2026-10-12), which imports main.js: one stamp per hop
           sed -i "s|css/viewer.css|css/viewer.css?v=$V|; s|js/boot.js|js/boot.js?v=$V|" index.html
           sed -i "s|'./app.js'|'./app.js?v=$V'|" js/boot.js
-          sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|; s|'./workspaces/assemble.js'|'./workspaces/assemble.js?v=$V'|; s|'./workspaces/parts.js'|'./workspaces/parts.js?v=$V'|; s|'./state/store.js'|'./state/store.js?v=$V'|; s|'./workspaces/colors.js'|'./workspaces/colors.js?v=$V'|; s|'./ui/phone.js'|'./ui/phone.js?v=$V'|" js/app.js
+          sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|; s|'./workspaces/assemble.js'|'./workspaces/assemble.js?v=$V'|; s|'./workspaces/parts.js'|'./workspaces/parts.js?v=$V'|; s|'./state/store.js'|'./state/store.js?v=$V'|; s|'./workspaces/colors.js'|'./workspaces/colors.js?v=$V'|; s|'./ui/phone.js'|'./ui/phone.js?v=$V'|; s|'./workspaces/labels.js'|'./workspaces/labels.js?v=$V'|" js/app.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./topbar.js'|'./topbar.js?v=$V'|" js/ui/phone.js
-          sed -i "s|'../ui/phone.js'|'../ui/phone.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js
+          sed -i "s|'../ui/phone.js'|'../ui/phone.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js js/workspaces/labels.js
+          # the Labels workspace (phase 5) and its rules module
+          sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'../rules/labels.js'|'../rules/labels.js?v=$V'|; s|'../label-panel.js'|'../label-panel.js?v=$V'|; s|'../label-text.js'|'../label-text.js?v=$V'|" js/workspaces/labels.js
+          sed -i "s|'../label-panel.js'|'../label-panel.js?v=$V'|" js/rules/labels.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../filament-db.js'|'../filament-db.js?v=$V'|; s|'../bed-finish.js'|'../bed-finish.js?v=$V'|" js/workspaces/colors.js
           sed -i "s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/store.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../rules/bom.js'|'../rules/bom.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|" js/workspaces/parts.js

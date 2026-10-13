@@ -7,6 +7,7 @@ import { mountBuild } from './workspaces/build.js';
 import { mountAssemble } from './workspaces/assemble.js';
 import { mountParts, printCountOf } from './workspaces/parts.js';
 import { mountColors } from './workspaces/colors.js';
+import { mountLabels, labelsBadge } from './workspaces/labels.js';
 import { createStore } from './state/store.js';
 import { isPhone, PHONE_MAX } from './ui/phone.js';
 
@@ -40,7 +41,7 @@ function initialMode() {
 }
 
 /* the workspaces that exist; each mount returns { onSelect?, onPage?, unmount } */
-const WORKSPACES = { build: mountBuild, assemble: mountAssemble, parts: mountParts, colors: mountColors };
+const WORKSPACES = { build: mountBuild, assemble: mountAssemble, parts: mountParts, colors: mountColors, labels: mountLabels };
 
 export async function boot() {
   if (!WS) { await createStage(document); return; }
@@ -77,7 +78,7 @@ export async function boot() {
     /* the palette moves to the build's own key BEFORE the first colour write (and on the first build edit), so a kit
        page's saved palette never takes a project's picks with it (Astra's two-projects-one-kit check) */
     ownPaletteKey: () => stage.setColorStoreKey(buildKey(store.state.buildId)),
-    badges: () => { try { return { parts: printCountOf(stage.build) || null }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count)
+    badges: () => { try { return { parts: printCountOf(stage.build) || null, labels: labelsBadge(store.state) }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count, Labels labelled/slots)
     has: (ws) => !!WORKSPACES[ws],
     remount() { if (current) { const ws = current.name; current.unmount(); current = { name: ws, ...WORKSPACES[ws](stage, ctx) }; } },
     switchTo(ws) {
@@ -89,7 +90,11 @@ export async function boot() {
       current = { name: ws, ...WORKSPACES[ws](stage, ctx) };
     },
   };
-  ctx.switchTo(WORKSPACES[WS] ? WS : 'build');
+  /* a labels link (#labels-add=, the Label Studio's "Add to planner build"; #labels-open) lands in the Labels workspace, which
+     imports it; the build's own #build= part stays beside it */
+  const labelsLink = /(^#|&)labels-(add=|open)/.test(location.hash);
+  if (/(^#|&)labels-open(&|$)/.test(location.hash)) history.replaceState(null, '', location.href.replace(/[#&]labels-open(?=&|$)/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
+  ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
   /* crossing the phone breakpoint re-mounts the workspace in the other chrome (its memo keeps the selection and step) */
   let wasPhone = isPhone(), resizeT = 0;
   addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { const now = isPhone(); document.documentElement.classList.toggle('ws-phone', now); if (now !== wasPhone) { wasPhone = now; ctx.remount(); } }, 150); });
