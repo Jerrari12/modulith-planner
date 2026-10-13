@@ -10252,6 +10252,8 @@ renderer.setAnimationLoop(renderLoop);
     // the Very High accumulation state and the live tier, so a screenshot harness (tools/golden-shots.mjs) can
     // wait for a CONVERGED frame (acc.n reaches ACC_SAMPLES) and prove the tier it asked for is the one drawing
     acc, ACC_SAMPLES, get quality() { return quality; },
+    // what a probe reads beside the JS heap: the renderer's live resource counts and the camera's place (tools/perf-probe.mjs)
+    probe: () => ({ geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, programs: (renderer.info.programs || []).length, camera: camera.position.toArray().map((v) => +v.toFixed(2)) }),
     // for the workspaces (phase 0): select a part by instance id (null deselects), and read the build and selection
     setSelected, get build() { return build; }, get selectedId() { return selectedId; },
     // the build-wide options the viewer's own panel drives, so the Build workspace's "Build style" tab drives the
