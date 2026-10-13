@@ -16,8 +16,64 @@ import { generateManifest } from '../generate.js';
 import * as R from '../rules/labels.js';
 import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle } from '../label-panel.js';
 import { loadLabelFont, labelIcons } from '../label-text.js';
+import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
 const G = globalThis.GEN2;
+
+/* ---- the brand icons of the two Label Studio tiles (its own tag and the Part Picker's bolt), and the hover scenes ---- */
+const STUDIO_ICON = () => scene('0 0 16 16', '<path fill="currentColor" fill-rule="evenodd" d="M2 2h6l6.3 6.3a1.5 1.5 0 0 1 0 2.1l-3.9 3.9a1.5 1.5 0 0 1-2.1 0L2 8V2zm3.2 1.9a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/>');
+const PICKER_ICON = () => scene('0 0 16 16', '<path fill="currentColor" d="M4.2 1h7.6l1.7 2.6-1.7 2.6H4.2L2.5 3.6zM6.6 6.2h2.8V15H6.6z"/>');
+/* every scene is 240 x 110 on one 4 s loop; a label strip is the EdgeLabel outline (the slanted right edge) */
+const strip = (x, y, w = 92, h = 34, extra = '') => `<g transform="translate(${x} ${y})" ${extra}><polygon points="0,0 ${w},0 ${w - h * 0.9},${h} 0,${h}" fill="#f4f1ec"/>`;
+const SCENES = {
+  type: () => scene('0 0 240 110', `
+    <rect x="0" y="0" width="240" height="110" rx="8" fill="none"/>
+    ${strip(36, 36, 140, 42)}
+      <text x="12" y="27" font-family="Archivo, system-ui, sans-serif" font-weight="800" font-size="16" fill="#1b1b1b">
+        <tspan opacity="0">M3${appear(0.08)}</tspan><tspan opacity="0"> SCR${appear(0.26)}</tspan><tspan opacity="0">EWS${appear(0.42)}</tspan></text>
+      <rect x="12" y="13" width="2" height="18" fill="#1b1b1b" opacity="0">${appear(0.02, 0.62)}${blink()}</rect>
+      <g opacity="0" transform="translate(100 8)">${appear(0.66)}<path d="M16 4l-5 5 1.5 1.5 5-5A4 4 0 0 1 13 11l-6 6-2-2 6-6A4 4 0 0 1 16 4z" fill="#1b1b1b"/></g>
+    </g>
+    <text x="120" y="98" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a" opacity="0">${appear(0.7)}the icon is guessed from the words</text>`),
+  file: () => scene('0 0 240 110', `
+    <g opacity="0">${appear(0.02, 0.5)}${moveTo(30, -30, 30, 22, 0.05, 0.25)}
+      <path d="M0 0h26l12 12v38H0z" fill="#e9e6df"/><path d="M26 0v12h12" fill="#cfcbc2"/>
+      <rect x="6" y="20" width="22" height="3" rx="1" fill="#9a9a9a"/><rect x="6" y="28" width="26" height="3" rx="1" fill="#9a9a9a"/><rect x="6" y="36" width="18" height="3" rx="1" fill="#9a9a9a"/></g>
+    <g opacity="0">${appear(0.34)}${strip(112, 18, 100, 28)}<text x="10" y="19" font-family="Archivo, system-ui" font-weight="800" font-size="12" fill="#1b1b1b">M4 × 16</text></g></g>
+    <g opacity="0">${appear(0.48)}${strip(112, 52, 100, 28)}<text x="10" y="19" font-family="Archivo, system-ui" font-weight="800" font-size="12" fill="#1b1b1b">HEX KEYS</text></g></g>
+    <text x="120" y="100" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a" opacity="0">${appear(0.6)}a label list, a Part Picker file, a Studio set</text>`),
+  studio: () => scene('0 0 240 110', `
+    ${strip(24, 22, 150, 52)}
+      <text x="48" y="31" font-family="Archivo, system-ui" font-weight="800" font-size="17" fill="#1b1b1b">COFFEE</text>
+      <path transform="translate(10 12)" d="M3 6h16v8a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6V6zm16 2h3a3 3 0 0 1 0 6h-3M2 24h18" fill="none" stroke="#1b1b1b" stroke-width="2.2" stroke-linecap="round"/>
+      <rect x="0" y="44" width="150" height="8" fill="#2f6fd6"><animate attributeName="fill" values="#2f6fd6;#2f6fd6;#d6392f;#d6392f;#2e9e63;#2e9e63;#2f6fd6" keyTimes="0;.28;.33;.61;.66;.94;1" dur="4s" repeatCount="indefinite"/></rect>
+    </g>
+    <g transform="translate(190 30)" opacity="0">${appear(0.5)}<rect x="0" y="0" width="30" height="40" rx="3" fill="none" stroke="#9a9a9a" stroke-width="1.5"/><rect x="4" y="5" width="22" height="7" fill="#f4f1ec"/><rect x="4" y="16" width="22" height="7" fill="#f4f1ec"/><rect x="4" y="27" width="22" height="7" fill="#f4f1ec"/></g>
+    <text x="120" y="100" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a">icons · stripes · uploads · the print plate</text>`),
+  picker: () => scene('0 0 240 110', `
+    ${[0, 1, 2].map((i) => `<g transform="translate(${26 + i * 34} 18)"><rect x="0" y="0" width="16" height="9" rx="2" fill="#8a8f98"/><rect x="4" y="9" width="8" height="${22 + i * 10}" fill="#aab0b8"/></g>`).join('')}
+    <rect x="56" y="12" width="28" height="56" rx="6" fill="none" stroke="#FF6A1A" stroke-width="2" opacity="0">${appear(0.34)}</rect>
+    <g opacity="0">${appear(0.04, 0.5)}${moveTo(120, 80, 72, 40, 0.08, 0.26)}<path d="M0 0l0 14 4-3 3 6 3-1.5-3-6 5-.5z" fill="#1b1b1b" stroke="#fff" stroke-width="1"/></g>
+    <g opacity="0">${appear(0.52)}${strip(128, 28, 100, 34)}<text x="9" y="15" font-family="Archivo, system-ui" font-weight="800" font-size="12" fill="#1b1b1b">M4 × 20</text><text x="9" y="28" font-family="IBM Plex Sans, system-ui" font-weight="600" font-size="8" fill="#1b1b1b">SOCKET CAP · STEEL</text></g></g>
+    <text x="120" y="100" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a">screws, nuts, washers and inserts become labels</text>`),
+  fill: () => scene('0 0 240 110', `
+    ${[[0, 0], [1, 0], [0, 1], [1, 1]].map(([c, r]) => `<rect x="${22 + c * 62}" y="${14 + r * 40}" width="58" height="36" rx="4" fill="#2b3a4e" stroke="#4d5f78"/>`).join('')}
+    ${[[0, 0, 0.12], [1, 0, 0.36], [0, 1, 0.6]].map(([c, r, at]) => `<g>${moveTo(170, 20 + (c + r * 2) * 24, 26 + c * 62, 20 + r * 40, at, 0.18)}<polygon points="0,0 50,0 32,24 0,24" fill="#f4f1ec"/></g>`).join('')}
+    <text x="120" y="102" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a">top row first, left to right · one Undo</text>`),
+  several: () => scene('0 0 240 110', `
+    ${[[0, 0], [1, 0], [2, 0]].map(([c, r]) => `<rect x="${22 + c * 66}" y="${18 + r * 40}" width="60" height="44" rx="4" fill="#2b3a4e" stroke="#4d5f78"/>`).join('')}
+    ${[[0, 0.14], [1, 0.42], [2, 0.7]].map(([c, at]) => `<g opacity="0">${appear(at)}<polygon transform="translate(${28 + c * 66} 28)" points="0,0 48,0 31,22 0,22" fill="#f4f1ec"/></g>`).join('')}
+    <g>${moveTo(52, 92, 52, 50, 0.04, 0.1)}${moveTo(52, 50, 118, 50, 0.3, 0.12)}<circle r="9" fill="none" stroke="#FF6A1A" stroke-width="2"><animate attributeName="r" values="9;9;4;9;9;4;9;9;4;9" keyTimes="0;.1;.14;.2;.38;.42;.48;.66;.7;.76" dur="4s" repeatCount="indefinite"/></circle></g>
+    <text x="120" y="102" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a">tap a drawer, the next label follows</text>`),
+};
+const HINTS = {
+  type: { title: 'Type a label', text: 'Words for one drawer; the icon is guessed, or pick one after.', scene: SCENES.type },
+  file: { title: 'Add from a file', text: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set.', scene: SCENES.file },
+  studio: { title: 'Label Studio', text: 'Make labels with icons, stripes and uploads, and print the plate. Opens in a new tab.', scene: SCENES.studio },
+  picker: { title: 'Part Picker', text: 'Choose screws, nuts, washers and inserts; each becomes a label laid out from its part record.', scene: SCENES.picker },
+  fill: { title: 'Fill empty drawers', text: 'Every waiting label onto an empty drawer, top row first, left to right. One Undo takes it back.', scene: SCENES.fill },
+  several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several },
+};
 const LABEL_STUDIO_URL = 'https://labels.modulith.systems/';
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 const sigOf = (m) => { const s = JSON.stringify(m); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + s.length; };
@@ -247,6 +303,7 @@ export function mountLabels(stage, ctx) {
   const ident = (l, ok = true) => el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (ok ? (L.iconOnly(l) ? 'Icon only' : '(empty)') : '(empty)') }), el('span.detail', { text: detail(l) })]);
 
   function renderPanel() {
+    hideHint();   // the control under a bubble is about to be rebuilt; a removed button never fires mouseleave (Terra 01a13529)
     panel.replaceChildren();
     if (!L) { panel.append(el('div.head', {}, [el('h2', { text: 'Labels' })]), el('p.hint', { text: 'Loading the label tools…' })); return; }
     const s = S();
@@ -275,7 +332,7 @@ export function mountLabels(stage, ctx) {
     ]));
     const last = lastChange();
     panel.appendChild(el('div.row.top', {}, [
-      faceOk && ready.length && empties.length && !picked ? el('button.key.sm', { onclick: () => { const w = ready[0]; if (w) armPlacing(w.id); } }, [icon('hand-pointing', { size: 16 }), 'Place several']) : null,
+      faceOk && ready.length && empties.length && !picked ? attachHint(el('button.key.sm', { onclick: () => { const w = ready[0]; if (w) armPlacing(w.id); } }, [icon('hand-pointing', { size: 16 }), 'Place several']), HINTS.several, panel) : null,
       last ? el('button.key.sm', { title: 'Undo: ' + last.desc, onclick: undoLabel }, [icon('arrow-counter-clockwise', { size: 16 }), 'Undo']) : null,
     ]));
     if (last) panel.appendChild(el('p.last', { text: 'Last change: ' + last.desc }));
@@ -324,13 +381,13 @@ export function mountLabels(stage, ctx) {
     /* the ways in, as four equal tiles (Joey 2026-10-13: a pile of mismatched buttons read as messy); Fill is an action on the
        build and gets a row of its own; the exports are the two icon buttons in the head; the settings stay last, collapsed */
     foot.appendChild(el('div.ways', { role: 'group', 'aria-label': 'Add labels' }, [
-      el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']),
-      el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']),
-      el('button.key.tile', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', onclick: () => openStudio(false) }, [icon('arrow-square-out', { size: 16 }), 'Label Studio']),
-      el('button.key.tile', { title: 'Opens the Label Studio’s Part Picker in a new tab: choose screws, nuts and washers; download its label list and add it here', onclick: () => openStudio(true) }, [icon('arrow-square-out', { size: 16 }), 'Part Picker']),
+      attachHint(el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']), HINTS.type, panel),
+      attachHint(el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']), HINTS.file, panel),
+      attachHint(el('button.key.tile.brand', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', onclick: () => openStudio(false) }, [STUDIO_ICON(), 'Label Studio', icon('arrow-square-out', { size: 12 })]), HINTS.studio, panel),
+      attachHint(el('button.key.tile.brand', { title: 'Opens the Label Studio’s Part Picker in a new tab: choose screws, nuts and washers; download its label list and add it here', onclick: () => openStudio(true) }, [PICKER_ICON(), 'Part Picker', icon('arrow-square-out', { size: 12 })]), HINTS.picker, panel),
     ]));
     if (labels.length) foot.appendChild(el('div.fillrow', {}, [
-      el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']),
+      attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
       pairs.length ? null : el('span.why', { text: !faceOk ? 'Needs an EdgeLabel or Classic Pro faceplate' : !ready.length ? 'No labels ready to place' : 'No empty drawers' }),
     ]));
     foot.appendChild(renderSettings());
@@ -511,6 +568,7 @@ export function mountLabels(stage, ctx) {
       ac.abort(); unsub();
       if (ctx.memo) ctx.memo.labelsSel = st.selId;
       stage.setSelected(null); stage.setSafeArea(null);
+      hideHint();
       if (phone) phone.destroy(); root.remove();
     },
   };

@@ -434,6 +434,18 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels .ways { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 #ws-labels .key.tile { display: flex; align-items: center; justify-content: flex-start; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; }
 #ws-labels .key.tile svg { flex: none; color: var(--ink-2); }
+#ws-labels .key.tile.brand svg:first-child { width: 16px; height: 16px; color: var(--orange); }
+#ws-labels .key.tile.brand { border-color: var(--orange-edge); }
+#ws-labels .key.tile.brand svg:last-child { margin-left: auto; color: var(--ink-3); }
+/* the hover hint: a bubble with a looping scene beside the control (js/ui/hint.js) */
+#ws-hint { position: fixed; z-index: 60; width: 264px; box-sizing: border-box; padding: 8px 8px 10px; border-radius: 14px; pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity var(--d-pop) var(--ease-out), transform var(--d-pop) var(--ease-out); }
+#ws-hint[hidden] { display: none; }
+#ws-hint.show { opacity: 1; transform: none; }
+#ws-hint .scene { border-radius: 9px; overflow: hidden; background: #1d2230; }
+#ws-hint .scene svg { display: block; width: 100%; height: auto; }
+#ws-hint .t { margin: 8px 4px 0; font-size: 12px; font-weight: 700; }
+#ws-hint .d { margin: 2px 4px 0; font-size: 11px; line-height: 1.4; color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { #ws-hint .scene svg animate, #ws-hint .scene svg animateTransform { display: none; } }
 #ws-labels .key.tile[disabled] { opacity: .45; cursor: not-allowed; }
 #ws-labels .fillrow { display: flex; flex-direction: column; gap: 3px; }
 #ws-labels .fillrow .wide { width: 100%; }
