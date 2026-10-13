@@ -16,6 +16,7 @@ import { toolbar } from '../ui/toolbar.js';
 import { glyphEl, FACEK, DEFAULT_COLORS } from '../ui/glyph.js';
 import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
+import { isPhone, phoneChrome } from '../ui/phone.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -303,7 +304,12 @@ export function mountParts(stage, ctx) {
   }
 
   /* ---------------- stage ---------------- */
-  const safe = () => stage.setSafeArea({ left: (st.wide ? 820 : 440) + 20 + 8, right: 324 + 20 + 8, top: innerWidth < 1280 ? 134 : 90, bottom: 118 });
+  const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'parts', soon }, { panels: [
+    { el: panel, title: () => { const c = counts(); return `Parts · ${c.printCount} to print`; }, open: true },
+    { el: insp, title: 'This unit · parts' },
+  ] }) : null;
+  const safe = () => { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: (st.wide ? 820 : 440) + 20 + 8, right: 324 + 20 + 8, top: innerWidth < 1280 ? 134 : 90, bottom: 118 }); };
+  if (phone) phone.onLayout(safe);
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
   const steps = stage.manifest?.steps?.length ?? 0;
@@ -312,8 +318,8 @@ export function mountParts(stage, ctx) {
   renderPanel(); renderInspector(); renderDock(); safe();
 
   return {
-    onSelect(sel) { st.sel = sel; renderInspector(); },
-    unmount() { ac.abort(); stage.setSelected(null); stage.setSafeArea(null); root.remove(); },
+    onSelect(sel) { st.sel = sel; renderInspector(); if (phone) { if (sel) phone.open(insp); else phone.collapse(insp); phone.refresh(); safe(); } },
+    unmount() { ac.abort(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },
   };
 }
 

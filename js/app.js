@@ -8,6 +8,7 @@ import { mountAssemble } from './workspaces/assemble.js';
 import { mountParts, printCountOf } from './workspaces/parts.js';
 import { mountColors } from './workspaces/colors.js';
 import { createStore } from './state/store.js';
+import { isPhone, PHONE_MAX } from './ui/phone.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog, a classic-script lexical global
@@ -45,6 +46,7 @@ export async function boot() {
   if (!WS) { await createStage(document); return; }
   document.documentElement.dataset.ws = WS;
   document.documentElement.dataset.mode = initialMode();
+  document.documentElement.classList.toggle('ws-phone', isPhone());   // the phone chrome (bottom tabs, sheets) below 1024 px
   let current = null;   // the mounted workspace's handle
   const stage = await createStage(document, {
     onSelect: (sel) => current?.onSelect?.(sel),
@@ -77,6 +79,7 @@ export async function boot() {
     ownPaletteKey: () => stage.setColorStoreKey(buildKey(store.state.buildId)),
     badges: () => { try { return { parts: printCountOf(stage.build) || null }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count)
     has: (ws) => !!WORKSPACES[ws],
+    remount() { if (current) { const ws = current.name; current.unmount(); current = { name: ws, ...WORKSPACES[ws](stage, ctx) }; } },
     switchTo(ws) {
       if (!WORKSPACES[ws] || (current && current.name === ws)) return;
       current?.unmount();
@@ -87,6 +90,9 @@ export async function boot() {
     },
   };
   ctx.switchTo(WORKSPACES[WS] ? WS : 'build');
+  /* crossing the phone breakpoint re-mounts the workspace in the other chrome (its memo keeps the selection and step) */
+  let wasPhone = isPhone(), resizeT = 0;
+  addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { const now = isPhone(); document.documentElement.classList.toggle('ws-phone', now); if (now !== wasPhone) { wasPhone = now; ctx.remount(); } }, 150); });
 }
 
 await boot();

@@ -21,6 +21,7 @@ import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 import { FILAMENT_DB } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
+import { isPhone, phoneChrome } from '../ui/phone.js';
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved schemes, in this browser
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
@@ -170,8 +171,8 @@ export function mountColors(stage, ctx) {
   /* ---------------- the picker (replaces the inspector) ---------------- */
   const picker = el('aside.glass.glass-edge', { id: 'ws-picker', 'aria-label': 'Filament picker', hidden: true });
   root.appendChild(picker);
-  function openPicker(key) { st.key = key; st.query = ''; renderAll(); }
-  function closePicker() { st.key = null; renderAll(); }
+  function openPicker(key) { st.key = key; st.query = ''; renderAll(); if (phone) phone.open(picker); }
+  function closePicker() { st.key = null; renderAll(); if (phone) phone.collapse(picker); }
   function renderPicker() {
     picker.replaceChildren();
     const key = st.key;
@@ -295,8 +296,13 @@ export function mountColors(stage, ctx) {
 
   /* ---------------- layout ---------------- */
   const narrow = () => innerWidth < 1280;
-  function safe() { stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 }); }
-  function renderAll() { renderPanel(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); safe(); }
+  const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'colors', soon }, { panels: [
+    { el: panel, title: 'Colors', open: true },
+    { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}` : typePlural(st.key)}` : 'Filament' },
+  ] }) : null;
+  if (phone) phone.onLayout(safe);
+  function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 }); }
+  function renderAll() { renderPanel(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
@@ -315,6 +321,6 @@ export function mountColors(stage, ctx) {
 
   return {
     onSelect(sel) { st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; } renderAll(); },
-    unmount() { ac.abort(); unsub(); stage.setSelected(null); stage.setSafeArea(null); root.remove(); },
+    unmount() { ac.abort(); unsub(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },
   };
 }

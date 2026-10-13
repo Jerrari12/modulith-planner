@@ -24,7 +24,7 @@ export function topbar(stage, ctx) {
     el('span.badge.preview', { text: 'Preview', title: 'A visual preview over the real scene. Adding, moving and removing units, per-unit type and the 2D board arrive with the Build rules (phase 3).' }),
     el('div.spacer'),
     el('button.chip.chip-btn.mount', { title: 'Mount and length · opens the setup sheet (phase 0, later)', onclick: ctx.soon('The setup sheet', 'the next phase-0 step') }, [
-      icon(MOUNT_ICON[build?.mount] || 'table'), `${MOUNT_NAME[build?.mount] || 'Tabletop'} · `, el('span.mono', { text: String(length) }),
+      icon(MOUNT_ICON[build?.mount] || 'table'), el('span.lbl', { text: `${MOUNT_NAME[build?.mount] || 'Tabletop'} · ` }), el('span.mono', { text: String(length) }),
     ]),
     el('button.chip.chip-btn.printer', { title: 'Printer · optional; only greys out sizes that will not fit', onclick: ctx.soon('The printer picker', 'the setup sheet') }, [icon('printer'), el('span', { text: 'Any printer' })]),
     themeToggle(),

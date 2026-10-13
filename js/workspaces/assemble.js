@@ -12,6 +12,7 @@ import { el, makeToast } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { isPhone, phoneChrome } from '../ui/phone.js';
 
 
 export function mountAssemble(stage, ctx) {
@@ -106,7 +107,9 @@ export function mountAssemble(stage, ctx) {
   }
 
   /* ---------------- stage ---------------- */
-  const safe = () => stage.setSafeArea({ left: 280 + 20 + 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + player.offsetHeight + 12 });
+  const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'assemble', soon }, { panels: [{ el: list, title: () => `Step ${Math.max(0, stage.cur)} of ${stage.pageCount - 2}`, open: false }] }) : null;
+  const safe = () => { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() + player.offsetHeight }); return; } stage.setSafeArea({ left: 280 + 20 + 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + player.offsetHeight + 12 }); };
+  if (phone) phone.onLayout(safe);
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
   setColors(false);
@@ -125,7 +128,7 @@ export function mountAssemble(stage, ctx) {
       stage.setPaused(false);
       if (stage.useCustom !== hadOwnColors) { stage.useCustom = hadOwnColors; stage.applyPalette(); }
       stage.setSafeArea(null);
-      root.remove();
+      if (phone) phone.destroy(); root.remove();
     },
   };
 }

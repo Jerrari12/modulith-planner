@@ -168,4 +168,27 @@ try {
     console.log('wrote colors shots');
     await ctx.close();
   }
+  /* the phone layout (the mobile phase): 390 x 844 dark, Build with the library sheet open, Build placing (sheet
+     collapsed, markers up), Parts with its sheet open, Colors */
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+    const page = await ctx.newPage();
+    const settle = () => page.waitForTimeout(1200);
+    await page.goto(`${base}/index.html?ws=build&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-tabbar'), null, { timeout: 90_000 });
+    await settle();
+    await writeFile(join(OUT, 'phone-build-dark-390.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-lib .sheet-handle'); await page.waitForTimeout(500);
+    await writeFile(join(OUT, 'phone-build-dark-390-library.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-lib .size:not(.dis) >> nth=5'); await settle();
+    await writeFile(join(OUT, 'phone-build-dark-390-placing.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-tabbar .tab:has-text("Parts")'); await settle();
+    await page.click('#ws-parts .sheet-handle'); await page.waitForTimeout(500);
+    await writeFile(join(OUT, 'phone-parts-dark-390.png'), await page.screenshot({ type: 'png' }));
+    await page.click('#ws-tabbar .tab:has-text("Colors")'); await settle();
+    await writeFile(join(OUT, 'phone-colors-dark-390.png'), await page.screenshot({ type: 'png' }));
+    console.log('wrote phone shots');
+    await ctx.close();
+  }
 } finally { await browser.close(); server.close(); }

@@ -424,6 +424,55 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-colors .crow .own, #ws-partcard .zchip .tag { margin-left: 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; background: var(--orange); color: var(--on-orange); font-weight: 700; }
 #ws-partcard .zchip.own { border-color: var(--orange); }
 
+/* ---- the phone layout (<= 1023 px): a bottom tab bar, panels as bottom sheets, a slim dock (the brief §2) ---- */
+#ws-tabbar { display: none; }
+@media (max-width: 1023px) {
+  #ws-top { top: 10px; left: 10px; right: 10px; gap: 6px; }
+  #ws-top #ws-tabs, #ws-top .preview, #ws-top .printer, #ws-top .share span, #ws-top .spacer { display: none; }
+  #ws-top .chip-btn.share { padding: 0 12px; }
+  #ws-top #ws-switch { flex: 1; min-width: 0; margin-left: 0; }
+  #ws-top #ws-switch > .chip-btn { width: 100%; }
+  #ws-top #ws-switch > .chip-btn > span { flex: 1; max-width: none; }
+  #ws-top .chip-btn.mount { padding: 0 10px; }
+  #ws-top .chip-btn.mount .lbl { display: none; }
+  #ws-logo img { height: 22px; }
+  #ws-tabbar { display: flex; position: absolute; left: 0; right: 0; bottom: 0; height: 64px; justify-content: space-around; align-items: stretch; padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px)); border-radius: 0; border-width: 1px 0 0 0; z-index: 12; }
+  #ws-tabbar .tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: none; background: transparent; color: var(--ink-2); font-size: 10px; font-weight: 600; position: relative; border-radius: 10px; }
+  #ws-tabbar .tab.on { color: var(--orange); }
+  #ws-tabbar .tab .badge { position: absolute; top: 3px; right: 8%; font-size: 9px; padding: 1px 5px; }
+  #ws-tools { top: 64px; left: 10px; right: 10px; gap: 6px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  #ws-tools .quality { display: none; }
+  #ws-dock { left: 10px; right: 10px; bottom: 70px; transform: none; padding: 6px 6px 6px 8px; gap: 8px; justify-content: space-between; border-radius: 14px; z-index: 11; }
+  #ws-dock .group { gap: 4px; }
+  #ws-dock .group:nth-of-type(2) { display: none; }
+  #ws-dock .big { font-size: 16px; }
+  #ws-dock .unit-lbl { font-size: 11px; }
+  #ws-dock .status { height: 34px; padding: 0 10px; font-size: 12px; }
+  #ws-dock .cta { height: 40px; padding: 0 12px; font-size: 13px; gap: 6px; }
+  #ws-dock .pbar { width: 90px; }
+  /* sheets */
+  #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px))); transition: transform var(--d-pop) var(--ease-out); z-index: 10; animation: none; }
+  #ws .sheet.open { transform: none; overflow-y: auto; z-index: 13; }
+  #ws .sheet[hidden] { display: none; }
+  #ws .sheet-handle { flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
+  #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; }
+  #ws .sheet-handle .ttl { flex: 1; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #ws .sheet-handle .chev { color: var(--ink-3); display: inline-flex; }
+  #ws .sheet-peek { flex: none; height: 40px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
+  #ws .sheet > .tabs { margin-top: 0; }
+  #ws .sheet .collapse, #ws .sheet.rail .expand, #ws .sheet .railbtn { display: none; }
+  #ws-lib.sheet.rail { width: auto; padding: 0 14px 14px; align-items: stretch; }
+  #ws-board { top: 110px; left: 10px; right: 10px; bottom: 176px; }
+  #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: 132px; max-height: 44vh; }
+  #ws-menu { width: 180px; }
+  #ws-parts.wide { width: auto; }
+  #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
+  #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
+  #ws-colors .scheme .shop { display: none; }
+  #ws-player { left: 10px; right: 10px; width: auto; transform: none; bottom: 70px; }
+  #ws-steps.sheet { bottom: 126px; }
+}
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }

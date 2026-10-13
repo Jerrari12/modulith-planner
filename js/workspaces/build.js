@@ -27,6 +27,7 @@ import { el, makeToast } from '../ui/dom.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 import { board } from '../ui/board.js';
+import { isPhone, phoneChrome } from '../ui/phone.js';
 import { layoutRules } from '../rules/layout.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest } from '../generate.js';
@@ -84,7 +85,7 @@ export function mountBuild(stage, ctx) {
   const nameEl = top.querySelector('#ws-switch > .chip-btn > span');
 
   /* ---------------- the record ↔ the stage ---------------- */
-  let lastSig = null, syncing = false, queue = Promise.resolve();
+  let lastSig = null, syncing = false, unmounting = false, queue = Promise.resolve();
   const tryGen = (rec) => { try { return generateManifest(rec); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
   { const g = tryGen(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }
   /* every settled change: regenerate the scene when the manifest changed; an unshowable layout keeps the last good
@@ -384,7 +385,7 @@ export function mountBuild(stage, ctx) {
       const why = sizeWhy(w, h); const id = `${w}x${h}`; const dis = !!why, on = st.addSize === id;
       sizes.appendChild(el('button.size.key' + (dis ? '.dis' : on ? '.on' : ''), {
         title: why || `${w * 88} × ${h * 56} mm · click to place`, 'aria-disabled': dis ? 'true' : null, 'aria-pressed': String(on),
-        onclick: dis ? null : () => { setPalette(st.unit, id); st.armed = true; st.eraser = false; renderAll(); },
+        onclick: dis ? null : () => { setPalette(st.unit, id); st.armed = true; st.eraser = false; renderAll(); if (phone) phone.collapse(lib); },
       }, [el('div.holder', {}, [sizeGlyph(kindOf(st.unit), w, h, colors)]), el('span.cap', { text: `${w}W·${h}H` })]));
     }
     sz.appendChild(sizes);
@@ -663,12 +664,20 @@ export function mountBuild(stage, ctx) {
       onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
       onChoose: (sp) => { st.chosen = sp; renderChoice(); } } : null);
     const u = st.selId != null ? s.placed.find((p) => p.id === st.selId) : null;
-    stage.setDrag(u && !st.armed ? { unitId: u.id, get rows() { return S().gridH * 2; }, spots: () => moveSpots(u), onDrop: (sp, id) => moveTo(id, sp.x, sp.y, { exact: true }), onCancel: () => renderAll() } : null);
+    stage.setDrag(u && !st.armed ? { unitId: u.id, get rows() { return S().gridH * 2; }, spots: () => { const sp = moveSpots(u); if (!sp.length) say('No other valid spot for this unit here · the 2D board lets it go anywhere free, and gravity settles it.'); return sp; }, onDrop: (sp, id) => moveTo(id, sp.x, sp.y, { exact: true }), onCancel: () => renderAll() } : null);
   }
 
   /* ---------------- layout ---------------- */
   const narrow = () => innerWidth < 1280;
+  /* the phone chrome: the library and the inspector are bottom sheets, the tabs a bottom bar. Placing keeps the sheets
+     closed so the next spot stays uncovered (Joey, 2026-10-11); the inspector's handle names the selected unit. */
+  const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'build', soon }, { panels: [
+    { el: lib, title: () => st.tab === 'add' ? (st.armed ? `Placing ${armedSize().w}W·${armedSize().h}H · tap a spot` : 'Add units') : 'Build style', open: false },   // the model first; the handle opens the library
+    { el: insp, title: () => { const u = S().placed.find((p) => p.id === st.selId); return u ? `Unit ${S().placed.indexOf(u) + 1} · ${u.w}W·${u.hh / 2}H ${(G?.fills || []).find((f) => f.id === u.fill)?.label || u.fill}` : 'This unit'; } },
+  ] }) : null;
+  if (phone) phone.onLayout(() => { safe(); if (st.view === '2d') brd.render(); });
   function layout() {
+    if (phone) { tools.style.left = ''; brd.el.style.left = ''; brd.el.style.right = ''; phone.refresh(); safe(); if (st.view === '2d') brd.render(); return; }
     const left = st.collapsed ? 88 + 20 : 304 + 40;
     tools.style.left = left + 'px';
     brd.el.style.left = left + 'px';
@@ -677,6 +686,7 @@ export function mountBuild(stage, ctx) {
     if (st.view === '2d') brd.render();
   }
   function safe() {
+    if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; }
     const libW = st.collapsed ? 68 + 20 : 304 + 20;
     const inspW = (!narrow() || !insp.hidden) ? 324 + 20 : 0;
     const topPx = narrow() ? 134 : 90;
@@ -684,6 +694,7 @@ export function mountBuild(stage, ctx) {
   }
   let autoCollapsed = false;
   function applyNarrow() {
+    if (phone) return;   // sheets, not a rail
     if (narrow() && st.sel && !st.collapsed) { st.collapsed = true; autoCollapsed = true; }
     else if ((!narrow() || !st.sel) && autoCollapsed) { st.collapsed = false; autoCollapsed = false; }
   }
@@ -718,19 +729,22 @@ export function mountBuild(stage, ctx) {
 
   return {
     onSelect(sel) {
-      if (syncing) return;   // the rebuild's own deselect; the selection comes back right after
+      if (syncing || unmounting) return;   // the rebuild's own deselect (the selection comes back right after), or the unmount's (the memo keeps it)
       st.sel = sel; st.selId = sel ? (sel.owner ?? null) : null;
       S().selectedUnit = st.selId; ctx.memo.buildSel = st.selId;
       if (st.peeking != null && st.peeking !== st.selId) { st.peeking = null; }
       const was = st.collapsed; applyNarrow(); if (st.collapsed !== was) renderLib();
       renderInspector(); renderOverlays(); layout();
+      if (phone) { phone.collapse(insp); phone.refresh(); safe(); }   // a selection shows as the inspector's handle (its name); a tap on it opens the sheet - never over the model by itself
     },
     onContext: openMenu,
     unmount() {
+      unmounting = true;
       ac.abort(); unsub();
       stage.setSpots(null); stage.setFlags([]); stage.setDrag(null); stage.setEraser(null); stage.cancelDrag(); stage.unpeek(); stage.clearSpotChoice();
       stage.setSelected(null); stage.setSafeArea(null);
       document.documentElement.classList.remove('ws-2d');
+      if (phone) phone.destroy();
       root.remove();
     },
   };
