@@ -6014,13 +6014,14 @@ function ensureSelFx() {
   if (selFx) return selFx;
   const rt = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: true });
   const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const occMat = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false });   // everything else, for depth: the outline follows VISIBLE selected surfaces (Astra 2026-10-14)
   const mat = new THREE.ShaderMaterial({
     // sRGB components, not a THREE.Color: a raw shader writes to the canvas unconverted, and Color stores linear (Sol 01a1330b)
     uniforms: { tMask: { value: rt.texture }, uTexel: { value: new THREE.Vector2(1, 1) }, uColor: { value: new THREE.Vector3(255 / 255, 106 / 255, 26 / 255) } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
     fragmentShader: `
       uniform sampler2D tMask; uniform vec2 uTexel; uniform vec3 uColor; varying vec2 vUv;
-      float m(vec2 o) { return texture2D(tMask, vUv + o * uTexel).a; }
+      float m(vec2 o) { return texture2D(tMask, vUv + o * uTexel).r; }   // red: the occluders are black, the selection white
       void main() {
         float c = m(vec2(0.0));
         float ring = 0.0, g1 = 0.0, g2 = 0.0, g3 = 0.0, inner = 1.0;
@@ -6042,7 +6043,7 @@ function ensureSelFx() {
   });
   const qScene = new THREE.Scene(); const qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   qScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
-  selFx = { rt, maskMat, mat, qScene, qCam };
+  selFx = { rt, maskMat, occMat, mat, qScene, qCam };
   return selFx;
 }
 function clearSelOutline() {
@@ -6074,11 +6075,21 @@ function drawSelOutline() {
   if (fx.rt.width !== size.x || fx.rt.height !== size.y) fx.rt.setSize(size.x, size.y);
   const prevBg = scene.background, prevOv = scene.overrideMaterial, prevAuto = renderer.autoClear, prevMask = camera.layers.mask;
   const prevClear = renderer.getClearColor(_selClear).clone(), prevAlpha = renderer.getClearAlpha();
+  const hidden = [];
   try {
-    scene.background = null; scene.overrideMaterial = fx.maskMat; camera.layers.set(SEL_LAYER);
+    scene.background = null;
     renderer.setRenderTarget(fx.rt); renderer.setClearColor(0x000000, 0); renderer.autoClear = true; renderer.clear();
+    /* pass 1: every real part and surface in black, for DEPTH - so a cover in front of the selected unit hides it in the
+       mask and the outline never suggests the cover is selected. The overlays, sprites, lines and the reflection are
+       not occluders. */
+    scene.traverse(o => { if ((o.userData.ghost || o.isSprite || o.isLine || o.isLineSegments || o === refl.mesh) && o.visible) { o.visible = false; hidden.push(o); } });
+    scene.overrideMaterial = fx.occMat;
+    renderer.render(scene, camera);
+    // pass 2: the selected unit in white, depth-tested against pass 1
+    scene.overrideMaterial = fx.maskMat; camera.layers.set(SEL_LAYER); renderer.autoClear = false;
     renderer.render(scene, camera);
   } finally {
+    while (hidden.length) hidden.pop().visible = true;
     scene.background = prevBg; scene.overrideMaterial = prevOv; camera.layers.mask = prevMask;
     renderer.setRenderTarget(null); renderer.setClearColor(prevClear, prevAlpha); renderer.autoClear = prevAuto;
   }
