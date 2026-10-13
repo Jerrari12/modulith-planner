@@ -228,7 +228,7 @@ test('Assemble: Next steps through, Skip reaches the end, Back returns', async (
 
 test('the build store: an edit autosaves, a bare address reopens the build, Rename, Duplicate, Delete', async () => {
   const { ctx, page, errors } = await open('build', { query: '&new=1' });
-  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.feet = s.feet === 'print' ? 'buy' : 'print'; }, 'edit'));
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.feet = s.feet === 'adhesive' ? 'tpu' : 'adhesive'; }, 'edit'));
   const id = await page.evaluate(() => window.__GEN2_STORE__.state.buildId);
   const recent = async () => page.evaluate(() => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds').objectStore('builds').getAll(); t.onsuccess = () => r(t.result.map((e) => [e.id, e.name])); }; }));
   // the autosave lands after the store's 350 ms coalescing and an IndexedDB write: poll, never a fixed sleep
@@ -262,6 +262,49 @@ test('the build store: an edit autosaves, a bare address reopens the build, Rena
   let left = await names();
   for (let i = 0; i < 60 && left.length !== 1; i++) { await settle(p2, 250); left = await names(); }
   assert.deepEqual(left, ['Copy of E2E bench']);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the journeys: a share link opens the same build elsewhere, Load build file lands on it, the 20-build cap asks before dropping', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1' });
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.feet = s.feet === 'adhesive' ? 'tpu' : 'adhesive'; s.backCover = !s.backCover; }, 'edit'));
+  await page.waitForFunction(() => /^#build=/.test(location.hash), null, { timeout: 15_000 });
+  const snap = await page.evaluate(() => JSON.stringify(window.__GEN2_STORE__.state));
+  const link = await page.evaluate(() => location.href);
+  // SHARE LINK: the address, opened in another browser (a fresh context: no store, no Recent builds), is the same record
+  const other = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  contexts.add(other);
+  const p2 = await other.newPage();
+  await p2.goto(link, { waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(p2);
+  assert.equal(await p2.evaluate(() => JSON.stringify(window.__GEN2_STORE__.state)), snap, 'the link carries the whole record');
+  assert.equal(await p2.evaluate(() => window.__GEN2_CTX__().builds.entry), null, 'a stranger’s build is not in this browser’s Recent builds until it is edited');
+  await other.close();
+  // LOAD BUILD FILE: a planner file ({ gen2Build: 1, name, data }) through the switcher's file input lands on that build
+  const rec = JSON.parse(snap); rec.buildId = 'e2efile00001'; rec.feet = 'adhesive';
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await page.locator('#ws-switch input[type="file"]').setInputFiles({ name: 'bench.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ gen2Build: 1, name: 'From a file', data: rec })) });
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.buildId === 'e2efile00001', null, { timeout: 90_000 });
+  await waitBoot(page);
+  assert.equal(await page.evaluate(() => document.title), 'From a file');
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.feet), 'adhesive');
+  // THE CAP: Recent builds full at 20 - a new build's first change is held, the switcher asks, Drop it makes room
+  await page.evaluate(() => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds', 'readwrite'); const st = t.objectStore('builds'); st.clear(); for (let i = 0; i < 20; i++) st.put({ id: 'e2ecapfill' + String(i).padStart(2, '0'), name: 'Filler ' + i, savedAt: 1000 + i, openedAt: 1000 + i, kit: null, mount: 'tabletop', length: 185, units: 1, record: { mount: 'tabletop', length: 185, placed: [], nextId: 1, buildId: 'e2ecapfill' + String(i).padStart(2, '0') } }); t.oncomplete = () => r(); }; }));
+  const p3 = await ctx.newPage();
+  await p3.goto(`${base}/index.html?ws=build&new=1&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(p3);
+  await p3.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.feet = s.feet === 'adhesive' ? 'tpu' : 'adhesive'; }, 'edit'));
+  await p3.waitForFunction(() => window.__GEN2_CTX__().builds.capPending, null, { timeout: 15_000 });
+  const held = await p3.evaluate(() => window.__GEN2_STORE__.state.buildId);
+  await p3.click('#ws-switch .chip-btn');
+  assert.match(await text(p3, '#ws-switch .notice p'), /Recent builds is full \(20\)\. “Filler 0”/);
+  await p3.locator('#ws-switch .notice button:text-is("Drop it")').click();
+  await p3.waitForFunction(() => !window.__GEN2_CTX__().builds.capPending && window.__GEN2_CTX__().builds.entry, null, { timeout: 15_000 });
+  const names = await p3.evaluate(() => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds').objectStore('builds').getAll(); t.onsuccess = () => r(t.result.map((e) => [e.id, e.name])); }; }));
+  assert.equal(names.length, 20, 'still twenty');
+  assert.ok(!names.some((e) => e[1] === 'Filler 0'), 'the one opened longest ago went');
+  assert.ok(names.some((e) => e[0] === held), 'the held build is saved');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
