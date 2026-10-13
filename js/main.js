@@ -6000,11 +6000,56 @@ let selAnchor = new THREE.Vector3(); // selected part's bbox-center offset from 
 let selOutline = null;
 /* two rims: a white inner one that reads against an orange filament, an orange outer one that reads against
    the stage, so the selection is unmistakable whatever the unit wears */
-const selOutlineMats = [
-  { scale: 1.025, mat: new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide, transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false }) },
-  { scale: 1.055, mat: new THREE.MeshBasicMaterial({ color: 0xff6a1a, side: THREE.BackSide, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }) },
-];
-function clearSelOutline() { if (selOutline) { scene.remove(selOutline); selOutline = null; } }
+/* ---- the selection silhouette (Astra 2026-10-14: "a thin outer silhouette that preserves the normal material
+   appearance") ---------------------------------------------------------------------------------------------------
+   Nothing is added to the scene. The selected unit's meshes are tagged into layer 1; each frame, after the
+   composite, they are drawn flat into a mask (an override material, the camera seeing layer 1 only), and a
+   full-screen pass draws an orange ring where the mask ends, a soft glow outside it and a one-pixel white line
+   inside, over the finished frame. The inverted hull it replaces drew its own back faces through a drawer's slots
+   and over the plate (Joey: "is the highlight clipping into the drawer?"). */
+const SEL_LAYER = 1;
+let selMembers = [], selFx = null;
+const _selClear = new THREE.Color();
+function ensureSelFx() {
+  if (selFx) return selFx;
+  const rt = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: true });
+  const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const mat = new THREE.ShaderMaterial({
+    // sRGB components, not a THREE.Color: a raw shader writes to the canvas unconverted, and Color stores linear (Sol 01a1330b)
+    uniforms: { tMask: { value: rt.texture }, uTexel: { value: new THREE.Vector2(1, 1) }, uColor: { value: new THREE.Vector3(255 / 255, 106 / 255, 26 / 255) } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `
+      uniform sampler2D tMask; uniform vec2 uTexel; uniform vec3 uColor; varying vec2 vUv;
+      float m(vec2 o) { return texture2D(tMask, vUv + o * uTexel).a; }
+      void main() {
+        float c = m(vec2(0.0));
+        float ring = 0.0, g1 = 0.0, g2 = 0.0, g3 = 0.0, inner = 1.0;
+        for (int i = 0; i < 16; i++) {
+          float a = float(i) * 0.39269908;
+          vec2 d = vec2(cos(a), sin(a));
+          ring = max(ring, m(d * 2.2));
+          g1 = max(g1, m(d * 3.4)); g2 = max(g2, m(d * 4.6)); g3 = max(g3, m(d * 6.0));   // the glow fades out in three steps (Sol 01a1330b)
+          inner = min(inner, m(d * 1.4));
+        }
+        if (c > 0.5) { if (inner < 0.5) gl_FragColor = vec4(1.0, 1.0, 1.0, 0.85); else discard; return; }
+        if (ring > 0.5) { gl_FragColor = vec4(uColor, 0.95); return; }
+        if (g1 > 0.5) { gl_FragColor = vec4(uColor, 0.3); return; }
+        if (g2 > 0.5) { gl_FragColor = vec4(uColor, 0.16); return; }
+        if (g3 > 0.5) { gl_FragColor = vec4(uColor, 0.06); return; }
+        discard;
+      }`,
+    transparent: true, depthTest: false, depthWrite: false, toneMapped: false,
+  });
+  const qScene = new THREE.Scene(); const qCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  qScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat));
+  selFx = { rt, maskMat, mat, qScene, qCam };
+  return selFx;
+}
+function clearSelOutline() {
+  for (const inst of selMembers) inst.group.traverse(o => { if (o.isMesh) o.layers.disable(SEL_LAYER); });
+  selMembers = [];
+  invalidateFrame();
+}
 function unitMembers(host) {
   // the host and every instance whose `rides` chain reaches it (faceplate, handle, accent, label, cover)
   const out = [host];
@@ -6017,30 +6062,29 @@ function unitMembers(host) {
 }
 function showSelOutline(members) {
   clearSelOutline();
-  const g = new THREE.Group();
-  g.name = 'sel-outline';
-  const box = new THREE.Box3();
-  for (const inst of members) { inst.group.updateWorldMatrix(true, true); box.expandByObject(inst.group); }
-  if (box.isEmpty()) return;
-  const c = box.getCenter(new THREE.Vector3());
-  const unC = new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z);
-  for (const { scale, mat } of selOutlineMats) {
-    const layer = new THREE.Group();
-    for (const inst of members) inst.group.traverse(o => {
-      if (!o.isMesh || !o.visible || !o.geometry) return;
-      const m = new THREE.Mesh(o.geometry, mat);
-      m.matrixAutoUpdate = false;
-      m.matrix.copy(o.matrixWorld).premultiply(unC);
-      m.castShadow = false; m.receiveShadow = false;
-      layer.add(m);
-    });
-    layer.scale.setScalar(scale);
-    g.add(layer);
+  selMembers = members.filter(Boolean);
+  for (const inst of selMembers) inst.group.traverse(o => { if (o.isMesh) o.layers.enable(SEL_LAYER); });
+  invalidateFrame();
+}
+/* drawn after the frame's composite (the loop), never into the accumulation or the AO passes */
+function drawSelOutline() {
+  if (!selMembers.length || !selMembers.some(i => i.group.visible)) return;
+  const fx = ensureSelFx();
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  if (fx.rt.width !== size.x || fx.rt.height !== size.y) fx.rt.setSize(size.x, size.y);
+  const prevBg = scene.background, prevOv = scene.overrideMaterial, prevAuto = renderer.autoClear, prevMask = camera.layers.mask;
+  const prevClear = renderer.getClearColor(_selClear).clone(), prevAlpha = renderer.getClearAlpha();
+  try {
+    scene.background = null; scene.overrideMaterial = fx.maskMat; camera.layers.set(SEL_LAYER);
+    renderer.setRenderTarget(fx.rt); renderer.setClearColor(0x000000, 0); renderer.autoClear = true; renderer.clear();
+    renderer.render(scene, camera);
+  } finally {
+    scene.background = prevBg; scene.overrideMaterial = prevOv; camera.layers.mask = prevMask;
+    renderer.setRenderTarget(null); renderer.setClearColor(prevClear, prevAlpha); renderer.autoClear = prevAuto;
   }
-  g.position.copy(c);
-  g.renderOrder = -1;
-  scene.add(g);
-  selOutline = g;
+  fx.mat.uniforms.uTexel.value.set(1 / size.x, 1 / size.y);
+  renderer.autoClear = false;
+  try { renderer.render(fx.qScene, fx.qCam); } finally { renderer.autoClear = prevAuto; }
 }
 /* The shelf whose lip the identify card is editing (null when the selection is
    anything else). Assigned in setSelected, read by cycleLip further down.
@@ -7979,7 +8023,7 @@ canvas.addEventListener('pointerup', e => {
 const editGroup = new THREE.Group(); editGroup.name = 'edit-overlays'; scene.add(editGroup);
 const SPOT_COLORS = { add: 0xffcf5a, need: 0xff5a5a, hover: 0x5ad67a };
 let spotSpec = null, spotHover = null, flagHelpers = [], carry = null, dragSpec = null, eraser = null, eraseHelper = null, eraseId = null;
-function disposeObj(o) { o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); }); }
+function disposeObj(o) { o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material && !c.isSprite) c.material.dispose(); }); }   // sprite materials share the marker textures
 /* a cell's place in the world comes from a case the scene already holds: 88 mm per column, 28 mm per half row from it.
    Heights are compared as half-rows ABOVE THE MOUNT FRAME (the generator's own normalisation), because the caller's
    grid can differ from this record's (the store's tabletop grid tracks the build; the kit file's does not):
@@ -8017,19 +8061,29 @@ function plusMark(w, h, d, opacity = 0.85) {
 /* A SPOT is a small marker at the centre of the cell it names (Astra: quiet targets, never volumes that overlap and hide
    the build) plus a full-size translucent ghost of the unit that shows only for the hovered or chosen spot. The marker
    is drawn through everything (no depth test) so it is never lost behind a drawer; the ghost is the volume. */
-const SPOT_MARK = 18;
+const SPOT_MARK = 26;   // mm, the marker's world size (it always faces the camera)
+const spotTextures = {};
+function spotTexture(hex) {   // a round orange control with a white plus, drawn once per colour
+  if (spotTextures[hex]) return spotTextures[hex];
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
+  c.beginPath(); c.arc(64, 64, 58, 0, Math.PI * 2); c.fillStyle = '#' + hex.toString(16).padStart(6, '0'); c.fill();
+  c.lineWidth = 6; c.strokeStyle = 'rgba(255,255,255,0.95)'; c.stroke();
+  c.strokeStyle = '#ffffff'; c.lineWidth = 12; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(64, 34); c.lineTo(64, 94); c.moveTo(34, 64); c.lineTo(94, 64); c.stroke();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+  spotTextures[hex] = t; return t;
+}
 function spotBox(w, hh, world, color) {
   const d = Math.max(20, world.depth - 6);
   const spot = new THREE.Group();
   spot.position.set(world.x, world.y, world.z);
-  const marker = new THREE.Mesh(new THREE.BoxGeometry(SPOT_MARK, SPOT_MARK, SPOT_MARK), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false, depthTest: false }));
-  marker.renderOrder = 998; marker.userData.ghost = true; marker.userData.marker = true;
-  marker.add(plusMark(SPOT_MARK, SPOT_MARK, SPOT_MARK, 0.95));
+  const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: spotTexture(color), transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+  marker.scale.set(SPOT_MARK, SPOT_MARK, 1); marker.renderOrder = 998; marker.userData.ghost = true; marker.userData.marker = true;
   const ghost = new THREE.Mesh(new THREE.BoxGeometry(w * 88 - 6, hh * 28 - 6, d), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false }));
   ghost.renderOrder = 997; ghost.userData.ghost = true; ghost.visible = false;
   ghost.add(new THREE.LineSegments(new THREE.EdgesGeometry(ghost.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false })));
   spot.add(marker, ghost);
-  spot.userData.marker = marker; spot.userData.ghost = ghost; spot.userData.ghostShape = true;
+  spot.userData.marker = marker; spot.userData.ghost = ghost;
   return spot;
 }
 /* spec: { spots: [{ x, y, w?, hh?, kind?: 'add' | 'need' }], w, hh, rows, onPick(spot), onChoose?(spot | null) } | null -
@@ -8054,7 +8108,7 @@ function spotStyle() {
     if (!g.userData.spot) continue;
     const sp = g.userData.spot, hov = spotHover === g, chosen = spotChosen === g;
     const col = hov || chosen ? SPOT_COLORS.hover : SPOT_COLORS[sp.kind || 'add'];
-    g.userData.marker.material.color.setHex(col);
+    g.userData.marker.material.map = spotTexture(col);
     g.userData.ghost.material.color.setHex(col);
     g.userData.ghost.visible = hov || chosen;
     g.userData.marker.visible = !(hov || chosen);
@@ -8075,7 +8129,8 @@ function spotAt(e) {
   if (!spotSpec) return null;
   castAt(e);
   editGroup.updateMatrixWorld(true);   // markers added since the last frame have no world matrix yet (the loop idles while hidden)
-  const targets = []; for (const g of editGroup.children) if (g.userData.spot) targets.push(g.userData.marker, g.userData.ghost);
+  // only what is on screen is a target: the marker, or the ghost while it stands in for it (Sol 01a1330b: a hidden ghost is a hit area with no control shown)
+  const targets = []; for (const g of editGroup.children) if (g.userData.spot) targets.push(g.userData.ghost.visible ? g.userData.ghost : g.userData.marker);
   const hits = ray.intersectObjects(targets, false);
   return hits.length ? hits[0].object.parent : null;
 }
@@ -8206,10 +8261,10 @@ let thumbScene = null, thumbCam = null, thumbRT = null;
 function paletteSig() { return Object.keys(manifest.colors || {}).sort().map(k => k + '=' + activeHex(k)).join(',') + '|' + stageTheme + '|' + (useCustom ? 1 : 0); }
 async function renderThumb(opts = {}) {
   if (!build) return null;
-  const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384 } = opts;
+  const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08 } = opts;
   const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
   const sig = paletteSig();
-  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, handle && handle.node, build.buildPlate, sig]);
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, handle && handle.node, build.buildPlate, sig]);
   if (thumbCache.has(key)) return thumbCache.get(key);
   const job = (async () => {
     const gridH = Math.max(1, Math.ceil(hh / 2));
@@ -8247,6 +8302,7 @@ async function renderThumb(opts = {}) {
         if (fp && templates[fp.node]) pos = [c.pos[0], fp.pos[1] + (faceplateHeightOf(fp.node) - handle.h) / 2 - 0.5, fp.pos[2] + nodeDepth(fp.node) / 2 + handle.d / 2];
       }
       const g = templates[node].clone(true);
+      g.userData.node = node;
       g.position.set(pos[0], pos[1], pos[2]);
       const rot = c.rot || [0, c.yaw || 0, 0];
       g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
@@ -8255,7 +8311,12 @@ async function renderThumb(opts = {}) {
       group.add(g);
     }
     thumbScene.add(group); group.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(group);
+    let box = new THREE.Box3().setFromObject(group);
+    if (frame === 'handle') {   // Astra: frame the handle, with just enough plate behind it for context
+      const hb = new THREE.Box3();
+      for (const g of group.children) if (typeByNode[g.userData.node] === 'Handle') hb.expandByObject(g);
+      if (!hb.isEmpty()) { const hs = hb.getSize(new THREE.Vector3()); hb.expandByVector(new THREE.Vector3(hs.x * 0.35 + 6, hs.y * 0.9 + 10, 0)); box = hb; }
+    }
     const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
     const W = size, H = Math.round(size * 3 / 4);
     if (!thumbRT || thumbRT.width !== W || thumbRT.height !== H) {
@@ -8267,7 +8328,7 @@ async function renderThumb(opts = {}) {
     const fovV = THREE.MathUtils.degToRad(thumbCam.fov), fovH = 2 * Math.atan(Math.tan(fovV / 2) * thumbCam.aspect);
     const dir = (view === 'front' ? new THREE.Vector3(0, 0.1, 1) : new THREE.Vector3(0.6, 0.35, 1)).normalize();
     const fitW = view === 'front' ? sz.x : sz.x * 0.85 + sz.z * 0.55;
-    const dist = Math.max((sz.y / 2) / Math.tan(fovV / 2), (fitW / 2) / Math.tan(fovH / 2)) * 1.12 + sz.z / 2;
+    const dist = Math.max((sz.y / 2) / Math.tan(fovV / 2), (fitW / 2) / Math.tan(fovH / 2)) * fit + (frame === 'handle' ? 0 : sz.z / 2);
     thumbCam.position.copy(c).add(dir.multiplyScalar(dist)); thumbCam.lookAt(c); thumbCam.updateMatrixWorld(true);
     const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
     renderer.setRenderTarget(thumbRT); renderer.setClearColor(0x000000, 0); renderer.clear();
@@ -9941,6 +10002,7 @@ function renderLoop(now) {
   const accDrew = !!guardFx('accum', accumFrame);
   if (!accDrew) renderer.render(scene, camera);
   if (!lite) guardFx('ao', compositeAO);   // laid over the finished frame; no composer in the path
+  guardFx('selfx', drawSelOutline);   // the selection silhouette, over everything (phase 3)
   if (settleBench) settleBench.afterFrame({ accDrew, lite });   // the frame's post-render settle state (settle-bench.js)
   // partReady only after a REAL rendered frame exists — posted from inside the
   // loop, not after mount, so the site never drops its poster onto a blank

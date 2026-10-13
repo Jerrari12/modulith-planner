@@ -432,7 +432,7 @@ export function mountBuild(stage, ctx) {
       const curH = stage.currentHandleStyle();
       const shape = (label) => /crystal/i.test(label) ? 'crystal' : /block/i.test(label) ? 'blockbar' : 'deco';
       hs.appendChild(el('div.handles', {}, stage.HANDLE_STYLES.map((h) => el('button.handle.key' + (curH?.node === h.node ? '.on' : ''), { onclick: async () => { await stage.applyHandleStyle(h); await adopt(); } },
-        [preview(el('span.shape.' + shape(h.label), { style: `background:${colors.handle}` }), { fill: 'decor', w: 1, hh: 2, faceStyle: cur.key, handleStyle: h.planner, handle: h, view: 'three' }, 'handle'), h.label]))));
+        [preview(el('span.shape.' + shape(h.label), { style: `background:${colors.handle}` }), { fill: 'decor', w: 1, hh: 2, faceStyle: cur.key, handleStyle: h.planner, handle: h, view: 'three', frame: 'handle', fit: 1.0 }, 'handle'), h.label]))));
       lib.appendChild(hs);
     }
 
@@ -513,7 +513,7 @@ export function mountBuild(stage, ctx) {
     insp.append(
       el('div.head', {}, [el('h2.h2', { text: 'This unit only' }), el('span.idx', { text: `Unit ${idx} of ${s.placed.length}` }), closeBtn]),
       el('div.ident', {}, [
-        el('div.wellbox.well', {}, [preview(glyphEl(kind, 79, 50, { ...colors, front: frontFor(unit.fill) }), { fill: unit.fill, w: unit.w, hh: unit.hh, variant: unit.variant || null, lip: unit.lip || null, view: 'three' }, 'insp')]),
+        el('div.wellbox.well', {}, [preview(glyphEl(kind, 79, 50, { ...colors, front: frontFor(unit.fill) }), { fill: unit.fill, w: unit.w, hh: unit.hh, variant: unit.variant || null, lip: unit.lip || null, view: 'three', fit: 1.0, size: 512 }, 'insp')]),
         el('div.col', {}, [
           el('h3', { text: fill?.label || unit.fill }),
           el('div.dims', { text: `${unit.w}W·${unit.hh / 2}H · inside ${unit.w * 88 - wall.wWall} × ${Math.round((unit.hh / 2) * 56 - wall.hWall)} × ${INSIDE[length] ?? length} mm` }),
