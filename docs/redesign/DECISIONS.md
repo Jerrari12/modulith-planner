@@ -153,3 +153,7 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **The old address forwards the build the browser had open last.** The cutover-redirect branch's script (087c78b) reads the old planner's `gen2-last-build` slot when the address carries no kit and no build, and forwards it as the share-link form; a labels link rides beside it. The one migration the plan had left to a sentence on the page is a mechanism now; the colour stores and the tracker still stay behind (CUTOVER.md).
 - **The golden screenshots still match after phases 3 to 5**: 60 shots (every official kit, cover, a middle step and the end, Very High and Fast), 0 differ. The stage refactors, the hover watch and the label mirror changes moved no pixel of the old viewer's pages.
 
+## 2026-10-13 (keyboard and screen reader)
+
+- **The shell works from the keyboard.** The build switcher's menu opens on Down (or Up) from its chip with an item focused once Recent builds are listed, the arrows walk every row including the delete marks, Home and End jump, Escape closes and returns to the chip, and a rebuild of the menu keeps a keyboard user's place; the toast is a polite live region; the Labels modal and the setup sheet keep Tab inside, take focus on open and give it back on close (`trapTab` in `js/ui/dom.js`). Proved by a keyboard e2e case with real key presses. Terra 01a136de caught an arrow pressed while a click-open's list was still loading: the key now waits for that render.
+

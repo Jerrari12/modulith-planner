@@ -2,7 +2,7 @@
    build lands here on a fresh kit page; the top bar's Mount · Length and Printer chips reopen it at that step. Mount and
    length decide the scene the stage builds at boot (the table, the wall, the rails), so applying them writes the record
    and reloads the page on it - the one boot path the switcher uses too; a printer or name change applies in place. */
-import { el } from './dom.js';
+import { el, trapTab } from './dom.js';
 import { icon } from './icons.js';
 import { layoutRules } from '../rules/layout.js';
 
@@ -57,7 +57,9 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   const box = el('div.glass.sheet');
   veil.appendChild(box);
   (document.getElementById('ws') || document.body).appendChild(veil);   // inside the workspace root: the glass rules are scoped to #ws, and its children take pointer events
-  const close = () => { veil.remove(); document.removeEventListener('keydown', onKey); };
+  const ret = document.activeElement;   // where focus goes back to when the sheet closes
+  const close = () => { veil.remove(); document.removeEventListener('keydown', onKey); if (ret && typeof ret.focus === 'function' && document.contains(ret)) { try { ret.focus(); } catch { /* gone */ } } };
+  trapTab(veil, box);
   const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
   document.addEventListener('keydown', onKey);
   veil.addEventListener('click', (e) => { if (e.target === veil && !fresh) close(); });
@@ -161,5 +163,6 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     else { if (ctx.remount) ctx.remount(); ctx.say('Setup applied.'); }   // the top bar's chips are built at mount: a printer or name change shows after a remount
   }
   render();
+  setTimeout(() => { try { (box.querySelector('input.name') || box.querySelector('button')).focus(); } catch { /* jsdom */ } }, 0);   // focus moves into the dialog
   return { close };
 }

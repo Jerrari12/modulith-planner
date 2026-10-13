@@ -7,7 +7,7 @@
    file, a Label Studio set) or from a #labels-add= link, the set-wide label settings, and exports. Making labels - icons,
    stripes, part layouts, the print plate - stays the Label Studio's job: Make labels / Part Picker open it, and Print labels
    hands it this build's words (its one-way link) until the Studio learns the merged app's address (DECISIONS.md, 2026-10-13). */
-import { el, makeToast } from '../ui/dom.js';
+import { el, makeToast, trapTab } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
@@ -239,6 +239,7 @@ export function mountLabels(stage, ctx) {
   }
   function closeModal() { modal.hidden = true; modal.replaceChildren(); const ret = modalState && modalState.ret; modalState = null; if (ret && typeof ret.focus === 'function' && document.contains(ret)) { try { ret.focus(); } catch { /* gone */ } } }
   modal.addEventListener('click', (e) => { if (e.target === modal && modalState) modalState.onCancel(); });
+  trapTab(modal);
   const modalField = () => modal.querySelector('input.field')?.value || '';
 
   /* ---------------- the panel ---------------- */

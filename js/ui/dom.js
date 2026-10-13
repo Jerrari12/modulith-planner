@@ -18,8 +18,20 @@ export function el(spec, attrs = {}, children = []) {
 }
 
 /* one toast at the bottom of the workspace; say(msg) shows it for 2.6 s */
+/* keep Tab inside a modal: a keydown listener for the dialog element, cycling the focusable elements of `box` (the caller
+   handles Escape). A dialog that moves focus out of the page on Tab is the first thing a keyboard user notices. */
+export function trapTab(dialog, box = dialog) {
+  dialog.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const items = [...box.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter((x) => !x.disabled && !x.hidden && x.offsetParent !== null);
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement);
+    const next = e.shiftKey ? (i <= 0 ? items[items.length - 1] : items[i - 1]) : (i < 0 || i === items.length - 1 ? items[0] : items[i + 1]);
+    e.preventDefault(); next.focus();
+  });
+}
 export function makeToast(root) {
-  const toast = el('div', { id: 'ws-toast', class: 'glass' });
+  const toast = el('div', { id: 'ws-toast', class: 'glass', role: 'status', 'aria-live': 'polite' });
   root.appendChild(toast);
   let t = 0;
   const say = (msg) => { toast.textContent = msg; toast.classList.add('show'); clearTimeout(t); t = setTimeout(() => toast.classList.remove('show'), 2600); };

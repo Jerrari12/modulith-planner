@@ -46,6 +46,7 @@ export function topbar(stage, ctx) {
     const units = build?.placed?.length ?? 0;
     const item = (text, onclick, title = null) => el('button.item', { role: 'menuitem', title, onclick }, [el('span', { text })]);
     async function render() {
+      const had = menu.contains(document.activeElement);   // a keyboard user inside the menu keeps a place after a rebuild
       const list = B ? await B.list() : [];
       const cur = B ? B.entry : null;
       const cap = B ? B.capPending : null;
@@ -77,9 +78,25 @@ export function topbar(stage, ctx) {
         item('Load build file…', () => fileIn.click(), 'A build saved from this planner or the old one, or an official kit file'),
         item('New build', () => { set(false); B && B.newBuild(); }, 'A fresh copy of this kit; this build stays in Recent builds (the setup sheet for mount, length and printer comes later)'),
       ].filter(Boolean));   // replaceChildren would print a null as the word
+      if (had && !renaming) focusItem(0);
     }
-    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) render(); else { renaming = false; confirmId = null; } };
+    const items = () => [...menu.querySelectorAll('button')].filter((x) => !x.disabled && x.offsetParent !== null);
+    const focusItem = (i) => { const all = items(); if (all.length) all[((i % all.length) + all.length) % all.length].focus(); };
+    let rendering = Promise.resolve();   // the open menu's render in flight: a key pressed before Recent builds are listed waits for it (Terra 01a136de)
+    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) { rendering = render(); return rendering; } renaming = false; confirmId = null; return rendering; };
     btn.addEventListener('click', () => set(!open));
+    /* keyboard: Down or Enter on the chip opens with the first item focused; arrows walk the items (the delete marks too),
+       Home and End jump, Escape closes and returns to the chip; a Tab leaves the menu as it would any popup */
+    btn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' || (e.key === 'ArrowUp' && !open)) { e.preventDefault(); const k = e.key; (open ? rendering : set(true)).then(() => focusItem(k === 'ArrowUp' ? -1 : 0)); } });   // render() lists Recent builds first (async)
+    menu.addEventListener('keydown', (e) => {
+      if (e.target.matches('input')) return;   // the rename field keeps its own keys
+      const all = items(), i = all.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') { e.preventDefault(); focusItem(i + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); focusItem(i - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); focusItem(0); }
+      else if (e.key === 'End') { e.preventDefault(); focusItem(-1); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); set(false); btn.focus(); }
+    });
     document.addEventListener('pointerdown', (e) => { if (open && !wrap.contains(e.target)) set(false); }, { signal: ctx.signal });
     wrap.append(btn, menu, fileIn);
     return wrap;

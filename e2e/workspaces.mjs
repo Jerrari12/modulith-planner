@@ -316,6 +316,44 @@ test('the journeys: a share link opens the same build elsewhere, Load build file
   await ctx.close();
 });
 
+test('the keyboard: the switcher menu walks with the arrows and closes on Escape, a modal keeps Tab inside, the setup sheet takes focus', async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1' });
+  // the switcher: Down on the chip opens the menu with the first item focused; arrows walk; Escape closes and returns
+  await page.focus('#ws-switch .chip-btn');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForFunction(() => { const m = document.querySelector('#ws-switch .menu'); return m && !m.hidden && m.contains(document.activeElement); }, null, { timeout: 5000 });
+  const first = await page.evaluate(() => document.activeElement.textContent.trim().slice(0, 20));
+  await page.keyboard.press('ArrowDown');
+  const second = await page.evaluate(() => document.activeElement.textContent.trim().slice(0, 20));
+  assert.notEqual(second, first, 'ArrowDown moved to the next item');
+  await page.keyboard.press('End');
+  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /New build/, 'End reaches the last item');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('#ws-switch .menu').hidden && document.activeElement === document.querySelector('#ws-switch .chip-btn'), null, { timeout: 5000 });
+  assert.equal(await page.evaluate(() => document.querySelector('#ws-switch .chip-btn').getAttribute('aria-expanded')), 'false');
+  // the toast is a live region
+  assert.equal(await page.evaluate(() => document.getElementById('ws-toast').getAttribute('aria-live')), 'polite');
+  // a modal: Tab cycles inside it, Escape closes it and focus goes back where it was
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await btn(page, 'Type a label', '#ws-labels').focus();
+  await btn(page, 'Type a label', '#ws-labels').press('Enter');
+  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 5000 });
+  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => document.getElementById('ws-modal').contains(document.activeElement)), 'three Tabs later focus is still inside the modal');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.getElementById('ws-modal').hidden, null, { timeout: 5000 });
+  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Type a label/, 'focus returned to the opener');
+  // the setup sheet: focus lands on the name field, Tab stays inside, Escape closes and returns
+  await page.evaluate(() => { window.__GEN2_CTX__().openSetup('mount'); });
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-setup input.name'), null, { timeout: 5000 });
+  for (let i = 0; i < 12; i++) await page.keyboard.press('Tab');
+  assert.ok(await page.evaluate(() => document.getElementById('ws-setup').contains(document.activeElement)), 'twelve Tabs later focus is still inside the sheet');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('ws-setup'), null, { timeout: 5000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build rebuilds on the record', async () => {
   const { ctx, page } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
