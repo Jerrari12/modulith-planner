@@ -168,7 +168,29 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   await settle(page, 800);
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels.length), 4, 'the link added one');
   assert.ok(await page.evaluate(() => /^#build=/.test(location.hash) && !/labels-add/.test(location.hash)), 'the hash keeps the build and drops the link');
+  // LABELS KEPT ASIDE: a link of this build made before its labels (no list, no mirror) opens in the same browser; the Recent
+  // entry's labels are offered back and Restore puts the two placed ones back on their drawers
+  const id = await page.evaluate(() => window.__GEN2_STORE__.state.buildId);
+  const saved = () => page.evaluate((want) => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds').objectStore('builds').get(want); t.onsuccess = () => r(!!(t.result && t.result.record.labelList && t.result.record.labelList.labels.length === 4)); t.onerror = () => r(false); }; q.onerror = () => r(false); }), id);
+  for (let i = 0; i < 60 && !(await saved()); i++) await settle(page, 250);
+  assert.ok(await saved(), 'the autosave holds the four labels');
+  const bare = await page.evaluate(() => { const rec = JSON.parse(JSON.stringify(window.__GEN2_STORE__.state)); delete rec.labelList; delete rec.labelAssign; for (const u of rec.placed) { delete u.label; delete u.labelBadge; } return btoa(unescape(encodeURIComponent(JSON.stringify(rec)))); });
+  const assigned = await page.evaluate(() => window.__GEN2_STORE__.state.labelAssign);
+  const p2 = await ctx.newPage();
+  const errors2 = []; p2.on('pageerror', (e) => errors2.push('pageerror: ' + e.message)); p2.on('console', (m) => { if (m.type() === 'error') errors2.push('console: ' + m.text()); });
+  await p2.goto(`${base}/index.html?ws=labels&debug=1#build=${bare}`, { waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(p2);
+  assert.equal(await p2.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length), 0, 'the link arrived without labels');
+  await p2.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 });
+  assert.match(await text(p2, '#ws-labels .banner.copy span'), /kept 4 labels/);
+  await btn(p2, 'Restore labels', '#ws-labels .banner.copy').click();
+  await p2.waitForFunction(() => window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels.length === 4, null, { timeout: 30_000 });
+  assert.deepEqual(await p2.evaluate(() => window.__GEN2_STORE__.state.labelAssign), assigned, 'the two placed labels are back on their drawers');
+  assert.equal(await p2.locator('#ws-labels .banner.copy').count(), 0, 'the offer is over');
+  assert.equal(await p2.evaluate(() => window.__GEN2_VIEWER__.build.placed.filter((u) => u.label).length), 2, 'the stage wears them again');
+  assert.equal(await p2.evaluate(() => localStorage.getItem('gen2-label-copies')), null, 'the copy is spent');
   assert.deepEqual(clean(errors), []);
+  assert.deepEqual(clean(errors2), []);
   await ctx.close();
 });
 

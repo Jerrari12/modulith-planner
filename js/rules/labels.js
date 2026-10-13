@@ -76,6 +76,39 @@ export function applyResult(L, b, r) {
   writeMirror(L, b);
 }
 
+/* A COPY OFFERED BACK (js/state/label-copies.js): the labels this browser kept for a build that came back without them. An
+   assignment is kept only where the drawer is still there in the cell the copy recorded, then the copy is reconciled with the
+   board by the older-tool rules (never a deletion, never an edit in place): a drawer the newer link cleared sends its label to
+   the tray, a drawer it renamed gets a new label and the original waits in the tray. The build on the board must have no list
+   of its own: a restore never merges two lists. */
+export function restoreCopy(L, b, copy) {
+  if (!copy || !copy.list || !Array.isArray(copy.list.labels) || !copy.list.labels.length) return refuse('no-copy', 'There is no copy to restore.');
+  if (labelsOf(b).length) return refuse('has-labels', 'This build has labels of its own now; the copy is not merged over them.');
+  // the list as the reconcile will clean it: an assignment to a label the cleaning drops (an id not of the format) is not kept,
+  // or its planted mirror below would mint a duplicate from the words
+  const byId = new Map(L.cleanLabelList(copy.list, { inBuild: true }).labels.map((l) => [l.id, l]));
+  const keep = {};
+  for (const [k, id] of Object.entries(copy.assign || {})) {
+    const u = (b.placed || []).find((x) => String(x.id) === k);
+    const g = copy.geom && copy.geom[k];
+    if (u && byId.has(id) && Array.isArray(g) && u.x === g[0] && u.y === g[1] && u.w === g[2] && u.hh === g[3]) keep[k] = id;
+  }
+  // a kept drawer with no words of its own shows the copy's mirror, so the older-tool rules read it as unchanged (a link made
+  // before the labels carries no mirror at all; without this every kept assignment would count as "cleared")
+  const units = (b.placed || []).map((u) => {
+    const l = keep[u.id] ? byId.get(keep[u.id]) : null;
+    if (!l || L.cleanText(u.label)) return u;
+    const m = L.mirrorOfLabel(l); if (!m) return u;
+    return { ...u, label: m.label, labelBadge: m.labelBadge || undefined };
+  });
+  const r = L.reconcile(units, copy.list, keep);
+  if (!r.list.labels.length) return refuse('nothing', 'Nothing in the copy can be restored.');
+  const total = r.list.labels.length, on = new Set(Object.values(r.assignments)).size;
+  const moved = r.changes.filter((ch) => ch.kind === 'cleared' || ch.kind === 'edited').length;
+  return done({ list: r.list, assignments: r.assignments }, `restored ${total} ${plural(total, 'label', 'labels')}`,
+    `Restored ${total} ${plural(total, 'label', 'labels')} (${on} on drawers).` + (moved ? ` ${moved} ${plural(moved, 'drawer', 'drawers')} changed since kept their words; the earlier labels are in your list.` : ''));
+}
+
 /* ---- the operations: { ok: true, list, assignments, desc, msg, pick? } or { ok: false, reason, msg } ------------- */
 const quote = (l, caps) => { const s = labelShort(l); return s ? `“${caps ? s.toUpperCase() : s}”` : 'the icon-only label'; };
 const plural = (n, one, many) => (n === 1 ? one : many);

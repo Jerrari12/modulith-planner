@@ -12,6 +12,7 @@ import { createStore } from './state/store.js';
 import { openBuilds, entryOf, hashOf, fileOf, fileName, parseBuildFile, cleanName } from './state/builds.js';
 import { isPhone, PHONE_MAX } from './ui/phone.js';
 import { openSetup } from './ui/setup.js';
+import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog, a classic-script lexical global
@@ -58,6 +59,13 @@ export async function boot() {
      the planner's slot) by putting its record in the address before the stage boots from it; `?new=1` skips that. */
   const builds = await openBuilds();
   let entry = null;   // the Recent entry of the build on this page, once known
+  /* LABELS KEPT ASIDE (js/state/label-copies.js): a link or a file can carry a build this browser already holds, without its
+     labels (made before they were added, or by the old planner); the autosave would then replace the Recent entry, labels and
+     all. The entry's labels are copied aside first and the Labels workspace offers them back while the board has none. */
+  const copies = safeStorage((() => { try { return localStorage; } catch { return null; } })());
+  const hasLabels = (rec) => !!(rec && rec.labelList && Array.isArray(rec.labelList.labels) && rec.labelList.labels.length);
+  const LINKED = /(^#|&)build=/.test(location.hash);   // a record arrived in the address (not the reopen below, which writes it)
+  let labelCopy = null, hadLabels = false;
   if (FRESH || SETUP) { const q = new URLSearchParams(location.search); q.delete('new'); q.delete('setup'); history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`); }
   else if (!/(^#|&)build=/.test(location.hash) && !KIT) {
     const cur = await builds.get(builds.currentId); const rec = cur ? cur.record : builds.readSlot();
@@ -95,6 +103,8 @@ export async function boot() {
       builds.currentId = entry.id;
       builds.writeSlot(rec);
       document.title = entry.name;
+      if (hadLabels && !hasLabels(rec)) { dropLabels(copies, rec.buildId); labelCopy = null; }   // the last label removed here: nothing to offer back
+      hadLabels = hasLabels(rec);
       if (!persisted) { persisted = true; builds.persist(); }
     }).catch((e) => console.warn('[builds] save failed', e));
     return saving;
@@ -120,6 +130,9 @@ export async function boot() {
   if (KIT && location.hash.startsWith('#build=')) { try { kitTitle = (await (await fetch(`builds/${encodeURIComponent(KIT)}.json`)).json()).title || kitTitle; document.title = kitTitle; } catch { /* the hash's own name stands */ } }
   if (!entry && typeof store.state.buildId === 'string') entry = await builds.get(store.state.buildId);   // our own build, reopened from the address
   if (entry) { document.title = entry.name; builds.currentId = entry.id; builds.writeSlot(entry.record); }   // the slot follows what is open, not only what is edited
+  hadLabels = hasLabels(store.state);
+  if (LINKED && entry && !hadLabels && hasLabels(entry.record)) rememberLabels(copies, entry.id, labelCopyOf(entry.record, entry.savedAt));
+  if (!hadLabels && typeof store.state.buildId === 'string') labelCopy = heldLabels(copies, store.state.buildId);
   setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
   const ctx = {
     setMode,
@@ -150,6 +163,7 @@ export async function boot() {
       async loadFile(file) {
         const got = parseBuildFile(await file.text()); if (got.problem) return got.problem;
         const prev = typeof got.record.buildId === 'string' ? await builds.get(got.record.buildId) : null;
+        if (prev && !hasLabels(got.record) && hasLabels(prev.record)) rememberLabels(copies, prev.id, labelCopyOf(prev.record, prev.savedAt));   // offered back after the reload
         const e = entryOf(got.record, { name: got.name || (prev ? prev.name : null) || file.name.replace(/\.json$/i, ''), prev });
         const r = await builds.put(e); if (!r.ok) { capPending = { drop: r.drop, snap: JSON.stringify(e.record), name: e.name }; return 'cap'; }
         builds.currentId = e.id; builds.writeSlot(e.record); go({ ws: wsNow() }, hashOf(e.record)); return null;
@@ -162,6 +176,14 @@ export async function boot() {
       capKeep() { capPending = null; },
     },
     /* the setup sheet: mount, length, printer and the name; `fresh` = a New build (mount and length reload the page on the record) */
+    /* the labels kept aside for this build (null when none, or once decided): the Labels workspace offers them back */
+    labelCopy: {
+      get copy() { return labelCopy; },
+      // the copy as the storage holds it NOW: another tab may have restored or discarded it since this page read it (Sol 01a136b1)
+      take() { labelCopy = typeof store.state.buildId === 'string' ? heldLabels(copies, store.state.buildId) : null; return labelCopy; },
+      done() { if (labelCopy && typeof store.state.buildId === 'string') dropLabels(copies, store.state.buildId, labelCopy.savedAt); labelCopy = null; },   // restored or discarded: this copy only
+      later() { labelCopy = null; },   // Not now: this page only; the next load offers again
+    },
     openSetup: (step, fresh = false) => openSetup(stage, { store, builds: ctx.builds, say: toast, remount: () => ctx.remount() }, { step, fresh }),
     remount() { if (current) { const ws = current.name; current.unmount(); current = { name: ws, ...WORKSPACES[ws](stage, ctx) }; } },
     switchTo(ws) {
@@ -178,6 +200,7 @@ export async function boot() {
   const labelsLink = /(^#|&)labels-(add=|open)/.test(location.hash);
   if (/(^#|&)labels-open(&|$)/.test(location.hash)) history.replaceState(null, '', location.href.replace(/[#&]labels-open(?=&|$)/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
   ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
+  if (labelCopy && current.name !== 'labels') toast(`Opened without its ${labelCopy.n} ${labelCopy.n === 1 ? 'label · Labels can bring it back.' : 'labels · Labels can bring them back.'}`);
   if (SETUP) ctx.openSetup('mount', FRESH);   // New build: the sheet opens over the fresh kit
   /* crossing the phone breakpoint re-mounts the workspace in the other chrome (its memo keeps the selection and step) */
   let wasPhone = isPhone(), resizeT = 0;

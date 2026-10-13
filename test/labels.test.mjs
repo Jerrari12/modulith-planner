@@ -161,3 +161,32 @@ test('exports: the list without assignments, the text in drawer order', () => {
   assert.deepEqual(doc.style, { capMm: 4, allCaps: false });
   assert.equal(R.exportText(L, b), 'Drawer 3: Bolts\n\nReady to place:\nSpare\n');
 });
+
+test('a kept copy comes back: assignments stay where the drawer is still the same cell, a moved drawer sends its label to the list', () => {
+  const had = withLabels(['Screws', 'Nuts', 'Bolts']);
+  const [s, nn] = ids(had);
+  apply(had, R.place(L, had, 1, s, null, 'drawer'));
+  apply(had, R.place(L, had, 2, nn, null, 'drawer'));
+  const copy = { savedAt: 5, list: had.labelList, assign: had.labelAssign, geom: { 1: [0, 0, 1, 2], 2: [1, 0, 1, 2] }, n: 3 };
+  // the build comes back without labels, drawer 2 now sits elsewhere (a link from another board reused its id)
+  const back = build({ placed: [unit(1, 0, 0), unit(2, 3, 3), unit(3, 0, 1)] });
+  const r = R.restoreCopy(L, back, copy);
+  assert.equal(r.ok, true, r.msg);
+  assert.equal(r.list.labels.length, 3, 'every label is back');
+  assert.equal(r.assignments[1], s, 'drawer 1 keeps its label');
+  assert.equal(r.assignments[2], undefined, 'the moved drawer is not trusted with its old label');
+  R.applyResult(L, back, r);
+  assert.equal(back.placed[0].label, 'Screws');
+  assert.equal(back.placed[1].label, undefined);
+  assert.match(r.msg, /Restored 3 labels \(1 on drawers\)/);
+});
+
+test('a kept copy is refused over a build that has labels of its own, and when it holds nothing', () => {
+  const b = withLabels(['Own']);
+  const copy = { savedAt: 5, list: { format: L.FORMAT, version: L.VERSION, labels: [{ id: 'x1', text: 'Kept' }] }, assign: {}, geom: {}, n: 1 };
+  assert.equal(R.restoreCopy(L, b, copy).ok, false);
+  assert.equal(R.restoreCopy(L, b, copy).reason, 'has-labels');
+  assert.equal(R.restoreCopy(L, build(), null).reason, 'no-copy');
+  assert.equal(R.restoreCopy(L, build(), { ...copy, list: { ...copy.list, labels: [] } }).reason, 'no-copy');
+});
+

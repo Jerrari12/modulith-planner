@@ -341,6 +341,24 @@ export function mountLabels(stage, ctx) {
       last ? el('button.key.sm', { title: 'Undo: ' + last.desc, onclick: undoLabel }, [icon('arrow-counter-clockwise', { size: 16 }), 'Undo']) : null,
     ]));
     if (last) panel.appendChild(el('p.last', { text: 'Last change: ' + last.desc }));
+    // labels kept aside for this build (a link or a file brought it back without them): offered while the board has none
+    const kept = ctx.labelCopy && ctx.labelCopy.copy;
+    if (kept && !labels.length) {
+      const k = kept.list.labels.filter((l) => L.assignable(l)).length || kept.n;
+      let when = 'earlier'; try { when = new Date(kept.savedAt).toLocaleString(); } catch { /* an odd clock */ }
+      // the copy is re-read at the moment of the choice: another tab may have restored or discarded it meanwhile
+      const gone = () => { status('The kept labels are gone: another tab restored or discarded them.', true); renderAll(); };
+      const restore = () => { const live = ctx.labelCopy.take(); if (!live) { gone(); return; } const r = R.restoreCopy(L, S(), live); if (labelCommit(r, 'labels-restore')) ctx.labelCopy.done(); };
+      const discard = () => openModal({ title: `Discard the ${n(k, 'kept label')}?`, body: ['They cannot be brought back afterwards.'], ok: 'Discard', onOk: () => { closeModal(); if (!ctx.labelCopy.take()) { gone(); return; } ctx.labelCopy.done(); status('The kept labels were discarded.'); renderAll(); }, onCancel: () => closeModal() });
+      panel.appendChild(el('div.banner.copy', { role: 'status' }, [
+        el('span', { text: `This build came back without its labels. This browser kept ${n(k, 'label')} from ${when}.` }),
+        el('div.btns', {}, [
+          el('button.key.sm.on', { onclick: restore }, [icon('arrow-counter-clockwise', { size: 16 }), 'Restore labels']),
+          el('button.key.sm', { text: 'Not now', onclick: () => { ctx.labelCopy.later(); renderAll(); } }),
+          el('button.key.sm', { text: 'Discard', onclick: discard }),
+        ]),
+      ]));
+    }
     if (picked) panel.appendChild(el('div.banner', { role: 'status' }, [el('span', { text: `Place ${quote(picked)} · tap a drawer` }), el('button.key.sm', { text: 'Done placing', onclick: () => armPlacing(null) })]));
     // no label faceplate: the callout (the spec: never hidden or greyed out)
     if (!faceOk) {
