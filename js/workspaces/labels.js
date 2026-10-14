@@ -432,6 +432,9 @@ export function mountLabels(stage, ctx) {
   }
   function detail(l) {
     const it = l.hardware;
+    // words typed over a part label: the part's own words stay in view beside them, so a part re-sent with another size is
+    // not hidden behind the old words (Astra, 2026-10-13)
+    if (it && typeof l.text === 'string' && l.text !== R.itemWords(it).slice(0, L.TEXT_MAX) && R.itemWords(it)) return `Part: ${R.itemWords(it)}`;
     if (it && Array.isArray(it.attributes)) { const m = it.attributes.map((a) => (a && typeof (a.meaning || a.text) === 'string' ? (a.meaning || a.text) : '')).filter(Boolean).slice(0, 2); if (m.length) return m.join(' · '); }
     if (R.isPartLabel(l)) return 'From the part record';
     const b = L.cleanBadge(l.badge, { svg: true });

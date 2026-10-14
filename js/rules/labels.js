@@ -269,7 +269,7 @@ export function addPartItems(L, b, items) {
   const byPart = new Map();
   for (const l of base.list.labels) { const id = l.hardware && typeof l.hardware.id === 'string' ? l.hardware.id : null; if (id && !byPart.has(id)) byPart.set(id, l); }
   const fresh = [], updated = [], at = new Map();
-  let skipped = 0;
+  let skipped = 0, kept = 0;
   for (const it of Array.isArray(items) ? items : []) {
     if (!it || typeof it !== 'object' || it.schema !== L.HW_ITEM || typeof it.id !== 'string') { skipped++; continue; }
     const text = itemWords(it).slice(0, L.TEXT_MAX);
@@ -282,6 +282,7 @@ export function addPartItems(L, b, items) {
       if (!c) { skipped++; continue; }
       for (const k of Object.keys(have)) delete have[k];   // the same object (its place in the list), the cleaned contents only
       Object.assign(have, c);
+      if (own) kept++;
       if (!updated.includes(have.id)) updated.push(have.id);
       continue;
     }
@@ -294,7 +295,7 @@ export function addPartItems(L, b, items) {
   if (!added && !updated.length) return refuse('none', skipped ? 'None of these part labels could be read.' : 'There were no part labels to add.');
   const parts = [];
   if (added) parts.push(`Added ${added} part ${plural(added, 'label', 'labels')}`);
-  if (updated.length) parts.push(`${added ? 'updated' : 'Updated'} ${updated.length} already in the list`);
+  if (updated.length) parts.push(`${added ? 'updated' : 'Updated'} ${updated.length} already in the list` + (kept ? ` (your own words kept on ${kept})` : ''));
   const desc = parts.join(', ');
   return done(r.state, desc, desc + (skipped ? `; ${skipped} could not be read` : '') + '.', { pick: null, added: r.added, updated, skipped });
 }

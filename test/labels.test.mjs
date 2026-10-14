@@ -233,6 +233,7 @@ test('a Part Picker row sent again keeps words typed by hand over the part’s o
   const after = R.labelById(b, l.id);
   assert.equal(after.text, 'Short M4s', 'the hand-typed words stay');
   assert.equal(after.hardware.fields[1], '12', 'the record is the new one');
+  assert.match(r.msg, /your own words kept on 1/);
   // two rows for the same screw are two labels: the row is the identity, not the size
   apply(b, R.addPartItems(L, b, [part('p10', ['M4', '12']), part('p11', ['M4', '12'])]));
   assert.equal(R.labelsOf(b).filter((x) => x.hardware && x.hardware.fields.join() === 'M4,12').length, 3);
