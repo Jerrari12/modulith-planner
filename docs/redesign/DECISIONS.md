@@ -238,3 +238,21 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **The plate's Download verified** (Astra, relayed by Joey: "Download enabled" is not the exported file): the same
   headless run downloaded `edgelabels.3mf` from the plate on the domain and from the standalone Studio with the same one
   label at the same default settings; the two files are byte-identical (71,946 bytes).
+
+## 2026-10-14 (Joey's hands-on pass: the Part Picker modal's scroll)
+
+- **Found by Joey**: in the Part Picker modal the summary column was "a scroll within a scroll" and its bottom could not
+  be reached. Cause: `#side` is sticky with its own scroll (`max-height: calc(100vh - 24px)`), so its last rows sat under
+  the embed's pinned "Add … to the planner" bar, and the wheel scrolled the column or the page by where the pointer was.
+- **Fixed in the Picker** (its repo 7b83b8d8; Terra 01a13c10, its one finding discarded as wrong): in an embed
+  (`html.embed`, the Studio's sheet and the planner's modal) `#side` flows with the page. The standalone Picker keeps
+  its sticky column. Republished into the Studio (`planner-plate` 75b4eaad).
+- **Deployed** on Joey's go: public main a781fd5e -> 85fd350f (a cherry-pick of 75b4eaad; all 17 Studio test files
+  pass); the live `parts/SOURCE.json` names 7b83b8d8.
+- **Checked live** on planner.modulith.systems (`?ws=labels&debug=1`, a 1440 × 900 viewport, so the modal shows both columns):
+  the wheel over the summary column scrolls the whole frame, with one scrollbar; the column's last controls (Copy list
+  as text, Export/Import JSON, Clear all, the label-colours menu) sit fully above the pinned bar; the builder's last
+  section clears the bar too. Opened as a page of its own, the Picker keeps the sticky column.
+- **The trade-off, for the flow review**: the summary column, and its Queue button with it, no longer follows the page
+  down in an embed; from the lower builder sections (lengths, finish, name) the Queue button is above the fold. This
+  belongs with Joey's other Picker frictions (Queue then Add as two steps, density, queueing a part with no size).
