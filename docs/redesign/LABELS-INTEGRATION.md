@@ -105,9 +105,16 @@ capabilities, then named commands (the plan's "host commands independent of the 
 - **Found on the way**: the Studio page already had a `postToPlanner` (the tab link's, to the opener); a same-named embed
   sender was hoisted over by it and the `ready` went to a null opener. The embed sends through `plateSend`, and a test pins
   every embed function to one declaration.
+- **The print preference** (added the same day, DECISIONS.md "the stripe on part labels"): the stripe position (or Off) and
+  the screw-and-nut drawings are the PRINTER's choice, kept per browser by the planner (never the record), shown under
+  Label settings and live on the plate; the snapshot carries them in the document's `output` bag (`hw-band`, `hw-profile`)
+  and the plate's inputs send a `setting { id, value, rev, buildId }` back (capability `setting/1`). A plate-originated
+  change keeps the rev (the Studio already holds that state) and echoes no snapshot. This is the one thing the read-only
+  plate edits, and it is not label content.
 - **Recorded gaps**: the Studio is dark only, so a light planner shows a dark plate (the plan's "takes the planner's theme"
-  is not met in B1); stripes are not in the shared list format, so none show on the plate (none are lost either); the 3D
-  plate does not highlight the selected label, only its row; the stage keeps rendering under the frame.
+  is not met in B1); stripes made in the standalone Studio are not in the shared list format, so none show on the plate
+  (none are lost either); the 3D plate does not highlight the selected label, only its row; the stage keeps rendering
+  under the frame.
 - **The seam the editable B builds on** (Sol): the Studio's snapshot handler is "apply the committed state"; the editable
   step adds a draft layer over it (jobId, baseRev, draft storage, Apply, Discard, stale) and must gate this handler, and a
   build switch, so a draft is never erased by a planner update. The revision must then become build-scoped and survive a

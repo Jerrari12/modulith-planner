@@ -110,6 +110,31 @@ test('selected: only a label of this build at this rev counts; a late answer fro
   assert.equal(P.readSelected({ gen2plate: 'snapshot' }, ctx), null);
 });
 
+test('the print preference: cleaned to the Studio\'s defaults, sent as the Studio\'s input ids, part of the signature and the snapshot', () => {
+  assert.deepEqual(P.cleanPrint(null), { band: 'bottom', drawings: true });
+  assert.deepEqual(P.cleanPrint({ band: 'off', drawings: false }), { band: 'off', drawings: false });
+  assert.deepEqual(P.cleanPrint({ band: 'sideways', drawings: 'yes' }), { band: 'bottom', drawings: true }, 'unknown values fall back');
+  assert.deepEqual(P.printOutput({ band: 'end' }), { 'hw-band': 'end', 'hw-profile': true });
+  const b = withLabels(['A']);
+  assert.notEqual(P.labelSig(b, { band: 'off' }), P.labelSig(b, null), 'the stripe choice is part of the plate');
+  assert.equal(P.labelSig(b, { band: 'bottom', drawings: true }), P.labelSig(b, null), 'the defaults are the defaults');
+  const { msg } = P.snapshot(L, b, { session: SESSION, rev: 1, selected: null, print: { band: 'off', drawings: false } });
+  assert.deepEqual(msg.doc.output, { 'hw-band': 'off', 'hw-profile': false });
+  assert.deepEqual(P.snapshot(L, b, { session: SESSION, rev: 1, selected: null }).msg.doc.output, { 'hw-band': 'bottom', 'hw-profile': true }, 'no preference given: the defaults');
+});
+
+test('setting: a plate input the visitor changed, honoured for this build at this rev; anything else is ignored', () => {
+  const ctx = { rev: 2, buildId: 'buildaaaaaaa' };
+  const m = (o) => ({ gen2plate: 'setting', v: 1, session: SESSION, rev: 2, buildId: 'buildaaaaaaa', ...o });
+  assert.deepEqual(P.readSetting(m({ id: 'hw-band', value: 'off' }), ctx), { band: 'off' });
+  assert.deepEqual(P.readSetting(m({ id: 'hw-profile', value: false }), ctx), { drawings: false });
+  assert.equal(P.readSetting(m({ id: 'hw-band', value: 'diagonal' }), ctx), null, 'an unknown position');
+  assert.equal(P.readSetting(m({ id: 'hw-profile', value: 'off' }), ctx), null, 'drawings is a boolean');
+  assert.equal(P.readSetting(m({ id: 'bed-preset', value: 'x' }), ctx), null, 'a printer pref is the Studio\'s own, not relayed');
+  assert.equal(P.readSetting(m({ id: 'hw-band', value: 'off', rev: 1 }), ctx), null, 'an older rev');
+  assert.equal(P.readSetting(m({ id: 'hw-band', value: 'off', buildId: 'buildbbbbbbb' }), ctx), null, 'another build');
+});
+
 test('the hello and select messages carry the key, the version and the session', () => {
   assert.deepEqual(P.helloMessage(SESSION), { gen2plate: 'hello', v: 1, session: SESSION });
   assert.deepEqual(P.selectMessage(SESSION, 'labelaaaaaaa', 'buildaaaaaaa'), { gen2plate: 'select', v: 1, session: SESSION, id: 'labelaaaaaaa', buildId: 'buildaaaaaaa' });

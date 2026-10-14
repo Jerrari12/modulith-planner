@@ -256,3 +256,21 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **The trade-off, for the flow review**: the summary column, and its Queue button with it, no longer follows the page
   down in an embed; from the lower builder sections (lengths, finish, name) the Queue button is above the fold. This
   belongs with Joey's other Picker frictions (Queue then Add as two steps, density, queueing a part with no size).
+
+## 2026-10-14 (the stripe on part labels: whose setting it is)
+
+- **Joey's question** (hands-on pass): a user with fewer than three filament colours needs to turn the stripe (the
+  thread-system colour and the material patch) off; where would that control feel natural? Sol 01a13c2a reviewed five
+  candidate places (the planner's Label settings; the Label plate only; per part in the Picker; a printer-capability
+  question at setup; the Colors workspace) and recommended the Label settings as the source of truth with an EDITABLE,
+  synchronized control on the plate; a printer-capability answer only as a suggestion (it misleads when printers are
+  switched); and warned that saving the choice with the build makes the sender's printer the recipient's start.
+- **The decision**: it is the PRINTER'S choice, not the build's. The planner keeps it per browser (localStorage
+  `gen2-label-print`: the stripe position or Off, and whether screws and nuts are drawn), like the quality tier; never in
+  the record, so a share link carries no stripe choice and the record's field list (pinned to the old planner by the drift
+  check) is untouched. It shows in the Labels panel under Label settings ("Printing part labels": Part label stripe, Screw
+  and nut drawings, a line saying what Off means) and on the Label plate, whose own Stripe position and drawings inputs
+  stay live and send a `setting` message back; the planner sends it to the Studio in the list document's `output` bag under
+  the Studio's input ids, so a downloaded list carries it too. Verified from the code that Off removes the material patch
+  with the band (the patch is a piece of the band), so Off is two filaments.
+- **Not done**: a printer-capability suggestion (Sol's D); the planner does not know a printer's colour count.

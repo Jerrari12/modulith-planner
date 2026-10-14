@@ -490,6 +490,24 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   await frame.locator(`#labels .row[data-label-id="${screws}"] .utag`).waitFor({ state: 'detached', timeout: 10_000 });
   assert.equal(await frame.locator('#labels .row[data-label-id]').count(), 2, 'still both labels');
   assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().log.filter((k) => k === 'ready').length), 1, 'the same frame: no second hello answered');
+  // the print preference (the stripe): Off in the panel's Label settings reaches the plate's own stripe input, a change on the
+  // plate comes back to the panel and this browser's preference; neither is the build's record
+  await page.locator('#ws-labels details.settings summary').click();
+  await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'off');
+  await settle(page, 600);
+  assert.equal(await frame.locator('#hw-band').evaluate((el) => el.value), 'off', 'the plate follows the panel');
+  assert.match(await text(page, '#ws-labels details.settings summary'), /no stripe/);
+  await frame.locator('#hw-band').selectOption('end');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'end', null, { timeout: 5000 });   // the plate's change is the browser's preference now
+  assert.equal(await page.locator('#ws-labels select[aria-label="Part label stripe"]').evaluate((el) => el.value), 'end', 'and the panel shows it');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__GEN2_STORE__.state).includes('hw-band')), false, 'never in the record');
+  await settle(page, 400);
+  assert.equal(await frame.locator('#hw-band').evaluate((el) => el.value), 'end', 'no snapshot echoed the old value back over the plate');
+  await frame.locator('#hw-band').selectOption('wedge');   // a second change from the plate still carries the current rev (Sol 01a13c32)
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'wedge', null, { timeout: 5000 });
+  await frame.locator('#hw-profile').setChecked(false);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').drawings === false, null, { timeout: 5000 });
+  assert.equal(await page.locator('#ws-labels [aria-label="Screw and nut drawings"] .seg.on').textContent(), 'Off', 'the panel shows the drawings off');
   // the toggle keeps the frame; the dock's Print labels shows the plate again
   await page.locator('#ws-labels .track.view button:text-is("On build")').click();
   await settle(page, 200);

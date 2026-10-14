@@ -32,10 +32,32 @@ export function canon(v) {
 export function hashOf(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + s.length; }
 const bytesOf = (s) => (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(s).length : unescape(encodeURIComponent(s)).length);
 
+/* THE PRINT PREFERENCE: whether part labels print a STRIPE (the thread-system colour, with the material patch at its start:
+   two more filaments) and where, and whether screws and nuts are drawn. A printer's choice, not the build's (Sol 01a13c2a:
+   a build shared with a two-colour printer must not carry the sender's stripe), so it is kept per browser like the quality
+   tier, never in the record or a share link. It reaches the Studio in the list document's `output` bag under the Studio's
+   own input ids, and the Studio's plate inputs edit it back through `setting`. The defaults are the Studio's. */
+export const BANDS = Object.freeze(['bottom', 'end', 'wedge', 'off']);
+export const PRINT_DEFAULTS = Object.freeze({ band: 'bottom', drawings: true });
+export const PRINT_KEY = 'gen2-label-print';
+export function cleanPrint(p) {
+  const o = { ...PRINT_DEFAULTS };
+  if (isObj(p)) { if (BANDS.includes(p.band)) o.band = p.band; if (typeof p.drawings === 'boolean') o.drawings = p.drawings; }
+  return o;
+}
+export const printOutput = (p) => { const c = cleanPrint(p); return { 'hw-band': c.band, 'hw-profile': c.drawings }; };
+/* the Studio's `setting` (a plate input the visitor changed): the print patch it means, for THIS build at THIS rev; null otherwise */
+export function readSetting(d, { rev, buildId }) {
+  if (!isObj(d) || d[KEY] !== 'setting' || d.rev !== rev || d.buildId !== buildId) return null;
+  if (d.id === 'hw-band') return BANDS.includes(d.value) ? { band: d.value } : null;
+  if (d.id === 'hw-profile') return typeof d.value === 'boolean' ? { drawings: d.value } : null;
+  return null;
+}
+
 /* THE LABEL-RELEVANT STATE (Astra: a cabinet move must not count): the build's identity, the faceplate, the label style, the
-   list, the assignments, and the ORDER of the drawers (their numbers on the plate's tags: a drawer added, removed or moved
-   past another renumbers the rest - Sol 01a13a10). Two states with one signature show the same plate. */
-export const labelSig = (b) => hashOf(canon({ build: b.buildId, face: b.faceStyle, style: b.labelStyle || null, list: b.labelList || null, assign: b.labelAssign || null, order: drawers(b).map((u) => u.id) }));
+   list, the assignments, the ORDER of the drawers (their numbers on the plate's tags: a drawer added, removed or moved
+   past another renumbers the rest - Sol 01a13a10), and the print preference. Two states with one signature show the same plate. */
+export const labelSig = (b, print) => hashOf(canon({ build: b.buildId, face: b.faceStyle, style: b.labelStyle || null, list: b.labelList || null, assign: b.labelAssign || null, order: drawers(b).map((u) => u.id), print: cleanPrint(print) }));
 
 /* the label type the plate lays out: the faceplate's, or null when the faceplate takes no printed labels */
 export const plateType = (b) => (faceCarriesLabels(b) ? (b.faceStyle === 'classicpro' ? 'classicpro' : 'edgelabel') : null);
@@ -53,12 +75,13 @@ export const selectMessage = (session, id, buildId) => ({ [KEY]: 'select', v: V,
 
 /* The snapshot. Over the bounds nothing of the list is sent: the message carries `doc: null` and the reason, so the Studio
    clears what it showed (a plate from the previous state must never stay printable - Sol 01a139ee). */
-export function snapshot(L, b, { session, rev, selected }) {
+export function snapshot(L, b, { session, rev, selected, print }) {
   const base = { [KEY]: 'snapshot', v: V, session, buildId: b.buildId, rev, type: plateType(b) };
   const labels = labelsOf(b);
   const sel = selected && labels.some((l) => l.id === selected) ? selected : null;
   if (labels.length > LABELS_MAX) return { msg: { ...base, doc: null, drawers: {}, selected: null, reason: `This build has ${labels.length} labels; the plate shows at most ${LABELS_MAX}.` }, problem: 'too-many' };
   const doc = exportDoc(L, b);
+  doc.output = printOutput(print);   // the print preference rides in the document's output bag, as a set file carries it
   const bytes = bytesOf(JSON.stringify(doc));
   if (bytes > JSON_MAX) return { msg: { ...base, doc: null, drawers: {}, selected: null, reason: 'This build’s labels are too large to show on the plate (uploaded icons are large).' }, problem: 'too-big' };
   return { msg: { ...base, doc, drawers: drawersOf(b), selected: sel }, problem: null };

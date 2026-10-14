@@ -149,7 +149,7 @@ export function mountLabels(stage, ctx) {
     return queue;
   }
   const unsub = store.subscribe((state, why) => {
-    const sig = P.labelSig(state); if (sig !== lastLabelSig) { lastLabelSig = sig; labelRev++; syncPlateSoon(); }   // a label-relevant change: a new rev, the plate follows
+    const sig = P.labelSig(state, st.print); if (sig !== lastLabelSig) { lastLabelSig = sig; labelRev++; syncPlateSoon(); }   // a label-relevant change: a new rev, the plate follows
     if (why === 'adopt') return; if (why === 'undo' || why === 'redo' || why === 'load') { if (st.pick && !R.labelById(state, st.pick)) st.pick = null; if (st.edit && !R.labelById(state, st.edit.id)) st.edit = null; } syncStage(); renderAll(); });
   /* one label operation = one history entry (flushed on both sides of the commit, so the 350 ms coalescing never joins it to a
      neighbour); "Last change" remembers it while the WHOLE record is still what it produced (Sol 01a13518: a later settings
@@ -399,8 +399,21 @@ export function mountLabels(stage, ctx) {
      channel is the Part Picker modal's (js/rules/plate.js): a hello with a session, the Studio's ready with what it can do,
      then a SNAPSHOT of the label-relevant state after every change that alters it, and the selected label both ways. The
      frame is made once and kept across the toggle; a build switch rides the same session with its own buildId and rev. */
-  let plate = null, labelRev = 0, plateTimer = 0, lastLabelSig = P.labelSig(S());
+  /* the print preference (the stripe and the drawings on part labels): this browser's, like the quality tier; see plate.js */
+  st.print = (() => { try { return P.cleanPrint(JSON.parse(localStorage.getItem(P.PRINT_KEY))); } catch { return P.cleanPrint(null); } })();
+  let plate = null, labelRev = 0, plateTimer = 0, lastLabelSig = P.labelSig(S(), st.print);
   const debug = !!new URLSearchParams(location.search).get('debug');
+  /* fromPlate: the Studio already shows this state, so the rev stays (a second change from the plate must still carry the
+     current rev - Sol 01a13c32) and no snapshot goes back; the signature moves with it so nothing else re-sends either */
+  function setPrint(patch, fromPlate = false) {
+    const next = P.cleanPrint({ ...st.print, ...patch });
+    if (next.band === st.print.band && next.drawings === st.print.drawings) return false;
+    st.print = next;
+    try { localStorage.setItem(P.PRINT_KEY, JSON.stringify(next)); } catch { /* private mode: the choice lasts the page */ }
+    lastLabelSig = P.labelSig(S(), st.print);
+    if (fromPlate) { if (plate) plate.sentSig = lastLabelSig; } else { labelRev++; syncPlateSoon(); }
+    return true;
+  }
   function setView(v) {
     if (v === st.view) return;
     st.view = v;
@@ -433,6 +446,11 @@ export function mountLabels(stage, ctx) {
           const id = P.readSelected(d, { rev: labelRev, buildId: S().buildId, ids: R.labelsOf(S()).map((l) => l.id) });
           if (id === null || id === st.selLabel) return;
           st.selLabel = id; plate.sentSel = id; st.pick = null; st.selId = null; stage.setSelected(null); renderAll();   // the Studio's row is the selection now, not a drawer or an armed label
+          return;
+        }
+        if (d[P.KEY] === 'setting') {   // a plate input the visitor changed (the stripe, the drawings): the preference follows, with no snapshot echoed back
+          const patch = P.readSetting(d, { rev: labelRev, buildId: S().buildId });
+          if (patch && setPrint(patch, true)) renderAll();
         }
       };
       addEventListener('message', onMessage, { signal });
@@ -453,7 +471,7 @@ export function mountLabels(stage, ctx) {
     if (!plate || !plate.ready || plate.bad || plate.box.hidden || !L) return;
     const post = (m) => { try { plate.frame.contentWindow.postMessage(m, STUDIO_ORIGIN); } catch { /* the frame went away */ } };
     if (plate.sentSig !== lastLabelSig) {
-      const { msg, problem } = P.snapshot(L, S(), { session: plate.session, rev: labelRev, selected: st.selLabel });
+      const { msg, problem } = P.snapshot(L, S(), { session: plate.session, rev: labelRev, selected: st.selLabel, print: st.print });
       post(msg);
       plate.sentSig = lastLabelSig; plate.sentSel = st.selLabel;
       plate.link.textContent = problem ? msg.reason : '';
@@ -541,7 +559,7 @@ export function mountLabels(stage, ctx) {
       el('h2', { text: 'Labels' }),
       el('span.count', { text: ready.length ? `${n(ready.length, 'label')} ready to place` : labels.length ? (slots ? `${onN} of ${slots} drawers labelled` : `${n(labels.length, 'label')}`) : '' }),
       labels.length ? el('span.tools', {}, [
-        el('button.mini', { title: 'Download the list · a MODULITH label list (.json) the Label Studio opens', 'aria-label': 'Download the label list', onclick: () => download(`modulith-${s.length}-labels.json`, JSON.stringify(R.exportDoc(L, s), null, 2), 'application/json') }, [icon('download-simple', { size: 16 })]),
+        el('button.mini', { title: 'Download the list · a MODULITH label list (.json) the Label Studio opens', 'aria-label': 'Download the label list', onclick: () => download(`modulith-${s.length}-labels.json`, JSON.stringify({ ...R.exportDoc(L, s), output: P.printOutput(st.print) }, null, 2), 'application/json') }, [icon('download-simple', { size: 16 })]),
         el('button.mini', { title: 'Copy the labels as text, in drawer order', 'aria-label': 'Copy the labels as text', onclick: async () => { try { await navigator.clipboard.writeText(R.exportText(L, s)); say('Labels copied.'); } catch { say('Could not reach the clipboard.'); } } }, [icon('copy', { size: 16 })]),
       ]) : null,
     ]));
@@ -652,7 +670,7 @@ export function mountLabels(stage, ctx) {
     const s = S(); const eff = effectiveStyle(s); const lim = G?.labelSpec?.limits || {};
     const det = el('details.settings', { open: st.settings ? '' : null });
     det.addEventListener('toggle', () => { st.settings = det.open; });
-    det.appendChild(el('summary', {}, [icon('sliders-horizontal', { size: 16 }), 'Label settings', el('span.dim', { text: `${eff.capMm} mm · ${eff.allCaps ? 'caps' : 'as typed'}` })]));
+    det.appendChild(el('summary', {}, [icon('sliders-horizontal', { size: 16 }), 'Label settings', el('span.dim', { text: `${eff.capMm} mm · ${eff.allCaps ? 'caps' : 'as typed'}${st.print.band === 'off' ? ' · no stripe' : ''}` })]));
     for (const row of LABEL_STYLE_ROWS) {
       const [lo, hi] = lim[row.key] || [0, 99];
       const inp = el('input', { type: 'number', min: String(lo), max: String(hi), step: String(row.step), value: String(eff[row.key]), 'aria-label': row.label });
@@ -662,6 +680,14 @@ export function mountLabels(stage, ctx) {
     for (const [key, label] of [['bold', 'Bold'], ['allCaps', 'All caps'], ['predictIcons', 'Predict icons']]) {
       det.appendChild(el('label.srow', {}, [el('span', { text: label }), el('div.track.seg2', { role: 'group', 'aria-label': label }, [false, true].map((v) => el('button.seg.sm' + (!!eff[key] === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(!!eff[key] === v), onclick: () => store.commit((x) => styleEdit(x, key, v), 'label-style') })))]));
     }
+    /* printing part labels: the stripe and the drawings. This browser's printer choice, not the build's (plate.js): a two-colour
+       printer turns the stripe off once and every build follows; the Label plate's own inputs change the same choice */
+    det.appendChild(el('p.sub', { text: 'Printing part labels' }));
+    const bandSel = el('select', { 'aria-label': 'Part label stripe' }, [['bottom', 'Bottom edge'], ['end', 'End stripe'], ['wedge', '45° end'], ['off', 'Off · two filaments']].map(([v, t]) => el('option', { value: v, text: t, selected: st.print.band === v ? '' : null })));
+    bandSel.addEventListener('change', () => { setPrint({ band: bandSel.value }); renderAll(); });
+    det.appendChild(el('label.srow', {}, [el('span', { text: 'Part label stripe' }), bandSel]));
+    det.appendChild(el('label.srow', {}, [el('span', { text: 'Screw and nut drawings' }), el('div.track.seg2', { role: 'group', 'aria-label': 'Screw and nut drawings' }, [false, true].map((v) => el('button.seg.sm' + (st.print.drawings === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(st.print.drawings === v), onclick: () => { setPrint({ drawings: v }); renderAll(); } })))]));
+    det.appendChild(el('p.dim', { text: st.print.band === 'off' ? 'Part labels print in two filaments: the base and the words. Your printer’s choice, kept in this browser for every build.' : 'The stripe adds the thread-system colour and a material patch: more filaments. Your printer’s choice, kept in this browser for every build.' }));
     return det;
   }
 

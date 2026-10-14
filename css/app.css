@@ -490,6 +490,8 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-partpicker { position: fixed; inset: 0; z-index: 70; display: flex; padding: 18px; background: rgba(6, 5, 20, .55); }
 #ws-partpicker[hidden] { display: none; }   /* the flex above would beat the hidden attribute */
 /* the two views (step B1): the pill in the panel, the selected label, the Label plate frame over the stage */
+#ws-labels .settings .sub { margin: 8px 0 2px; font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+#ws-labels .srow select { height: 28px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--hair); background: var(--track); color: var(--ink); font: inherit; font-size: 12px; }
 #ws-labels .track.view { margin: 0 0 2px; }
 #ws-labels .track.view .seg { flex: 1; }
 #ws-labels .chip-l.sel { border-color: var(--ink-3); }
