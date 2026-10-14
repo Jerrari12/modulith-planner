@@ -221,5 +221,16 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **The code reviewed** (Sol 01a13a10, 2 of 4 held): the plate's signature now includes the drawer order, so a drawer moved
   past another renumbers the tags on the plate; the Studio's size guard measures bytes against the advertised bound. A
   `select` also names its build and the Studio drops one for another build (belt and braces: messages arrive in order).
-- **Not deployed yet**: the Studio side waits on branch `planner-plate` for Joey's go; the planner side on `labels-plate`
-  merges to main after review. The production check follows the Studio deploy, as for step A.
+- **Deployed and checked in production** (2026-10-14, Joey: "go"): the Studio first (public main a781fd5e, from
+  `planner-plate` 44ccabc1; `plate-link.js`, the embed guard and `label-list.js` verified live), then the planner's main
+  fast-forwarded to d91c251. That deploy failed at the module-graph stamp check (the new `js/rules/plate.js` was not on the
+  workflow's explicit import list); 279c6bd adds its two stamps (the stamp and verify steps run locally on a copy first;
+  Terra 01a13bbd, no findings) and deployed green. The live check on planner.modulith.systems (`?ws=labels&debug=1`): the
+  frame loads `labels.modulith.systems/?embed=planner`, the Studio answers ready with its capabilities, a typed label
+  placed on a drawer shows on the plate as a row tagged with its drawer, laid out on the 3D plate, Download enabled, the
+  selection highlighted on both sides; Undo in the planner takes the tag off the row with a new rev. The console's 429s
+  (seven this time; one unidentified on step A's check) are not the planner's or the Studio's: every request to either
+  origin returns 200, and the page's only other hosts are the old viewer's GoatCounter counter (`jerrari-build`, ten
+  beacons, which cutover day stops), its script CDN, and the parts host. They do not occur on loopback, where the beacons
+  are not sent and the parts host is the same. Which response carries the 429 cannot be read cross-origin, and ten direct
+  hits on a beacon URL answered 200 (Terra 01a13bcc: the attribution was an inference, so it is recorded as one). Benign.

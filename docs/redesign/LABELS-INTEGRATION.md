@@ -147,8 +147,8 @@ capabilities, then named commands (the plan's "host commands independent of the 
 - **Step A in production** (2026-10-14): the Studio deployed (public main 6426fc80), the Picker repo at 12752df0 on its
   remote `Jerrari12/gen2-part-picker` (private), `planner.modulith.systems` live. The live check passed: add, reopen,
   update in place, three undos, another build (DECISIONS.md, 2026-10-14).
-- **Step B1 built** (2026-10-14): the read-only Label plate view (the section above); the planner side on branch
-  `labels-plate`, the Studio side on branch `planner-plate` (source repo), not yet deployed. Next: the editable B.
+- **Step B1 in production** (2026-10-14): the read-only Label plate view (the section above), the Studio deployed (public
+  main a781fd5e) and the planner's main at 279c6bd; the live check passed (DECISIONS.md). Next: the editable B.
 
 ## Order
 
