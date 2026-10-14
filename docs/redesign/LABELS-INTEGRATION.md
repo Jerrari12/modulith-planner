@@ -73,6 +73,46 @@ commands and events (open with snapshot, select id, apply, discard, stale) so a 
 the product. What an iframe cannot do, and must be worked around by message: share focus and tab order, let the Studio's
 menus escape its frame, route keyboard shortcuts and undo to one owner.
 
+## Step B1, the Label plate read-only: what was built (2026-10-14; design reviewed by Sol 01a139ee, 7 of 9 held)
+
+**The transport is NOT the tab job protocol - a recorded deviation.** The plan above says "the transport is the existing
+job protocol". The job protocol (label-link.js) is keyed by DRAWER (`rows[].u`), bound to a tab's `window.opener`, and
+carries a job in the URL hash; the plate shows the whole LIST by label id inside a frame whose parent is the planner. So B1
+uses the Part Picker modal's channel (step A): the planner's hello with a session, the Studio's `ready` naming its
+capabilities, then named commands (the plan's "host commands independent of the transport"). The job protocol's RULES
+(the return, the merge, the review) are what the editable B reuses over this channel; the transport is settled here.
+
+- **Planner** (`js/rules/plate.js`, pure; the page half in `js/workspaces/labels.js`): the Labels panel gets a view pill,
+  `On build | Label plate`; the plate is one iframe of `STUDIO/?embed=planner` in a glass frame over the stage, made on the
+  first switch and hidden on the way back (fonts, WebGL and printer prefs persist); the dock's Print labels shows it. The
+  channel: `hello { session }` → `ready { caps }` (the planner needs `snapshot/1` and `select/1`, and says what an older
+  Studio lacks); `snapshot { buildId, rev, type, doc, drawers, selected }` after every LABEL-RELEVANT change (the list, the
+  assignments, the label style, the faceplate, the build; a cabinet move is not one), debounced 150 ms and deduplicated by
+  a signature of those; `select { id }`; and back, `selected { id, rev, buildId }`, honoured only for this build at this
+  rev. `rev` is a workspace counter (+1 per label-relevant change, undo and redo included; not persisted: B1 is a preview).
+  Over the bounds (400 labels, 256 KiB) the snapshot carries `doc: null` and a reason, so the Studio clears the plate and
+  disables Download rather than keep a stale plate printable. The selection is one workspace field, set by arming a label,
+  selecting a labelled drawer, or a row clicked in the Studio; cleared when its label leaves the list.
+- **Studio** (`plate-link.js`, pure; the page half in index.html; `label-list.js` now loaded by the page): `?embed=planner`
+  in a frame; an inline head script hides the chrome before first paint (the masthead, the link bar, Add label, Add labels
+  from, Save / Open, the footer); the type select and the six label settings are disabled mirrors of the snapshot; rows are
+  read-only (text readOnly, buttons disabled, remove and bulk hidden), tagged `data-label-id` and `#n` per drawer; the
+  printer section and Download stay live. After the hello every message is read from the bound window at the bound origin
+  with the bound session (Sol). Storage isolation: `EMBED` short-circuits autosave, the restore, the previous set and the
+  boot; printer prefs still persist. A snapshot for another build replaces everything with no prompt.
+- **Proved** by unit tests on both sides, an e2e case driving the real Studio from the checkout beside the repo, and the
+  browser pane on loopback (desktop and phone).
+- **Found on the way**: the Studio page already had a `postToPlanner` (the tab link's, to the opener); a same-named embed
+  sender was hoisted over by it and the `ready` went to a null opener. The embed sends through `plateSend`, and a test pins
+  every embed function to one declaration.
+- **Recorded gaps**: the Studio is dark only, so a light planner shows a dark plate (the plan's "takes the planner's theme"
+  is not met in B1); stripes are not in the shared list format, so none show on the plate (none are lost either); the 3D
+  plate does not highlight the selected label, only its row; the stage keeps rendering under the frame.
+- **The seam the editable B builds on** (Sol): the Studio's snapshot handler is "apply the committed state"; the editable
+  step adds a draft layer over it (jobId, baseRev, draft storage, Apply, Discard, stale) and must gate this handler, and a
+  build switch, so a draft is never erased by a planner update. The revision must then become build-scoped and survive a
+  reload, checked together with buildId and jobId; B1's counter is the preview's only.
+
 ## Astra's adjustments (2026-10-13, approving step A)
 
 - **Safeguards behind the scenes.** "Reviewed commit" means an **Apply changes** button; a review screen appears only when
@@ -107,7 +147,8 @@ menus escape its frame, route keyboard shortcuts and undo to one owner.
 - **Step A in production** (2026-10-14): the Studio deployed (public main 6426fc80), the Picker repo at 12752df0 on its
   remote `Jerrari12/gen2-part-picker` (private), `planner.modulith.systems` live. The live check passed: add, reopen,
   update in place, three undos, another build (DECISIONS.md, 2026-10-14).
-- Step B may start; not started.
+- **Step B1 built** (2026-10-14): the read-only Label plate view (the section above); the planner side on branch
+  `labels-plate`, the Studio side on branch `planner-plate` (source repo), not yet deployed. Next: the editable B.
 
 ## Order
 

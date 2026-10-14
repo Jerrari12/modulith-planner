@@ -442,6 +442,70 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   await ctx.close();
 });
 
+test('the Label plate view (step B1): the Studio embedded read-only shows this build’s list with its drawers, a row clicked there is the selection here, the plate follows undo, the frame is kept across the toggle', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await settle(page, 800);
+  for (const w of ['Screws', 'Nuts']) {
+    await btn(page, 'Type a label', '#ws-labels').click();
+    await page.fill('#ws-modal input.field', w);
+    await btn(page, 'Add label', '#ws-modal .box').click();
+    await settle(page, 300);
+  }
+  const [screws, nuts] = await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels.map((l) => l.id));
+  // Screws onto the first drawer (Place several, one tap)
+  await btn(page, 'Place several', '#ws-labels').click();
+  await settle(page, 200);
+  const first = await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((u) => u.fill === 'decor').id);
+  await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), first); await settle(page, 500);
+  await btn(page, 'Done placing', '#ws-labels').click();
+  assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 1, 'Screws placed');
+  // the plate: the real Studio in the frame, headerless, the list as rows with the drawer tag, read-only
+  await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });   // the Studio answered the hello with its capabilities
+  const frame = page.frameLocator('#ws-plate iframe');
+  await frame.locator('#labels .row[data-label-id]').nth(1).waitFor({ timeout: 30_000 });
+  assert.equal(await frame.locator('#labels .row[data-label-id]').count(), 2, 'both labels on the plate');
+  assert.equal(await frame.locator('#mast').isVisible(), false, 'no Studio masthead inside the planner');
+  assert.equal(await frame.locator('#link-bar').isVisible(), false);
+  const where = await text(page, '#ws-labels .prow .where');   // "Drawer N" in label order, as the panel says it
+  assert.equal(await frame.locator(`#labels .row[data-label-id="${screws}"] .utag`).textContent(), '#' + where.replace(/\D/g, ''), 'the drawer tag on the placed label');
+  assert.equal(await frame.locator(`#labels .row[data-label-id="${nuts}"] .utag`).count(), 0, 'none on the waiting one');
+  assert.equal(await frame.locator('#labels .row input.label-text').first().evaluate((i) => i.readOnly), true, 'read-only rows');
+  assert.equal(await frame.locator('#labels .row .remove').first().isVisible(), false, 'no remove button');
+  assert.match(await frame.locator('#status').textContent(), /2 labels from the planner build/);
+  assert.equal(await frame.locator('#download').isEnabled(), true, 'the print file downloads from the plate');
+  assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().log.filter((k) => k === 'ready').length), 1, 'one ready');
+  // a row clicked in the Studio is the selected label in the planner (the drawer selection and the armed label go)
+  await frame.locator(`#labels .row[data-label-id="${nuts}"]`).click();
+  await page.waitForFunction((id) => window.__GEN2_PLATE__().selLabel === id, nuts, { timeout: 10_000 });
+  assert.equal(await page.locator('#ws-labels .chip-l.sel').count(), 1, 'the selection shows in the panel');
+  assert.equal(await frame.locator(`#labels .row.sel[data-label-id="${nuts}"]`).count(), 1, 'and on the plate');
+  // undo in the planner (the placement): the plate follows with a new rev, the drawer tag goes
+  const rev = await page.evaluate(() => window.__GEN2_PLATE__().rev);
+  await page.click('#ws-tools button[aria-label="Undo"]');
+  await page.waitForFunction((r) => window.__GEN2_PLATE__().rev > r, rev, { timeout: 10_000 });
+  await frame.locator(`#labels .row[data-label-id="${screws}"] .utag`).waitFor({ state: 'detached', timeout: 10_000 });
+  assert.equal(await frame.locator('#labels .row[data-label-id]').count(), 2, 'still both labels');
+  assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().log.filter((k) => k === 'ready').length), 1, 'the same frame: no second hello answered');
+  // the toggle keeps the frame; the dock's Print labels shows the plate again
+  await page.locator('#ws-labels .track.view button:text-is("On build")').click();
+  await settle(page, 200);
+  assert.equal(await page.locator('#ws-plate').count(), 1, 'the frame stays');
+  assert.equal(await page.locator('#ws-plate').isVisible(), false, 'hidden');
+  await page.click('#ws-dock button.cta');
+  await page.waitForFunction(() => !window.__GEN2_PLATE__().box.hidden, null, { timeout: 5000 });
+  assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().view), 'plate');
+  // a message that is not from the frame, or without the session, is ignored
+  await page.evaluate((origin) => { window.postMessage({ gen2plate: 'selected', v: 1, session: 'nope', id: 'x', rev: 0 }, origin); }, base);
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().selLabel), nuts, 'a stray selected changes nothing');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build rebuilds on the record', async () => {
   const { ctx, page } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });

@@ -201,3 +201,25 @@ Dated calls made while building, with who made them. The brief and the inventory
   origin not identified.
 - **Step B may start**: LABELS-INTEGRATION.md's Order puts the production test of A before B, and this was it. Nothing of B
   is written yet.
+
+## 2026-10-14 (the Label plate: step B1, read-only)
+
+- **Built on Joey's go** ("let's tackle step B"), with the design reviewed first (Sol 01a139ee: 7 of 9 held, in
+  LABELS-INTEGRATION.md's new section). The Labels workspace has two views: On build (today's panel and stage) and Label
+  plate (the Label Studio in a frame, headerless, read-only, showing this build's list as it lays it out; its Download print
+  file works). The dock's Print labels now shows the plate instead of opening the Studio's one-way tab.
+- **The transport deviates from the plan on purpose**: the Part Picker's parent-bound hello and session channel with
+  named commands (snapshot, select, selected), not the drawer-keyed, opener-bound job protocol; the reason and what the
+  editable B reuses from the job protocol are in the plan.
+- **Sol's amendments taken**: the Studio checks the bound window and origin on every message after the hello; replies
+  carry buildId and rev, and a build switch always advances the rev; an oversized list clears the plate and its Download
+  rather than leaving the previous plate printable; `ready` carries capabilities and the planner says what an older Studio
+  lacks; the seam for the editable step is named. Discarded: "stripes are lost on the plate" (the shared list format
+  carries none, so none travel - recorded as a gap). Recorded, not met: the Studio has no light theme.
+- **Found on the way**: a hoisted name clash in the Studio page (its `postToPlanner` swallowed the embed's `ready`); the
+  Studio page never loaded `label-list.js` (the planner's vendored copy did) - it does now, stamped.
+- **The code reviewed** (Sol 01a13a10, 2 of 4 held): the plate's signature now includes the drawer order, so a drawer moved
+  past another renumbers the tags on the plate; the Studio's size guard measures bytes against the advertised bound. A
+  `select` also names its build and the Studio drops one for another build (belt and braces: messages arrive in order).
+- **Not deployed yet**: the Studio side waits on branch `planner-plate` for Joey's go; the planner side on `labels-plate`
+  merges to main after review. The production check follows the Studio deploy, as for step A.

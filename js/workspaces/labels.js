@@ -5,8 +5,8 @@
    record: the stage redraws the label text in place after each commit (stage.setLabels).
    The list itself: typed labels (words, an icon or a letter), labels from a file (a MODULITH label list, a Part Picker items
    file, a Label Studio set) or from a #labels-add= link, the set-wide label settings, and exports. Making labels - icons,
-   stripes, part layouts, the print plate - stays the Label Studio's job: Make labels / Part Picker open it, and Print labels
-   hands it this build's words (its one-way link) until the Studio learns the merged app's address (DECISIONS.md, 2026-10-13). */
+   stripes, part layouts, the print plate - stays the Label Studio's job: Make labels / Part Picker open it, and the LABEL PLATE
+   view (step B1) shows this build's list as the Studio lays it out, in a frame, read-only, with its print file to download. */
 import { el, makeToast, trapTab } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { topbar } from '../ui/topbar.js';
@@ -14,6 +14,7 @@ import { toolbar } from '../ui/toolbar.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { generateManifest } from '../generate.js';
 import * as R from '../rules/labels.js';
+import * as P from '../rules/plate.js';
 import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle } from '../label-panel.js';
 import { loadLabelFont, labelIcons } from '../label-text.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
@@ -122,7 +123,7 @@ export function mountLabels(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
   const S = () => store.state;
-  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null, fresh: null };
+  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null, fresh: null, view: 'build', selLabel: null };
   let L = null;   // the label-list module once loaded
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -147,7 +148,9 @@ export function mountLabels(stage, ctx) {
     }).catch((e) => console.error(e));
     return queue;
   }
-  const unsub = store.subscribe((state, why) => { if (why === 'adopt') return; if (why === 'undo' || why === 'redo' || why === 'load') { if (st.pick && !R.labelById(state, st.pick)) st.pick = null; if (st.edit && !R.labelById(state, st.edit.id)) st.edit = null; } syncStage(); renderAll(); });
+  const unsub = store.subscribe((state, why) => {
+    const sig = P.labelSig(state); if (sig !== lastLabelSig) { lastLabelSig = sig; labelRev++; syncPlateSoon(); }   // a label-relevant change: a new rev, the plate follows
+    if (why === 'adopt') return; if (why === 'undo' || why === 'redo' || why === 'load') { if (st.pick && !R.labelById(state, st.pick)) st.pick = null; if (st.edit && !R.labelById(state, st.edit.id)) st.edit = null; } syncStage(); renderAll(); });
   /* one label operation = one history entry (flushed on both sides of the commit, so the 350 ms coalescing never joins it to a
      neighbour); "Last change" remembers it while the WHOLE record is still what it produced (Sol 01a13518: a later settings
      change, or any other edit, must not be what the panel's Undo takes back). `also(s)` runs inside the same commit, for what
@@ -200,7 +203,7 @@ export function mountLabels(stage, ctx) {
     if (id && !R.faceCarriesLabels(S())) { status(R.NO_FACE_MSG, true); renderAll(); return; }
     const l = id ? R.labelById(S(), id) : null;
     st.pick = l && L.assignable(l) ? id : null;
-    if (st.pick) { st.selId = null; st.edit = null; status(''); stage.setSelected(null); if (phone) phone.collapse(panel); }   // the model stays uncovered while placing (Joey's phone finding)
+    if (st.pick) { st.selId = null; st.edit = null; status(''); stage.setSelected(null); setSelLabel(st.pick); if (phone) phone.collapse(panel); }   // the model stays uncovered while placing (Joey's phone finding)
     hoverPreview(null); stage.watchHover(!!st.pick);
     renderAll();
   }
@@ -391,13 +394,79 @@ export function mountLabels(stage, ctx) {
     const q = '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels');
     try { window.open(LABEL_STUDIO_URL + q + (parts ? '#parts' : ''), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
   }
-  /* Print labels: the Studio's one-way link, the drawers' words in drawer order (what it lays out and exports; icons, stripes and
-     part layouts come from the Studio's own list). The two-way job protocol waits for the Studio to accept this app's address. */
-  function printLabels() {
-    const words = R.drawers(S()).map((u) => R.labelById(S(), assignOf()[u.id])).filter(Boolean).map((l) => R.labelWords(l)).filter(Boolean);
-    const all = words.length ? words : R.labelsOf(S()).map((l) => R.labelWords(l)).filter(Boolean);
-    if (!all.length) { say('No label words to print yet.'); return; }
-    try { window.open(LABEL_STUDIO_URL + '#labels=' + btoa(unescape(encodeURIComponent(JSON.stringify(all)))), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }
+  /* THE LABEL PLATE VIEW (docs/redesign/LABELS-INTEGRATION.md, step B1, read-only): the Label Studio in a frame over the
+     stage, headerless, showing this build's committed list as it lays it out (its Download print file works there). The
+     channel is the Part Picker modal's (js/rules/plate.js): a hello with a session, the Studio's ready with what it can do,
+     then a SNAPSHOT of the label-relevant state after every change that alters it, and the selected label both ways. The
+     frame is made once and kept across the toggle; a build switch rides the same session with its own buildId and rev. */
+  let plate = null, labelRev = 0, plateTimer = 0, lastLabelSig = P.labelSig(S());
+  const debug = !!new URLSearchParams(location.search).get('debug');
+  function setView(v) {
+    if (v === st.view) return;
+    st.view = v;
+    if (v === 'plate') { openPlate(); if (phone) phone.collapse(panel); } else if (plate) plate.box.hidden = true;
+    renderAll();
+  }
+  function openPlate() {
+    if (!plate) {
+      const session = newSession();
+      const frame = el('iframe', { src: STUDIO + '?embed=planner', title: 'Label plate: the Label Studio', referrerpolicy: 'strict-origin-when-cross-origin' });
+      const link = el('span.link', { role: 'status', text: 'Connecting to the Label Studio…' });
+      const box = el('div.glass', { id: 'ws-plate', role: 'region', 'aria-label': 'Label plate', hidden: true }, [
+        el('div.head', {}, [el('h2', { text: 'Label plate' }), el('span.sub', { text: 'This build’s labels as the Label Studio lays them out. Edit them On build; download the print file here.' }), link]), frame]);
+      root.appendChild(box);
+      const hello = () => { try { frame.contentWindow.postMessage(P.helloMessage(session), STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
+      frame.addEventListener('load', hello);
+      const onMessage = (e) => {
+        if (!plate || e.source !== frame.contentWindow || e.origin !== STUDIO_ORIGIN) return;
+        const d = e.data;
+        if (plate.log.length < 40) plate.log.push(d && d[P.KEY]);
+        if (!d || typeof d !== 'object' || d.v !== P.V || d.session !== session) return;
+        if (d[P.KEY] === 'ready') {
+          const r = P.readReady(d); if (!r) return;
+          clearTimeout(plate.wait);
+          const missing = P.missingCaps(r.caps);   // version skew fails visibly (the plan's risk): an older Studio says what it lacks
+          if (missing.length) { plate.bad = true; plate.link.textContent = `This Label Studio cannot show the plate yet (it lacks ${missing.join(', ')}). Try again later.`; return; }
+          plate.ready = true; plate.bad = false; plate.link.textContent = ''; plate.sentSig = null; syncPlate(); return;
+        }
+        if (d[P.KEY] === 'selected') {
+          const id = P.readSelected(d, { rev: labelRev, buildId: S().buildId, ids: R.labelsOf(S()).map((l) => l.id) });
+          if (id === null || id === st.selLabel) return;
+          st.selLabel = id; plate.sentSel = id; st.pick = null; st.selId = null; stage.setSelected(null); renderAll();   // the Studio's row is the selection now, not a drawer or an armed label
+        }
+      };
+      addEventListener('message', onMessage, { signal });
+      plate = { box, frame, link, session, ready: false, bad: false, hello, sentSig: null, sentSel: null, log: [], wait: 0 };
+      if (debug) window.__GEN2_PLATE__ = () => ({ ...plate, rev: labelRev, selLabel: st.selLabel, view: st.view });   // the e2e suite reads the handshake
+    }
+    plate.box.hidden = false;
+    if (!plate.ready) {
+      plate.hello();   // a frame that loaded before this page listened (or lost the first hello) hears it again
+      clearTimeout(plate.wait);
+      plate.wait = setTimeout(() => { if (!plate.ready && !plate.bad) plate.link.textContent = 'The Label Studio has not connected: this planner’s address is not on its list.'; }, 8000);
+    }
+    syncPlate();
+  }
+  /* the snapshot when the label-relevant state changed since the one last sent (undo and redo included); the selection alone
+     as `select`. Nothing is sent while the plate is hidden: the next opening sends what changed. */
+  function syncPlate() {
+    if (!plate || !plate.ready || plate.bad || plate.box.hidden || !L) return;
+    const post = (m) => { try { plate.frame.contentWindow.postMessage(m, STUDIO_ORIGIN); } catch { /* the frame went away */ } };
+    if (plate.sentSig !== lastLabelSig) {
+      const { msg, problem } = P.snapshot(L, S(), { session: plate.session, rev: labelRev, selected: st.selLabel });
+      post(msg);
+      plate.sentSig = lastLabelSig; plate.sentSel = st.selLabel;
+      plate.link.textContent = problem ? msg.reason : '';
+      return;
+    }
+    if (plate.sentSel !== st.selLabel) { post(P.selectMessage(plate.session, st.selLabel, S().buildId)); plate.sentSel = st.selLabel; }
+  }
+  const syncPlateSoon = () => { clearTimeout(plateTimer); plateTimer = setTimeout(syncPlate, 150); };
+  /* the selected label: UI state, one id, set by arming a label, selecting a labelled drawer or a row in the Studio */
+  function setSelLabel(id) { if (id === st.selLabel) return; st.selLabel = id; syncPlateSoon(); }
+  function renderViewBar() {
+    return el('div.track.seg2.view', { role: 'group', 'aria-label': 'View' }, [['build', 'On build'], ['plate', 'Label plate']].map(([v, t]) =>
+      el('button.seg.sm' + (st.view === v ? '.on' : ''), { text: t, 'aria-pressed': String(st.view === v), onclick: () => setView(v) })));
   }
   function download(name, text, type) {
     const a = el('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
@@ -456,6 +525,7 @@ export function mountLabels(stage, ctx) {
     const carried = assignOf();
     const car = R.carriers(s);
     if (st.pick && (car.has(st.pick) || !R.labelById(s, st.pick))) st.pick = null;
+    if (st.selLabel && !R.labelById(s, st.selLabel)) setSelLabel(null);   // its label left the list: the selection clears on purpose
     const waitingAll = labels.filter((l) => !car.has(l.id));
     const ready = waitingAll.filter((l) => L.assignable(l));
     const empties = R.emptyDrawers(s);
@@ -475,6 +545,7 @@ export function mountLabels(stage, ctx) {
         el('button.mini', { title: 'Copy the labels as text, in drawer order', 'aria-label': 'Copy the labels as text', onclick: async () => { try { await navigator.clipboard.writeText(R.exportText(L, s)); say('Labels copied.'); } catch { say('Could not reach the clipboard.'); } } }, [icon('copy', { size: 16 })]),
       ]) : null,
     ]));
+    panel.appendChild(renderViewBar());
     const last = lastChange();
     panel.appendChild(el('div.row.top', {}, [
       faceOk && ready.length && empties.length && !picked ? attachHint(el('button.key.sm', { onclick: () => { const w = ready[0]; if (w) armPlacing(w.id); } }, [icon('hand-pointing', { size: 16 }), 'Place several']), HINTS.several, panel) : null,
@@ -524,7 +595,7 @@ export function mountLabels(stage, ctx) {
     scroll.appendChild(el('div.list', {}, waitingAll.map((l) => {
       const ok = L.assignable(l);
       const onPick = l.id === st.pick;
-      const b = el('button.chip-l' + (onPick ? '.on' : '') + (l.hardware ? '.hw' : '') + (st.fresh && st.fresh.has(l.id) ? '.new' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
+      const b = el('button.chip-l' + (onPick ? '.on' : '') + (st.selLabel === l.id ? '.sel' : '') + (l.hardware ? '.hw' : '') + (st.fresh && st.fresh.has(l.id) ? '.new' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
       if (l.hardware && R.hwNotReady(l)) b.appendChild(el('span.tag', { text: 'not ready' }));
       if (ok) dragFrom(b, l.id);
       return el('div.item', {}, [b,
@@ -535,7 +606,7 @@ export function mountLabels(stage, ctx) {
     const onUnits = R.drawers(s).filter((u) => carried[u.id] && R.labelById(s, carried[u.id]));
     if (onUnits.length) scroll.appendChild(el('div.placed', {}, [el('h4', { text: `On drawers (${onUnits.length})` }), el('div.rows', {}, onUnits.map((u) => {
       const l = R.labelById(s, carried[u.id]); const isSel = !!sel && sel.id === u.id;
-      return el('button.prow' + (isSel ? '.sel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on drawer ${R.drawerNumber(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
+      return el('button.prow' + (isSel ? '.sel' : '') + (st.selLabel === l.id ? '.lsel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on drawer ${R.drawerNumber(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
         [preview(l), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: 'Drawer ' + R.drawerNumber(s, u.id) })]);
     }))]));
     panel.appendChild(scroll);
@@ -675,7 +746,7 @@ export function mountLabels(stage, ctx) {
       el('span.status' + (labels.length ? '' : '.issue'), {}, [el('span.dot'), labels.length ? `${n(labels.length, 'label')} · ${onN} on drawers` : 'No labels yet']),
       el('div.group', {}, [el('span.big', { text: String(s.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
-      labels.length ? el('button.cta', { title: 'Opens the Label Studio with this build’s label words: the print plate and the 3MF are made there', onclick: printLabels }, ['Print labels', icon('arrow-right', { size: 20 })])
+      labels.length ? el('button.cta', { title: 'Shows the Label plate: this build’s labels as the Label Studio lays them out, with the print file to download', onclick: () => setView('plate') }, ['Print labels', icon('arrow-right', { size: 20 })])
         : el('button.cta', { title: 'Opens the Label Studio in a new tab', onclick: () => openStudio(false) }, ['Make labels', icon('arrow-right', { size: 20 })]),
     );
   }
@@ -687,8 +758,16 @@ export function mountLabels(stage, ctx) {
     { el: editor, title: 'Edit label' },
   ] }) : null;
   if (phone) phone.onLayout(safe);
-  function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 324 + 28, right: (st.edit ? 304 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 }); }
-  function renderAll() { renderPanel(); renderEditor(); renderDock(); bar.sync(); if (phone) phone.refresh(); safe(); const fresh = st.fresh && panel.querySelector('.chip-l.new'); if (fresh) { try { fresh.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } }
+  function safe() {
+    if (plate) {   // the plate fills the stage area the panels and the toolbar leave (the toolbar wraps at narrow widths; the phone's chrome moves)
+      const s = plate.box.style;
+      s.top = phone ? phone.top() + 'px' : Math.round(bar.el.getBoundingClientRect().bottom + 10) + 'px';
+      s.bottom = phone ? phone.bottom() + 'px' : ''; s.left = phone ? '8px' : ''; s.right = phone ? '8px' : '';
+    }
+    if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; }
+    stage.setSafeArea({ left: 324 + 28, right: (st.edit ? 304 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 });
+  }
+  function renderAll() { root.classList.toggle('editing', !!st.edit); root.classList.toggle('view-plate', st.view === 'plate'); renderPanel(); renderEditor(); renderDock(); bar.sync(); if (phone) phone.refresh(); safe(); const fresh = st.fresh && panel.querySelector('.chip-l.new'); if (fresh) { try { fresh.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } }
   addEventListener('resize', safe, { signal });
   addEventListener('hashchange', () => { if (L) importFromHash(); }, { signal });
   document.addEventListener('keydown', (e) => {
@@ -725,6 +804,7 @@ export function mountLabels(stage, ctx) {
       const owner = sel ? (sel.owner ?? stage.partInfo?.(sel.id)?.owner ?? null) : null;
       if (sel && st.pick && L) { if (owner != null) tapDrawer(owner); stage.setSelected(null); return; }
       st.selId = owner;
+      if (owner != null && assignOf()[owner] && R.labelById(S(), assignOf()[owner])) setSelLabel(assignOf()[owner]);   // a labelled drawer selects its label
       if (owner != null && st.edit && st.edit.unitId != null && st.edit.unitId !== owner) st.edit = null;
       renderAll();
       if (phone && owner != null && !st.pick) phone.open(panel);
