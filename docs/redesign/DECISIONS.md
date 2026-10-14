@@ -177,3 +177,27 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Proved** by unit tests on the batch rule and by an e2e case driving the real published Picker on a second loopback server: the hello binds, a nut lands with its part record, the same part again updates in place after a hand edit, three undos walk back update, edit and add, a batch after the close is refused, another build gets a new frame and session, a stray message without the session changes nothing.
 - **Found on the way**: the modal's first two ids clashed with the Colors filament picker and the Parts panel; the modal's flex display beat the hidden attribute; the Picker's hello handler rendered before its data (fixed in the Picker); a family tile clicked before the Picker's data had loaded threw inside the Picker (pre-existing; fixed in the Picker, 12752df0: the tiles wait for the data). Inside the planner the Picker's buttons now read "Queue N parts" and "Add N labels to the planner" (Astra's wording). The Picker repo has no git remote: its commits are local until Joey gives it one.
 
+
+## 2026-10-14 (step A in production)
+
+- **The three account actions landed** (Joey; the plan's Order section asks for the Studio deploy and the domain before the
+  production test): the Studio's `planner-picker` branch deployed
+  to the public Label Studio (cherry-picked onto `labels-public`, 6426fc80 = `modulith-label-studio` main; the 16 Studio test
+  files pass; the live `parts/js/embed.js` serves `?embed=planner`); the Picker source repo got its remote
+  (`Jerrari12/gen2-part-picker`, private, master 12752df0 pushed; not `gen2-parts`, which is the public GLB and thumbnail
+  asset repo); and `planner.modulith.systems` resolves (Cloudflare CNAME to `jerrari12.github.io`, DNS only; the Pages custom
+  domain with HTTPS enforced). The domain came up ahead of cutover day on purpose: it only moves the planner's own address,
+  the redirects, the site branch and the GoatCounter stop still wait. `jerrari12.github.io/modulith-planner/` now 301s to
+  the domain with its query string, which the Studio's return list already allowed for.
+- **The live check of step A, on the domain, against the deployed Studio** (the browser pane, `?ws=labels&debug=1`): the
+  modal's frame loads `labels.modulith.systems/parts/?embed=planner`, the hello is answered and bound (focus on Close); a
+  screw queued and sent lands in the open build as one part label with its record, the modal closes, "Added 1 part label",
+  the chip marked new; a reopen keeps the frame and the session; the same row sent again after a hand edit updates the one
+  label in place ("Updated 1 already in the list (your own words kept on 1)": words kept, the record refreshed); three
+  undos walk back the update, the edit and the add, one step each; a different build gets a new frame and session, Escape
+  closes it. The same results as the loopback e2e case on the steps repeated; two of its checks were not repeated live (a
+  batch arriving after the close is refused; a stray message without the session is ignored). One unexplained console line: a 429 on the planner's first load, from
+  none of the planner's or the Picker's own files (every request listed returned 200, or 206 for the hint clip's range),
+  origin not identified.
+- **Step B may start**: LABELS-INTEGRATION.md's Order puts the production test of A before B, and this was it. Nothing of B
+  is written yet.

@@ -103,9 +103,11 @@ menus escape its frame, route keyboard shortcuts and undo to one owner.
 ## Status
 
 - **Step A built** (2026-10-13): the planner side on `main`, the Picker's embed mode in its repo (89db3532) and republished into
-  the Studio on branch `planner-picker` (95efefdf). Waits on the Studio deploy and the domain for production; proven locally
-  end to end (DECISIONS.md, the same date).
-- Step B not started.
+  the Studio on branch `planner-picker` (95efefdf). Proven locally end to end (DECISIONS.md, the same date).
+- **Step A in production** (2026-10-14): the Studio deployed (public main 6426fc80), the Picker repo at 12752df0 on its
+  remote `Jerrari12/gen2-part-picker` (private), `planner.modulith.systems` live. The live check passed: add, reopen,
+  update in place, three undos, another build (DECISIONS.md, 2026-10-14).
+- Step B may start; not started.
 
 ## Order
 
