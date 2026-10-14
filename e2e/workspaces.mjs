@@ -388,9 +388,12 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Close the Part Picker', 'focus moved into the modal');
   const frame = page.frameLocator('#ws-partpicker iframe');
   await frame.locator('.tile.has-img').first().waitFor({ timeout: 60_000 });   // the Picker's data and pictures are in (a family picked before that has no template)
+  // the flow refine (the Picker's docs/FLOW-REFINE-2026-10-14.md): a stage strip, one add action in the pinned bar; a nut needs a
+  // type and a size before it can be added (an untouched field blocks; only a deliberate Unknown adds with a warning)
   await frame.locator('button.tile').filter({ hasText: /^Nuts$/ }).first().click();
-  await frame.locator('button', { hasText: /^Queue 1 part/ }).first().click();   // the Picker's planner wording: Queue, then Add N labels to the planner
-  await frame.locator('#make-labels').click();
+  await frame.locator('#stage-panel button.tile[title="Hex nut"]').click();   // the type tile reads "Hex · ISO 4032"; its full name is its title
+  await frame.locator('#stage-panel button.thr[aria-label="M3"]').click();   // the size tile, by its accessible name
+  await frame.locator('#add-parts', { hasText: /^Add 1 label to the planner/ }).click();   // ONE click posts the batch
   await page.waitForFunction(() => { const p = window.__GEN2_PICKER__(); return p.veil.hidden; }, null, { timeout: 30_000 });   // the planner took it and closed the modal
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.buildId), buildId, 'still the same build');
   const after1 = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.map((l) => [l.id, !!l.hardware, l.hardware && l.hardware.id]));
@@ -405,13 +408,14 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   await page.evaluate(() => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { const l = s.labelList.labels[0]; l.text = 'edited by hand'; l.hardware.fields = ['M9']; }, 'edit'); st.flush(); });
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
   await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
-  await frame.locator('#make-labels').click();
+  await frame.locator('details.ltools > summary').click();   // List tools: "Add all N to the planner" (#make-labels) re-sends the kept list
+  await frame.locator('#make-labels:enabled').click();
   await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
   const after2 = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.map((l) => l.id));
   assert.deepEqual(after2, [after1[0][0]], 'the same label, not a second one');
   assert.match(await text(page, '#ws-labels .last'), /Updated 1 already in the list/);
   // one undo takes the batch back
-  assert.deepEqual(await page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels[0]; return [l.text, l.hardware.fields.join()]; }), ['edited by hand', ''], 'the hand-typed words stay, the record is the Picker’s again');
+  assert.deepEqual(await page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels[0]; return [l.text, l.hardware.fields.join()]; }), ['edited by hand', 'M3'], 'the hand-typed words stay, the record is the Picker’s again (an M3 nut now: the flow refine needs a size)');
   await page.click('#ws-tools button[aria-label="Undo"]');
   await page.waitForFunction(() => { const l = window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0]; return l && l.hardware.fields.join() === 'M9'; }, null, { timeout: 10_000 });   // one undo: the update alone
   await page.click('#ws-tools button[aria-label="Undo"]');

@@ -342,7 +342,7 @@ export function mountLabels(stage, ctx) {
       const closeBtn = el('button.x', { title: 'Close', 'aria-label': 'Close the Part Picker', onclick: () => closePicker() }, [icon('x', { size: 18 })]);
       const link = el('span.link', { role: 'status', text: 'Connecting…' });   // the handshake, in the planner's own words
       const veil = el('div', { id: 'ws-partpicker', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Part Picker', hidden: true }, [
-        el('div.glass.frame', {}, [el('div.head', {}, [el('h2', { text: 'Part Picker' }), el('span.sub', { text: 'Choose parts, then Add part labels: they land in this build’s list, ready to place.' }), link, closeBtn]), frame]),
+        el('div.glass.frame', {}, [el('div.head', {}, [el('h2', { text: 'Part Picker' }), el('span.sub', { text: 'Choose parts, then Add labels: they land in this build’s list, ready to place.' }), link, closeBtn]), frame]),
       ]);
       root.appendChild(veil);
       const hello = () => { try { frame.contentWindow.postMessage({ gen2parts: 'hello', v: 1, session }, STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };

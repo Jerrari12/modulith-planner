@@ -115,6 +115,11 @@ capabilities, then named commands (the plan's "host commands independent of the 
   is not met in B1); stripes made in the standalone Studio are not in the shared list format, so none show on the plate
   (none are lost either); the 3D plate does not highlight the selected label, only its row; the stage keeps rendering
   under the frame.
+- **A follow-up for the editable step** (the Part Picker flow refine, Sol 01a13c5f via the Refiner session, 2026-10-14):
+  the Picker's `gen2parts` replies carry counts but no batch id, so a timed-out send's late reply arriving while the next
+  send waits is credited to the next one. The harm is cosmetic (a "sent" mark, a held batch released) and the planner
+  updates in place; the cure is a batch id echoed in `added` / `refused` on all three sides (the Picker's embed.js, the
+  Studio's sheet, the planner's modal). Deferred, recorded here.
 - **The seam the editable B builds on** (Sol): the Studio's snapshot handler is "apply the committed state"; the editable
   step adds a draft layer over it (jobId, baseRev, draft storage, Apply, Discard, stale) and must gate this handler, and a
   build switch, so a draft is never erased by a planner update. The revision must then become build-scoped and survive a
