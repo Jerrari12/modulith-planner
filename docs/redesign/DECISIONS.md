@@ -282,4 +282,8 @@ Dated calls made while building, with who made them. The brief and the inventory
   goes with the band. Astra's other confirmation, in the e2e: a `setting` without the frame's session changes nothing, one
   from the real frame with a stale rev is rejected and one at the current rev taken, and a change made while the plate is
   hidden reaches it on reopening.
+- **Deployed and checked in production** (Joey: "go"; the Studio first, public main 331c0052, then the planner's main
+  2fee225, run 38641378552 green): on planner.modulith.systems a part label on the plate, Off in the panel reaches the
+  plate's Stripe position (its row note reads "Screw drawing", no stripe), End chosen on the plate comes back to the panel and the
+  browser preference, and the 3MF downloaded with the stripe Off has two volumes on extruders 1 and 2.
 - **Not done**: a printer-capability suggestion (Sol's D); the planner does not know a printer's colour count.
