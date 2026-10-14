@@ -680,14 +680,15 @@ export function mountLabels(stage, ctx) {
     for (const [key, label] of [['bold', 'Bold'], ['allCaps', 'All caps'], ['predictIcons', 'Predict icons']]) {
       det.appendChild(el('label.srow', {}, [el('span', { text: label }), el('div.track.seg2', { role: 'group', 'aria-label': label }, [false, true].map((v) => el('button.seg.sm' + (!!eff[key] === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(!!eff[key] === v), onclick: () => store.commit((x) => styleEdit(x, key, v), 'label-style') })))]));
     }
-    /* printing part labels: the stripe and the drawings. This browser's printer choice, not the build's (plate.js): a two-colour
-       printer turns the stripe off once and every build follows; the Label plate's own inputs change the same choice */
+    /* printing part labels: the stripe and the drawings. This browser's DEFAULT for printing labels (plate.js; Astra: it mixes a
+       printer's capability with a look, so a printer profile or a build override may come later): a two-colour printer turns the
+       stripe off once and every build follows; the Label plate's own inputs change the same choice */
     det.appendChild(el('p.sub', { text: 'Printing part labels' }));
     const bandSel = el('select', { 'aria-label': 'Part label stripe' }, [['bottom', 'Bottom edge'], ['end', 'End stripe'], ['wedge', '45° end'], ['off', 'Off · two filaments']].map(([v, t]) => el('option', { value: v, text: t, selected: st.print.band === v ? '' : null })));
     bandSel.addEventListener('change', () => { setPrint({ band: bandSel.value }); renderAll(); });
     det.appendChild(el('label.srow', {}, [el('span', { text: 'Part label stripe' }), bandSel]));
     det.appendChild(el('label.srow', {}, [el('span', { text: 'Screw and nut drawings' }), el('div.track.seg2', { role: 'group', 'aria-label': 'Screw and nut drawings' }, [false, true].map((v) => el('button.seg.sm' + (st.print.drawings === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(st.print.drawings === v), onclick: () => { setPrint({ drawings: v }); renderAll(); } })))]));
-    det.appendChild(el('p.dim', { text: st.print.band === 'off' ? 'Part labels print in two filaments: the base and the words. Your printer’s choice, kept in this browser for every build.' : 'The stripe adds the thread-system colour and a material patch: more filaments. Your printer’s choice, kept in this browser for every build.' }));
+    det.appendChild(el('p.dim', { text: (st.print.band === 'off' ? 'Part labels print in two filaments: the base and the words.' : 'The stripe adds the thread-system colour and a material patch: more filaments.') + ' Your default for printing labels, kept in this browser for every build.' }));
     return det;
   }
 

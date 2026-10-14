@@ -265,12 +265,21 @@ Dated calls made while building, with who made them. The brief and the inventory
   question at setup; the Colors workspace) and recommended the Label settings as the source of truth with an EDITABLE,
   synchronized control on the plate; a printer-capability answer only as a suggestion (it misleads when printers are
   switched); and warned that saving the choice with the build makes the sender's printer the recipient's start.
-- **The decision**: it is the PRINTER'S choice, not the build's. The planner keeps it per browser (localStorage
-  `gen2-label-print`: the stripe position or Off, and whether screws and nuts are drawn), like the quality tier; never in
-  the record, so a share link carries no stripe choice and the record's field list (pinned to the old planner by the drift
-  check) is untouched. It shows in the Labels panel under Label settings ("Printing part labels": Part label stripe, Screw
+- **The decision**: a browser-level DEFAULT for printing labels, this version. The planner keeps it per browser (localStorage
+  `gen2-label-print`: the stripe position or Off, and whether screws and nuts are drawn), like the quality tier; not in the
+  record, so a share link carries no stripe choice. Astra (relayed by Joey): the choice mixes a printer's capability with a
+  label's look, so "the printer's, not the build's" is too absolute; a browser default is the right practical first version,
+  and printer profiles or a per-build override can come later. That the record's field list is pinned to the old planner by
+  the drift check, and that the shared formats keep six style keys, are implementation constraints, not the reason. It shows in the Labels panel under Label settings ("Printing part labels": Part label stripe, Screw
   and nut drawings, a line saying what Off means) and on the Label plate, whose own Stripe position and drawings inputs
   stay live and send a `setting` message back; the planner sends it to the Studio in the list document's `output` bag under
   the Studio's input ids, so a downloaded list carries it too. Verified from the code that Off removes the material patch
   with the band (the patch is a piece of the band), so Off is two filaments.
+- **The export checked** (Astra: "two filaments" must match the file, the material patch included): a stainless M5 × 20
+  socket-cap part label (the Studio's fixture t1) exported from the plate on loopback with the stripe at Bottom edge assigns
+  four extruders in the 3MF's Slic3r config (Base → 1, text → 2, "band Metric" → 3, "band accent Stainless" → 4; the
+  Studio's status says the same); with the stripe Off, two (Base → 1, text → 2), no band and no accent volume: the patch
+  goes with the band. Astra's other confirmation, in the e2e: a `setting` without the frame's session changes nothing, one
+  from the real frame with a stale rev is rejected and one at the current rev taken, and a change made while the plate is
+  hidden reaches it on reopening.
 - **Not done**: a printer-capability suggestion (Sol's D); the planner does not know a printer's colour count.

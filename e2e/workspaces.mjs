@@ -508,6 +508,25 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   await frame.locator('#hw-profile').setChecked(false);
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').drawings === false, null, { timeout: 5000 });
   assert.equal(await page.locator('#ws-labels [aria-label="Screw and nut drawings"] .seg.on').textContent(), 'Off', 'the panel shows the drawings off');
+  // a setting without the frame's session, or with an old rev, changes nothing (Astra: the fix must not let stale updates in)
+  const revNow = await page.evaluate(() => window.__GEN2_PLATE__().rev);
+  await page.evaluate((origin) => { window.postMessage({ gen2plate: 'setting', v: 1, session: 'nope', id: 'hw-band', value: 'bottom', rev: 0, buildId: window.__GEN2_STORE__.state.buildId }, origin); }, base);
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gen2-label-print')).band), 'wedge', 'a stray setting changes nothing');
+  assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().rev), revNow, 'and moves no rev');
+  // the same from the REAL frame with its own session but a stale rev: the source and session pass, the rev rule rejects it
+  // (Terra 01a13c4b: the self-posted message above never reaches that rule)
+  await frame.locator('body').evaluate((_, r) => { window.parent.postMessage({ gen2plate: 'setting', v: 1, session: EMBED.bind.session, id: 'hw-band', value: 'bottom', rev: r - 1, buildId: EMBED.snap.buildId }, EMBED.bind.origin); }, revNow);
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gen2-label-print')).band), 'wedge', 'a stale-rev setting from the frame changes nothing');
+  await frame.locator('body').evaluate((_, r) => { window.parent.postMessage({ gen2plate: 'setting', v: 1, session: EMBED.bind.session, id: 'hw-band', value: 'end', rev: r, buildId: EMBED.snap.buildId }, EMBED.bind.origin); }, revNow);
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print')).band === 'end', null, { timeout: 5000 });   // the current rev: taken
+  // changed while the plate is hidden: the reopening carries the latest preference
+  await page.locator('#ws-labels .track.view button:text-is("On build")').click();
+  await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'off');
+  await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+  await settle(page, 600);
+  assert.equal(await frame.locator('#hw-band').evaluate((el) => el.value), 'off', 'the plate shows the change made while it was hidden');
   // the toggle keeps the frame; the dock's Print labels shows the plate again
   await page.locator('#ws-labels .track.view button:text-is("On build")').click();
   await settle(page, 200);
