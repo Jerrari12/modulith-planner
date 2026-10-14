@@ -229,8 +229,12 @@ Dated calls made while building, with who made them. The brief and the inventory
   frame loads `labels.modulith.systems/?embed=planner`, the Studio answers ready with its capabilities, a typed label
   placed on a drawer shows on the plate as a row tagged with its drawer, laid out on the 3D plate, Download enabled, the
   selection highlighted on both sides; Undo in the planner takes the tag off the row with a new rev. The console's 429s
-  (seven this time; one unidentified on step A's check) are not the planner's or the Studio's: every request to either
-  origin returns 200, and the page's only other hosts are the old viewer's GoatCounter counter (`jerrari-build`, ten
-  beacons, which cutover day stops), its script CDN, and the parts host. They do not occur on loopback, where the beacons
-  are not sent and the parts host is the same. Which response carries the 429 cannot be read cross-origin, and ten direct
-  hits on a beacon URL answered 200 (Terra 01a13bcc: the attribution was an inference, so it is recorded as one). Benign.
+  (seven this time; one unidentified on step A's check) are ESTABLISHED by a headless run that logged every response:
+  they are event beacons to the old viewer's GoatCounter counter, `jerrari-build.goatcounter.com/count?p=open:…`,
+  `preset:…`, `step:…`, `complete` (four beacons answered 429 in that load; the run logged responses of 400 and above
+  only, and no request to the planner's or the Studio's origin was among them; the pane's earlier loads sent ten such
+  beacons each). That counter is the one cutover day stops. (Terra 01a13bcc had rightly called the earlier attribution,
+  from a host count alone, an inference; this run replaced it.) They do not affect the label workflow.
+- **The plate's Download verified** (Astra, relayed by Joey: "Download enabled" is not the exported file): the same
+  headless run downloaded `edgelabels.3mf` from the plate on the domain and from the standalone Studio with the same one
+  label at the same default settings; the two files are byte-identical (71,946 bytes).
