@@ -287,3 +287,36 @@ Dated calls made while building, with who made them. The brief and the inventory
   plate's Stripe position (its row note reads "Screw drawing", no stripe), End chosen on the plate comes back to the panel and the
   browser preference, and the 3MF downloaded with the stripe Off has two volumes on extruders 1 and 2.
 - **Not done**: a printer-capability suggestion (Sol's D); the planner does not know a printer's colour count.
+
+## 2026-10-14 (the Part Picker's refined flow, live)
+
+- **Why** (Joey's hands-on pass): in the Picker modal one intent took two confirmations ("Queue N parts" in the right
+  panel, then "Add N labels to the planner" in the bar at the other corner), an empty "M? × ?" part could reach the list, and the right column was dense
+  for a first-time user. Joey's idea was stages along the top. A second session, the Label Studio Refiner, designed, built
+  and stress-tested the refinement on the Picker's branch `flow-refine` under a brief from this one: the design
+  (docs/FLOW-REFINE-2026-10-14.md, 9028a06c) reviewed by Sol 01a13c2c before the prototype (1305aed6; 9 of 9 held), the
+  code by an internal review, a stress agent and Sol 01a13c5f / 01a13c96; the final build is 75a5d1b5.
+- **What shipped**: a stage strip (Family · Type · Size · Lengths · Details) that is progress and navigation, never a gate;
+  ONE add action in a bar pinned in every mode ("Add N labels to the planner" in the planner); "Pick more first" keeps a
+  batch pending ("3 parts pending ×", the × announced as "Clear pending parts") and opens the stage before it; the reasons
+  an add is not possible yet, beside it, as links to their stage (an untouched field blocks; a deliberate Unknown adds,
+  with a warning); "This part" and "Your parts" on the right, the status words, pins and colours folded under "Part
+  details", the list tools under "List tools". Astra's review of the prototype (relayed by Joey) chose that wording, had
+  the stage heading clear the sticky strip, the disabled primary subdued (grey, no fill), and "N unspecified details"
+  inside Part details instead of "N unknown" on the row.
+- **The batch id** (Astra: a late reply credited to a later send could falsely confirm labels, so not cosmetic): the
+  Picker mints a `batch` id on every `add`; the planner's modal and the Studio's sheet echo it on `added` and `refused`;
+  the Picker credits a reply only when its batch matches the pending send and retires the id on a timeout.
+- **Deployed receivers first**: the planner's echo (main 2c58a0e, live 22:48Z), then the Studio sheet's echo alone (public
+  main 1d25ae87, live 23:45Z), then, after the Studio page's ten-minute cache (max-age=600), the Picker (public main
+  56c546bc, live 23:56Z, its SOURCE.json naming 75a5d1b5). The planner's e2e case drives the new flow (e7d1587).
+- **Checked in production** (headless, the same walk as on loopback): in the planner on the domain, the live Picker build
+  75a5d1b5, M4 × 12 / 16 / 20, Pick more first, M5 × 16, ONE Add: four part labels in the build ("Added 4 part labels",
+  the handshake log `ready, add`), and on reopening the Picker says "Added 4 part labels to your build."; in the Label
+  Studio's own sheet, a hex M3 nut ("Add 1 part label"): one part row, the sheet closed, the Studio's reply carried the
+  batch id back, and the Picker said "Added 1 part label to your list." with the row marked sent. No page errors, and no
+  failed request outside the GoatCounter counter (its 429s filtered out, as placed earlier the same day).
+- **A caveat**: a planner or Studio tab opened before these deploys still runs the old receiving code; reload it, or the
+  Picker reports an add as not answered although it landed.
+- **Later** (polish): the regular Nyloc picture at the same three-quarter angle, light and scale as the other nuts, with
+  the insert visible.
