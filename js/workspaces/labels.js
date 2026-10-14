@@ -78,6 +78,21 @@ const HINTS = {
   several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several, video: `img/hints/labels-several.mp4` },
 };
 const LABEL_STUDIO_URL = 'https://labels.modulith.systems/';
+/* the Studio this page talks to. A page served from loopback may point at a local Studio with ?studio=http://127.0.0.1:PORT/
+   (kept for the tab); a page on any other origin ignores it, so a link cannot point a visitor at another Studio. */
+const STUDIO = (() => {
+  try {
+    const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(location.origin);
+    const ok = (u) => typeof u === 'string' && /^http:\/\/(localhost|127\.0\.0\.1):\d{2,5}\/$/.test(u);
+    const q = new URLSearchParams(location.search).get('studio');
+    if (local && ok(q)) sessionStorage.setItem('gen2-studio-url', q);
+    const s = sessionStorage.getItem('gen2-studio-url');
+    if (local && ok(s)) return s;
+  } catch { /* no storage */ }
+  return LABEL_STUDIO_URL;
+})();
+const STUDIO_ORIGIN = new URL(STUDIO).origin;
+const PICKER_MAX = 200;   // the Picker's own cap on one batch
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 const sigOf = (m) => { const s = JSON.stringify(m); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + s.length; };
 const FACE_LABEL = Object.fromEntries((G?.faceplateStyles || []).map((f) => [f.id, f.label]));
@@ -107,7 +122,7 @@ export function mountLabels(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
   const S = () => store.state;
-  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null };
+  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null, fresh: null };
   let L = null;   // the label-list module once loaded
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -138,6 +153,7 @@ export function mountLabels(stage, ctx) {
      change, or any other edit, must not be what the panel's Undo takes back). `also(s)` runs inside the same commit, for what
      belongs to the operation (an imported set's style). */
   function labelCommit(r, why = 'label', also = null) {
+    st.fresh = null;   // the labels a Part Picker batch just brought stay marked until the next label change
     if (!r.ok) { if (r.msg) status(r.msg, true); renderAll(); return false; }
     store.flush();
     // the panel state changes INSIDE the commit, so the subscriber's render already sees the armed label and the status
@@ -307,6 +323,68 @@ export function mountLabels(stage, ctx) {
     if (doc === undefined) { status('This labels link is damaged; nothing was added.', true); renderAll(); return; }
     importDoc(doc, 'link');
   }
+  /* THE PART PICKER MODAL (docs/redesign/LABELS-INTEGRATION.md, step A): the Studio's Part Picker in a frame over the
+     workspace, made once per page and hidden between openings so its choices persist. The planner speaks first: a hello
+     with a session the Picker binds to (it checks the origin against its own list); every message after carries the
+     session, and the planner reads only from its own frame's window at the Studio's origin. A batch lands in the build
+     that was open when the modal opened, as one history entry; the Picker is answered only after the store took it. */
+  let picker = null;
+  const PICKER_ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const newSession = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map((b) => PICKER_ALPHABET[b % 62]).join(''); };
+  function openPicker() {
+    if (picker && picker.buildId !== S().buildId) { picker.veil.remove(); picker = null; }   // another build: a new frame and session, so a batch still in flight for the old one is a stranger here (Sol 01a13844); the Picker keeps its list in its own storage
+    if (!picker) {
+      const session = newSession();
+      const frame = el('iframe', { src: STUDIO + 'parts/?embed=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : ''), title: 'Part Picker', referrerpolicy: 'strict-origin-when-cross-origin' });
+      const closeBtn = el('button.x', { title: 'Close', 'aria-label': 'Close the Part Picker', onclick: () => closePicker() }, [icon('x', { size: 18 })]);
+      const link = el('span.link', { role: 'status', text: 'Connecting…' });   // the handshake, in the planner's own words
+      const veil = el('div', { id: 'ws-partpicker', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Part Picker', hidden: true }, [
+        el('div.glass.frame', {}, [el('div.head', {}, [el('h2', { text: 'Part Picker' }), el('span.sub', { text: 'Choose parts, then Add part labels: they land in this build’s list, ready to place.' }), link, closeBtn]), frame]),
+      ]);
+      root.appendChild(veil);
+      const hello = () => { try { frame.contentWindow.postMessage({ gen2parts: 'hello', v: 1, session }, STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
+      frame.addEventListener('load', hello);
+      const onMessage = (e) => {
+        if (!picker || e.source !== frame.contentWindow || e.origin !== STUDIO_ORIGIN) return;
+        const d = e.data;
+        if (picker.log.length < 20) picker.log.push(d && d.gen2parts);
+        if (!d || typeof d !== 'object' || d.v !== 1 || d.session !== session) return;
+        if (d.gen2parts === 'ready') { picker.ready = true; clearTimeout(picker.wait); picker.link.textContent = ''; return; }
+        if (d.gen2parts !== 'add') return;
+        const reply = (m) => { try { e.source.postMessage({ ...m, v: 1, session }, STUDIO_ORIGIN); } catch { /* the frame went away */ } };
+        if (picker.veil.hidden) { reply({ gen2parts: 'refused', reason: 'The Part Picker was closed before the labels arrived. Open it and press Add part labels again.' }); return; }
+        if (S().buildId !== picker.buildId) { reply({ gen2parts: 'refused', reason: 'The planner moved to another build while the Part Picker was open. Close it and open it again on that build.' }); return; }
+        if (!Array.isArray(d.items) || !d.items.length) { reply({ gen2parts: 'refused', reason: 'No part labels came through.' }); return; }
+        if (d.items.length > PICKER_MAX) { reply({ gen2parts: 'refused', reason: `The planner takes at most ${PICKER_MAX} part labels at once.` }); return; }
+        if (!L) { reply({ gen2parts: 'refused', reason: 'The planner’s label module has not loaded yet; try again in a moment.' }); return; }
+        const r = R.addPartItems(L, S(), d.items);
+        if (!labelCommit(r, 'labels-add')) { reply({ gen2parts: 'refused', reason: r.msg || 'The planner could not add them.' }); return; }
+        reply({ gen2parts: 'added', count: r.added.length + r.updated.length, skipped: r.skipped });
+        st.fresh = new Set([...r.added, ...r.updated]); st.pick = null; st.selId = null; stage.setSelected(null);
+        closePicker(); renderAll(); say(r.msg); if (phone) phone.open(panel);
+      };
+      addEventListener('message', onMessage, { signal });
+      picker = { veil, frame, closeBtn, link, session, buildId: null, ready: false, hello, ret: null, log: [], wait: 0 };
+      if (new URLSearchParams(location.search).get('debug')) window.__GEN2_PICKER__ = () => picker;   // the e2e suite reads the handshake
+    }
+    picker.buildId = S().buildId;   // the destination: a batch for another build is refused
+    picker.ret = document.activeElement;
+    picker.veil.hidden = false;
+    document.documentElement.classList.add('ws-partpicker-open');
+    if (!picker.ready) {
+      picker.hello();   // a frame that loaded before this page listened (or lost the first hello) hears it again
+      clearTimeout(picker.wait);
+      picker.wait = setTimeout(() => { if (!picker.ready) picker.link.textContent = 'The Picker has not connected: this planner’s address is not on its list yet (it will be at planner.modulith.systems).'; }, 8000);
+    }
+    setTimeout(() => { try { picker.closeBtn.focus(); } catch { /* jsdom */ } }, 0);
+  }
+  function closePicker() {
+    if (!picker || picker.veil.hidden) return;
+    picker.veil.hidden = true;
+    document.documentElement.classList.remove('ws-partpicker-open');
+    const r = picker.ret; picker.ret = null;
+    if (r && typeof r.focus === 'function' && document.contains(r)) { try { r.focus(); } catch { /* gone */ } }
+  }
   function openStudio(parts) {
     // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
     // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
@@ -443,7 +521,7 @@ export function mountLabels(stage, ctx) {
     scroll.appendChild(el('div.list', {}, waitingAll.map((l) => {
       const ok = L.assignable(l);
       const onPick = l.id === st.pick;
-      const b = el('button.chip-l' + (onPick ? '.on' : '') + (l.hardware ? '.hw' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
+      const b = el('button.chip-l' + (onPick ? '.on' : '') + (l.hardware ? '.hw' : '') + (st.fresh && st.fresh.has(l.id) ? '.new' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
       if (l.hardware && R.hwNotReady(l)) b.appendChild(el('span.tag', { text: 'not ready' }));
       if (ok) dragFrom(b, l.id);
       return el('div.item', {}, [b,
@@ -467,7 +545,7 @@ export function mountLabels(stage, ctx) {
       attachHint(el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']), HINTS.type, panel),
       attachHint(el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']), HINTS.file, panel),
       attachHint(el('button.key.tile.brand', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', onclick: () => openStudio(false) }, [STUDIO_ICON(), 'Label Studio', icon('arrow-square-out', { size: 12 })]), HINTS.studio, panel),
-      attachHint(el('button.key.tile.brand', { title: 'Opens the Label Studio’s Part Picker in a new tab: choose screws, nuts and washers; download its label list and add it here', onclick: () => openStudio(true) }, [PICKER_ICON(), 'Part Picker', icon('arrow-square-out', { size: 12 })]), HINTS.picker, panel),
+      attachHint(el('button.key.tile.brand', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker', icon('arrow-square-out', { size: 12 })]), HINTS.picker, panel),
     ]));
     if (labels.length) foot.appendChild(el('div.fillrow', {}, [
       attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
@@ -488,7 +566,7 @@ export function mountLabels(stage, ctx) {
     box.appendChild(el('div.dlabel', {}, [preview(l, true), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
     const acts = el('div.acts');
     if (R.isPartLabel(l)) {
-      acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Label Studio; add the new label from its file', onclick: () => openStudio(true) }, ['Edit part details', icon('arrow-square-out', { size: 14 })]));
+      acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker() }, ['Edit part details', icon('arrow-square-out', { size: 14 })]));
       acts.appendChild(el('button.key.sm', { title: 'Replace the part layout with your own words on this drawer', onclick: () => openModal({ title: `Use your own words on drawer ${no}?`, body: ['This label is laid out from its part record. Words you type replace that layout on this drawer only; the part label goes back to your labels, ready to place again.'], ok: 'Use custom wording', field: { placeholder: 'What’s in this drawer?', value: R.labelShort(l) }, onOk: () => { const t = modalField(); closeModal(); labelCommit(R.customWording(L, S(), u.id, t)); }, onCancel: () => closeModal() }) }, ['Use custom wording']));
     } else acts.appendChild(el('button.key.sm', { onclick: () => openEdit(l.id, u.id) }, [icon('pencil-simple', { size: 15 }), 'Edit']));
     acts.appendChild(el('button.key.sm', { title: 'Take the label off this drawer; it waits to be placed again', onclick: () => labelCommit(R.unassign(L, S(), u.id, l.id)) }, ['Remove']));
@@ -607,12 +685,12 @@ export function mountLabels(stage, ctx) {
   ] }) : null;
   if (phone) phone.onLayout(safe);
   function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 324 + 28, right: (st.edit ? 304 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 }); }
-  function renderAll() { renderPanel(); renderEditor(); renderDock(); bar.sync(); if (phone) phone.refresh(); safe(); }
+  function renderAll() { renderPanel(); renderEditor(); renderDock(); bar.sync(); if (phone) phone.refresh(); safe(); const fresh = st.fresh && panel.querySelector('.chip-l.new'); if (fresh) { try { fresh.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } }
   addEventListener('resize', safe, { signal });
   addEventListener('hashchange', () => { if (L) importFromHash(); }, { signal });
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
-    if (e.key === 'Escape') { if (modalState) { modalState.onCancel(); return; } if (st.edit) { closeEdit(); return; } if (st.pick) { armPlacing(null); return; } if (tag === 'input') { e.target.blur(); return; } stage.setSelected(null); return; }
+    if (e.key === 'Escape') { if (picker && !picker.veil.hidden) { closePicker(); return; } if (modalState) { modalState.onCancel(); return; } if (st.edit) { closeEdit(); return; } if (st.pick) { armPlacing(null); return; } if (tag === 'input') { e.target.blur(); return; } stage.setSelected(null); return; }
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }
@@ -652,6 +730,7 @@ export function mountLabels(stage, ctx) {
       ac.abort(); unsub();
       if (ctx.memo) ctx.memo.labelsSel = st.selId;
       stage.setSelected(null); stage.setSafeArea(null); stage.watchHover(false);
+      document.documentElement.classList.remove('ws-partpicker-open');
       hideHint();
       if (phone) phone.destroy(); root.remove();
     },

@@ -259,6 +259,42 @@ export function importLabels(L, b, labels) {
   return done(r.state, desc, msg, { pick: null, added: r.added });
 }
 
+/* THE PART PICKER'S BATCH (the planner's modal, docs/redesign/LABELS-INTEGRATION.md step A): a part already in the list (the
+   same part id in its record) is UPDATED in place and keeps its label id, its badge and its drawers (the Studio's own rule for
+   its Part Picker sheet); a new part is appended; a batch naming a part twice keeps the last; an item that is not a part label
+   is skipped and counted. One history entry, so one undo takes the whole batch back. */
+export function addPartItems(L, b, items) {
+  const base = b.labelList ? withList(L, stateOf(b)) : (() => { const r = L.reconcile(b.placed || [], null, null); return { list: r.list, assignments: r.assignments }; })();
+  const byPart = new Map();
+  for (const l of base.list.labels) { const id = l.hardware && typeof l.hardware.id === 'string' ? l.hardware.id : null; if (id && !byPart.has(id)) byPart.set(id, l); }
+  const fresh = [], updated = [], at = new Map();
+  let skipped = 0;
+  for (const it of Array.isArray(items) ? items : []) {
+    if (!it || typeof it !== 'object' || it.schema !== L.HW_ITEM || typeof it.id !== 'string') { skipped++; continue; }
+    const text = itemWords(it).slice(0, L.TEXT_MAX);
+    const have = byPart.get(it.id);
+    if (have) {
+      const c = L.cleanLabel({ ...have, text, hardware: it }, { inBuild: true });
+      if (!c) { skipped++; continue; }
+      for (const k of Object.keys(have)) delete have[k];   // the same object (its place in the list), the cleaned contents only
+      Object.assign(have, c);
+      if (!updated.includes(have.id)) updated.push(have.id);
+      continue;
+    }
+    const label = { text, hardware: it };
+    if (at.has(it.id)) fresh[at.get(it.id)] = label; else { at.set(it.id, fresh.length); fresh.push(label); }
+  }
+  const r = L.appendLabels(base, fresh, { inBuild: true });
+  skipped += r.dropped;
+  const added = r.added.length;
+  if (!added && !updated.length) return refuse('none', skipped ? 'None of these part labels could be read.' : 'There were no part labels to add.');
+  const parts = [];
+  if (added) parts.push(`Added ${added} part ${plural(added, 'label', 'labels')}`);
+  if (updated.length) parts.push(`${added ? 'updated' : 'Updated'} ${updated.length} already in the list`);
+  const desc = parts.join(', ');
+  return done(r.state, desc, desc + (skipped ? `; ${skipped} could not be read` : '') + '.', { pick: null, added: r.added, updated, skipped });
+}
+
 /* ---- exports ------------------------------------------------------------------------------------------------- */
 /* the build's labels as a standalone label list (the format, with the build's style; assignments stay in the build) */
 export function exportDoc(L, b) {

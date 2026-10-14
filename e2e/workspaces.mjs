@@ -19,17 +19,18 @@ import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');   // e2e/ sits beside test/
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
-function serve() {
+function serve(dir = root) {
   const server = createServer(async (req, res) => {
     try {
       const rel = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^([/\\])+/, '');
-      let file = join(root, rel === '' ? 'index.html' : rel);
-      if (!file.startsWith(root)) { res.writeHead(403); res.end(); return; }
+      let file = join(dir, rel === '' ? 'index.html' : rel);
+      if (!file.startsWith(dir)) { res.writeHead(403); res.end(); return; }
       if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
       res.writeHead(200, { 'Content-Type': MIME[extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store' });
       res.end(await readFile(file));
@@ -41,11 +42,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const { chromium } = await import('playwright');
 const server = await serve();
 const base = `http://127.0.0.1:${server.address().port}`;
+/* the Label Studio checkout beside this repo (its published Part Picker under parts/) on a second loopback server: the
+   Part Picker case drives the real Picker in the planner's modal; without the checkout the case is skipped */
+const STUDIO_DIR = process.env.STUDIO_DIR || join(root, '..', 'GEN2 label-types', 'GEN2 EdgeLabel Label Generator');
+const haveStudio = existsSync(join(STUDIO_DIR, 'parts', 'js', 'embed.js'));
+const studioServer = haveStudio ? await serve(STUDIO_DIR) : null;
+const studio = studioServer ? `http://127.0.0.1:${studioServer.address().port}/` : null;
 /* E2E_SOFT=1 reproduces the CI runner's rendering here: the SwiftShader software rasteriser, no GPU */
 const SOFT = process.env.E2E_SOFT === '1';
 const launchArgs = ['--enable-unsafe-swiftshader', ...(SOFT ? ['--disable-gpu', '--use-angle=swiftshader'] : [])];
 const browser = await (async () => { for (const o of [{ channel: 'chrome' }, {}]) { try { return await chromium.launch({ ...o, args: launchArgs }); } catch {} } throw new Error('no Chromium'); })();
-test.after(async () => { await browser.close(); server.close(); });
+test.after(async () => { await browser.close(); server.close(); if (studioServer) studioServer.close(); });
 /* a case that fails before its own ctx.close() must not leave a page rendering: on the CI runner's software rasteriser
    one leftover render loop starved every boot after it, so each case's contexts are closed here whatever happened */
 const contexts = new Set();
@@ -61,7 +68,7 @@ async function open(ws, { query = '', phone = false, context = null } = {}) {
   if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const page = await ctx.newPage();
   const errors = [];
-  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 3).join(' | ').trim()));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   await page.goto(`${base}/index.html?ws=${ws}&debug=1${query}`, { waitUntil: 'load', timeout: 90_000 });
   await waitBoot(page);
@@ -368,6 +375,68 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
   assert.ok(await page.evaluate(() => document.getElementById('ws-setup').contains(document.activeElement)), 'twelve Tabs later focus is still inside the sheet');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.getElementById('ws-setup'), null, { timeout: 5000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add part labels lands in this build as one undo step, the same part again updates in place', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  const buildId = await page.evaluate(() => window.__GEN2_STORE__.state.buildId);
+  await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && p.ready && !p.veil.hidden; }, null, { timeout: 60_000 });   // the Picker loaded and answered the hello
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Close the Part Picker', 'focus moved into the modal');
+  const frame = page.frameLocator('#ws-partpicker iframe');
+  await frame.locator('.tile.has-img').first().waitFor({ timeout: 60_000 });   // the Picker's data and pictures are in (a family picked before that has no template)
+  await frame.locator('button.tile').filter({ hasText: /^Nuts$/ }).first().click();
+  await frame.locator('button', { hasText: /^Add 1 part/ }).first().click();
+  await frame.locator('#make-labels').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PICKER__(); return p.veil.hidden; }, null, { timeout: 30_000 });   // the planner took it and closed the modal
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.buildId), buildId, 'still the same build');
+  const after1 = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.map((l) => [l.id, !!l.hardware, l.hardware && l.hardware.id]));
+  assert.equal(after1.length, 1, 'one part label');
+  assert.ok(after1[0][1] && after1[0][2], 'it carries its part record');
+  assert.equal(await page.locator('#ws-labels .chip-l.new').count(), 1, 'the new label is marked in the list');
+  assert.match(await text(page, '#ws-labels .last'), /Added 1 part label/);
+  assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ws-partpicker')).display), 'none', 'the modal is really gone from view');
+  // the same part sent again: updated in place, never a second label (the Picker keeps its list between openings). The
+  // label's words are changed here first, so the update is a real change (an identical record makes no history entry)
+  await page.evaluate(() => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { s.labelList.labels[0].text = 'edited by hand'; }, 'edit'); st.flush(); });
+  await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  await frame.locator('#make-labels').click();
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
+  const after2 = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.map((l) => l.id));
+  assert.deepEqual(after2, [after1[0][0]], 'the same label, not a second one');
+  assert.match(await text(page, '#ws-labels .last'), /Updated 1 already in the list/);
+  // one undo takes the batch back
+  assert.notEqual(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels[0].text), 'edited by hand', 'the update brought the part’s own words back');
+  await page.click('#ws-tools button[aria-label="Undo"]');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0].text === 'edited by hand', null, { timeout: 10_000 });   // one undo: the update alone
+  await page.click('#ws-tools button[aria-label="Undo"]');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels.length === 1 && window.__GEN2_STORE__.state.labelList.labels[0].text !== 'edited by hand', null, { timeout: 10_000 });   // the hand edit
+  await page.click('#ws-tools button[aria-label="Undo"]');
+  await page.waitForFunction(() => !window.__GEN2_STORE__.state.labelList || !window.__GEN2_STORE__.state.labelList.labels.length, null, { timeout: 10_000 });
+  // a batch that lands after the modal was closed is refused, not imported behind the visitor's back (Sol 01a13844)
+  await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  await page.evaluate(() => { const p = window.__GEN2_PICKER__(); p.veil.hidden = true; });   // closed from under the batch
+  await frame.locator('#make-labels').evaluate((b) => b.click());   // the Picker's own button, pressed inside the hidden frame
+  await settle(page, 800);
+  assert.ok(!(await page.evaluate(() => window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels.length)), 'nothing was imported after the close');
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_PICKER__().log.slice(-1)), ['add'], 'the batch did arrive and was refused');
+  const sessionA = await page.evaluate(() => window.__GEN2_PICKER__().session);
+  // another build: the next opening makes a new frame and session, so nothing from the old one can land here
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.buildId = 'e2eotherbuild1'; }, 'edit'));
+  await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
+  await page.waitForFunction((a) => { const p = window.__GEN2_PICKER__(); return p && p.session !== a && p.ready && !p.veil.hidden; }, sessionA, { timeout: 60_000 });
+  assert.equal(await page.locator('#ws-partpicker').count(), 1, 'one modal, the new one');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 5000 });
+  // a message that is not from the frame, or without the session, is ignored
+  await page.evaluate((origin) => { window.postMessage({ gen2parts: 'add', v: 1, session: 'nope', items: [] }, origin); }, base);
+  await settle(page, 300);
+  assert.ok(!(await page.evaluate(() => window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels.length)), 'a stray add changes nothing');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

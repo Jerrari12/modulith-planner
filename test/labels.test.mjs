@@ -190,3 +190,34 @@ test('a kept copy is refused over a build that has labels of its own, and when i
   assert.equal(R.restoreCopy(L, build(), { ...copy, list: { ...copy.list, labels: [] } }).reason, 'no-copy');
 });
 
+/* ---- the Part Picker's batch (the planner's modal) ---- */
+const part = (id, fields, head = 'SHCS') => ({ schema: 'part-picker-label-item/1', id, fields, attributes: [{ path: 'head', text: head }], pinned: ['head'] });
+test('a Part Picker batch appends new parts, updates a part already in the list in place (its id, badge and drawer kept), skips junk, keeps the last of a twice-named part', () => {
+  const b = withLabels(['Typed']);
+  let r = R.addPartItems(L, b, [part('p1', ['M5', '20']), part('p2', ['M3', '10']), { schema: 'nope' }, part('p2', ['M3', '12'])]);
+  assert.equal(r.ok, true, r.msg);
+  assert.equal(r.added.length, 2); assert.equal(r.updated.length, 0); assert.equal(r.skipped, 1);
+  apply(b, r);
+  const p1 = R.labelsOf(b).find((l) => l.hardware && l.hardware.id === 'p1'), p2 = R.labelsOf(b).find((l) => l.hardware && l.hardware.id === 'p2');
+  assert.equal(p1.text, 'M5 20 · SHCS');
+  assert.equal(p2.text, 'M3 12 · SHCS', 'the batch named p2 twice: the last wins');
+  assert.equal(R.labelsOf(b).length, 3);
+  // p1 goes on a drawer and gets an icon; then the Picker sends p1 again with a new length
+  apply(b, R.place(L, b, 1, p1.id, null, 'drawer'));
+  R.labelById(b, p1.id).badge = { type: 'char', value: 'A' };   // the list object was replaced by the place: set it on the live label
+  r = R.addPartItems(L, b, [part('p1', ['M5', '30'])]);
+  assert.equal(r.ok, true, r.msg);
+  assert.deepEqual([r.added.length, r.updated], [0, [p1.id]]);
+  apply(b, r);
+  const p1b = R.labelById(b, p1.id);
+  assert.equal(p1b.text, 'M5 30 · SHCS');
+  assert.equal(p1b.hardware.fields[1], '30');
+  assert.deepEqual(p1b.badge, { type: 'char', value: 'A' }, 'the badge survives');
+  assert.equal(b.labelAssign[1], p1.id, 'the drawer keeps it');
+  assert.equal(b.placed[0].label, 'M5 30 · SHCS', 'the mirror follows');
+  assert.equal(R.labelsOf(b).length, 3, 'nothing was added twice');
+  assert.match(r.msg, /Updated 1 already in the list/);
+  assert.equal(R.addPartItems(L, b, [{ schema: 'nope' }]).reason, 'none');
+  assert.equal(R.addPartItems(L, b, []).reason, 'none');
+});
+

@@ -73,6 +73,23 @@ commands and events (open with snapshot, select id, apply, discard, stale) so a 
 the product. What an iframe cannot do, and must be worked around by message: share focus and tab order, let the Studio's
 menus escape its frame, route keyboard shortcuts and undo to one owner.
 
+## Astra's adjustments (2026-10-13, approving step A)
+
+- **Safeguards behind the scenes.** "Reviewed commit" means an **Apply changes** button; a review screen appears only when
+  something needs a decision (a label deleted while assigned to a drawer, edits applied after the underlying labels
+  changed). Otherwise the integration would feel heavier than the two apps.
+- **Picker additions are a simple operation**: select parts, Add labels, the labels appear in the planner. No draft
+  workflow for the Picker; what stays necessary is the right destination build and no duplicate additions.
+- **The two views are continuous**: both show the current draft, so edits can be inspected on the build before applying;
+  if the build ever shows only saved labels, that must be obvious on screen.
+- **Conflict detection tracks label-relevant changes**, not the project revision as a whole: moving a cabinet must not
+  invalidate a draft that only changed label text. The revision stays the commit check; the conflict test compares the
+  label list and the assignments.
+- **The handshake checks both the origin and the expected sending window.**
+- **Step A is complete when**: the labels land in the build that was open when the modal opened, a part already in the
+  list is updated rather than added again, part details and icons survive the trip, and one undo takes the addition back.
+  Not merely when the modal opens.
+
 ## Risks named, to be designed around
 
 - payload checks beyond the envelope: ids, counts, text bounds, safe rendering;
@@ -82,6 +99,13 @@ menus escape its frame, route keyboard shortcuts and undo to one owner.
 - the Studio's response headers must permit framing by the planner's origin;
 - a kept iframe holds the previous build's session: rebound explicitly on a build switch;
 - undo scope: Ctrl+Z in the Studio edits the draft, in the planner the project, and the screen says which.
+
+## Status
+
+- **Step A built** (2026-10-13): the planner side on `main`, the Picker's embed mode in its repo (89db3532) and republished into
+  the Studio on branch `planner-picker` (95efefdf). Waits on the Studio deploy and the domain for production; proven locally
+  end to end (DECISIONS.md, the same date).
+- Step B not started.
 
 ## Order
 

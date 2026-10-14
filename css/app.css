@@ -486,6 +486,18 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels .chip-l:hover { background: var(--track); }
 #ws-labels .chip-l.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
 #ws-labels .chip-l[disabled] { opacity: .5; cursor: not-allowed; }
+/* the Part Picker modal: the Studio's picker in a frame over the workspace, a small border of the planner around it */
+#ws-partpicker { position: fixed; inset: 0; z-index: 70; display: flex; padding: 18px; background: rgba(6, 5, 20, .55); }
+#ws-partpicker[hidden] { display: none; }   /* the flex above would beat the hidden attribute */
+#ws-partpicker .frame { flex: 1; display: flex; flex-direction: column; min-width: 0; border-radius: 16px; overflow: hidden; }
+#ws-partpicker .head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--glass-border); }
+#ws-partpicker .head h2 { margin: 0; font-size: 15px; }
+#ws-partpicker .head .sub { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-partpicker .head .link { font-size: 12px; color: var(--warning, var(--orange)); max-width: 46%; }
+#ws-partpicker .head .link:empty { display: none; }
+#ws-partpicker iframe { flex: 1; width: 100%; border: 0; background: #1D1E20; }
+#ws-labels .chip-l.new { box-shadow: 0 0 0 2px var(--orange-edge); }
+@media (max-width: 1023px) { #ws-partpicker { padding: 6px; } #ws-partpicker .head .sub { display: none; } }
 /* a label dragged from the list: the ghost follows the pointer; the page says it is carrying something */
 #ws .drag-ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; padding: 6px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--ink); white-space: nowrap; }
 body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-select: none; }
