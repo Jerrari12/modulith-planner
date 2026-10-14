@@ -389,7 +389,7 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   const frame = page.frameLocator('#ws-partpicker iframe');
   await frame.locator('.tile.has-img').first().waitFor({ timeout: 60_000 });   // the Picker's data and pictures are in (a family picked before that has no template)
   await frame.locator('button.tile').filter({ hasText: /^Nuts$/ }).first().click();
-  await frame.locator('button', { hasText: /^Add 1 part/ }).first().click();
+  await frame.locator('button', { hasText: /^Queue 1 part/ }).first().click();   // the Picker's planner wording: Queue, then Add N labels to the planner
   await frame.locator('#make-labels').click();
   await page.waitForFunction(() => { const p = window.__GEN2_PICKER__(); return p.veil.hidden; }, null, { timeout: 30_000 });   // the planner took it and closed the modal
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.buildId), buildId, 'still the same build');
@@ -399,9 +399,10 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   assert.equal(await page.locator('#ws-labels .chip-l.new').count(), 1, 'the new label is marked in the list');
   assert.match(await text(page, '#ws-labels .last'), /Added 1 part label/);
   assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ws-partpicker')).display), 'none', 'the modal is really gone from view');
-  // the same part sent again: updated in place, never a second label (the Picker keeps its list between openings). The
-  // label's words are changed here first, so the update is a real change (an identical record makes no history entry)
-  await page.evaluate(() => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { s.labelList.labels[0].text = 'edited by hand'; }, 'edit'); st.flush(); });
+  // the same row sent again: updated in place, never a second label (the Picker keeps its list between openings). Words typed
+  // by hand stay; the record underneath is refreshed. The record is bent here first so the update is a real change (an
+  // identical record makes no history entry)
+  await page.evaluate(() => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { const l = s.labelList.labels[0]; l.text = 'edited by hand'; l.hardware.fields = ['M9']; }, 'edit'); st.flush(); });
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
   await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
   await frame.locator('#make-labels').click();
@@ -410,11 +411,11 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   assert.deepEqual(after2, [after1[0][0]], 'the same label, not a second one');
   assert.match(await text(page, '#ws-labels .last'), /Updated 1 already in the list/);
   // one undo takes the batch back
-  assert.notEqual(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels[0].text), 'edited by hand', 'the update brought the part’s own words back');
+  assert.deepEqual(await page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels[0]; return [l.text, l.hardware.fields.join()]; }), ['edited by hand', ''], 'the hand-typed words stay, the record is the Picker’s again');
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0].text === 'edited by hand', null, { timeout: 10_000 });   // one undo: the update alone
+  await page.waitForFunction(() => { const l = window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0]; return l && l.hardware.fields.join() === 'M9'; }, null, { timeout: 10_000 });   // one undo: the update alone
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels.length === 1 && window.__GEN2_STORE__.state.labelList.labels[0].text !== 'edited by hand', null, { timeout: 10_000 });   // the hand edit
+  await page.waitForFunction(() => { const l = window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0]; return l && l.text !== 'edited by hand' && window.__GEN2_STORE__.state.labelList.labels.length === 1; }, null, { timeout: 10_000 });   // the hand edit
   await page.click('#ws-tools button[aria-label="Undo"]');
   await page.waitForFunction(() => !window.__GEN2_STORE__.state.labelList || !window.__GEN2_STORE__.state.labelList.labels.length, null, { timeout: 10_000 });
   // a batch that lands after the modal was closed is refused, not imported behind the visitor's back (Sol 01a13844)

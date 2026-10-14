@@ -221,3 +221,20 @@ test('a Part Picker batch appends new parts, updates a part already in the list 
   assert.equal(R.addPartItems(L, b, []).reason, 'none');
 });
 
+test('a Part Picker row sent again keeps words typed by hand over the part’s own, and refreshes the record underneath', () => {
+  const b = withLabels([]);
+  apply(b, R.addPartItems(L, b, [part('p9', ['M4', '10'])]));
+  const l = R.labelsOf(b).find((x) => x.hardware && x.hardware.id === 'p9');
+  assert.equal(l.text, 'M4 10 · SHCS');
+  R.labelById(b, l.id).text = 'Short M4s';   // the visitor's own words on the part label
+  const r = R.addPartItems(L, b, [part('p9', ['M4', '12'])]);
+  assert.equal(r.ok, true, r.msg);
+  apply(b, r);
+  const after = R.labelById(b, l.id);
+  assert.equal(after.text, 'Short M4s', 'the hand-typed words stay');
+  assert.equal(after.hardware.fields[1], '12', 'the record is the new one');
+  // two rows for the same screw are two labels: the row is the identity, not the size
+  apply(b, R.addPartItems(L, b, [part('p10', ['M4', '12']), part('p11', ['M4', '12'])]));
+  assert.equal(R.labelsOf(b).filter((x) => x.hardware && x.hardware.fields.join() === 'M4,12').length, 3);
+});
+

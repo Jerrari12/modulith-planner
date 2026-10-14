@@ -259,10 +259,11 @@ export function importLabels(L, b, labels) {
   return done(r.state, desc, msg, { pick: null, added: r.added });
 }
 
-/* THE PART PICKER'S BATCH (the planner's modal, docs/redesign/LABELS-INTEGRATION.md step A): a part already in the list (the
-   same part id in its record) is UPDATED in place and keeps its label id, its badge and its drawers (the Studio's own rule for
-   its Part Picker sheet); a new part is appended; a batch naming a part twice keeps the last; an item that is not a part label
-   is skipped and counted. One history entry, so one undo takes the whole batch back. */
+/* THE PART PICKER'S BATCH (the planner's modal, docs/redesign/LABELS-INTEGRATION.md step A). The identity is the Picker's ROW
+   (its record id), not the part's size: the same row sent again is the same label, UPDATED in place (its label id, its badge and
+   its drawers kept, its words refreshed unless they were typed by hand); two rows for the same screw are two labels, as the
+   visitor queued them; and one label can sit on several drawers anyway. A new row is appended; a batch naming a row twice
+   keeps the last; an item that is not a part label is skipped and counted. One history entry, so one undo takes it all back. */
 export function addPartItems(L, b, items) {
   const base = b.labelList ? withList(L, stateOf(b)) : (() => { const r = L.reconcile(b.placed || [], null, null); return { list: r.list, assignments: r.assignments }; })();
   const byPart = new Map();
@@ -274,7 +275,10 @@ export function addPartItems(L, b, items) {
     const text = itemWords(it).slice(0, L.TEXT_MAX);
     const have = byPart.get(it.id);
     if (have) {
-      const c = L.cleanLabel({ ...have, text, hardware: it }, { inBuild: true });
+      // words typed by hand over the part's own (the text no longer equals what its record produces) are kept: the record is
+      // refreshed underneath them, the words are the visitor's (Astra, 2026-10-13)
+      const own = have.text !== itemWords(have.hardware).slice(0, L.TEXT_MAX);
+      const c = L.cleanLabel({ ...have, text: own ? have.text : text, hardware: it }, { inBuild: true });
       if (!c) { skipped++; continue; }
       for (const k of Object.keys(have)) delete have[k];   // the same object (its place in the list), the cleaned contents only
       Object.assign(have, c);
