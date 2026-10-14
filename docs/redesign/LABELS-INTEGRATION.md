@@ -115,11 +115,12 @@ capabilities, then named commands (the plan's "host commands independent of the 
   is not met in B1); stripes made in the standalone Studio are not in the shared list format, so none show on the plate
   (none are lost either); the 3D plate does not highlight the selected label, only its row; the stage keeps rendering
   under the frame.
-- **A follow-up for the editable step** (the Part Picker flow refine, Sol 01a13c5f via the Refiner session, 2026-10-14):
-  the Picker's `gen2parts` replies carry counts but no batch id, so a timed-out send's late reply arriving while the next
-  send waits is credited to the next one. The harm is cosmetic (a "sent" mark, a held batch released) and the planner
-  updates in place; the cure is a batch id echoed in `added` / `refused` on all three sides (the Picker's embed.js, the
-  Studio's sheet, the planner's modal). Deferred, recorded here.
+- **The batch id in the Picker's replies** (the Part Picker flow refine, Sol 01a13c5f via the Refiner session; Astra,
+  relayed by Joey, 2026-10-14: a late reply credited to a later send "could falsely tell someone their latest labels were
+  added", not cosmetic): the Picker mints a `batch` id (8 to 64 of `[A-Za-z0-9_-]`) on each `add`; the planner's modal and
+  the Studio's sheet echo it verbatim on `added` and `refused`; the Picker credits a reply to its pending send only when
+  the ids match and ignores any other. An older Picker sends none and gets none. Done on all three sides the same day;
+  the planner and the Studio echo first, the Picker ships after them.
 - **The seam the editable B builds on** (Sol): the Studio's snapshot handler is "apply the committed state"; the editable
   step adds a draft layer over it (jobId, baseRev, draft storage, Apply, Discard, stale) and must gate this handler, and a
   build switch, so a draft is never erased by a planner update. The revision must then become build-scoped and survive a

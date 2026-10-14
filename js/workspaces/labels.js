@@ -354,7 +354,10 @@ export function mountLabels(stage, ctx) {
         if (!d || typeof d !== 'object' || d.v !== 1 || d.session !== session) return;
         if (d.gen2parts === 'ready') { picker.ready = true; clearTimeout(picker.wait); picker.link.textContent = ''; return; }
         if (d.gen2parts !== 'add') return;
-        const reply = (m) => { try { e.source.postMessage({ ...m, v: 1, session }, STUDIO_ORIGIN); } catch { /* the frame went away */ } };
+        // the batch id the Picker minted for this send rides back on the reply, so a late reply to a timed-out send is never
+        // credited to the next one (Astra, 2026-10-14: a wrong "added" is not cosmetic); an older Picker sends none and gets none
+        const batch = typeof d.batch === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(d.batch) ? d.batch : undefined;
+        const reply = (m) => { try { e.source.postMessage({ ...m, v: 1, session, ...(batch ? { batch } : {}) }, STUDIO_ORIGIN); } catch { /* the frame went away */ } };
         if (picker.veil.hidden) { reply({ gen2parts: 'refused', reason: 'The Part Picker was closed before the labels arrived. Open it and press Add part labels again.' }); return; }
         if (S().buildId !== picker.buildId) { reply({ gen2parts: 'refused', reason: 'The planner moved to another build while the Part Picker was open. Close it and open it again on that build.' }); return; }
         if (!Array.isArray(d.items) || !d.items.length) { reply({ gen2parts: 'refused', reason: 'No part labels came through.' }); return; }
