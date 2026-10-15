@@ -604,6 +604,57 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   await ctx.close();
 });
 
+/* EDIT PART DETAILS OPENS THAT PART (`open/1`, LABELS-INTEGRATION.md, the parts channel's additions).
+   - A Picker that offers the cap gets `open` and answers `opened`, with that part in Edit.
+   - A second browser profile, whose Picker list lacks the row, gets a refusal; its words show in the dialog's head.
+   - An older Picker (no cap) is sent no `open`, and the dialog just opens, as before.
+   The checkout's published parts/ decides which branch runs. */
+test('Edit part details: the Part Picker opens that part (open/1), or just opens with an older Picker', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await settle(page, 800);
+  await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && p.ready && !p.veil.hidden; }, null, { timeout: 60_000 });
+  const frame = page.frameLocator('#ws-partpicker iframe');
+  await frame.locator('.tile.has-img').first().waitFor({ timeout: 60_000 });
+  await frame.locator('button.tile').filter({ hasText: /^Nuts$/ }).first().click();
+  await frame.locator('#stage-panel button.tile[title="Hex nut"]').click();
+  await frame.locator('#stage-panel button.thr[aria-label="M3"]').click();
+  await frame.locator('#add-parts').click();
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
+  // place it on the first Decor drawer, then select that drawer: its card offers Edit part details
+  const first = await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((u) => u.fill === 'decor').id);
+  await page.locator('#ws-labels .chip-l').first().click();
+  await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), first); await settle(page, 500);
+  await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), first); await settle(page, 500);
+  await page.locator('#ws-labels button:has-text("Edit part details")').first().click();
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  const caps = await page.evaluate(() => window.__GEN2_PICKER__().caps || []);
+  if (caps.includes('open/1')) {
+    await page.waitForFunction(() => window.__GEN2_PICKER__().log.includes('opened'), null, { timeout: 15_000 });
+    assert.equal(await page.evaluate(() => window.__GEN2_PICKER__().req), null, 'the answer was credited to its request');
+    // another browser profile, the same build: its Picker has no such row, so it refuses and says why
+    const hash = await page.evaluate(() => location.hash);
+    const other = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(other);
+    await other.addInitScript(() => { try { localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+    const p2 = await other.newPage();
+    await p2.goto(`${base}/index.html?ws=labels&debug=1&studio=${encodeURIComponent(studio)}${hash}`, { waitUntil: 'load', timeout: 90_000 });
+    await p2.waitForSelector('#ws-labels .foot', { timeout: 60_000 });
+    await settle(p2, 1000);
+    const unitId = await p2.evaluate(() => Number(Object.keys(window.__GEN2_STORE__.state.labelAssign || {})[0]));
+    await p2.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), unitId); await settle(p2, 500);
+    await p2.locator('#ws-labels button:has-text("Edit part details")').first().click();
+    await p2.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && !p.veil.hidden && /another browser/.test(document.querySelector('#ws-partpicker .link').textContent); }, null, { timeout: 60_000 });
+  } else {
+    await settle(page, 800);
+    assert.equal(await page.evaluate(() => window.__GEN2_PICKER__().req), null, 'no open sent to an older Picker');
+  }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* A STUDIO THAT DOES NOT ANSWER (the stress test, 2026-10-15). The message blamed the planner's address and offered nothing.
    Now it says the Studio may be slow or down, and offers Try again, which reloads the frame and waits again */
 test('the Part Picker modal with the Studio unreachable: after 8 s it says so and offers Try again', async () => {

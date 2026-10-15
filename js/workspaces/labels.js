@@ -347,7 +347,19 @@ export function mountLabels(stage, ctx) {
         el('button.key.sm', { onclick: () => { h.link.textContent = 'Connecting…'; try { h.frame.src = h.frame.src; } catch { /* the frame went away */ } armWait(h, who); } }, ['Try again']));
     }, 8000);
   }
-  function openPicker() {
+  /* EDIT PART DETAILS OPENS THAT PART (LABELS-INTEGRATION.md, the parts channel's additions, `open/1`): only to a Picker
+     whose ready offered the cap; one request at a time, the latest wins, and an answer counts only with its own req. An
+     older Picker just opens, as before. */
+  function sendOpen() {
+    const p = picker; if (!p || !p.ready || !p.pendingOpen) return;
+    const want = p.pendingOpen; p.pendingOpen = null;
+    if (!(p.caps || []).includes('open/1')) return;
+    let size = Infinity; try { size = JSON.stringify(want.item).length; } catch { /* not plain data */ }
+    if (size > 64 * 1024) return;   // bounded as an add item is
+    p.req = newSession();
+    try { p.frame.contentWindow.postMessage({ gen2parts: 'open', v: 1, session: p.session, req: p.req, id: want.id, item: want.item }, STUDIO_ORIGIN); } catch { /* the frame went away */ }
+  }
+  function openPicker({ open = null } = {}) {
     if (picker && picker.buildId !== S().buildId) { picker.veil.remove(); picker = null; }   // another build: a new frame and session, so a batch still in flight for the old one is a stranger here (Sol 01a13844); the Picker keeps its list in its own storage
     if (!picker) {
       const session = newSession();
@@ -370,9 +382,17 @@ export function mountLabels(stage, ctx) {
         const d = e.data;
         if (picker.log.length < 20) picker.log.push(d && d.gen2parts);
         if (!d || typeof d !== 'object' || d.v !== 1 || d.session !== session) return;
-        if (d.gen2parts === 'ready') { picker.ready = true; picker.caps = Array.isArray(d.caps) ? d.caps.filter((c) => typeof c === 'string').slice(0, 16) : []; clearTimeout(picker.wait); picker.link.textContent = ''; return; }
+        if (d.gen2parts === 'ready') { picker.ready = true; picker.caps = Array.isArray(d.caps) ? d.caps.filter((c) => typeof c === 'string').slice(0, 16) : []; clearTimeout(picker.wait); picker.link.textContent = ''; sendOpen(); return; }
         // Escape inside the frame never reaches this page's keys: the Picker asks, and the dialog closes as its own Escape does
         if (d.gen2parts === 'close') { closePicker(); return; }
+        // the answer to an `open`: counted only with the latest req (a superseded one is dropped); a refusal's words show in
+        // the dialog's head, where the visitor is looking (this `refused` comes FROM the Picker and carries req, not batch)
+        if (d.gen2parts === 'opened' || (d.gen2parts === 'refused' && typeof d.req === 'string')) {
+          if (!picker.req || d.req !== picker.req) return;
+          picker.req = null;
+          if (d.gen2parts === 'refused' && typeof d.reason === 'string') picker.link.textContent = d.reason.slice(0, 300);
+          return;
+        }
         if (d.gen2parts !== 'add') return;
         // the batch id the Picker minted for this send rides back on the reply, so a late reply to a timed-out send is never
         // credited to the next one (Astra, 2026-10-14: a wrong "added" is not cosmetic); an older Picker sends none and gets none
@@ -397,7 +417,12 @@ export function mountLabels(stage, ctx) {
     picker.ret = document.activeElement; picker.retKey = focusKey();
     picker.veil.hidden = false;
     document.documentElement.classList.add('ws-partpicker-open');
-    if (!picker.ready) {
+    // this opening's request: a part to open (Edit part details), or none. A new `open` replaces an outstanding one (sendOpen
+    // mints a new req); an opening without a part leaves it be, since its answer may still come and a refusal's words still
+    // matter (Sol 01a13ffb: clearing req on every opening dropped a refusal that arrived after a quick close and reopen)
+    picker.pendingOpen = open && typeof open.id === 'string' && open.id ? { id: open.id, item: open } : null;
+    if (picker.ready) { picker.link.textContent = ''; sendOpen(); }
+    else {
       picker.hello();   // a frame that loaded before this page listened (or lost the first hello) hears it again
       armWait(picker, 'The Part Picker');
     }
@@ -684,7 +709,7 @@ export function mountLabels(stage, ctx) {
     box.appendChild(el('div.dlabel', {}, [preview(l, true), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
     const acts = el('div.acts');
     if (R.isPartLabel(l)) {
-      acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker() }, ['Edit part details']));
+      acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker({ open: l.hardware }) }, ['Edit part details']));
       acts.appendChild(el('button.key.sm', { title: 'Replace the part layout with your own words on this drawer', onclick: () => openModal({ title: `Use your own words on drawer ${no}?`, body: ['This label is laid out from its part record. Words you type replace that layout on this drawer only; the part label goes back to your labels, ready to place again.'], ok: 'Use custom wording', field: { placeholder: 'What’s in this drawer?', value: R.labelShort(l) }, onOk: () => { const t = modalField(); closeModal(); labelCommit(R.customWording(L, S(), u.id, t)); }, onCancel: () => closeModal() }) }, ['Use custom wording']));
     } else acts.appendChild(el('button.key.sm', { onclick: () => openEdit(l.id, u.id) }, [icon('pencil-simple', { size: 15 }), 'Edit']));
     acts.appendChild(el('button.key.sm', { title: 'Take the label off this drawer; it waits to be placed again', onclick: () => labelCommit(R.unassign(L, S(), u.id, l.id)) }, ['Remove']));
