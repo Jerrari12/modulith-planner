@@ -797,11 +797,26 @@ export function mountLabels(stage, ctx) {
     if (R.isPartLabel(l)) { editor.appendChild(el('p.note', { text: 'This label is laid out from its part record in the Label Studio. Its words here are what the drawer shows in older tools.' })); }
     // the words
     const words = el('input.words', { type: 'text', maxlength: '40', value: R.labelWords(l), placeholder: 'What’s in this drawer?', autocomplete: 'off', 'aria-label': 'Label words' });
-    // !st.edit: Escape closed the editor, and the field's change on removal came after (it threw on st.edit.id)
-    const commitWords = () => { if (quietEditor || !st.edit) return; const t = L.cleanText(words.value, L.MIRROR_MAX); if (t === R.labelWords(R.labelById(S(), st.edit.id))) return; if (!t && !L.visibleBadge(l)) { say('A label needs words, an icon or a letter.'); words.value = R.labelWords(l); return; } editCommit({ text: t }); };
+    // !st.edit: Escape closed the editor, and the field's change on removal came after (it threw on st.edit.id).
+    // A label can arrive with more than the planner's 40 characters (a file; the format allows 200). Nothing changed commits
+    // nothing (the stress test, 2026-10-15: Enter cut such a label to 40 without a word); a change keeps the first 40 and
+    // says so
+    const shownWords = words.value;   // what the field was rendered with: "nothing changed" is measured against it, raw (Terra 01a14005)
+    const commitWords = () => {
+      if (quietEditor || !st.edit) return;
+      if (words.value === shownWords) return;
+      const full = L.cleanText(words.value, L.TEXT_MAX);
+      if (full === R.labelWords(R.labelById(S(), st.edit.id))) return;
+      const t = L.cleanText(words.value, L.MIRROR_MAX);
+      if (!t && !L.visibleBadge(l)) { say('A label needs words, an icon or a letter.'); words.value = R.labelWords(l); return; }
+      editCommit({ text: t });
+      if (full.length > L.MIRROR_MAX) say(`Labels made here hold ${L.MIRROR_MAX} characters, so the words were cut to “${t}”.`);
+    };
     words.addEventListener('change', commitWords);
     words.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); commitWords(); } });
     editor.appendChild(el('label.frow', {}, [el('span', { text: 'Words' }), words]));
+    const long = R.labelWords(l).length;
+    if (long > L.MIRROR_MAX) editor.appendChild(el('p.note', { text: `These words are ${long} characters long. Labels made here hold ${L.MIRROR_MAX}, so a change keeps the first ${L.MIRROR_MAX}.` }));
     // the icon
     const b = L.cleanBadge(l.badge, { svg: true });
     const state = !b ? 'auto' : b.type === 'none' ? 'none' : b.type === 'char' ? 'char' : b.svg ? 'upload' : 'icon';

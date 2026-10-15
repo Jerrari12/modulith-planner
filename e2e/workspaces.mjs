@@ -655,6 +655,34 @@ test('Edit part details: the Part Picker opens that part (open/1), or just opens
   await ctx.close();
 });
 
+/* LONGER WORDS THAN THE PLANNER HOLDS (the stress test, 2026-10-15, P-F6). The label format allows 200 characters, and
+   a file can bring them. Enter in the editor cut such a label to 40 without a word, even with nothing changed. Now
+   nothing changed commits nothing, the editor says what a change will keep, and a change says it cut */
+test('the label editor: a label longer than 40 characters is not cut by an Enter that changes nothing, and a change says it cut', async () => {
+  const { ctx, page, errors } = await open('labels');
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await btn(page, 'Type a label', '#ws-labels').click();
+  await page.fill('#ws-modal input.field', 'Short');
+  await btn(page, 'Add label', '#ws-modal .box').click();
+  await settle(page, 300);
+  const long = 'Long words from a file '.repeat(5).trim();   // 114 characters
+  await page.evaluate((t) => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { s.labelList.labels[0].text = t; }, 'edit'); st.flush(); }, long);
+  await settle(page, 300);
+  await page.locator('#ws-labels button[title="Edit this label"]').first().click();
+  await page.waitForSelector('#ws-labeledit input.words', { timeout: 10_000 });
+  assert.match(await text(page, '#ws-labeledit .note'), new RegExp(`${long.length} characters long`), 'the editor says what a change keeps');
+  await page.locator('#ws-labeledit input.words').press('Enter');
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels[0].text), long, 'nothing changed, nothing cut');
+  await page.locator('#ws-labeledit input.words').press('End');
+  await page.keyboard.press('Backspace');   // a change (the field's maxlength of 40 stops typing more into it)
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList.labels[0].text.length === 40, null, { timeout: 5000 });
+  assert.match(await text(page, '#ws-toast'), /cut to/, 'and it says so');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* A STUDIO THAT DOES NOT ANSWER (the stress test, 2026-10-15). The message blamed the planner's address and offered nothing.
    Now it says the Studio may be slow or down, and offers Try again, which reloads the frame and waits again */
 test('the Part Picker modal with the Studio unreachable: after 8 s it says so and offers Try again', async () => {
