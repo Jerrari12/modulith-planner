@@ -320,3 +320,100 @@ Dated calls made while building, with who made them. The brief and the inventory
   Picker reports an add as not answered although it landed.
 - **Later** (polish): the regular Nyloc picture at the same three-quarter angle, light and scale as the other nuts, with
   the insert visible.
+
+## 2026-10-15 (the spacing pass and the label-flow stress test, live)
+
+- **Why.** Joey, on the Part Picker's Sizes stage: "look how close these buttons are together, stuff like this should
+  definitely be looked for". Then he asked the Label Studio Refiner session to stress-test the whole label flow:
+  "no errors, flows well, and feels easy and welcoming to use".
+  - Three agents ran headless as a newcomer and as a power user, at 1280, 1440 and 390 (touch), in dark and light,
+    keyboard only, at the limits, with the Studio down or slow.
+  - The findings: `D:\Claude - Output\label-flow-stress-2026-10-15\FINDINGS.md`.
+  - The lanes: the Refiner fixed the Picker and the Studio; this session fixed the planner and the plate's EMBED paths.
+- **Two of the fixes were bugs in the code that was live:**
+  - **A new Tabletop build dead-ended.** Reproduced in production before the fix: "Can't show this build yet: A unit is
+    floating", with a pageerror, and the same page again after a reload.
+    - The cause: setMount rebases units onto the mount's edge only on a change of mount, and a fresh Tabletop build from
+      a Tabletop kit is not one. A fresh starter is now rebased.
+  - **A DOM XSS.** bootFail wrote the generator's errors into innerHTML, and those errors quote the share link's own
+    fields. Every dynamic part is now escaped, and in the planner the failure page offers "Start a new build" and the
+    kits.
+    - Shown ON LOOPBACK, in the viewer page and in the planner: a crafted mount ran script. It was never exercised on the
+      live site. The live fix was checked by reading the deployed main.js.
+    - The old viewer (gen2build.jerrari3d.com, the GEN2 Visual Animator repo) has the same code. That fix is queued as a
+      separate task.
+- **The planner** (main 461fa1b … ea9720d). Each change's check is named beside it: an e2e case that fails on the old
+  code, a measured probe, or a screenshot. The status clearing has no dedicated check.
+  - **Spacing:** `#ws` tokens, 8 px between bordered controls and 6 px between list rows (measured by the spacing audit,
+    before and after).
+  - **The phone:** the label editor's sheet now opens (e2e).
+  - **The label editor:** the icon search keeps its height (screenshot).
+  - **Label settings** can reach "Printing part labels": `#ws .unit` became `.unit.key`, the foot scrolls on a desktop, and
+    only the list and the foot give way (a probe at 1440, 1280 and 390).
+  - **Wording:** the faceplate sentence is said once, and the in-page Part Picker loses the new-tab glyph (screenshots).
+  - **Focus is kept across re-renders,** by stable data-focus keys (e2e):
+    - the editor's open and close, from the keyboard;
+    - a late icon font no longer commits half-typed words;
+    - Escape with edited words no longer throws.
+  - **The Part Picker dialog:** it traps Tab, gives focus back to the opener after an add, and closes on the Picker's `close`
+    (Escape inside the frame) (e2e).
+  - **The connection:** "Try again" when the Studio does not answer, instead of blaming the address (e2e).
+  - **Status:** the status line clears on undo (no case of its own).
+  - **Long labels:** an Enter that changes nothing no longer cuts a label over 40 characters (e2e).
+  - **"Edit part details" opens that part** (open/1, LABELS-INTEGRATION.md). In another browser it is refused, with words
+    that say why (e2e, against the Picker as built and against an older one).
+- **The Label Studio** (public main 60c58d00):
+  - **The plate is really read-only:** updateTypeUI and updateStripeBtn had re-enabled the type switch and the stripe
+    buttons. Its planner-owned fields read as text (this session; the planner's e2e asserts the disabled controls).
+  - **The Picker republished** (866322a4). These are the Refiner's changes, as it reported and tested them:
+    - the Refiner found in the Picker's code that 12 of 17 families could send blank or partial labels while saying
+      "Added" (FINDINGS K-B1); fixed in 50d298de;
+    - pending parts are kept per build;
+    - open/1 and close;
+    - Remove has Undo;
+    - spacing tokens with a durable `npm run spacing` audit.
+  - **The Studio's own fixes**, the Refiner's, as it reported them, with its tests and its own browser check:
+    - bad number settings are clamped with a note, instead of exporting NaN;
+    - text that runs off the label stops the export;
+    - Open set file keeps the Previous set, with Undo;
+    - the preview's far plane follows the camera;
+    - NFC normalisation, and a warning for missing glyphs;
+    - Undo for remove, sort, affix, preset and bulk delete;
+    - Enter goes to the next row;
+    - a real CSV parse;
+    - one export at a time.
+- **Reviews:**
+  - each batch by Sol or Terra: 01a13fb7, 01a13fc5, 01a13fda, 01a13fdc (4 of 4 held), 01a13fe5 (1 held), 01a13ff2,
+    01a13ffb (1 held), 01a14005 (1 held);
+  - the Refiner's own: Sol 01a13fac, 01a13fdf and 01a13ff8; Terra 01a13ff5 and 01a14009 / 01a14017.
+- **Tests before the deploy:**
+  - the planner: 498 unit tests passed, 0 failed, 5 skipped; 19 of 19 e2e cases passed, against the Studio worktree at
+    301011e4;
+  - the Studio: 18 files, 193 passed, 0 failed, 1 skipped.
+- **Deployed:**
+  1. the Studio first: 383b8160, ebaf0b2f and 301011e4 cherry-picked onto labels-public, tree-identical to planner-plate
+     301011e4. Public main 60c58d00, its parts/SOURCE.json reading 866322a4 at 16:48:49Z;
+  2. then the planner: main ea9720d, pushed at 16:49:11Z, run 38772162823 green at 17:06:22Z, the live index.html stamped
+     v=ea9720d4;
+  3. the Picker repo's master was fast-forwarded to 866322a4 and pushed to its own remote.
+- **Checked in production** (headless, fresh profiles). "No errors" here excludes the GoatCounter 429 beacons and the
+  WebGL/GPU notices, as before.
+  - A new build with every default (Tabletop) boots with gridH 2 and one drawer at y 2, hh 2, on the floor, with no
+    errors.
+  - The deployed main.js escapes bootFail's message and offers the way out. This was read from the file; no payload was
+    sent.
+  - The plate's type select and stripe buttons are disabled, and its stripe preference is live.
+  - The live Picker offers open/1. Edit part details is answered `opened`, Escape inside the Picker closes the dialog, and
+    after an add, focus is on the opener.
+  - On the phone, the label editor's sheet opens and its close is reachable, with no errors.
+- **A caveat:** an open tab may still hold the code from before the deploy. Reload both the planner and the Studio.
+- **Not done, and Joey's to decide or later:**
+  - the type words for the 11 families, and the short forms for the 34 values that cannot print (both measured,
+    WORDING_STATUS proposed; MODULITH measurements.md);
+  - "Make labels →": a new tab, or the four ways;
+  - whether a plate row also selects its drawer;
+  - the plate's printer prefs (S-F6; the correction is in LABELS-INTEGRATION.md);
+  - keyboard selection of a plate row;
+  - a keyboard path to place a label;
+  - a compact panel foot for small screens;
+  - the Studio's phone first screen.

@@ -99,7 +99,9 @@ capabilities, then named commands (the plan's "host commands independent of the 
   read-only (text readOnly, buttons disabled, remove and bulk hidden), tagged `data-label-id` and `#n` per drawer; the
   printer section and Download stay live. After the hello every message is read from the bound window at the bound origin
   with the bound session (Sol). Storage isolation: `EMBED` short-circuits autosave, the restore, the previous set and the
-  boot; printer prefs still persist. A snapshot for another build replaces everything with no prompt.
+  boot. A snapshot for another build replaces everything with no prompt. **Correction (2026-10-15, the stress test's
+  S-F6):** the printer settings do NOT persist in the plate. They live inside the standalone autosave, which EMBED skips,
+  so the plate's printer resets on every planner reload. The fix, storing them on their own in the embed, is still to do.
 - **Proved** by unit tests on both sides, an e2e case driving the real Studio from the checkout beside the repo, and the
   browser pane on loopback (desktop and phone).
 - **Found on the way**: the Studio page already had a `postToPlanner` (the tab link's, to the opener); a same-named embed
