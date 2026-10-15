@@ -159,12 +159,23 @@ export function mountBuild(stage, ctx) {
   }
   const spotCache = new Map();
   const cacheKey = (tag) => tag + '|' + JSON.stringify(store.serialize());
+  /* BUILDING PAST THE GRID'S EDGES (Joey, 2026-10-15: "I'd like to be able to build to the left of the starting drawer
+     too, this was a limitation to our old grid"). A spot may sit up to one unit-width outside either edge. Taking it
+     moves the whole build right by the columns it needs on the left (k) and widens the grid to `span`, never past the
+     mount's width cap. Spots keep the LIVE grid's x, so a spot left of the build has a negative x. */
+  const grownFor = (x, w, s, Rs) => { const k = Math.max(0, -x); const span = Math.max(s.gridW, x + w) + k; return span <= Rs.capW() ? { k, span } : null; };
+  function growTo(t, k, span) { if (k) for (const p of t.placed) p.x += k; t.gridW = span; }
   function addSpots(w, hh, fill) {
     const key = cacheKey(`add ${w}x${hh} ${fill}`); if (spotCache.has(key)) return spotCache.get(key);
     const s = S(), Rs = R(); const out = []; const rows = s.gridH * 2;
-    for (let y = 0; y <= rows - hh; y++) for (let x = 0; x <= s.gridW - w; x++) {
-      if (!Rs.canPlace(x, y, w, hh)) continue;
-      if (judge((t) => { t.placed.push({ id: t.nextId++, x, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
+    for (let y = 0; y <= rows - hh; y++) for (let x = -w; x <= s.gridW; x++) {
+      const g = grownFor(x, w, s, Rs); if (!g) continue;
+      if (!g.k && g.span === s.gridW) {   // inside the grid, as before
+        if (!Rs.canPlace(x, y, w, hh)) continue;
+        if (judge((t) => { t.placed.push({ id: t.nextId++, x, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
+        continue;
+      }
+      if (judge((t, Rt) => { growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, w, hh)) return false; t.placed.push({ id: t.nextId++, x: x + g.k, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
     }
     if (spotCache.size > 40) spotCache.clear(); spotCache.set(key, out); return out;
   }
@@ -200,11 +211,15 @@ export function mountBuild(stage, ctx) {
   function placeAt(x, y, size = armedSize(), fill = st.unit === 'decor' && st.gf === 'gridfinity' ? 'decor' : st.unit) {
     const Rs = R();
     if (!Rs.selectable(size.w, size.h) && !(size.hh && Rs.sizeExists(size.w, size.hh / 2, fill))) { say('That size is not available here.'); return; }
-    if (!Rs.canPlace(x, y, size.w, size.hh)) { say('That spot is taken.'); return; }
+    const s0 = S(); const g = grownFor(x, size.w, s0, Rs);
+    if (!g) { say(`The build is already as wide as this mount allows (${Rs.capW()}W).`); return; }
+    if (!g.k && g.span === s0.gridW) { if (!Rs.canPlace(x, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
+    else { const t = clone(s0); const Rt = layoutRules(t, G, { tabletop: TT }); growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
     let id;
     edit((s) => {
+      growTo(s, g.k, g.span);   // past an edge: the build moves right and the grid widens, in the same undo step
       id = s.nextId++;
-      const u = { id, x, y, w: size.w, hh: size.hh, fill, shelves: 0 };
+      const u = { id, x: x + g.k, y, w: size.w, hh: size.hh, fill, shelves: 0 };
       if (fill === 'decor' && st.gf === 'gridfinity' && s.fill === 'decor') u.variant = 'gridfinity';
       s.placed.push(u); s.selectedUnit = id;
     }, 'add');
@@ -726,6 +741,7 @@ export function mountBuild(stage, ctx) {
   stage.setDims(false);
   renderAll();
   if (st.selId != null) stage.selectUnit(st.selId);
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_BUILD__ = { addSpots, placeAt };   // the e2e suite reads the spots and places through them
 
   return {
     onSelect(sel) {

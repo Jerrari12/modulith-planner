@@ -683,6 +683,37 @@ test('the label editor: a label longer than 40 characters is not cut by an Enter
   await ctx.close();
 });
 
+/* BUILDING LEFT OF THE STARTER (Joey, 2026-10-15: "I'd like to be able to build to the left of the starting drawer too,
+   this was a limitation to our old grid"). A fresh Tabletop build's starter sits at x 0. Spots are now offered past
+   either edge. Taking one on the left moves the build right and widens the grid, in one undo step */
+test('Build: a spot left of the starter drawer, and placing there shifts the build and widens the grid as one undo step', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  for (let i = 0; i < 4; i++) {
+    const start = page.locator('#ws-setup button:has-text("Start build")');
+    if (await start.count() && await start.first().isVisible()) { await start.first().click(); break; }
+    await btn(page, 'Next', '#ws-setup').click();
+  }
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_BUILD__ && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'tabletop', null, { timeout: 150_000 });
+  await waitBoot(page);
+  const s0 = await S(page);
+  assert.deepEqual(s0.placed.map((u) => u.x), [0], 'the starter sits at the left edge');
+  const spots = await page.evaluate(() => window.__GEN2_BUILD__.addSpots(1, 2, 'decor'));
+  const left = spots.find((sp) => sp.x < 0);
+  assert.ok(left, 'a spot left of the starter');
+  assert.ok(spots.some((sp) => sp.x + 1 > s0.gridW), 'and one past the right edge');
+  await page.evaluate((sp) => window.__GEN2_BUILD__.placeAt(sp.x, sp.y, { w: 1, h: 1, hh: 2 }, 'decor'), left);
+  await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w + 1, s0.gridW, { timeout: 10_000 });
+  const s1 = await S(page);
+  assert.deepEqual(s1.placed.map((u) => [u.id, u.x]).sort((a, b) => a[0] - b[0]), [[s0.placed[0].id, 1], [s0.nextId, 0]], 'the starter moved right, the new drawer is at x 0');
+  await page.click('#ws-tools button[aria-label="Undo"]');
+  await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w && window.__GEN2_STORE__.state.placed.length === 1, s0.gridW, { timeout: 10_000 });
+  assert.deepEqual((await S(page)).placed.map((u) => u.x), [0], 'one undo puts it all back');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* A STUDIO THAT DOES NOT ANSWER (the stress test, 2026-10-15). The message blamed the planner's address and offered nothing.
    Now it says the Studio may be slow or down, and offers Try again, which reloads the frame and waits again */
 test('the Part Picker modal with the Studio unreachable: after 8 s it says so and offers Try again', async () => {
