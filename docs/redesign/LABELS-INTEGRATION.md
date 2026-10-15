@@ -126,6 +126,56 @@ capabilities, then named commands (the plan's "host commands independent of the 
   build switch, so a draft is never erased by a planner update. The revision must then become build-scoped and survive a
   reload, checked together with buildId and jobId; B1's counter is the preview's only.
 
+## The parts channel's additions (2026-10-15): the build on the hello, and `open/1`
+
+These come from the stress test of the whole label flow (`D:\Claude - Output\label-flow-stress-2026-10-15\FINDINGS.md`,
+P-F8 and P-F9). Both are additive: an older Picker or an older planner tab ignores them.
+
+- **The build on the hello.** P-F9: the Picker's list followed the visitor from build to build. On a new build, "Add all
+  31 to the planner" offered the first build's parts.
+  - The planner's `hello` gains `buildId`: the target build's id, captured when the modal opens. It is the record's own id,
+    `/^[a-z0-9]{8,32}$/`.
+  - In planner mode the Picker keys its "sent" marks by it, and words the batch action "Add all N to this build".
+  - A missing or malformed `buildId` (an older planner tab) means no per-build marks. It is never a refusal.
+  - An older Picker is unaffected: its hello check reads only `gen2parts`, `v` and `session` (`js/embed.js` readHello).
+- **`open/1`: Edit part details opens that part.** P-F8: it opened the Picker at its last stage instead.
+  - **The capability.** The Picker's `ready` gains `caps`, and a Picker that can open a part lists `'open/1'`. The planner
+    sends `open` only to a Picker whose `ready` offered it. With an older Picker, Edit part details opens the Picker as
+    before.
+  - **Planner → Picker, after `ready`:** `{ gen2parts: 'open', v: 1, session, req, id, item }`.
+    - `req` is a request id minted per `open`, 8 to 64 of `[A-Za-z0-9_-]` like `batch`, and echoed on the answer.
+    - `id` is the part label's `hardware.id`: the Picker's record id, the key the planner already updates in place by.
+    - `item` is the label item the planner stores for that label, in the shape the Picker sent in `add`. It lets a browser
+      whose Picker list lacks the row still open it. It is one item, bounded as an `add` item is.
+    - `id` must equal `item.id`, and both must be valid record ids. Otherwise the Picker refuses.
+  - **What the Picker does:**
+    - **It never discards work and never sends unrelated parts.** While it is editing another row with unsaved changes,
+      or holds parts pending ("Pick more first"), it changes nothing. It refuses with words the planner can show, e.g.
+      "The Part Picker has 3 parts pending: add or clear them first."
+    - Otherwise it opens the row with that id in Edit.
+    - When its list lacks that row, it imports `item` with the import's validation, KEEPING `item.id`, and opens that row.
+      An import that cannot keep the id refuses. A new id would make the edit come back as a second label instead of
+      updating the first.
+    - It answers `{ gen2parts: 'opened', v: 1, session, req, id }`, or
+      `{ gen2parts: 'refused', v: 1, session, req, id, reason }`, where `reason` is the words to show.
+    - **The latest request wins.** A new `open` supersedes any outstanding one, and the Picker drops the work of a
+      superseded request. A new hello (a new session) voids every outstanding `open`.
+  - **What the planner does:**
+    - It ignores an answer whose `req` is not the latest it sent.
+    - On a refusal it shows the reason in its status line and leaves the Picker open.
+    - The edit comes back through the existing `add`, where the same id updates the label in place as one undo step.
+  - **Telling the replies apart:** this `refused` comes FROM the Picker and carries `req`. The planner's `refused` to an
+    `add` comes TO the Picker and carries `batch`.
+  - **The rules:** the channel's rules hold unchanged. The hello is bound to the parent window, the origin must be on the
+    allowlist, every message carries the session, and every reply is read from the bound window at the bound origin.
+- **Pending parts belong to their build.** A pending batch belongs to the `buildId` and the session it was staged under.
+  It is released by a hello for another build, or by a hello without a `buildId` after one that had one. Released parts
+  go back to the Picker's list unsent, and the bar's line says so. A build never receives parts staged for another.
+- **Deploy order:** either side may go first. The capability keeps `open` inert until the Picker offers it, and `buildId`
+  is ignored until the Picker reads it.
+- **Owners:** the Picker side belongs to the Label Studio Refiner session, on the Picker repo's `flow-refine`. The planner
+  side belongs to the planner session.
+
 ## Astra's adjustments (2026-10-13, approving step A)
 
 - **Safeguards behind the scenes.** "Reviewed commit" means an **Apply changes** button; a review screen appears only when
