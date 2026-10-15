@@ -171,6 +171,13 @@ P-F8 and P-F9). Both are additive: an older Picker or an older planner tab ignor
 - **Pending parts belong to their build.** A pending batch belongs to the `buildId` and the session it was staged under.
   It is released by a hello for another build, or by a hello without a `buildId` after one that had one. Released parts
   go back to the Picker's list unsent, and the bar's line says so. A build never receives parts staged for another.
+- **`close`: Escape inside the frame.** The stress test's P-F4: a key pressed inside the frame never reaches the planner's
+  page, so Escape there could not close the dialog.
+  - Picker → planner: `{ gen2parts: 'close', v: 1, session }`. The Picker sends it when Escape has nothing of its own to
+    close: no open box or menu, and no custom-value field.
+  - The planner closes the dialog exactly as its own Escape does, so focus goes back to the opener. It ignores a `close`
+    without the session.
+  - The planner side is in place and inert until the Picker sends it.
 - **Deploy order:** either side may go first. The capability keeps `open` inert until the Picker offers it, and `buildId`
   is ignored until the Picker reads it.
 - **Owners:** the Picker side belongs to the Label Studio Refiner session, on the Picker repo's `flow-refine`. The planner

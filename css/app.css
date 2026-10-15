@@ -452,6 +452,9 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 /* when the panel is full, only the list (and, on a desktop, the foot) give way. A line that clips its own overflow counts
    as shrinkable to flexbox: Last change, with its ellipsis, was squeezed to a sliver under Undo (2026-10-15) */
 #ws-labels > * { flex-shrink: 0; }
+/* the panel and the editor take the keyboard when the control that had it is gone (labels.js restoreFocus); Tab goes on
+   to a control, which shows its own ring */
+#ws-labels:focus, #ws-labeledit:focus { outline: none; }
 #ws-labels .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 #ws-labels h2, #ws-labeledit h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
 #ws-labels .count { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
@@ -498,6 +501,7 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels .chip-l[disabled] { opacity: .5; cursor: not-allowed; }
 /* the Part Picker modal: the Studio's picker in a frame over the workspace, a small border of the planner around it */
 #ws-partpicker { position: fixed; inset: 0; z-index: 70; display: flex; padding: 18px; background: rgba(6, 5, 20, .55); }
+#ws-partpicker .trap { position: absolute; width: 1px; height: 1px; overflow: hidden; }   /* the Tab sentinels: focusable, never seen */
 #ws-partpicker[hidden] { display: none; }   /* the flex above would beat the hidden attribute */
 /* the two views (step B1): the pill in the panel, the selected label, the Label plate frame over the stage */
 #ws-labels .settings .sub { margin: 8px 0 2px; font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }

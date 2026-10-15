@@ -368,6 +368,23 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.getElementById('ws-modal').hidden, null, { timeout: 5000 });
   assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Type a label/, 'focus returned to the opener');
+  // ...and after an ADD, which re-renders the panel (the stress test, 2026-10-15: the keyboard was left at <body>)
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 5000 });
+  await page.keyboard.type('Keyboard label');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 5000 });
+  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Type a label/, 'the keyboard stays on the opener after the add');
+  // the label editor from the keyboard: Enter on the pencil moves into its words, Escape closes it and comes back to the pencil
+  await page.locator('#ws-labels button[title="Edit this label"]').first().focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-labeledit input.words'), null, { timeout: 5000 });
+  // a late icon font re-renders the editor alone: the keyboard and the half-typed words stay (Sol 01a13fe5)
+  await page.keyboard.press('End'); await page.keyboard.type(' xyz');
+  await page.evaluate(() => window.__GEN2_LABELS_REFRESH__());
+  assert.deepEqual(await page.evaluate(() => { const a = document.activeElement; return [a === document.querySelector('#ws-labeledit input.words'), a.value]; }), [true, 'Keyboard label xyz'], 'still typing, nothing lost');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.getElementById('ws-labeledit').hidden && document.activeElement && document.activeElement.getAttribute('title') === 'Edit this label', null, { timeout: 5000 });
   // the setup sheet: focus lands on the name field, Tab stays inside, Escape closes and returns
   await page.evaluate(() => { window.__GEN2_CTX__().openSetup('mount'); });
   await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-setup input.name'), null, { timeout: 5000 });
@@ -402,6 +419,9 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   assert.equal(await page.locator('#ws-labels .chip-l.new').count(), 1, 'the new label is marked in the list');
   assert.match(await text(page, '#ws-labels .last'), /Added 1 part label/);
   assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ws-partpicker')).display), 'none', 'the modal is really gone from view');
+  // the keyboard is back on the Part Picker button, not on the hidden frame (the stress test, 2026-10-15: the add re-rendered
+  // the opener before the close looked for it)
+  assert.match(await page.evaluate(() => (document.activeElement && document.activeElement.getAttribute('title')) || ''), /^Opens the Part Picker here/, 'focus back on the opener');
   // the same row sent again: updated in place, never a second label (the Picker keeps its list between openings). Words typed
   // by hand stay; the record underneath is refreshed. The record is bent here first so the update is a real change (an
   // identical record makes no history entry)
@@ -437,6 +457,16 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   await page.waitForFunction((a) => { const p = window.__GEN2_PICKER__(); return p && p.session !== a && p.ready && !p.veil.hidden; }, sessionA, { timeout: 60_000 });
   assert.equal(await page.locator('#ws-partpicker').count(), 1, 'one modal, the new one');
   await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 5000 });
+  // Escape INSIDE the frame never reaches this page: the Picker asks with `close` and the dialog closes (a stranger's
+  // close, without the session, is ignored)
+  await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  const sessionB = await page.evaluate(() => window.__GEN2_PICKER__().session);
+  await frame.locator('body').evaluate(() => parent.postMessage({ gen2parts: 'close', v: 1, session: 'not-the-session-at-all' }, '*'));
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_PICKER__().veil.hidden), false, 'a close without the session is ignored');
+  await frame.locator('body').evaluate((body, s) => parent.postMessage({ gen2parts: 'close', v: 1, session: s }, '*'), sessionB);
   await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 5000 });
   // a message that is not from the frame, or without the session, is ignored
   await page.evaluate((origin) => { window.postMessage({ gen2parts: 'add', v: 1, session: 'nope', items: [] }, origin); }, base);
@@ -574,6 +604,19 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   await ctx.close();
 });
 
+/* A STUDIO THAT DOES NOT ANSWER (the stress test, 2026-10-15). The message blamed the planner's address and offered nothing.
+   Now it says the Studio may be slow or down, and offers Try again, which reloads the frame and waits again */
+test('the Part Picker modal with the Studio unreachable: after 8 s it says so and offers Try again', async () => {
+  const { ctx, page } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent('http://127.0.0.1:9/') });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
+  await page.waitForFunction(() => /hasn’t answered yet/.test(document.querySelector('#ws-partpicker .link').textContent), null, { timeout: 15_000 });
+  assert.doesNotMatch(await text(page, '#ws-partpicker .link'), /not on its list/, 'no blame on the address');
+  await page.locator('#ws-partpicker .link button:has-text("Try again")').click();
+  assert.match(await text(page, '#ws-partpicker .link'), /Connecting…/, 'Try again waits again');
+  await ctx.close();
+});
+
 /* A BUILD THAT CANNOT BE SHOWN (2026-10-15). The generator's errors quote the link's own fields, and bootFail wrote them
    into innerHTML, so a crafted #build= link ran script on this origin. The page also had no way out: a stored build that
    cannot be shown reopens on every reload */
@@ -646,7 +689,8 @@ test('the phone: Edit raises the label editor sheet, its close is reachable, and
   await page.click('#ws-labels button[title="Edit this label"]');
   await page.waitForFunction(() => { const e = document.querySelector('#ws-labeledit'); return e && !e.hidden && e.classList.contains('open'); }, null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => document.querySelector('#ws-labels').classList.contains('open')), false, 'the Labels sheet steps down for the editor');
-  const reach = await page.evaluate(() => { const b = document.querySelector('#ws-labeledit button[aria-label="Close the editor"]'); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t === b || b.contains(t); });
+  // the sheet rises with a transition: wait for it to settle (a single look mid-rise read the dock under the × on a busy run)
+  const reach = await page.waitForFunction(() => { const b = document.querySelector('#ws-labeledit button[aria-label="Close the editor"]'); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t === b || b.contains(t); }, null, { timeout: 5000 }).then(() => true, () => false);
   assert.ok(reach, 'nothing covers the editor’s close');
   await page.click('#ws-labeledit button[aria-label="Close the editor"]');
   const backToList = () => page.waitForFunction(() => document.querySelector('#ws-labeledit').hidden && document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 15_000 });

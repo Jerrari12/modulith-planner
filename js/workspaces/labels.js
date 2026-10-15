@@ -150,7 +150,9 @@ export function mountLabels(stage, ctx) {
   }
   const unsub = store.subscribe((state, why) => {
     const sig = P.labelSig(state, st.print); if (sig !== lastLabelSig) { lastLabelSig = sig; labelRev++; syncPlateSoon(); }   // a label-relevant change: a new rev, the plate follows
-    if (why === 'adopt') return; if (why === 'undo' || why === 'redo' || why === 'load') { if (st.pick && !R.labelById(state, st.pick)) st.pick = null; if (st.edit && !R.labelById(state, st.edit.id)) st.edit = null; } syncStage(); renderAll(); });
+    // an undo, a redo or a load: the status line described the state before it ("Removed …" outlived the toolbar's Undo of
+    // that remove, the stress test 2026-10-15), so it goes
+    if (why === 'adopt') return; if (why === 'undo' || why === 'redo' || why === 'load') { if (st.pick && !R.labelById(state, st.pick)) st.pick = null; if (st.edit && !R.labelById(state, st.edit.id)) st.edit = null; status(''); } syncStage(); renderAll(); });
   /* one label operation = one history entry (flushed on both sides of the commit, so the 350 ms coalescing never joins it to a
      neighbour); "Last change" remembers it while the WHOLE record is still what it produced (Sol 01a13518: a later settings
      change, or any other edit, must not be what the panel's Undo takes back). `also(s)` runs inside the same commit, for what
@@ -334,6 +336,17 @@ export function mountLabels(stage, ctx) {
   let picker = null;
   const PICKER_ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const newSession = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map((b) => PICKER_ALPHABET[b % 62]).join(''); };
+  /* THE HANDSHAKE'S PATIENCE (the stress test, 2026-10-15: a slow or unreachable Studio was blamed on the allowlist, and
+     nothing offered a retry). After 8 s it says what is likely and offers Try again, which reloads the frame (the load
+     sends the hello again) and waits again. */
+  function armWait(h, who) {
+    clearTimeout(h.wait);
+    h.wait = setTimeout(() => {
+      if (h.ready || h.bad) return;
+      h.link.replaceChildren(el('span', { text: `${who} hasn’t answered yet. It may be slow, or its site may be down. ` }),
+        el('button.key.sm', { onclick: () => { h.link.textContent = 'Connecting…'; try { h.frame.src = h.frame.src; } catch { /* the frame went away */ } armWait(h, who); } }, ['Try again']));
+    }, 8000);
+  }
   function openPicker() {
     if (picker && picker.buildId !== S().buildId) { picker.veil.remove(); picker = null; }   // another build: a new frame and session, so a batch still in flight for the old one is a stranger here (Sol 01a13844); the Picker keeps its list in its own storage
     if (!picker) {
@@ -341,18 +354,25 @@ export function mountLabels(stage, ctx) {
       const frame = el('iframe', { src: STUDIO + 'parts/?embed=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : ''), title: 'Part Picker', referrerpolicy: 'strict-origin-when-cross-origin' });
       const closeBtn = el('button.x', { title: 'Close', 'aria-label': 'Close the Part Picker', onclick: () => closePicker() }, [icon('x', { size: 18 })]);
       const link = el('span.link', { role: 'status', text: 'Connecting…' });   // the handshake, in the planner's own words
+      // Tab stays in the dialog (the stress test, 2026-10-15): a sentinel on each side sends the keyboard round to the other end
+      const trap = (to) => el('span.trap', { tabindex: '0', 'aria-hidden': 'true', onfocus: () => { try { to().focus(); } catch { /* gone */ } } });
       const veil = el('div', { id: 'ws-partpicker', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Part Picker', hidden: true }, [
+        trap(() => frame),
         el('div.glass.frame', {}, [el('div.head', {}, [el('h2', { text: 'Part Picker' }), el('span.sub', { text: 'Choose parts, then Add labels: they land in this build’s list, ready to place.' }), link, closeBtn]), frame]),
+        trap(() => closeBtn),
       ]);
       root.appendChild(veil);
-      const hello = () => { try { frame.contentWindow.postMessage({ gen2parts: 'hello', v: 1, session }, STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
+      // the build rides on the hello (LABELS-INTEGRATION.md, the parts channel's additions): the Picker keys its "sent" marks by it
+      const hello = () => { try { frame.contentWindow.postMessage({ gen2parts: 'hello', v: 1, session, ...(picker && picker.buildId ? { buildId: picker.buildId } : {}) }, STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
       frame.addEventListener('load', hello);
       const onMessage = (e) => {
         if (!picker || e.source !== frame.contentWindow || e.origin !== STUDIO_ORIGIN) return;
         const d = e.data;
         if (picker.log.length < 20) picker.log.push(d && d.gen2parts);
         if (!d || typeof d !== 'object' || d.v !== 1 || d.session !== session) return;
-        if (d.gen2parts === 'ready') { picker.ready = true; clearTimeout(picker.wait); picker.link.textContent = ''; return; }
+        if (d.gen2parts === 'ready') { picker.ready = true; picker.caps = Array.isArray(d.caps) ? d.caps.filter((c) => typeof c === 'string').slice(0, 16) : []; clearTimeout(picker.wait); picker.link.textContent = ''; return; }
+        // Escape inside the frame never reaches this page's keys: the Picker asks, and the dialog closes as its own Escape does
+        if (d.gen2parts === 'close') { closePicker(); return; }
         if (d.gen2parts !== 'add') return;
         // the batch id the Picker minted for this send rides back on the reply, so a late reply to a timed-out send is never
         // credited to the next one (Astra, 2026-10-14: a wrong "added" is not cosmetic); an older Picker sends none and gets none
@@ -374,13 +394,12 @@ export function mountLabels(stage, ctx) {
       if (new URLSearchParams(location.search).get('debug')) window.__GEN2_PICKER__ = () => picker;   // the e2e suite reads the handshake
     }
     picker.buildId = S().buildId;   // the destination: a batch for another build is refused
-    picker.ret = document.activeElement;
+    picker.ret = document.activeElement; picker.retKey = focusKey();
     picker.veil.hidden = false;
     document.documentElement.classList.add('ws-partpicker-open');
     if (!picker.ready) {
       picker.hello();   // a frame that loaded before this page listened (or lost the first hello) hears it again
-      clearTimeout(picker.wait);
-      picker.wait = setTimeout(() => { if (!picker.ready) picker.link.textContent = 'The Picker has not connected: this planner’s address is not on its list yet (it will be at planner.modulith.systems).'; }, 8000);
+      armWait(picker, 'The Part Picker');
     }
     setTimeout(() => { try { picker.closeBtn.focus(); } catch { /* jsdom */ } }, 0);
   }
@@ -390,6 +409,7 @@ export function mountLabels(stage, ctx) {
     document.documentElement.classList.remove('ws-partpicker-open');
     const r = picker.ret; picker.ret = null;
     if (r && typeof r.focus === 'function' && document.contains(r)) { try { r.focus(); } catch { /* gone */ } }
+    else restoreFocus(picker.retKey, true);   // the add re-rendered the opener (the stress test, 2026-10-15: the keyboard stayed on the hidden frame)
   }
   function openStudio(parts) {
     // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
@@ -463,8 +483,7 @@ export function mountLabels(stage, ctx) {
     plate.box.hidden = false;
     if (!plate.ready) {
       plate.hello();   // a frame that loaded before this page listened (or lost the first hello) hears it again
-      clearTimeout(plate.wait);
-      plate.wait = setTimeout(() => { if (!plate.ready && !plate.bad) plate.link.textContent = 'The Label Studio has not connected: this planner’s address is not on its list.'; }, 8000);
+      armWait(plate, 'The Label Studio');
     }
     syncPlate();
   }
@@ -618,12 +637,12 @@ export function mountLabels(stage, ctx) {
     scroll.appendChild(el('div.list', {}, waitingAll.map((l) => {
       const ok = L.assignable(l);
       const onPick = l.id === st.pick;
-      const b = el('button.chip-l' + (onPick ? '.on' : '') + (st.selLabel === l.id ? '.sel' : '') + (l.hardware ? '.hw' : '') + (st.fresh && st.fresh.has(l.id) ? '.new' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
+      const b = el('button.chip-l' + (onPick ? '.on' : '') + (st.selLabel === l.id ? '.sel' : '') + (l.hardware ? '.hw' : '') + (st.fresh && st.fresh.has(l.id) ? '.new' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), 'data-focus': 'chip:' + l.id, onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
       if (l.hardware && R.hwNotReady(l)) b.appendChild(el('span.tag', { text: 'not ready' }));
       if (ok) dragFrom(b, l.id);
       return el('div.item', {}, [b,
-        el('button.mini', { title: 'Edit this label', 'aria-label': 'Edit ' + (R.labelWords(l) || 'this label'), onclick: () => openEdit(l.id, null) }, [icon('pencil-simple', { size: 15 })]),
-        el('button.mini', { title: 'Remove from this build', 'aria-label': 'Remove ' + (R.labelWords(l) || 'this label') + ' from this build', onclick: () => labelCommit(R.remove(L, s, l.id)) }, [icon('x', { size: 15 })])]);
+        el('button.mini', { title: 'Edit this label', 'aria-label': 'Edit ' + (R.labelWords(l) || 'this label'), 'data-focus': 'edit:' + l.id, onclick: () => openEdit(l.id, null) }, [icon('pencil-simple', { size: 15 })]),
+        el('button.mini', { title: 'Remove from this build', 'aria-label': 'Remove ' + (R.labelWords(l) || 'this label') + ' from this build', 'data-focus': 'remove:' + l.id, onclick: () => labelCommit(R.remove(L, s, l.id)) }, [icon('x', { size: 15 })])]);
     })));
     // on drawers
     const onUnits = R.drawers(s).filter((u) => carried[u.id] && R.labelById(s, carried[u.id]));
@@ -709,8 +728,32 @@ export function mountLabels(stage, ctx) {
   }
   // on the phone the editor is a sheet of its own: opening it must raise it, or it waits collapsed behind the open Labels
   // sheet and the dock and the pencil seems to do nothing (the spacing audit, 2026-10-15: its close sat under Print labels)
-  function openEdit(id, unitId) { st.edit = { id, unitId, scope: 'all' }; st.query = ''; st.letter = ''; st.pick = null; renderAll(); if (phone) phone.open(editor); if (!labelIcons()) loadLabelFont().then(() => renderEditor()).catch(() => {}); }
-  function closeEdit() { st.edit = null; renderAll(); }
+  // the keyboard follows: an opening from the keyboard moves into the editor's first field; closing returns to the opener
+  function openEdit(id, unitId) {
+    const a = document.activeElement; const byKey = !!(a && a.matches && a.matches(':focus-visible'));
+    st.editRet = focusKey();
+    st.edit = { id, unitId, scope: 'all' }; st.query = ''; st.letter = ''; st.pick = null; renderAll(); if (phone) phone.open(editor);
+    if (byKey) { const f = editor.querySelector('input.words') || editor.querySelector('button.x'); if (f) { try { f.focus({ preventScroll: true }); } catch { /* jsdom */ } } }
+    if (!labelIcons()) loadLabelFont().then(() => refreshEditor()).catch(() => {});
+  }
+  // the editor alone, re-rendered (the icon font arrived, the scope changed), with the keyboard and half-typed words kept
+  // (Sol 01a13fe5: a cold font load replaced the focused field and lost both)
+  // while it rebuilds, the focused field's `change` on removal is not the visitor's commit (it committed the half-typed words)
+  let quietEditor = false;
+  function refreshEditor() {
+    const fk = focusKey(); const a = document.activeElement;
+    const typed = a && a.tagName === 'INPUT' && editor.contains(a) ? { v: a.value, s: a.selectionStart, e: a.selectionEnd } : null;
+    quietEditor = true; try { renderEditor(); } finally { quietEditor = false; }
+    restoreFocus(fk);
+    const b = document.activeElement;
+    if (typed && b && b.tagName === 'INPUT' && editor.contains(b)) { if (b.value !== typed.v) b.value = typed.v; try { b.setSelectionRange(typed.s, typed.e); } catch { /* not a text field */ } }
+  }
+  if (debug) window.__GEN2_LABELS_REFRESH__ = refreshEditor;   // the e2e suite stands in for a late icon font
+  function closeEdit() {
+    const a = document.activeElement; const fromEditor = !a || a === document.body || editor.contains(a);
+    const back = st.editRet; st.editRet = null; st.edit = null; renderAll();
+    if (fromEditor) restoreFocus(back, true);   // renderAll parked the keyboard on the panel; the opener is where it goes back
+  }
   const editCommit = (patch) => { const e = st.edit; if (!e) return; const r = R.edit(L, S(), e.id, patch, e.scope === 'this' && e.unitId != null ? 'this' : 'all', e.unitId); if (labelCommit(r) && r.id !== e.id) st.edit.id = r.id; renderAll(); };
   function renderEditor() {
     const e = st.edit; const l = e ? R.labelById(S(), e.id) : null;
@@ -723,13 +766,14 @@ export function mountLabels(stage, ctx) {
     editor.appendChild(el('div.head', {}, [el('h2.h2', { text: R.isPartLabel(l) ? 'Part label' : 'Edit label' }), el('button.x', { title: 'Close', 'aria-label': 'Close the editor', onclick: closeEdit }, [icon('x', { size: 16 })])]));
     editor.appendChild(el('div.prev', {}, [preview(l, true)]));
     if (shared.length > 1 && e.unitId != null) editor.appendChild(el('div.track.seg2.scope', { role: 'group', 'aria-label': 'Which drawers change' }, [
-      el('button.seg.sm' + (e.scope === 'all' ? '.on' : ''), { text: `All ${n(shared.length, 'drawer')}`, onclick: () => { e.scope = 'all'; renderEditor(); } }),
-      el('button.seg.sm' + (e.scope === 'this' ? '.on' : ''), { text: 'This drawer only', title: 'A copy of the label carries the change; the other drawers keep theirs', onclick: () => { e.scope = 'this'; renderEditor(); } }),
+      el('button.seg.sm' + (e.scope === 'all' ? '.on' : ''), { text: `All ${n(shared.length, 'drawer')}`, onclick: () => { e.scope = 'all'; refreshEditor(); } }),
+      el('button.seg.sm' + (e.scope === 'this' ? '.on' : ''), { text: 'This drawer only', title: 'A copy of the label carries the change; the other drawers keep theirs', onclick: () => { e.scope = 'this'; refreshEditor(); } }),
     ]));
     if (R.isPartLabel(l)) { editor.appendChild(el('p.note', { text: 'This label is laid out from its part record in the Label Studio. Its words here are what the drawer shows in older tools.' })); }
     // the words
     const words = el('input.words', { type: 'text', maxlength: '40', value: R.labelWords(l), placeholder: 'What’s in this drawer?', autocomplete: 'off', 'aria-label': 'Label words' });
-    const commitWords = () => { const t = L.cleanText(words.value, L.MIRROR_MAX); if (t === R.labelWords(R.labelById(S(), st.edit.id))) return; if (!t && !L.visibleBadge(l)) { say('A label needs words, an icon or a letter.'); words.value = R.labelWords(l); return; } editCommit({ text: t }); };
+    // !st.edit: Escape closed the editor, and the field's change on removal came after (it threw on st.edit.id)
+    const commitWords = () => { if (quietEditor || !st.edit) return; const t = L.cleanText(words.value, L.MIRROR_MAX); if (t === R.labelWords(R.labelById(S(), st.edit.id))) return; if (!t && !L.visibleBadge(l)) { say('A label needs words, an icon or a letter.'); words.value = R.labelWords(l); return; } editCommit({ text: t }); };
     words.addEventListener('change', commitWords);
     words.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); commitWords(); } });
     editor.appendChild(el('label.frow', {}, [el('span', { text: 'Words' }), words]));
@@ -739,7 +783,7 @@ export function mountLabels(stage, ctx) {
     editor.appendChild(el('div.frow', {}, [el('span', { text: 'Icon' }), el('span.dim', { text: state === 'auto' ? (predicted(R.labelWords(l)) ? `Auto · ${iconName(predicted(R.labelWords(l))).toLowerCase()}` : 'Auto · none matched') : state === 'none' ? 'No icon' : state === 'char' ? `Letter · ${shown(b.value)}` : state === 'upload' ? 'Your uploaded icon' : `Manual · ${iconName(b.value).toLowerCase()}` })]));
     const letter = el('input.letter', { type: 'text', maxlength: String(L.CHAR_MAX), value: st.letter || (state === 'char' ? b.value : ''), placeholder: 'A', 'aria-label': 'Letter', autocomplete: 'off' });
     letter.addEventListener('input', () => { st.letter = letter.value; });
-    letter.addEventListener('change', () => { const v = letter.value.trim(); if (v) editCommit({ badge: { type: 'char', value: v.slice(0, L.CHAR_MAX) } }); });
+    letter.addEventListener('change', () => { if (quietEditor) return; const v = letter.value.trim(); if (v) editCommit({ badge: { type: 'char', value: v.slice(0, L.CHAR_MAX) } }); });
     editor.appendChild(el('div.track.seg3.badge', { role: 'group', 'aria-label': 'Icon' }, [
       el('button.seg.sm' + (state === 'auto' ? '.on' : ''), { text: 'Auto', title: 'Guess an icon from the words', onclick: () => editCommit({ badge: null }) }),
       el('button.seg.sm' + (state === 'none' ? '.on' : ''), { text: 'No icon', onclick: () => editCommit({ badge: { type: 'none' } }) }),
@@ -806,7 +850,30 @@ export function mountLabels(stage, ctx) {
     if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; }
     stage.setSafeArea({ left: 324 + 28, right: (st.edit ? 304 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 });
   }
-  function renderAll() { root.classList.toggle('editing', !!st.edit); root.classList.toggle('view-plate', st.view === 'plate'); renderPanel(); renderEditor(); renderDock(); bar.sync(); if (phone) phone.refresh(); safe(); const fresh = st.fresh && panel.querySelector('.chip-l.new'); if (fresh) { try { fresh.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } }
+  /* THE FOCUS ACROSS A RE-RENDER (the stress test, 2026-10-15). After Switch to EdgeLabel, Add label, Fill, Undo, a
+     row, the editor's open and close, and Escape, the keyboard was left at <body>. renderAll replaces the panel's
+     controls, so the one that had focus is found again by its name. When it is gone or disabled, the panel itself takes
+     the keyboard, so Tab goes on from there. */
+  panel.tabIndex = -1; editor.tabIndex = -1;
+  // a per-label control carries a stable key (data-focus): its words, and so its accessible name, change with an edit
+  const focusName = (b) => b.getAttribute('data-focus') || b.getAttribute('aria-label') || b.title || b.textContent.trim();
+  function focusKey() {
+    const a = document.activeElement;
+    if (!a || a === document.body) return null;
+    const host = panel.contains(a) ? panel : editor.contains(a) ? editor : null;
+    if (!host || a === host) return null;
+    const name = focusName(a);
+    return { host, tag: a.tagName, name, i: [...host.querySelectorAll(a.tagName)].filter((x) => focusName(x) === name).indexOf(a) };
+  }
+  function restoreFocus(k, force = false) {
+    if (!k) return;
+    const a = document.activeElement;
+    if (!force && a && a !== document.body && document.contains(a)) return;   // the keyboard is somewhere real: leave it
+    const same = [...k.host.querySelectorAll(k.tag)].filter((x) => focusName(x) === k.name && !x.disabled && x.getClientRects().length);
+    const t = same[Math.min(Math.max(k.i, 0), same.length - 1)] || (k.host.hidden ? panel : k.host);
+    try { t.focus({ preventScroll: true }); } catch { /* jsdom */ }
+  }
+  function renderAll() { const fk = focusKey(); root.classList.toggle('editing', !!st.edit); root.classList.toggle('view-plate', st.view === 'plate'); renderPanel(); renderEditor(); renderDock(); bar.sync(); if (phone) phone.refresh(); safe(); restoreFocus(fk); const fresh = st.fresh && panel.querySelector('.chip-l.new'); if (fresh) { try { fresh.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } }
   addEventListener('resize', safe, { signal });
   addEventListener('hashchange', () => { if (L) importFromHash(); }, { signal });
   document.addEventListener('keydown', (e) => {
