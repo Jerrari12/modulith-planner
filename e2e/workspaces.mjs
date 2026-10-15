@@ -574,6 +574,47 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   await ctx.close();
 });
 
+/* A BUILD THAT CANNOT BE SHOWN (2026-10-15). The generator's errors quote the link's own fields, and bootFail wrote them
+   into innerHTML, so a crafted #build= link ran script on this origin. The page also had no way out: a stored build that
+   cannot be shown reopens on every reload */
+test('a build link that cannot be shown: its words stay text, and the planner offers a way out', async () => {
+  const { ctx, page: first } = await open('build');
+  const rec = { v: 1, mount: '<img src=x onerror="window.__e2eXss=1">', length: 185, gridW: 2, gridH: 1, placed: [{ id: 1, x: 0, y: 0, w: 1, hh: 2, fill: 'decor', shelves: 0 }] };
+  const hash = encodeURIComponent(Buffer.from(JSON.stringify(rec), 'utf8').toString('base64'));
+  await first.close();
+  const page = await ctx.newPage();   // a fresh document: the same address with a new hash is only a hashchange
+  await page.goto(`${base}/index.html?ws=build&debug=1#build=${hash}`, { waitUntil: 'load', timeout: 90_000 });
+  await page.waitForFunction(() => /Can’t show this build yet/.test((document.getElementById('loading-text') || {}).textContent || ''), null, { timeout: 60_000 });
+  await settle(page, 500);
+  assert.equal(await page.evaluate(() => window.__e2eXss), undefined, 'no script ran');
+  assert.equal(await page.locator('#loading-text img').count(), 0, 'no markup from the link');
+  assert.match(await text(page, '#loading-text'), /"<img src=x onerror=/, 'the words shown as text');
+  assert.equal(await page.locator('#loading-text a[href="index.html?ws=build&new=1&setup=1"]').count(), 1, 'Start a new build');
+  assert.equal(await page.locator('#loading-text a[href="builds/"]').count(), 1, 'the kits');
+  await ctx.close();
+});
+
+/* THE TABLETOP DEFAULT (the stress test, 2026-10-15). New build, then Start build with every default (Tabletop, 185, from a
+   Tabletop kit), stopped on "A unit is floating" with no way back. setMount rebases only on a change of mount, so the
+   starter stayed at the top and syncTabletopGrid grew the grid under it. The Wall Mount case above never saw it */
+test('the setup sheet: New build with every default (Tabletop) boots with its starter drawer on the floor', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  for (let i = 0; i < 4; i++) {   // Next through every step, choosing nothing
+    const start = page.locator('#ws-setup button:has-text("Start build")');
+    if (await start.count() && await start.first().isVisible()) { await start.first().click(); break; }
+    await btn(page, 'Next', '#ws-setup').click();
+  }
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'tabletop', null, { timeout: 150_000 });
+  await waitBoot(page);
+  const s = await S(page);
+  assert.equal(s.placed.length, 1, 'one starter drawer');
+  assert.equal(s.placed[0].y + s.placed[0].hh, s.gridH * 2, 'resting on the floor');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the phone: the Build library sheet opens on its handle; the Labels sheet collapses while placing', async () => {
   const { ctx, page, errors } = await open('build', { phone: true });
   await page.click('#ws-lib .sheet-handle');

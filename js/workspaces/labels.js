@@ -676,7 +676,8 @@ export function mountLabels(stage, ctx) {
   function renderSettings() {
     const s = S(); const eff = effectiveStyle(s); const lim = G?.labelSpec?.limits || {};
     const det = el('details.settings', { open: st.settings ? '' : null });
-    det.addEventListener('toggle', () => { st.settings = det.open; });
+    // opened by the visitor (not re-rendered open): bring the settings into view, down to Printing part labels
+    det.addEventListener('toggle', () => { const was = st.settings; st.settings = det.open; if (det.open && !was) { try { det.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } });
     det.appendChild(el('summary', {}, [icon('sliders-horizontal', { size: 16 }), 'Label settings', el('span.dim', { text: `${eff.capMm} mm · ${eff.allCaps ? 'caps' : 'as typed'}${st.print.band === 'off' ? ' · no stripe' : ''}` })]));
     for (const row of LABEL_STYLE_ROWS) {
       const [lo, hi] = lim[row.key] || [0, 99];

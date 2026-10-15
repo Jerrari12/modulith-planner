@@ -153,6 +153,10 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
       s.length = draft.length;
       if (fresh) { s.placed = [starterUnit({ ...s, mount: draft.mount })]; s.nextId = 2; delete s.labelList; delete s.labelAssign; }
       if (R.setMount) R.setMount(draft.mount); else s.mount = draft.mount;
+      // the starter sits on its mount's edge. setMount rebases only on a CHANGE of mount, and a fresh Tabletop build from a
+      // Tabletop kit is not one. The stress test, 2026-10-15: the starter stayed at the top, syncTabletopGrid grew the grid
+      // under it, and the page stopped on "A unit is floating", with no way back
+      if (fresh && R.rebaseToMountEdge) R.rebaseToMountEdge();
       if (R.clampGrid) R.clampGrid();
       if (R.syncTabletopGrid) R.syncTabletopGrid();
     }, 'setup');

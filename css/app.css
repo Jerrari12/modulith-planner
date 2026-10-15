@@ -127,8 +127,11 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws-lib.rail .expand { width: 52px; height: 44px; padding: 0; background: transparent; border: none; color: var(--ink-2); cursor: pointer; }
 #ws-lib.rail .railbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 56px; height: 58px; padding: 0; border-radius: 12px; font-size: 10px; font-weight: 600; }
 #ws .units { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap-ctl); }
-#ws .unit { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; height: 78px; border-radius: 12px; padding: 0 2px; font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; }
-#ws .unit .soon { position: absolute; top: 4px; right: 4px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 4px; border-radius: 4px; background: var(--badge-bg); color: var(--badge-fg); }
+/* the Build library's unit tiles (button.unit.key). Not a bare .unit: that also matched the Label settings' and the setup
+   sheet's "mm" wrappers (span.unit) and made each settings row 78 px tall (the stress test, 2026-10-15: "Printing part
+   labels" fell out of the panel) */
+#ws .unit.key { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; height: 78px; border-radius: 12px; padding: 0 2px; font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; }
+#ws .unit.key .soon { position: absolute; top: 4px; right: 4px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 4px; border-radius: 4px; background: var(--badge-bg); color: var(--badge-fg); }
 #ws .gf { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 8px; }
 #ws .gf .seg { height: 34px; font-size: 12px; }
 #ws .sizes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap-ctl); }
@@ -446,6 +449,9 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 
 /* ---- Labels (phase 5): the list panel, the selected drawer, the editor card, the dialog, the previews ---- */
 #ws-labels { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 324px; box-sizing: border-box; padding: 14px 16px 12px; border-radius: 18px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+/* when the panel is full, only the list (and, on a desktop, the foot) give way. A line that clips its own overflow counts
+   as shrinkable to flexbox: Last change, with its ellipsis, was squeezed to a sliver under Undo (2026-10-15) */
+#ws-labels > * { flex-shrink: 0; }
 #ws-labels .head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 #ws-labels h2, #ws-labeledit h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
 #ws-labels .count { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
@@ -545,6 +551,10 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 #ws-labels .dlabel { display: flex; align-items: center; gap: 10px; }
 #ws-labels .acts { display: flex; flex-wrap: wrap; gap: 6px; }
 #ws-labels .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
+/* desktop: the panel is a fixed height and clips. Label settings open makes the foot taller than what is left under the
+   list (the list is already at its 60 px floor), so the foot scrolls in its own box (the stress test, 2026-10-15: the
+   wheel could not reach "Printing part labels"). The phone's sheet scrolls as a whole, so this stays off there */
+@media (min-width: 1024px) { #ws-labels .foot { flex-shrink: 1; min-height: 0; overflow-y: auto; } }
 #ws-labels .status { margin: 0; font-size: 12px; color: var(--ink-2); }
 #ws-labels .status.warn { color: var(--warn-fg); }
 #ws-labels .settings summary { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; list-style: none; padding: 4px 0; }
