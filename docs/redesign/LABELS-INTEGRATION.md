@@ -153,13 +153,26 @@ P-F8 and P-F9). Both are additive: an older Picker or an older planner tab ignor
       or holds parts pending ("Pick more first"), it changes nothing. It refuses with words the planner can show, e.g.
       "The Part Picker has 3 parts pending: add or clear them first."
     - Otherwise it opens the row with that id in Edit.
-    - When its list lacks that row, it imports `item` with the import's validation, KEEPING `item.id`, and opens that row.
-      An import that cannot keep the id refuses. A new id would make the edit come back as a second label instead of
-      updating the first.
+    - **When its list lacks that row, it REFUSES.** The words: "This part label was made in another browser, so the Part
+      Picker here has no details to edit. Add the part again from here, or edit it in the browser that made it." This is
+      amended from the first text, which imported `item`: a label item carries PRINT text (fields, attribute texts, pins),
+      not the part's field values. A record rebuilt from it would guess the values, and the edit sent back would
+      overwrite the label with the guesses (the Picker side, flow-refine 50d298de; Sol 01a13fdf agreed). `item` still
+      rides along: `id` must equal `item.id`, and the item must pass the add check.
+    - **The refusal order** (nothing is touched before every check passes): a malformed id or item; parts pending; an
+      add still waiting for its reply; unsaved changes to another row; the row not in this browser's list. A row with no
+      changes is switched away from; a draft in progress is kept, as the Edit button keeps it.
     - It answers `{ gen2parts: 'opened', v: 1, session, req, id }`, or
       `{ gen2parts: 'refused', v: 1, session, req, id, reason }`, where `reason` is the words to show.
     - **The latest request wins.** A new `open` supersedes any outstanding one, and the Picker drops the work of a
-      superseded request. A new hello (a new session) voids every outstanding `open`.
+      superseded request unanswered. An `open` that arrives before the Picker's list has loaded waits for it.
+    - **A new session rebinds.** A hello with a NEW session from the bound origin rebinds the Picker. It voids every
+      outstanding `open`, retires an add still waiting for its old-session reply (the bar offers Try again), loads that
+      build's sent marks, and re-checks the pending parts. The same session again is answered with `ready` again, so a
+      lost `ready` is recoverable. A hello from another origin after the bind is ignored.
+  - **Later, `open/2`, editing across browsers:** `add` items would gain `record`, the part record minus its photo and
+    bounded. The planner would store it on the label, and the Picker would import it with importDoc's validation, keeping
+    the id. This needs a new stored key on the planner's side, so it is a planner decision, not part of `open/1`.
   - **What the planner does:**
     - It ignores an answer whose `req` is not the latest it sent.
     - On a refusal it shows the reason in its status line and leaves the Picker open.
