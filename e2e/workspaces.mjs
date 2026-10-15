@@ -584,3 +584,36 @@ test('the phone: the Build library sheet opens on its handle; the Labels sheet c
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* THE PHONE'S LABEL EDITOR (the spacing audit, 2026-10-15): the pencil left the editor's sheet collapsed behind the open
+   Labels sheet and the dock - nothing seemed to happen, and its close sat under Print labels. page.click() is the check:
+   it refuses a control something else covers. */
+test('the phone: Edit raises the label editor sheet, its close is reachable, and closing brings the Labels sheet back', async () => {
+  const { ctx, page, errors } = await open('labels', { phone: true });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.click('#ws-labels .sheet-handle');
+  await page.waitForFunction(() => document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 30_000 });
+  await page.click('#ws-labels button:has-text("Type a label")');
+  await page.fill('#ws-modal input.field', 'Phone edit');
+  await page.click('#ws-modal .box button:has-text("Add label")');
+  await settle(page, 400);
+  await page.click('#ws-labels button[title="Edit this label"]');
+  await page.waitForFunction(() => { const e = document.querySelector('#ws-labeledit'); return e && !e.hidden && e.classList.contains('open'); }, null, { timeout: 15_000 });
+  assert.equal(await page.evaluate(() => document.querySelector('#ws-labels').classList.contains('open')), false, 'the Labels sheet steps down for the editor');
+  const reach = await page.evaluate(() => { const b = document.querySelector('#ws-labeledit button[aria-label="Close the editor"]'); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t === b || b.contains(t); });
+  assert.ok(reach, 'nothing covers the editor’s close');
+  await page.click('#ws-labeledit button[aria-label="Close the editor"]');
+  const backToList = () => page.waitForFunction(() => document.querySelector('#ws-labeledit').hidden && document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 15_000 });
+  await backToList();
+  // the other ways out (Sol 01a13fb7: the first version proved Close only): Escape, and an undo that takes the label away
+  const raise = async () => { await page.click('#ws-labels button[title="Edit this label"]'); await page.waitForFunction(() => document.querySelector('#ws-labeledit').classList.contains('open'), null, { timeout: 15_000 }); };
+  await raise();
+  await page.keyboard.press('Escape');
+  await backToList();
+  await raise();
+  await page.evaluate(() => window.__GEN2_STORE__.undo());
+  await backToList();
+  assert.equal(await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length), 0, 'the undo took the label away');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});

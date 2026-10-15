@@ -702,13 +702,17 @@ export function mountLabels(stage, ctx) {
     openModal({ title: 'Add a label', body: ['Type what goes in the drawer. The icon is guessed from the words; change it after with Edit.'], ok: 'Add label', field: { placeholder: 'e.g. M3 screws' },
       onOk: () => { const t = modalField(); const r = R.add(L, S(), { text: t }); if (!r.ok) { say(r.msg); return; } closeModal(); labelCommit(r); if (phone) phone.open(panel); }, onCancel: () => closeModal() });
   }
-  function openEdit(id, unitId) { st.edit = { id, unitId, scope: 'all' }; st.query = ''; st.letter = ''; st.pick = null; renderAll(); if (!labelIcons()) loadLabelFont().then(() => renderEditor()).catch(() => {}); }
+  // on the phone the editor is a sheet of its own: opening it must raise it, or it waits collapsed behind the open Labels
+  // sheet and the dock and the pencil seems to do nothing (the spacing audit, 2026-10-15: its close sat under Print labels)
+  function openEdit(id, unitId) { st.edit = { id, unitId, scope: 'all' }; st.query = ''; st.letter = ''; st.pick = null; renderAll(); if (phone) phone.open(editor); if (!labelIcons()) loadLabelFont().then(() => renderEditor()).catch(() => {}); }
   function closeEdit() { st.edit = null; renderAll(); }
   const editCommit = (patch) => { const e = st.edit; if (!e) return; const r = R.edit(L, S(), e.id, patch, e.scope === 'this' && e.unitId != null ? 'this' : 'all', e.unitId); if (labelCommit(r) && r.id !== e.id) st.edit.id = r.id; renderAll(); };
   function renderEditor() {
     const e = st.edit; const l = e ? R.labelById(S(), e.id) : null;
     editor.hidden = !l;
-    if (!l) { editor.replaceChildren(); return; }
+    // the editor going away while its phone sheet is up (Close, Escape, an undo that removes the label, another drawer):
+    // the Labels sheet comes back, unless a label is armed for placing, when the model stays uncovered
+    if (!l) { if (phone && phone.isOpen(editor)) { if (st.pick) phone.collapse(editor); else phone.open(panel); } editor.replaceChildren(); return; }
     editor.replaceChildren();
     const shared = L.assignedUnits({ list: S().labelList, assignments: assignOf() }, l.id);
     editor.appendChild(el('div.head', {}, [el('h2.h2', { text: R.isPartLabel(l) ? 'Part label' : 'Edit label' }), el('button.x', { title: 'Close', 'aria-label': 'Close the editor', onclick: closeEdit }, [icon('x', { size: 16 })])]));
