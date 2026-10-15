@@ -479,6 +479,11 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   assert.equal(await frame.locator(`#labels .row[data-label-id="${nuts}"] .utag`).count(), 0, 'none on the waiting one');
   assert.equal(await frame.locator('#labels .row input.label-text').first().evaluate((i) => i.readOnly), true, 'read-only rows');
   assert.equal(await frame.locator('#labels .row .remove').first().isVisible(), false, 'no remove button');
+  // the stress test, 2026-10-15: the type switch and the rows' stripe buttons came back enabled after the snapshot. A visitor
+  // could turn the plate to Classic Pro and download a print file the build's faceplates do not take
+  assert.equal(await frame.locator('#label-type').isDisabled(), true, 'the label type is the planner build’s');
+  assert.deepEqual([...new Set(await frame.locator('#labels .row .stripe-btn').evaluateAll((bs) => bs.map((b) => b.disabled)))], [true], 'no stripe button takes a click or a key');
+  assert.equal(await frame.locator('#hw-band').isEnabled(), true, 'the print preference stays live');
   assert.match(await frame.locator('#status').textContent(), /2 labels from the planner build/);
   assert.equal(await frame.locator('#download').isEnabled(), true, 'the print file downloads from the plate');
   assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().log.filter((k) => k === 'ready').length), 1, 'one ready');

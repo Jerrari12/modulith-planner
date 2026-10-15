@@ -603,14 +603,16 @@ export function mountLabels(stage, ctx) {
     }
     // the selected drawer
     if (sel) panel.appendChild(renderDrawer(sel, selL, ready.length));
-    // the hint
-    panel.appendChild(el('p.hint', { text: !labels.length ? 'Make your labels in the Label Studio, or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'
-      : !faceOk ? R.NO_FACE_MSG
+    // the hint. None under the faceplate callout: it already says so and offers the switch (the stress test, 2026-10-15:
+    // on a Classic build the same sentence stood three times and squeezed the list to two rows)
+    const hint = !labels.length ? 'Make your labels in the Label Studio, or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'
+      : !faceOk ? null
       : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
       : sel && R.eligible(s, sel) && ready.length ? (selL ? `Drawer ${R.drawerNumber(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on drawer ${R.drawerNumber(s, sel.id)}. The drawer stays selected afterwards.`)
       : !ready.length ? 'Tap a drawer on the model to change or remove its label.'
       : !empties.length ? 'Every drawer has a label. Tap one on the model to replace its label.'
-      : 'Tap a drawer on the model to give it a label, or use Place several to label drawers one after another.' }));
+      : 'Tap a drawer on the model to give it a label, or use Place several to label drawers one after another.';
+    if (hint) panel.appendChild(el('p.hint', { text: hint }));
     // the waiting labels
     const scroll = el('div.scroll');
     scroll.appendChild(el('div.list', {}, waitingAll.map((l) => {
@@ -640,7 +642,8 @@ export function mountLabels(stage, ctx) {
       attachHint(el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']), HINTS.type, panel),
       attachHint(el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']), HINTS.file, panel),
       attachHint(el('button.key.tile.brand', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', onclick: () => openStudio(false) }, [STUDIO_ICON(), 'Label Studio', icon('arrow-square-out', { size: 12 })]), HINTS.studio, panel),
-      attachHint(el('button.key.tile.brand', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker', icon('arrow-square-out', { size: 12 })]), HINTS.picker, panel),
+      // the Part Picker opens in the page now (step A), so no new-tab glyph: that one is the Label Studio's
+      attachHint(el('button.key.tile.brand', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker']), HINTS.picker, panel),
     ]));
     if (labels.length) foot.appendChild(el('div.fillrow', {}, [
       attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
@@ -656,12 +659,13 @@ export function mountLabels(stage, ctx) {
     const box = el('div.drawer', { 'aria-label': 'Selected drawer' });
     box.appendChild(el('div.dhead', {}, [el('span.tag', { text: no ? `Drawer ${no}` : 'Selected' }), el('span.size', { text: [`${u.w}W·${u.hh / 2}H`, FILL_LABEL(u.fill), u.fill === 'decor' && FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] : ''].filter(Boolean).join(' · ') }),
       el('button.x', { title: 'Deselect', 'aria-label': 'Deselect the drawer', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })])]));
-    if (!R.eligible(s, u) && !l) { box.appendChild(el('p.none', { text: u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : R.NO_FACE_MSG })); return box; }
+    // a Decor drawer on a faceplate without labels: the callout above the card explains it and offers the switch
+    if (!R.eligible(s, u) && !l) { box.appendChild(el('p.none', { text: u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : 'This faceplate style takes no label.' })); return box; }
     if (!l) { box.appendChild(el('p.none', { text: 'No label yet' + (readyN ? ' · click a label below to put it on this drawer.' : '.') })); return box; }
     box.appendChild(el('div.dlabel', {}, [preview(l, true), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
     const acts = el('div.acts');
     if (R.isPartLabel(l)) {
-      acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker() }, ['Edit part details', icon('arrow-square-out', { size: 14 })]));
+      acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker() }, ['Edit part details']));
       acts.appendChild(el('button.key.sm', { title: 'Replace the part layout with your own words on this drawer', onclick: () => openModal({ title: `Use your own words on drawer ${no}?`, body: ['This label is laid out from its part record. Words you type replace that layout on this drawer only; the part label goes back to your labels, ready to place again.'], ok: 'Use custom wording', field: { placeholder: 'What’s in this drawer?', value: R.labelShort(l) }, onOk: () => { const t = modalField(); closeModal(); labelCommit(R.customWording(L, S(), u.id, t)); }, onCancel: () => closeModal() }) }, ['Use custom wording']));
     } else acts.appendChild(el('button.key.sm', { onclick: () => openEdit(l.id, u.id) }, [icon('pencil-simple', { size: 15 }), 'Edit']));
     acts.appendChild(el('button.key.sm', { title: 'Take the label off this drawer; it waits to be placed again', onclick: () => labelCommit(R.unassign(L, S(), u.id, l.id)) }, ['Remove']));

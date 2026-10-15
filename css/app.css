@@ -455,7 +455,7 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels .key.tile svg { flex: none; color: var(--ink-2); }
 #ws-labels .key.tile.brand svg:first-child { width: 16px; height: 16px; color: var(--orange); }
 #ws-labels .key.tile.brand { border-color: var(--orange-edge); }
-#ws-labels .key.tile.brand svg:last-child { margin-left: auto; color: var(--ink-3); }
+#ws-labels .key.tile.brand svg:last-child:not(:first-child) { margin-left: auto; color: var(--ink-3); }
 /* the hover hint: a bubble with a looping scene beside the control (js/ui/hint.js) */
 #ws-hint { position: fixed; z-index: 60; width: 264px; box-sizing: border-box; padding: 8px 8px 10px; border-radius: 14px; pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity var(--d-pop) var(--ease-out), transform var(--d-pop) var(--ease-out); }
 #ws-hint[hidden] { display: none; }
