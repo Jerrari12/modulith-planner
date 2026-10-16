@@ -105,16 +105,18 @@ test('analytics: only Assemble counts steps, the boot preset is not a pick, and 
   const log = await page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice());
   assert.deepEqual(log.filter((n) => /^(step:|complete$|preset:)/.test(n)), [], `Build boot sent: ${log.join(', ')}`);
   // the pacing: a stub count() records when each event leaves
-  // waited for, not timed: on the CI runner the render loop keeps the main thread busy and timers run late (the first
-  // version of this case waited a fixed 1.6 s and failed the deploy run 38934988676)
+  // waited for, not timed: the first version waited a fixed 1.6 s / 1.2 s. Deploy run 38934988676 failed in this suite;
+  // that those fixed waits were the cause is UNCONFIRMED (the run's log was not read - it needs a GitHub sign-in): the
+  // runner's busy main thread makes timers late, which fits. A timeout here names the event it waited for.
   await page.evaluate(() => { window.__at = []; window.goatcounter = { count: () => window.__at.push(performance.now()) }; for (let i = 0; i < 4; i++) window.__GEN2_VIEWER__.track('test:' + i); });
-  await page.waitForFunction(() => window.__at.length === 4, null, { timeout: 30_000 });
+  await page.waitForFunction(() => window.__at.length === 4, null, { timeout: 30_000 })
+    .catch(async () => assert.fail(`paced events: ${await page.evaluate(() => window.__at.length)} of 4 (test:0-3) sent within 30 s`));
   const gaps = await page.evaluate(() => window.__at.slice(1).map((t, i) => t - window.__at[i]));
   for (const g of gaps) assert.ok(g >= 380, `spaced: ${gaps.map(Math.round).join(', ')} ms`);
   await ctx.close();
   const a = await open('assemble');
   await a.page.waitForFunction(() => window.__GEN2_VIEWER__.trackLog.some((n) => /^step:/.test(n)), null, { timeout: 30_000 })
-    .catch(() => assert.fail('Assemble still counts its steps: ' + 'no step: event within 30 s'));
+    .catch(async () => assert.fail(`Assemble's step event: no "step:" event within 30 s; the log has ${JSON.stringify(await a.page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice(-8)))}`));
   await a.ctx.close();
 });
 
@@ -127,6 +129,18 @@ test('Build: a unit placed through the store reaches the stage; move, remove and
   await page.click('#ws-lib .size:not(.dis) >> nth=1');
   await page.waitForSelector('#ws-lib .size.on', { timeout: 5000 });
   assert.ok(await page.locator('#ws-lib .armed').count(), 'picking a size starts placing');
+  // cancelling clears the lit tile and the placing box, and the size stays remembered (the build's `selected`)
+  const picked = (await S(page)).selected;
+  await btn(page, 'Stop placing', '#ws-lib').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .armed'), null, { timeout: 5000 });
+  assert.equal(await page.locator('#ws-lib .size.on').count(), 0, 'Stop placing clears the lit size');
+  assert.deepEqual((await S(page)).selected, picked, 'the size is still remembered after cancelling');
+  await page.click('#ws-lib .size:not(.dis) >> nth=1');
+  await page.waitForSelector('#ws-lib .size.on', { timeout: 5000 });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .size.on'), null, { timeout: 5000 });
+  assert.deepEqual((await S(page)).selected, picked, 'Escape cancels placing and keeps the size');
+  await page.click('#ws-lib .size:not(.dis) >> nth=1');   // armed again for the placement below
   await page.waitForFunction(() => window.__GEN2_VIEWER__.build && document.querySelector('#ws-lib .size.on, #ws-lib .size[aria-pressed="true"]'), null, { timeout: 5000 }).catch(() => {});
   // beside the build on its bottom row: supported by the surface, so the generator accepts it and the stage rebuilds
   await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s, R) => { const id = s.nextId++; const bottom = Math.max(...s.placed.map((p) => p.y + p.hh)); const right = Math.max(...s.placed.map((p) => p.x + p.w)); s.placed.push({ id, x: right, y: bottom - 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }); if (s.gridW < right + 1) s.gridW = right + 1; R.syncTabletopGrid(); }, 'edit'); });
