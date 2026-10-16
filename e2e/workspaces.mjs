@@ -105,18 +105,16 @@ test('analytics: only Assemble counts steps, the boot preset is not a pick, and 
   const log = await page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice());
   assert.deepEqual(log.filter((n) => /^(step:|complete$|preset:)/.test(n)), [], `Build boot sent: ${log.join(', ')}`);
   // the pacing: a stub count() records when each event leaves
-  const gaps = await page.evaluate(async () => {
-    const at = []; window.goatcounter = { count: () => at.push(performance.now()) };
-    for (let i = 0; i < 4; i++) window.__GEN2_VIEWER__.track('test:' + i);
-    await new Promise((r) => setTimeout(r, 1600));
-    return at.slice(1).map((t, i) => t - at[i]);
-  });
-  assert.equal(gaps.length, 3, 'all four sent');
+  // waited for, not timed: on the CI runner the render loop keeps the main thread busy and timers run late (the first
+  // version of this case waited a fixed 1.6 s and failed the deploy run 38934988676)
+  await page.evaluate(() => { window.__at = []; window.goatcounter = { count: () => window.__at.push(performance.now()) }; for (let i = 0; i < 4; i++) window.__GEN2_VIEWER__.track('test:' + i); });
+  await page.waitForFunction(() => window.__at.length === 4, null, { timeout: 30_000 });
+  const gaps = await page.evaluate(() => window.__at.slice(1).map((t, i) => t - window.__at[i]));
   for (const g of gaps) assert.ok(g >= 380, `spaced: ${gaps.map(Math.round).join(', ')} ms`);
   await ctx.close();
   const a = await open('assemble');
-  await settle(a.page);
-  assert.ok((await a.page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice())).some((n) => /^step:/.test(n)), 'Assemble still counts its steps');
+  await a.page.waitForFunction(() => window.__GEN2_VIEWER__.trackLog.some((n) => /^step:/.test(n)), null, { timeout: 30_000 })
+    .catch(() => assert.fail('Assemble still counts its steps: ' + 'no step: event within 30 s'));
   await a.ctx.close();
 });
 
