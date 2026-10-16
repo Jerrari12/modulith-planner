@@ -6,11 +6,13 @@
  *
  * The record lives in the store (js/state/store.js); every rule is the planner's own, ported by copy
  * (js/rules/layout.js). Editing (Joey's decision 2026-10-12: everything the prototype tried):
- *   - ADD: pick a unit and a size, then click an amber spot on the stage or a cell on the 2D board. A spot is a
- *     cell where the planner's canPlace holds AND the layout stays showable with no new structural problem
- *     (a trial per cell through the generator and the validity rules; the generator runs in 0.3 ms).
- *   - MOVE: drag a selected unit on the stage (it snaps to a valid spot), drag on the board (any free cell),
- *     or nudge with the arrow keys; gravity settles anything left unsupported toward the mount surface
+ *   - ADD: pick a unit and a size, then click an amber "+" on the stage or on the 2D board - the SAME list
+ *     (placementSpots, the board redesign 2026-10-16): spots where the planner's canPlace holds AND the layout stays
+ *     showable with no new structural problem, that touch the build; one start spot on an empty build. Past either
+ *     edge widens the build within the mount's cap; the grid always hugs the build (hug()).
+ *   - MOVE: drag a selected unit on the stage (it snaps to a valid spot) or on the board (any free footprint, past
+ *     the build's edges within the cap), the inspector's Move buttons, or the arrow keys; gravity settles anything
+ *     left unsupported toward the mount surface
  *     (drop only, never adds parts - Undo puts it back).
  *   - REMOVE: the inspector's Remove, Delete, the eraser mode, or the context menu; gravity follows.
  *   - NEEDED CELLS: red spots where the planner's Fix structure would add a case; one click adds exactly that.
@@ -135,9 +137,19 @@ export function mountBuild(stage, ctx) {
   }
   /* every edit is ONE undo step, gravity included (Astra: make the whole action one Undo step and show which units
      moved): the moved units are named in the toast, pulsed on the model and flashed on the board */
+  /* THE BOARD HUGS THE BUILD (the 2D board redesign, Joey + Astra 2026-10-16): after every edit the grid is exactly the
+     build's width - empty columns at either end are dropped and the build starts at x 0 - so the width cap measures the
+     build itself and both views offer the same spots. Nothing downstream reads gridW (the BOM and the generator use the
+     placed units); gaps INSIDE the build stay. */
+  function hug(s) {
+    if (!s.placed.length) return;
+    const x0 = Math.min(...s.placed.map((p) => p.x));
+    if (x0) for (const p of s.placed) p.x -= x0;
+    s.gridW = Math.max(1, Math.max(...s.placed.map((p) => p.x + p.w)));
+  }
   function edit(fn, why = 'edit', { gravity = true } = {}) {
     let dropped = new Map();
-    const r = store.commit((s, Rs) => { const out = fn(s, Rs); if (gravity) dropped = settle(s, Rs); return out; }, why);
+    const r = store.commit((s, Rs) => { const out = fn(s, Rs); if (gravity) dropped = settle(s, Rs); hug(s); return out; }, why);
     if (dropped.size) {
       const s = S();
       const names = [...dropped.keys()].map((id) => { const u = s.placed.find((p) => p.id === id); return `${u ? `${u.w}W·${u.hh / 2}H` : 'unit'} (unit ${s.placed.indexOf(u) + 1})`; });
@@ -164,14 +176,22 @@ export function mountBuild(stage, ctx) {
      too, this was a limitation to our old grid"). A spot may sit up to one unit-width outside either edge. Taking it
      moves the whole build right by the columns it needs on the left (k) and widens the grid to `span`, never past the
      mount's width cap. Spots keep the LIVE grid's x, so a spot left of the build has a negative x. */
-  const grownFor = (x, w, s, Rs) => { const k = Math.max(0, -x); const span = Math.max(s.gridW, x + w) + k; return span <= Rs.capW() ? { k, span } : null; };
+  // The growth is measured on what the build WOULD be - the units that stay plus the new footprint (Sol 01a14656): a
+  // moving unit's old place does not count, and a stored gridW wider than the build (an older link) does not either.
+  // k shifts the trial so the build starts at x 0 (it may be negative: empty columns on the left drop out), span is
+  // its width; hug() then keeps the live grid exactly that.
+  const grownFor = (x, w, s, Rs, moving = null) => {
+    const others = s.placed.filter((p) => p.id !== moving);
+    const lo = Math.min(x, ...others.map((p) => p.x)), hi = Math.max(x + w, ...others.map((p) => p.x + p.w));
+    return hi - lo <= Rs.capW() ? { k: -lo, span: Math.max(1, hi - lo) } : null;
+  };
   function growTo(t, k, span) { if (k) for (const p of t.placed) p.x += k; t.gridW = span; }
   function addSpots(w, hh, fill) {
     const key = cacheKey(`add ${w}x${hh} ${fill}`); if (spotCache.has(key)) return spotCache.get(key);
     const s = S(), Rs = R(); const out = []; const rows = s.gridH * 2;
     for (let y = 0; y <= rows - hh; y++) for (let x = -w; x <= s.gridW; x++) {
       const g = grownFor(x, w, s, Rs); if (!g) continue;
-      if (!g.k && g.span === s.gridW) {   // inside the grid, as before
+      if (!g.k && g.span <= s.gridW) {   // inside the grid, as before
         if (!Rs.canPlace(x, y, w, hh)) continue;
         if (judge((t) => { t.placed.push({ id: t.nextId++, x, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
         continue;
@@ -180,17 +200,59 @@ export function mountBuild(stage, ctx) {
     }
     if (spotCache.size > 40) spotCache.clear(); spotCache.set(key, out); return out;
   }
+  /* ONE PLACEMENT CALCULATION for both views (Astra, the redesign): may a w x hh footprint sit at (x, y) in the LIVE
+     grid's columns, the grid widening past either edge within the mount's cap? `moving` names a unit whose own cells do
+     not count. Collisions and the mount's bounds only: a move may leave the build incomplete for a while (gravity
+     settles it, the Dock says what is left). Returns the growth { k, span } or null. */
+  function fitAt(x, y, w, hh, moving = null, s = S()) {
+    const Rs = layoutRules(s, G, { tabletop: TT }); const g = grownFor(x, w, s, Rs, moving); if (!g) return null;
+    if (!g.k && g.span <= s.gridW) return Rs.canPlace(x, y, w, hh, moving) ? g : null;
+    const t = clone(s); const Rt = layoutRules(t, G, { tabletop: TT }); growTo(t, g.k, g.span);
+    return Rt.canPlace(x + g.k, y, w, hh, moving) ? g : null;
+  }
+  /* a spot touches the build: beside a unit, or on or under one (gaps inside the build touch both sides) */
+  const touchesBuild = (sp, w, hh, placed) => placed.some((p) => ((p.x + p.w === sp.x || sp.x + w === p.x) && sp.y < p.y + p.hh && p.y < sp.y + hh)
+    || ((p.y === sp.y + hh || p.y + p.hh === sp.y) && sp.x < p.x + p.w && p.x < sp.x + w));
+  /* THE "+" SPOTS, the same list for the 3D view and the 2D board: the valid spots (addSpots - the full footprint, support,
+     the generator) that touch the build; an empty build gets ONE starting position, the mount edge's first column */
+  function placementSpots(a = armedSize(), fill = st.unit) {
+    const s = S(); const all = addSpots(a.w, a.hh, fill);
+    if (!s.placed.length) {
+      const edgeFirst = (p, q) => p.x - q.x || (s.mount === 'tabletop' ? q.y - p.y : p.y - q.y);
+      const start = all.filter((sp) => sp.x >= 0).sort(edgeFirst)[0] || all.slice().sort(edgeFirst)[0];
+      return start ? [start] : [];
+    }
+    return all.filter((sp) => touchesBuild(sp, a.w, a.hh, s.placed));
+  }
+  /* ONE MOVE CHECK for every way of moving (the board's drag preview, the arrow keys and Move buttons, the move itself,
+     the 3D drag's targets - Sol 01a14656): collisions and the mount's width cap (fitAt), then the move with gravity
+     settled must raise no NEW structural problem (judge). A temporary completion deficit is not a structural problem, so
+     an uneven top is allowed for a while. `sel` gives the trial the moving unit's own headroom (the 3D drag's frame).
+     Returns { g, rests } or { why }; `rests`: gravity left the unit where it was put. */
+  function moveCheck(u, x, y, sel = null) {
+    const s0 = sel ? (() => { const t = clone(S()); t.selected = sel; layoutRules(t, G, { tabletop: TT }).syncTabletopGrid(); return t; })() : S();
+    if (!grownFor(x, u.w, s0, layoutRules(s0, G, { tabletop: TT }), u.id)) return { why: `The build is already as wide as this mount allows (${R().capW()}W).` };
+    const g = fitAt(x, y, u.w, u.hh, u.id, s0); if (!g) return { why: 'Can’t move there · another unit is in the way.' };
+    let rests = true;
+    const ok = judge((t, Rt) => {
+      if (sel) Rt.syncTabletopGrid();
+      growTo(t, g.k, g.span); const p = t.placed.find((q) => q.id === u.id); p.x = x + g.k; p.y = y;
+      const before = p.y; settle(t, Rt); rests = p.y === before;
+    }, u.id, sel);
+    return ok ? { g, rests } : { why: 'Can’t move there · it would leave a unit without support.' };
+  }
   function moveSpots(u) {
     const key = cacheKey(`move ${u.id}`); if (spotCache.has(key)) return spotCache.get(key);
     const s = S(); const out = [];
     const sel = { w: u.w, h: u.hh / 2 };
     const t0 = clone(s); t0.selected = sel; layoutRules(t0, G, { tabletop: TT }).syncTabletopGrid();   // headroom for the unit's own height
-    const R0 = layoutRules(t0, G, { tabletop: TT }); const rows = t0.gridH * 2; const u0 = t0.placed.find((p) => p.id === u.id);
+    const rows = t0.gridH * 2; const u0 = t0.placed.find((p) => p.id === u.id);
     const delta = rows - s.gridH * 2;   // the trial grid's extra headroom shifts every y (tabletop); spots are reported in the LIVE grid's y
-    for (let y = 0; y <= rows - u.hh; y++) for (let x = 0; x <= t0.gridW - u.w; x++) {
+    // past either edge too, within the mount's cap (the redesign: a drag may take a unit beyond the build)
+    for (let y = 0; y <= rows - u.hh; y++) for (let x = -u.w; x <= t0.gridW; x++) {
       if (x === u0.x && y === u0.y) continue;
-      if (!R0.canPlace(x, y, u.w, u.hh, u.id)) continue;
-      if (judge((t, Rt) => { Rt.syncTabletopGrid(); const p = t.placed.find((q) => q.id === u.id); p.x = x; p.y = y; }, u.id, sel)) out.push({ x, y: y - delta });
+      // the shared check; the 3D view draws only the spots where the unit rests (it cannot show a drop from above)
+      const c = moveCheck(u, x, y, sel); if (c.g && c.rests) out.push({ x, y: y - delta });
     }
     if (spotCache.size > 40) spotCache.clear(); spotCache.set(key, out); return out;
   }
@@ -214,7 +276,7 @@ export function mountBuild(stage, ctx) {
     if (!Rs.selectable(size.w, size.h) && !(size.hh && Rs.sizeExists(size.w, size.hh / 2, fill))) { say('That size is not available here.'); return; }
     const s0 = S(); const g = grownFor(x, size.w, s0, Rs);
     if (!g) { say(`The build is already as wide as this mount allows (${Rs.capW()}W).`); return; }
-    if (!g.k && g.span === s0.gridW) { if (!Rs.canPlace(x, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
+    if (!g.k && g.span <= s0.gridW) { if (!Rs.canPlace(x, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
     else { const t = clone(s0); const Rt = layoutRules(t, G, { tabletop: TT }); growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
     let id;
     edit((s) => {
@@ -228,13 +290,18 @@ export function mountBuild(stage, ctx) {
   }
   function moveTo(id, x, y, { exact = false } = {}) {
     const u = S().placed.find((p) => p.id === id); if (!u) return;
+    // the shared move check first (a 3D drag's spot already passed it, in its own headroom frame)
+    if (!exact) { const c = moveCheck(u, x, y); if (!c.g) { say(c.why); return; } }
     edit((s, Rs) => {
       const before = s.gridH * 2;
       if (exact) { s.selected = { w: u.w, h: u.hh / 2 }; Rs.syncTabletopGrid(); }   // headroom for the unit's own height (a stage spot may sit above the live grid)
       const ty = y + (s.gridH * 2 - before);
       const p = s.placed.find((q) => q.id === id);
-      if (!Rs.canPlace(x, ty, p.w, p.hh, p.id)) { say('Can’t move there · another unit is in the way.'); return; }
-      p.x = x; p.y = ty;
+      // the same calculation as the spots: past either edge within the cap; checked BEFORE anything changes
+      const g = fitAt(x, ty, p.w, p.hh, p.id, s);
+      if (!g) { say(grownFor(x, p.w, s, Rs, p.id) ? 'Can’t move there · another unit is in the way.' : `The build is already as wide as this mount allows (${Rs.capW()}W).`); return; }
+      growTo(s, g.k, g.span);
+      p.x = x + g.k; p.y = ty;
       if (exact) { const a = armedSize(); s.selected = { w: a.w, h: a.h }; }
     }, 'move');
   }
@@ -256,6 +323,9 @@ export function mountBuild(stage, ctx) {
   }
   function nudge(dir) {
     if (st.selId == null) return;
+    // left and right go through the move calculation, so a unit can step past the build's edge (the redesign's
+    // alternative to dragging: the arrow keys and the inspector's Move buttons); up and down stay the rules' nudge
+    if (dir === 'left' || dir === 'right') { const u = S().placed.find((p) => p.id === st.selId); if (u) moveTo(u.id, u.x + (dir === 'left' ? -1 : 1), u.y); return; }
     edit((s, Rs) => { s.selectedUnit = st.selId; return Rs.nudgeSelected(dir); }, 'nudge');
   }
   function fixStructure() {
@@ -294,8 +364,6 @@ export function mountBuild(stage, ctx) {
   function setUnitOption(id, fn) { edit((s) => { const p = s.placed.find((q) => q.id === id); if (p) fn(p, s); }, 'option', { gravity: false }); }
   function gridOp(op) {
     edit((s, Rs) => {
-      if (op === 'w+') s.gridW = Math.min(Rs.capW(), s.gridW + 1);
-      if (op === 'w-') s.gridW = Math.max(Rs.GRID_LIMITS.wMin, s.gridW - 1);
       if (op === 'h+') s.gridH = Math.min(Rs.capH(), s.gridH + 1);
       if (op === 'h-') s.gridH = Math.max(Rs.GRID_LIMITS.hMin, s.gridH - 1);
       const before = s.placed.length; Rs.clampGrid();
@@ -411,7 +479,7 @@ export function mountBuild(stage, ctx) {
     sz.appendChild(el('p.readout', { text: `${aw}W·${ah}H inside ≈ ${aw * 88 - wall.wWall} × ${Math.round(ah * 56 - wall.hWall)} × ${INSIDE[length] ?? length} mm` }));
     if (st.armed) {
       sz.appendChild(el('div.armed', {}, [
-        el('span', { text: st.view === '2d' ? 'Click a free cell on the board to place it.' : 'Click an amber spot on the model to place it.' }),
+        el('span', { text: st.view === '2d' ? 'Click a + on the board to place it.' : 'Click an amber spot on the model to place it.' }),
         el('button.key.sm', { text: 'Stop placing', onclick: () => { st.armed = false; renderAll(); } }),
       ]));
     } else sz.appendChild(el('p.hint', { text: 'Pick a size to start placing. Greyed sizes say why on hover.' }));
@@ -575,6 +643,11 @@ export function mountBuild(stage, ctx) {
       insp.appendChild(el('div.row', {}, ['Lip', el('div.track.mini', { role: 'group', style: `grid-template-columns: repeat(${stops.length}, minmax(0, 1fr))` }, stops.map(([id, label]) =>
         el('button.seg.sm' + (curLip === id ? '.on' : ''), { text: label, onclick: () => setUnitOption(unit.id, (p) => { if (id === 'none') delete p.lip; else p.lip = id; }) })))]));
     }
+    // the alternative to dragging (Astra): one column at a time, past the build's edge too, within the mount's cap
+    insp.appendChild(el('div.row', {}, ['Move', el('div.track.mini', { role: 'group', 'aria-label': 'Move this unit', style: 'grid-template-columns: repeat(2, minmax(0, 1fr))' }, [
+      el('button.seg.sm', { text: '◀ Left', title: 'One column left · ←', onclick: () => { select(unit.id); nudge('left'); } }),
+      el('button.seg.sm', { text: 'Right ▶', title: 'One column right · →', onclick: () => { select(unit.id); nudge('right'); } }),
+    ])]));
     insp.appendChild(el('div.actions', {}, [
       el('button.key' + (st.peeking === unit.id ? '.on' : ''), { text: st.peeking === unit.id ? 'Close it' : 'Peek inside', title: unit.fill === 'shelf' ? 'A shelf has nothing to open' : 'Slide the drawer open on the model', disabled: unit.fill === 'shelf', onclick: () => togglePeek(unit.id) }),
       el('button.key', { text: 'Duplicate', title: 'A copy on the nearest valid spot', onclick: () => duplicateUnit(unit.id) }),
@@ -595,6 +668,11 @@ export function mountBuild(stage, ctx) {
     state: S, colors: () => ({ ...colors }), armed: () => st.armed ? armedSize() : null, selected: () => st.selId,
     flagged: () => flaggedIds(issues()), deficit: () => S().mount === 'tabletop' ? R().tabletopCompletion().cells : [],
     canPlace: (x, y, w, hh, id) => R().canPlace(x, y, w, hh, id), labelOf: (u) => u.label || '',
+    // the redesign: the board shows the SAME "+" spots as the 3D view, a drag is judged by the same calculation (past
+    // the build's edges within the cap), and the margin either side is the room the cap leaves (3 columns, or the armed width if wider)
+    spots: () => (st.armed ? placementSpots() : []),
+    canMove: (id, x, y) => { const u = S().placed.find((p) => p.id === id); return !!u && !!moveCheck(u, x, y).g; },
+    margin: () => { const s = S(); const span = s.placed.length ? Math.max(...s.placed.map((p) => p.x + p.w)) - Math.min(...s.placed.map((p) => p.x)) : 0; return Math.max(0, Math.min(R().capW() - span, Math.max(3, st.armed ? armedSize().w : 0))); },   // 3: a drag "three columns over" (Joey)
     onSelect: (id) => { if (st.eraser && id != null) { removeUnit(id); return; } select(id); },
     onPlace: (x, y) => placeAt(x, y), onMove: (id, x, y) => moveTo(id, x, y), onGrid: gridOp,
   });
@@ -676,17 +754,9 @@ export function mountBuild(stage, ctx) {
     if (!show3d || st.eraser) { stage.setSpots(null); stage.setDrag(null); return; }
     const spots = [];
     for (const sp of neededSpots()) spots.push(sp);
-    if (st.armed) {
-      // only the spots that TOUCH the build (beside a unit, or on or under one): every free column of a wide grid read as
-      // three spots on one side and one on the other (Joey 2026-10-16). The 2D board still takes any free cell.
-      const a = armedSize(); const all = addSpots(a.w, a.hh, st.unit);
-      const touches = (sp) => s.placed.some((p) => ((p.x + p.w === sp.x || sp.x + a.w === p.x) && sp.y < p.y + p.hh && p.y < sp.y + a.hh)
-        || ((p.y === sp.y + a.hh || p.y + p.hh === sp.y) && sp.x < p.x + p.w && p.x < sp.x + a.w));
-      // tabletop only for now: on a wall or under a table a unit hanging from the rail with a gap is supported and valid
-      // (Terra 01a14645); the board redesign decides those. An empty build has nothing to touch: every spot.
-      const near = s.mount === 'tabletop' && s.placed.length ? all.filter(touches) : all;
-      for (const sp of near) spots.push(sp);
-    }
+    // the shared "+" list (placementSpots): the 2D board shows exactly these. Every mount: a gap along a wall or table
+    // rail comes from moving a unit (drag, ← →, the inspector's Move), and the gap then offers its own spots
+    if (st.armed) for (const sp of placementSpots()) spots.push(sp);
     const a = armedSize();
     stage.setSpots(spots.length ? { spots, w: a.w, hh: a.hh, rows: s.gridH * 2,
       onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
@@ -754,7 +824,7 @@ export function mountBuild(stage, ctx) {
   stage.setDims(false);
   renderAll();
   if (st.selId != null) stage.selectUnit(st.selId);
-  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_BUILD__ = { addSpots, placeAt };   // the e2e suite reads the spots and places through them
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_BUILD__ = { addSpots, placeAt, moveTo, moveCheck, placementSpots };   // the e2e suite reads the spots and places through them
 
   return {
     onSelect(sel) {

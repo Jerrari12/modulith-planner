@@ -120,24 +120,130 @@ test('analytics: only Assemble counts steps, the boot preset is not a pick, and 
   await a.ctx.close();
 });
 
-test('Build: 3D offers the spots that touch the build, one each side; no viewer pill over the Dock; the chip has no GEN2', async () => {
-  // Joey 2026-10-16: three spots on the right and one on the left in 3D; placing left on the board showed "the edge of a red
-  // rectangle"; the viewer's "Previewing an in-progress tabletop kit" pill covered the Dock
+/* THE BOARD REDESIGN (Joey + Astra, 2026-10-16): the 2D board hugs the build and shows the 3D view's "+" spots (one
+   calculation for both); past either edge widens the build within the mount's cap; a drag may go past the build; the
+   inspector's Move buttons are the alternative to dragging; an empty build has one starting spot. */
+const boardSpots = (page) => page.evaluate(() => [...document.querySelectorAll('#ws-board .b-spot')].map((g) => `${g.dataset.x},${g.dataset.y}`).sort());
+const stageSpots = (page) => page.evaluate(() => (window.__spots || []).slice().sort());
+const watchStageSpots = (page) => page.evaluate(() => { const V = window.__GEN2_VIEWER__; if (V.__watched) return; V.__watched = 1; const o = V.setSpots; V.setSpots = (spec) => { window.__spots = spec ? spec.spots.filter((p) => p.kind !== 'need').map((p) => `${p.x},${p.y}`) : []; return o(spec); }; });
+const brief = (page) => page.evaluate(() => { const s = window.__GEN2_STORE__.state; return { gridW: s.gridW, units: s.placed.map((p) => `${p.id}:${p.w}W@${p.x},${p.y}`).sort().join(' ') }; });
+const armSize = async (page, t) => { await page.locator('#ws-lib .size:not(.dis)', { hasText: t }).first().click(); await page.waitForSelector('#ws-lib .size.on', { timeout: 5000 }); };
+const view = async (page, v) => { await page.locator(`#ws-tools button:has-text("${v}")`).first().click(); await page.waitForTimeout(300); };
+async function startBuild(page, placed) {
+  await page.evaluate((placed) => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = placed.map((u) => ({ ...u, y: u.y ?? y, hh: u.hh || 2, fill: 'decor', shelves: 0 })); s.nextId = 100; s.gridW = Math.max(1, ...s.placed.map((p) => p.x + p.w)); }, 'edit'), placed);
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n, placed.length, { timeout: 90_000 });
+  await watchStageSpots(page);
+}
+const clickSpot = async (page, x, y) => {
+  const c = await page.evaluate(([x, y]) => { const r = document.querySelector(`#ws-board .b-spot[data-x="${x}"][data-y="${y}"] circle`).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }, [x, y]);
+  await page.mouse.move(c[0], c[1]); await page.mouse.down(); await page.mouse.up();
+};
+
+test('the board redesign: both views show the same "+" spots, left and right grow the build, undo, the views keep the build', async () => {
   const { ctx, page, errors } = await open('build');
-  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = [{ id: 1, x: 0, y, w: 1, hh: 2, fill: 'classic', shelves: 0 }, { id: 2, x: 1, y, w: 2, hh: 2, fill: 'classic', shelves: 0 }, { id: 3, x: 3, y, w: 2, hh: 2, fill: 'classic', shelves: 0 }]; s.nextId = 4; s.gridW = 7; }, 'edit'));
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 3, null, { timeout: 90_000 });
-  await page.evaluate(() => { const V = window.__GEN2_VIEWER__; const o = V.setSpots; V.setSpots = (spec) => { window.__spots = spec ? spec.spots.filter((p) => p.kind !== 'need') : []; return o(spec); }; });
-  await page.locator('#ws-lib .size:not(.dis)', { hasText: '1W·1H' }).first().click();
-  await page.waitForFunction(() => Array.isArray(window.__spots) && window.__spots.length, null, { timeout: 30_000 });
-  const surface = await page.evaluate(() => { const y = window.__GEN2_STORE__.state.gridH * 2 - 2; return window.__spots.filter((p) => p.y === y).map((p) => p.x).sort((a, b) => a - b); });
-  assert.deepEqual(surface, [-1, 5], 'one surface spot each side, touching the build');
-  // a 1.5H unit leaves the tabletop incomplete: the Dock's issue says so, the viewer's pill stays hidden
-  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed.push({ id: s.nextId++, x: 5, y: s.gridH * 2 - 3, w: 1, hh: 3, fill: 'classic', shelves: 0 }); }, 'edit'));
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 4, null, { timeout: 90_000 });
-  await settle(page);
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }]);   // Joey's: a 2W and a 1W
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await armSize(page, '1W·1H');
+  await page.waitForFunction(() => (window.__spots || []).length, null, { timeout: 30_000 }).catch(() => assert.fail('the 3D view drew no spots for 1W·1H within 30 s'));
+  const in3d = await stageSpots(page);
+  assert.ok(in3d.includes(`-1,${y}`) && in3d.includes(`3,${y}`), `a surface spot each side: ${in3d}`);
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 10_000 }).catch(() => assert.fail('the board drew no "+" spots within 10 s'));
+  assert.deepEqual(await boardSpots(page), in3d, 'the board shows exactly the 3D spots');
+  assert.match(await text(page, '#ws-board .bttl'), /3W × /, 'the board is the build width');
+  assert.equal(await page.locator('#ws-board button:has-text("W+")').count(), 0, 'no W+ / W- buttons');
+  // switching views keeps the build and the spots
+  const before = await brief(page);
+  await view(page, '3D'); await view(page, '2D');
+  assert.deepEqual(await brief(page), before, 'the build is unchanged by switching views');
+  assert.deepEqual(await boardSpots(page), in3d, 'and the spots are the same');
+  // left: the build shifts right and the grid hugs it; one Undo puts it all back
+  await clickSpot(page, -1, y);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 30_000 }).catch(() => assert.fail('the left "+" placed nothing within 30 s'));
+  const left = await brief(page);
+  assert.equal(left.gridW, 4, 'the grid is the new build width');
+  assert.match(left.units, /1:2W@1,/, 'the 2W moved right by one');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 });
+  assert.deepEqual(await brief(page), before, 'one Undo restores the build');
+  // right
+  await page.waitForSelector(`#ws-board .b-spot[data-x="3"][data-y="${y}"]`, { timeout: 10_000 });
+  await clickSpot(page, 3, y);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 30_000 }).catch(() => assert.fail('the right "+" placed nothing within 30 s'));
+  assert.equal((await brief(page)).gridW, 4);
+  // cancelling: Escape takes the spots away
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#ws-board .b-spot') && !document.querySelector('#ws-lib .size.on'), null, { timeout: 5000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the board redesign: a drag past the build leaves a gap that offers spots, the Move buttons, sizes, the width cap, an empty build', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }]);
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await view(page, '2D');
+  // drag the 1W three columns right, past the build's edge
+  const u = await page.evaluate(() => { const r = document.querySelector('#ws-board .b-unit[data-id="2"] rect').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width + 3]; });
+  await page.mouse.move(u[0], u[1]); await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(u[0] + u[2] * 3 * i / 12, u[1]);
+  assert.match(await page.evaluate(() => document.querySelector('#ws-board .b-ghost')?.getAttribute('class') || ''), /ok/, 'the preview past the edge is green');
+  await page.mouse.up();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 2)?.x === 5, null, { timeout: 30_000 }).catch(() => assert.fail('the drag did not land the 1W at x 5 within 30 s'));
+  // a 2W fits the gap (x 2..4): its spots there (a surface gap is two runs, each topped on its own: not a deficit)
+  await armSize(page, '2W·1H');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 10_000 });
+  const gap = await boardSpots(page);
+  assert.ok(gap.includes(`2,${y}`) && gap.includes(`3,${y}`), `the gap offers the 2W: ${gap}`);
+  await clickSpot(page, 2, y);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 30_000 });
+  // temporarily incomplete: a 1.5H beside 1H drawers leaves the top uneven; the board hatches it, the Dock says so, and
+  // the viewer's pill stays out of the way
+  await page.keyboard.press('Escape');
+  await armSize(page, '1W·1.5H');
+  const rows15 = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2);   // arming a taller size can grow the grid
+  const tall = (await boardSpots(page)).map((k) => k.split(',').map(Number)).find(([x, yy]) => x < 0 && yy + 3 === rows15);
+  assert.ok(tall, 'a 1.5H spot left of the build');
+  await clickSpot(page, tall[0], tall[1]);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 4, null, { timeout: 30_000 });
+  await page.waitForSelector('#ws-board .b-deficit', { timeout: 10_000 }).catch(() => assert.fail('the uneven top was not hatched within 10 s'));
+  assert.match(await text(page, '#ws-dock'), /issue/i, 'the Dock counts the completion issue');
   assert.equal(await page.locator('#incomplete-status').isVisible(), false, 'no viewer pill over the Dock');
-  // the chip, refreshed by Build after every edit, shows the name without GEN2 too (js/ui/names.js)
+  // the Move buttons: the unit at the left edge steps past it, the build widens (Escape twice: stop placing, then drop
+  // the selection - the 1.5H just placed is selected, and a click on a selected unit deselects it)
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  const leftmost = await page.evaluate(() => window.__GEN2_STORE__.state.placed.slice().sort((a, b) => a.x - b.x)[0].id);
+  await page.locator(`#ws-board .b-unit[data-id="${leftmost}"]`).click();
+  await page.waitForSelector('#ws-insp button:has-text("◀ Left")', { timeout: 10_000 });
+  const w0 = (await brief(page)).gridW;
+  await page.locator('#ws-insp button:has-text("◀ Left")').click();
+  await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w + 1, w0, { timeout: 30_000 }).catch(() => assert.fail('Move ◀ did not widen the build within 30 s'));
   assert.doesNotMatch(await text(page, '#ws-switch > .chip-btn > span'), /GEN2/, 'the build chip after an edit');
+  // at the cap, a move is measured on the build it would make (Sol 01a14656): three 4W fill 12W, and the right one may
+  // still go to the far left - the build stays 12W
+  await startBuild(page, [{ id: 30, x: 0, w: 4 }, { id: 31, x: 4, w: 4 }, { id: 32, x: 8, w: 4 }]);
+  const y4 = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  assert.ok(await page.evaluate((yy) => !!window.__GEN2_BUILD__.moveCheck(window.__GEN2_STORE__.state.placed.find((p) => p.id === 32), -4, yy).g, y4), 'the 4W may move to the far left at the cap');
+  await page.evaluate((yy) => window.__GEN2_BUILD__.moveTo(32, -4, yy), y4);
+  await page.waitForFunction(() => { const s = window.__GEN2_STORE__.state; return s.placed.find((p) => p.id === 32)?.x === 0 && s.gridW === 12; }, null, { timeout: 30_000 }).catch(() => assert.fail('the 4W did not move to the far left within 30 s'));
+  // an older link whose gridW is wider than its build: growth is measured on the units, not the stored width
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = [{ id: 40, x: 5, y, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.gridW = 12; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 1, null, { timeout: 30_000 });
+  const legacy = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => p.x));
+  assert.ok(legacy.includes(4) && legacy.includes(7), `a spot each side of the 2W in the over-wide grid: ${legacy}`);
+  // the width cap: a 12W build offers nothing past either edge
+  await startBuild(page, Array.from({ length: 6 }, (_, i) => ({ id: 10 + i, x: i * 2, w: 2 })));
+  await armSize(page, '2W·1H');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 10_000 });
+  const capXs = (await boardSpots(page)).map((k) => +k.split(',')[0]);
+  assert.ok(capXs.every((x) => x >= 0 && x < 12), `nothing past the 12W cap: ${capXs}`);
+  // an empty build: one starting spot, in both views
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed = []; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 0, null, { timeout: 30_000 });
+  await armSize(page, '1W·1H');
+  await page.waitForFunction(() => document.querySelectorAll('#ws-board .b-spot').length === 1, null, { timeout: 10_000 }).catch(() => assert.fail('the empty build did not show exactly one starting spot within 10 s'));
+  await view(page, '3D');
+  await page.waitForFunction(() => (window.__spots || []).length === 1, null, { timeout: 30_000 }).catch(() => assert.fail('the 3D view did not show exactly one starting spot within 30 s'));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -765,7 +871,8 @@ test('Build: a spot left of the starter drawer, and placing there shifts the bui
   assert.ok(left, 'a spot left of the starter');
   assert.ok(spots.some((sp) => sp.x + 1 > s0.gridW), 'and one past the right edge');
   await page.evaluate((sp) => window.__GEN2_BUILD__.placeAt(sp.x, sp.y, { w: 1, h: 1, hh: 2 }, 'decor'), left);
-  await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w + 1, s0.gridW, { timeout: 10_000 });
+  // the grid hugs the build (the board redesign): its width is the build's, 1 + the starter's
+  await page.waitForFunction((w) => window.__GEN2_STORE__.state.placed.length === 2 && window.__GEN2_STORE__.state.gridW === w + 1, s0.placed[0].w, { timeout: 10_000 });
   const s1 = await S(page);
   assert.deepEqual(s1.placed.map((u) => [u.id, u.x]).sort((a, b) => a[0] - b[0]), [[s0.placed[0].id, 1], [s0.nextId, 0]], 'the starter moved right, the new drawer is at x 0');
   await page.click('#ws-tools button[aria-label="Undo"]');
