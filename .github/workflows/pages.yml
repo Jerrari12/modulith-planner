@@ -96,7 +96,11 @@ jobs:
           named() {
             npm run "$1" 2>&1 | tee "/tmp/$1.log"; local s=${PIPESTATUS[0]}
             if [ "$s" -ne 0 ]; then
-              { grep -E '^✖' "/tmp/$1.log" | sort -u | head -5; grep -E 'AssertionError|Error:|within|expected|actual' "/tmp/$1.log" | head -5; } | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | while IFS= read -r l; do echo "::error title=$1::$l"; done
+              # without a terminal node --test reports in TAP ("not ok N - name", "error: ..."), not the spec reporter's
+              # "✖" (f10b245's run matched nothing); and anything else ends with the log's last lines
+              { grep -E '^\s*(not ok|✖)' "/tmp/$1.log" | sort -u | head -5; grep -E "AssertionError|TimeoutError|Timeout [0-9]+ms|Error:|error: |within|expected|actual" "/tmp/$1.log" | head -5; } > "/tmp/$1.why"
+              [ -s "/tmp/$1.why" ] || tail -n 8 "/tmp/$1.log" > "/tmp/$1.why"
+              sed -e 's/%/%25/g' -e 's/\r/%0D/g' "/tmp/$1.why" | while IFS= read -r l; do echo "::error title=$1::$l"; done
             fi
             return "$s"
           }
