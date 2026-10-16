@@ -28,6 +28,7 @@ import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 import { board } from '../ui/board.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
+import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
 import { layoutRules } from '../rules/layout.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest } from '../generate.js';
@@ -675,7 +676,17 @@ export function mountBuild(stage, ctx) {
     if (!show3d || st.eraser) { stage.setSpots(null); stage.setDrag(null); return; }
     const spots = [];
     for (const sp of neededSpots()) spots.push(sp);
-    if (st.armed) { const a = armedSize(); for (const sp of addSpots(a.w, a.hh, st.unit)) spots.push(sp); }
+    if (st.armed) {
+      // only the spots that TOUCH the build (beside a unit, or on or under one): every free column of a wide grid read as
+      // three spots on one side and one on the other (Joey 2026-10-16). The 2D board still takes any free cell.
+      const a = armedSize(); const all = addSpots(a.w, a.hh, st.unit);
+      const touches = (sp) => s.placed.some((p) => ((p.x + p.w === sp.x || sp.x + a.w === p.x) && sp.y < p.y + p.hh && p.y < sp.y + a.hh)
+        || ((p.y === sp.y + a.hh || p.y + p.hh === sp.y) && sp.x < p.x + p.w && p.x < sp.x + a.w));
+      // tabletop only for now: on a wall or under a table a unit hanging from the rail with a gap is supported and valid
+      // (Terra 01a14645); the board redesign decides those. An empty build has nothing to touch: every spot.
+      const near = s.mount === 'tabletop' && s.placed.length ? all.filter(touches) : all;
+      for (const sp of near) spots.push(sp);
+    }
     const a = armedSize();
     stage.setSpots(spots.length ? { spots, w: a.w, hh: a.hh, rows: s.gridH * 2,
       onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
@@ -722,7 +733,7 @@ export function mountBuild(stage, ctx) {
     brd.el.hidden = st.view !== '2d'; if (st.view === '2d') brd.render();
     document.documentElement.classList.toggle('ws-2d', st.view === '2d');
     renderOverlays(); layout();
-    if (nameEl) nameEl.textContent = baseName() + (store.canUndo && !ctx.builds ? ' · edited' : '');   // autosaved builds need no 'edited' mark
+    if (nameEl) nameEl.textContent = buildName(baseName()) + (store.canUndo && !ctx.builds ? ' · edited' : '');   // autosaved builds need no 'edited' mark
   }
 
   /* ---------------- keys ---------------- */

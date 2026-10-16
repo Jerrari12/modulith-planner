@@ -120,6 +120,28 @@ test('analytics: only Assemble counts steps, the boot preset is not a pick, and 
   await a.ctx.close();
 });
 
+test('Build: 3D offers the spots that touch the build, one each side; no viewer pill over the Dock; the chip has no GEN2', async () => {
+  // Joey 2026-10-16: three spots on the right and one on the left in 3D; placing left on the board showed "the edge of a red
+  // rectangle"; the viewer's "Previewing an in-progress tabletop kit" pill covered the Dock
+  const { ctx, page, errors } = await open('build');
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = [{ id: 1, x: 0, y, w: 1, hh: 2, fill: 'classic', shelves: 0 }, { id: 2, x: 1, y, w: 2, hh: 2, fill: 'classic', shelves: 0 }, { id: 3, x: 3, y, w: 2, hh: 2, fill: 'classic', shelves: 0 }]; s.nextId = 4; s.gridW = 7; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 3, null, { timeout: 90_000 });
+  await page.evaluate(() => { const V = window.__GEN2_VIEWER__; const o = V.setSpots; V.setSpots = (spec) => { window.__spots = spec ? spec.spots.filter((p) => p.kind !== 'need') : []; return o(spec); }; });
+  await page.locator('#ws-lib .size:not(.dis)', { hasText: '1W·1H' }).first().click();
+  await page.waitForFunction(() => Array.isArray(window.__spots) && window.__spots.length, null, { timeout: 30_000 });
+  const surface = await page.evaluate(() => { const y = window.__GEN2_STORE__.state.gridH * 2 - 2; return window.__spots.filter((p) => p.y === y).map((p) => p.x).sort((a, b) => a - b); });
+  assert.deepEqual(surface, [-1, 5], 'one surface spot each side, touching the build');
+  // a 1.5H unit leaves the tabletop incomplete: the Dock's issue says so, the viewer's pill stays hidden
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed.push({ id: s.nextId++, x: 5, y: s.gridH * 2 - 3, w: 1, hh: 3, fill: 'classic', shelves: 0 }); }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 4, null, { timeout: 90_000 });
+  await settle(page);
+  assert.equal(await page.locator('#incomplete-status').isVisible(), false, 'no viewer pill over the Dock');
+  // the chip, refreshed by Build after every edit, shows the name without GEN2 too (js/ui/names.js)
+  assert.doesNotMatch(await text(page, '#ws-switch > .chip-btn > span'), /GEN2/, 'the build chip after an edit');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Build: a unit placed through the store reaches the stage; move, remove and undo follow; the issue card speaks', async () => {
   const { ctx, page, errors } = await open('build');
   const n0 = await units(page);

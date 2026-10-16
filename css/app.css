@@ -39,7 +39,10 @@
 html[data-ws] #topbar, html[data-ws] #controls, html[data-ws] #note-panel, html[data-ws] #checklist-tab,
 html[data-ws] #checklist-panel, html[data-ws] #identify-card, html[data-ws] #cover-overlay, html[data-ws] #cover-bg,
 html[data-ws] #tap-hint, html[data-ws] #paid-note, html[data-ws] #outro-overlay, html[data-ws] #embed-hint,
-html[data-ws] #measure-toggle, html[data-ws] #color-toggle, html[data-ws] #pointer-line { display: none !important; }
+html[data-ws] #measure-toggle, html[data-ws] #color-toggle, html[data-ws] #pointer-line,
+/* the viewer's "Previewing an in-progress tabletop kit" pill sat over the Dock (Joey 2026-10-16); the Dock's issue card
+   already carries the tabletop-completion guidance */
+html[data-ws] #incomplete-status { display: none !important; }
 html[data-ws] body { font-family: var(--font-ui); color: var(--ink); }
 /* the viewer's W/H/L callouts are clamped to the old layout's edges; they return with the Measure tool until the stage's safe area exists */
 html[data-ws]:not(.ws-measure) .dim-label { display: none !important; }
