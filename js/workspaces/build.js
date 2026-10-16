@@ -397,7 +397,9 @@ export function mountBuild(stage, ctx) {
     const sizes = el('div.sizes');
     const heights = R().heightsForFill(st.unit);
     for (const h of heights) for (const w of (G?.drawerWidths || [1, 2, 3, 4])) {
-      const why = sizeWhy(w, h); const id = `${w}x${h}`; const dis = !!why, on = st.addSize === id;
+      // lit only while it is being PLACED: the remembered size lit on entry read as "placing already" with no spots on the
+      // model (Joey 2026-10-16: "no '+' are shown unless i select a different size")
+      const why = sizeWhy(w, h); const id = `${w}x${h}`; const dis = !!why, on = st.armed && st.addSize === id;
       sizes.appendChild(el('button.size.key' + (dis ? '.dis' : on ? '.on' : ''), {
         title: why || `${w * 88} × ${h * 56} mm · click to place`, 'aria-disabled': dis ? 'true' : null, 'aria-pressed': String(on),
         onclick: dis ? null : () => { setPalette(st.unit, id); st.armed = true; st.eraser = false; renderAll(); if (phone) phone.collapse(lib); },

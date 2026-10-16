@@ -121,8 +121,12 @@ test('analytics: only Assemble counts steps, the boot preset is not a pick, and 
 test('Build: a unit placed through the store reaches the stage; move, remove and undo follow; the issue card speaks', async () => {
   const { ctx, page, errors } = await open('build');
   const n0 = await units(page);
+  // a size is lit only while it is being placed: lit on entry it read as "placing already" with no spots (Joey 2026-10-16)
+  assert.equal(await page.locator('#ws-lib .size.on').count(), 0, 'no size lit before one is picked');
   // place: the library arms a size and the store takes the placement the way the spot tap does
   await page.click('#ws-lib .size:not(.dis) >> nth=1');
+  await page.waitForSelector('#ws-lib .size.on', { timeout: 5000 });
+  assert.ok(await page.locator('#ws-lib .armed').count(), 'picking a size starts placing');
   await page.waitForFunction(() => window.__GEN2_VIEWER__.build && document.querySelector('#ws-lib .size.on, #ws-lib .size[aria-pressed="true"]'), null, { timeout: 5000 }).catch(() => {});
   // beside the build on its bottom row: supported by the surface, so the generator accepts it and the stage rebuilds
   await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s, R) => { const id = s.nextId++; const bottom = Math.max(...s.placed.map((p) => p.y + p.hh)); const right = Math.max(...s.placed.map((p) => p.x + p.w)); s.placed.push({ id, x: right, y: bottom - 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }); if (s.gridW < right + 1) s.gridW = right + 1; R.syncTabletopGrid(); }, 'edit'); });
