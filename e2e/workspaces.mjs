@@ -345,14 +345,46 @@ test('3D: with a wide ghost showing, moving onto the neighbouring "+" moves the 
   await armSize(page, '3W·1H');   // 3W spots one column apart: the next marker sits well INSIDE the hovered ghost
   const top = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 4);
   await page.waitForFunction((t) => window.__GEN2_VIEWER__.spotScreens().filter((m) => m.y === t).length >= 2, top, { timeout: 30_000 }).catch(() => assert.fail('no two 3W spots on top within 30 s'));
+  await settle(page, 2500);   // the camera re-frames after a rebuild: screen positions are read once it has stopped
   const marks = (await page.evaluate((t) => window.__GEN2_VIEWER__.spotScreens().filter((m) => m.y === t).sort((a, b) => a.x - b.x), top));
   const hovered = () => page.evaluate(() => (window.__GEN2_VIEWER__.spotScreens().find((m) => m.hovered) || {}).x ?? null);
   await page.mouse.move(marks[0].sx, marks[0].sy, { steps: 4 });
-  await page.waitForFunction((x) => (window.__GEN2_VIEWER__.spotScreens().find((m) => m.hovered) || {}).x === x, marks[0].x, { timeout: 5000 }).catch(() => assert.fail('the first "+" did not take the hover'));
-  for (const m of marks.slice(1)) {
+  await page.waitForFunction((x) => (window.__GEN2_VIEWER__.spotScreens().find((m) => m.hovered) || {}).x === x, marks[0].x, { timeout: 20_000 }).catch(() => assert.fail('the first "+" did not take the hover'));
+  for (const m0 of marks.slice(1)) {
+    const m = await page.evaluate(([x, t]) => window.__GEN2_VIEWER__.spotScreens().find((q) => q.x === x && q.y === t), [m0.x, top]);
     await page.mouse.move(m.sx, m.sy, { steps: 6 });   // straight across, never leaving the ghost
-    await page.waitForFunction((x) => (window.__GEN2_VIEWER__.spotScreens().find((q) => q.hovered) || {}).x === x, m.x, { timeout: 5000 }).catch(async () => assert.fail(`moving onto the "+" at x ${m.x} left the hover on x ${await hovered()}`));
+    await page.waitForFunction((x) => (window.__GEN2_VIEWER__.spotScreens().find((q) => q.hovered) || {}).x === x, m.x, { timeout: 20_000 }).catch(async () => assert.fail(`moving onto the "+" at x ${m.x} left the hover on x ${await hovered()}`));
   }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('3D: a mouse drag picks up any unit - unselected, even while placing - and a click on a "+" over a unit still places', async () => {
+  // Joey 2026-10-16: "I'm trying to left click and drag a unit but it does nothing" (only the selected unit could be
+  // dragged, and none while a size was armed)
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }, { id: 3, x: 3, w: 1 }]);
+  await armSize(page, '1W·1H');   // placing: the old code refused every drag here
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.spotScreens().length, null, { timeout: 30_000 });
+  await settle(page, 2500);   // the camera re-frames after a rebuild
+  const at = await page.evaluate(() => window.__GEN2_VIEWER__.unitScreen(3));
+  await page.mouse.move(at.x, at.y); await page.mouse.down(); await page.mouse.move(at.x + 12, at.y, { steps: 3 });
+  // picked up: the move targets replace the "+"; take the one left of the build
+  await page.waitForFunction((y) => window.__GEN2_VIEWER__.spotScreens().some((m) => m.x === -1 && m.y === y), y, { timeout: 30_000 }).catch(() => assert.fail('the drag offered no target left of the build within 30 s'));
+  const t = await page.evaluate((y) => window.__GEN2_VIEWER__.spotScreens().find((m) => m.x === -1 && m.y === y), y);
+  await page.mouse.move(t.sx, t.sy, { steps: 8 }); await page.mouse.up();
+  await page.waitForFunction(() => { const p = window.__GEN2_STORE__.state.placed.find((q) => q.id === 3); return p && p.x === 0; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`the dragged unit is at ${JSON.stringify(await brief(page))}`));
+  assert.equal(await page.locator('#ws-lib .size.on').count(), 0, 'picking a unit up stopped placing');
+  // a "+" sitting on a unit is a placement, not a pick-up
+  await armSize(page, '1W·1H');
+  const topY = y - 2;
+  await page.waitForFunction((t) => window.__GEN2_VIEWER__.spotScreens().some((m) => m.y === t), topY, { timeout: 30_000 });
+  await settle(page, 2500);
+  const n0 = await units(page);
+  const plus = await page.evaluate((t) => window.__GEN2_VIEWER__.spotScreens().find((m) => m.y === t), topY);
+  await page.mouse.move(plus.sx, plus.sy, { steps: 4 }); await page.mouse.down(); await page.mouse.up();
+  await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n + 1, n0, { timeout: 30_000 }).catch(() => assert.fail('a click on a "+" over a unit placed nothing within 30 s'));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

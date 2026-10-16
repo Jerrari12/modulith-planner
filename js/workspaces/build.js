@@ -785,7 +785,12 @@ export function mountBuild(stage, ctx) {
       onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
       onChoose: (sp) => { st.chosen = sp; renderChoice(); } } : null);
     const u = st.selId != null ? s.placed.find((p) => p.id === st.selId) : null;
-    stage.setDrag(u && !st.armed ? { unitId: u.id, get rows() { return S().gridH * 2; }, spots: () => { const sp = moveSpots(u); if (!sp.length) say('No other valid spot for this unit here · the 2D board lets it go anywhere free, and gravity settles it.'); return sp; }, onDrop: (sp, id) => moveTo(id, sp.x, sp.y, { exact: true }), onCancel: () => renderAll() } : null);
+    // any unit can be dragged with a mouse or pen, selected or not, even while a size is armed (picking one up stops
+    // placing); a finger drags the selected unit (Joey 2026-10-16). The targets are moveSpots: the shared moveCheck.
+    stage.setDrag({ unitId: u ? u.id : null, any: true, get rows() { return S().gridH * 2; },
+      spots: (id) => { const m = S().placed.find((p) => p.id === id); const sp = m ? moveSpots(m) : []; if (!sp.length) say('No other valid spot for this unit here · the 2D board lets it go anywhere free, and gravity settles it.'); return sp; },
+      onStart: (id) => { st.armed = false; st.selId = id; st.sel = { owner: id }; },   // state only: no render mid-carry (it would clear the stage's spots)
+      onDrop: (sp, id) => { moveTo(id, sp.x, sp.y, { exact: true }); select(id); }, onCancel: () => renderAll() });
   }
 
   /* ---------------- layout ---------------- */

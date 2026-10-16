@@ -8055,7 +8055,7 @@ function noteBuildMismatch(o) {
 canvas.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerup', e => {
   // the Build workspace's carry (phase 3) ends on release wherever the pointer is: a drop on a spot, else a cancel
-  if (carry) { if (endCarry(true)) return; }
+  if (carry) { if (!(e.button === 0 || e.pointerType === 'touch')) return; if (endCarry(true)) return; }   // only the button that picked it up ends it; another button's release mid-carry does nothing
   // The cover and outro are PRESENTATION pages (box art / end-credits cinema) —
   // taps there must not identify parts: a stray cover click used to raycast the
   // model and ISOLATE a faceplate underneath the cover chrome (Joey's official-
@@ -8280,28 +8280,40 @@ function setEraser(cb) { eraser = cb || null; eraseBox(null); canvas.style.curso
 /* the carry: pointerdown on the dragged unit lifts a white ghost of it; it snaps to the nearest valid spot within
    reach on screen (the workspace supplies the spots when the press starts), else rides the camera plane; release on
    a spot drops it there. Orbit is off for the duration. */
-function setDrag(spec) { dragSpec = spec || null; }   // { unitId, spots(): [{x,y}] | Promise, onDrop(spot, unitId), onCancel() }
+// { unitId, any?, spots(unitId): [{x,y}] | Promise, onStart?(unitId), onDrop(spot, unitId), onCancel() }
+// `any` (Joey 2026-10-16: "I'm trying to left click and drag a unit but it does nothing"): with a mouse or pen ANY unit
+// can be picked up, selected or not; a finger still drags only the selected unit, so touching the model orbits it
+function setDrag(spec) { dragSpec = spec || null; }
 canvas.addEventListener('pointerdown', e => {
   if (!dragSpec || e.button !== 0 || carry || eraser) return;
-  const id = unitAtEvent(e); if (id == null || id !== dragSpec.unitId) return;
+  if (spotSpec && spotAt(e)) return;   // a "+" under the pointer is a placement, not a unit to pick up (they sit on units)
+  const id = unitAtEvent(e); if (id == null) return;
+  if (id !== dragSpec.unitId && !(dragSpec.any && e.pointerType !== 'touch')) return;
   const box = unitBox(id); if (box.isEmpty()) return;
   controls.enabled = false;
   const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
   const m = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y, sz.z), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false }));
   m.position.copy(c); m.renderOrder = 1000; m.userData.ghost = true;
+  m.visible = false;   // shown once the pointer moves (dragMove): a click flashes nothing
   m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthTest: false })));
   editGroup.add(m);
   carry = { id, mesh: m, origin: c.clone(), moved: false, start: [e.clientX, e.clientY], snap: null };
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* no capture */ }
-  Promise.resolve(dragSpec.spots()).then(spots => {
-    if (!carry || carry.id !== id) return;
-    const u = build.placed.find(p => p.id === id);
-    if (u) setSpots({ spots: spots || [], w: u.w, hh: u.hh, rows: dragSpec.rows });
-  });
 });
 function dragMove(e) {
   if (!carry) return;
   if (!carry.moved && Math.hypot(e.clientX - carry.start[0], e.clientY - carry.start[1]) < 4) return;
+  if (!carry.moved) {
+    // picked up only once it MOVES: a plain click stays a click (it selects, and the placing spots stay). The placing
+    // "+" go at once and the move targets replace them BEFORE this move snaps (Terra 01a146a2: a quick one-move drag
+    // could not snap, and could snap to a stale placing spot); an async list is matched to THIS carry by its token
+    const id = carry.id, tok = carry.tok = (carry.tok || 0) + Math.random();
+    if (dragSpec && dragSpec.onStart) dragSpec.onStart(id);
+    setSpots(null);
+    const show = (spots) => { if (!carry || carry.tok !== tok) return; const u = build.placed.find(p => p.id === id); if (u) setSpots({ spots: spots || [], w: u.w, hh: u.hh, rows: dragSpec.rows }); };
+    const got = dragSpec ? dragSpec.spots(id) : [];
+    if (Array.isArray(got)) show(got); else Promise.resolve(got).then(show);
+  }
   carry.moved = true;
   const r = canvas.getBoundingClientRect();
   let best = null, bd = Infinity;
@@ -8327,7 +8339,7 @@ function endCarry(drop) {
   if (!carry) return false;
   const { snap, moved, id } = carry;
   editGroup.remove(carry.mesh); disposeObj(carry.mesh); carry = null; controls.enabled = true;
-  setSpots(null);
+  if (moved) setSpots(null);   // a click that never moved leaves the spots as they were
   if (drop && moved && snap && dragSpec && dragSpec.onDrop) dragSpec.onDrop(snap.userData.spot, id);
   else if (moved && dragSpec && dragSpec.onCancel) dragSpec.onCancel();
   invalidateFrame();
@@ -8356,6 +8368,9 @@ canvas.addEventListener('pointermove', e => {
 canvas.addEventListener('pointerleave', () => hoverAt(null));
 canvas.addEventListener('pointercancel', () => endCarry(false));
 canvas.addEventListener('contextmenu', e => {
+  // a touch or pen HOLD arrives as a contextmenu (the system's long-press): held still it opens the menu, as on a phone;
+  // a hold that became a drag never does (Joey 2026-10-16: holding brought the menu up instead of moving the unit)
+  if (carry) { if (carry.moved) { e.preventDefault(); return; } endCarry(false); }
   if (typeof opts === 'undefined' || !opts.onContext || !build) return;
   const id = unitAtEvent(e); if (id == null) return;
   e.preventDefault(); opts.onContext({ unitId: id, x: e.clientX, y: e.clientY });
