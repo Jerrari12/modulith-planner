@@ -783,7 +783,9 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-top .printer span, #ws-top .share span { display: none; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
   #ws-switch > .chip-btn > span { max-width: 120px; }
-  #ws-tabs { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); }
+  /* top is from #ws-top (18 px down; its bar ends at 64): the 52 px row then sits 8 px under the bar and 10 px over the
+     panels at 134 (Joey 2026-10-16: at 70 it overlapped the view tools by 6 px) */
+  #ws-tabs { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); }
   #ws-top .spacer { flex: 1; }
   #ws-lib, #ws-insp, #ws-tools, #ws-steps { top: 134px; }
   #ws-dock { gap: 14px; }
