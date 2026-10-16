@@ -62,6 +62,12 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
    The quality tier is pinned to `fast` (no shadows, dpr 1) and the desktop viewport is the smallest desktop layout: the
    suite proves behaviour, not pixels, and on the CI runner's software rasteriser the balanced tier at 1440x900 kept the
    main thread so busy that a click took longer than its 30 s to be acknowledged (run 38426597075, 2026-10-13) */
+/* a second browser for share-link checks, set up as open() sets up its own: the fast tier and the dark theme. Without it the
+   page renders at its default quality, and on the CI runner's software rasteriser that kept the main thread so busy that
+   a click outlived its 30 s (deploy run 38981210610: "the redesign follow-up: a gap build…" - locator.click: Timeout
+   30000ms exceeded; this suite passed locally on a real GPU every time) */
+const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} };
+async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
 async function open(ws, { query = '', phone = false, context = null } = {}) {
   const ctx = context || await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
@@ -301,7 +307,7 @@ test('the redesign follow-up: a gap build and an older over-wide build survive s
   await page.waitForFunction((u) => { const s = window.__GEN2_STORE__.state; return s.placed.map((p) => `${p.id}:${p.w}W@${p.x},${p.y}`).sort().join(' ') === u; }, want.units, { timeout: 30_000 }).catch(async () => assert.fail(`reopened as ${JSON.stringify(await brief(page))}, wanted ${JSON.stringify(want)}`));
   // share: the address opens the same build in another browser
   const link = await page.evaluate(() => location.href);
-  const other = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(other);
+  const other = await freshContext();
   const p2 = await other.newPage(); await p2.goto(link, { waitUntil: 'load' }); await waitBoot(p2);
   assert.deepEqual((await brief(p2)).units, want.units, 'the share link opens the same gap build');
   await other.close();
@@ -310,7 +316,7 @@ test('the redesign follow-up: a gap build and an older over-wide build survive s
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = [{ id: 7, x: 5, y, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.nextId = 8; s.gridW = 12; }, 'edit'));
   await page.waitForTimeout(800);
   const old = await page.evaluate(() => location.href);
-  const third = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(third);
+  const third = await freshContext();
   const p3 = await third.newPage(); await p3.goto(old, { waitUntil: 'load' }); await waitBoot(p3);
   assert.equal((await brief(p3)).gridW, 12, 'the older build opens as stored');
   await watchStageSpots(p3); await view(p3, '2D'); await armSize(p3, '1W·1H');
