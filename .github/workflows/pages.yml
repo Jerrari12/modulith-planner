@@ -90,11 +90,21 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-          npm run smoke
-          npm run profile-lands
-          npm run relief-tier
+          # a failure NAMES ITSELF in the run's annotations, which the API serves without signing in (2026-10-16: three
+          # runs failed here and the log - sign-in only - could not be read): the failing tests, then their messages,
+          # with workflow-command escaping for % and carriage returns (Terra 01a146f2)
+          named() {
+            npm run "$1" 2>&1 | tee "/tmp/$1.log"; local s=${PIPESTATUS[0]}
+            if [ "$s" -ne 0 ]; then
+              { grep -E '^✖' "/tmp/$1.log" | sort -u | head -5; grep -E 'AssertionError|Error:|within|expected|actual' "/tmp/$1.log" | head -5; } | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | while IFS= read -r l; do echo "::error title=$1::$l"; done
+            fi
+            return "$s"
+          }
+          named smoke
+          named profile-lands
+          named relief-tier
           # the merged planner's five workspaces, the store and the setup sheet, driven end to end (2026-10-13)
-          npm run e2e
+          named e2e
 
       # Stamp the app's own JS/CSS URLs with the commit SHA. GitHub Pages caches
       # assets for 10 minutes (max-age=600), so without this a visitor loading
