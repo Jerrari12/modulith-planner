@@ -286,11 +286,14 @@ export function computeBom(build, GEN2) {
       // optional side covers for units on the outer edges of the layout.
       // Covers pair to a case via the side dovetails, so cabinets (stacked
       // 1H cases/extenders) take 1H covers per level.
-      const minX = Math.min(...build.placed.map((p) => p.x));
-      const maxX = Math.max(...build.placed.map((p) => p.x + p.w));
+      // the outer sides of EACH run of columns: a tabletop with a gap is two separate sections, and the sides facing
+      // the gap are exposed too (2026-10-16: a gap build billed 2 side covers where its two sections need 4; on a
+      // build without a gap this is the old outermost-edge rule)
+      const runStarts = new Set(columnRuns().map((r) => r.start));
+      const runEnds = new Set(columnRuns().map((r) => r.start + r.len));
       const sideCovers = new Map(); // height -> qty
       build.placed.forEach((p) => {
-        const exposedSides = (p.x === minX ? 1 : 0) + (p.x + p.w === maxX ? 1 : 0);
+        const exposedSides = (runStarts.has(p.x) ? 1 : 0) + (runEnds.has(p.x + p.w) ? 1 : 0);
         if (!exposedSides) return;
         if (p.fill === "cabinet") count(sideCovers, 1, exposedSides * (p.hh / 2));
         else count(sideCovers, p.hh / 2, exposedSides);

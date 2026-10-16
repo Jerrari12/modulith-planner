@@ -248,6 +248,115 @@ test('the board redesign: a drag past the build leaves a gap that offers spots, 
   await ctx.close();
 });
 
+/* THE REDESIGN'S FOLLOW-UP CHECKS (Joey + Astra, 2026-10-16): separate sections said in the Dock and on the board; the
+   drag ghost shows the settled position; a unit taller than the headroom can be dragged on top; a gap build and an
+   older over-wide build survive save, reopen and share; on a phone a "+" takes a finger's tap. */
+test('the redesign follow-up: sections are said, the ghost shows where gravity settles, a tall unit stacks by drag', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }, { id: 3, x: 3, w: 1, hh: 3 }]);
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const p = s.placed.find((q) => q.id === 3); p.y = s.gridH * 2 - 3; }, 'edit'));
+  await view(page, '2D');
+  assert.equal(await page.locator('#ws-dock .group.sections').count(), 0, 'one section: nothing said');
+  // drawers: no 3W·3H or 4W·3H tile at all, not even greyed (Joey 2026-10-16)
+  for (const t of ['3W·3H', '4W·3H']) assert.equal(await page.locator('#ws-lib .size', { hasText: t }).count(), 0, `no ${t} drawer tile`);
+  // the ghost of a unit dragged into the air sits on the surface, and the unit lands there
+  const box = (sel) => page.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width + 3, r.height + 3, r.bottom]; }, sel);
+  let u = await box('#ws-board .b-unit[data-id="2"] rect');
+  await page.mouse.move(u[0], u[1]); await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(u[0] + u[2] * 2 * i / 10, u[1] - u[3] * i / 10);
+  const ghost = await page.evaluate(() => { const g = document.querySelector('#ws-board .b-ghost'); return g && [g.getAttribute('class'), g.getBoundingClientRect().bottom]; });
+  const surface = await page.evaluate(() => document.querySelector('#ws-board .b-mount').getBoundingClientRect().top);
+  assert.ok(ghost && /ok/.test(ghost[0]) && Math.abs(ghost[1] - surface) < 6, `the ghost sits on the surface: ${ghost} vs ${surface}`);
+  await page.mouse.up();
+  await page.waitForFunction(() => { const s = window.__GEN2_STORE__.state; const p = s.placed.find((q) => q.id === 2); return p && p.x === 4 && p.y + p.hh === s.gridH * 2; }, null, { timeout: 30_000 }).catch(() => assert.fail('the 1W did not land on the surface at x 4 within 30 s'));
+  // now two sections: the Dock and the board say so
+  await page.waitForSelector('#ws-dock .group.sections', { timeout: 10_000 }).catch(() => assert.fail('the Dock did not show the sections within 10 s'));
+  assert.match(await text(page, '#ws-dock .group.sections'), /2\s*sections/);
+  assert.match(await text(page, '#ws-board .bttl'), /2 separate sections/);
+  // the 1.5H, taller than the 1H headroom, dragged on top of the 2W
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 2)?.x === 2, null, { timeout: 30_000 });
+  u = await box('#ws-board .b-unit[data-id="3"] rect'); const two = await box('#ws-board .b-unit[data-id="1"] rect');
+  const tx = two[0] - two[2] / 4, ty = two[1] - two[3] / 2 - u[3] / 2 - 4;
+  await page.mouse.move(u[0], u[1]); await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(u[0] + (tx - u[0]) * i / 10, u[1] + (ty - u[1]) * i / 10);
+  await page.mouse.up();
+  await page.waitForFunction(() => { const s = window.__GEN2_STORE__.state; const t = s.placed.find((q) => q.id === 3), b = s.placed.find((q) => q.id === 1); return t && b && t.x === b.x && t.y + t.hh === b.y; }, null, { timeout: 30_000 }).catch(() => assert.fail('the 1.5H was not stacked on the 2W within 30 s'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the redesign follow-up: a gap build and an older over-wide build survive save, reopen and share', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 4, w: 1 }]);   // a gap: two sections
+  await page.evaluate(() => window.__GEN2_BUILD__.moveTo(2, 5, window.__GEN2_STORE__.state.gridH * 2 - 2));   // an EDIT: autosave + hug
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 2)?.x === 5, null, { timeout: 30_000 });
+  const want = await brief(page);
+  // reopen: the bare address reopens the autosaved build
+  await page.waitForTimeout(1500);   // the IndexedDB write
+  await page.goto(`${base}/index.html?ws=build&debug=1`, { waitUntil: 'load' }); await waitBoot(page);
+  await page.waitForFunction((u) => { const s = window.__GEN2_STORE__.state; return s.placed.map((p) => `${p.id}:${p.w}W@${p.x},${p.y}`).sort().join(' ') === u; }, want.units, { timeout: 30_000 }).catch(async () => assert.fail(`reopened as ${JSON.stringify(await brief(page))}, wanted ${JSON.stringify(want)}`));
+  // share: the address opens the same build in another browser
+  const link = await page.evaluate(() => location.href);
+  const other = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(other);
+  const p2 = await other.newPage(); await p2.goto(link, { waitUntil: 'load' }); await waitBoot(p2);
+  assert.deepEqual((await brief(p2)).units, want.units, 'the share link opens the same gap build');
+  await other.close();
+  // an older link: a stored gridW wider than the build. It opens as stored (nothing hugs until an edit), the "+" sit
+  // either side of the build, and the first placement hugs the grid to the build
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = [{ id: 7, x: 5, y, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.nextId = 8; s.gridW = 12; }, 'edit'));
+  await page.waitForTimeout(800);
+  const old = await page.evaluate(() => location.href);
+  const third = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(third);
+  const p3 = await third.newPage(); await p3.goto(old, { waitUntil: 'load' }); await waitBoot(p3);
+  assert.equal((await brief(p3)).gridW, 12, 'the older build opens as stored');
+  await watchStageSpots(p3); await view(p3, '2D'); await armSize(p3, '1W·1H');
+  const y3 = await p3.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await p3.waitForSelector(`#ws-board .b-spot[data-x="4"][data-y="${y3}"]`, { timeout: 10_000 }).catch(() => assert.fail('no "+" left of the older build within 10 s'));
+  assert.ok(await p3.locator(`#ws-board .b-spot[data-x="7"][data-y="${y3}"]`).count(), 'and one on its right');
+  await clickSpot(p3, 4, y3);
+  await p3.waitForFunction(() => { const s = window.__GEN2_STORE__.state; return s.placed.length === 2 && s.gridW === 3 && Math.min(...s.placed.map((p) => p.x)) === 0; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`after the first placement: ${JSON.stringify(await brief(p3))}`));
+  await third.close();
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the redesign follow-up: on a phone a "+" takes a tap near it, and a touch drag moves a unit', async () => {
+  const { ctx, page, errors } = await open('build', { phone: true });
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }]);
+  await page.locator('#ws-tools button:has-text("2D")').first().tap();
+  const handle = page.locator('#ws-lib .sheet-handle').first(); if (await handle.count()) await handle.tap();
+  await page.locator('#ws-lib .size:not(.dis)', { hasText: '1W·1H' }).first().tap();
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await page.waitForSelector(`#ws-board .b-spot[data-x="-1"][data-y="${y}"]`, { timeout: 10_000 }).catch(() => assert.fail('no left "+" on the phone board within 10 s'));
+  const c = await page.evaluate(([y]) => { const r = document.querySelector(`#ws-board .b-spot[data-x="-1"][data-y="${y}"] circle`).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width]; }, [y]);
+  assert.ok(c[2] >= 28, `a finger-sized "+": ${c[2]} px`);
+  await page.touchscreen.tap(c[0], c[1] - 16);   // outside the 1H footprint, within reach
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 30_000 }).catch(() => assert.fail('a tap near the "+" placed nothing within 30 s'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('3D: with a wide ghost showing, moving onto the neighbouring "+" moves the ghost there', async () => {
+  // Joey 2026-10-16: hovering one 2W spot on top of the build showed its green box, and moving straight onto the next "+"
+  // did not move it - the box covered the neighbour's marker and caught the ray
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 1 }, { id: 2, x: 1, w: 1 }, { id: 3, x: 2, w: 1 }, { id: 4, x: 3, w: 1 }]);
+  await armSize(page, '3W·1H');   // 3W spots one column apart: the next marker sits well INSIDE the hovered ghost
+  const top = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 4);
+  await page.waitForFunction((t) => window.__GEN2_VIEWER__.spotScreens().filter((m) => m.y === t).length >= 2, top, { timeout: 30_000 }).catch(() => assert.fail('no two 3W spots on top within 30 s'));
+  const marks = (await page.evaluate((t) => window.__GEN2_VIEWER__.spotScreens().filter((m) => m.y === t).sort((a, b) => a.x - b.x), top));
+  const hovered = () => page.evaluate(() => (window.__GEN2_VIEWER__.spotScreens().find((m) => m.hovered) || {}).x ?? null);
+  await page.mouse.move(marks[0].sx, marks[0].sy, { steps: 4 });
+  await page.waitForFunction((x) => (window.__GEN2_VIEWER__.spotScreens().find((m) => m.hovered) || {}).x === x, marks[0].x, { timeout: 5000 }).catch(() => assert.fail('the first "+" did not take the hover'));
+  for (const m of marks.slice(1)) {
+    await page.mouse.move(m.sx, m.sy, { steps: 6 });   // straight across, never leaving the ghost
+    await page.waitForFunction((x) => (window.__GEN2_VIEWER__.spotScreens().find((q) => q.hovered) || {}).x === x, m.x, { timeout: 5000 }).catch(async () => assert.fail(`moving onto the "+" at x ${m.x} left the hover on x ${await hovered()}`));
+  }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Build: a unit placed through the store reaches the stage; move, remove and undo follow; the issue card speaks', async () => {
   const { ctx, page, errors } = await open('build');
   const n0 = await units(page);

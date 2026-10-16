@@ -228,18 +228,26 @@ export function mountBuild(stage, ctx) {
      the 3D drag's targets - Sol 01a14656): collisions and the mount's width cap (fitAt), then the move with gravity
      settled must raise no NEW structural problem (judge). A temporary completion deficit is not a structural problem, so
      an uneven top is allowed for a while. `sel` gives the trial the moving unit's own headroom (the 3D drag's frame).
-     Returns { g, rests } or { why }; `rests`: gravity left the unit where it was put. */
+     Returns { g, rests, y } or { why }; `rests`: gravity left the unit where it was put; `y`: where gravity settles it
+     (in the trial's frame - the board's drag preview draws there, so the ghost shows the final position). */
   function moveCheck(u, x, y, sel = null) {
     const s0 = sel ? (() => { const t = clone(S()); t.selected = sel; layoutRules(t, G, { tabletop: TT }).syncTabletopGrid(); return t; })() : S();
     if (!grownFor(x, u.w, s0, layoutRules(s0, G, { tabletop: TT }), u.id)) return { why: `The build is already as wide as this mount allows (${R().capW()}W).` };
     const g = fitAt(x, y, u.w, u.hh, u.id, s0); if (!g) return { why: 'Can’t move there · another unit is in the way.' };
-    let rests = true;
+    let rests = true, settledY = y;
     const ok = judge((t, Rt) => {
       if (sel) Rt.syncTabletopGrid();
       growTo(t, g.k, g.span); const p = t.placed.find((q) => q.id === u.id); p.x = x + g.k; p.y = y;
-      const before = p.y; settle(t, Rt); rests = p.y === before;
+      const before = p.y; settle(t, Rt); rests = p.y === before; settledY = p.y;
     }, u.id, sel);
-    return ok ? { g, rests } : { why: 'Can’t move there · it would leave a unit without support.' };
+    return ok ? { g, rests, y: settledY } : { why: 'Can’t move there · it would leave a unit without support.' };
+  }
+  /* the moving unit's own headroom (tabletop: room above the build for ITS height), as moveSpots and moveTo's exact
+     path use: sel for the trial, delta = the extra half-rows that frame adds on top */
+  function dragFrame(u) {
+    const sel = { w: u.w, h: u.hh / 2 };
+    const t0 = clone(S()); t0.selected = sel; layoutRules(t0, G, { tabletop: TT }).syncTabletopGrid();
+    return { sel, delta: t0.gridH * 2 - S().gridH * 2 };
   }
   function moveSpots(u) {
     const key = cacheKey(`move ${u.id}`); if (spotCache.has(key)) return spotCache.get(key);
@@ -466,6 +474,9 @@ export function mountBuild(stage, ctx) {
     const sizes = el('div.sizes');
     const heights = R().heightsForFill(st.unit);
     for (const h of heights) for (const w of (G?.drawerWidths || [1, 2, 3, 4])) {
+      // the sizes no single drawer comes in (3W·3H, 4W·3H) are not shown at all, not even greyed (Joey 2026-10-16: "i
+      // don't want to make those or even give the hint that they might be available")
+      if (G?.unavailableSizes?.includes(`${w}W-${h}H`) && !R().sizeExists(w, h, st.unit)) continue;
       // lit only while it is being PLACED: the remembered size lit on entry read as "placing already" with no spots on the
       // model (Joey 2026-10-16: "no '+' are shown unless i select a different size")
       const why = sizeWhy(w, h); const id = `${w}x${h}`; const dis = !!why, on = st.armed && st.addSize === id;
@@ -671,10 +682,16 @@ export function mountBuild(stage, ctx) {
     // the redesign: the board shows the SAME "+" spots as the 3D view, a drag is judged by the same calculation (past
     // the build's edges within the cap), and the margin either side is the room the cap leaves (3 columns, or the armed width if wider)
     spots: () => (st.armed ? placementSpots() : []),
-    canMove: (id, x, y) => { const u = S().placed.find((p) => p.id === id); return !!u && !!moveCheck(u, x, y).g; },
+    // judged in the moving unit's OWN headroom frame (as the 3D drag is), so a taller unit can go on top of the build;
+    // the answer carries where gravity settles it, which is where the board draws the ghost
+    canMove: (id, x, y) => { const u = S().placed.find((p) => p.id === id); if (!u) return { ok: false }; const f = dragFrame(u); const c = moveCheck(u, x, y + f.delta, f.sel); return c.g ? { ok: true, y: c.y - f.delta } : { ok: false, why: c.why }; },
+    topRoom: () => { const s = S(); return s.mount === 'tabletop' && s.placed.length ? Math.max(0, Math.max(...s.placed.map((p) => p.hh)) - Math.min(...s.placed.map((p) => p.y))) : 0; },
+    sections: () => sectionCount(),   // (defined further down, with the Dock: read at call time)
     margin: () => { const s = S(); const span = s.placed.length ? Math.max(...s.placed.map((p) => p.x + p.w)) - Math.min(...s.placed.map((p) => p.x)) : 0; return Math.max(0, Math.min(R().capW() - span, Math.max(3, st.armed ? armedSize().w : 0))); },   // 3: a drag "three columns over" (Joey)
     onSelect: (id) => { if (st.eraser && id != null) { removeUnit(id); return; } select(id); },
-    onPlace: (x, y) => placeAt(x, y), onMove: (id, x, y) => moveTo(id, x, y), onGrid: gridOp,
+    onPlace: (x, y) => placeAt(x, y), onGrid: gridOp,
+    // the same check as the preview, then the move in that frame (exact: moveTo gives the unit its headroom first)
+    onMove: (id, x, y) => { const u = S().placed.find((p) => p.id === id); if (!u) return; const f = dragFrame(u); const c = moveCheck(u, x, y + f.delta, f.sel); if (!c.g) { say(c.why); renderAll(); return; } moveTo(id, x, y, { exact: true }); },
   });
   brd.el.hidden = true;
   root.appendChild(brd.el);
@@ -688,14 +705,20 @@ export function mountBuild(stage, ctx) {
     const W = (Math.max(0, ...placed.map((u) => u.x + u.w)) - Math.min(99, ...placed.map((u) => u.x))) * 88, H = (Math.max(0, ...placed.map((u) => u.y + u.hh)) - Math.min(99, ...placed.map((u) => u.y))) * 28;
     return `${Math.max(0, W)} × ${Math.max(0, H)} × ${length}`;
   };
+  /* SEPARATE SECTIONS (2026-10-16): columns with a gap between them are separate runs, each finished on its own - the
+     tabletop-completion contract, the BOM's rails and covers and the 3D model all treat them so (measured: a gap build's
+     parts equal its sections built apart). Said in the Dock and on the board, so a gap reads as a choice. */
+  const sectionCount = () => { const cols = [...new Set(S().placed.flatMap((p) => Array.from({ length: p.w }, (_, i) => p.x + i)))].sort((a, b) => a - b); return cols.filter((c, i) => i === 0 || c !== cols[i - 1] + 1).length; };
+  const SECTION_WHY = { tabletop: 'its own top covers, foot rails and feet', wall: 'its own wall brackets', 'under-table': 'its own under-table rails' };
   function renderDock() {
-    const list = issues(); const k = list.length;
-    dock.replaceChildren(
+    const list = issues(); const k = list.length; const secs = sectionCount();
+    dock.replaceChildren(...[
       el('button.status' + (k ? '.issue' : ''), { title: k ? 'Open the issue card' : 'Every unit is supported and in the collection', 'aria-expanded': String(st.issuesOpen), onclick: () => { st.issuesOpen = !st.issuesOpen; renderIssues(); renderDock(); } }, [el('span.dot'), k ? n(k, 'issue') : 'Layout valid']),
       el('div.group', {}, [el('span.big', { text: String(S().placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims() }), el('span.unit-lbl', { text: 'mm' })]),
+      secs > 1 ? el('div.group.sections', { title: `A gap splits the build into ${secs} separate sections · each gets ${SECTION_WHY[S().mount] || 'its own mounting parts'} (the parts list counts them)` }, [el('span.big', { text: String(secs) }), el('span.unit-lbl', { text: 'sections' })]) : null,
       el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
-    );
+    ].filter(Boolean));
   }
   const card = el('div.glass', { id: 'ws-issues', role: 'dialog', 'aria-label': 'Build issues', hidden: true });
   root.appendChild(card);

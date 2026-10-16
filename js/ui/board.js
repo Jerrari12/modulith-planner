@@ -13,7 +13,9 @@ const NS = 'http://www.w3.org/2000/svg';
 const svgEl = (name, attrs = {}, parent = null) => { const n = document.createElementNS(NS, name); for (const [k, v] of Object.entries(attrs)) if (v != null) n.setAttribute(k, v); if (parent) parent.appendChild(n); return n; };
 
 /* opts: { state(), colors(), armed() -> { w, hh } | null, flagged() -> Set<id>, deficit() -> [{x,y}], selected() -> id|null,
-          spots() -> [{ x, y }] the armed size's "+" spots, canMove(id, x, y), margin() -> columns of room each side,
+          spots() -> [{ x, y }] the armed size's "+" spots, margin() -> columns of room each side,
+          canMove(id, x, y) -> { ok, y } (y: where gravity settles it - the ghost is drawn there), topRoom() -> half-rows
+          drawn above the grid so a unit taller than the headroom can be dragged on top, sections() -> separate runs,
           onSelect(id|null), onPlace(x, y), onMove(id, x, y), onGrid(op), labelOf(u) } */
 export function board(opts) {
   const host = el('div.glass', { id: 'ws-board', role: 'group', 'aria-label': '2D board' });
@@ -25,7 +27,7 @@ export function board(opts) {
   const PAD = 18;
   let hover = null, drag = null, press = null, hoverSpot = null;
   // the drawn columns: the build's extent [x0, x1) and the margin [vL, vR) around it, in the grid's x
-  let x0 = 0, x1 = 0, vL = 0, vR = 1;
+  let x0 = 0, x1 = 0, vL = 0, vR = 1, topR = 0;
   let curSpots = [];   // the armed size's spots as last rendered (the pointer handlers read these, not a fresh list)
 
   function extent() {
@@ -33,6 +35,7 @@ export function board(opts) {
     if (st.placed.length) { x0 = Math.min(...st.placed.map((p) => p.x)); x1 = Math.max(...st.placed.map((p) => p.x + p.w)); }
     else { x0 = x1 = spots.length ? spots[0].x : 0; }
     const m = opts.margin ? opts.margin() : 0;
+    topR = opts.topRoom ? opts.topRoom() : 0;
     vL = x0 - m; vR = x1 + m;
     for (const sp of spots) { vL = Math.min(vL, sp.x); vR = Math.max(vR, sp.x + a.w); }   // every "+" is on the drawing
     if (vR <= vL) vR = vL + 1;
@@ -42,30 +45,34 @@ export function board(opts) {
     const st = opts.state(); extent();
     const rows = st.gridH * 2; const cols = vR - vL;
     const availW = host.clientWidth - 2 * PAD, availH = host.clientHeight - head.offsetHeight - 2 * PAD - 8;
-    cell = Math.max(28, Math.min(96, Math.floor(Math.min(availW / cols, availH / (rows * 28 / 88)))));
-    const W = cols * cell + 2 * PAD, H = rows * half() + 2 * PAD;
+    cell = Math.max(28, Math.min(96, Math.floor(Math.min(availW / cols, availH / ((rows + topR) * 28 / 88)))));
+    const W = cols * cell + 2 * PAD, H = (rows + topR) * half() + 2 * PAD;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
   }
-  const px = (x) => PAD + (x - vL) * cell, py = (y) => PAD + y * half();
+  const px = (x) => PAD + (x - vL) * cell, py = (y) => PAD + (y + topR) * half();
   function cellAt(e) {
     // one uniform scale (meet): the drawing is the viewBox centred in the element, never stretched
     const r = svg.getBoundingClientRect(); const vb = svg.viewBox.baseVal;
     const k = Math.min(r.width / vb.width, r.height / vb.height); const ox = (r.width - vb.width * k) / 2, oy = (r.height - vb.height * k) / 2;
     const sx = (e.clientX - r.left - ox) / k, sy = (e.clientY - r.top - oy) / k;
-    const fx = (sx - PAD) / cell + vL, fy = (sy - PAD) / half();
+    const fx = (sx - PAD) / cell + vL, fy = (sy - PAD) / half() - topR;
     return { x: Math.floor(fx), y: Math.floor(fy), fx, fy };
   }
   function unitAt(x, y) { return opts.state().placed.find((p) => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.hh) || null; }
-  /* the "+" under the pointer: a spot whose footprint holds the pointer, the nearest centre first (wide sizes overlap) */
+  /* the "+" under the pointer: a spot whose footprint holds the pointer, the nearest centre first (wide sizes overlap),
+     or failing that the nearest centre within a finger's reach (the narrow-screen check, 2026-10-16: a 1W·1H spot is
+     about 35 x 20 px on a phone, under a comfortable touch target) */
+  const coarse = () => { try { return matchMedia('(pointer: coarse)').matches; } catch { return false; } };
+  const REACH_PX = 24;
   function spotAt(c) {
     const a = opts.armed(); if (!a || !c) return null;
-    let best = null, bd = Infinity;
+    let best = null, bd = Infinity, near = null, nd = Infinity;
     for (const sp of curSpots) {
-      if (c.fx < sp.x || c.fx >= sp.x + a.w || c.fy < sp.y || c.fy >= sp.y + a.hh) continue;
-      const d = Math.hypot(c.fx - (sp.x + a.w / 2), c.fy - (sp.y + a.hh / 2));
-      if (d < bd) { bd = d; best = sp; }
+      const dpx = Math.hypot((c.fx - (sp.x + a.w / 2)) * cell, (c.fy - (sp.y + a.hh / 2)) * half());
+      if (c.fx >= sp.x && c.fx < sp.x + a.w && c.fy >= sp.y && c.fy < sp.y + a.hh) { if (dpx < bd) { bd = dpx; best = sp; } }
+      else if (dpx <= REACH_PX && dpx < nd) { nd = dpx; near = sp; }
     }
-    return best;
+    return best || near;
   }
 
   function render() {
@@ -73,8 +80,8 @@ export function board(opts) {
     layout();
     const span = st.placed.length ? x1 - x0 : 0;
     head.replaceChildren(...[   // (a tabletop has no height buttons: a null child would print as "null")
-      el('span.bttl', { text: span ? `Board · ${span}W × ${st.gridH}H` : 'Board · empty' }),
-      el('span.bhint', { text: a ? (spots.length ? 'Click a + to place · past either edge widens the build' : 'No spot for this size · the mount’s width limit, or nothing free beside the build')
+      el('span.bttl', { text: span ? `Board · ${span}W × ${st.gridH}H${opts.sections && opts.sections() > 1 ? ` · ${opts.sections()} separate sections` : ''}` : 'Board · empty' }),
+      el('span.bhint', { text: a ? (spots.length ? `${coarse() ? 'Tap' : 'Click'} a + to place · past either edge widens the build` : 'No spot for this size · the mount’s width limit, or nothing free beside the build')
         : (st.mount === 'tabletop' ? 'Stacks from the surface up · drag a unit to move it, past either edge too' : 'Hangs from the top row · drag a unit to move it, past either edge too') }),
       st.mount === 'tabletop' ? null : el('div.bgrid', {}, [
         el('button.key.sm', { text: 'H−', title: 'Shorter grid', onclick: () => opts.onGrid('h-') }),
@@ -126,7 +133,7 @@ export function board(opts) {
     }
     // the "+" spots: the 3D view's list, one amber disc at each footprint's centre
     if (a) for (const sp of spots) {
-      const cx = px(sp.x) + a.w * cell / 2, cy = py(sp.y) + a.hh * half() / 2, r = Math.max(9, Math.min(cell, a.hh * half()) * 0.26);
+      const cx = px(sp.x) + a.w * cell / 2, cy = py(sp.y) + a.hh * half() / 2, r = Math.max(coarse() ? 15 : 9, Math.min(cell, a.hh * half()) * 0.26);   // 30 px discs for a finger
       const g = svgEl('g', { class: 'b-spot', 'data-x': sp.x, 'data-y': sp.y }, svg);
       svgEl('circle', { cx, cy, r }, g);
       svgEl('path', { d: `M${cx - r * 0.5} ${cy}H${cx + r * 0.5}M${cx} ${cy - r * 0.5}V${cy + r * 0.5}`, class: 'b-spot-plus' }, g);
@@ -140,8 +147,9 @@ export function board(opts) {
     const st = opts.state();
     if (drag && drag.moved) {
       const u = st.placed.find((p) => p.id === drag.id); if (!u) return;
-      const ok = opts.canMove(drag.id, drag.tx, drag.ty);
-      ghost = svgEl('rect', { x: px(drag.tx) + 1.5, y: py(drag.ty) + 1.5, width: u.w * cell - 3, height: u.hh * half() - 3, rx: 5, class: 'b-ghost ' + (ok ? 'ok' : 'no') }, svg);
+      // the ghost shows the FINAL position: where gravity settles the unit, not where the pointer is
+      const res = opts.canMove(drag.id, drag.tx, drag.ty); const gy = res.ok ? res.y : drag.ty;
+      ghost = svgEl('rect', { x: px(drag.tx) + 1.5, y: py(gy) + 1.5, width: u.w * cell - 3, height: u.hh * half() - 3, rx: 5, class: 'b-ghost ' + (res.ok ? 'ok' : 'no') }, svg);
       return;
     }
     const a = opts.armed();
@@ -165,7 +173,7 @@ export function board(opts) {
         // the preview stays on the drawing: the build's width plus the room the mount allows each side
         const st = opts.state(); const u = st.placed.find((p) => p.id === drag.id);
         drag.tx = Math.max(vL, Math.min(vR - (u ? u.w : 1), c.x - drag.dx));
-        drag.ty = Math.max(0, Math.min(st.gridH * 2 - (u ? u.hh : 1), c.y - drag.dy));
+        drag.ty = Math.max(-topR, Math.min(st.gridH * 2 - (u ? u.hh : 1), c.y - drag.dy));
         renderGhost();
       }
       return;

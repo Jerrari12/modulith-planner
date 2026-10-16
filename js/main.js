@@ -6217,6 +6217,14 @@ function unitScreen(unitId) {
   const r = renderer.domElement.getBoundingClientRect();
   return { x: r.left + (c.x + 1) / 2 * r.width, y: r.top + (1 - c.y) / 2 * r.height };
 }
+/* where each "+" marker is on screen, and which one is hovered (the e2e suite moves the pointer marker to marker) */
+function spotScreens() {
+  const r = renderer.domElement.getBoundingClientRect(); editGroup.updateMatrixWorld(true);
+  return editGroup.children.filter((g) => g.userData.spot).map((g) => {
+    const c = g.userData.marker.getWorldPosition(new THREE.Vector3()).project(camera);
+    return { x: g.userData.spot.x, y: g.userData.spot.y, sx: r.left + (c.x + 1) / 2 * r.width, sy: r.top + (1 - c.y) / 2 * r.height, hovered: spotHover === g };
+  });
+}
 function setSelected(id) {
   if (selectedId === id) return;
   schedulePaidNote(); // the card's paid links come and go with the selection
@@ -8211,9 +8219,15 @@ function spotAt(e) {
   castAt(e);
   editGroup.updateMatrixWorld(true);   // markers added since the last frame have no world matrix yet (the loop idles while hidden)
   // only what is on screen is a target: the marker, or the ghost while it stands in for it (Sol 01a1330b: a hidden ghost is a hit area with no control shown)
-  const targets = []; for (const g of editGroup.children) if (g.userData.spot) targets.push(g.userData.ghost.visible ? g.userData.ghost : g.userData.marker);
-  const hits = ray.intersectObjects(targets, false);
-  return hits.length ? hits[0].object.parent : null;
+  // The "+" markers come FIRST (Joey 2026-10-16: with a 2W ghost showing, moving onto the neighbouring "+" did not move
+  // the green box - the hovered spot's ghost is large, covered the neighbours' markers and caught the ray). A visible
+  // marker under the pointer wins; the ghost only holds the hover where no marker is.
+  const markers = [], ghosts = [];
+  for (const g of editGroup.children) if (g.userData.spot) (g.userData.ghost.visible ? ghosts.push(g.userData.ghost) : markers.push(g.userData.marker));
+  const hm = ray.intersectObjects(markers, false);
+  if (hm.length) return hm[0].object.parent;
+  const hg = ray.intersectObjects(ghosts, false);
+  return hg.length ? hg[0].object.parent : null;
 }
 /* a short orange pulse around units, for what gravity just moved (Astra: show which units moved) */
 let pulseHelpers = [], pulseTimer = 0;
@@ -10310,7 +10324,7 @@ renderer.setAnimationLoop(renderLoop);
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
