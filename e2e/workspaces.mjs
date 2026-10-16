@@ -67,6 +67,9 @@ async function open(ws, { query = '', phone = false, context = null } = {}) {
   contexts.add(ctx);
   if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const page = await ctx.newPage();
+  // E2E_THROTTLE=n slows this machine's CPU n times (Chrome's own throttling), towards the CI runner's speed: the
+  // follow-up cases of 2026-10-16 passed here, soft rendering included, and failed there twice
+  if (process.env.E2E_THROTTLE) { const cdp = await ctx.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: +process.env.E2E_THROTTLE }); }
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 3).join(' | ').trim()));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });

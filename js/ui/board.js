@@ -62,7 +62,11 @@ export function board(opts) {
   /* the "+" under the pointer: a spot whose footprint holds the pointer, the nearest centre first (wide sizes overlap),
      or failing that the nearest centre within a finger's reach (the narrow-screen check, 2026-10-16: a 1W·1H spot is
      about 35 x 20 px on a phone, under a comfortable touch target) */
-  const coarse = () => { try { return matchMedia('(pointer: coarse)').matches; } catch { return false; } };
+  // a finger: a coarse pointer, OR the phone layout (html.ws-phone, < 1024 px) - a browser need not report the pointer
+  // media for an emulated or hybrid touch device, and a phone-sized board wants finger-sized "+" either way
+  const mq = (q) => { try { return matchMedia(q).matches; } catch { return false; } };
+  const coarse = () => document.documentElement.classList.contains('ws-phone') || mq('(pointer: coarse)') || mq('(any-pointer: coarse)');
+  const tapWord = () => (mq('(pointer: coarse)') ? 'Tap' : 'Click');   // the word follows the PRIMARY pointer (Terra 01a146d5)
   const REACH_PX = 24;
   function spotAt(c) {
     const a = opts.armed(); if (!a || !c) return null;
@@ -81,7 +85,7 @@ export function board(opts) {
     const span = st.placed.length ? x1 - x0 : 0;
     head.replaceChildren(...[   // (a tabletop has no height buttons: a null child would print as "null")
       el('span.bttl', { text: span ? `Board · ${span}W × ${st.gridH}H${opts.sections && opts.sections() > 1 ? ` · ${opts.sections()} separate sections` : ''}` : 'Board · empty' }),
-      el('span.bhint', { text: a ? (spots.length ? `${coarse() ? 'Tap' : 'Click'} a + to place · past either edge widens the build` : 'No spot for this size · the mount’s width limit, or nothing free beside the build')
+      el('span.bhint', { text: a ? (spots.length ? `${tapWord()} a + to place · past either edge widens the build` : 'No spot for this size · the mount’s width limit, or nothing free beside the build')
         : (st.mount === 'tabletop' ? 'Stacks from the surface up · drag a unit to move it, past either edge too' : 'Hangs from the top row · drag a unit to move it, past either edge too') }),
       st.mount === 'tabletop' ? null : el('div.bgrid', {}, [
         el('button.key.sm', { text: 'H−', title: 'Shorter grid', onclick: () => opts.onGrid('h-') }),
