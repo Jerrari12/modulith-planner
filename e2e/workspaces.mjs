@@ -97,6 +97,29 @@ test('every workspace boots on the root kit without errors, desktop and phone', 
   }
 });
 
+test('analytics: only Assemble counts steps, the boot preset is not a pick, and events go out 400 ms apart', async () => {
+  // the UI review, 2026-10-16: three 429s from GoatCounter (4 hits a second); every workspace's boot had fired step:11,
+  // complete and preset:<first> at once beside the page view
+  const { ctx, page } = await open('build');
+  await settle(page);
+  const log = await page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice());
+  assert.deepEqual(log.filter((n) => /^(step:|complete$|preset:)/.test(n)), [], `Build boot sent: ${log.join(', ')}`);
+  // the pacing: a stub count() records when each event leaves
+  const gaps = await page.evaluate(async () => {
+    const at = []; window.goatcounter = { count: () => at.push(performance.now()) };
+    for (let i = 0; i < 4; i++) window.__GEN2_VIEWER__.track('test:' + i);
+    await new Promise((r) => setTimeout(r, 1600));
+    return at.slice(1).map((t, i) => t - at[i]);
+  });
+  assert.equal(gaps.length, 3, 'all four sent');
+  for (const g of gaps) assert.ok(g >= 380, `spaced: ${gaps.map(Math.round).join(', ')} ms`);
+  await ctx.close();
+  const a = await open('assemble');
+  await settle(a.page);
+  assert.ok((await a.page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice())).some((n) => /^step:/.test(n)), 'Assemble still counts its steps');
+  await a.ctx.close();
+});
+
 test('Build: a unit placed through the store reaches the stage; move, remove and undo follow; the issue card speaks', async () => {
   const { ctx, page, errors } = await open('build');
   const n0 = await units(page);
@@ -280,12 +303,12 @@ test('the build store: an edit autosaves, a bare address reopens the build, Rena
   await p2.getByRole('menuitem', { name: 'Rename', exact: true }).click();
   await p2.fill('#ws-switch input.rename', 'E2E bench');
   await p2.keyboard.press('Enter');
-  await p2.waitForFunction(() => document.title === 'E2E bench', null, { timeout: 30_000 });   // the rename lands after an IndexedDB write
+  await p2.waitForFunction(() => document.title === 'E2E bench · MODULITH', null, { timeout: 30_000 });   // the rename lands after an IndexedDB write
   // duplicate (navigates), then delete the original from the copy's menu
   await p2.getByRole('menuitem', { name: 'Duplicate', exact: true }).click();
   await p2.waitForFunction((old) => window.__GEN2_STORE__ && window.__GEN2_STORE__.state.buildId !== old, id, { timeout: 60_000 });
   await waitBoot(p2);
-  assert.equal(await p2.evaluate(() => document.title), 'Copy of E2E bench');
+  assert.equal(await p2.evaluate(() => document.title), 'Copy of E2E bench · MODULITH');   // the tab is the build, then the product (js/ui/names.js)
   await p2.click('#ws-switch .chip-btn');
   await p2.locator('#ws-switch .item.recent .x').first().click();
   await p2.locator('#ws-switch .item.confirm button:text-is("Delete")').click();
@@ -319,7 +342,7 @@ test('the journeys: a share link opens the same build elsewhere, Load build file
   await page.locator('#ws-switch input[type="file"]').setInputFiles({ name: 'bench.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ gen2Build: 1, name: 'From a file', data: rec })) });
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.buildId === 'e2efile00001', null, { timeout: 90_000 });
   await waitBoot(page);
-  assert.equal(await page.evaluate(() => document.title), 'From a file');
+  assert.equal(await page.evaluate(() => document.title), 'From a file · MODULITH');
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.feet), 'adhesive');
   // THE CAP: Recent builds full at 20 - a new build's first change is held, the switcher asks, Drop it makes room
   await page.evaluate(() => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds', 'readwrite'); const st = t.objectStore('builds'); st.clear(); for (let i = 0; i < 20; i++) st.put({ id: 'e2ecapfill' + String(i).padStart(2, '0'), name: 'Filler ' + i, savedAt: 1000 + i, openedAt: 1000 + i, kit: null, mount: 'tabletop', length: 185, units: 1, record: { mount: 'tabletop', length: 185, placed: [], nextId: 1, buildId: 'e2ecapfill' + String(i).padStart(2, '0') } }); t.oncomplete = () => r(); }; }));
@@ -599,7 +622,7 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   const s = await S(page);
   assert.equal(s.printer, 'mk4');
   assert.equal(s.placed.length, 1, 'one starter drawer');
-  assert.equal(await page.evaluate(() => document.title), 'E2E wall');
+  assert.equal(await page.evaluate(() => document.title), 'E2E wall · MODULITH');
   assert.match(await text(page, '#ws-top .chip-btn.mount'), /Wall Mount · 115/);
   await ctx.close();
 });

@@ -158,9 +158,25 @@ function track(name) {
   if (IS_BENCH) return;   // a benchmark run is a test, not a visitor: none of its events reach the dashboard (count.js still counts the page load itself)
   try {
     const gc = window.goatcounter;
-    if (gc && gc.count) { gc.count({ path: name, title: name, event: true }); return; }
+    if (gc && gc.count) { paceSend(gc, name); return; }
     if (!trackSettled && trackQ.length < 40) trackQ.push(name);
   } catch (e) { /* ignore — never let tracking throw */ }
+}
+// GoatCounter's /count allows 4 hits a second ("x-rate-limit-limit: 4", reset 1 s; read off a live response
+// 2026-10-16) and the page view itself is one, so a boot that fired 4-5 events at once lost one to a 429 (the UI review
+// saw three in the console). Events go out 400 ms apart: at most 3 a second beside the page view.
+const PACE_MS = 400;
+const paceQ = []; let paceBusy = false;
+function paceSend(gc, name) {
+  if (paceQ.length < 40) paceQ.push(name);
+  if (paceBusy) return;
+  paceBusy = true;
+  (function next() {
+    const n = paceQ.shift();
+    if (n === undefined) { paceBusy = false; return; }
+    try { (window.goatcounter && window.goatcounter.count ? window.goatcounter : gc).count({ path: n, title: n, event: true }); } catch (e) { /* never let tracking throw */ }
+    setTimeout(next, PACE_MS);
+  })();
 }
 // fire at most once per page session: replay, Back and regenerate() all re-enter
 // the same code paths, and a step counted twice turns the drop-off curve to noise
@@ -5643,8 +5659,14 @@ function goTo(i, { animate = true } = {}) {
   // The drop-off curve: the step where the count falls off a cliff is a broken
   // instruction. Once per page session only — Back, replay and regenerate() all
   // re-enter goTo, and a step counted twice makes the curve meaningless.
-  trackOnce(step.checklist ? 'step:intro' : 'step:' + stepIdx);
-  if (stepIdx === manifest.steps.length - 1) trackOnce('complete');
+  // In the merged planner only Assemble is the instructions: its other workspaces stand the finished build up by going to
+  // the last step, which counted every Build/Colors/Labels/Parts visit as a "step:11" and a "complete" (2026-10-16).
+  // The old viewer has no workspace, so it counts as before.
+  const wsNow = document.documentElement.dataset.ws;
+  if (!wsNow || wsNow === 'assemble') {
+    trackOnce(step.checklist ? 'step:intro' : 'step:' + stepIdx);
+    if (stepIdx === manifest.steps.length - 1) trackOnce('complete');
+  }
   $('step-title').textContent = step.title;
   $('step-note').textContent = step.note || '';
   const numbered = !step.checklist; // assembly steps count from 1, intro shows none
@@ -6933,8 +6955,9 @@ $('color-toggle').onclick = () => { useCustom = !useCustom; track('colors:' + (u
 // preset picker: apply a whole per-type filament set at once, and save/load
 // them. Presets only replace the WORKING palette (customColors) — the user's
 // hand-built palette survives in userPalette and comes back via its chip.
-function applyPreset(p) {
-  track('preset:' + slug(p.name)); // preset names are OURS — a fixed, tiny vocabulary
+function applyPreset(p, opts = {}) {
+  // `quiet`: the planner's boot dresses the model in the first preset; that is not a visitor's pick (2026-10-16)
+  if (!opts.quiet) track('preset:' + slug(p.name)); // preset names are OURS — a fixed, tiny vocabulary
   customColors = {};
   for (const [type, f] of Object.entries(p.colors)) customColors[type] = { ...f };
   overrides = {};
@@ -9566,7 +9589,9 @@ async function mountManifest(m) {
     }
   }
   $('kit-title').textContent = m.title;
-  document.title = m.title;
+  // in the planner (a workspace on <html>) the tab title is the build's, set by app.js (js/ui/names.js tabTitle); every
+  // regeneration here had put the generated "… · GEN2 Custom · 185" back (the UI review, 2026-10-16)
+  if (!document.documentElement.dataset.ws) document.title = m.title;
   typeByNode = Object.fromEntries(m.parts.map(p => [p.node, p.type]));
   partInfoByNode = Object.fromEntries(m.parts.map(p => [p.node, p]));
   syncBedFinish();   // before any material is built: the plate decides which program they get

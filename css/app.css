@@ -77,6 +77,8 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws .well { background: var(--well); border: 1px solid var(--well-border); }
 #ws button:active:not([disabled]):not(.dis) { transform: scale(.97); transition: transform var(--d-press) var(--ease-out); }
 #ws button { transition: background var(--d-hover) var(--ease-out), box-shadow var(--d-hover) var(--ease-out), color var(--d-hover) var(--ease-out); }
+/* a light/dark flip is instant: a transition caught by the stage's shader recompile froze half way (app.js setMode) */
+html.ws-mode-flip #ws *, html.ws-mode-flip #ws *::before, html.ws-mode-flip #ws *::after { transition: none !important; }
 
 /* ---- top bar ---- */
 #ws-top { position: absolute; top: 18px; left: 20px; right: 20px; display: flex; align-items: center; gap: 10px; z-index: 5; }
@@ -84,7 +86,9 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws-logo { display: flex; align-items: center; height: 44px; }
 #ws-logo img { height: 28px; width: auto; display: block; }
 #ws-switch { position: relative; margin-left: 6px; }
-#ws-switch > .chip-btn > span { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the build name takes the bar's free room, up to 240 px (the UI review 2026-10-16: "The Mighty Bit B..." at 1440 with
+   room to spare); the width terms are measured: the bar's other items fill about 1370 px above 1500, 1260 up to it */
+#ws-switch > .chip-btn > span { max-width: clamp(150px, calc(100vw - 1370px), 240px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #ws-switch .menu { position: absolute; top: 52px; left: 0; width: 300px; max-height: min(70vh, 640px); overflow-y: auto; padding: 8px; border-radius: 14px; display: flex; flex-direction: column; gap: 2px; z-index: 9; }
 #ws-switch .item.recent { padding: 0; height: auto; gap: 2px; }
 #ws-switch .item.recent .open { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; border: none; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -774,7 +778,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 @media (max-width: 1500px) {
   #ws-top .printer span, #ws-top .share span { display: none; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
-  #ws-switch > .chip-btn > span { max-width: 120px; }
+  #ws-switch > .chip-btn > span { max-width: clamp(120px, calc(100vw - 1260px), 240px); }
 }
 /* narrow desktop (1024-1279): the workspace tabs keep their names on a row of their own under the bar, and the
    panels start below it; the chips go icon-only */
@@ -782,7 +786,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-tools .quality span { display: none; }
   #ws-top .printer span, #ws-top .share span { display: none; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
-  #ws-switch > .chip-btn > span { max-width: 120px; }
+  #ws-switch > .chip-btn > span { max-width: 240px; }   /* the tabs have their own row: the bar has room */
   /* top is from #ws-top (18 px down; its bar ends at 64): the 52 px row then sits 8 px under the bar and 10 px over the
      panels at 134 (Joey 2026-10-16: at 70 it overlapped the view tools by 6 px) */
   #ws-tabs { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); }

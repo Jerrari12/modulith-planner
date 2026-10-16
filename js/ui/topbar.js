@@ -4,6 +4,7 @@
    say which phase brings them. */
 import { el } from './dom.js';
 import { icon } from './icons.js';
+import { buildName } from './names.js';   // shown without GEN2; the stored name is untouched
 
 const MOUNT_NAME = { 'under-table': 'Under-Table', tabletop: 'Tabletop', wall: 'Wall Mount' };
 const MOUNT_ICON = { 'under-table': 'desk', tabletop: 'table', wall: 'wall' };
@@ -37,7 +38,7 @@ export function topbar(stage, ctx) {
     const wrap = el('div', { id: 'ws-switch' });
     const B = ctx.builds;
     let open = false, renaming = false, confirmId = null;
-    const nameEl = el('span', { text: B ? B.name : name });
+    const nameEl = el('span', { text: buildName(B ? B.name : name) });
     const btn = el('button.chip.chip-btn.strong', { 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, [icon('folder-simple'), nameEl, icon('caret-down', { size: 16 })]);
     const menu = el('div.menu.glass', { role: 'menu', hidden: true });
     const fileIn = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
@@ -54,10 +55,10 @@ export function topbar(stage, ctx) {
       menu.replaceChildren(...[
         el('div.label', { text: 'Current build' }),
         renaming ? (() => { const inp = el('input.rename', { type: 'text', maxlength: '60', value: B.name, 'aria-label': 'Build name', autocomplete: 'off' });
-          const done = async () => { const v = inp.value; renaming = false; if (await B.rename(v)) { nameEl.textContent = B.name; ctx.say('Renamed.'); } await render(); };
+          const done = async () => { const v = inp.value; renaming = false; if (await B.rename(v)) { nameEl.textContent = buildName(B.name); ctx.say('Renamed.'); } await render(); };
           inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') { e.stopPropagation(); renaming = false; render(); } });
           const row = el('div.renamerow', {}, [inp, el('button.key.sm', { text: 'Save', onclick: done })]); setTimeout(() => { inp.focus(); inp.select(); }, 0); return row; })()
-          : el('button.item.current', { role: 'menuitem', title: 'Rename', onclick: () => { renaming = true; render(); } }, [el('span', { text: B ? B.name : name }), el('span.meta', { text: `${length} · ${units} units` })]),
+          : el('button.item.current', { role: 'menuitem', title: 'Rename', onclick: () => { renaming = true; render(); } }, [el('span', { text: buildName(B ? B.name : name) }), el('span.meta', { text: `${length} · ${units} units` })]),
         el('div.divider'),
         el('div.label', { text: 'Recent builds' }),
         cap ? el('div.notice', {}, [el('p', { text: `Recent builds is full (20). “${cap.drop.name}”, opened longest ago, would be dropped to make room for this one.` }),
@@ -65,7 +66,7 @@ export function topbar(stage, ctx) {
         ...others.map((e) => confirmId === e.id
           ? el('div.item.confirm', {}, [el('span', { text: `Delete “${e.name}”?` }), el('button.key.sm', { text: 'Delete', onclick: async () => { confirmId = null; await B.remove(e.id); ctx.say('Build deleted.'); render(); } }), el('button.key.sm', { text: 'Keep', onclick: () => { confirmId = null; render(); } })])
           : el('div.item.recent', {}, [
-            el('button.open', { role: 'menuitem', title: 'Open this build', onclick: () => B.open(e.id) }, [el('span', { text: e.name }), el('span.meta', { text: `${e.length} · ${e.units} ${e.units === 1 ? 'unit' : 'units'} · ${when(e.savedAt)}` })]),
+            el('button.open', { role: 'menuitem', title: 'Open this build', onclick: () => B.open(e.id) }, [el('span', { text: buildName(e.name) }), el('span.meta', { text: `${e.length} · ${e.units} ${e.units === 1 ? 'unit' : 'units'} · ${when(e.savedAt)}` })]),
             el('button.x', { title: 'Delete build', 'aria-label': `Delete ${e.name}`, onclick: () => { confirmId = e.id; render(); } }, [icon('x', { size: 14 })]),
           ])),
         others.length ? null : el('div.meta', { text: cur ? 'Other builds you open or start appear here.' : 'This build joins the list at its first change.', style: 'padding:4px 10px 8px' }),

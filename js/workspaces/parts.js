@@ -17,6 +17,7 @@ import { glyphEl, FACEK, DEFAULT_COLORS } from '../ui/glyph.js';
 import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
+import { partName } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -150,7 +151,7 @@ export function mountParts(stage, ctx) {
     const chip = el('span.chip' + (r.hardware ? '.buy' : ''), { title: r.hardware ? 'Bought, not printed' : 'Part color in Assemble' });
     if (!r.hardware) chip.style.background = chipFor(r.name);
     row.append(chip, el('span.qty.mono', { text: `×${r.qty}` }));
-    const mid = el('div.mid', {}, [el('div.name', { text: r.name })]);
+    const mid = el('div.mid', {}, [el('div.name', { text: partName(r.name) })]);
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     row.appendChild(mid);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
@@ -180,7 +181,7 @@ export function mountParts(stage, ctx) {
     const chip = el('span.chip' + (r.hardware ? '.buy' : ''), { title: r.hardware ? 'Bought, not printed' : 'Part color in Assemble' });
     if (!r.hardware) chip.style.background = chipFor(r.name);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
-    const mid = el('div.mid', {}, [el('div.name', {}, [r.name, badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
+    const mid = el('div.mid', {}, [el('div.name', {}, [partName(r.name), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     const counter = (field, label) => {
       const v = p[field] || 0;
@@ -217,7 +218,7 @@ export function mountParts(stage, ctx) {
     let last = '';
     for (const r of rows()) {
       if (r.section !== last) { txt += `\n[${r.section}]\n`; last = r.section; }
-      txt += `${r.qty}x ${r.name}${r.optional ? ' (optional)' : ''}${r.unreleased ? ' (coming soon)' : ''}\n`;
+      txt += `${r.qty}x ${partName(r.name)}${r.optional ? ' (optional)' : ''}${r.unreleased ? ' (coming soon)' : ''}\n`;
       if (r.links) { txt += `    Printables: ${r.links.printables}\n    Thangs:     ${r.links.thangs}\n`; }
     }
     try { await navigator.clipboard.writeText(txt); say('Parts list copied.'); } catch { say('Could not reach the clipboard.'); }
@@ -226,7 +227,7 @@ export function mountParts(stage, ctx) {
     const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const m = meta();
     const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Printables', 'Thangs'].map(esc).join(',')];
-    for (const r of rows()) lines.push([r.section, r.qty, r.name + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), r.links?.printables || '', r.links?.thangs || ''].map(esc).join(','));
+    for (const r of rows()) lines.push([r.section, r.qty, partName(r.name) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), r.links?.printables || '', r.links?.thangs || ''].map(esc).join(','));
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `modulith-${length}-parts.csv` });
     document.body.appendChild(a); a.click(); a.remove();

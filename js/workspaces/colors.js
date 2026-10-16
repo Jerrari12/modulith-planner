@@ -5,7 +5,7 @@
  * (which key their cache on the live palette) and the inspector read one source. Every pick is one undo step:
  * the store snapshots the palette beside the build record (createStore's `extra`), and Undo restores both.
  *
- *   left panel   Instruction colors / My colors · Your schemes (★ My palette, saved schemes, save / download /
+ *   left panel   Your schemes (★ My palette, saved schemes, save / download /
  *                upload / share) · Premade by Jerrari (strips, Active, Shop this look) · Colors in this build
  *                (one row per region the build has) · Build plate finish
  *   stage        clicking a part opens the part card above the Dock: name, count, current filament, region chips
@@ -69,11 +69,8 @@ export function mountColors(stage, ctx) {
     const p = pal(); const cur = p.on ? palKey(p.colors) : null;
     panel.replaceChildren();
     panel.appendChild(el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]));
-    // the whole-view switch (the inventory's "Instruction color"): the kit's identification colours, or the visitor's
-    panel.appendChild(el('div.track.seg2', { role: 'group', 'aria-label': 'Which colors the model shows' }, [
-      el('button.seg' + (p.on ? '.on' : ''), { text: 'My colors', onclick: () => commitColors('colors-on', () => stage.setUseCustom(true)) }),
-      el('button.seg' + (!p.on ? '.on' : ''), { text: 'Instruction colors', title: 'The kit’s identification colours, as the assembly steps show them', onclick: () => commitColors('colors-off', () => stage.setUseCustom(false)) }),
-    ]));
+    // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
+    // 2026-10-16). Opening this tab turns the visitor's colours on (onEnter below).
     // your schemes
     const mine = el('section');
     mine.appendChild(el('h3.h2', { text: 'Your schemes' }));

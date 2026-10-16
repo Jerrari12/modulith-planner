@@ -11,6 +11,7 @@ import { mountLabels, labelsBadge } from './workspaces/labels.js';
 import { createStore } from './state/store.js';
 import { openBuilds, entryOf, hashOf, fileOf, fileName, parseBuildFile, cleanName } from './state/builds.js';
 import { isPhone, PHONE_MAX } from './ui/phone.js';
+import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, safeStorage } from './state/label-copies.js';
 
@@ -33,14 +34,29 @@ function colorKeyAtBoot() {
 }
 
 /* theme: the brief's data-mode on <html>, kept in step with the stage's own light/dark */
-export function setMode(mode, stage) {
-  document.documentElement.dataset.mode = mode;
+export function setMode(mode, stage, { now = false } = {}) {
+  const root = document.documentElement;
+  // the UI review (2026-10-16): the switch "fades slowly" and panel text vanished mid-switch. The stage's theme flip
+  // recompiles its shaders in one long task (2.5 s measured on the headless software renderer), which froze the
+  // buttons' 150 ms colour transitions half way. So: no transitions during the flip, the panels painted in the new mode
+  // FIRST, and the stage flipped on the frame after.
+  root.classList.add('ws-mode-flip');
+  root.dataset.mode = mode;
   // the same two keys the viewer's own button writes: the value, and the stamp a cross-site handoff compares
   try { localStorage.setItem('gen2-theme', mode); localStorage.setItem('gen2-theme:t', String(Date.now())); } catch { /* private mode */ }
   // the workspace's dark mode is the stage's quieter `night` variant (same palette, calmer grid and reflection)
-  const want = mode === 'dark' && document.documentElement.dataset.ws ? 'night' : mode;
-  if (stage && stage.stageTheme !== want) stage.applyStageTheme(want);
+  const want = mode === 'dark' && root.dataset.ws ? 'night' : mode;
+  const flip = () => { if (stage && stage.stageTheme !== want) stage.applyStageTheme(want); };
+  // only the LATEST request flips the stage and ends the flip class: two quick clicks must not recompile twice (Sol 01a1456c)
+  const token = ++setMode.token;
+  if (now) { flip(); root.classList.remove('ws-mode-flip'); return; }
+  requestAnimationFrame(() => setTimeout(() => {
+    if (token !== setMode.token) return;
+    flip();
+    requestAnimationFrame(() => { if (token === setMode.token) root.classList.remove('ws-mode-flip'); });
+  }, 0));
 }
+setMode.token = 0;
 function initialMode() {
   try { return localStorage.getItem('gen2-theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
 }
@@ -83,7 +99,7 @@ export async function boot() {
   /* a representative finished build in every workspace (Astra): the first preset's coordinated filaments unless the
      visitor already has a saved palette; Assemble switches to Part colors on its own and restores this on leave. Applied
      BEFORE the store captures its baseline, so the first Undo returns to this palette and not to none (e2e, 2026-10-13). */
-  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0]);
+  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0], { quiet: true });   // not a visitor's pick: no preset event
   /* THE STORE (phase 3): the build record with the planner's rules and undo history. It opens on the record the
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
@@ -103,7 +119,7 @@ export async function boot() {
       entry = next;
       builds.currentId = entry.id;
       builds.writeSlot(rec);
-      document.title = entry.name;
+      document.title = tabTitle(entry.name);
       if (hadLabels && !hasLabels(rec)) { dropLabels(copies, rec.buildId); labelCopy = null; }   // the last label removed here: nothing to offer back
       hadLabels = hasLabels(rec);
       if (!persisted) { persisted = true; builds.persist(); }
@@ -128,13 +144,14 @@ export async function boot() {
   if (stage.build) store.load(stage.build);
   if (QS.get('debug')) { window.__GEN2_STORE__ = store; window.__GEN2_CTX__ = () => ctx; }   // for the shot tool and end-to-end checks, like the stage's own hook
   let kitTitle = stage.manifest?.title || null;
-  if (KIT && location.hash.startsWith('#build=')) { try { kitTitle = (await (await fetch(`builds/${encodeURIComponent(KIT)}.json`)).json()).title || kitTitle; document.title = kitTitle; } catch { /* the hash's own name stands */ } }
+  if (KIT && location.hash.startsWith('#build=')) { try { kitTitle = (await (await fetch(`builds/${encodeURIComponent(KIT)}.json`)).json()).title || kitTitle; document.title = tabTitle(kitTitle); } catch { /* the hash's own name stands */ } }
   if (!entry && typeof store.state.buildId === 'string') entry = await builds.get(store.state.buildId);   // our own build, reopened from the address
-  if (entry) { document.title = entry.name; builds.currentId = entry.id; builds.writeSlot(entry.record); }   // the slot follows what is open, not only what is edited
+  document.title = tabTitle(entry ? entry.name : kitTitle);   // the planner owns the tab title (main.js leaves it alone here)
+  if (entry) { builds.currentId = entry.id; builds.writeSlot(entry.record); }   // the slot follows what is open, not only what is edited
   hadLabels = hasLabels(store.state);
   if (LINKED && entry && !hadLabels && hasLabels(entry.record)) rememberLabels(copies, entry.id, labelCopyOf(entry.record, entry.savedAt));
   if (!hadLabels && typeof store.state.buildId === 'string') labelCopy = heldLabels(copies, store.state.buildId);
-  setMode(document.documentElement.dataset.mode, stage);   // the viewer booted on `dark`; the workspace wants `night`
+  setMode(document.documentElement.dataset.mode, stage, { now: true });   // the viewer booted on `dark`; the workspace wants `night` (at once: nothing is painted yet)
   const ctx = {
     setMode,
     memo: {},   // what a workspace wants back when it is remounted (the Assemble step, for one)
@@ -151,7 +168,7 @@ export async function boot() {
       get name() { return entry ? entry.name : kitTitle || 'Workbench build'; },
       get capPending() { return capPending; },
       list: () => builds.list(),
-      async rename(v) { const name = cleanName(v); if (!name) return false; if (!entry) { await saveBuild(JSON.stringify(store.serialize())); } if (!entry) return false; entry = { ...entry, name }; await builds.put(entry, { force: true }); document.title = name; return true; },
+      async rename(v) { const name = cleanName(v); if (!name) return false; if (!entry) { await saveBuild(JSON.stringify(store.serialize())); } if (!entry) return false; entry = { ...entry, name }; await builds.put(entry, { force: true }); document.title = tabTitle(name); return true; },
       async open(id) { const e = await builds.get(id); if (!e) return; builds.currentId = id; e.openedAt = Date.now(); await builds.put(e, { force: true }); builds.writeSlot(e.record); go({ ws: wsNow(), ...(e.kit ? { build: e.kit } : {}) }, hashOf(e.record)); },
       async duplicate() {
         const rec = store.serialize(); const copy = { ...rec, buildId: undefined };

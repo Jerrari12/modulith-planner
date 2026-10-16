@@ -133,7 +133,10 @@ jobs:
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|" js/ui/toolbar.js
           sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/board.js'|'../ui/board.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|" js/workspaces/build.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|" js/ui/board.js
-          sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|" js/ui/topbar.js
+          sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./names.js'|'./names.js?v=$V'|" js/ui/topbar.js
+          # the shown names (2026-10-16): imported by app.js, the top bar and the Parts workspace
+          sed -i "s|'./ui/names.js'|'./ui/names.js?v=$V'|" js/app.js
+          sed -i "s|'../ui/names.js'|'../ui/names.js?v=$V'|" js/workspaces/parts.js
           sed -i "s|js/catalog/data.js|js/catalog/data.js?v=$V|; s|css/tokens.css|css/tokens.css?v=$V|; s|css/app.css|css/app.css?v=$V|; s|css/fonts.css|css/fonts.css?v=$V|" index.html
           # ⚠ the vendored requirement-scope contract is a CLASSIC script tag,
           # not a module import, so the module-graph guard below cannot see it.
