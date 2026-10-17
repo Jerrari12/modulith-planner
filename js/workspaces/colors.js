@@ -181,7 +181,7 @@ export function mountColors(stage, ctx) {
     const w = st.scope === 'unit' ? (unitPick || null) : worn(key);   // what the chosen scope is wearing
     const q = st.query.trim().toLowerCase();
     const scopeText = st.scope === 'unit' ? `This ${unitWord()} only${unitNo()}` : `All ${typePlural(key)} · ${count}`;
-    picker.append(
+    picker.append(...[
       el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: regionOf(key) }), ` · ${scopeText}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
       el('div.track.seg2', { role: 'group', 'aria-label': 'Apply to' }, [
         el('button.seg' + (st.scope === 'all' ? '.on' : ''), { text: `All ${typePlural(key)} · ${count}`, onclick: () => { st.scope = 'all'; renderAll(); } }),
@@ -189,7 +189,7 @@ export function mountColors(stage, ctx) {
       ]),
       st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? worn(key).name.replace('Panchroma ', '') : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
       el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
-    );
+    ].filter(Boolean));   // append(null) writes the word "null" (it showed under the scope switch, 2026-10-17)
     const brands = el('div.brands');
     picker.appendChild(brands);
     function renderBrands() {
@@ -269,7 +269,7 @@ export function mountColors(stage, ctx) {
     const p = pal(); const fils = p.on ? filamentsOf(p.colors, p.over).filter((f) => stage.keysInBuild().some((k) => f.keys.includes(k.key))) : [];
     const s = stage.buildSize?.(); const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
     dock.replaceChildren(
-      el('button.status.stack', { title: fils.length ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !fils.length, onclick: () => { st.shop = st.shop ? false : 'build'; renderShop(); renderCard(); } }, [el('span.stacks', {}, fils.slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), fils.length ? n(fils.length, 'filament') : 'Instruction colors']),
+      el('button.status.stack', { title: fils.length ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !fils.length, onclick: () => { st.shop = st.shop ? false : 'build'; if (st.shop && phone) phone.collapse(); renderShop(); renderCard(); } }, [el('span.stacks', {}, fils.slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), fils.length ? n(fils.length, 'filament') : 'Instruction colors']),   // on a phone the list shows over the sheets' handles: the Colors sheet (up on arrival) covered it
       el('div.group', {}, [el('span.big', { text: String(store.state.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
       el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),

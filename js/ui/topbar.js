@@ -44,7 +44,8 @@ export function topbar(stage, ctx) {
     const fileIn = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
     fileIn.addEventListener('change', async () => { const f = fileIn.files && fileIn.files[0]; fileIn.value = ''; if (!f || !B) return; const problem = await B.loadFile(f); if (problem === 'cap') { await render(); } else if (problem) ctx.say(problem); });
     const when = (ts) => { const d = Date.now() - ts; if (d < 60e3) return 'just now'; if (d < 3600e3) return `${Math.round(d / 60e3)} min ago`; if (d < 86400e3) return `${Math.round(d / 3600e3)} h ago`; return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
-    const units = build?.placed?.length ?? 0;
+    // counted when the menu opens: the bar outlives the edits ("185 · 3 units" with 4 in the Dock, the phone check, 2026-10-17)
+    const units = () => { const k = (ctx.store?.state?.placed ?? build?.placed ?? []).length; return `${k} ${k === 1 ? 'unit' : 'units'}`; };
     const item = (text, onclick, title = null) => el('button.item', { role: 'menuitem', title, onclick }, [el('span', { text })]);
     async function render() {
       const had = menu.contains(document.activeElement);   // a keyboard user inside the menu keeps a place after a rebuild
@@ -58,7 +59,7 @@ export function topbar(stage, ctx) {
           const done = async () => { const v = inp.value; renaming = false; if (await B.rename(v)) { nameEl.textContent = buildName(B.name); ctx.say('Renamed.'); } await render(); };
           inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') { e.stopPropagation(); renaming = false; render(); } });
           const row = el('div.renamerow', {}, [inp, el('button.key.sm', { text: 'Save', onclick: done })]); setTimeout(() => { inp.focus(); inp.select(); }, 0); return row; })()
-          : el('button.item.current', { role: 'menuitem', title: 'Rename', onclick: () => { renaming = true; render(); } }, [el('span', { text: buildName(B ? B.name : name) }), el('span.meta', { text: `${length} · ${units} units` })]),
+          : el('button.item.current', { role: 'menuitem', title: 'Rename', onclick: () => { renaming = true; render(); } }, [el('span', { text: buildName(B ? B.name : name) }), el('span.meta', { text: `${length} · ${units()}` })]),
         el('div.divider'),
         el('div.label', { text: 'Recent builds' }),
         cap ? el('div.notice', {}, [el('p', { text: `Recent builds is full (20). “${cap.drop.name}”, opened longest ago, would be dropped to make room for this one.` }),
