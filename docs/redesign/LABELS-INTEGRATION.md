@@ -128,6 +128,14 @@ capabilities, then named commands (the plan's "host commands independent of the 
   and the plate's inputs send a `setting { id, value, rev, buildId }` back (capability `setting/1`). A plate-originated
   change keeps the rev (the Studio already holds that state) and echoes no snapshot. This is the one thing the read-only
   plate edits, and it is not label content.
+  - **A faceplate switch is not the visitor's change (fixed 2026-10-17).** With the plate open, a snapshot that switched
+    the Studio's label type gave the stripe and the drawings that type's defaults. The plate then sent them back as a
+    `setting`, which the planner took: this browser's End stripe became Bottom, and drawings that were Off came back On,
+    with nobody touching them.
+    - **The fix:** the Studio's `applySnapshot` unsets `EMBED.applied` while it switches type, which keeps the listener
+      silent. It then sets the snapshot's own values.
+    - **Checked by** the e2e case "a faceplate switch with the plate open leaves this browser's stripe and drawings as they
+      were". The case fails against the Studio without that line.
 - **Recorded gaps**: the Studio is dark only, so a light planner shows a dark plate (the plan's "takes the planner's theme"
   is not met in B1); stripes made in the standalone Studio are not in the shared list format, so none show on the plate
   (none are lost either); the 3D plate does not highlight the selected label, only its row; the stage keeps rendering

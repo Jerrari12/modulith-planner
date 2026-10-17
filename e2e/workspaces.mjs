@@ -983,6 +983,49 @@ test('the Label plate keeps this browser’s printer settings across a planner r
   await ctx.close();
 });
 
+/* A TYPE SWITCH IS NOT THE VISITOR'S (found 2026-10-17, beside S-F6). With the plate open, a faceplate switch made the Studio
+   give the stripe and the drawings the new type's defaults, and its listener sent them to the planner as the visitor's
+   `setting`: this browser's End stripe became Bottom and its drawings came back On, with nobody touching them. The switch is
+   the page's own change now: nothing goes back, and a change made on the plate afterwards still does */
+test('the Label plate: a faceplate switch with the plate open leaves this browser’s stripe and drawings as they were; a change on the plate still goes back', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  const face = (key) => page.evaluate(async (k) => {   // as the panel's Switch to EdgeLabel applies a faceplate
+    const v = window.__GEN2_VIEWER__;
+    await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === k)); v.setDims(false);
+    window.__GEN2_STORE__.load(v.build, 'adopt');
+  }, key);
+  await face('edgelabel');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 60_000 });
+  // this browser's print preference, set in the panel: the End stripe, the drawings off (neither is the type's default)
+  await page.locator('#ws-labels details.settings summary').click();
+  await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'end');
+  await page.locator('#ws-labels [aria-label="Screw and nut drawings"] .seg:text-is("Off")').click();
+  const pref = () => page.evaluate(() => JSON.parse(localStorage.getItem('gen2-label-print') || 'null'));
+  await page.waitForFunction(() => { const p = JSON.parse(localStorage.getItem('gen2-label-print') || 'null'); return !!p && p.band === 'end' && p.drawings === false; }, null, { timeout: 5000 });
+  // the plate open on it, showing that preference
+  await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });
+  const f = await (await page.locator('#ws-plate iframe').elementHandle()).contentFrame();
+  await f.waitForFunction(() => !!EMBED.snap && !!EMBED.applied && EMBED.applied['hw-band'] === 'end' && EMBED.applied['hw-profile'] === false, null, { timeout: 30_000 });
+  const sent = () => page.evaluate(() => window.__GEN2_PLATE__().log.slice());   // what the frame has sent the planner
+  // the faceplate to Classic Pro and back with the plate open: each snapshot switches the Studio's label type
+  for (const key of ['classicpro', 'edgelabel']) {
+    await face(key);
+    await f.waitForFunction((t) => labelType.id === t, key, { timeout: 30_000 });
+    await settle(page, 600);
+    assert.deepEqual(await pref(), { band: 'end', drawings: false }, `this browser's preference after the switch to ${key}`);
+    assert.deepEqual(await sent(), ['ready'], `nothing sent back by the switch to ${key}`);
+    assert.deepEqual(await f.evaluate(() => [gid('hw-band').value, gid('hw-profile').checked]), ['end', false], `the plate still shows it (${key})`);
+  }
+  // a change made on the plate is the visitor's, and still goes back
+  await f.locator('#hw-band').selectOption('wedge');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'wedge', null, { timeout: 5000 });
+  assert.deepEqual(await sent(), ['ready', 'setting']);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build rebuilds on the record', async () => {
   const { ctx, page } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
