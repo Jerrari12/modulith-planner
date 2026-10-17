@@ -24,6 +24,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localParts } from './lib/local-parts.mjs';
 
 import { FILAMENT_PROFILES } from '../js/filament-profiles.js';
 
@@ -68,7 +69,7 @@ async (t) => {
   const { chromium } = await import('playwright');
   const server = await serve();
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await launch(chromium);
+  const browser = localParts(await launch(chromium), root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from here
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 
   try {

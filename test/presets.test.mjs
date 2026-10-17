@@ -73,14 +73,16 @@ function objAt(needle) {
 }
 const COLORS = objAt('const COLORS');
 const SHELF_COLORS = objAt('const SHELF_COLORS') || {};
+const SIDE_COVER_COLOR = objAt('const SIDE_COVER_COLOR') || {};
 const extHex = (gen.match(/CaseExtender:\s*'([^']+)'/) || [])[1];
 
-const ZONE_KEYS = ['Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT'];
+/* the side cover's 0.8 mm FACE is a zone of its own (the GLB's FACE material), themed like the faceplate's */
+const ZONE_KEYS = ['Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT', 'SideCover:FACE'];
 /* ⚠ FootAdhesive is deliberately EXCLUDED. It is a bought rubber foot, not
    filament: the row is `purchased`, so colorLocked always renders its real
    finish and a preset entry could never apply. Giving it one would contradict
    the "shown in its real finish" promise its own tooltip makes. */
-const TYPES = [...Object.keys(COLORS || {}), ...Object.keys(SHELF_COLORS),
+const TYPES = [...Object.keys(COLORS || {}), ...Object.keys(SHELF_COLORS), ...Object.keys(SIDE_COVER_COLOR),
                ...(extHex ? ['CaseExtender'] : []), ...ZONE_KEYS]
   .filter((t) => t !== 'FootAdhesive');
 
@@ -89,7 +91,7 @@ test('the extraction actually found the catalog and the presets', () => {
   assert.ok(FILAMENT_DB.reduce((a, b) => a + b.colors.length, 0) > 50, 'too few catalog colours - check the extraction');
   assert.equal(PRESETS.length, 4, 'expected four presets');
   assert.ok(COLORS && Object.keys(COLORS).length > 10, 'COLORS did not extract');
-  assert.ok(TYPES.includes('ShelfInsert') && TYPES.includes('CaseExtender'),
+  assert.ok(TYPES.includes('ShelfInsert') && TYPES.includes('CaseExtender') && TYPES.includes('SideCover'),
     'the type list is missing the newest parts - the extraction is stale');
 });
 
@@ -122,6 +124,19 @@ test('a case extender wears the CASE colour in every preset', () => {
   for (const p of PRESETS)
     assert.equal(p.colors.CaseExtender.name, p.colors.Case.name,
       `${p.name}: extender is ${p.colors.CaseExtender.name} but the case is ${p.colors.Case.name}`);
+});
+
+test('a side cover wears the CASE colour on its core and the faceplate FACE on its face, in every preset', () => {
+  /* Joey 2026-10-09 (vault decisions.md "Side covers"): core = the case colour, face = the accent colour - The Jerrari's
+     own example is an Elegoo black core and a Mystery Orange face, which is that preset's faceplate FACE */
+  for (const p of PRESETS) {
+    assert.equal(p.colors.SideCover.name, p.colors.Case.name,
+      `${p.name}: the side cover core is ${p.colors.SideCover.name} but the case is ${p.colors.Case.name}`);
+    assert.equal(p.colors['SideCover:FACE'].name, p.colors['Faceplate:FACE'].name,
+      `${p.name}: the side cover face is ${p.colors['SideCover:FACE'].name} but the faceplate face is ${p.colors['Faceplate:FACE'].name}`);
+  }
+  const j = PRESETS.find((p) => p.name === 'The Jerrari');
+  assert.equal(j.colors['SideCover:FACE'].name, 'Printed Solid Mystery Orange', 'the rule\'s own example');
 });
 
 test('The Jerrari keeps the shelf colours Joey specified', () => {

@@ -369,6 +369,23 @@ const shelfDrop = (id) => ({ id, by: [0, -SHELF_FIT.rise, 0], hold: SHELF_FIT.ho
    ~0.3 s) rather than left to cross 200 mm at the cover's 750 ms. */
 const EXT_CLEAR = 15;
 const EXT_PACE = 1.4;
+/* ---- Side covers (v2609, released 2026-10-10) -------------------------------
+   A clip-on decorative panel for the OUTER side wall of a case: its clips hook into the windows in the wall and it
+   slides down to lock, no hardware (knowledge pack rules.md "Side covers"). One per exposed side wall, matched to the
+   case's height, any width.
+   PLACEMENT is the release handoff's, checked there against the case GLBs and carried in measurements.md "Side covers
+   (v2609)": the GLB is exported in the LEFT-wall installed pose (face toward -X, clips toward +X), so a left cover sits
+   at [-(W*44) + 0.025, 0.4, +4.0] from its case's origin and a right one mirrors it, turned 180 about Y. The same
+   offsets for every length and height; +4.0 puts the front edge flush with the case front, the cover being L - 8 long.
+   MEASURED here 2026-10-17 off the JSON of all 27 GLBs and their neighbours (test/lib/glb-spans.mjs): every cover is
+   5.05 thick about its own X = 0, so it stands 2.5 proud of the wall, and the covers, foot rails, under-table rails,
+   wall brackets and extenders beside it are all exactly W*88 wide - nothing stands proud of the plane it slides on.
+   THE INSTALL is two moves, the lip's shape: in off the wall (`out`) held `lift` above the seat until the clips enter
+   the windows, a beat, then straight down to lock. 3.8 mm is geometric, the float-clip relief plus the lock clip's
+   travel (measurements.md), not a guess; `out` is the handoff's suggested 30. */
+const SIDE = { x: 0.025, y: 0.4, z: 4.0, out: 30, lift: 3.8, hold: 450 };
+/* the 27 released sizes: the 59 in 0.5H and 1H, the other five collections in 0.5H/1H/1.5H/2H/3H (in half-rows) */
+const sideCoverHH = L => (L === 59 ? [1, 2] : [1, 2, 3, 4, 6]);
 
 // Amazon affiliate buy links for purchased hardware (Joey's, 2026-07-12) —
 // rendered as extra chips after Printables/Thangs in the BOM checklist +
@@ -497,6 +514,17 @@ const LINKS_BY_LEN = {
     240: { p: 'https://www.printables.com/model/1777826-gen2-240-foot-rails', t: 'https://than.gs/m/1574322', m: 'https://makerworld.com/en/models/3094051-gen2-240-foot-rails' },
     270: { p: 'https://www.printables.com/model/1777830-gen2-270-foot-rails', t: 'https://than.gs/m/1574327' },
   },
+  /* Side covers (v2609): one page per collection on each store, both live 2026-10-10 (the ids are the site ticket
+     TICKET-side-covers-2026-10-10.md's and the vault's decisions.md "Side covers"; js/workspaces/parts.js carries the
+     same six until the planner's catalog is re-vendored). NO 185 fallback: every length has its own page. */
+  sideCover: {
+    59:  { p: 'https://www.printables.com/model/1872093-modulith-59-side-covers', t: 'https://than.gs/m/1619983' },
+    115: { p: 'https://www.printables.com/model/1872105-modulith-115-side-covers', t: 'https://than.gs/m/1619981' },
+    165: { p: 'https://www.printables.com/model/1872112-modulith-165-side-covers', t: 'https://than.gs/m/1619978' },
+    185: { p: 'https://www.printables.com/model/1872115-modulith-185-side-covers', t: 'https://than.gs/m/1619982' },
+    240: { p: 'https://www.printables.com/model/1872120-modulith-240-side-covers', t: 'https://than.gs/m/1619980' },
+    270: { p: 'https://www.printables.com/model/1872123-modulith-270-side-covers', t: 'https://than.gs/m/1619979' },
+  },
   // Renamed on BOTH platforms 2026-07-29 ("… Tabletop Starter Kit"); the model
   // ids are unchanged, so the old slugs still 301/resolve — these are canonical.
   kit: {
@@ -580,6 +608,11 @@ const SHELF_COLORS = {
    Slate blue-grey: reads as structure next to the dark case without colliding
    with FootrailL/U blue-cyan, QuickLock teal or the insert's pale teal. */
 const EXTENDER_COLOR = { CaseExtender: '#7d8496' };
+/* The side cover rides in conditionally like the shelf parts. Pink: of the hues tried, the farthest from every colour
+   already in use and from both stages (CIEDE2000, nearest the stopper's magenta at 19.5) - it is a large panel on the
+   outside of the build, so it must not read as a case, a cover or a drawer front. One colour for the whole part: the
+   FACE zone follows the body in the identification palette, as every zone does. */
+const SIDE_COVER_COLOR = { SideCover: '#ff9ec4' };
 
 // ---- official-kit build migrations -----------------------------------------
 // Official kits (builds/<id>.json) commit a planner build to the repo forever —
@@ -720,6 +753,7 @@ export function generateManifest(build) {
     fr:      LINKS_BY_LEN.fr[L] || LINKS_BY_LEN.fr[185],
     wall:    LINKS_BY_LEN.wall[L] || LINKS.wall,
     rail:    LINKS_BY_LEN.rail[L] || LINKS.rail,
+    sideCover: LINKS_BY_LEN.sideCover[L] || null,       // no fallback - see the table
   };
   // ---- faceplate family (planner `faceStyle`, carried in share links) -----
   // essential: flat 5 mm plate + bolt-on handle. classic (2026-07-25): the FREE
@@ -1203,9 +1237,45 @@ export function generateManifest(build) {
     + (nLips > 1 ? ' and both lips' : nLips ? ' and its lip' : '')
     + ' before this case goes up · once the row above is in place the top is covered.';
   const baseCaseSteps = []; // bench cases (feet-on-case rows) slot into the bench flow before the feet
+  let baseSide = null;      // that lone base case's side covers, fitted once it is set down
+  const setDownCam = cam(0, 50, totalW, gridBottom, FIT);
   // wall steps play top-down (reversed), so the first top case SHOWN is the last
   // one generated — that's the one that gets the ghost+zoom peg demo.
   const ghostTopIdx = units.reduce((acc, v, idx) => v.topIdx === maxTop ? idx : acc, -1);
+
+  /* ---- side covers: which walls take one ----------------------------------
+     EXACTLY THE BILL'S RULE (js/rules/bom.js), so the stage draws what the parts list counts: a run is a span of
+     occupied columns at any height, and a unit takes a cover on a side that lies on its run's outer edge. A gap in a
+     tabletop makes two sections, each with its own two ends (2026-10-16); an upper unit inset from both edges takes
+     none although its end walls show (rules.md). One cover per side at the unit's own height - a shelf's too, as the
+     bill counts it. That a tall cover fits a stacked shelf is not printed yet: its clip rows lie on the 28 mm half-row
+     grid, which suggests they meet each ring's windows (vault known-gaps.md, "Side covers"). test/side-covers.test.mjs
+     holds the two tools to the same count. */
+  const occupied = new Set();
+  units.forEach(u => { for (let c = u.col; c < u.col + u.w; c++) occupied.add(c); });
+  const sideOf = u => [-1, 1].filter(s => s < 0 ? !occupied.has(u.col - 1) : !occupied.has(u.col + u.w));
+  /* A size the bill names but nothing models: a shelf above 3H (above 1H on the 59). It is said, never drawn - a GLB
+     that does not exist would stop the whole page loading. */
+  const sideTooTall = build.sideCovers === false ? [] : units.filter(u => sideOf(u).length && !sideCoverHH(L).includes(u.hh));
+  if (sideTooTall.length)
+    warnings.push(`Side covers stop at ${L === 59 ? '1H' : '3H'} · the ${[...new Set(sideTooTall.map(u => u.hh / 2 + 'H'))].join(' and ')} shelf ends are shown bare, although the parts list counts a cover for them.`);
+  /* The order the steps PLAY in (hanging builds assemble top-down, see caseStepOrder), so the first cover a reader
+     meets is the one that spells the fit out. */
+  const shownOrder = !hangs ? units.map((_, i) => i)
+    : isStaggered ? [...units.keys()].filter(i => units[i].topIdx === maxTop).concat([...units.keys()].filter(i => units[i].topIdx !== maxTop).reverse())
+    : [...units.keys()].reverse();
+  const firstSide = shownOrder.find(i => sideOf(units[i]).length && sideCoverHH(L).includes(units[i].hh));
+  const sideWords = n => n > 1 ? 'both side covers' : 'the side cover';
+  /* the fit in words: the release copy's sentence ("Hold the side cover against the outer wall just above its seat,
+     press it in so the clips enter the slots, then slide it down to lock"), said in full once */
+  const sideHow = n => `hold ${n > 1 ? 'each one' : 'it'} against the outer wall just above its seat, press it in so the clips enter the slots, then slide it down to lock`;
+  const sideText = (n, first, lead = 'Then') => ` ${lead} ${sideWords(n)}` + (first ? ` (optional): ${sideHow(n)}.` : ', the same way (optional).');
+  /* Said on the rows that arrive PRE-ASSEMBLED (wall lower rows, the under-table cases after the first). Under a row
+     the reason is physical: the cover starts 3.8 mm above its seat, and on a hanging mount the unit above an exposed
+     lower side stands on the same edge (it must span that outer column, and nothing stands beside it), so its own
+     cover is where this one would lift to. */
+  const preFittedSide = (n, first, underRow) => ` Fit ${sideWords(n)} before it goes up (optional)` + (first ? `: ${sideHow(n)}` : '')
+    + (underRow ? ' · under the row above there is no room to lift it on.' : '.');
 
   // ---- QuickLock dip-and-pop (ground truth: the 2026-08-24 spring video) ----
   // A seated QuickLock's tab is pressed DOWN while a unit's channel slides
@@ -1478,6 +1548,48 @@ export function generateManifest(build) {
         lipMidZ = spots.reduce((a, z) => a + z, 0) / spots.length;
       }
     }
+    /* ---- side covers (v2609), on this unit's exposed walls -------------------
+       ENHANCEMENT on `unit.side_finish`, byte-for-byte the bill's classification: decorative, and droppable with every
+       obligation still met. `owner` names the unit, so a cover selects, drags and takes "this unit only" colours with
+       it. Staged only where the case is assembled on a stage it then leaves with (the wall bench): on a tabletop the
+       cover goes on after the case has settled home, and the hanging rows that slide in carry it in `members`. */
+    /* `sideCovers: false` on the record draws none. No planner record can carry it (sanitizeBuild keeps BUILD_FIELDS
+       only, pinned to the old planner); it is for a FIXED workload that must not move with this feature - the orbit
+       benchmark's 80-unit build (orbit-bench.js benchBuild), whose 2026-09-14 series compares part for part. */
+    const scH = build.sideCovers !== false && sideCoverHH(L).includes(u.hh) ? H_LABEL[u.hh] : null;
+    const scNode = `SideCover_${L}-${scH}H`;
+    const scStaged = isWall && isTop;
+    const scIds = scH ? sideOf(u).map(side => {
+      const id = `sc${i}${side < 0 ? 'L' : 'R'}`;
+      inst.push({ id, node: scNode, pos: [side < 0 ? left + SIDE.x : right - SIDE.x, bottom + SIDE.y, SIDE.z], ...(side > 0 ? { yaw: 180 } : {}), owner: u.id, ...(scStaged ? stg : {}) });
+      add(scNode, `Side Cover ${L}-${scH}H`, 'SideCover', links.sideCover, 1, false, false, { requirement: REQ.enhancement('unit.side_finish') });
+      return { id, side, x: side < 0 ? left + SIDE.x : right - SIDE.x };
+    }) : [];
+    if (hangs) members.push(...scIds.map(s => s.id));
+    /* Close on EACH cover from its own outer side, where no neighbour stands between the camera and it: the 3.8 mm
+       slide is the whole lesson, and at a step's own framing it is a few pixels. Framed on the FRONT part of the
+       cover, where its top edge passes the case's: the whole cover at 1.15 of its own sphere measured ~6 px of slide
+       on a 1280 x 800 Assemble (2026-10-17, the recorded clip); this is about twice that, the approach still in frame.
+       `fitR` is aspect-aware like the faceplate cinematic. `off` is where the cover is assembled: the wall bench's
+       stage, or the under-table demo case's spot out front. */
+    const scLen = depth - 8, scTall = u.hh * PITCH_HALF_Y - 0.4;
+    const sideCam = (sc, off) => ({
+      t: sc.side * 55, p: 66,
+      fitR: Math.hypot(scLen * 0.55, scTall + SIDE.lift, SIDE.out) / 2,
+      target: [sc.x + sc.side * SIDE.out / 2 + off[0], bottom + SIDE.y + scTall / 2 + off[1], SIDE.z + scLen / 4 + off[2]],
+    });
+    const sideFit = ({ at = [0, 0, 0], restore = null } = {}) => {
+      const so = (scStaged && st && stages[st]) || [0, 0, 0];
+      const off = [so[0] + at[0], so[1] + at[1], so[2] + at[2]];
+      const out = [];
+      for (const sc of scIds) {
+        out.push({ camera: sideCam(sc, off) });
+        out.push({ enter: [{ id: sc.id, at: [at[0], at[1] + SIDE.lift, at[2]], from: [sc.side * SIDE.out, 0, 0] }] });
+        out.push({ move: [{ id: sc.id, by: [0, -SIDE.lift, 0], hold: SIDE.hold, ease: 'detent' }] });
+      }
+      if (scIds.length && restore) out.push({ camera: restore });
+      return out;
+    };
     /* Close on the SHELF while it goes in. Framed by the DECK, not the case:
        the whole install is a 14 mm drop and a 4.93 mm slide, which measured
        6.2 px at the step's own whole-case framing - honest, and nearly
@@ -1606,7 +1718,8 @@ export function generateManifest(build) {
         note: 'On the bench, line this top case up with the rest of the top row: QuickLocks into the outer wall slots (L left, R right)'
           + (mcId ? ', magnet clip into the back slot' : '') + '. The cover slides on across the whole row next.'
           + (shId ? ' ' + (firstShelfDemo === null ? shelfText : 'Fit this case\'s shelf insert the same way.') + lipText(lipIds.length) : '')
-          + extText,
+          + extText
+          + (scIds.length ? sideText(scIds.length, i === firstSide) : ''),
         camera: benchCam,
         phases: [
           { enter: [{ id: `case${i}`, from: [0, 45, 0] }] },
@@ -1614,6 +1727,8 @@ export function generateManifest(build) {
           ...(mcId ? [{ enter: [{ id: mcId, from: [0, 35, 0] }, { id: mgId, from: [0, 0, -30] }] }] : []),
           // ⚠ the shelf fit had been MISSING here entirely — see shelfFit
           ...shelfFit({ restore: benchCam }),
+          // the side covers before anything caps the case (the release rule: after the case, before what stacks on top)
+          ...sideFit({ restore: benchCam }),
         ],
       });
       if (shId && firstShelfDemo === null) firstShelfDemo = i;
@@ -1672,6 +1787,8 @@ export function generateManifest(build) {
       // back out before the cover — the CL caps the case top, so this is the
       // last moment the insert can be lowered in
       if (shId) bench.push(...shelfFit({ restore: benchCam }));
+      // the side covers before the Cover Lower caps the case (after the case, before what stacks on top)
+      bench.push(...sideFit({ restore: benchCam }));
       bench.push({ enter: clLocal.map(id => ({ id, from: [0, 0, -WALL.coverSlide] })), dip: dipItems([`ql${i}L`, `ql${i}R`], WALL.coverSlide) });
       bench.push({ pop: popItems([`ql${i}L`, `ql${i}R`]) });
       if (stopIds.length) bench.push({ enter: stopIds.map(id => ({ id, from: [0, 35, 0] })) });
@@ -1685,10 +1802,12 @@ export function generateManifest(build) {
       // case up close (caseR), not the whole build
       const benchNote = 'On the bench, before it goes near the wall: QuickLocks in, '
         + (shId ? 'shelf insert' + (lipIds.length ? (lipIds.length > 1 ? ' and both lips' : ' and lip') : '') + ' down into the case, ' : '')
+        + (scIds.length ? `${sideWords(scIds.length)} on (optional), ` : '')
         + 'slide the Cover Lower on'
         + (isDrawer ? ', drop the drawer stoppers into it,' : ',') + ' then cap it with the Cover Upper · the cover can only slide on now, not once the case is on the wall.'
         + (mcId && firstClipDemo === null ? ' ' + clipText : '')
-        + (shId && firstShelfDemo === null ? ' ' + shelfWhy : '');
+        + (shId && firstShelfDemo === null ? ' ' + shelfWhy : '')
+        + (scIds.length && i === firstSide ? ` A side cover goes on like this: ${sideHow(1)}.` : '');
 
       if (i === ghostTopIdx) {
         // the first top case shown is split into two steps (there's a lot going
@@ -1744,6 +1863,8 @@ export function generateManifest(build) {
           // the step's net offset still comes back to zero. Extenders take the
           // same `at`, and ride the same cancelling move via `members`.
           ...shelfFit({ at: [0, 0, F], zBase: F }),
+          // the side covers too, out front: they ride the same cancelling move via `members`
+          ...sideFit({ at: [0, 0, F] }),
           { camera: camUp(cx, bottom + caseH / 2, totalW, gridBottom) }, // back below before the slide
           { move: members.map(id => ({ id, by: [0, 0, -F] })), dip: dipItems([`ql${i}L`, `ql${i}R`], F) },
           { pop: popItems([`ql${i}L`, `ql${i}R`]) },
@@ -1754,6 +1875,7 @@ export function generateManifest(build) {
           step.note += ' ' + shelfText + lipText(lipIds.length);
           if (firstShelfDemo === null) firstShelfDemo = i;
         }
+        if (scIds.length) step.note += sideText(scIds.length, i === firstSide, 'Before the slide, fit');
       } else {
         // pre-assembled one-piece slide-in, same read as wall lower rows
         step.phases = [
@@ -1763,6 +1885,7 @@ export function generateManifest(build) {
         step.note = isTop
           ? 'QuickLocks in, then slide the case straight back · its top rails ride into the rail channels until it stops.'
           : 'Slide the case straight back under the row above · its top rails engage the case above and the QuickLocks click home.';
+        if (scIds.length) step.note += preFittedSide(scIds.length, i === firstSide, !isTop);
       }
       if (isTop && isDrawer) step.note += ' (No drawer stoppers needed up here · the rail has them built in.)';
       if (mcId && firstClipDemo === null) { firstClipDemo = i; if (i !== ghostTopIdx) step.note += ' ' + clipText; }
@@ -1780,6 +1903,7 @@ export function generateManifest(build) {
       step.note = 'Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home.';
       if (mcId && firstClipDemo === null) { firstClipDemo = i; step.note += ' ' + clipText; }
       if (shId) step.note += ' ' + preFittedShelf(lipIds.length);
+      if (scIds.length) step.note += preFittedSide(scIds.length, i === firstSide, true);
     } else {
       // tabletop: case + quicklocks drop in on the bench, then settle from behind
       // the BASE ring's pair; shelfFit gives each further ring its own
@@ -1820,9 +1944,17 @@ export function generateManifest(build) {
       if (dips.length) {
         step.phases.push({ settle: st, dip: dipItems(dips, Math.abs(slideBack)) }, { pop: popItems(dips) });
       } else step.phases.push({ settle: st });
+      /* the side covers go on once the case has settled home - after the case, before what stacks on top. Held
+         for the stopper pass below, which appends them AFTER the floor stoppers so the phases and the words keep
+         one order. */
+      if (scIds.length) step._side = { phases: sideFit({ restore: step.camera }), note: sideText(scIds.length, i === firstSide) };
       steps.push(step);
     }
-    else baseCaseSteps.push(step); // slots into the bench flow before the feet
+    else {
+      baseCaseSteps.push(step); // slots into the bench flow before the feet
+      // a lone bottom case takes its covers once it is set down where the kit will live (setDownStep)
+      if (scIds.length) baseSide = { phases: sideFit({ restore: setDownCam }), note: sideText(scIds.length, i === firstSide) };
+    }
     caseSteps.push(step);
   });
 
@@ -1928,6 +2060,9 @@ export function generateManifest(build) {
       s.note = 'QuickLocks in (L left, R right), then slide the case on from the back until it clicks.';
     }
     delete s._stoppers;
+    // a tabletop case's side covers, after its floor stoppers (see the case loop)
+    if (s._side) { s.phases.push(...s._side.phases); s.note += s._side.note; }
+    delete s._side;
   });
 
   // covers: contiguous column runs sharing the same exposed top height. On WALL
@@ -2228,9 +2363,9 @@ export function generateManifest(build) {
   const nFeet = feetIds.back.length + feetIds.front.length;
   const setDownStep = {
     title: 'Set the base down',
-    note: 'Flip the base feet-down and set it where the kit will live.',
-    camera: cam(0, 50, totalW, gridBottom, FIT),
-    phases: [{ settle: 'base' }],
+    note: 'Flip the base feet-down and set it where the kit will live.' + (baseSide ? baseSide.note : ''),
+    camera: setDownCam,
+    phases: [{ settle: 'base' }, ...(baseSide ? baseSide.phases : [])],
   };
   // a fun, deterministic name for the custom build (same build = same name)
   const ADJ = ['Mighty', 'Tidy', 'Trusty', 'Grand', 'Clever', 'Bold', 'Steady', 'Nimble'];
@@ -2461,6 +2596,8 @@ export function generateManifest(build) {
       // only a shelf ABOVE 1H stacks extenders, so a board of 1H shelves still
       // emits no extender colour
       ...(units.some(u => u.fill === 'shelf' && u.hh > 2) ? EXTENDER_COLOR : {}),
+      // only when a cover is drawn: a build whose exposed ends are all too tall for one emits no colour for it
+      ...(inst.some(i => i.node.startsWith('SideCover_')) ? SIDE_COVER_COLOR : {}),
     },
     parts: [...bom.values()],
     instances: inst,
@@ -2546,6 +2683,9 @@ function imgFor(node, type) {
   // the 2026-08-28 batch was copied in NAMED BY NODE, so both map straight
   // through. Inserts wear their collection's brand colour, lips are Case Black.
   if (/^ShelfInsert_\d+-\dW$/.test(node) || /^ShelfLip_\dW$/.test(node)) return `img/parts/${node}.png`;
+  // side covers (v2609): the 27 BOM thumbnails of the release (D:\Render Projects\Side Covers\BOM Thumbnails, the
+  // planner's iso look, each in its collection's colour), copied to the parts host NAMED BY NODE
+  if (/^SideCover_\d+-\d+H$/.test(node)) return `img/parts/${node}.png`;
   // mirror parts: the R render is the L one flipped horizontally (2026-07-10)
   if (node === 'QuickLock-R') return 'img/parts/QuickLock-R.png';
   if (node.startsWith('QuickLock')) return 'img/parts/QuickLock.png';
@@ -2928,6 +3068,11 @@ const PLATE_POSE = {
      plain - on the renderer AND, since the nine handle product pages landed (2026-09-19), on the
      plate view: `deco-handle` is plate-capable and the eight BlockBar/Crystal pages fail closed. */
   'handle:deco': [180, 0, 0],
+  /* Side covers (v2609) "print face-down" (the release's print notes: face-down, no supports; the FACE zone is the
+     bed-contact face, decisions.md "Side covers"). The GLB is the left-wall installed pose, its face toward -X, so
+     +90 about Z lays that face on the plate and the part grows face first, clips last: authored +X. The first pose
+     here that turns about Z - buildAxisFromEuler's Z terms, which no shipped entry exercised before. */
+  sideCover: [0, 0, 90],
 };
 /* Every hardware entry, reachable by the TYPE it poses. Built once from the same table
    platePoseFor reads, so the two cannot name different entries for one type. */
@@ -2961,6 +3106,7 @@ export function plateRotForType(type, faceStyle, handleStyle) {
     : type === 'Bracket' ? 'bracket'
     : type === 'Accent' ? 'accent'
     : type === 'Label' ? 'label:' + faceStyle
+    : type === 'SideCover' ? 'sideCover'
     : null;
   return k != null && k in PLATE_POSE ? PLATE_POSE[k] : null;
 }
@@ -2979,10 +3125,12 @@ export function plateRotForType(type, faceStyle, handleStyle) {
  * hand-expanded rotation matrix is exactly the kind of thing that is wrong in one quadrant and
  * right everywhere anyone looked.
  *
- * ⚠ EXPORTED ONLY SO THAT GATE CAN REACH IT. Every pose this repo ships is a rotation about X
- * alone, so the Y and Z terms below are exercised by no shipped data; a gate that could only go
- * through buildAxisForType would have to restate the expansion to sweep them, and would then be
- * comparing two copies of the same guess. Nothing here calls it directly.
+ * ⚠ EXPORTED ONLY SO THAT GATE CAN REACH IT. Every pose this repo shipped until 2026-10-17 was a
+ * rotation about X alone, so the Y and Z terms below were exercised by no shipped data; a gate that
+ * could only go through buildAxisForType would have to restate the expansion to sweep them, and
+ * would then be comparing two copies of the same guess. The side cover's pose turns about Z (its
+ * face is authored toward -X), so the Z terms now carry one shipped answer, [1, 0, 0], which
+ * test/side-covers.test.mjs checks against the part's own thickness. Nothing here calls it directly.
  */
 export function buildAxisFromEuler(rot) {
   if (!Array.isArray(rot)) return null;

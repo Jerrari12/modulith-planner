@@ -4291,10 +4291,15 @@ function buildExploded() {
     Foot: [0, -25, 0], FootAdhesive: [0, -25, 0], Drawer: [0, 0, 170], CoverU: [0, 45, 0], FootrailU: [0, 25, 0],
   };
   const RIDER_PUSH = { Faceplate: [0, 0, 70], Handle: [0, 0, 115] };
+  /* a side cover pushes out along its OWN outward normal, so the push needs the side's sign, unlike the fixed vectors
+     above: the GLB faces -X as authored (the left-wall pose) and a right cover is the same part turned 180 about Y */
+  const SIDE_PUSH = 60;
   const eFor = inst => {
     const e = basePos(inst, false).sub(center).multiply(SCALE).add(center);
-    const push = PUSH[typeByNode[inst.cfg.node]];
+    const type = typeByNode[inst.cfg.node];
+    const push = PUSH[type];
     if (push) e.add(new THREE.Vector3(...push));
+    if (type === 'SideCover') e.add(new THREE.Vector3(-SIDE_PUSH, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(inst.cfg.yaw || 0)));
     return e;
   };
   for (const inst of instances.values()) if (!inst.cfg.rides) exploded.set(inst.cfg.id, eFor(inst));
@@ -6750,6 +6755,10 @@ const PRESETS = [
          could not see. test/presets.test.mjs pins a 4.5:1 floor. */
     CaseExtender: _db('Elegoo PLA Black'),
     ShelfInsert: _db('Panchroma Cold White'), ShelfLip: _db('Elegoo PLA Black'),
+    /* SIDE COVER COLOUR RULE (Joey 2026-10-09, decisions.md "Side covers"), applied to all four: the core takes the
+       CASE colour and the 0.8 mm FACE the accent - read as the preset's faceplate FACE, which is exactly the rule's own
+       example here (Elegoo black core, Mystery Orange face). test/presets.test.mjs pins it. */
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Printed Solid Mystery Orange'),
     ...CLASSIC_FACE, // black body / orange face + grip / silk-silver rod
     Accent: _db('ERYONE Burnt Titanium'), Label: _db('Panchroma Cold White'),
     BackCover: _db('Elegoo PLA Black'),
@@ -6767,6 +6776,7 @@ const PRESETS = [
     // Silk Silver, not Cold White: Joey wants Stealth to stay stealthy
     // (9.29:1 against its black case - Steel Grey would drop to 2.89:1)
     ShelfInsert: _db('Panchroma Silk Silver'), ShelfLip: _db('Panchroma Black'),
+    SideCover: _db('Panchroma Black'), 'SideCover:FACE': _db('Panchroma Dark Grey'),
     // FACE is the Classic plate's front layer — every preset defines all four
     // zones so nothing silently inherits the body (see renderZoneChips)
     Faceplate: _db('Panchroma Steel Grey'), 'Faceplate:FACE': _db('Panchroma Dark Grey'),
@@ -6785,6 +6795,7 @@ const PRESETS = [
     Foot: _db('Panchroma Purple'), Rail: _db('Panchroma Blue'),
     Bracket: _db('Panchroma Steel Grey'), CaseExtender: _db('Panchroma Black'),
     ShelfInsert: _db('Panchroma Yellow'), ShelfLip: _db('Panchroma Black'),
+    SideCover: _db('Panchroma Black'), 'SideCover:FACE': _db('Panchroma Yellow'),
     Faceplate: _db('Panchroma Orange'), 'Faceplate:FACE': _db('Panchroma Yellow'),
     'Faceplate:GRIP': _db('Panchroma Yellow'), 'Faceplate:GRIP ACCENT': _db('Panchroma Polymaker Teal'),
     Accent: _db('Panchroma Aqua Blue'), Label: _db('Panchroma Cold White'),
@@ -6801,6 +6812,7 @@ const PRESETS = [
     FootrailU: _db('Panchroma Brown'), Foot: _db('Panchroma Brown'),
     Rail: _db('Panchroma Brown'), CaseExtender: _db('Panchroma Brown'),
     ShelfInsert: _db('Panchroma Cream'), ShelfLip: _db('Panchroma Brown'),
+    SideCover: _db('Panchroma Brown'), 'SideCover:FACE': _db('Panchroma Brown'),
     Faceplate: _db('Panchroma Orange'), 'Faceplate:FACE': _db('Panchroma Brown'),
     'Faceplate:GRIP': _db('Panchroma Brown'), 'Faceplate:GRIP ACCENT': _db('Panchroma Steel Grey'),
     Accent: _db('Panchroma Tan'), Label: _db('Panchroma Cream'),
@@ -8526,7 +8538,7 @@ function keysInBuild() {
     for (const key of [t, ...[...zones].map(z => zoneKey(t, z))]) { const e = out.get(key) || { key, type: t, zone: key.includes(':') ? key.split(':')[1] : '', count: 0, locked: colorLocked(t) }; if (!key.includes(':')) e.count++; out.set(key, e); }
   }
   for (const e of out.values()) { if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0; e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0; }
-  const order = ['Case', 'CaseExtender', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
+  const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
 }
