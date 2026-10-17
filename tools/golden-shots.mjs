@@ -25,6 +25,7 @@ import { readFile, readdir, mkdir, writeFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localParts } from '../test/lib/local-parts.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(root, 'test', 'golden', 'shots');
@@ -121,7 +122,7 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   const server = await serve();
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await launch(chromium);
+  const browser = localParts(await launch(chromium), root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from here
   const rows = [];
   let failed = 0;
   try {

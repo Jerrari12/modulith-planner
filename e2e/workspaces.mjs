@@ -22,6 +22,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localParts } from '../test/lib/local-parts.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');   // e2e/ sits beside test/
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
@@ -52,6 +53,7 @@ const studio = studioServer ? `http://127.0.0.1:${studioServer.address().port}/`
 const SOFT = process.env.E2E_SOFT === '1';
 const launchArgs = ['--enable-unsafe-swiftshader', ...(SOFT ? ['--disable-gpu', '--use-angle=swiftshader'] : [])];
 const browser = await (async () => { for (const o of [{ channel: 'chrome' }, {}]) { try { return await chromium.launch({ ...o, args: launchArgs }); } catch {} } throw new Error('no Chromium'); })();
+localParts(browser, root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from this checkout (test/lib/local-parts.mjs)
 test.after(async () => { await browser.close(); server.close(); if (studioServer) studioServer.close(); });
 /* a case that fails before its own ctx.close() must not leave a page rendering: on the CI runner's software rasteriser
    one leftover render loop starved every boot after it, so each case's contexts are closed here whatever happened */
