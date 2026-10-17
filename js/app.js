@@ -1,8 +1,11 @@
 // The merged app's boot (phase 0, Build screen first). Decides whether this page shows a workspace
-// shell over the stage or the old viewer unchanged: `?ws=build` opens the Build workspace; without
-// it the page is the viewer as deployed before the redesign, which the golden screenshots and the
-// smoke tests still exercise. The default flips once the shell is accepted.
+// shell over the stage or the old viewer unchanged (js/entry.js shellWorkspace): `?ws=<name>` opens
+// that workspace, and so does the bare address (cutover, 2026-10-17: planner.modulith.systems/ is the
+// planner, Build). An address that names a kit, a build, a part preview or a benchmark without ?ws=
+// is still the viewer as deployed before the redesign, which the golden screenshots and the smoke
+// tests exercise.
 import { createStage } from './main.js';
+import { shellWorkspace } from './entry.js';
 import { mountBuild } from './workspaces/build.js';
 import { mountAssemble } from './workspaces/assemble.js';
 import { mountParts, printCountOf } from './workspaces/parts.js';
@@ -19,7 +22,7 @@ import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, 
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog, a classic-script lexical global
 
 const QS = new URLSearchParams(location.search);
-const WS = QS.get('ws');
+const WS = shellWorkspace(location.search, location.hash);   // the workspace to open, or null for the old viewer
 const KIT = QS.get('build');   // the official kit this page opened with, kept in the address through every edit
 const FRESH = QS.get('new') === '1';   // New build: a fresh copy of the kit, never the build this browser had open
 const SETUP = QS.get('setup') === '1';   // ...and the setup sheet open on it

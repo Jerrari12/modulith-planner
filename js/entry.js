@@ -116,3 +116,16 @@ export function resolveEntry(search = '', hash = '') {
     officialTarget,
   };
 }
+
+/* THE MERGED PLANNER'S FRONT DOOR (cutover, 2026-10-17): which workspace the page opens, or null for the old viewer.
+ * ?ws=<name> opens that workspace (app.js opens Build for a name it does not know). An address WITHOUT ?ws= opens Build
+ * when it is the bare root above - nothing a route reads, only riders such as ?from=, ?ref=, ?debug=, a labels link
+ * (#labels-add=, which app.js sends to Labels) or a shared #scheme= - so planner.modulith.systems/ is the planner.
+ * Every address that names something without ?ws= keeps the old viewer: the site's part preview (?part=&mode=preview),
+ * the benchmarks (?bench=), the old planner's dock (?embed=1 with #build=), a kit or a build by name (?build=, ?kit=,
+ * #build=). The smoke test, the golden screenshots and the relief and profile checks open the old viewer by those. */
+export function shellWorkspace(search = '', hash = '') {
+  const ws = new URLSearchParams(search).get('ws');
+  if (ws) return ws;
+  return resolveEntry(search, hash).isRoot ? 'build' : null;
+}

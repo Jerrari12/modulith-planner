@@ -5726,21 +5726,12 @@ $('btn-start').onclick = () => { track('start'); goTo(1); }; // cover → intro,
 $('btn-skip-end').onclick = () => { track('skip-to-end'); goTo(PAGES.length - 2, { animate: false }); };
 // Official kits only: "Customize this build" (cover + outro) — the on-ramp to
 // the planner. Hands over the CURRENT build (option tweaks ride along) as a
-// #build= hash the planner sanitizes + restores. Raw base64, NOT
-// percent-encoded — the planner's decode has no decodeURIComponent, so an
-// encoded hash would silently fail there.
-const PLANNER_URL = 'https://gen2planner.jerrari3d.com/';
-// ?theme=&tt= rides along so the planner (a separate origin) can adopt the
-// light/dark choice; the query goes BEFORE the hash — the planner's decoder
-// reads location.hash and never sees it.
-const themeQS = () => {
-  try {
-    const v = localStorage.getItem('gen2-theme');
-    if (v !== 'dark' && v !== 'light') return '';
-    return '?theme=' + v + '&tt=' + encodeURIComponent(localStorage.getItem('gen2-theme:t') || '0');
-  } catch (e) { return ''; }
-};
-const plannerHandoffUrl = () => PLANNER_URL + themeQS() + '#build=' + btoa(unescape(encodeURIComponent(JSON.stringify(build))));
+// #build= hash the planner sanitizes + restores, in raw base64.
+/* THE PLANNER IS THIS APP (cutover, 2026-10-17): the Build workspace of this same page, no longer
+   gen2planner.jerrari3d.com. The kit rides along as ?build=, which the workspace keeps in the address: the build is
+   named after it and keeps this page's palette (gen2-colors:official-<id>, the key both read). One origin shares the
+   light/dark choice too, so the ?theme=&tt= the other planner needed is gone. */
+const plannerHandoffUrl = () => location.pathname + '?ws=build&build=' + encodeURIComponent(OFFICIAL.id) + '#build=' + btoa(unescape(encodeURIComponent(JSON.stringify(build))));
 if (OFFICIAL) {
   const cover = $('btn-customize');
   cover.classList.remove('hidden');

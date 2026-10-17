@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>GEN2 Assembly Instructions</title>
+<!-- the bare address is the planner (cutover, 2026-10-17): this is what a link preview of it shows. app.js names the tab after
+     the open build; on the old viewer's own addresses (?build=<kit> and the like) main.js names it after the build it shows -->
+<title>MODULITH Planner</title>
+<meta name="description" content="Plan a MODULITH build (formerly GEN2): pick a mount, lay out your drawers, and get the exact parts list with download links and a 3D assembly guide for your layout." />
 <!-- Site icon: the Jerrari J on a dark tile. The mark's core is WHITE, so a
      transparent icon dissolves into a light tab bar — the tile keeps it legible
      in both themes. Root-absolute paths so /builds/ resolves them too. Same
@@ -225,7 +228,7 @@
           <button id="btn-start">Get started <i>&rarr;</i></button>
           <button id="btn-skip-end" title="Jump straight to the completed model - tap parts to recolor or customize">Skip to the finished build &rarr;</button>
           <!-- official kits only: the gentle on-ramp to the planner -->
-          <button id="btn-customize" class="hidden" title="Open this exact build in the GEN2 Planner - resize it, add drawers, make it yours">Customize this build &rarr;</button>
+          <button id="btn-customize" class="hidden" title="Open this exact build in the planner - resize it, add drawers, make it yours">Customize this build &rarr;</button>
           <!-- official kits only: the PINNED link. The bare root means "the
                current recommended starter" and deliberately never rewrites
                itself, so this is how you get a URL that always opens THIS kit. -->

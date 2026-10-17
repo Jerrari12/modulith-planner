@@ -35,10 +35,12 @@ A static site: serve the root folder and open it.
 python -m http.server 8743
 ```
 
-Then `http://127.0.0.1:8743/?ws=build`. The part models load from the parts host, so it needs the network even locally.
-`?ws=` picks the workspace; without it the page is the old viewer, which the golden screenshots still exercise.
-`?new=1` starts a fresh build (`&setup=1` with the setup sheet open), `?build=<kit>` opens an official kit,
-`?debug=1` exposes `window.__GEN2_STORE__`, `__GEN2_VIEWER__` and `__GEN2_CTX__()` for the tools and the tests.
+Then `http://127.0.0.1:8743/`, which opens Build. The part models load from the parts host, so it needs the network even
+locally. `?ws=` picks the workspace. An address that names something without `?ws=` is still the old viewer: a kit
+(`?build=<kit>`), a build (`#build=`), the part preview (`?part=…&mode=preview`) or a benchmark (`?bench=`). The smoke test
+and the golden screenshots exercise it (`js/entry.js` `shellWorkspace` decides). `?new=1` starts a fresh build
+(`&setup=1` with the setup sheet open), `?ws=build&build=<kit>` opens an official kit in Build, `?debug=1` exposes
+`window.__GEN2_STORE__`, `__GEN2_VIEWER__` and `__GEN2_CTX__()` for the tools and the tests.
 
 The map: `index.html` → `js/boot.js` → `js/app.js` (the boot: the build store, the setup sheet, the workspace
 router) → `createStage()` from `js/main.js` (the whole former viewer as a factory). Workspaces in `js/workspaces/`,
