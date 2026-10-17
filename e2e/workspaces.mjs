@@ -957,6 +957,112 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   await ctx.close();
 });
 
+/* THE PLATE'S PRINTER (the stress test 2026-10-15, S-F6). The plate's printer reset to Prusa Core One on every planner reload:
+   the Studio kept it only in its ordinary autosave, which the embed never touches. The plate now keeps its printer settings
+   under a key of its own in this browser: the printer by its name (three printers share 256×256, and a value alone came back
+   as the first), the format, the purge area and the preview colours, which a label-type switch would otherwise reset. Never
+   the ordinary autosave, and never the stripe (the planner's print preference) */
+test('the Label plate keeps this browser’s printer settings across a planner reload and a label-type switch (S-F6)', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  // a faceplate applied as the panel's Switch to EdgeLabel applies one. Classic Pro first: the Studio boots on EdgeLabel, so
+  // every boot of the frame then switches type
+  const face = (key) => page.evaluate(async (k) => {
+    const v = window.__GEN2_VIEWER__;
+    await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === k)); v.setDims(false);
+    window.__GEN2_STORE__.load(v.build, 'adopt');
+  }, key);
+  await face('classicpro');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro', null, { timeout: 60_000 });
+  const plate = async () => {   // the plate shown, its Studio answered and the build's snapshot applied: the frame
+    await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+    await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });
+    const f = await (await page.locator('#ws-plate iframe').elementHandle()).contentFrame();
+    await f.waitForFunction(() => !!EMBED.snap && labelType.id === 'classicpro', null, { timeout: 30_000 });
+    return f;
+  };
+  const shown = (f) => f.evaluate(() => ({ printer: gid('bed-preset').selectedOptions[0].text, plate: gid('bed-w').value + '×' + gid('bed-l').value,
+    format: gid('export-format').value, purge: gid('reserve-purge').checked, base: gid('color-base').value, text: gid('color-text').value }));
+  const kept = (f) => f.evaluate(() => JSON.parse(localStorage.getItem('labelstudio.plate-printer.v1')));
+  const f = await plate();
+  assert.equal((await shown(f)).printer, 'Prusa Core One (250×220)', 'the page’s own printer on a first visit');
+  // changed as a visitor changes them
+  await f.locator('#bed-preset').selectOption({ label: 'Bambu P2S (256×256)' });
+  await f.locator('#export-format').selectOption('stl');
+  await f.locator('#reserve-purge').setChecked(false);
+  await f.locator('#color-base').fill('#2a6fdb', { force: true });   // a swatch's colour input hides behind its label (the label opens the picker)
+  await f.waitForFunction(() => { const r = JSON.parse(localStorage.getItem('labelstudio.plate-printer.v1') || 'null'); return !!r && r.printer === 'Bambu P2S (256×256)' && r.settings['export-format'] === 'stl' && r.settings['reserve-purge'] === false && r.settings['color-base'] === '#2a6fdb'; }, null, { timeout: 10_000 });
+  const rec = await kept(f);
+  assert.ok(!('hw-band' in rec.settings) && !('hw-profile' in rec.settings), 'the stripe and the drawings are the planner’s print preference, not kept here');
+  assert.equal(await f.evaluate(() => localStorage.getItem('edgelabel.autosave.v1')), null, 'the ordinary autosave is never written from the plate');
+  // the build saved with its Classic Pro faceplates; then one more change and at once a reload (the page going saves it)
+  const id = await page.evaluate(() => window.__GEN2_STORE__.state.buildId);
+  const saved = () => page.evaluate((want) => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds').objectStore('builds').get(want); t.onsuccess = () => r(!!(t.result && t.result.record.faceStyle === 'classicpro')); t.onerror = () => r(false); }; q.onerror = () => r(false); }), id);
+  for (let i = 0; i < 60 && !(await saved()); i++) await settle(page, 250);
+  assert.ok(await saved(), 'the build is saved with its Classic Pro faceplates');
+  await f.locator('#color-text').fill('#ffe000', { force: true });
+  await page.reload({ waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(page);
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.buildId), id, 'the same build reopened');
+  // a new frame: it boots on EdgeLabel and switches to the build's Classic Pro, and the settings come back through the switch
+  const f2 = await plate();
+  const want = { printer: 'Bambu P2S (256×256)', plate: '256×256', format: 'stl', purge: false, base: '#2a6fdb', text: '#ffe000' };
+  assert.deepEqual(await shown(f2), want, 'kept across the reload');
+  assert.match(await f2.locator('#download').textContent(), /\.stl\)$/, 'the download names the kept format');
+  // a type switch while the plate is open (the build to EdgeLabel) keeps them as well
+  await face('edgelabel');
+  await f2.waitForFunction(() => labelType.id === 'edgelabel', null, { timeout: 30_000 });
+  await settle(page, 600);   // past the 400 ms save that the switch's own input events set off
+  assert.deepEqual(await shown(f2), want, 'kept through the switch to EdgeLabel');
+  assert.equal((await kept(f2)).settings['color-base'], '#2a6fdb', 'and still kept so');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A TYPE SWITCH IS NOT THE VISITOR'S (found 2026-10-17, beside S-F6). With the plate open, a faceplate switch made the Studio
+   give the stripe and the drawings the new type's defaults, and its listener sent them to the planner as the visitor's
+   `setting`: this browser's End stripe became Bottom and its drawings came back On, with nobody touching them. The switch is
+   the page's own change now: nothing goes back, and a change made on the plate afterwards still does */
+test('the Label plate: a faceplate switch with the plate open leaves this browser’s stripe and drawings as they were; a change on the plate still goes back', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  const face = (key) => page.evaluate(async (k) => {   // as the panel's Switch to EdgeLabel applies a faceplate
+    const v = window.__GEN2_VIEWER__;
+    await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === k)); v.setDims(false);
+    window.__GEN2_STORE__.load(v.build, 'adopt');
+  }, key);
+  await face('edgelabel');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 60_000 });
+  // this browser's print preference, set in the panel: the End stripe, the drawings off (neither is the type's default)
+  await page.locator('#ws-labels details.settings summary').click();
+  await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'end');
+  await page.locator('#ws-labels [aria-label="Screw and nut drawings"] .seg:text-is("Off")').click();
+  const pref = () => page.evaluate(() => JSON.parse(localStorage.getItem('gen2-label-print') || 'null'));
+  await page.waitForFunction(() => { const p = JSON.parse(localStorage.getItem('gen2-label-print') || 'null'); return !!p && p.band === 'end' && p.drawings === false; }, null, { timeout: 5000 });
+  // the plate open on it, showing that preference
+  await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });
+  const f = await (await page.locator('#ws-plate iframe').elementHandle()).contentFrame();
+  await f.waitForFunction(() => !!EMBED.snap && !!EMBED.applied && EMBED.applied['hw-band'] === 'end' && EMBED.applied['hw-profile'] === false, null, { timeout: 30_000 });
+  const sent = () => page.evaluate(() => window.__GEN2_PLATE__().log.slice());   // what the frame has sent the planner
+  // the faceplate to Classic Pro and back with the plate open: each snapshot switches the Studio's label type
+  for (const key of ['classicpro', 'edgelabel']) {
+    await face(key);
+    await f.waitForFunction((t) => labelType.id === t, key, { timeout: 30_000 });
+    await settle(page, 600);
+    assert.deepEqual(await pref(), { band: 'end', drawings: false }, `this browser's preference after the switch to ${key}`);
+    assert.deepEqual(await sent(), ['ready'], `nothing sent back by the switch to ${key}`);
+    assert.deepEqual(await f.evaluate(() => [gid('hw-band').value, gid('hw-profile').checked]), ['end', false], `the plate still shows it (${key})`);
+  }
+  // a change made on the plate is the visitor's, and still goes back
+  await f.locator('#hw-band').selectOption('wedge');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'wedge', null, { timeout: 5000 });
+  assert.deepEqual(await sent(), ['ready', 'setting']);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build rebuilds on the record', async () => {
   const { ctx, page } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });

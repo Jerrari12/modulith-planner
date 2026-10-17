@@ -417,3 +417,41 @@ Dated calls made while building, with who made them. The brief and the inventory
   - a keyboard path to place a label;
   - a compact panel foot for small screens;
   - the Studio's phone first screen.
+
+## 2026-10-17 (the Part Picker's round 3, live)
+
+- **Joey's rule (2026-10-17).**
+  - The Picker takes a value away only where a standard or physics rules it out.
+  - A value that is only hard to buy stays, with a warning.
+  - Custom is never refused.
+  - Round 2's not-sold removals became warnings under the same rule. Nylon heat-set inserts stay blocked (physics).
+  - His six round-3 answers are in the Picker repo's RESEARCH-HARDWARE-2026-10-16.md, section 6. The tables are in the
+    MODULITH vault's decisions.md, under "What the Part Picker offers".
+- **What changed, in the Picker:**
+  - 60869eb5, round 3:
+    - a hex head and a nut have no drive choice;
+    - connectors offer tin or gold contact plating;
+    - one ring size list per ring type;
+    - spring washer ranges follow the newest editions;
+    - inch lengths are suggested from commonly stocked ones.
+  - 9d05a7a5: only the looks a part can have ship. 240 finish variants stay out, and 80 gold-plating renders were added.
+  - fa512265: round 2's removals warn instead.
+  - Nothing in the planner's code changed. The planner's Part Picker dialog loads the Studio's parts/.
+- **Tests:**
+  - the Picker: 256 tests; 255 passed, 1 skipped;
+  - the Studio, on planner-plate with the republish staged: 18 files; 194 passed, 0 failed, 1 skipped.
+- **Deployed:**
+  1. The Studio: the republish was committed on labels-public in the ls-public worktree, as public main 8b29cb2b. Its
+     parts/SOURCE.json read fa512265 at 18:28:52Z.
+  2. The Picker repo's master was fast-forwarded to fa512265.
+  3. The Studio's source branch planner-plate carries the same republish: fb39932b, a cherry-pick of 8b29cb2b, pushed
+     to origin. Its parts/ tree is identical to 8b29cb2b's.
+- **Checked in production:**
+  - the round-3 blocks, warnings and Custom;
+  - a look a part can have loads (200), and a pruned one is gone (404);
+  - on planner.modulith.systems, the Part Picker dialog (parts/?embed=planner) reports ready, with open/1.
+- **Reviews:**
+  - the code: Sol 01a14a93 (2 of 2 held); Terra 01a14a99 (1, wrong); Sol 01a14ac2 (1 held); Terra 01a14ac4 (2, wrong);
+    Terra 01a14b05 (round 2's warnings);
+  - the vault entries: Sol 01a14aa0 (7 of 10 held); Terra 01a14aa6, 01a14ac8, 01a14b06 and 01a14b22.
+- **A caveat:** an open tab may still hold the old Picker. Reload it.
