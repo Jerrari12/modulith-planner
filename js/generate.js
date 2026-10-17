@@ -1248,9 +1248,9 @@ export function generateManifest(build) {
      occupied columns at any height, and a unit takes a cover on a side that lies on its run's outer edge. A gap in a
      tabletop makes two sections, each with its own two ends (2026-10-16); an upper unit inset from both edges takes
      none although its end walls show (rules.md). One cover per side at the unit's own height - a shelf's too, as the
-     bill counts it. That a tall cover fits a stacked shelf is not printed yet: its clip rows lie on the 28 mm half-row
-     grid, which suggests they meet each ring's windows (vault known-gaps.md, "Side covers"). test/side-covers.test.mjs
-     holds the two tools to the same count. */
+     bill counts it. Whether a tall cover's clips meet a stacked shelf's windows is unknown: nobody has measured where a
+     case's or an extender's windows sit, and no stacked shelf has worn one (vault known-gaps.md, "Side covers").
+     test/side-covers.test.mjs holds the two tools to the same count. */
   const occupied = new Set();
   units.forEach(u => { for (let c = u.col; c < u.col + u.w; c++) occupied.add(c); });
   const sideOf = u => [-1, 1].filter(s => s < 0 ? !occupied.has(u.col - 1) : !occupied.has(u.col + u.w));
