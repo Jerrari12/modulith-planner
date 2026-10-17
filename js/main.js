@@ -2140,7 +2140,7 @@ function accVerify(mode = 'stale') {
   } finally {
     acc.jitter = savedJitter;
     acc.blocked = true;
-    renderer.setAnimationLoop(renderLoop);   // see the note on renderLoop
+    renderer.setAnimationLoop(loopTick);   // see the note on renderLoop
   }
   /* ⚠ REPORTED TWICE, AND THE SECOND NUMBER IS THE ONE THAT MEANS SOMETHING.
      There is no MSAA on the scene target (see ACC_WARMUP), so at any pixel with
@@ -8561,6 +8561,7 @@ function setLabels(nb) {
   copyLabelFields(nb, build);
   originalBuild = structuredClone(build);
   refreshLabelTexts();
+  invalidateFrame();   // new label meshes: the idle gate redraws
   return true;
 }
 const UNIT_PICK = ['Drawer', 'ShelfInsert', 'Case', 'CaseExtender'];
@@ -8652,7 +8653,7 @@ function updateMeasure() { // render-loop: constant marker screen-size + label t
 const dims = { on: false, group: null, lines: {}, choice: '', hCorner: null, lastKey: null };
 function setDims(on) {
   dims.on = on && !assembledBox.isEmpty();
-  dims.choice = ''; dims.hCorner = null; dims.lastKey = null;
+  dims.choice = ''; dims.hCorner = null; dims.lastKey = null; invalidateFrame();
   if (dims.group) { scene.remove(dims.group); dims.group.traverse(o => o.geometry?.dispose()); dims.group = null; }
   for (const id of ['dim-w', 'dim-h', 'dim-l']) $(id).classList.add('hidden');
   if (!dims.on) return;
@@ -9685,6 +9686,7 @@ async function regenerate(pre) {
   goTo(keep, { animate: false });
   if (panelOpen) setChecklist(true); // restore the panel the user was just clicking in
   regenBusy = false;
+  invalidateFrame();   // the idle gate: a rebuild of the same part count changes nothing it compares
   syncBuildToPlanner(); // keep the opener planner tab in step (no-op if opened cold)
 }
 
@@ -10040,7 +10042,7 @@ const benchApi = !IS_BENCH ? null : ({
   applyQuality, applyStageTheme, quality: () => quality, stage: () => stageTheme,
   setHold: (on) => { benchHold = !!on; if (on) { perf.thrifty = false; qualityLocked = true; } },
   // stops and restarts the viewer's own loop, so the browser's bare frame cadence can be read (see renderLoop's note)
-  pauseLoop: (on) => renderer.setAnimationLoop(on ? null : renderLoop),
+  pauseLoop: (on) => renderer.setAnimationLoop(on ? null : loopTick),
   closePanel: () => setChecklist(false),
   bounds: () => ({ center: buildCenter, radius: buildRadius }),
   instanceCount: () => instances.size,
@@ -10158,10 +10160,44 @@ if (IS_EMBED && build) setTimeout(() => {
    `getAnimationLoop`, so anything that pauses the loop to drive frames by hand
    (accVerify, the film rig, a capture harness) has nothing to put back unless
    the callback has a name. Restoring `null` freezes the viewer permanently. */
+/* THE IDLE GATE. A frame is skipped when ALL hold: no tween, no outro cinema, no benchmark; the camera's pose, the
+   projection, the canvas size and the scene's identity (accRev, every invalidateFrame(), included) are what they were;
+   no input arrived; the progressive passes have converged (AO's jittered passes, Very High's accumulation, a pending
+   shadow-map refresh); no pulse is breathing; and the last change is IDLE_SETTLE_MS old. Two safety nets: any input or
+   finished load counts as a change, and an idle canvas still draws once every IDLE_KEEPALIVE_MS, so something that
+   changed without saying so shows within a second. ?idle=off restores drawing every frame (for diagnosis). */
+const IDLE_OFF = new URLSearchParams(location.search).get('idle') === 'off';
+const IDLE_SETTLE_MS = 600, IDLE_KEEPALIVE_MS = 1000;
+const idle = { sig: '', changedAt: 0, drawnAt: 0, inputRev: 0, skipped: 0, drawn: 0 };
+let inRenderLoop = false;   // renderLoop's depth (a canvas read inside a frame goes straight through)
+for (const ev of ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize', 'focus'])
+  addEventListener(ev, () => { idle.inputRev++; }, { passive: true, capture: true });
+{ const lm = THREE.DefaultLoadingManager; const onP = lm.onProgress, onL = lm.onLoad;
+  lm.onProgress = (...a) => { idle.inputRev++; if (onP) onP(...a); }; lm.onLoad = (...a) => { idle.inputRev++; if (onL) onL(...a); }; }
+function idleSettling() {
+  if (typeof aoWanted === 'function' && aoWanted() && (ao.blocked || ao.passes < (ao.accumMax || 0))) return true;
+  if (typeof accWanted === 'function' && accWanted() && acc.ok && acc.n < ACC_SAMPLES) return true;
+  if (renderer.shadowMap.enabled && renderer.shadowMap.needsUpdate) return true;
+  return false;
+}
+function idleFrame(now) {
+  if (IDLE_OFF || (IS_PART && !partView.posted)) return false;
+  const v = camera.view;
+  const sig = camera.position.toArray().concat(camera.quaternion.toArray(), [camera.zoom, camera.fov]).map((n) => n.toFixed(4)).join()
+    + '|' + (v && v.enabled ? [v.offsetX, v.offsetY, v.width, v.height].join() : '')
+    + '|' + canvas.width + 'x' + canvas.height + '|' + accRev + '|' + ao.rev + '|' + instances.size + '|' + cur + '|' + quality + '|' + stageTheme + '|' + idle.inputRev;
+  if (sig !== idle.sig) { idle.sig = sig; idle.changedAt = now; }
+  const busy = tweens.size > 0 || cinema.on || !!orbitBench || !!settleBench || perf.moving || !!plateStage.ringMat || idleSettling();
+  if (idle.force || busy || now - idle.changedAt < IDLE_SETTLE_MS || now - idle.drawnAt >= IDLE_KEEPALIVE_MS) { idle.force = false; idle.drawnAt = now; idle.drawn++; return false; }
+  idle.skipped++;
+  return true;
+}
+/* the animation loop's entry: renderLoop's body with its depth marked (a canvas read inside a frame must not re-enter) */
+function loopTick(now) { inRenderLoop = true; try { renderLoop(now); } finally { inRenderLoop = false; } }
 function renderLoop(now) {
   // offscreen part-preview cards stop rendering entirely (only after the ready
   // frame was posted — the site must never wait on a suspended first frame)
-  if (IS_PART && partView.posted && !partView.visible) return;
+  if (IS_PART && partView.posted && !partView.visible && !idle.force) return;   // (a canvas read forces its frame: Sol 01a14a28)
   resize();
   if (orbitBench) orbitBench.tick(now);   // the benchmark's camera, placed before anything this frame reads it
   if (settleBench) settleBench.tick(now);
@@ -10181,6 +10217,11 @@ function renderLoop(now) {
   updateDrawerDims();
   updateFpEnv();
   updateOverhangPulse(now);
+  // IDLE: nothing on screen can change, so the GPU rests and the canvas keeps showing the last frame (Joey 2026-10-17:
+  // the planner held ~40% of a laptop GPU with a still view - measured 120-240 full frames a second, 56 draw calls each
+  // on Balanced, with nothing changing). Everything above still runs every frame (damping, tweens, the DOM callouts);
+  // only the GPU work below waits.
+  if (idleFrame(now)) return;
   // ⚠ AO and the reflection are the only things here touching driver-dependent
   // features (render targets, depth textures, an override material). A throw
   // INSIDE setAnimationLoop kills the whole loop — the screen would freeze
@@ -10225,7 +10266,22 @@ function renderLoop(now) {
     postToEmbedder({ gen2: 'partReady' });
   }
 }
-renderer.setAnimationLoop(renderLoop);
+renderer.setAnimationLoop(loopTick);
+/* READING THE CANVAS DRAWS IT FIRST. preserveDrawingBuffer is off, so a WebGL canvas read on a frame the idle gate
+   skipped returns an EMPTY buffer - the screen keeps showing the last frame, but toDataURL / toBlob do not (the goldens
+   read 51 of 60 shots blank, 2026-10-17). A read renders one frame in the same task, so it always gets the picture.
+   Inside a frame (a read from a render callback) the buffer is already being drawn, so the read goes straight through:
+   no re-entry (Sol 01a14a28). */
+for (const m of ['toDataURL', 'toBlob']) {
+  const orig = canvas[m].bind(canvas);
+  canvas[m] = (...args) => {
+    if (!inRenderLoop) {
+      idle.force = true;
+      try { loopTick(performance.now()); } catch (e) { console.warn('[stage] the frame drawn for a canvas read failed', e); }
+    }
+    return orig(...args);
+  };
+}
 
 // the stage's interface - and, with ?debug=1, the dev-only hook it always was (mirrors the planner's
 // guarded test-hook convention)
@@ -10339,7 +10395,7 @@ renderer.setAnimationLoop(renderLoop);
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL

@@ -398,6 +398,27 @@ test('3D: a mouse drag picks up any unit - unselected, even while placing - and 
   await ctx.close();
 });
 
+test('the idle gate: a still view stops drawing, an edit draws again at once, a canvas read is never blank', async () => {
+  // Joey 2026-10-17: the planner held ~40% of a laptop GPU with nothing moving (measured: every frame redrawn, 120-240 a
+  // second). Now a still view draws about once a second (the safety net), and any change draws at once.
+  const { ctx, page, errors } = await open('build');
+  await settle(page, 4000);
+  const drawnIn = (ms) => page.evaluate(async (ms) => { const V = window.__GEN2_VIEWER__; const a = V.idleStats(); await new Promise((r) => setTimeout(r, ms)); const b = V.idleStats(); return { drawn: b.drawn - a.drawn, skipped: b.skipped - a.skipped }; }, ms);
+  const still = await drawnIn(3000);
+  assert.ok(still.drawn <= 6, `a still view draws about once a second: ${JSON.stringify(still)}`);
+  // an edit (no pointer or key input at all) draws again within the settle window
+  const busy = page.evaluate(async () => { const V = window.__GEN2_VIEWER__; const a = V.idleStats(); await new Promise((r) => setTimeout(r, 1500)); return V.idleStats().drawn - a.drawn; });
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; const right = Math.max(...s.placed.map((p) => p.x + p.w)); s.placed.push({ id: s.nextId++, x: right, y, w: 1, hh: 2, fill: 'decor', shelves: 0 }); s.gridW = right + 1; }, 'edit'));
+  assert.ok(await busy >= 3, 'an edit is drawn at once, not after the next safety-net frame');
+  // reading the canvas after a skipped frame returns the picture, not an empty buffer
+  await settle(page, 2500);
+  const png = await page.evaluate(() => document.querySelector('canvas').toDataURL('image/png').length);
+  const blank = await page.evaluate(() => { const c = document.createElement('canvas'); const g = document.querySelector('canvas'); c.width = g.width; c.height = g.height; return c.toDataURL('image/png').length; });
+  assert.ok(png > blank * 5, `a canvas read is the picture (${png} bytes vs a blank ${blank})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Build: a unit placed through the store reaches the stage; move, remove and undo follow; the issue card speaks', async () => {
   const { ctx, page, errors } = await open('build');
   const n0 = await units(page);
