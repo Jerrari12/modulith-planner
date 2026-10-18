@@ -16,6 +16,10 @@
  *                (previewPalette: never saved, never in the history); a click opens its details
  *   details      in the gallery's place: the big card, the filament list with buy links (Shop this look, moved here
  *                from the old preset rows), the notes, Apply (one undo step), Delete for a saved look
+ *   surprise     in the gallery's spot (step 5): a mood, a filament cap, "only filaments I own" (an owned list kept in
+ *                this browser, edited here), locks on the regions that drive a look, and three generated candidates
+ *                (js/colors/surprise.js, under the preset rules) shown on the model like the tray's finalists; Keep
+ *                applies one as a scheme, More like this keeps its shell and face, Try again rolls three more
  *   stage        clicking a part opens the part card above the Dock: name, count, current filament, region chips
  *                (Body + the part's zones), Open the drawer; a chip opens the picker for that region
  *   right        the filament picker replaces the inspector: title, Apply to (all / only this one), search, In this
@@ -30,6 +34,8 @@ import { toolbar } from '../ui/toolbar.js';
 import { FILAMENT_DB } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
+import { surprise, LOCKS, MOODS, CAPS, shortName } from '../colors/surprise.js';
+import { readOwned, writeOwned } from '../state/owned.js';
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
@@ -126,6 +132,14 @@ let lastLook = null;   // the look last chosen by name, for "<look> · edited" (
    the model. */
 const TRAY_MAX = 3;
 let trayLooks = [];
+/* SURPRISE ME (the Colors plan's step 5, 2026-10-18): the settings and the three candidates, kept across remounts. `locks`
+   is role -> filament (see LOCKS: the regions a visitor can hold as they are); `like` the shell and face "More like this"
+   started from; `cands` the looks as the gallery lists them ({ id, kind, name, colors, over }), plus their roles. */
+const sp = { mood: 'playful', cap: 3, ownedOnly: false, locks: {}, like: null, seed: 0, cands: [], short: false };
+const MOOD_LABEL = { subtle: 'Subtle', playful: 'Playful', wild: 'Wild' };
+const MOOD_HINT = { subtle: 'Neutrals and one quiet colour', playful: 'A neutral shell with a bright colour or two', wild: 'A coloured shell, hues far apart' };
+const LABELS = new Set(FILAMENT_DB.flatMap((b) => b.colors.map((c) => c.label)));
+const storage = () => { try { return localStorage; } catch { return null; } };   // a browser that blocks storage throws on the read itself
 
 export function mountColors(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
@@ -133,13 +147,16 @@ export function mountColors(stage, ctx) {
   // scope: 'all' (the build) | 'unit' (the clicked unit only); gallery: false | 'featured' | 'mine' | 'all'; detail: the look
   // whose details are open; fmax: the filament-count filter (0 = any); more: the Download / Upload / Share row shown
   // tray: the compare tray is open; flip: the index of the finalist shown on the model (null = the chosen look)
-  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null };
+  // surprise: the Surprise me panel is open; owning: its owned-filaments editor is up (oq its search); sshow: the index of
+  // the candidate pinned on the model (null = none)
+  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '' };
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
   root.prepend(topbar(stage, { ...ctx, active: 'colors', say, soon, signal }));
   const cards = cardPump(stage);
-  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_CARDS__ = cards;   // the pacing check reads what the gallery still owes
+  const debug = new URLSearchParams(location.search).get('debug');
+  if (debug) { window.__GEN2_CARDS__ = cards; window.__GEN2_SURPRISE__ = sp; }   // the pacing check reads what the gallery still owes; the step-5 checks read the candidates
 
   /* ---------------- the palette, as one undo step each ---------------- */
   const pal = () => stage.palette();
@@ -184,7 +201,7 @@ export function mountColors(stage, ctx) {
      with no source, "Custom look" */
   function lookName(p) {
     if (!p.on || !Object.keys(p.colors).length) return 'Instruction colors';
-    const hit = looksList().find((l) => wears(p, l));
+    const hit = looksList().find((l) => wears(p, l)) || sp.cands.find((c) => wears(p, c));   // a kept Surprise me candidate is a look too
     if (hit) return hit.name;
     return lastLook ? `${lastLook} · edited` : 'Custom look';
   }
@@ -215,7 +232,7 @@ export function mountColors(stage, ctx) {
     ]));
     look.appendChild(el('div.row4', {}, [
       el('button.key.sm.strong.browse', { title: 'Every look, shown on this build', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']),
-      el('button.key.sm.surprise', { disabled: true, title: 'Surprise me comes with a later step of the Colors plan' }, [icon('sparkle', { size: 14 }), 'Surprise me']),
+      el('button.key.sm.surprise', { title: 'Three new looks for this build, under your rules', onclick: openSurprise }, [icon('sparkle', { size: 14 }), 'Surprise me']),
       el('button.key.sm.save', { text: 'Save', title: 'Keep these colours as a look of your own, to reuse on another build', disabled: !p.on || !Object.keys(p.colors).length, onclick: () => { st.saving = !st.saving; renderPanel(); } }),
       el('button.key.sm.more', { text: '⋯', title: 'Download, Upload, Share', 'aria-label': 'More', 'aria-expanded': String(st.more), onclick: () => { st.more = !st.more; renderPanel(); } }),
     ]));
@@ -289,7 +306,7 @@ export function mountColors(stage, ctx) {
   const gallery = el('aside.glass', { id: 'ws-gallery', role: 'dialog', 'aria-label': 'Looks', hidden: true });
   root.appendChild(gallery);
   // the gallery and the tray never show together (Astra: contextual panels do not pile up over the model); the tray's looks keep
-  function openGallery(tab) { st.gallery = tab || 'featured'; st.detail = null; st.tray = false; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(gallery); else gallery.querySelector('.gq')?.focus(); }
+  function openGallery(tab) { st.gallery = tab || 'featured'; st.detail = null; st.tray = false; st.flip = null; st.surprise = false; st.sshow = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(gallery); else gallery.querySelector('.gq')?.focus(); }
   function closeGallery() { st.gallery = false; st.detail = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(gallery); phone.open(panel); } }   // the phone comes back to the Colors sheet
 
   /* ---------------- the compare tray (step 4): two or three finalists, flipped on a still model ---------------- */
@@ -308,7 +325,7 @@ export function mountColors(stage, ctx) {
     trayLooks.splice(i, 1);
     if (st.flip === i) { st.flip = null; stage.endPreview?.(); } else if (st.flip != null && st.flip > i) st.flip--;
   }
-  function openTray() { st.gallery = false; st.detail = null; st.tray = true; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(tray); }
+  function openTray() { st.gallery = false; st.detail = null; st.surprise = false; st.sshow = null; st.tray = true; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(tray); }
   function closeTray() { st.tray = false; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(tray); phone.open(panel); } }   // the phone comes back to the Colors sheet
   /* a flip SHOWS a finalist (previewPalette: never saved, never in the history) and touches nothing else: no renderAll, so
      the safe area is never set and the camera stays where the visitor left it (the plan: "the camera held still") */
@@ -367,7 +384,7 @@ export function mountColors(stage, ctx) {
   }
   const disclosure = (fc) => el('span.disc', { text: fc.filaments.some((f) => /polymaker/i.test(f.url)) ? 'Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission at no extra cost to you.' : fc.filaments.some((f) => isPaid(f.url)) ? 'Paid links · I earn a small commission at no extra cost to you.' : '' });
   function renderGallery() {
-    document.documentElement.classList.toggle('ws-gallery', !!st.gallery && !phone);   // the view tools step aside (app.css)
+    document.documentElement.classList.toggle('ws-gallery', (!!st.gallery || st.surprise) && !phone);   // the view tools step aside (app.css); Surprise me takes the gallery's spot
     if (!st.gallery) { gallery.hidden = true; return; }
     gallery.hidden = false;
     gallery.replaceChildren();
@@ -442,6 +459,122 @@ export function mountColors(stage, ctx) {
       el('p.note', { text: 'Appearance only: whether a filament suits a part (strength, heat, flex) is a separate question.' }),
       translucent.length ? el('p.note', { text: `${translucent.join(', ')} ${translucent.length === 1 ? 'is' : 'are'} translucent; the card shows ${translucent.length === 1 ? 'it' : 'them'} solid.` }) : null,
     );
+  }
+
+  /* ---------------- Surprise me (step 5): three looks under the visitor's constraints ---------------- */
+  const sur = el('aside.glass', { id: 'ws-surprise', role: 'dialog', 'aria-label': 'Surprise me', hidden: true });
+  root.appendChild(sur);
+  const owned = () => readOwned(storage(), LABELS);
+  // the panel takes the gallery's spot and closes it and the tray (contextual panels do not pile up over the model)
+  function openSurprise() { st.gallery = false; st.detail = null; st.tray = false; st.flip = null; st.surprise = true; st.owning = false; st.sshow = null; stage.endPreview?.(); if (!sp.cands.length || !ownedHolds()) roll(); renderAll(); if (phone) phone.open(sur); }
+  function closeSurprise() { if (st.owning) leaveOwned(); st.surprise = false; st.owning = false; st.sshow = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(sur); phone.open(panel); } }   // the phone comes back to the Colors sheet
+  /* "only filaments I own" against the candidates and the list as they stand: false when the list has shrunk under them (a
+     filament unticked, the list cleared), so the candidates are rolled again rather than kept to be Kept (Sol 01a150df) */
+  function ownedHolds() {
+    if (!sp.ownedOnly) return true;
+    const have = new Set(owned()); if (have.size < 2) return false;
+    const held = new Set(Object.values(sp.locks).map((f) => f.name));
+    return sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name) || held.has(f.name)));
+  }
+  /* every way out of the owned editor (its Back, Escape, the close button) goes through here: the switch drops when the list
+     is under two, and the candidates are rolled again when the list changed under the switch */
+  function leaveOwned() { st.owning = false; if (sp.ownedOnly && owned().length < 2) sp.ownedOnly = false; if (sp.ownedOnly && owned().join('|') !== st.ownedWas) roll(); }
+  function enterOwned() { st.owning = true; st.ownedWas = owned().join('|'); renderSurprise(); if (phone) phone.refresh(); }
+  /* a roll: three looks for the settings, a new seed each time; "More like this" keeps a candidate's shell and face. A roll
+     never touches the safe area (no renderAll), so the camera stays (the plan: a look is judged on a still model) */
+  function roll(like = null) {
+    sp.like = like; sp.seed = (Math.random() * 2 ** 32) >>> 0;
+    const r = surprise({ mood: sp.mood, cap: sp.cap, owned: sp.ownedOnly ? owned() : null, locks: sp.locks, like, seed: sp.seed });
+    sp.cands = r.looks.map((l, i) => ({ id: `surprise:${sp.seed}:${i}`, kind: 'surprise', name: l.name, colors: l.colors, over: {}, roles: l.roles }));
+    sp.short = r.short;
+    st.sshow = null; stage.endPreview?.();
+  }
+  const reroll = (like = null) => { roll(like); renderSurprise(); if (phone) phone.refresh(); };
+  /* a candidate SHOWN on the model (previewPalette, as a tray flip): hovering shows one while none is pinned; a click pins it */
+  function showCand(i) {
+    if (i == null || i === st.sshow) { st.sshow = null; stage.endPreview?.(); }
+    else { st.sshow = i; stage.previewPalette(asLook(sp.cands[i])); }
+    renderSurprise(); if (phone) phone.refresh();
+  }
+  /* Keep: the look on the build as a scheme of its own (one undo step; commitColors flushes around it); the panel stays and
+     the card reads ACTIVE, so the next one can be compared against it */
+  function keep(c) { st.sshow = null; applyLook({ name: c.name, apply: () => commitColors('scheme', () => stage.setPalette({ colors: c.colors, over: {}, on: true })) }); renderAll(); }
+  function renderSurprise() {
+    if (!st.surprise) { sur.hidden = true; return; }
+    sur.hidden = false; sur.replaceChildren();
+    if (st.owning) { renderOwned(); return; }
+    const p = pal(); const list = owned();
+    const have = new Set(stage.keysInBuild().filter((k) => !k.locked).map((k) => k.key));
+    sur.append(
+      el('div.head', {}, [el('h2', { text: 'Surprise me' }), el('span.sub', { text: 'Three looks for this build.' }), el('button.x', { title: 'Close', 'aria-label': 'Close Surprise me', onclick: closeSurprise }, [icon('x', { size: 16 })])]),
+      el('div.srow', {}, [el('span.lbl', { text: 'Mood' }), el('div.track.seg3.mood', { role: 'group', 'aria-label': 'Mood' }, MOODS.map((m) => el('button.seg.sm' + (sp.mood === m ? '.on' : ''), { text: MOOD_LABEL[m], title: MOOD_HINT[m], 'aria-pressed': String(sp.mood === m), onclick: () => { if (sp.mood !== m) { sp.mood = m; reroll(); } } })))]),
+      // the cap is the visitor's: the planner cannot know a printer's colour count (the plan)
+      el('div.srow', {}, [el('span.lbl', { text: 'Filaments' }), el('div.track.seg3.cap', { role: 'group', 'aria-label': 'Filaments at most' }, CAPS.map((c) => el('button.seg.sm' + (sp.cap === c ? '.on' : ''), { text: `≤ ${c}`, title: `At most ${c} filaments, printed · you know your printer's colours`, 'aria-pressed': String(sp.cap === c), onclick: () => { if (sp.cap !== c) { sp.cap = c; reroll(); } } })))]),
+      el('div.srow.ownedrow', {}, [
+        el('label.chk', { title: list.length < 2 ? 'Tick two or more filaments you own first' : 'Only the filaments on your list' }, [
+          el('input.ownedonly', { type: 'checkbox', checked: sp.ownedOnly && list.length >= 2 ? true : null, disabled: list.length < 2, onchange: (e) => { sp.ownedOnly = e.target.checked; reroll(); } }),
+          el('span', { text: 'Only filaments I own' }), el('span.cnt', { text: ` (${list.length})` }),
+        ]),
+        el('button.key.sm.edit', { title: 'Tick the filaments you have', onclick: enterOwned }, [icon('pencil-simple', { size: 14 }), 'Edit']),
+      ]),
+      // locks: the regions that drive a look and that this build has, each holding the filament it wears now
+      el('div.locks', {}, [el('span.lbl', { text: 'Lock', title: 'Hold a region at the filament it wears now; every look keeps it' }), el('div.chips', {}, LOCKS.filter(([key]) => have.has(key)).map(([key, role, label]) => {
+        const held = sp.locks[role]; const cur = worn(key) || (key.includes(':') ? worn(key.split(':')[0]) : null); const f = held || cur;
+        return el('button.lchip' + (held ? '.on' : ''), { disabled: !held && !cur, 'aria-pressed': String(!!held), title: held ? `${label} stays ${short(held.name)} · click to free it` : cur ? `Keep the ${label.toLowerCase()} ${short(cur.name)} in every look` : `Pick a filament for the ${label.toLowerCase()} first`, onclick: () => { if (held) delete sp.locks[role]; else sp.locks[role] = { name: cur.name, hex: cur.hex, url: cur.url }; reroll(); } }, [icon('lock-simple', { size: 12 }), f ? el('i', { style: `background:${f.hex}` }) : null, label]);
+      }))]),
+    );
+    const cands = el('div.cands', { role: 'list' });
+    sp.cands.forEach((c, i) => {
+      const on = p.on && wears(p, c); const shown = st.sshow === i;
+      const cv = el('canvas.render', { width: CARD.w, height: CARD.h, 'aria-hidden': 'true' });
+      cards.want(cv, asLook(c), CARD.w, CARD.h);
+      const count = stage.filamentsInBuild(asLook(c)).count;   // the one count (D2): what THIS build prints in under the look
+      cands.appendChild(el('div.cand' + (shown ? '.on' : ''), { role: 'listitem' }, [
+        el('button.pick', { title: shown ? 'Put the chosen look back' : `Show “${c.name}” on the model`, 'aria-pressed': String(shown),
+          onpointerenter: () => { if (st.sshow == null) stage.previewPalette(asLook(c)); }, onpointerleave: () => { if (st.sshow == null) stage.endPreview?.(); }, onclick: () => showCand(i) }, [
+          cv,
+          el('span.lname', { text: c.name, title: c.name }),
+          el('div.lrow', {}, [el('span.lcount', { text: n(count, 'filament') }), on ? el('span.badge.active', { text: 'ACTIVE' }) : shown ? el('span.badge.shown', { text: 'SHOWN' }) : null]),
+        ]),
+        el('div.cacts', {}, [
+          el('button.key.sm.strong.keep', { text: on ? 'Applied' : 'Keep', disabled: on, title: 'Dress the whole build in this look · one undo step', onclick: () => keep(c) }),
+          el('button.key.sm.like', { text: 'More like this', title: `Three more with ${shortName(c.roles.face)} on ${shortName(c.roles.shell)}`, onclick: () => reroll({ shell: c.roles.shell, face: c.roles.face }) }),
+        ]),
+      ]));
+    });
+    const fix = ' Free a lock, allow more filaments or add to the filaments you own.';
+    if (sp.cands.length) sur.appendChild(cands);
+    if (sp.short) sur.appendChild(el('p.note.short', { text: (sp.cands.length ? `Only ${n(sp.cands.length, 'look fits', 'looks fit')} these settings.` : 'No look fits these settings.') + fix }));
+    sur.appendChild(el('div.sacts', {}, [el('button.key.sm.strong.again', { title: 'Three new looks', onclick: () => reroll() }, [icon('arrow-clockwise', { size: 14 }), 'Try again']), el('span.note', { text: 'Hover or tap a look to see it on the model. The view stays put.' })]));
+  }
+  /* the owned list: every catalog colour by brand, ticked or not; kept in this browser (js/state/owned.js) */
+  function renderOwned() {
+    const count = el('span.sub.ocount');
+    const sync = () => { const l = owned(); count.textContent = n(l.length, 'filament'); clear.disabled = !l.length; };
+    const back = () => { leaveOwned(); renderSurprise(); if (phone) phone.refresh(); };
+    const clear = el('button.key.sm.clear', { text: 'Clear all', title: 'Untick every filament', onclick: () => { writeOwned(storage(), []); sync(); fill(); } });
+    sur.append(
+      el('div.head', {}, [el('button.back.key.sm', { title: 'Back to Surprise me', onclick: back }, ['← Surprise me']), el('h2', { text: 'Filaments I own' }), count, el('button.x', { title: 'Close', 'aria-label': 'Close Surprise me', onclick: closeSurprise }, [icon('x', { size: 16 })])]),
+      el('input.search.oq', { type: 'search', placeholder: 'Search filaments', value: st.oq, 'aria-label': 'Search filaments', oninput: (e) => { st.oq = e.target.value; fill(); } }),
+    );
+    const brands = el('div.brands'); sur.appendChild(brands);
+    // the brands alone follow the search box, so the box is never rebuilt under the caret (the gallery's lesson, Sol 01a14f91)
+    const fill = () => {
+      brands.replaceChildren();
+      const q = st.oq.trim().toLowerCase(); const have = new Set(owned());
+      let any = false;
+      for (const brand of FILAMENT_DB) {
+        const colors = q ? brand.colors.filter((f) => `${brand.brand} ${brand.line} ${f.label}`.toLowerCase().includes(q)) : brand.colors;
+        if (!colors.length) continue;
+        any = true;
+        const mine = brand.colors.filter((f) => have.has(f.label)).length;
+        brands.appendChild(el('div.bhead', {}, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${mine ? `${mine} of ${brand.colors.length}` : brand.colors.length}` })])]));
+        brands.appendChild(el('div.swatches', {}, colors.map((f) => { const on = have.has(f.label); return el('button.sw' + (on ? '.own' : ''), { style: `background:${f.hex}`, title: f.label + (on ? ' · owned' : ''), 'aria-label': f.label, 'aria-pressed': String(on), onclick: () => { const cur = owned(); writeOwned(storage(), on ? cur.filter((x) => x !== f.label) : [...cur, f.label]); sync(); fill(); } }); })));
+      }
+      if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
+    };
+    fill(); sync();
+    sur.appendChild(el('div.ofoot', {}, [clear, el('span.note', { text: 'Kept in this browser. With two or more ticked, Surprise me can stay inside your shelf.' })]));
   }
 
   /* ---------------- the picker (replaces the inspector) ---------------- */
@@ -575,6 +708,7 @@ export function mountColors(stage, ctx) {
     { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}` : typePlural(st.key)}` : 'Filament' },
     { el: gallery, title: () => st.detail ? st.detail.name : 'Looks' },
     { el: tray, title: () => `Compare · ${trayLooks.length} of ${TRAY_MAX}` },
+    { el: sur, title: () => st.owning ? 'Filaments I own' : 'Surprise me' },
   ] }) : null;
   if (phone) phone.onLayout(safe);
   /* the gallery never moves the safe area (the plan: a change refits the camera, and a hovered look must be judged on a
@@ -582,7 +716,7 @@ export function mountColors(stage, ctx) {
   /* the open tray lifts the safe area's floor ONCE, when it opens (the stage refits only a camera the visitor has not taken);
      a flip never calls this, so the camera stays where the visitor left it between finalists (step 4) */
   function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
-  function renderAll() { renderPanel(); renderGallery(); renderTray(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
+  function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
@@ -590,6 +724,7 @@ export function mountColors(stage, ctx) {
     if (e.key === 'Escape') {
       if (st.detail) { st.detail = null; stage.endPreview?.(); renderGallery(); if (phone) phone.refresh(); return; }
       if (st.gallery) { closeGallery(); return; }
+      if (st.surprise) { if (st.owning) { leaveOwned(); renderSurprise(); if (phone) phone.refresh(); return; } closeSurprise(); return; }
       if (st.tray) { closeTray(); return; }
       if (st.shop) { st.shop = false; renderShop(); renderCard(); return; }
       if (st.key) { closePicker(); return; }
@@ -611,5 +746,6 @@ export function mountColors(stage, ctx) {
     unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace
     get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
     get tray() { return trayLooks.map((t) => t.name); },   // the finalists, for a check
+    get surprise() { return { names: sp.cands.map((c) => c.name), colors: sp.cands.map((c) => c.colors), mood: sp.mood, cap: sp.cap, ownedOnly: sp.ownedOnly, locks: Object.keys(sp.locks), short: sp.short, seed: sp.seed }; },   // the candidates, for a check
   };
 }

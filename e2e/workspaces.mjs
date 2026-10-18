@@ -1810,6 +1810,119 @@ test('Colors step 4 on the phone: the tray is a sheet of its own, opened from th
   await ctx.close();
 });
 
+/* The Colors plan's step 5 (2026-10-18): Surprise me. Three generated candidates for THIS build under a mood, a filament
+   cap, locks and (on the phone case) the owned list; shown on the model like the tray's finalists (previewPalette: never
+   chosen), with the camera and the safe area untouched; Keep is one undo step; the generator's rules are the unit test's
+   (test/surprise.test.mjs), this case proves the workspace around it. */
+test('Colors step 5: Surprise me draws three candidates of this build, a hovered one is shown and not chosen, the cap and a lock hold, Keep is one undo step, the camera stays', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  const drawn3 = () => page.waitForFunction(() => document.querySelectorAll('#ws-surprise .cand canvas.drawn').length === 3, null, { timeout: 30_000 });
+  const before = await page.evaluate(() => ({ cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors) }));
+  await page.locator('#ws-colors .surprise').click();
+  await drawn3();
+  const first = await page.evaluate(() => {
+    const sp = window.__GEN2_SURPRISE__;
+    const cards = [...document.querySelectorAll('#ws-surprise .cand')];
+    return { names: cards.map((c) => c.querySelector('.lname').textContent), counts: cards.map((c) => +c.querySelector('.lcount').textContent.split(' ')[0]), stray: [...document.querySelector('#ws-surprise').childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent), mood: sp.mood, cap: sp.cap, galleryHidden: document.querySelector('#ws-gallery').hidden, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea) };
+  });
+  assert.equal(new Set(first.names).size, 3, `three candidates, named apart: ${first.names.join(' / ')}`);
+  assert.ok(first.counts.every((c) => c >= 1 && c <= first.cap), `every candidate within the cap of ${first.cap} on this build (${first.counts.join(', ')})`);
+  assert.deepEqual(first.stray, [], 'no stray text in the panel');
+  assert.ok(first.galleryHidden, 'the panel takes the gallery\'s spot; the gallery is closed');
+  assert.equal(first.safe, before.safe, 'opening the panel leaves the safe area alone');
+  assert.equal(first.cam, before.cam, 'and the camera');
+  // hover: shown, not chosen
+  await page.locator('#ws-surprise .cand .pick').nth(0).hover();
+  await settle(page, 300);
+  const hovered = await page.evaluate(() => ({ previewing: window.__GEN2_VIEWER__.previewing, caseHex: window.__GEN2_VIEWER__.activeHex('Case'), palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), canUndo: window.__GEN2_STORE__.canUndo, candCase: window.__GEN2_SURPRISE__.cands[0].colors.Case.hex }));
+  assert.ok(hovered.previewing && hovered.caseHex.toLowerCase() === hovered.candCase.toLowerCase(), `the model wears the candidate's case while hovered (${hovered.caseHex} for ${hovered.candCase})`);
+  assert.equal(hovered.palette, before.palette, 'the palette is not chosen');
+  assert.equal(hovered.canUndo, false, 'nothing in the history');
+  await page.mouse.move(900, 400);
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'leaving the card puts the chosen look back');
+  // Try again: three others, the camera and the safe area still where they were
+  await page.locator('#ws-surprise .again').click();
+  await drawn3();
+  const again = await page.evaluate(() => ({ names: [...document.querySelectorAll('#ws-surprise .cand .lname')].map((x) => x.textContent), cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), previewing: window.__GEN2_VIEWER__.previewing }));
+  assert.notDeepEqual(again.names, first.names, 'Try again rolls three others');
+  assert.equal(again.cam, before.cam, 'the camera across Try again'); assert.equal(again.safe, before.safe, 'the safe area across Try again');
+  assert.equal(again.previewing, false);
+  // the cap at 2: every candidate prints in two
+  await page.locator('#ws-surprise .cap .seg').nth(0).click();
+  await drawn3();
+  const capped = await page.evaluate(() => ({ counts: [...document.querySelectorAll('#ws-surprise .cand .lcount')].map((x) => +x.textContent.split(' ')[0]), whole: window.__GEN2_SURPRISE__.cands.map((c) => new Set(Object.entries(c.colors).filter(([k]) => k !== 'Magnet' && k !== 'Screw').map(([, f]) => f.name)).size) }));
+  assert.ok(capped.counts.every((c) => c <= 2) && capped.whole.every((w) => w <= 2), `the cap of 2 holds on the build (${capped.counts.join(', ')}) and over the whole look (${capped.whole.join(', ')})`);
+  // a lock on the case: every candidate keeps the case the build wears
+  await page.locator('#ws-surprise .lchip', { hasText: 'Case' }).click();
+  await drawn3();
+  const locked = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const sp = window.__GEN2_SURPRISE__; return { held: sp.locks.shell && sp.locks.shell.name, caseNow: v.palette().colors.Case.name, cases: sp.cands.map((c) => c.colors.Case.name), extenders: sp.cands.map((c) => c.colors.CaseExtender.name), chipOn: document.querySelector('#ws-surprise .lchip.on')?.textContent }; });
+  assert.equal(locked.held, locked.caseNow, 'the lock holds the case the build wears');
+  assert.ok(locked.cases.every((c) => c === locked.caseNow) && locked.extenders.every((c) => c === locked.caseNow), `every candidate keeps it (${locked.cases.join(', ')})`);
+  assert.equal(locked.chipOn, 'Case');
+  // Keep: one undo step, the panel named after the candidate, Undo takes it back
+  const keepName = await page.locator('#ws-surprise .cand .lname').nth(0).textContent();
+  await page.locator('#ws-surprise .keep').nth(0).click();
+  await settle(page, 600);
+  const kept = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const sp = window.__GEN2_SURPRISE__; return { palette: JSON.stringify(v.palette().colors), cand: JSON.stringify(sp.cands[0].colors), lname: document.querySelector('#ws-colors .lname').textContent, canUndo: window.__GEN2_STORE__.canUndo, previewing: v.previewing, badge: document.querySelector('#ws-surprise .cand .badge')?.textContent, keepBtn: document.querySelector('#ws-surprise .keep').textContent, panelOpen: !document.querySelector('#ws-surprise').hidden }; });
+  assert.equal(kept.palette, kept.cand, 'the build wears the kept look');
+  assert.equal(kept.lname, keepName, 'the panel is named after it');
+  assert.ok(kept.canUndo && !kept.previewing && kept.badge === 'ACTIVE' && kept.keepBtn === 'Applied' && kept.panelOpen, `kept: ${JSON.stringify(kept)}`);
+  await page.keyboard.press('Control+Z');
+  await settle(page, 600);
+  const undone = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), lname: document.querySelector('#ws-colors .lname').textContent, canUndo: window.__GEN2_STORE__.canUndo, presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
+  assert.equal(undone.palette, before.palette, 'one Undo restores the palette');
+  assert.equal(undone.lname, 'The Jerrari'); assert.equal(undone.canUndo, false, 'Keep was exactly one step');
+  assert.deepEqual(undone.presetEvents, [], 'no candidate, hover or Keep sent a preset event');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned list is ticked in it and "only filaments I own" keeps every candidate inside it; closing returns to the Colors sheet', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .surprise', { timeout: 30_000 });
+  await page.locator('#ws-colors .surprise').click();
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Surprise me/);
+  await page.waitForFunction(() => document.querySelectorAll('#ws-surprise .cand canvas.drawn').length === 3, null, { timeout: 30_000 });
+  await page.locator('#ws-surprise .cand .pick').nth(0).click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'a tap shows the candidate on the phone');
+  assert.equal(await page.evaluate(() => document.querySelector('#ws-surprise .ownedonly').disabled), true, 'with nothing owned the switch is off');
+  await page.locator('#ws-surprise .edit').click();
+  await page.waitForSelector('#ws-surprise .sw', { timeout: 5000 });
+  assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Filaments I own/, 'the sheet is titled after the editor');
+  for (const label of ['Elegoo PLA Black', 'Printed Solid Mystery Orange', 'Panchroma Cold White']) await page.locator(`#ws-surprise .sw[aria-label="${label}"]`).click();
+  assert.match(await text(page, '#ws-surprise .ocount'), /3 filaments/);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gen2-owned')).labels.length), 3, 'the list is kept in this browser');
+  await page.locator('#ws-surprise .back').click();
+  await page.waitForSelector('#ws-surprise .ownedonly:not([disabled])', { timeout: 5000 });
+  await page.locator('#ws-surprise .ownedonly').click();
+  await page.waitForFunction(() => { const sp = window.__GEN2_SURPRISE__; return sp.ownedOnly && sp.cands.length && [...document.querySelectorAll('#ws-surprise .cand canvas')].every((c) => c.classList.contains('drawn')); }, null, { timeout: 30_000 });
+  const owned = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name))), n: sp.cands.length, short: sp.short, note: document.querySelector('#ws-surprise .short')?.textContent || null }; });
+  assert.ok(owned.within, 'every candidate prints only in owned filaments');
+  assert.ok(!owned.short || /fit these settings/.test(owned.note), `fewer than three is said, never hidden (${owned.n}: ${owned.note})`);
+  // the list shrinks under the switch and the editor is left by its close button, not Back: the candidates are rolled again
+  // inside the new list when the panel reopens (Sol 01a150df: Escape and close skipped the re-roll, so Keep could apply a
+  // filament no longer owned)
+  await page.locator('#ws-surprise .edit').click();
+  await page.waitForSelector('#ws-surprise .sw', { timeout: 5000 });
+  await page.locator('#ws-surprise .sw[aria-label="Printed Solid Mystery Orange"]').click();
+  await page.locator('#ws-surprise .head .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden, null, { timeout: 10_000 });
+  await page.locator('#ws-colors .surprise').click();
+  await page.waitForFunction(() => { const sp = window.__GEN2_SURPRISE__; return document.querySelector('#ws-surprise').classList.contains('open') && (!sp.cands.length || [...document.querySelectorAll('#ws-surprise .cand canvas')].every((c) => c.classList.contains('drawn'))); }, null, { timeout: 30_000 });
+  const shrunk = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { have: [...have], ownedOnly: sp.ownedOnly, within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name))), n: sp.cands.length }; });
+  assert.deepEqual(shrunk.have, ['Elegoo PLA Black', 'Panchroma Cold White']);
+  assert.ok(shrunk.ownedOnly && shrunk.within, `after the list shrank, every candidate is inside it (${shrunk.n} candidates)`);
+  await page.locator('#ws-surprise .head .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* Joey, 2026-10-18: "lets just hide makerworld and cults for now until eventually i upload more models there". Few parts
    have a page on either, and choosing one in the Parts list turned most rows into a site search. */
 test('Parts and the viewer offer and link only Printables and Thangs (MakerWorld and Cults 3D are hidden)', async () => {

@@ -819,3 +819,58 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Live:** run 39133529005 green. Checked in production with saved choices of both hidden stores: the Parts list
   shows Printables and Thangs with Printables on, and so does the viewer's picker; no link to either store anywhere;
   no page errors.
+
+## 2026-10-18 (Colors, step 5 of the redesign plan: Surprise me, with constraints)
+
+- **Joey's go:** "continue with colors step 5", the evening the batch of fixes went live. The plan's step 5 as approved
+  (COLORS-PLAN.md §4): lock colours or parts; Subtle, Playful or Wild; a cap of 2, 3 or 4 filaments set by the visitor
+  (the planner cannot know a printer's colour count); optionally only filaments the visitor owns, a new list kept
+  outside the vendored catalog and keyed by label; three candidates with Keep, More like this and Try again; generated
+  looks under the preset rules (the deck at 4.5:1 from inside the look, lower and upper parts sharing a colour, the
+  extender, the lip and the side-cover core in the case colour, the side-cover face as D1 reads it).
+- **The generator is pure and seeded** (`js/colors/surprise.js`): a look is built from roles (shell, drawer, face,
+  grip accent, accent, handle, label and its text, the small parts, the deck, the bought hardware) and written out to
+  the 27 keys every preset sets, so the product rules hold by construction and are checked once more before a look
+  leaves (`checkLook`). `test/surprise.test.mjs` re-states every rule independently of the generator and holds 6,800
+  looks (3 moods × 3 caps × 3 catalogs × 100 seeds) to them: 100 % pass, and the share of settings that return fewer
+  than three is printed, never hidden. The study's colour maths (CIELAB, CIEDE2000 against the 34 Sharma pairs, WCAG
+  contrast) moved into the runtime as `js/colors/colour.js`.
+- **Moods read the catalog in LCh:** neutral under C 10, muted to 25, mid to 45, vivid above. Subtle: a neutral or
+  muted shell, nothing vivid, at most one colour above C 25, hues within 60°. Playful: a neutral shell, the rest neutral
+  or vivid with at least one vivid, in a harmony (hues within 40° or 100–180° apart). Wild: a mid or vivid shell, the
+  rest mid or vivid at least 60° apart or neutral. Two filaments in one look read as two colours (CIEDE2000 ≥ 10); no
+  translucent filament is picked (a card would show it solid). **Two things moved while building:** Wild as first
+  designed ("everything mid or vivid") found nothing for an eight-filament owned list, because a deck or a label text at
+  4.5:1 needs a light or a dark colour and the vivid part of the catalog sits at mid lightness, so Wild admits neutrals;
+  and the cap is a ceiling, not a count, because Subtle at cap 4 found nothing where four neutrals read as three.
+- **Locks** are per role, offered as chips for the regions that drive a look and that the build has (Case, Drawer body,
+  Face, Accent, Handle, Label, Shelf deck); a chip holds the filament the region wears now (a region on an
+  identification colour cannot be locked: there is no filament to keep). A locked colour wins over the mood and over the
+  owned list, and counts toward the cap. A rolled face is never the shell's filament (the face is the look's statement);
+  a locked one may be, as Black & gold's is (Sol 01a150df: the generator refused the pair as "No look fits"), and such a
+  look is named by its accent.
+- **The owned list** is `gen2-owned` in this browser (`js/state/owned.js`: catalog labels only, each once; a label that
+  leaves the catalog drops out on the next read; a storage that throws reads as nothing owned). It is edited in the
+  panel: every catalog colour by brand, ticked or not, with a search. "Only filaments I own" stays off and disabled until
+  the list has two. Every way out of the editor (Back, Escape, the close button) reconciles: the switch drops under two,
+  and the candidates roll again when the list changed under the switch (Sol 01a150df: Escape and close skipped it, so
+  Keep could apply a filament just unticked); the panel also re-rolls on opening when its candidates no longer fit the
+  list.
+- **The panel takes the gallery's spot** and closes the gallery and the tray (contextual panels do not pile up over the
+  model). Candidates draw through the gallery's card pump and `stage.lookCard`, one a frame, and show through
+  `previewPalette`: hovering shows one while none is pinned, a click pins it (a phone has no hover), the same click frees
+  it. Keep applies a candidate as a scheme of its own (one undo step; the current-look card then reads the candidate's
+  name, decision D4). More like this keeps a candidate's shell and face and re-rolls the rest; Try again rolls three
+  more. Fewer than three is said in a note, never hidden. Opening, hovering, rolling and keeping never touch the safe
+  area, so the camera stays (step 4's rule). Names read "<face> on <shell>", with the third colour when the look has one.
+- **No stage change.** No analytics: a candidate never goes through `applyPreset`.
+- **Measured (STEP5.md, marks written first):** 6,800 generated looks, none breaks a rule; the three candidates always
+  differ in shell and face, 23 distinct shells over 50 rolls; a roll of three in a median 0.2 ms under node; the safe
+  area and the camera unchanged to the number across opening the panel and 20 Try agains at Balanced, 4× CPU and Very
+  High; Try again to the third card drawn in a median 43–56 ms at Balanced (max 95), 44 ms at Very High (max 123),
+  289–364 ms at 4× CPU (max 607, one re-render frame of up to 308 ms, reported with no mark).
+- **Checks:** npm test 537 (532 passed, 0 failed, 5 skipped); e2e 48 of 48 (soft rendering, as CI runs it), two new
+  cases, the desktop one mutation-checked (Keep through `previewPalette` fails it at "the build wears the kept look");
+  review Sol 01a150df, two findings, both held and fixed before the commit.
+- **Not deployed:** branch `colors-step5`; deploys on Joey's go. Astra's refinement (styles, three interpretations, the
+  wording, short names) follows on the same branch as 5b before any deploy (Joey, relaying Astra, 2026-10-18).
