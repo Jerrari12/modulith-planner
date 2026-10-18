@@ -8522,10 +8522,14 @@ function setColor(key, f) {   // one region, build-wide: a filament { name, hex,
   if (selectedId && instances.has(selectedId)) refreshSelHighlight();
 }
 function setPalette(p) {   // the whole working palette (a scheme, an upload, an undo)
-  customColors = {}; for (const [k, v] of Object.entries((p && p.colors) || {})) if (v && v.hex) customColors[k] = { name: v.name, hex: v.hex, url: v.url };
-  overrides = (p && p.over && typeof p.over === 'object') ? structuredClone(p.over) : {};   // a scheme replaces the layer; an undo restores it
+  // every entry is checked like a relayed palette (cleanPalette: a real hex colour, an http(s) link or none). A shared
+  // #scheme= link and an uploaded file are outside data, and these values reach swatch styles and buy-link hrefs: until
+  // 2026-10-17 a crafted link could carry a javascript: "Buy" link or CSS into the Colors workspace
+  customColors = cleanPalette(p && p.colors);
+  overrides = {};   // a scheme replaces the layer; an undo restores it
+  if (p && p.over && typeof p.over === 'object') for (const [u, m] of Object.entries(p.over)) { if (u === '__proto__' || u === 'constructor' || u === 'prototype') continue; const c = cleanPalette(m); if (Object.keys(c).length) overrides[u] = c; }
   useCustom = !!(p && p.on) && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0);
-  if (p && p.user) userPalette = structuredClone(p.user);
+  if (p && p.user) userPalette = cleanPalette(p.user);
   saveColors(); applyPalette(); refreshMaterials();
 }
 function setUseCustom(on) { useCustom = !!on && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0); saveColors(); applyPalette(); refreshMaterials(); }
@@ -9381,6 +9385,7 @@ function cleanPalette(o) {
   const out = {};
   if (!o || typeof o !== 'object') return out;
   for (const [k, v] of Object.entries(o)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;   // a crafted key must not reach `out`'s prototype
     if (!v || typeof v.hex !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(v.hex)) continue;
     const e = { name: String(v.name || ''), hex: v.hex };
     if (typeof v.url === 'string' && /^https?:\/\//.test(v.url)) e.url = v.url;

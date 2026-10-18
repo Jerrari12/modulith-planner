@@ -1387,3 +1387,31 @@ test('the label editor: a part label offers no icon choice; an ordinary label\'s
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* A shared colour scheme is outside data (2026-10-17): a #scheme= link went into the palette unchecked, so a crafted one
+   could carry a javascript: "Buy" link into the shopping list and the picker, or CSS into the swatches. Every whole-palette
+   entry now passes the relay's own check (main.js cleanPalette): a real hex colour, an http(s) link or none. */
+test('Colors: a crafted #scheme= link cannot bring in a javascript: buy link, CSS, or a __proto__ key', async () => {
+  const colors = JSON.parse('{"Case":{"name":"Bad hex","hex":"red;background-image:url(https://example.invalid/leak)","url":"https://example.invalid/ok"},'
+    + '"Drawer":{"name":"Evil link","hex":"#ff0000","url":"javascript:alert(1)"},'
+    + '"Faceplate":{"name":"Fine","hex":"#00aa55","url":"https://example.invalid/fine"},'
+    + '"__proto__":{"name":"Proto","hex":"#00ff00"}}');
+  const b64 = Buffer.from(JSON.stringify(colors), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('colors', { query: '&new=1#scheme=' + encodeURIComponent(b64) });
+  await page.waitForSelector('#ws-colors', { timeout: 30_000 });
+  await settle(page, 800);
+  const pal = await page.evaluate(() => { const p = window.__GEN2_VIEWER__.palette(); return { keys: Object.keys(p.colors), drawer: p.colors.Drawer || null, face: p.colors.Faceplate || null, proto: Object.getPrototypeOf(p.colors) === Object.prototype }; });
+  assert.ok(!pal.keys.includes('Case'), 'a hex that is not a colour is dropped');
+  assert.ok(pal.drawer && pal.drawer.hex === '#ff0000' && pal.drawer.url === undefined, 'a javascript: link is dropped, the colour kept');
+  assert.ok(pal.face && pal.face.url === 'https://example.invalid/fine', 'a good entry keeps its link');
+  assert.ok(pal.proto && !pal.keys.includes('__proto__'), 'no __proto__ key');
+  // the shopping list renders the buy links: none may be javascript:
+  const stack = page.locator('#ws-dock button.status.stack');
+  if (await stack.isEnabled()) { await stack.click(); await settle(page, 300); }
+  const bad = await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => /^\s*javascript:/i.test(h)));
+  assert.deepEqual(bad, [], 'no javascript: href anywhere on the page');
+  const css = await page.evaluate(() => [...document.querySelectorAll('[style]')].map((x) => x.getAttribute('style')).filter((s) => /example\.invalid\/leak/.test(s)));
+  assert.deepEqual(css, [], 'no injected CSS');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
