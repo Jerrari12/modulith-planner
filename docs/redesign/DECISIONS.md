@@ -598,4 +598,12 @@ Dated calls made while building, with who made them. The brief and the inventory
     - an unpicked region reported the manifest colour where the dark stage shows its light case.
   - Set aside: "the Dock should count with instruction colours on". That text is unchanged; with no look chosen there
     are no filaments to count.
-- **Not deployed.** It waits for Joey's go. Main is merged in, through b48d0ae.
+- **Live (Joey's go, "Continue", 2026-10-18).** Main fast-forwarded to `9132e00`; run 39127134427 green. Checked in
+  production, on the dark stage at the Fast tier:
+  - a shown look leaves the palette, the saved palette and the history alone, and `endPreview` puts the chosen look back;
+  - the bought magnets are not counted, the Dock reads "4 filaments", and Signal's Shop list has the 10 rows the count
+    gives;
+  - a plate change and Undo leave the stage and the store on the old plate together;
+  - a crafted `#scheme=` link loses its `javascript:` link and its `__proto__` key, and the page has no `javascript:`
+    href;
+  - no page errors.
