@@ -872,8 +872,14 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Checks:** npm test 537 (532 passed, 0 failed, 5 skipped); e2e 48 of 48 (soft rendering, as CI runs it), two new
   cases, the desktop one mutation-checked (Keep through `previewPalette` fails it at "the build wears the kept look");
   review Sol 01a150df, two findings, both held and fixed before the commit.
-- **Not deployed:** branch `colors-step5`; deploys on Joey's go. Astra's refinement (styles, three interpretations, the
-  wording, short names) follows on the same branch as 5b before any deploy (Joey, relaying Astra, 2026-10-18).
+- **Live (with 5b below):** Joey, "Deploy Colors step 5 + 5b", 2026-10-18. Main fast-forwarded to `3526e5a`; run
+  39172061740 passed the tests and the smoke and failed at the deploy's module-graph guard (the new modules' imports
+  carried no `?v=` stamp), so nothing shipped; `aedb37a` added the stamping lines (replayed locally with the guard;
+  Luna 01a1512b); run 39173205072 green, live stamp `aedb37a3`. Production check `step5-prod.mjs` on the desktop and
+  a 390×844 phone viewport: the panel opens in the gallery's spot with the five tiles (15 swatches), three candidates
+  drawn and named in colour words with the accent share rising (quiet / balanced / bold), a hovered candidate shown and
+  not chosen, Show three more with the camera and the safe area unchanged, Use this look wearing the look as one undo
+  step and the panel named after it, Undo restoring The Jerrari, no preset event, no page errors.
 
 ## 2026-10-18 (Colors, step 5b: "Find your next look", Astra's refinement of Surprise me)
 
@@ -917,3 +923,4 @@ Dated calls made while building, with who made them. The brief and the inventory
   Label plate's faceplate-switch case on a visibility wait (37 s), which touches nothing 5b changed and passed on the
   5b worktree and on main, with and without soft rendering, when run again (four of four): a load flake, recorded, not
   fixed. Review Sol 01a15101, one finding held and fixed, one discarded as the design.
+- **Live:** with step 5, 2026-10-18 (see the step-5 entry: run 39173205072, stamp `aedb37a3`, the production check).
