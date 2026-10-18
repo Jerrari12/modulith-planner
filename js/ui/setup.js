@@ -167,6 +167,9 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     else { if (ctx.remount) ctx.remount(); ctx.say('Setup applied.'); }   // the top bar's chips are built at mount: a printer or name change shows after a remount
   }
   render();
-  setTimeout(() => { try { (box.querySelector('input.name') || box.querySelector('button')).focus(); } catch { /* jsdom */ } }, 0);   // focus moves into the dialog
+  // focus moves into the dialog: the name field on a desktop; on a phone the first button, since a focused field raises the
+  // keyboard over the sheet before anything was asked for (Joey, 2026-10-18, tapping the mount chip on his phone)
+  const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 1023px)').matches;   // (none under jsdom: Terra 01a15096)
+  setTimeout(() => { try { ((phone ? null : box.querySelector('input.name')) || box.querySelector('button')).focus(); } catch { /* jsdom */ } }, 0);
   return { close };
 }

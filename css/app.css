@@ -904,3 +904,13 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-dock { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }
+
+/* THE SETUP SHEET ON A PHONE (Joey, 2026-10-18, tapping the mount chip on his phone: "it just opens a broken menu and
+   expands my keyboard"). Its box carries the class `sheet` and sits inside #ws, so at phone width the bottom-sheet rules
+   above took it: positioned at the Dock, slid down to its 44 px peek and clipped - "Build setup" and one line showing
+   behind the Dock. It is a modal, not a bottom sheet: here it takes the modal's own layout back, full width under the
+   top bar, scrolling inside. (Same specificity as `#ws .sheet`, so this must stay below the phone block.) */
+@media (max-width: 1023px) {
+  #ws-setup { align-items: flex-start; padding: 64px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  #ws-setup .sheet, #ws-setup .sheet.open { position: relative; left: auto; right: auto; top: auto; bottom: auto; width: 100%; max-height: 100%; padding: 16px 16px 14px; border-radius: 18px; transform: none; clip-path: none; overflow-y: auto; z-index: auto; transition: none; }
+}

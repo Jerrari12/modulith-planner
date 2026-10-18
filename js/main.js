@@ -465,11 +465,13 @@ const STAGE_THEMES = {
   // point of this stage, so this is the brightest rung that keeps it.
   dark:  { bg: 0x0d0e21, bgWall: 0x150f30, table: 0x282c66, wall: 0x50526e,
            surface: 0x6e7090, grid: 0x2b7f9e, dim: 0x8f9ad8 },
-  // the workspace shell's night stage (2026-10-12): the dark stage with the grid two steps quieter and the floor
-  // reflection halved, so the product is the focal point under the glass chrome (Astra's review of the first
-  // Build screen). Everything else is `dark`; the plain viewer never selects it.
+  // the workspace shell's night stage (2026-10-12): the dark stage with the grid two steps quieter (0x1f5a70) and the
+  // floor reflection halved (refl 0.08), so the product is the focal point under the glass chrome (Astra's review of
+  // the first Build screen). REVERSED 2026-10-18: Joey, comparing the old viewer and the planner on his phone, "Is it
+  // just me or does the new grid feel darker" ... "I like the old more" - the night stage now matches `dark` exactly;
+  // the entry stays so the shell's mode name and a future variant have somewhere to live.
   night: { bg: 0x0d0e21, bgWall: 0x150f30, table: 0x282c66, wall: 0x50526e,
-           surface: 0x6e7090, grid: 0x1f5a70, dim: 0x8f9ad8, refl: 0.08 },
+           surface: 0x6e7090, grid: 0x2b7f9e, dim: 0x8f9ad8 },
 };
 // DARK IS THE DEFAULT (Joey 2026-08-08). Both choices are stored explicitly,
 // so "no key" can't mean light and a blocked localStorage fails safe to the
