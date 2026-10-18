@@ -660,6 +660,34 @@ Dated calls made while building, with who made them. The brief and the inventory
   tone-mapped tiers.
 - **Not deployed.** The branch is `colors-step2-gate`; a debug hook has no reason to ship before step 3 uses it.
 
+## 2026-10-18 (Colors, step 4 of the redesign plan: the compare tray)
+
+- **Joey's go:** "Go" to the proposed step 4, the same day step 3 went live. The plan's step 4 as approved
+  (COLORS-PLAN.md): two or three finalists, flipped with the camera held still, flips through the preview API, never
+  touching the safe area; the step's record is `D:\Claude - Output\colors-presets-2026-10-17\STEP4.md`.
+- **Finalists:** up to three, in a list that survives the gallery closing and a remount. They come in from a "+" on
+  every gallery card, from "Add to Compare" in a look's details, and from "Add current look" in the tray; the gallery's
+  head counts them ("Compare (2)") and opens the tray.
+- **The tray** sits over the stage above the Dock (a sheet on the phone). The gallery and the tray never show together
+  (Astra: contextual panels do not pile up over the model): opening one closes the other, and the finalists keep. The
+  part card hides while the tray is open, as under the shopping list.
+- **A flip shows a finalist and nothing more:** `previewPalette`, no re-render of the workspace, so the safe area is
+  never set and the camera stays. "Current" puts the chosen look back. Measured (STEP4.md, marks written first): on this
+  laptop at Balanced, dpr 1, a flip reaches the next drawn frame in a median 10 ms (max 16) over 20 flips; the camera
+  and the safe area are unchanged to the number (M8 and M10 pass; 4× throttled and Very High: STEP4.md).
+- **The safe area's floor lifts once, when the tray opens,** by the tray's height, so an auto-fitted model rises above
+  it; the stage refits only a camera the visitor has not taken. A flip never touches it.
+- **Apply** goes through the gallery look the finalist came from (a preset's own apply and its event; a saved look's
+  per-unit layer), or as a scheme of the finalist's colours when that look is gone; one undo step. The tray stays open.
+  Deleting a saved look in the details also takes it out of the tray.
+- **Tests:** two e2e cases (the desktop flow: enter, Compare (2), the tray replaces the gallery, a flip is shown and
+  not chosen with the palette, the camera, the safe area and the history untouched, the second finalist replaces the
+  first, Current, Apply as one undo step, remove, Escape; the phone sheet), one mutation-checked.
+- **Review:** Sol 01a15017, no findings. **Checks on the final code:** npm test 521 (516 passed, 0 failed, 5 skipped);
+  e2e 46 of 46 (soft rendering, the Studio checkout served); the desktop tray case mutation-checked (a flip that chose
+  the look through `setPalette` fails it at once). Flip latency measured by hand, STEP4.md §4: M8, M9 and M10 pass.
+- **Not deployed:** the branch is `colors-step4`, pushed; a feature deploys on Joey's own go.
+
 ## 2026-10-18 (Colors, step 3 of the redesign plan: the current-look card, Browse looks, look details, the new presets)
 
 - **Joey's go:** "Start Colors step 3" (the "MODULITH planner-2 | 10-18" session). The plan's step 3, as approved

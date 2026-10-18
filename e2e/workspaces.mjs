@@ -1736,6 +1736,80 @@ test('Colors step 3 on the phone: Browse looks opens the gallery sheet over the 
   await ctx.close();
 });
 
+/* The Colors plan's step 4 (2026-10-18): the compare tray. Two or three finalists from the gallery; a flip SHOWS one on the
+   model (previewPalette: never saved, never in the history) with the camera and the safe area untouched; Apply is one
+   undo step through the look's own apply; the tray and the gallery never show together. */
+test('Colors step 4: finalists enter the tray from the gallery, a flip shows one on a still model and chooses nothing, Apply is one undo step', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  await page.locator('#ws-colors .browse').click();
+  await page.waitForSelector('#ws-gallery .cmp', { timeout: 10_000 });
+  assert.equal(await page.locator('#ws-gallery .cmp-open').isDisabled(), true, 'Compare is disabled while the tray is empty');
+  await page.locator('#ws-gallery .cmp').nth(1).click();   // Stealth
+  await page.locator('#ws-gallery .cmp').nth(2).click();   // Signal
+  assert.equal(await text(page, '#ws-gallery .cmp-open'), 'Compare (2)', 'the head counts the finalists');
+  assert.equal(await page.locator('#ws-gallery .cmp.on').count(), 2, 'their corner buttons read as in');
+  await page.locator('#ws-gallery .cmp-open').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-tray').hidden && document.querySelector('#ws-gallery').hidden, null, { timeout: 5000 });   // the tray, not the gallery
+  await page.waitForFunction(() => document.querySelectorAll('#ws-tray canvas.drawn').length === 2, null, { timeout: 30_000 });
+  // the tray's opening lifted the safe area's floor once, and the camera eases to its new fit: the flips are judged only
+  // once it has come to rest (the same position read twice, 300 ms apart)
+  await page.waitForFunction(() => { const p = JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()); const same = window.__camPrev === p; window.__camPrev = p; return same; }, null, { polling: 300, timeout: 15_000 });
+  const before = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), canUndo: window.__GEN2_STORE__.canUndo }; });
+  await page.locator('#ws-tray .pick').nth(0).click();
+  await settle(page, 300);
+  const flipped = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { previewing: v.previewing, caseHex: v.activeHex('Case'), palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), shown: document.querySelectorAll('#ws-tray .tcard.on').length, canUndo: window.__GEN2_STORE__.canUndo }; });
+  assert.ok(flipped.previewing && flipped.caseHex === '#2b2b2e', `the model wears Stealth after the flip (${flipped.caseHex})`);
+  assert.equal(flipped.palette, before.palette, 'the palette is not chosen by a flip');
+  assert.equal(flipped.cam, before.cam, 'the camera stays where it was');
+  assert.equal(flipped.safe, before.safe, 'the safe area is untouched by a flip');
+  assert.equal(flipped.canUndo, before.canUndo, 'a flip is not an undo step');
+  assert.equal(flipped.shown, 1, 'the shown card is marked');
+  await page.locator('#ws-tray .pick').nth(1).click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.activeHex('Drawer')), '#d23a2e', 'the second finalist (Signal) replaces the first on the model');
+  await page.locator('#ws-tray .current').click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'Current puts the chosen look back');
+  await page.locator('#ws-tray .pick').nth(0).click();
+  await settle(page, 300);
+  await page.locator('#ws-tray .apply').click();
+  await settle(page, 600);
+  const applied = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), previewing: window.__GEN2_VIEWER__.previewing, name: document.querySelector('#ws-colors .lname').textContent, trayOpen: !document.querySelector('#ws-tray').hidden }));
+  assert.notEqual(applied.palette, before.palette, 'Apply chose the look');
+  assert.ok(!applied.previewing && /Stealth/.test(applied.name) && applied.trayOpen, `applied for real, named on the card, the tray still open (${applied.name})`);
+  await page.keyboard.press('Control+Z');
+  await settle(page, 800);
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors)), before.palette, 'one Undo takes it off again');
+  await page.locator('#ws-tray .tcard .x').nth(0).click();
+  await settle(page, 200);
+  assert.equal(await page.locator('#ws-tray .tcard').count(), 1, 'a finalist can be removed');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden, null, { timeout: 5000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors step 4 on the phone: the tray is a sheet of its own, opened from the gallery and closed back to the Colors sheet', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await page.waitForSelector('#ws-gallery .cmp', { timeout: 10_000 });
+  await page.locator('#ws-gallery .cmp').nth(1).click();
+  await page.locator('#ws-gallery .cmp').nth(2).click();
+  await page.locator('#ws-gallery .cmp-open').click();
+  await page.waitForFunction(() => document.querySelector('#ws-tray').classList.contains('open') && !document.querySelector('#ws-gallery').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-tray .sheet-handle .ttl'), /Compare · 2 of 3/);
+  await page.locator('#ws-tray .pick').nth(0).click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'a flip shows the look on the phone too');
+  await page.locator('#ws-tray .ihead .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* Joey, 2026-10-18: "lets just hide makerworld and cults for now until eventually i upload more models there". Few parts
    have a page on either, and choosing one in the Parts list turned most rows into a site search. */
 test('Parts and the viewer offer and link only Printables and Thangs (MakerWorld and Cults 3D are hidden)', async () => {

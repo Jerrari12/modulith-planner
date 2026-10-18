@@ -120,13 +120,20 @@ function cardPump(stage) {
 }
 
 let lastLook = null;   // the look last chosen by name, for "<look> · edited" (decision D4); kept across remounts
+/* THE COMPARE TRAY (the Colors plan's step 4, 2026-10-18): up to three finalists, kept across remounts (the phone breakpoint)
+   and across the gallery closing. A finalist is { id, kind, name, colors, over }: `id` names the gallery's look it came from
+   (so Apply goes through that look's own apply, a preset's analytics included), or 'current:<time>' for a look taken off
+   the model. */
+const TRAY_MAX = 3;
+let trayLooks = [];
 
 export function mountColors(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
   // scope: 'all' (the build) | 'unit' (the clicked unit only); gallery: false | 'featured' | 'mine' | 'all'; detail: the look
   // whose details are open; fmax: the filament-count filter (0 = any); more: the Download / Upload / Share row shown
-  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false };
+  // tray: the compare tray is open; flip: the index of the finalist shown on the model (null = the chosen look)
+  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null };
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
@@ -281,8 +288,70 @@ export function mountColors(stage, ctx) {
   /* ---------------- the gallery: Browse looks, and a look's details ---------------- */
   const gallery = el('aside.glass', { id: 'ws-gallery', role: 'dialog', 'aria-label': 'Looks', hidden: true });
   root.appendChild(gallery);
-  function openGallery(tab) { st.gallery = tab || 'featured'; st.detail = null; renderAll(); if (phone) phone.open(gallery); else gallery.querySelector('.gq')?.focus(); }
+  // the gallery and the tray never show together (Astra: contextual panels do not pile up over the model); the tray's looks keep
+  function openGallery(tab) { st.gallery = tab || 'featured'; st.detail = null; st.tray = false; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(gallery); else gallery.querySelector('.gq')?.focus(); }
   function closeGallery() { st.gallery = false; st.detail = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(gallery); phone.open(panel); } }   // the phone comes back to the Colors sheet
+
+  /* ---------------- the compare tray (step 4): two or three finalists, flipped on a still model ---------------- */
+  const tray = el('div.glass', { id: 'ws-tray', role: 'dialog', 'aria-label': 'Compare looks', hidden: true });
+  root.appendChild(tray);
+  const inTray = (l) => trayLooks.some((t) => t.id === l.id);
+  function addToTray(l) {
+    if (inTray(l)) return false;
+    if (trayLooks.length >= TRAY_MAX) { say(`Compare holds ${TRAY_MAX} looks. Remove one first.`); return false; }
+    trayLooks.push({ id: l.id, kind: l.kind, name: l.name, colors: l.colors, over: l.over || {} });
+    say(`“${l.name}” added to Compare · ${trayLooks.length} of ${TRAY_MAX}.`);
+    return true;
+  }
+  function removeFromTray(id) {
+    const i = trayLooks.findIndex((t) => t.id === id); if (i < 0) return;
+    trayLooks.splice(i, 1);
+    if (st.flip === i) { st.flip = null; stage.endPreview?.(); } else if (st.flip != null && st.flip > i) st.flip--;
+  }
+  function openTray() { st.gallery = false; st.detail = null; st.tray = true; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(tray); }
+  function closeTray() { st.tray = false; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(tray); phone.open(panel); } }   // the phone comes back to the Colors sheet
+  /* a flip SHOWS a finalist (previewPalette: never saved, never in the history) and touches nothing else: no renderAll, so
+     the safe area is never set and the camera stays where the visitor left it (the plan: "the camera held still") */
+  function flipTo(i) {
+    if (i == null || i === st.flip) { st.flip = null; stage.endPreview?.(); }
+    else { st.flip = i; stage.previewPalette(asLook(trayLooks[i])); }
+    renderTray(); if (phone) phone.refresh();
+  }
+  /* Apply from the tray: through the gallery look it came from when that still exists (a preset's apply sends its event, a
+     saved look's its layer), else as a scheme of its own colours; one undo step either way (commitColors flushes around it) */
+  function applyFromTray(t) {
+    const l = looksList().find((x) => x.id === t.id) || { ...t, apply: () => commitColors('scheme', () => stage.setPalette({ colors: t.colors, over: t.over, on: true })) };
+    st.flip = null; applyLook(l); renderAll();
+  }
+  function renderTray() {
+    if (!st.tray) { tray.hidden = true; return; }
+    tray.hidden = false; tray.replaceChildren();
+    const p = pal();
+    const flipped = st.flip != null ? trayLooks[st.flip] : null;
+    const row = el('div.trow', { role: 'list' });
+    trayLooks.forEach((t, i) => {
+      const shown = st.flip === i, worn = p.on && wears(p, t);
+      const cv = el('canvas.render', { width: CARD.w, height: CARD.h, 'aria-hidden': 'true' });
+      cards.want(cv, asLook(t), CARD.w, CARD.h);
+      row.appendChild(el('div.tcard' + (shown ? '.on' : ''), { role: 'listitem' }, [
+        el('button.pick', { title: shown ? 'Put the chosen look back' : `Show “${t.name}” on the model`, 'aria-pressed': String(shown), onclick: () => flipTo(i) }, [
+          cv,
+          el('div.lrow', {}, [el('span.lname', { text: t.name }), worn ? el('span.badge.active', { text: 'ACTIVE' }) : shown ? el('span.badge.shown', { text: 'SHOWN' }) : null]),
+        ]),
+        el('button.x', { title: 'Remove from Compare', 'aria-label': `Remove ${t.name} from Compare`, onclick: () => { removeFromTray(t.id); renderTray(); if (phone) phone.refresh(); } }, [icon('x', { size: 14 })]),
+      ]));
+    });
+    tray.append(
+      el('div.ihead', {}, [el('b', { text: `Compare · ${trayLooks.length} of ${TRAY_MAX}` }), el('span.sub', { text: 'Click a look to see it on the model. The view stays put.' }), el('button.x', { 'aria-label': 'Close Compare', title: 'Close', onclick: closeTray }, [icon('x', { size: 16 })])]),
+      trayLooks.length ? row : el('p.note', { text: 'No looks here yet. Browse looks and press + on two or three.' }),
+      el('div.tacts', {}, [
+        el('button.key.sm.current' + (st.flip == null ? '.on' : ''), { text: 'Current', title: 'The chosen look, as the model wears it', 'aria-pressed': String(st.flip == null), onclick: () => flipTo(null) }),
+        el('button.key.sm.strong.apply', { text: flipped ? `Apply “${flipped.name}”` : 'Apply the shown look', disabled: !flipped || (p.on && wears(p, flipped)), title: 'Dress the whole build in the shown look · one undo step', onclick: () => { if (flipped) applyFromTray(flipped); } }),
+        el('button.key.sm.browse', { text: 'Browse looks', title: 'Back to the gallery; the tray keeps its looks', onclick: () => openGallery('featured') }),
+        p.on && trayLooks.length < TRAY_MAX ? el('button.key.sm.addcur', { text: 'Add current look', title: 'Keep the look the model wears now as a finalist', disabled: trayLooks.some((t) => wears(p, t)), onclick: () => { if (addToTray({ id: 'current:' + Date.now(), kind: 'current', name: lookName(p), colors: p.colors, over: p.over })) renderTray(); } }) : null,
+      ]),
+    );
+  }
   /* a hovered or focused card shows its look on the model; leaving it puts the chosen look back, unless details are open
      (the details keep their look shown while they are up) */
   const show = (look) => { if (!st.detail) stage.previewPalette(asLook(look)); };
@@ -319,17 +388,25 @@ export function mountColors(stage, ctx) {
         const on = p.on && wears(p, l);
         const cv = el('canvas.render', { width: CARD.w, height: CARD.h, 'aria-hidden': 'true' });
         cards.want(cv, asLook(l), CARD.w, CARD.h);
-        grid.appendChild(el('button.lcard.key' + (on ? '.on' : ''), { role: 'listitem', title: `${l.name} · ${n(l.count, 'filament')} on this build`, 'aria-label': `${l.name}, ${n(l.count, 'filament')}${on ? ', the current look' : ''}`,
-          onpointerenter: () => show(l), onpointerleave: unshow, onfocus: () => show(l), onblur: unshow,
-          onclick: () => { st.detail = l; stage.previewPalette(asLook(l)); renderGallery(); gallery.querySelector('.back')?.focus(); } }, [
-          cv,
-          el('div.lrow', {}, [el('span.lname', { text: l.name }), on ? el('span.badge.active', { text: 'ACTIVE' }) : el('span.lcount', { text: String(l.count), title: n(l.count, 'filament') })]),
+        const held = inTray(l);
+        grid.appendChild(el('div.lwrap', { role: 'listitem' }, [
+          el('button.lcard.key' + (on ? '.on' : ''), { title: `${l.name} · ${n(l.count, 'filament')} on this build`, 'aria-label': `${l.name}, ${n(l.count, 'filament')}${on ? ', the current look' : ''}`,
+            onpointerenter: () => show(l), onpointerleave: unshow, onfocus: () => show(l), onblur: unshow,
+            onclick: () => { st.detail = l; stage.previewPalette(asLook(l)); renderGallery(); gallery.querySelector('.back')?.focus(); } }, [
+            cv,
+            el('div.lrow', {}, [el('span.lname', { text: l.name }), on ? el('span.badge.active', { text: 'ACTIVE' }) : el('span.lcount', { text: String(l.count), title: n(l.count, 'filament') })]),
+          ]),
+          // the tray's corner button (step 4): a finalist in, or out again; the head's Compare count follows
+          el('button.cmp' + (held ? '.on' : ''), { title: held ? 'Remove from Compare' : 'Add to Compare', 'aria-label': `${held ? 'Remove' : 'Add'} ${l.name} ${held ? 'from' : 'to'} Compare`, 'aria-pressed': String(held), onclick: () => { if (held) removeFromTray(l.id); else if (!addToTray(l)) return; fillGrid(); syncCmp(); } }, [icon(held ? 'check' : 'plus', { size: 14 })]),
         ]));
       }
       if (!shown.length) grid.appendChild(el('p.note', { text: tab === 'mine' && !all.some((l) => l.kind !== 'preset') ? 'No looks of your own yet. Pick a few colours, then Save on the Colors panel.' : 'No look matches.' }));
     };
+    const cmpBtn = el('button.key.sm.cmp-open', { title: 'Compare the finalists on the model, one at a time', onclick: openTray });
+    const syncCmp = () => { cmpBtn.textContent = trayLooks.length ? `Compare (${trayLooks.length})` : 'Compare'; cmpBtn.disabled = !trayLooks.length; };
+    syncCmp();
     gallery.append(
-      el('div.head', {}, [el('h2', { text: 'Looks' }), el('span.sub', { text: 'Every look is shown on this build.' }), el('button.x', { title: 'Close', 'aria-label': 'Close the looks', onclick: closeGallery }, [icon('x', { size: 16 })])]),
+      el('div.head', {}, [el('h2', { text: 'Looks' }), el('span.sub', { text: 'Every look is shown on this build.' }), cmpBtn, el('button.x', { title: 'Close', 'aria-label': 'Close the looks', onclick: closeGallery }, [icon('x', { size: 16 })])]),
       el('div.track.seg3.gtabs', { role: 'tablist', 'aria-label': 'Which looks' }, [['featured', 'Featured'], ['mine', 'My looks'], ['all', 'All looks']].map(([id, label]) => el('button.seg' + (tab === id ? '.on' : ''), { role: 'tab', 'aria-selected': String(tab === id), text: label, onclick: () => { st.gallery = id; renderGallery(); } }))),
       el('div.gfilter', {}, [
         el('input.gq.search', { type: 'search', placeholder: 'Search looks', value: st.gq, 'aria-label': 'Search looks', oninput: (e) => { st.gq = e.target.value; fillGrid(); } }),
@@ -355,7 +432,8 @@ export function mountColors(stage, ctx) {
       el('div.lookcard.well.big', {}, [hero, el('div.lrow', {}, [el('span.lcount.badge', { text: n(fc.count, 'filament') + ' on this build' }), on ? el('span.badge.active', { text: 'ACTIVE' }) : null])]),
       el('div.dacts', {}, [
         el('button.key.sm.strong.apply', { text: on ? 'Applied' : 'Apply this look', disabled: on, title: 'Dress the whole build in this look · one undo step', onclick: () => { st.detail = null; st.gallery = false; applyLook(l); renderAll(); if (phone) { phone.collapse(gallery); phone.open(panel); } } }),   // the phone comes back to the Colors sheet (Terra 01a14f96)
-        l.del ? el('button.key.sm.del', { text: 'Delete', title: 'Forget this saved look (the colours on the model stay)', onclick: () => { l.del(); st.detail = null; stage.endPreview?.(); say(`Deleted “${l.name}”.`); renderAll(); } }) : null,
+        el('button.key.sm.cmp' + (inTray(l) ? '.on' : ''), { title: inTray(l) ? 'In Compare already' : 'Keep this look as a finalist to flip against the others', disabled: inTray(l), onclick: () => { if (addToTray(l)) renderGallery(); } }, [icon(inTray(l) ? 'check' : 'plus', { size: 14 }), inTray(l) ? 'In Compare' : 'Add to Compare']),
+        l.del ? el('button.key.sm.del', { text: 'Delete', title: 'Forget this saved look (the colours on the model stay)', onclick: () => { l.del(); removeFromTray(l.id); st.detail = null; stage.endPreview?.(); say(`Deleted “${l.name}”.`); renderAll(); } }) : null,
       ]),
       el('h3.h2', { text: 'Shop this look' }),
       el('div.frows', {}, filamentRows(fc)),
@@ -431,7 +509,7 @@ export function mountColors(stage, ctx) {
   function renderCard() {
     const sel = st.sel;
     card.replaceChildren();
-    if (!sel || st.shop) { card.hidden = true; return; }   // the shopping list takes the card's place while it is open (Astra)
+    if (!sel || st.shop || st.tray) { card.hidden = true; return; }   // the shopping list, or the compare tray, takes the card's place while it is open (Astra)
     card.hidden = false;
     const info = stage.partInfo(sel.id);
     if (!info) { card.hidden = true; return; }
@@ -496,12 +574,15 @@ export function mountColors(stage, ctx) {
     { el: panel, title: 'Colors', open: true },
     { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}` : typePlural(st.key)}` : 'Filament' },
     { el: gallery, title: () => st.detail ? st.detail.name : 'Looks' },
+    { el: tray, title: () => `Compare · ${trayLooks.length} of ${TRAY_MAX}` },
   ] }) : null;
   if (phone) phone.onLayout(safe);
   /* the gallery never moves the safe area (the plan: a change refits the camera, and a hovered look must be judged on a
      still model); on the phone the sheet manager's heights already include an open sheet */
-  function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 }); }
-  function renderAll() { renderPanel(); renderGallery(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
+  /* the open tray lifts the safe area's floor ONCE, when it opens (the stage refits only a camera the visitor has not taken);
+     a flip never calls this, so the camera stays where the visitor left it between finalists (step 4) */
+  function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
+  function renderAll() { renderPanel(); renderGallery(); renderTray(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
@@ -509,6 +590,7 @@ export function mountColors(stage, ctx) {
     if (e.key === 'Escape') {
       if (st.detail) { st.detail = null; stage.endPreview?.(); renderGallery(); if (phone) phone.refresh(); return; }
       if (st.gallery) { closeGallery(); return; }
+      if (st.tray) { closeTray(); return; }
       if (st.shop) { st.shop = false; renderShop(); renderCard(); return; }
       if (st.key) { closePicker(); return; }
       stage.setSelected(null); return;
@@ -528,5 +610,6 @@ export function mountColors(stage, ctx) {
     onSelect(sel) { st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; } renderAll(); },
     unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace
     get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
+    get tray() { return trayLooks.map((t) => t.name); },   // the finalists, for a check
   };
 }
