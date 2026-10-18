@@ -659,3 +659,24 @@ Dated calls made while building, with who made them. The brief and the inventory
   the unmeasured consequence that the Build workspace's product previews (`renderThumb`) get no tone mapping on the
   tone-mapped tiers.
 - **Not deployed.** The branch is `colors-step2-gate`; a debug hook has no reason to ship before step 3 uses it.
+
+## 2026-10-18 (MakerWorld and Cults 3D hidden from the store links)
+
+- **Joey's call (2026-10-18):** "I noticed i don't like how we link to makerworld or cults, if it doesn't exist on their
+  site it instead does a standard search, lets just hide makerworld and cults for now until eventually i upload more
+  models there".
+- **Changed (`b2fb64c`):**
+  - the Parts list's Download site switch offers Printables and Thangs only, and no row links either hidden store;
+  - the viewer's store picker and its part links list neither;
+  - a saved choice of either reads as Printables, the preference itself included;
+  - `?from=` arrivals from either are still tracked.
+- **Not changed:** the vendored catalog (`js/catalog/data.js`) still carries both. To bring one back, use
+  `SHOWN_STORES` in main.js and `STORES` in parts.js, then update the e2e case.
+- **Checks:**
+  - a new e2e case, mutation-checked;
+  - npm test 515 passed, 0 failed, 5 skipped; e2e 40 of 40;
+  - review: Terra 01a14f3d, 1 held (normalise the preference itself), fixed;
+  - vault decisions `40c41f2`.
+- **Live:** run 39133529005 green. Checked in production with saved choices of both hidden stores: the Parts list
+  shows Printables and Thangs with Printables on, and so does the viewer's picker; no link to either store anywhere;
+  no page errors.
