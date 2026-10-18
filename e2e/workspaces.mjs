@@ -1574,3 +1574,43 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* Joey, 2026-10-18: "lets just hide makerworld and cults for now until eventually i upload more models there". Few parts
+   have a page on either, and choosing one in the Parts list turned most rows into a site search. */
+test('Parts and the viewer offer and link only Printables and Thangs (MakerWorld and Cults 3D are hidden)', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  // saved choices of the two hidden stores, from before: each must read as Printables
+  await context.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-link-store', 'makerworld'); localStorage.setItem('gen2-store', 'cults'); } catch {} });
+  const { ctx, page, errors } = await open('parts', { context });
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const parts = await page.evaluate(() => ({
+    sites: [...document.querySelectorAll('#ws-parts .track.sites .seg')].map((b) => b.textContent.trim()),
+    on: document.querySelector('#ws-parts .track.sites .seg.on')?.textContent.trim() || null,
+    printables: [...document.querySelectorAll('#ws-parts a[href]')].filter((a) => /printables\.com/.test(a.href)).length,
+    hidden: [...document.querySelectorAll('#ws-parts a[href]')].map((a) => a.href).filter((h) => /makerworld\.com|cults3d\.com/.test(h)),
+    labels: [...document.querySelectorAll('#ws-parts a.link')].map((a) => a.textContent).filter((t) => /MakerWorld|Cults/.test(t)),
+  }));
+  assert.deepEqual(parts.sites, ['Printables', 'Thangs'], 'the download-site choice offers only Printables and Thangs');
+  assert.equal(parts.on, 'Printables', 'a saved MakerWorld choice reads as Printables');
+  assert.ok(parts.printables > 0, 'the control: the rows link to Printables');
+  assert.deepEqual(parts.hidden, [], 'no row links to MakerWorld or Cults 3D');
+  assert.deepEqual(parts.labels, [], 'no row is labelled with either');
+  // the viewer's own panels, which the bare address shows until the cutover: its store picker and its parts' links
+  const viewer = await context.newPage();
+  const verrors = []; viewer.on('pageerror', (e) => verrors.push(e.message));
+  await viewer.goto(`${base}/index.html?debug=1`, { waitUntil: 'load', timeout: 90_000 });
+  await viewer.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#store-select option'), null, { timeout: 90_000 });
+  await settle(viewer, 1500);
+  const v = await viewer.evaluate(() => ({
+    options: [...document.querySelectorAll('#store-select option')].map((o) => o.textContent.trim()),
+    value: document.querySelector('#store-select').value,
+    printables: [...document.querySelectorAll('a[href]')].filter((a) => /printables\.com/.test(a.href)).length,
+    hidden: [...document.querySelectorAll('a[href]')].map((a) => a.href).filter((h) => /makerworld\.com|cults3d\.com/.test(h)),
+  }));
+  assert.deepEqual(v.options, ['Printables', 'Thangs'], 'the viewer\'s store picker offers only Printables and Thangs');
+  assert.equal(v.value, 'printables', 'a saved Cults 3D choice shows as Printables');
+  assert.ok(v.printables > 0, 'the control: the viewer\'s parts list links to Printables');
+  assert.deepEqual(v.hidden, [], 'no MakerWorld or Cults 3D link in the viewer\'s panels');
+  assert.deepEqual(clean([...errors, ...verrors]), []);
+  await ctx.close();
+});

@@ -25,7 +25,12 @@ const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
 const LINKS = typeof partLinks === 'function' ? partLinks : null;
 // eslint-disable-next-line no-undef
 const BUY = typeof HARDWARE_BUY !== 'undefined' ? HARDWARE_BUY : {};
-const STORES = [['printables', 'Printables'], ['thangs', 'Thangs'], ['makerworld', 'MakerWorld'], ['cults', 'Cults 3D']];
+/* MakerWorld and Cults 3D are hidden for now (Joey, 2026-10-18: "lets just hide makerworld and cults for now until
+   eventually i upload more models there"): few parts have a page on either, and choosing one turned most rows into a
+   site search. The vendored catalog (js/catalog/data.js) still carries both; this list offers and links neither, and a
+   saved choice of either reads as Printables (readStore). */
+const STORES = [['printables', 'Printables'], ['thangs', 'Thangs']];
+const SHOWN = new Set(STORES.map(([id]) => id));
 const STORE_KEY = 'gen2-link-store';   // the planner's own preference key, same ids
 const INSIDE = { 59: 45, 115: 101, 165: 151, 185: 171, 240: 226, 270: 256 };
 const CLUB = { edgelabel: 1, classicpro: 1, chevron: 1 };
@@ -192,7 +197,7 @@ export function mountParts(stage, ctx) {
         el('button', { text: '+', 'aria-label': `${label}: one more`, disabled: (p.had || 0) + (p.made || 0) >= r.qty, onclick: () => bump(r, field, 1) }),
       ]);
     };
-    const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site) || r.links?.stores?.[0];
+    const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site) || r.links?.stores?.find((s) => SHOWN.has(s.id));
     row.append(chip, mid, el('span.mono.need', { text: String(r.qty) }), counter('had', 'Already have'), counter('made', r.hardware ? 'Bought' : 'Printed'),
       el('span.mono.left' + (left ? '' : '.ok'), { text: left ? String(left) : '✓ done' }),
       link ? el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗` }) : r.unreleased ? el('span.link.dim', { text: 'Not released' }) : el('span'));
