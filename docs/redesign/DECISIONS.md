@@ -660,6 +660,47 @@ Dated calls made while building, with who made them. The brief and the inventory
   tone-mapped tiers.
 - **Not deployed.** The branch is `colors-step2-gate`; a debug hook has no reason to ship before step 3 uses it.
 
+## 2026-10-18 (Presets: the accent differs from the face; Jessie Neon Yellow; the "Neon yellow & black" preset)
+
+- **Joey, on his phone with EdgeLabel faceplates:** "I shouldn't have the accent color the same as the face for those".
+  The EdgeLabel family's accent part sits on the face and vanishes into one of the same colour. The four presets of
+  2026-08 never matched them; four of step 3's seven did (Grey & sunlight yellow, Safety yellow & black, Printer black &
+  red, Flight-team navy & gold) and now take another colour the look already prints; Flight-team's is the navy, since
+  white would fade on its yellow face (Terra 01a15087). `test/presets.test.mjs` pins Accent ≠ Faceplate:FACE.
+- **"Can we add Jessie neon yellow as an available color?"** Printed Solid Neon Yellow joins the catalog (112 colours).
+  Its hex `#E4E202` is the median of the centre third of the maker's swatch photo (no colour code is published). The
+  catalog's source of truth, `gen2-visual-animator/viewer/js/filament-db.js`, and the Filament Material Lab's copy (its
+  pinned hash bumped) were re-vendored the same day. Terra 01a1508a.
+- **"Neon yellow & black"**, the twelfth preset, is Joey's own 3D Printopia build (his photo): Chevron faceplates with
+  every face black, the body in neon yellow, handles in plain black PLA (that build wore a holographic build plate: the
+  plate finish, not a colour). Shell in Neon Yellow; faces, grips, drawers, handles and the deck (13:1) in Elegoo PLA
+  Black; accents and hardware neon. Terra 01a1508e, no findings. The presets test pins 12.
+- **Checks:** presets.test.mjs 17 of 17 and filament-db.test.mjs on the final code; a change Joey decided in words
+  deploys once its checks pass.
+- **Live:** main 03ee0bd (261cc80 accent rule + Neon Yellow, 81ceda9 the preset, 03ee0bd the night grid and setup
+  sheet), run 39161157605 green 16:26, live stamp `03ee0bdb`. Production check (evening-prod.mjs, desktop and
+  375×844): 112 colours with Neon Yellow `#E4E202` and its Printed Solid URL; 12 presets, the last "Neon yellow &
+  black" (Case Printed Solid Neon Yellow, Faceplate:FACE Elegoo PLA Black); accent ≠ face and grip = face hold on
+  every preset.
+
+## 2026-10-18 (the night stage's grid back to the old cyan; the setup sheet on a phone)
+
+- **Joey, comparing the old viewer and the planner on his phone:** "Is it just me or does the new grid feel darker" ...
+  "I like the old more". The shell's `night` stage (2026-10-12: the grid two steps quieter and the floor reflection
+  halved, from Astra's review of the first Build screen) now matches `dark` exactly: grid `0x2b7f9e`, the reflection at
+  the stage's default. The entry stays as the shell's mode name. This reverses the 2026-10-12 choice on Joey's word.
+- **Joey, tapping the mount chip on his phone:** "it just opens a broken menu and expands my keyboard". The Build setup
+  sheet's box carries the class `sheet` inside `#ws`, so the phone's bottom-sheet rules took it: positioned at the Dock,
+  slid to its 44 px peek and clipped (measured at 375×812: top 642, translateY 410 px, clip-path to 44 px), with the name
+  field focused and the keyboard up. A phone rule below the phone block gives the modal its own layout back (top 64,
+  full width, scrolling inside), and on a phone the dialog's focus lands on its close button; the desktop keeps the name
+  field focused (the keyboard e2e case). `matchMedia` guarded for environments without it (Terra 01a15096, held).
+- **Checks:** the keyboard, setup-sheet and every-workspace-boots e2e cases (5 of 5) on the final code; node --check
+  on setup.js. Both changes are Joey's in words, so they deploy once checks pass.
+- **Live:** main 03ee0bd, run 39161157605 green, stamp `03ee0bdb` (see the entry above). Production check: the
+  `night` theme's grid reads `#2b7f9e` on both viewports; the setup sheet at 375×844 sits at top 64 with no transform
+  and no clip-path, focus on `BUTTON.x`; on the desktop it keeps the name field focused.
+
 ## 2026-10-18 (Colors, step 4 of the redesign plan: the compare tray)
 
 - **Joey's go:** "Go" to the proposed step 4, the same day step 3 went live. The plan's step 4 as approved
