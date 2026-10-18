@@ -535,6 +535,12 @@ Dated calls made while building, with who made them. The brief and the inventory
     found only muted colours staying 11 or more apart under every vision type (for example `#876969`), and those would
     read as plain plastic among the saturated part colours.
 - **Changed:** generate.js `SIDE_COVER_COLOR` and the Parts list's chip (parts.js `chipFor`).
+- **Tests:** the 60 golden screenshots and the ten kit manifests re-blessed. A pixel audit of the 60 old/new pairs:
+  of 405,992 changed pixels, 15,193 were not pink in the old shot, and none changed by more than 50 per channel (edge
+  blends and floor reflections next to the covers). npm test 520 (515 passed, 0 failed, 5 skipped); e2e 34 of 34.
+  Review: Terra 01a14d3e (1 held, fixed).
+- **Live:** `e351252`, run 39097744412 green at 04:52:32Z. Checked in production on both themes: the manifest and the
+  stage give the side cover `#c2185b`, the Parts chip agrees, and no page errors.
 
 ## 2026-10-18 (Colors, step 1 of the redesign plan: the foundations)
 
@@ -592,4 +598,4 @@ Dated calls made while building, with who made them. The brief and the inventory
     - an unpicked region reported the manifest colour where the dark stage shows its light case.
   - Set aside: "the Dock should count with instruction colours on". That text is unchanged; with no look chosen there
     are no filaments to count.
-- **Not deployed.** It waits for Joey's go. It needs main's newer commits merged in first.
+- **Not deployed.** It waits for Joey's go. Main is merged in, through b48d0ae.
