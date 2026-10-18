@@ -618,9 +618,11 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 #ws-labeledit .igroup.open .ghead svg { transform: rotate(90deg); }
 #ws-labeledit .cells { display: none; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; padding: 2px 0 6px; }
 #ws-labeledit .igroup.open .cells { display: grid; }
-#ws-labeledit .cell { aspect-ratio: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--hair); background: var(--input-bg); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* an icon tile shows the icon as it prints: its art carries its own black fill, so the tile is the label's light body, in
+   both themes (Joey 2026-10-17: black on dark grey had "terrible contrast") */
+#ws-labeledit .cell { aspect-ratio: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--hair); background: #f4f1ec; color: #1b1b1b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 #ws-labeledit .cell svg { width: 100%; height: 100%; }
-#ws-labeledit .cell:hover { background: var(--track); }
+#ws-labeledit .cell:hover { background: #e6e1d8; }
 #ws-labeledit .cell.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
 #ws-labeledit .row { display: flex; gap: 6px; }
 /* the dialog: Replace, Fill, Use custom wording, Add a label */

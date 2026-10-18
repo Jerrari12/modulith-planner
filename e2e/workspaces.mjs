@@ -1340,3 +1340,50 @@ test('a label preview drawn late swaps in place: the editor keeps the keyboard a
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* A part label prints its part's drawing, never an icon (2026-10-17, Joey: "it's kind of weird that i can select icons for
+   these part picker labels, it doesnt seem to apply them"): its editor offers no icon controls and says why. An ordinary
+   label keeps them, and its icon tiles show the icon as it prints, dark art on the label's light body ("terrible contrast"). */
+test('the label editor: a part label offers no icon choice; an ordinary label\'s icon tiles are dark on light', async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1' });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await settle(page, 800);
+  await page.evaluate(async () => {
+    const R = await import('/js/rules/labels.js');
+    const L = globalThis.GEN2LabelList;
+    const st = window.__GEN2_STORE__;
+    const item = { schema: 'part-picker-label-item/1', id: 'p6', family: 'screw', head: 'socket-cap', units: 'mm', fields: ['M2', '× 6'], value_missing: [],
+      attributes: [{ path: 'head', text: 'SHCS', meaning: 'Socket head cap' }], pinned: ['head'], optional: [], pinned_unprinted: [] };
+    const apply = (r) => { if (!r.ok) throw new Error(r.msg); st.flush(); st.commit((s) => R.applyResult(L, s, r), 'label'); st.flush(); };
+    apply(R.addPartItems(L, st.state, [item]));
+    apply(R.add(L, st.state, { text: 'Torx bits' }));
+  });
+  await settle(page, 600);
+  const editFor = async (title) => {
+    const chip = page.locator('#ws-labels .chip-l').filter({ hasText: title }).first();
+    const row = chip.locator('xpath=ancestor::*[.//button[@title="Edit this label"]][1]');
+    await row.locator('button[title="Edit this label"]').first().click();
+    await page.waitForFunction(() => !document.getElementById('ws-labeledit').hidden, null, { timeout: 5000 });
+    await settle(page, 300);
+  };
+  await editFor('M2');
+  assert.deepEqual(await page.evaluate(() => ({ grid: !!document.querySelector('#ws-labeledit .igrid'), seg: !!document.querySelector('#ws-labeledit .track.badge'), note: !!document.querySelector('#ws-labeledit .noicon') })),
+    { grid: false, seg: false, note: true }, 'a part label: no icon controls, and a note says why');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.getElementById('ws-labeledit').hidden, null, { timeout: 5000 });
+  await editFor('TORX');
+  await page.waitForFunction(() => document.querySelector('#ws-labeledit .igrid'), null, { timeout: 10_000 });
+  // open the first group so its tiles lay out, then read a tile's colours
+  await page.evaluate(() => { const h = document.querySelector('#ws-labeledit .igroup:not(.open) .ghead'); if (h) h.click(); });
+  const tile = await page.evaluate(() => {
+    const c = document.querySelector('#ws-labeledit .igroup.open .cell');
+    if (!c) return null;
+    const lum = (s) => { const m = s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map((v) => v / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+    return { bg: lum(getComputedStyle(c).backgroundColor) };
+  });
+  assert.ok(tile && tile.bg > 0.8, `an icon tile is light behind the black art: luminance ${tile && tile.bg}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
