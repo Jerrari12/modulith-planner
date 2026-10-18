@@ -467,7 +467,8 @@ Dated calls made while building, with who made them. The brief and the inventory
     kits, edge cases and 400 random builds;
   - it is fitted after the case and before anything stacks on top: in from 30 mm off the wall, 3.8 mm up, a pause,
     then the slide down, under a close camera;
-  - pink in Part colors; in the presets the core takes the case colour and the face the faceplate face colour;
+  - pink in Part colors (raspberry since 2026-10-18, see that entry); in the presets the core takes the case colour and
+    the face the faceplate face colour;
   - builds are 5 mm wider, because the covers count in W; the ten kits gain 4 × 1H covers each.
 - **Known limits:** a 4H–6H shelf end has no made cover size, so it stays bare with a warning (MODULITH known-gaps).
   Reading "face = the accent colour" as the faceplate face makes Sandstone's covers all brown and Signal's faces
@@ -515,3 +516,22 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Open:** the 3D label and the Label plate can still differ when this browser's print preference (the plate's stripe
   position or drawings switch) differs from the defaults. The stage always draws the drawings, with the stripe at the
   label's own position or the bottom.
+
+## 2026-10-18 (side covers: raspberry in Part colors)
+
+- **Joey's call (2026-10-18):** "use raspberry". He had asked whether the light pink suits the instructions; the
+  colour-blind check below answered that it does not for deuteranopes.
+- **The check:** CIEDE2000 under normal vision and under Machado (2009) simulations of protanopia, deuteranopia and
+  tritanopia (severity 1.0), against every colour the identification palette emits (generate.js COLORS, SHELF_COLORS,
+  EXTENDER_COLOR, FootAdhesive, the dark stage's Case) and the stages' surfaces.
+  - The first pink `#ff9ec4`: 19.5 from the nearest part colour (the stopper) for normal vision, but 2.5 from the shelf
+    insert under deuteranopia, the most common type. Against the light stage: 1.7:1 on the background, 1.4:1 on the floor.
+  - Raspberry `#c2185b`: 18.3 from the stopper for normal vision; at least 9 from every part colour under deuteranopia
+    (12.8) and tritanopia (9.4). Against the light stage: 5.1:1 on the background, 4.3:1 on the floor. The dark stage
+    loses some: 3.2:1 and 2.2:1, where the pink had 9.9:1 and 6.7:1.
+  - Its weak spot: under protanopia it comes within 2.0 of the adhesive feet's grey, a colour only builds with stick-on
+    feet emit; the case is 9.0 away.
+  - Set aside: a grid scan (sRGB in steps of 15, keeping colours with at least 3:1 against both stage backgrounds)
+    found only muted colours staying 11 or more apart under every vision type (for example `#876969`), and those would
+    read as plain plastic among the saturated part colours.
+- **Changed:** generate.js `SIDE_COVER_COLOR` and the Parts list's chip (parts.js `chipFor`).
