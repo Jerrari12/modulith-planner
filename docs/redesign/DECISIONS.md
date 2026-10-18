@@ -709,8 +709,18 @@ Dated calls made while building, with who made them. The brief and the inventory
   checkout served); the gallery case mutation-checked (with `mountManifest`'s revision bump removed it fails on "the
   revision moved with the unit"). Two unit tests that lift the handle and faceplate swaps out of main.js needed
   `let sceneRev = 0` in their sandboxes.
-- **Not deployed:** the branch is `colors-step3`, pushed. A feature deploys on Joey's go, and the go to start a step is
-  not the go to deploy it (the 10-17 session, 2026-10-18). The grip rule rides on the same branch.
+- **Live (Joey's go, 2026-10-18: "Deploy Colors step 3").** Main fast-forwarded to `66d91b0`. The first run
+  (39142321766) failed on the new pacing gate itself: the runner's software rasteriser filled the 11 cards in 8.9 s
+  against a 5 s bound, so the gate took the runner's bounds (`a4a49ee`, 30 s and a 2 s frame; Terra 01a14fce). The
+  second (39144483279) fell on the idle-gate case's 1.5 s window, which passes locally and had passed the run before;
+  an empty commit (`3011d62`) re-ran it: green, live stamp `3011d62a`. Checked in production with
+  `D:\Claude - Output\planner-prod-checks-2026-10-18\step3-prod.mjs`, desktop 1280×800 and a 390×844 phone, both on
+  Very High: 11 presets, the grip rule holds in every one, the panel's card names "The Jerrari · 4 filaments" and is
+  drawn, the gallery's 11 cards fill in about 200 ms keyed on the live scene revision, a hovered card shows Stealth on
+  the model (Case #2b2b2e) with the palette unchanged and leaving ends it, the details show Stealth with 4 filament
+  rows and 4 Buy links and Apply, the phone's gallery sheet is titled after the look, no preset event, no page errors
+  (the phone run, opened seconds after the desktop one, logged a single third-party 429 that a plain re-load of both
+  viewports did not reproduce).
 
 ## 2026-10-18 (MakerWorld and Cults 3D hidden from the store links)
 
