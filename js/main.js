@@ -691,11 +691,19 @@ const LIGHT_RIG = {
   key:     { hemi: 0.15, sun: 1.2, fill: 0.3 },
 };
 let baseHemi = LIGHT_RIG.shipped.hemi;   // updateCinema fades FROM this, per tier
+/* the light strengths a tier gives the stage: its rig, with the fill the workspace asks for on top (opts.fillBoost,
+   2026-10-12: a black shell in the Jerrari palette lost its side faces at the stage's resting fill; the boost reveals the
+   shape without changing the filament colour). The product previews read it too (drawThumb), so they are lit as the model is. */
+function rigFor(name) {
+  const q = QUALITY[name], rig = q.key ? LIGHT_RIG.key : LIGHT_RIG.shipped;
+  return { hemi: rig.hemi, sun: rig.sun, fill: rig.fill * ((typeof opts !== 'undefined' && opts.fillBoost) || 1) };
+}
 
 function applyQuality(name) {
   /* every tier change and every re-mount (mountManifest calls this) compiles programs on the next frames;
      the auto-downgrade must not read those stalls as the new tier's frame rate */
   perfGrace();
+  const was = quality;
   quality = QUALITY[name] ? name : 'high';
   const q = QUALITY[quality];
 
@@ -703,13 +711,11 @@ function applyQuality(name) {
   // ⚠ NOT ACES. Measured median hue error: none 0.9 deg, Khronos Neutral 2.5 deg,
   // ACES 5.3 deg. Neutral exists for product rendering where colour is a promise.
 
-  const rig = q.key ? LIGHT_RIG.key : LIGHT_RIG.shipped;
+  const rig = rigFor(quality);
   baseHemi = rig.hemi;
   if (!cinema.on) hemi.intensity = rig.hemi;
   sun.intensity = rig.sun;
-  /* the workspace asks for more fill (opts.fillBoost, 2026-10-12): a black shell in the Jerrari palette lost its
-     side faces at the stage's resting fill; the boost reveals the shape without changing the filament colour */
-  fill.intensity = rig.fill * ((typeof opts !== 'undefined' && opts.fillBoost) || 1);
+  fill.intensity = rig.fill;
 
   // The outro owns scene.environment while it runs — don't stomp the party room.
   if (!cinema.on) scene.environment = q.env ? studioEnv() : null;
@@ -722,6 +728,9 @@ function applyQuality(name) {
   applyShadowQuality();
   guardFx('reflection', applyReflectionQuality);   // also builds the render target
   labelQualityBtn();
+  // a NEW tier (the pill, or the auto-downgrade; a re-mount at the same tier is none) tells the workspace, which redraws
+  // whatever it drew for a tier: Build's product previews are lit, tone-mapped and keyed per tier (drawThumb)
+  if (quality !== was && typeof opts !== 'undefined' && opts.onQuality) opts.onQuality(quality);
 }
 function setQuality(name, { user = false } = {}) {
   applyQuality(name);
@@ -8408,100 +8417,178 @@ canvas.addEventListener('contextmenu', e => {
    One unit of the asked size, fill, faceplate family, handle and drawer variant, built by the real generator and
    drawn from the real GLBs with the SAME shared materials the model wears (so a filament pick, the dark-stage
    palette and the plate finish all follow), rendered once into an offscreen target and cached as a PNG data URL.
+   Lit, tone-mapped and encoded as the stage draws the model on the current tier (drawThumb), so the colours match too.
    A front view for comparing faceplate styles; a slight three-quarter where depth or grip shape matters. Covers,
    rails, feet, QuickLocks and stoppers are left out: the preview is the unit, not the kit around it. */
 const THUMB_TYPES = new Set(['Case', 'CaseExtender', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip']);
 const thumbCache = new Map();
-let thumbScene = null, thumbCam = null, thumbRT = null;
+let thumbScene = null, thumbCam = null, thumbRT = null, thumbRig = null;
 function paletteSig() { return Object.keys(manifest.colors || {}).sort().map(k => k + '=' + activeHex(k)).join(',') + '|' + stageTheme + '|' + (useCustom ? 1 : 0) + '|' + JSON.stringify(overrides); }
-async function renderThumb(opts = {}) {
-  if (!build) return null;
+/* a preview's spec with its defaults filled in, the handle variant it wears and its cache key. The quality tier is in the
+   key: it decides the light rig, the environment and the tone mapping a preview is drawn with, as the model is. */
+function thumbSpec(opts = {}) {
   const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08, unitId = null } = opts;
   const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
-  const sig = paletteSig();
-  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, sig]);
-  if (thumbCache.has(key)) return thumbCache.get(key);
-  const job = (async () => {
-    const gridH = Math.max(1, Math.ceil(hh / 2));
-    const unit = { id: 1, x: 0, y: gridH * 2 - hh, w, hh, fill, shelves: 0 };
-    if (variant) unit.variant = variant; if (lip) unit.lip = lip;
-    const rec = { mount: 'tabletop', length: build.length, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null, faceStyle, doorStyle: build.doorStyle, handleStyle, wallStagger: false, backCover: false, feet: 'tpu', buildPlate: build.buildPlate, removedStoppers: [], gridW: w, gridH, placed: [unit], nextId: 2 };
-    const gen = generateManifest(rec);
-    if (!gen.manifest) throw new Error((gen.errors || []).join(' · ') || 'no preview');
-    const m = gen.manifest;
-    for (const part of m.parts) { if (!typeByNode[part.node]) typeByNode[part.node] = part.type; if (!partInfoByNode[part.node]) partInfoByNode[part.node] = part; }
-    const keep = m.instances.filter(c => THUMB_TYPES.has(typeByNode[c.node]));
-    if (handle && !typeByNode[handle.node]) typeByNode[handle.node] = 'Handle';   // a variant the build has never worn (applyHandleStyle does the same)
-    const nodes = [...new Set(keep.map(c => c.node).concat(handle ? [handle.node] : []))];
-    const missing = [];
-    await Promise.all(nodes.filter(n => !templates[n]).map(async node => {
-      try { const gltf = await loader.loadAsync(`${PARTS_BASE}${node}.lib.glb`); templates[node] = adoptTemplate(gltf.scene, typeByNode[node] || 'Handle', node); }
-      catch (e) { missing.push(node); }
-    }));
-    if (missing.length) throw new Error('part models missing: ' + missing.join(', '));
-    if (paletteSig() !== sig) throw new Error('palette changed while loading');   // the shared materials now wear another palette: this key must not cache them (Sol 01a132de)
-    if (!thumbScene) {
-      thumbScene = new THREE.Scene();
-      const h = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.1);
-      const s1 = new THREE.DirectionalLight(0xffffff, 1.6); s1.position.set(300, 600, 400);
-      const s2 = new THREE.DirectionalLight(0xffffff, 0.5); s2.position.set(-400, 200, -300);
-      thumbScene.add(h, s1, s2);
-      thumbCam = new THREE.PerspectiveCamera(22, 4 / 3, 1, 6000);
-    }
-    const group = new THREE.Group();
-    for (const c of keep) {
-      let node = c.node, pos = c.pos;
-      if (handle && typeByNode[c.node] === 'Handle') {   // the handle VARIANT in use lives outside the generator (applyHandleStyle)
-        const fp = keep.find(x => x.rides && x.rides === c.rides && typeByNode[x.node] === 'Faceplate');
-        node = handle.node;
-        if (fp && templates[fp.node]) pos = [c.pos[0], fp.pos[1] + (faceplateHeightOf(fp.node) - handle.h) / 2 - 0.5, fp.pos[2] + nodeDepth(fp.node) / 2 + handle.d / 2];
-      }
-      const g = templates[node].clone(true);
-      g.userData.node = node;
-      g.position.set(pos[0], pos[1], pos[2]);
-      const rot = c.rot || [0, c.yaw || 0, 0];
-      g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
-      const t = typeByNode[node];
-      g.traverse(o => { if (o.isMesh) { const z = o.userData.zone || ''; const ov = unitId != null ? overrideFor(unitId, zoneKey(t, z)) : null; o.material = ov ? overrideMatFor(zoneKey(t, z), ov, z, false) : baseMatFor(t, z); o.castShadow = false; o.receiveShadow = false; } });
-      group.add(g);
-    }
-    thumbScene.add(group); group.updateWorldMatrix(true, true);
-    let box = new THREE.Box3().setFromObject(group);
-    if (frame === 'handle') {   // Astra: frame the handle, with just enough plate behind it for context
-      const hb = new THREE.Box3();
-      for (const g of group.children) if (typeByNode[g.userData.node] === 'Handle') hb.expandByObject(g);
-      if (!hb.isEmpty()) { const hs = hb.getSize(new THREE.Vector3()); hb.expandByVector(new THREE.Vector3(hs.x * 0.35 + 6, hs.y * 0.9 + 10, 0)); box = hb; }
-    }
-    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
-    const W = size, H = Math.round(size * 3 / 4);
-    if (!thumbRT || thumbRT.width !== W || thumbRT.height !== H) {
-      if (thumbRT) thumbRT.dispose();
-      thumbRT = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true });
-      thumbRT.texture.colorSpace = THREE.SRGBColorSpace;   // the output transform the canvas gets, so the PNG matches the screen (Sol 01a132de)
-    }
-    thumbCam.aspect = W / H; thumbCam.updateProjectionMatrix();
-    const fovV = THREE.MathUtils.degToRad(thumbCam.fov), fovH = 2 * Math.atan(Math.tan(fovV / 2) * thumbCam.aspect);
-    const dir = (view === 'front' ? new THREE.Vector3(0, 0.1, 1) : new THREE.Vector3(0.6, 0.35, 1)).normalize();
-    const fitW = view === 'front' ? sz.x : sz.x * 0.85 + sz.z * 0.55;
-    const dist = Math.max((sz.y / 2) / Math.tan(fovV / 2), (fitW / 2) / Math.tan(fovH / 2)) * fit + (frame === 'handle' ? 0 : sz.z / 2);
-    thumbCam.position.copy(c).add(dir.multiplyScalar(dist)); thumbCam.lookAt(c); thumbCam.updateMatrixWorld(true);
-    const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
-    renderer.setRenderTarget(thumbRT); renderer.setClearColor(0x000000, 0); renderer.clear();
-    renderer.render(thumbScene, thumbCam);
-    const px = new Uint8Array(W * H * 4);
-    renderer.readRenderTargetPixels(thumbRT, 0, 0, W, H, px);
-    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
-    thumbScene.remove(group);
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const ctx2 = cv.getContext('2d'); const img = ctx2.createImageData(W, H);
-    for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);   // GL rows run bottom-up
-    ctx2.putImageData(img, 0, 0);
-    invalidateFrame();
-    return cv.toDataURL('image/png');
-  })();
-  thumbCache.set(key, job);
-  job.catch(() => thumbCache.delete(key));
+  const sig = paletteSig(), tier = quality;
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, sig, tier]);
+  return { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier, key };
+}
+async function renderThumb(opts = {}) {
+  if (!build) return null;
+  const s = thumbSpec(opts);
+  if (thumbCache.has(s.key)) return thumbCache.get(s.key);
+  const job = drawThumb(s).then(thumbPng);
+  thumbCache.set(s.key, job);
+  job.catch(() => thumbCache.delete(s.key));
   return job;
+}
+/* one preview drawn, uncached: { width, height, pixels (RGBA, GL rows bottom-up), box (the unit's bounds where it was
+   built, as two arrays), cam (the camera it was seen from) }. The box and the camera are for thumbModel. `plain` draws
+   into the ordinary render target the previews used before 2026-10-18: the measured control, never a control's choice. */
+async function drawThumb(s, { plain = false } = {}) {
+  const { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier } = s;
+  const gridH = Math.max(1, Math.ceil(hh / 2));
+  const unit = { id: 1, x: 0, y: gridH * 2 - hh, w, hh, fill, shelves: 0 };
+  if (variant) unit.variant = variant; if (lip) unit.lip = lip;
+  const rec = { mount: 'tabletop', length: build.length, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null, faceStyle, doorStyle: build.doorStyle, handleStyle, wallStagger: false, backCover: false, feet: 'tpu', buildPlate: build.buildPlate, removedStoppers: [], gridW: w, gridH, placed: [unit], nextId: 2 };
+  const gen = generateManifest(rec);
+  if (!gen.manifest) throw new Error((gen.errors || []).join(' · ') || 'no preview');
+  const m = gen.manifest;
+  for (const part of m.parts) { if (!typeByNode[part.node]) typeByNode[part.node] = part.type; if (!partInfoByNode[part.node]) partInfoByNode[part.node] = part; }
+  const keep = m.instances.filter(c => THUMB_TYPES.has(typeByNode[c.node]));
+  if (handle && !typeByNode[handle.node]) typeByNode[handle.node] = 'Handle';   // a variant the build has never worn (applyHandleStyle does the same)
+  const nodes = [...new Set(keep.map(c => c.node).concat(handle ? [handle.node] : []))];
+  const missing = [];
+  await Promise.all(nodes.filter(n => !templates[n]).map(async node => {
+    try { const gltf = await loader.loadAsync(`${PARTS_BASE}${node}.lib.glb`); templates[node] = adoptTemplate(gltf.scene, typeByNode[node] || 'Handle', node); }
+    catch (e) { missing.push(node); }
+  }));
+  if (missing.length) throw new Error('part models missing: ' + missing.join(', '));
+  if (paletteSig() !== sig) throw new Error('palette changed while loading');   // the shared materials now wear another palette: this key must not cache them (Sol 01a132de)
+  if (quality !== tier) throw new Error('quality tier changed while loading');   // and the light, the environment and the tone mapping another tier's
+  if (!thumbScene) {
+    thumbScene = new THREE.Scene();
+    // the stage's lights, placed where the stage places them (the strengths are set per tier below)
+    thumbRig = { hemi: new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.1), sun: new THREE.DirectionalLight(0xffffff, 1.6), fill: new THREE.DirectionalLight(0xffffff, 0.5) };
+    thumbRig.sun.position.set(300, 600, 400); thumbRig.fill.position.set(-400, 200, -300);
+    thumbScene.add(thumbRig.hemi, thumbRig.sun, thumbRig.fill);
+    thumbCam = new THREE.PerspectiveCamera(22, 4 / 3, 1, 6000);
+  }
+  /* lit as the stage lights the model on this tier (applyQuality): the rig's strengths with the workspace's fill boost, and
+     the studio environment where the tier has one. The tier's own numbers, not the live lights': the outro animates those. */
+  const rig = rigFor(tier);
+  thumbRig.hemi.intensity = rig.hemi; thumbRig.sun.intensity = rig.sun; thumbRig.fill.intensity = rig.fill;
+  thumbScene.environment = QUALITY[tier].env ? studioEnv() : null;
+  const group = new THREE.Group();
+  for (const c of keep) {
+    let node = c.node, pos = c.pos;
+    if (handle && typeByNode[c.node] === 'Handle') {   // the handle VARIANT in use lives outside the generator (applyHandleStyle)
+      const fp = keep.find(x => x.rides && x.rides === c.rides && typeByNode[x.node] === 'Faceplate');
+      node = handle.node;
+      if (fp && templates[fp.node]) pos = [c.pos[0], fp.pos[1] + (faceplateHeightOf(fp.node) - handle.h) / 2 - 0.5, fp.pos[2] + nodeDepth(fp.node) / 2 + handle.d / 2];
+    }
+    const g = templates[node].clone(true);
+    g.userData.node = node;
+    g.position.set(pos[0], pos[1], pos[2]);
+    const rot = c.rot || [0, c.yaw || 0, 0];
+    g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
+    const t = typeByNode[node];
+    g.traverse(o => { if (o.isMesh) { const z = o.userData.zone || ''; const ov = unitId != null ? overrideFor(unitId, zoneKey(t, z)) : null; o.material = ov ? overrideMatFor(zoneKey(t, z), ov, z, false) : baseMatFor(t, z); o.castShadow = false; o.receiveShadow = false; } });
+    group.add(g);
+  }
+  thumbScene.add(group); group.updateWorldMatrix(true, true);
+  let box = new THREE.Box3().setFromObject(group);
+  const bounds = [box.min.toArray(), box.max.toArray()];
+  if (frame === 'handle') {   // Astra: frame the handle, with just enough plate behind it for context
+    const hb = new THREE.Box3();
+    for (const g of group.children) if (typeByNode[g.userData.node] === 'Handle') hb.expandByObject(g);
+    if (!hb.isEmpty()) { const hs = hb.getSize(new THREE.Vector3()); hb.expandByVector(new THREE.Vector3(hs.x * 0.35 + 6, hs.y * 0.9 + 10, 0)); box = hb; }
+  }
+  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  const W = size, H = Math.round(size * 3 / 4);
+  if (!thumbRT || thumbRT.width !== W || thumbRT.height !== H || !!thumbRT.isXRRenderTarget === plain) {
+    if (thumbRT) thumbRT.dispose();
+    thumbRT = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true });
+    thumbRT.texture.colorSpace = THREE.SRGBColorSpace;   // the output transform the canvas gets, so the PNG matches the screen (Sol 01a132de)
+    /* ⚠ FLAGGED AS AN XR TARGET AND STORED AS RGBA8, or the preview is not the model. three r185 tone-maps only the screen
+       and XR targets, and an ordinary target writes the working colour space: on the tone-mapped tiers (Balanced and up;
+       Very High is the default) the previews sat a median 17 to 31 of 255 off the model (PREVIEW-FIDELITY.md, 2026-10-18).
+       The flag gives a target the screen's tone mapping and its texture's colour space; RGBA8 storage keeps the sRGB
+       texture from being stored as SRGB8_ALPHA8, whose hardware encode would encode it a second time (the Colors step-2
+       gate, STEP2-GATE.md). The flag is internal to three ("TODO Remove this when possible", three.module.js line 14372):
+       the e2e case "Build: a product preview matches the model ..." pins the match, with the ordinary target as control. */
+    if (!plain) { thumbRT.isXRRenderTarget = true; thumbRT.texture.internalFormat = 'RGBA8'; }
+  }
+  thumbCam.aspect = W / H; thumbCam.updateProjectionMatrix();
+  const fovV = THREE.MathUtils.degToRad(thumbCam.fov), fovH = 2 * Math.atan(Math.tan(fovV / 2) * thumbCam.aspect);
+  const dir = (view === 'front' ? new THREE.Vector3(0, 0.1, 1) : new THREE.Vector3(0.6, 0.35, 1)).normalize();
+  const fitW = view === 'front' ? sz.x : sz.x * 0.85 + sz.z * 0.55;
+  const dist = Math.max((sz.y / 2) / Math.tan(fovV / 2), (fitW / 2) / Math.tan(fovH / 2)) * fit + (frame === 'handle' ? 0 : sz.z / 2);
+  thumbCam.position.copy(c).add(dir.multiplyScalar(dist)); thumbCam.lookAt(c); thumbCam.updateMatrixWorld(true);
+  const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  renderer.setRenderTarget(thumbRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.render(thumbScene, thumbCam);
+  const px = new Uint8Array(W * H * 4);
+  renderer.readRenderTargetPixels(thumbRT, 0, 0, W, H, px);
+  renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
+  thumbScene.remove(group);
+  invalidateFrame();
+  const cam = { position: thumbCam.position.toArray(), quaternion: thumbCam.quaternion.toArray(), fov: thumbCam.fov, aspect: thumbCam.aspect, near: thumbCam.near, far: thumbCam.far };
+  return { width: W, height: H, pixels: px, box: bounds, cam };
+}
+function thumbPng({ width: W, height: H, pixels: px }) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx2 = cv.getContext('2d'); const img = ctx2.createImageData(W, H);
+  for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);   // GL rows run bottom-up
+  ctx2.putImageData(img, 0, 0);
+  return cv.toDataURL('image/png');
+}
+/* THE PREVIEW AGAINST THE MODEL (debug-only; PREVIEW-FIDELITY.md, 2026-10-18). The live unit `unitId`, its preview parts
+   alone (every other object hidden but the lights), drawn through the screen's own path - renderer.render into the
+   canvas, so its tone mapping and output encoding - at a drawn preview's size, from the camera that preview `r` was seen
+   from, moved onto the live unit. RGB as the screen shows it, over the stage colour; alpha the unit's silhouette, from a
+   second draw over a transparent clear. GL rows bottom-up, like drawThumb's pixels. A test-only frame, redrawn at once. */
+function thumbModel(r, unitId) {
+  const parts = [...instances.values()].filter(i => unitOf(i) === unitId && THUMB_TYPES.has(typeByNode[i.cfg.node]) && i.group.visible && !i.styleHidden);
+  if (!parts.length) throw new Error('unit ' + unitId + ' has no preview parts on the stage');
+  const box = new THREE.Box3();
+  for (const i of parts) { i.group.updateWorldMatrix(true, true); box.expandByObject(i.group); }
+  const built = new THREE.Box3(new THREE.Vector3().fromArray(r.box[0]), new THREE.Vector3().fromArray(r.box[1]));
+  const d = box.getSize(new THREE.Vector3()).sub(built.getSize(new THREE.Vector3()));
+  if (Math.max(Math.abs(d.x), Math.abs(d.y), Math.abs(d.z)) > 0.5) throw new Error('unit ' + unitId + ' on the stage is not the previewed unit: its bounds differ by ' + d.toArray().map(v => v.toFixed(1)).join(', ') + ' mm');
+  const cam = new THREE.PerspectiveCamera(r.cam.fov, r.cam.aspect, r.cam.near, r.cam.far);
+  cam.position.fromArray(r.cam.position).add(box.getCenter(new THREE.Vector3()).sub(built.getCenter(new THREE.Vector3())));
+  cam.quaternion.fromArray(r.cam.quaternion); cam.updateMatrixWorld(true);
+  const keep = new Set(parts.map(i => i.group)), hidden = [];
+  for (const o of scene.children) if (o.visible && !o.isLight && !keep.has(o)) { o.visible = false; hidden.push(o); }
+  const { width: W, height: H } = r, out = new Uint8Array(W * H * 4);
+  const prevRT = renderer.getRenderTarget(), prevSize = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
+  const prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha(), prevBg = scene.background;
+  const shadowNeeds = renderer.shadowMap.needsUpdate;
+  try {
+    // the drawing buffer at the preview's size WITHOUT touching the pixel ratio (the relief's band limit is per device
+    // pixel); the half pixel keeps the floor three takes from landing one short
+    renderer.setSize((W + 0.5) / pr, (H + 0.5) / pr, false);
+    if (renderer.domElement.width !== W || renderer.domElement.height !== H) throw new Error('the drawing buffer is ' + renderer.domElement.width + 'x' + renderer.domElement.height + ', not ' + W + 'x' + H);
+    renderer.shadowMap.needsUpdate = false;   // the stage's shadow map as it stands, not one of the lone unit
+    renderer.setRenderTarget(null); renderer.clear();
+    renderer.render(scene, cam);
+    const gl = renderer.getContext();
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    // and once more over a transparent clear: that alpha is the unit's silhouette, and it replaces the stage colour's 255s
+    const sil = new Uint8Array(W * H * 4);
+    scene.background = null; renderer.setClearColor(0x000000, 0);
+    renderer.clear(); renderer.render(scene, cam);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, sil);
+    for (let i = 3; i < out.length; i += 4) out[i] = sil[i];
+  } finally {
+    for (const o of hidden) o.visible = true;
+    scene.background = prevBg; renderer.setClearColor(prevClear, prevAlpha);
+    renderer.shadowMap.needsUpdate = shadowNeeds;
+    renderer.setSize(prevSize.x, prevSize.y, false); renderer.setRenderTarget(prevRT);
+    invalidateFrame();
+  }
+  return out;
 }
 /* ---- the palette API for the Colors workspace (phase 4) ---------------------------------------------------
    The palette stays the viewer's own (customColors keyed by part type or Type:zone, useCustom, userPalette); the
@@ -10506,6 +10593,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,
+    // and, for the check that they match the model (PREVIEW-FIDELITY.md): one drawn uncached, and the live unit from its camera
+    thumbDraw: (o, x) => drawThumb(thumbSpec(o), x), thumbModel,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
     palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
     setOverride, clearOverrides, overrideFor, setColorStoreKey,

@@ -92,6 +92,7 @@ export async function boot() {
     onPage: (i) => current?.onPage?.(i),
     onContext: (info) => current?.onContext?.(info),
     onHover: (unitId) => current?.onHover?.(unitId),
+    onQuality: (tier) => current?.onQuality?.(tier),
     quietSelect: true, fillBoost: 1.6,
     // the palette is per BUILD: the kit this page opened with keeps its own (the Studio's own key for official kits)
     colorStoreKey: colorKeyAtBoot(),

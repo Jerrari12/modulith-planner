@@ -1574,3 +1574,74 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* BUILD'S PRODUCT PREVIEWS MATCH THE MODEL (PREVIEW-FIDELITY.md, 2026-10-18). A preview is drawn into a render target of its
+   own, and three.js r185 tone-maps only the screen and XR-flagged targets: on the tone-mapped tiers (Balanced and up; Very
+   High is the default) the previews sat a median 17 to 31 of 255 off the model. They now take the XR flag with RGBA8 storage,
+   and the stage's own light rig and environment. Here the first unit's inspector and tile previews are compared with that
+   unit on the stage, drawn through the screen's own path from the same camera: the colour over the preview's own pixels
+   (median <= 6, p95 <= 32 of 255), and the silhouettes 2 px in from their edges (at most 0.5% of the model's pixels in one
+   and not the other), on Balanced and then on Fast. On Balanced the ordinary target, the previews' old one, is the control
+   and must miss. `isXRRenderTarget` is internal to three.js, so an upgrade that changes it fails here. Between the two
+   tiers, the quality pill: a preview is drawn for a tier, so a new tier repaints the tiles. Dark stage only: on the light
+   stage the model also carries the stage's cast shadows (from the rest of the build and from its own parts), and a
+   preview draws none. */
+test('Build: a product preview matches the model on a tone-mapped tier and on Fast (an ordinary render target is the control), and a new tier repaints the tiles', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const { ctx, page, errors } = await open('build', { context });
+  await page.waitForSelector('#ws .pv img', { timeout: 30_000 });
+  await settle(page, 1500);
+  const compare = () => page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, u = window.__GEN2_STORE__.state.placed[0];
+    const colour = (p, m) => {   // the largest channel difference over the preview's own pixels: the true median and the p95
+      const d = []; for (let i = 0; i < p.length; i += 4) { if (p[i + 3] < 250) continue; d.push(Math.max(Math.abs(p[i] - m[i]), Math.abs(p[i + 1] - m[i + 1]), Math.abs(p[i + 2] - m[i + 2]))); }
+      d.sort((a, b) => a - b); const n = d.length;
+      return { pixels: n, median: n % 2 ? d[(n - 1) / 2] : (d[n / 2 - 1] + d[n / 2]) / 2, p95: d[Math.floor(n * 0.95)] };
+    };
+    const cover = (p, m, W, H) => {   // silhouette pixels (alpha >= 250) whose whole 5x5 neighbourhood is in one silhouette and that the other lacks
+      const P = new Uint8Array(W * H), M = new Uint8Array(W * H); let nM = 0;
+      for (let i = 0; i < W * H; i++) { P[i] = p[i * 4 + 3] >= 250 ? 1 : 0; M[i] = m[i * 4 + 3] >= 250 ? 1 : 0; nM += M[i]; }
+      const inner = (S, x, y) => { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H || !S[yy * W + xx]) return false; } return true; };
+      let off = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if ((M[i] && !P[i] && inner(M, x, y)) || (P[i] && !M[i] && inner(P, x, y))) off++; }
+      return { modelPixels: nM, share: 100 * off / Math.max(1, nM) };
+    };
+    const out = { tier: v.quality };
+    const look = { fill: u.fill, w: u.w, hh: u.hh, variant: u.variant || null, lip: u.lip || null };
+    for (const [name, spec] of [['inspector', { ...look, view: 'three', fit: 1.0, size: 512, unitId: u.id }], ['tile', { ...look, view: 'front' }]]) {
+      const shown = await v.thumbDraw(spec), model = v.thumbModel(shown, u.id);
+      out[name] = { ...colour(shown.pixels, model), cover: cover(shown.pixels, model, shown.width, shown.height) };
+      if (name === 'inspector' && v.quality === 'balanced') out.plain = colour((await v.thumbDraw(spec, { plain: true })).pixels, model);
+    }
+    return out;
+  });
+  const matches = (r) => {
+    for (const k of ['inspector', 'tile']) {
+      const c = r[k];
+      assert.ok(c.pixels > 1000, `${r.tier}, ${k}: the preview shows the unit (${c.pixels} pixels)`);
+      assert.ok(c.median <= 6 && c.p95 <= 32, `${r.tier}, ${k}: the preview's colours match the model: median ${c.median}, p95 ${c.p95}`);
+      assert.ok(c.cover.share <= 0.5, `${r.tier}, ${k}: the preview covers what the model covers: ${c.cover.share.toFixed(2)}% of ${c.cover.modelPixels} pixels differ`);
+    }
+  };
+  const b = await compare();
+  assert.equal(b.tier, 'balanced', 'the case starts on a tone-mapped tier');
+  matches(b);
+  assert.ok(b.plain.median > 12, `the control: an ordinary render target misses the tone mapping (median ${b.plain.median})`);
+  // a new tier, a new picture: the pill (Balanced, then Fast) repaints the tiles, and so does a tier the stage sets itself
+  // (setQuality, the auto-downgrade's path), since the stage tells the workspace (opts.onQuality)
+  const repainted = async (src, how) => {
+    await page.waitForFunction((s) => { const i = document.querySelector('#ws .pv img'); return !!i && i.getAttribute('src') !== s; }, src, { timeout: 30_000 })
+      .catch(async () => assert.fail(`${how}: the tiles were not repainted for the ${await page.evaluate(() => window.__GEN2_VIEWER__.quality)} tier`));
+    return page.locator('#ws .pv img').first().getAttribute('src');
+  };
+  const atBalanced = await page.locator('#ws .pv img').first().getAttribute('src');
+  await page.locator('#ws-tools button.quality').click();
+  const atFast = await repainted(atBalanced, 'the pill');
+  const f = await compare();
+  assert.equal(f.tier, 'fast', 'the pill moved Balanced on to Fast');
+  matches(f);
+  await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('balanced'));
+  assert.equal(await repainted(atFast, 'setQuality'), atBalanced, 'back on Balanced, the tiles are the Balanced ones again');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});

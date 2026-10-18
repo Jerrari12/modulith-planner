@@ -76,11 +76,16 @@ export function mountBuild(stage, ctx) {
   const { say, soon } = makeToast(root);
   /* a product-faithful preview (the stage renders one unit from the real GLBs): the generated glyph stands in until the
      image is ready, and stays when there is no model for it (Cabinet; a part missing from the library) */
+  const previews = new WeakMap();   // holder -> its spec, so a new quality tier repaints the pictures in place (onQuality)
   function preview(glyphNode, spec, cls = '') {
     const holder = el('div.pv' + (cls ? '.' + cls : ''), {}, [glyphNode]);
     if (!stage.thumb) return holder;
-    stage.thumb(spec).then((url) => { if (url && holder.isConnected !== false) holder.replaceChildren(el('img', { src: url, alt: '' })); }).catch(() => {});
+    previews.set(holder, spec);
+    paintPreview(holder, spec);
     return holder;
+  }
+  function paintPreview(holder, spec) {
+    stage.thumb(spec).then((url) => { if (url && holder.isConnected !== false) holder.replaceChildren(el('img', { src: url, alt: '' })); }).catch(() => {});
   }
   const top = topbar(stage, { ...ctx, active: 'build', say, soon, signal });
   root.prepend(top);
@@ -865,6 +870,15 @@ export function mountBuild(stage, ctx) {
       if (phone) { phone.collapse(insp); phone.refresh(); safe(); }   // a selection shows as the inspector's handle (its name); a tap on it opens the sheet - never over the model by itself
     },
     onContext: openMenu,
+    /* the stage changed its quality tier (the pill, or the auto-downgrade from the render loop): the product previews are
+       drawn for a tier, as the model is (it is in stage.thumb's key), so each picture on the page is drawn again for the
+       new one. In place: the old picture stays until the new one is ready, and nothing else is rebuilt, so a tier change
+       that lands mid-gesture moves no focus and closes no menu (a whole-panel renderAll from an async callback once wiped
+       a word being typed, reviewer lesson 01a14ca2) */
+    onQuality() {
+      if (unmounting) return;
+      for (const holder of document.querySelectorAll('.pv')) { const spec = previews.get(holder); if (spec) paintPreview(holder, spec); }
+    },
     unmount() {
       unmounting = true;
       ac.abort(); unsub();

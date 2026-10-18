@@ -607,3 +607,66 @@ Dated calls made while building, with who made them. The brief and the inventory
   - a crafted `#scheme=` link loses its `javascript:` link and its `__proto__` key, and the page has no `javascript:`
     href;
   - no page errors.
+
+## 2026-10-18 (Build's product previews match the model on every tier)
+
+- **Why:** the standing requirement above is product-faithful previews. The Colors step-2 gate
+  (`D:\Claude - Output\colors-presets-2026-10-17\STEP2-GATE.md`) found that three.js r185 tone-maps only the screen and
+  render targets flagged `isXRRenderTarget`. Build's previews (`renderThumb`) drew into an ordinary sRGB target, in a
+  scene of their own: the shipped light rig, no environment map, no fill boost.
+- **Measured first**, against marks written before any comparison
+  (`D:\Claude - Output\preview-fidelity-2026-10-18\PREVIEW-FIDELITY.md`).
+  - **The method.** Each preview is compared with the live unit, drawn through the screen's own path from the same
+    camera. The figure is the largest channel difference over the preview's own pixels. The mark is a median of at
+    most 6 and a p95 of at most 32, of 255.
+  - **Off on every tone-mapped tier.** On Balanced, High and Very High (the default) the root kit's previews sat a
+    median of 17 to 31 off the model, with a p95 of 31 to 67: a duller orange, on both stages. Fast matched (median 0).
+- **The fix**, in `drawThumb`, the drawing half of `renderThumb`. That half was split off first, unchanged, and checked
+  byte-identical against main's previews.
+  - The target is flagged `isXRRenderTarget` and its texture is stored as RGBA8, the recipe the gate measured: the
+    screen's tone mapping and colour space, encoded once. The flag is internal to three.js (line 14372 says "TODO Remove
+    this when possible"), which is why the e2e case below pins the match.
+  - The preview's lights take the stage's per-tier strengths, with the workspace's fill boost (`rigFor`, which
+    `applyQuality` now uses too). Its scene takes the studio environment where the tier has one.
+  - The tier is in the preview's cache key, and a draw whose tier changed while its part models loaded is dropped.
+  - A new tier, from the quality pill or the auto-downgrade, reaches the workspace through `opts.onQuality`. Build
+    repaints its preview images in place: no panel rebuild, so focus and open menus stay put.
+  - Two debug-only hooks, behind `?debug=1`: `stage.thumbDraw` and `stage.thumbModel`.
+- **After:** every compared image is inside the mark.
+  - **The root kit:** median 0 and p95 at most 11 on the dark stage; median at most 3 and p95 at most 31 on the light
+    stage.
+  - **149 more, one factor at a time:** a decor, a classic and a shelf unit; the four presets; the five faceplate
+    families; nine handle styles.
+  - **Silhouettes:** the preview and the model agree exactly, 2 px in from their edges.
+  - **The light stage's p95** is the stage's cast shadow on the unit, from the rest of the build and from the unit's own
+    parts (the check cannot separate the two). A preview draws no shadows. With the stage's sun casting none it is at
+    most 4.
+  - **Cost:** per preview, within 2 ms of the shipped code. Boot compiles one shader program fewer, consistent with a
+    preview now taking the screen's program parameters; a count cannot show which programs were used.
+  - **Not compared:** translucent filaments, which sample what is behind them, and a preview has nothing behind the
+    unit.
+- **Tests:**
+  - **The e2e case** "Build: a product preview matches the model on a tone-mapped tier and on Fast ...". It checks the
+    first unit's inspector and tile previews on the dark stage, on Balanced and then on Fast: the colour, the
+    silhouettes, the ordinary target as the control on Balanced, and the tiles repainting after the pill and after
+    `setQuality`.
+  - **Mutation-checked.** It fails:
+    - without the RGBA8 storage (median 52, p95 73);
+    - without the XR flag (11, 59);
+    - with the old lights and no environment (8, 70);
+    - without the repaint.
+  - **The totals:**
+    - npm test: 520 tests, 515 passed, 0 failed, 5 skipped (the same as before the change);
+    - e2e under SwiftShader with the Studio tree: 40 of 40;
+    - the 60 golden screenshots: 0 differ. They are the plain viewer's canvas, which draws no previews, so none was
+      re-blessed.
+- **Review:** Sol `01a14f5a`, two turns. All eight findings held and were acted on:
+  - the colour figure could not see missing pixels, so the silhouette check was added;
+  - the first tables' medians were upper-middle values, so they were re-run as true medians. The shipped figures were
+    re-run on a reconstruction of the shipped drawing, hash-checked against main; every figure came out the same;
+  - the e2e case's coverage was overstated, so the case was widened and is stated exactly here;
+  - the sample was narrow, so the one-factor sweep was added;
+  - the shipped figures and the root kit's silhouettes were still owed, so both were re-run;
+  - two claims went past their evidence (the light stage's shadows, the shared shader programs) and are now worded as
+    above.
+- **Not deployed:** branch `preview-fidelity`, waiting for Joey's go.
