@@ -1700,15 +1700,20 @@ test('Colors step 3: the gallery fills within bounds and keeps the page\'s frame
     const t0 = performance.now();
     document.querySelector('#ws-colors .browse').click();
     const n = document.querySelectorAll('#ws-gallery .lcard').length;
-    while (document.querySelectorAll('#ws-gallery canvas.drawn').length < n && performance.now() - t0 < 20000) await new Promise((r) => setTimeout(r, 5));
+    while (document.querySelectorAll('#ws-gallery canvas.drawn').length < n && performance.now() - t0 < 30000) await new Promise((r) => setTimeout(r, 5));
     const total = performance.now() - t0; go = false;
     const f = frames.slice(1).sort((a, b) => a - b);
     return { cards: n, drawn: document.querySelectorAll('#ws-gallery canvas.drawn').length, total: Math.round(total), frames: f.length, p50: Math.round(f[Math.floor(f.length / 2)] || 0), p95: Math.round(f[Math.floor(f.length * 0.95)] || 0), max: Math.round(f[f.length - 1] || 0) };
   });
   console.log(`      gallery fill: ${r.drawn}/${r.cards} cards in ${r.total} ms over ${r.frames} frames; frame p50 ${r.p50} p95 ${r.p95} max ${r.max} ms`);
   assert.equal(r.drawn, r.cards, 'every card drawn');
-  assert.ok(r.total <= 5000, `the gallery filled within 5 s (${r.total} ms)`);
-  assert.ok(r.max <= 500, `no frame stalled half a second (max ${r.max} ms)`);
+  // the bounds are the CI runner's, not a GPU's: its software rasteriser took 8.9 s for the 11 cards on 2026-10-18 (run
+  // 39142321766 failed a 5 s bound; this laptop's soft run takes 1.7 s with 250 ms frames, a real GPU 150 ms with 17 ms
+  // frames). The marks proper are in STEP3.md, measured by step3-pacing.mjs on a GPU; this gate catches only a fill that
+  // never ends or a frame that stalls for seconds. It cannot see the serial-fence pathology (11 cards in 1.2 s on a GPU,
+  // Terra 01a14fce): that is the harness's job
+  assert.ok(r.total <= 30_000, `the gallery filled within 30 s (${r.total} ms)`);
+  assert.ok(r.max <= 2000, `no frame stalled two seconds (max ${r.max} ms)`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
