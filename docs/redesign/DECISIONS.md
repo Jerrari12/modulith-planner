@@ -455,3 +455,32 @@ Dated calls made while building, with who made them. The brief and the inventory
     Terra 01a14b05 (round 2's warnings);
   - the vault entries: Sol 01a14aa0 (7 of 10 held); Terra 01a14aa6, 01a14ac8, 01a14b06 and 01a14b22.
 - **A caveat:** an open tab may still hold the old Picker. Reload it.
+
+## 2026-10-17 (side covers, live on every build)
+
+- **Joey's call (2026-10-17):** "Deploy side covers now, shown on every build". The default-off toggle of the 2026-10-09
+  decision is not built: the merged BOM already bills covers on every build, so the stage now shows them on every
+  build. A real toggle needs a new build field, and BUILD_FIELDS is pinned to the old planner's.
+- **What it is** (branch `side-covers`, `f28de1f` and `48f05b2`, by the side-covers session; Sol, two passes, no
+  findings):
+  - a cover goes on exactly the walls the BOM bills, at the release offsets; a test holds the stage to the BOM on the
+    kits, edge cases and 400 random builds;
+  - it is fitted after the case and before anything stacks on top: in from 30 mm off the wall, 3.8 mm up, a pause,
+    then the slide down, under a close camera;
+  - pink in Part colors; in the presets the core takes the case colour and the face the faceplate face colour;
+  - builds are 5 mm wider, because the covers count in W; the ten kits gain 4 × 1H covers each.
+- **Known limits:** a 4H–6H shelf end has no made cover size, so it stays bare with a warning (MODULITH known-gaps).
+  Reading "face = the accent colour" as the faceplate face makes Sandstone's covers all brown and Signal's faces
+  yellow; that reading is open for Joey.
+- **Deployed, in this order:**
+  1. gen2-parts master fast-forwarded to `d73facf` (the 27 GLBs and 27 thumbnails), served from 23:01:18Z;
+  2. the planner: `side-covers` merged into main as `d8f55bb` (no conflicts), pushed 23:34:50Z, run 39079574241
+     green at 23:49:48Z. The order matters: the side-covers session found that the planner's browser tests fail
+     while the parts host lacks the 27 files (its smoke run fetched SideCover_185-1H from the live host and failed).
+- **Tests on the merge, against the live parts host:** npm test 517 tests, 512 passed, 0 failed, 5 skipped; e2e with
+  E2E_SOFT=1 and the Studio at ls-public `fa87f8df`, 31 of 31.
+- **Checked in production:** the 185 2W-2H kit and a new build each draw 4 `SideCover_185-1H`; the Parts list shows
+  "×4 Side Cover 185 · 1H"; no page errors, and no failed requests apart from GoatCounter's (not checked).
+- **A test-setup gotcha:** STUDIO_DIR must be a Windows path with backslashes. The e2e server refuses any file whose path
+  does not start with that string, so a forward-slash path turns every Studio request into a 403, and the five
+  Studio cases time out.
