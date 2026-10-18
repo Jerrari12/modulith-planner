@@ -1967,3 +1967,52 @@ test('Parts and the viewer offer and link only Printables and Thangs (MakerWorld
   assert.deepEqual(clean([...errors, ...verrors]), []);
   await ctx.close();
 });
+
+/* Joey, 2026-10-18, on the Parts tab after choosing colours: "the parts have the instructions colors assigned to them, which
+   is kind of confusing after assigning chosen colors to it". With the visitor's colours on, a row's chip is the filament the
+   part prints in (the identification colour stays as a ring), the row names it, and so does the CSV. */
+test('Parts: with chosen colours on, a row shows and names the filament it prints in; off, the identification colour; the CSV carries the name', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .browse').click();
+  await page.locator('#ws-gallery .lcard').nth(1).click();   // Stealth, on a fresh profile
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.locator('#ws-gallery .apply').click();
+  await settle(page, 600);
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const read = () => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__; const pal = v.palette();
+    const rgb = (h) => { const s = document.createElement('span'); s.style.background = h; document.body.appendChild(s); const c = getComputedStyle(s).backgroundColor; s.remove(); return c; };
+    const row = [...document.querySelectorAll('#ws-parts .prow')].find((x) => /^Case\b/.test(x.querySelector('.name').textContent));
+    const chip = row.querySelector('.chip');
+    return { on: pal.on, caseName: pal.colors.Case ? pal.colors.Case.name : null, caseRgb: pal.colors.Case ? rgb(pal.colors.Case.hex) : null, idRgb: rgb('#E9E9EC'),
+      chipRgb: getComputedStyle(chip).backgroundColor, ring: getComputedStyle(chip).outlineStyle, swatches: chip.querySelectorAll('i').length,
+      line: (row.querySelector('.printin') || {}).textContent || '', link: (row.querySelector('.printin a') || {}).href || '', caption: document.querySelector('#ws-parts .row2 .dim').textContent,
+      buyChips: [...document.querySelectorAll('#ws-parts .chip.buy')].filter((c) => c.classList.contains('fil')).length };
+  });
+  const on = await read();
+  assert.ok(on.on && on.caseName, 'the control: the preset is on and picks the case');
+  assert.equal(on.chipRgb, on.caseRgb, `the case row's chip is the case filament (${on.caseName}), not the identification colour`);
+  assert.equal(on.ring, 'solid', 'the identification colour stays as a ring');
+  const shortName = on.caseName.replace('Panchroma ', '');   // the brand prefix is stripped, as the Colors tab strips it
+  assert.ok(on.line.startsWith(`Print in ${shortName}`), `the row names the filament: "${on.line}" (expected "Print in ${shortName}…")`);
+  assert.ok(/^https?:/.test(on.link), 'the name is the buy link the Colors tab uses');
+  assert.match(on.caption, /Chip = the filament it prints in · ring = its colour in Assemble/, 'the caption says what the chip is');
+  assert.equal(on.buyChips, 0, 'bought hardware keeps its dashed chip');
+  // the CSV names it too
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10_000 }), btn(page, 'Download CSV', '#ws-parts').click()]);
+  const csv = await readFile(await dl.path(), 'utf8');
+  const caseLine = csv.split(/\r?\n/).find((l) => /"Case 185/.test(l));
+  assert.ok(/"Section","Qty","Part","Print in"/.test(csv), 'the CSV has a Print in column');
+  assert.ok(caseLine && caseLine.includes(`"${on.caseName.replace('Panchroma ', '')}`), `the case line carries the filament: ${caseLine}`);
+  // colours off: the identification colour, as today
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setUseCustom(false); window.__GEN2_STORE__.commit(() => {}, 'color'); });
+  await settle(page, 400);
+  const off = await read();
+  assert.equal(off.on, false, 'the control: the colours are off');
+  assert.equal(off.chipRgb, off.idRgb, 'the chip is the identification colour again');
+  assert.equal(off.line, '', 'no Print in line');
+  assert.match(off.caption, /^Chips = part colors in Assemble/, 'the caption is the old one');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
