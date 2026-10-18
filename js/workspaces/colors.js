@@ -34,7 +34,8 @@ import { toolbar } from '../ui/toolbar.js';
 import { FILAMENT_DB } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
-import { surprise, LOCKS, MOODS, CAPS, shortName } from '../colors/surprise.js';
+import { surprise, LOCKS, CAPS, shortName } from '../colors/surprise.js';
+import { STYLES } from '../colors/styles.js';
 import { readOwned, writeOwned } from '../state/owned.js';
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
@@ -132,12 +133,11 @@ let lastLook = null;   // the look last chosen by name, for "<look> · edited" (
    the model. */
 const TRAY_MAX = 3;
 let trayLooks = [];
-/* SURPRISE ME (the Colors plan's step 5, 2026-10-18): the settings and the three candidates, kept across remounts. `locks`
-   is role -> filament (see LOCKS: the regions a visitor can hold as they are); `like` the shell and face "More like this"
-   started from; `cands` the looks as the gallery lists them ({ id, kind, name, colors, over }), plus their roles. */
-const sp = { mood: 'playful', cap: 3, ownedOnly: false, locks: {}, like: null, seed: 0, cands: [], short: false };
-const MOOD_LABEL = { subtle: 'Subtle', playful: 'Playful', wild: 'Wild' };
-const MOOD_HINT = { subtle: 'Neutrals and one quiet colour', playful: 'A neutral shell with a bright colour or two', wild: 'A coloured shell, hues far apart' };
+/* SURPRISE ME / FIND YOUR NEXT LOOK (the Colors plan's step 5, Astra's refinement 5b, 2026-10-18): the settings and the
+   three candidates, kept across remounts. `style` is a styles.js id; `locks` is role -> filament (see LOCKS: the regions a
+   visitor can hold as they are); `like` the accent colour and interpretation "More like this" started from; `cands` the
+   looks as the gallery lists them ({ id, kind, name, colors, over }), plus their roles, accent colour and interpretation. */
+const sp = { style: 'workshop', cap: 3, ownedOnly: false, locks: {}, like: null, seed: 0, cands: [], short: false };
 const LABELS = new Set(FILAMENT_DB.flatMap((b) => b.colors.map((c) => c.label)));
 const storage = () => { try { return localStorage; } catch { return null; } };   // a browser that blocks storage throws on the read itself
 
@@ -442,7 +442,8 @@ export function mountColors(stage, ctx) {
     const translucent = fc.filaments.filter((f) => TRANSLUCENT.has(f.name)).map((f) => short(f.name));
     gallery.append(
       el('div.head', {}, [
-        el('button.back.key.sm', { title: 'Back to the looks', onclick: () => { st.detail = null; stage.endPreview?.(); renderGallery(); } }, ['← Looks']),
+        // a candidate's details (step 5b) go back to Find your next look, not to the gallery grid
+        el('button.back.key.sm', { title: l.kind === 'surprise' ? 'Back to Find your next look' : 'Back to the looks', onclick: () => { if (l.kind === 'surprise') { st.detail = null; st.gallery = false; openSurprise(); return; } st.detail = null; stage.endPreview?.(); renderGallery(); } }, [l.kind === 'surprise' ? '← Find your next look' : '← Looks']),
         el('h2', { text: l.name }),
         el('button.x', { title: 'Close', 'aria-label': 'Close the looks', onclick: closeGallery }, [icon('x', { size: 16 })]),
       ]),
@@ -480,12 +481,13 @@ export function mountColors(stage, ctx) {
      is under two, and the candidates are rolled again when the list changed under the switch */
   function leaveOwned() { st.owning = false; if (sp.ownedOnly && owned().length < 2) sp.ownedOnly = false; if (sp.ownedOnly && owned().join('|') !== st.ownedWas) roll(); }
   function enterOwned() { st.owning = true; st.ownedWas = owned().join('|'); renderSurprise(); if (phone) phone.refresh(); }
-  /* a roll: three looks for the settings, a new seed each time; "More like this" keeps a candidate's shell and face. A roll
-     never touches the safe area (no renderAll), so the camera stays (the plan: a look is judged on a still model) */
+  /* a roll: the three interpretations of the style for the settings, a new seed each time; "More like this" keeps a
+     candidate's accent colour and interpretation on other shells. A roll never touches the safe area (no renderAll), so the
+     camera stays (the plan: a look is judged on a still model) */
   function roll(like = null) {
     sp.like = like; sp.seed = (Math.random() * 2 ** 32) >>> 0;
-    const r = surprise({ mood: sp.mood, cap: sp.cap, owned: sp.ownedOnly ? owned() : null, locks: sp.locks, like, seed: sp.seed });
-    sp.cands = r.looks.map((l, i) => ({ id: `surprise:${sp.seed}:${i}`, kind: 'surprise', name: l.name, colors: l.colors, over: {}, roles: l.roles }));
+    const r = surprise({ style: sp.style, cap: sp.cap, owned: sp.ownedOnly ? owned() : null, locks: sp.locks, like, seed: sp.seed });
+    sp.cands = r.looks.map((l, i) => ({ id: `surprise:${sp.seed}:${i}`, kind: 'surprise', name: l.name, colors: l.colors, over: {}, roles: l.roles, accent: l.accent, slot: l.slot, share: l.share }));
     sp.short = r.short;
     st.sshow = null; stage.endPreview?.();
   }
@@ -496,9 +498,12 @@ export function mountColors(stage, ctx) {
     else { st.sshow = i; stage.previewPalette(asLook(sp.cands[i])); }
     renderSurprise(); if (phone) phone.refresh();
   }
-  /* Keep: the look on the build as a scheme of its own (one undo step; commitColors flushes around it); the panel stays and
-     the card reads ACTIVE, so the next one can be compared against it */
-  function keep(c) { st.sshow = null; applyLook({ name: c.name, apply: () => commitColors('scheme', () => stage.setPalette({ colors: c.colors, over: {}, on: true })) }); renderAll(); }
+  /* Use this look: the look on the build as a scheme of its own (one undo step; commitColors flushes around it); the panel
+     stays and the card reads ACTIVE, so the next one can be compared against it */
+  const keepLook = (c) => commitColors('scheme', () => stage.setPalette({ colors: c.colors, over: {}, on: true }));
+  function keep(c) { st.sshow = null; applyLook({ name: c.name, apply: () => keepLook(c) }); renderAll(); }
+  /* Details: the gallery's look details for a candidate (the filament list with buy links, the notes); its Back comes back here */
+  function candDetail(c) { st.detail = { id: c.id, kind: 'surprise', name: c.name, colors: c.colors, over: {}, apply: () => keepLook(c) }; st.gallery = 'featured'; st.surprise = false; st.sshow = null; stage.previewPalette(asLook(c)); renderAll(); if (phone) { phone.collapse(sur); phone.open(gallery); } gallery.querySelector('.back')?.focus(); }
   function renderSurprise() {
     if (!st.surprise) { sur.hidden = true; return; }
     sur.hidden = false; sur.replaceChildren();
@@ -506,10 +511,11 @@ export function mountColors(stage, ctx) {
     const p = pal(); const list = owned();
     const have = new Set(stage.keysInBuild().filter((k) => !k.locked).map((k) => k.key));
     sur.append(
-      el('div.head', {}, [el('h2', { text: 'Surprise me' }), el('span.sub', { text: 'Three looks for this build.' }), el('button.x', { title: 'Close', 'aria-label': 'Close Surprise me', onclick: closeSurprise }, [icon('x', { size: 16 })])]),
-      el('div.srow', {}, [el('span.lbl', { text: 'Mood' }), el('div.track.seg3.mood', { role: 'group', 'aria-label': 'Mood' }, MOODS.map((m) => el('button.seg.sm' + (sp.mood === m ? '.on' : ''), { text: MOOD_LABEL[m], title: MOOD_HINT[m], 'aria-pressed': String(sp.mood === m), onclick: () => { if (sp.mood !== m) { sp.mood = m; reroll(); } } })))]),
+      el('div.head', {}, [el('h2', { text: 'Find your next look' }), el('span.sub', { text: 'Three colour combinations, made for your build.' }), el('button.x', { title: 'Close', 'aria-label': 'Close Find your next look', onclick: closeSurprise }, [icon('x', { size: 16 })])]),
+      // the styles as tiles (Astra: "a small palette tile with three swatches, so users can understand the choice without reading")
+      el('div.srow.stylerow', {}, [el('span.lbl', { text: 'Style' }), el('div.styles', { role: 'radiogroup', 'aria-label': 'Style' }, STYLES.map((s) => el('button.stile' + (sp.style === s.id ? '.on' : ''), { role: 'radio', 'aria-checked': String(sp.style === s.id), title: s.hint, onclick: () => { if (sp.style !== s.id) { sp.style = s.id; reroll(); } } }, [el('span.sw3', {}, s.swatches.map((h) => el('i', { style: `background:${h}` }))), el('span.sname', { text: s.name })])))]),
       // the cap is the visitor's: the planner cannot know a printer's colour count (the plan)
-      el('div.srow', {}, [el('span.lbl', { text: 'Filaments' }), el('div.track.seg3.cap', { role: 'group', 'aria-label': 'Filaments at most' }, CAPS.map((c) => el('button.seg.sm' + (sp.cap === c ? '.on' : ''), { text: `≤ ${c}`, title: `At most ${c} filaments, printed · you know your printer's colours`, 'aria-pressed': String(sp.cap === c), onclick: () => { if (sp.cap !== c) { sp.cap = c; reroll(); } } })))]),
+      el('div.srow', {}, [el('span.lbl', { text: 'Use up to' }), el('div.track.seg3.cap', { role: 'group', 'aria-label': 'Filaments at most' }, CAPS.map((c) => el('button.seg.sm' + (sp.cap === c ? '.on' : ''), { text: `${c} filaments`, title: `At most ${c} filaments, printed · you know your printer's colours`, 'aria-pressed': String(sp.cap === c), onclick: () => { if (sp.cap !== c) { sp.cap = c; reroll(); } } })))]),
       el('div.srow.ownedrow', {}, [
         el('label.chk', { title: list.length < 2 ? 'Tick two or more filaments you own first' : 'Only the filaments on your list' }, [
           el('input.ownedonly', { type: 'checkbox', checked: sp.ownedOnly && list.length >= 2 ? true : null, disabled: list.length < 2, onchange: (e) => { sp.ownedOnly = e.target.checked; reroll(); } }),
@@ -518,7 +524,7 @@ export function mountColors(stage, ctx) {
         el('button.key.sm.edit', { title: 'Tick the filaments you have', onclick: enterOwned }, [icon('pencil-simple', { size: 14 }), 'Edit']),
       ]),
       // locks: the regions that drive a look and that this build has, each holding the filament it wears now
-      el('div.locks', {}, [el('span.lbl', { text: 'Lock', title: 'Hold a region at the filament it wears now; every look keeps it' }), el('div.chips', {}, LOCKS.filter(([key]) => have.has(key)).map(([key, role, label]) => {
+      el('div.locks', {}, [el('span.lbl', { text: 'Keep these colours', title: 'Hold a region at the filament it wears now; every look keeps it' }), el('div.chips', {}, LOCKS.filter(([key]) => have.has(key)).map(([key, role, label]) => {
         const held = sp.locks[role]; const cur = worn(key) || (key.includes(':') ? worn(key.split(':')[0]) : null); const f = held || cur;
         return el('button.lchip' + (held ? '.on' : ''), { disabled: !held && !cur, 'aria-pressed': String(!!held), title: held ? `${label} stays ${short(held.name)} · click to free it` : cur ? `Keep the ${label.toLowerCase()} ${short(cur.name)} in every look` : `Pick a filament for the ${label.toLowerCase()} first`, onclick: () => { if (held) delete sp.locks[role]; else sp.locks[role] = { name: cur.name, hex: cur.hex, url: cur.url }; reroll(); } }, [icon('lock-simple', { size: 12 }), f ? el('i', { style: `background:${f.hex}` }) : null, label]);
       }))]),
@@ -537,15 +543,16 @@ export function mountColors(stage, ctx) {
           el('div.lrow', {}, [el('span.lcount', { text: n(count, 'filament') }), on ? el('span.badge.active', { text: 'ACTIVE' }) : shown ? el('span.badge.shown', { text: 'SHOWN' }) : null]),
         ]),
         el('div.cacts', {}, [
-          el('button.key.sm.strong.keep', { text: on ? 'Applied' : 'Keep', disabled: on, title: 'Dress the whole build in this look · one undo step', onclick: () => keep(c) }),
-          el('button.key.sm.like', { text: 'More like this', title: `Three more with ${shortName(c.roles.face)} on ${shortName(c.roles.shell)}`, onclick: () => reroll({ shell: c.roles.shell, face: c.roles.face }) }),
+          el('button.key.sm.strong.keep', { text: on ? 'In use' : 'Use this look', disabled: on, title: 'Dress the whole build in this look · one undo step', onclick: () => keep(c) }),
+          el('button.key.sm.like', { text: 'More like this', title: `Three more with ${shortName(c.accent)} as the accent, on other shells`, onclick: () => reroll({ accent: c.accent, slot: c.slot, notShell: c.roles.shell }) }),
+          el('button.key.sm.detail', { text: 'Details', title: 'The filaments of this look, with where to buy them', onclick: () => candDetail(c) }),
         ]),
       ]));
     });
-    const fix = ' Free a lock, allow more filaments or add to the filaments you own.';
+    const fix = ' Free a colour, allow more filaments or add to the filaments you own.';
     if (sp.cands.length) sur.appendChild(cands);
     if (sp.short) sur.appendChild(el('p.note.short', { text: (sp.cands.length ? `Only ${n(sp.cands.length, 'look fits', 'looks fit')} these settings.` : 'No look fits these settings.') + fix }));
-    sur.appendChild(el('div.sacts', {}, [el('button.key.sm.strong.again', { title: 'Three new looks', onclick: () => reroll() }, [icon('arrow-clockwise', { size: 14 }), 'Try again']), el('span.note', { text: 'Hover or tap a look to see it on the model. The view stays put.' })]));
+    sur.appendChild(el('div.sacts', {}, [el('button.key.sm.strong.again', { title: 'Three more looks in this style', onclick: () => reroll() }, [icon('arrow-clockwise', { size: 14 }), 'Show three more']), el('span.note', { text: 'Hover or tap a look to see it on the model; the view stays put. Looks follow the planner’s colour rules; whether a filament suits a part is a separate question.' })]));
   }
   /* the owned list: every catalog colour by brand, ticked or not; kept in this browser (js/state/owned.js) */
   function renderOwned() {
@@ -708,7 +715,7 @@ export function mountColors(stage, ctx) {
     { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}` : typePlural(st.key)}` : 'Filament' },
     { el: gallery, title: () => st.detail ? st.detail.name : 'Looks' },
     { el: tray, title: () => `Compare · ${trayLooks.length} of ${TRAY_MAX}` },
-    { el: sur, title: () => st.owning ? 'Filaments I own' : 'Surprise me' },
+    { el: sur, title: () => st.owning ? 'Filaments I own' : 'Find your next look' },
   ] }) : null;
   if (phone) phone.onLayout(safe);
   /* the gallery never moves the safe area (the plan: a change refits the camera, and a hovered look must be judged on a
@@ -746,6 +753,6 @@ export function mountColors(stage, ctx) {
     unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace
     get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
     get tray() { return trayLooks.map((t) => t.name); },   // the finalists, for a check
-    get surprise() { return { names: sp.cands.map((c) => c.name), colors: sp.cands.map((c) => c.colors), mood: sp.mood, cap: sp.cap, ownedOnly: sp.ownedOnly, locks: Object.keys(sp.locks), short: sp.short, seed: sp.seed }; },   // the candidates, for a check
+    get surprise() { return { names: sp.cands.map((c) => c.name), colors: sp.cands.map((c) => c.colors), style: sp.style, cap: sp.cap, ownedOnly: sp.ownedOnly, locks: Object.keys(sp.locks), short: sp.short, seed: sp.seed }; },   // the candidates, for a check
   };
 }

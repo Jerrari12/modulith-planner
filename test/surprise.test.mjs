@@ -1,12 +1,14 @@
-/* THE LOOK GENERATOR (js/colors/surprise.js, the Colors plan's step 5, 2026-10-18) against the preset rules, re-stated HERE
-   independently of the generator's own validator (STEP5.md, M11): every look it returns, over every mood, cap and three
-   catalogs (the whole one; an owned list of eight; an owned list of three), for a hundred seeds each, passes the rules
-   test/presets.test.mjs holds the presets to, keeps to the cap and the owned list, and never picks a translucent colour.
-   Then variety (M12), speed (M13), determinism, locks, "more like this", and the settings that admit no look. */
+/* THE LOOK GENERATOR (js/colors/surprise.js; the Colors plan's step 5 and Astra's refinement 5b, 2026-10-18) against the
+   preset rules, re-stated HERE independently of the generator's own validator (STEP5.md M11, STEP5B.md M16): every look it
+   returns, over every style, cap and three catalogs (the whole one; an owned list of eight; an owned list of three), for a
+   hundred seeds each, passes the rules test/presets.test.mjs holds the presets to, keeps to the cap and the owned list, and
+   never picks a translucent colour. Then style fidelity (M17), the three interpretations (M18), silk shells (M19),
+   availability (M20), names (M21), speed (M13), determinism, locks, "more like this", and settings that admit no look. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FILAMENT_DB } from '../js/filament-db.js';
-import { surprise, checkLook, catalog, PALETTE_KEYS, ROLE_KEYS, MOODS, CAPS, HARDWARE, shortName } from '../js/colors/surprise.js';
+import { surprise, checkLook, catalog, PALETTE_KEYS, ROLE_KEYS, CAPS, SLOTS, AREA, HARDWARE, areaOf } from '../js/colors/surprise.js';
+import { STYLES } from '../js/colors/styles.js';
 
 const BY_LABEL = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, { ...c, silk: /Silk/.test(b.line) }])));
 /* the presets test's own contrast formula, copied, not imported: this file must not lean on the module under test */
@@ -14,6 +16,7 @@ const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 
 const contrast = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
 const PRESET_KEYS = ['Case', 'Drawer', 'CoverL', 'CoverU', 'Bracket', 'FootrailL', 'FootrailU', 'Foot', 'Rail', 'CaseExtender', 'ShelfInsert', 'ShelfLip', 'SideCover', 'SideCover:FACE', 'Faceplate', 'Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT', 'Accent', 'Label', 'Label:TEXT', 'BackCover', 'Handle', 'QuickLock', 'MagnetClip', 'Stopper', 'Magnet', 'Screw'];
 const HARDWARE_KEYS = ['Magnet', 'Screw'];
+const printedNames = (look) => new Set(PRESET_KEYS.filter((k) => !HARDWARE_KEYS.includes(k)).map((k) => look.colors[k].name));
 
 /* the rules, as test/presets.test.mjs states them, plus this step's own (the cap, the owned list, no translucent, the
    covers and foot rails in pairs, the label text legible) */
@@ -38,134 +41,155 @@ function problems(look, { cap, owned }) {
   if (contrast(c.ShelfInsert.hex, c.Case.hex) < 4.5) p.push(`deck ${contrast(c.ShelfInsert.hex, c.Case.hex).toFixed(2)}:1`);
   if (!PRESET_KEYS.some((k) => k !== 'ShelfInsert' && c[k].name === c.ShelfInsert.name)) p.push('deck from outside the look');
   if (contrast(c['Label:TEXT'].hex, c.Label.hex) < 4.5) p.push('label text illegible');
-  const printed = new Set(PRESET_KEYS.filter((k) => !HARDWARE_KEYS.includes(k)).map((k) => c[k].name));
+  const printed = printedNames(look);
   if (printed.size > cap) p.push(`${printed.size} filaments over a cap of ${cap}`);
   if (owned) for (const n of printed) if (!owned.has(n)) p.push(`${n} not owned`);
   return p;
 }
+/* this file's own copy of the visible-area weights and the accent share, so M18 does not lean on the module's helper */
+const WEIGHTS = { shell: 0.44, face: 0.24, deck: 0.06, drawer: 0.06, handle: 0.05, accent: 0.05, label: 0.05, small: 0.03, gripAccent: 0.02 };
+const share = (look) => +Object.entries(WEIGHTS).reduce((s, [role, w]) => s + (look.roles[role] === look.accent ? w : 0), 0).toFixed(3);
 
 const OWNED_8 = ['Elegoo PLA Black', 'Panchroma Cold White', 'Printed Solid Mystery Orange', 'Panchroma Silk Silver', 'Polymaker PETG Yellow', 'Panchroma Azure Blue', 'Panchroma Steel Grey', 'Panchroma Red'];
 const OWNED_3 = ['Elegoo PLA Black', 'Panchroma Cold White', 'Printed Solid Mystery Orange'];
 const CATALOGS = [['whole', null], ['owned 8', OWNED_8], ['owned 3', OWNED_3]];
 const SEEDS = 100;
+const IDS = STYLES.map((s) => s.id);
 
-test('M11: every look returned, over 3 moods × 3 caps × 3 catalogs × 100 seeds, passes the preset rules, the cap and the owned list', () => {
-  let looks = 0, calls = 0, shortCalls = 0; const bad = []; const report = [];
-  for (const mood of MOODS) for (const cap of CAPS) for (const [cname, owned] of CATALOGS) {
-    let got = 0, short = 0;
+test('M16: every look returned, over 5 styles × 3 caps × 3 catalogs × 100 seeds, passes the preset rules, the cap and the owned list', () => {
+  let looks = 0, calls = 0; const bad = []; const report = [];
+  for (const style of IDS) for (const cap of CAPS) for (const [cname, owned] of CATALOGS) {
+    let got = 0, three = 0;
     for (let seed = 1; seed <= SEEDS; seed++) {
-      const r = surprise({ mood, cap, owned, seed }); calls++;
-      if (r.short) short++;
-      for (const l of r.looks) { looks++; got++; const p = problems(l, { cap, owned: owned && new Set(owned) }); if (p.length) bad.push(`${mood}/${cap}/${cname}/seed ${seed} "${l.name}": ${p.join('; ')}`); }
+      const r = surprise({ style, cap, owned, seed }); calls++;
+      if (r.looks.length === 3) three++;
+      for (const l of r.looks) { looks++; got++; const p = problems(l, { cap, owned: owned && new Set(owned) }); if (p.length) bad.push(`${style}/${cap}/${cname}/seed ${seed} "${l.name}": ${p.join('; ')}`); }
     }
-    shortCalls += short;
-    report.push(`${mood.padEnd(7)} cap ${cap} ${cname.padEnd(8)} ${(got / SEEDS).toFixed(2)} looks a call, ${short} of ${SEEDS} calls short`);
+    report.push(`${style.padEnd(8)} cap ${cap} ${cname.padEnd(8)} ${(got / SEEDS).toFixed(2)} looks a call, three in ${three} of ${SEEDS}`);
   }
-  console.log(`  M11 report (${looks} looks from ${calls} calls, ${shortCalls} calls returned fewer than three):\n    ${report.join('\n    ')}`);
+  console.log(`  M16 report (${looks} looks from ${calls} calls):\n    ${report.join('\n    ')}`);
   assert.deepEqual(bad.slice(0, 20), [], `${bad.length} of ${looks} looks break a rule`);
   assert.ok(looks > 2000, `the generator produced looks to check (${looks})`);
-  // the whole catalog and the eight owned filaments give three every time at every cap; three owned filaments may not
-  for (const line of report) if (/whole|owned 8/.test(line)) assert.match(line, / 0 of 100 calls short$/, line);
+  // M20: on the whole catalog the four open styles give three at every cap of 3 and 4 in 95 % of calls; Retro pop reported
+  for (const line of report) if (/whole/.test(line) && !/^retro/.test(line) && !/cap 2/.test(line)) assert.match(line, /three in (9[5-9]|100) of 100$/, line);
+});
+
+test('M17: every colour of a look is in its style\'s pools (the test\'s own reading of the style: shells, accents, neutrals by label)', () => {
+  const cat = catalog().list.filter((c) => !c.translucent);
+  for (const s of STYLES.filter((x) => x.id !== 'any')) {
+    const allowed = new Set(cat.filter((c) => s.shells(c) || s.accents(c) || s.neutrals(c)).map((c) => c.name));
+    const shells = new Set(cat.filter(s.shells).map((c) => c.name)), accents = new Set(cat.filter(s.accents).map((c) => c.name));
+    for (let seed = 1; seed <= 60; seed++) for (const l of surprise({ style: s.id, cap: 4, seed }).looks) {
+      assert.ok(shells.has(l.colors.Case.name), `${s.id} seed ${seed}: shell ${l.colors.Case.name}`);
+      assert.ok(accents.has(l.accent), `${s.id} seed ${seed}: accent ${l.accent}`);
+      for (const n of printedNames(l)) assert.ok(allowed.has(n), `${s.id} seed ${seed}: ${n} is outside the style`);
+    }
+  }
+});
+
+test('M18: the three interpretations differ visibly: the share of visible area carrying the accent colour rises from the first candidate to the third', () => {
+  let sets = 0, shares = { quiet: [], balanced: [], bold: [] };
+  for (const style of IDS) for (const cap of [3, 4]) for (let seed = 1; seed <= 60; seed++) {
+    const { looks } = surprise({ style, cap, seed });
+    if (looks.length === 3) sets++;
+    for (let i = 1; i < looks.length; i++) assert.ok(share(looks[i]) > share(looks[i - 1]), `${style}/${cap}/seed ${seed}: ${looks.map((l) => `${l.slot} ${share(l)}`).join(' < ')}`);
+    for (const l of looks) { shares[l.slot].push(share(l)); assert.equal(share(l), l.share, 'the module\'s share agrees'); }
+  }
+  const mid = (a) => a.sort((x, y) => x - y)[Math.floor(a.length / 2)];
+  console.log(`  M18: ${sets} sets of three; accent share medians quiet ${mid(shares.quiet)}, balanced ${mid(shares.balanced)}, bold ${mid(shares.bold)}`);
+  assert.ok(sets >= 500, `sets of three (${sets})`);
+  assert.deepEqual(SLOTS, ['quiet', 'balanced', 'bold']);
+  assert.ok(Math.abs(Object.values(AREA).reduce((a, b) => a + b, 0) - 1) < 1e-9, 'the area weights sum to one');
+});
+
+test('M19: shiny finishes are not the default: silk shells under 15 % for Warm & natural, Clean & calm and Workshop classic', () => {
+  for (const s of STYLES) {
+    let n = 0, silk = 0, silkAccent = 0;
+    for (let seed = 1; seed <= 100; seed++) for (const l of surprise({ style: s.id, cap: 3, seed }).looks) { n++; if (BY_LABEL.get(l.colors.Case.name).silk) silk++; if (BY_LABEL.get(l.accent).silk) silkAccent++; }
+    console.log(`  M19 ${s.id.padEnd(8)} silk shells ${(100 * silk / n).toFixed(0)} %, silk accents ${(100 * silkAccent / n).toFixed(0) } % of ${n}`);
+    if (['warm', 'calm', 'workshop'].includes(s.id)) assert.ok(silk / n <= 0.15, `${s.id}: ${silk} silk shells of ${n}`);
+  }
+});
+
+test('M21: the three candidates of a roll carry three different names; a name is two colour words', () => {
+  let sets = 0;
+  for (const style of IDS) for (let seed = 1; seed <= 60; seed++) {
+    const { looks } = surprise({ style, cap: 3, seed });
+    if (looks.length < 2) continue; sets++;
+    assert.equal(new Set(looks.map((l) => l.name)).size, looks.length, `${style}/seed ${seed}: ${looks.map((l) => l.name).join(' | ')}`);
+    for (const l of looks) assert.match(l.name, /^[A-Z][a-z ]+ & [a-z ]+(, a touch of [a-z ]+)?(, [a-z ]+)?$/, l.name);
+  }
+  console.log(`  M21: ${sets} sets named apart; e.g. ${surprise({ style: 'workshop', cap: 3, seed: 7 }).looks.map((l) => l.name).join(' | ')}`);
 });
 
 test('the generator\'s own validator and this file\'s rules agree, and the validator catches a broken look', () => {
-  const r = surprise({ mood: 'playful', cap: 3, seed: 7 });
+  const r = surprise({ style: 'workshop', cap: 3, seed: 7 });
   for (const l of r.looks) assert.deepEqual(checkLook(l.colors, { cap: 3 }), [], l.name);
-  const broken = structuredClone(r.looks[0].colors);
-  broken['Faceplate:GRIP'] = broken.Case.name === broken.Accent.name ? broken.Handle : broken.Accent;   // the grip off the face
-  const p = checkLook(broken, { cap: 3 });
-  assert.ok(p.some((x) => /grip/.test(x)) || p.some((x) => /accent/.test(x)) || p.length, `a broken look is caught: ${p.join('; ')}`);
-  const over = structuredClone(r.looks[0].colors); over.Handle = { name: 'Panchroma Lime Green', hex: '#9ccb3b', url: 'https://x.test/' };
+  const broken = structuredClone(r.looks[1].colors);
+  broken['Faceplate:GRIP'] = broken.Case;   // the grip off the face
+  assert.ok(checkLook(broken, { cap: 3 }).some((x) => /grip/.test(x)), 'a grip off the face is caught');
+  const over = structuredClone(r.looks[1].colors); over.Handle = { name: 'Panchroma Lime Green', hex: '#9ccb3b', url: 'https://x.test/' };
   assert.ok(checkLook(over, { cap: 2 }).some((x) => /cap|differs/.test(x)), 'a wrong hex or a fourth filament under a cap of 2 is caught');
 });
 
-test('M12: the three candidates differ in shell and face; 50 Try agains at one setting reach at least 8 shells', () => {
-  const shells = new Set();
-  for (let seed = 1; seed <= 50; seed++) {
-    const { looks } = surprise({ mood: 'playful', cap: 3, seed: seed * 7919 });
-    const pairs = looks.map((l) => l.colors.Case.name + '|' + l.colors['Faceplate:FACE'].name);
-    assert.equal(new Set(pairs).size, looks.length, `seed ${seed}: ${pairs.join(', ')}`);
-    for (const l of looks) shells.add(l.colors.Case.name);
-  }
-  console.log(`  M12: ${shells.size} distinct shells over 50 Try agains (playful, cap 3): ${[...shells].join(', ')}`);
-  assert.ok(shells.size >= 8, `${shells.size} shells`);
-});
-
-test('M13: three candidates in one call, the whole catalog, every mood and cap: timed (the laptop mark is median ≤ 20 ms; this gate is loose for the CI runner)', () => {
-  catalog();   // the memoised catalog and its CIEDE2000 table are built once, not timed
+test('M13: three candidates in one call, the whole catalog, every style and cap: timed (the laptop mark is median ≤ 20 ms; this gate is loose for the CI runner)', () => {
+  catalog();
   const ms = [];
-  for (let i = 0; i < 300; i++) {
-    const mood = MOODS[i % 3], cap = CAPS[(i / 3 | 0) % 3];
-    const t = performance.now(); surprise({ mood, cap, seed: 1000 + i }); ms.push(performance.now() - t);
-  }
+  for (let i = 0; i < 300; i++) { const t = performance.now(); surprise({ style: IDS[i % 5], cap: CAPS[(i / 5 | 0) % 3], seed: 1000 + i }); ms.push(performance.now() - t); }
   ms.sort((a, b) => a - b);
-  const median = ms[150], max = ms[299];
-  console.log(`  M13: median ${median.toFixed(2)} ms, p90 ${ms[269].toFixed(2)} ms, max ${max.toFixed(2)} ms over 300 calls`);
-  assert.ok(median <= 60 && max <= 400, `median ${median.toFixed(1)} ms, max ${max.toFixed(1)} ms`);
+  console.log(`  M13: median ${ms[150].toFixed(2)} ms, p90 ${ms[269].toFixed(2)} ms, max ${ms[299].toFixed(2)} ms over 300 calls`);
+  assert.ok(ms[150] <= 60 && ms[299] <= 400, `median ${ms[150].toFixed(1)} ms, max ${ms[299].toFixed(1)} ms`);
 });
 
 test('the same seed and settings give the same looks; a different seed gives different ones', () => {
-  const a = surprise({ mood: 'wild', cap: 4, seed: 42 }), b = surprise({ mood: 'wild', cap: 4, seed: 42 }), c = surprise({ mood: 'wild', cap: 4, seed: 43 });
+  const a = surprise({ style: 'any', cap: 4, seed: 42 }), b = surprise({ style: 'any', cap: 4, seed: 42 }), c = surprise({ style: 'any', cap: 4, seed: 43 });
   assert.deepEqual(a.looks.map((l) => l.colors), b.looks.map((l) => l.colors));
   assert.notDeepEqual(a.looks.map((l) => l.name), c.looks.map((l) => l.name));
   assert.equal(a.looks.length, 3);
 });
 
-test('moods: subtle has nothing vivid, playful has a neutral shell and a vivid colour, wild has a chromatic shell', () => {
-  const cat = catalog();
-  const cls = (name) => cat.byName.get(name).cls;
-  for (let seed = 1; seed <= 30; seed++) {
-    for (const l of surprise({ mood: 'subtle', cap: 3, seed }).looks) for (const k of PALETTE_KEYS) if (!HARDWARE_KEYS.includes(k)) assert.notEqual(cls(l.colors[k].name), 'vivid', `subtle seed ${seed} ${k} ${l.colors[k].name}`);
-    for (const l of surprise({ mood: 'playful', cap: 3, seed }).looks) { assert.equal(cls(l.colors.Case.name), 'neutral', `playful seed ${seed} shell ${l.colors.Case.name}`); assert.ok(PALETTE_KEYS.some((k) => cls(l.colors[k].name) === 'vivid'), `playful seed ${seed} has a vivid colour`); }
-    for (const l of surprise({ mood: 'wild', cap: 3, seed }).looks) assert.ok(['mid', 'vivid'].includes(cls(l.colors.Case.name)), `wild seed ${seed} shell ${l.colors.Case.name}`);
-  }
-});
-
-test('a lock fixes its role in every look (and the rules still hold); a lock the rules cannot meet admits no look', () => {
+test('a lock fixes its role in every look (and the rules still hold); a lock the rules cannot meet admits no look; a locked face may be the shell', () => {
   const red = BY_LABEL.get('Panchroma Red'), black = BY_LABEL.get('Elegoo PLA Black'), grey = BY_LABEL.get('Panchroma Dark Grey');
   const fil = (f) => ({ name: f.label, hex: f.hex, url: f.url });
   for (let seed = 1; seed <= 20; seed++) {
-    const { looks } = surprise({ mood: 'wild', cap: 3, seed, locks: { shell: fil(red) } });
+    const { looks } = surprise({ style: 'any', cap: 3, seed, locks: { shell: fil(red) } });
     assert.ok(looks.length >= 1, `seed ${seed}: a red shell admits looks`);
     for (const l of looks) { for (const k of ROLE_KEYS.shell) assert.equal(l.colors[k].name, 'Panchroma Red', k); assert.deepEqual(problems(l, { cap: 3, owned: null }), []); }
   }
-  // a locked colour wins over the mood (a neutral shell in wild) and over the owned list
-  const r = surprise({ mood: 'wild', cap: 3, seed: 5, locks: { shell: fil(black) }, owned: OWNED_8.filter((n) => n !== 'Elegoo PLA Black') });
-  assert.ok(r.looks.length && r.looks.every((l) => l.colors.Case.name === 'Elegoo PLA Black'), 'the lock is kept');
+  // a locked colour wins over the style (a black shell under Warm & natural, whose shells are light) and over the owned
+  // list (black unticked); a red shell with that list admits nothing, since no colour in it reaches 4.5:1 against red
+  const r = surprise({ style: 'warm', cap: 3, seed: 5, locks: { shell: fil(black) }, owned: ['Panchroma Cold White', 'Panchroma Tan', 'Panchroma Brown', 'Panchroma Steel Grey'] });
+  assert.ok(r.looks.length && r.looks.every((l) => l.colors.Case.name === 'Elegoo PLA Black'), `the lock is kept (${r.looks.length} looks)`);
+  assert.deepEqual(surprise({ style: 'calm', cap: 3, seed: 5, locks: { shell: fil(red) }, owned: OWNED_8.filter((n) => n !== 'Panchroma Red') }).looks, [], 'nothing in that list reads at 4.5:1 against red: no deck, no look');
   // the deck locked to dark grey on a black case: 1.64:1, the Stealth bug of 2026-08; nothing fits
-  const none = surprise({ mood: 'subtle', cap: 3, seed: 5, locks: { shell: fil(black), deck: fil(grey) } });
+  const none = surprise({ style: 'workshop', cap: 3, seed: 5, locks: { shell: fil(black), deck: fil(grey) } });
   assert.deepEqual(none.looks, []); assert.equal(none.short, true);
-  // the case and the face locked to ONE filament (Black & gold wears a black face on a black shell): looks, with the accent
-  // elsewhere and the rules whole (Sol 01a150df: no rule forbids face = shell; a rolled face still never is)
-  const same = surprise({ mood: 'playful', cap: 3, seed: 5, locks: { shell: fil(black), face: fil(black) } });
+  // the case and the face locked to ONE filament (Black & gold wears a black face on a black shell): looks, the accent elsewhere
+  const same = surprise({ style: 'workshop', cap: 3, seed: 5, locks: { shell: fil(black), face: fil(black) } });
   assert.ok(same.looks.length >= 1, 'a black shell with a locked black face admits looks');
-  for (const l of same.looks) { assert.equal(l.colors['Faceplate:FACE'].name, 'Elegoo PLA Black'); assert.notEqual(l.colors.Accent.name, 'Elegoo PLA Black'); assert.deepEqual(problems(l, { cap: 3, owned: null }), []); assert.match(l.name, /accents on Black/, l.name); }
-  for (let seed = 1; seed <= 30; seed++) for (const l of surprise({ mood: 'subtle', cap: 2, seed }).looks) assert.notEqual(l.colors['Faceplate:FACE'].name, l.colors.Case.name, `seed ${seed}: a rolled face is never the shell`);
+  for (const l of same.looks) { assert.equal(l.colors['Faceplate:FACE'].name, 'Elegoo PLA Black'); assert.notEqual(l.colors.Accent.name, 'Elegoo PLA Black'); assert.deepEqual(problems(l, { cap: 3, owned: null }), []); }
+  for (let seed = 1; seed <= 30; seed++) for (const l of surprise({ style: 'workshop', cap: 2, seed }).looks) assert.notEqual(l.colors['Faceplate:FACE'].name, l.colors.Case.name, `seed ${seed}: a rolled face is never the shell`);
 });
 
-test('"more like this" keeps the shell and the face and changes the rest; an impossible owned list returns nothing, not an error', () => {
-  const base = surprise({ mood: 'playful', cap: 4, seed: 11 }).looks[0];
-  const like = surprise({ mood: 'playful', cap: 4, seed: 12, like: { shell: base.roles.shell, face: base.roles.face } });
-  assert.ok(like.looks.length >= 2, `like admits looks (${like.looks.length})`);
-  for (const l of like.looks) { assert.equal(l.colors.Case.name, base.colors.Case.name); assert.equal(l.colors['Faceplate:FACE'].name, base.colors['Faceplate:FACE'].name); }
-  assert.ok(like.looks.some((l) => l.colors.Handle.name !== base.colors.Handle.name || l.colors.Accent.name !== base.colors.Accent.name || l.colors.Label.name !== base.colors.Label.name), 'something else moved');
-  const none = surprise({ mood: 'playful', cap: 2, seed: 1, owned: ['Elegoo PLA Black', 'Panchroma Black', 'Panchroma Dark Grey'] });
+test('"more like this" keeps the accent colour and the interpretation on other shells; an impossible owned list returns nothing, not an error; the cap of 2 gives two interpretations', () => {
+  const base = surprise({ style: 'workshop', cap: 3, seed: 11 }).looks[1];
+  for (let seed = 12; seed < 42; seed++) {
+    const like = surprise({ style: 'workshop', cap: 3, seed, like: { accent: base.accent, slot: base.slot, notShell: base.roles.shell } });
+    assert.ok(like.looks.length >= 2, `seed ${seed}: like admits looks (${like.looks.length})`);
+    for (const l of like.looks) { assert.equal(l.accent, base.accent); assert.equal(l.slot, base.slot); assert.notEqual(l.colors.Case.name, base.colors.Case.name, `seed ${seed}: never the candidate's own shell (Sol 01a15101)`); }
+    assert.equal(new Set(like.looks.map((l) => l.colors.Case.name)).size, like.looks.length, 'other shells');
+  }
+  const none = surprise({ style: 'any', cap: 2, seed: 1, owned: ['Elegoo PLA Black', 'Panchroma Black', 'Panchroma Dark Grey'] });
   assert.deepEqual(none.looks, []); assert.equal(none.short, true);
-  const one = surprise({ mood: 'playful', cap: 2, seed: 1, owned: ['Elegoo PLA Black', 'Printed Solid Mystery Orange'] });
-  assert.ok(one.looks.length >= 1 && one.short, 'two owned filaments at cap 2: one look (the pair), reported short');
+  const two = surprise({ style: 'any', cap: 2, seed: 1 });
+  assert.deepEqual(two.looks.map((l) => l.slot), ['balanced', 'bold'], 'a quiet look needs a third colour for its face: two filaments give the other two interpretations');
+  assert.equal(two.short, true);
+  const one = surprise({ style: 'any', cap: 2, seed: 1, owned: ['Elegoo PLA Black', 'Printed Solid Mystery Orange'] });
+  assert.ok(one.looks.length >= 1 && one.short, 'two owned filaments at cap 2: the pair, reported short');
 });
 
-test('names: "<face> on <shell>" from the short filament names; the hardware is the presets\' silk silver', () => {
-  assert.equal(shortName('Panchroma Silk Gold'), 'Silk Gold');
-  assert.equal(shortName('Elegoo PLA Black'), 'Black');
-  assert.equal(shortName('Polymaker PETG Yellow'), 'Yellow');
-  assert.equal(shortName('Printed Solid Mystery Orange'), 'Mystery Orange');
-  const l = surprise({ mood: 'playful', cap: 3, seed: 3 }).looks[0];
-  assert.ok(l.name.startsWith(`${shortName(l.colors['Faceplate:FACE'].name)} on ${shortName(l.colors.Case.name)}`), l.name);
+test('the hardware is the presets\' silk silver; a look reports its accent and share', () => {
+  const l = surprise({ style: 'retro', cap: 3, seed: 3 }).looks[0];
   assert.equal(l.colors.Magnet.name, HARDWARE); assert.equal(l.colors.Screw.name, HARDWARE);
-  const two = surprise({ mood: 'playful', cap: 2, seed: 3 }).looks[0];
-  assert.doesNotMatch(two.name, /·/, `a two-colour look has no third colour to name: ${two.name}`);
-  const printed = (x) => new Set(PALETTE_KEYS.filter((k) => !HARDWARE_KEYS.includes(k)).map((k) => x.colors[k].name)).size;
-  const three = surprise({ mood: 'playful', cap: 3, seed: 3 }).looks.find((x) => printed(x) === 3);
-  if (three) assert.match(three.name, / · .+ (trim|labels|drawers)$/, three.name);
+  assert.ok(BY_LABEL.has(l.accent) && l.share === areaOf(l.roles, l.accent));
 });

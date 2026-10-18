@@ -874,3 +874,46 @@ Dated calls made while building, with who made them. The brief and the inventory
   review Sol 01a150df, two findings, both held and fixed before the commit.
 - **Not deployed:** branch `colors-step5`; deploys on Joey's go. Astra's refinement (styles, three interpretations, the
   wording, short names) follows on the same branch as 5b before any deploy (Joey, relaying Astra, 2026-10-18).
+
+## 2026-10-18 (Colors, step 5b: "Find your next look", Astra's refinement of Surprise me)
+
+- **Astra, relayed by Joey the same evening,** on the step-5 panel: "'Mood' ... describes how adventurous the generator
+  is, but doesn't help someone picture the result"; styles "with a sense of place, rather than literal room categories",
+  five of them, "each as a small palette tile with three swatches"; "make the three results deliberately different
+  interpretations of the chosen style - one mostly neutral, one balanced, one with a stronger accent", counting "the
+  visible area carrying the accent, not simply how many part categories receive it"; "Keep" → "Use this look", "Try
+  again" → "Show three more", keep "More like this"; short names "such as 'Sand & charcoal'" with the filaments in
+  Details; Face and Handle locks kept; "Let Retro pop be a smaller, well-curated collection"; shiny finishes not the
+  default; and "the generator's rules make a look consistent with the planner's constraints; they don't by themselves
+  establish that every material is suitable for every printed part". Joey: implement it before deploying (her "settled
+  enough to implement now", relayed, read as the go to start, not to deploy).
+- **Styles are pools and relationships** (`js/colors/styles.js`): Warm & natural (warm neutrals and whites shell it, the
+  earths accent it, nothing vivid), Clean & calm (whites, greys, silvers; the quiet blues and soft greys), Workshop
+  classic (blacks, charcoals, steel grey, deep blues; reds, oranges, yellows), Retro pop (a named collection: eight
+  shells, cream one of them; thirteen accents), Anything goes (a neutral or chromatic shell, any mid or vivid accent).
+  Each has a least hue distance and a silk weight (a silk survives a pick at 0.25 in the two calm styles, 0.5 in the
+  workshop and retro ones). `test/styles.test.mjs` pins every pool as a label list.
+- **Three interpretations, told apart by visible area** (`AREA` in surprise.js: an estimate of the root kit's silhouette
+  by role; shell 0.44, face 0.24, deck, drawer, handle, accent, label, small, grip accent the rest): quiet puts the
+  accent colour on the Accent part and the grip accent only, balanced on the face, bold on the face, handle, small parts
+  and drawer body too; the share must rise slot to slot or the slot is dropped; nothing is padded. A cap of 2 gives two
+  (a quiet look needs a third colour for its face).
+- **Names are colour words** (`js/colors/words.js`, 36 words over LCh regions with named overrides for the finishes:
+  chrome, gold, brass, bronze, rose gold, titanium, clear, natural), "<Shell> & <accent>" from the two colours carrying
+  the most visible area, locked colours included; the filament names stay in the tooltip, the toast and Details.
+- **Details** is the gallery's own look details for the candidate; Back returns to the panel.
+- **Measured (STEP5B.md, marks written first):** 8,400 generated looks, none breaks a rule; every colour inside its
+  style's pools; the accent's visible share rises slot to slot in 600 of 600 sets (medians 0.07 / 0.27 / 0.40); silk
+  shells 5–8 % in the three calm styles; three candidates in 100 % of calls on the whole catalog at caps 3 and 4, Retro
+  pop included (a cap of 2 gives two, by design); 112 of 112 colours have a word, rolls named apart; Show three more to
+  the third card drawn in a median 38–43 ms at Balanced, 40 ms at Very High, 120–129 ms at 4× CPU (faster than step
+  5, whose mood generator re-rolled whole sets); the camera and the safe area unchanged to the number in every round.
+- **From the review (Sol 01a15101):** "More like this" could hand back the candidate's own shell: held and fixed (the
+  candidate's shell is passed as `notShell`). That the three interpretations may carry different accent colours was
+  read as the design (three interpretations of the style, not one colour three times) and left as is, recorded for
+  Astra and Joey.
+- **Checks:** npm test 546 (541 passed, 0 failed, 5 skipped); the two step-5 e2e cases extended (the tiles, "In use",
+  the cap of 2 giving two with its note) and green; the whole e2e suite under soft rendering 47 of 48, the one failure the
+  Label plate's faceplate-switch case on a visibility wait (37 s), which touches nothing 5b changed and passed on the
+  5b worktree and on main, with and without soft rendering, when run again (four of four): a load flake, recorded, not
+  fixed. Review Sol 01a15101, one finding held and fixed, one discarded as the design.

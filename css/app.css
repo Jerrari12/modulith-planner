@@ -551,6 +551,14 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 #ws-surprise .srow { display: flex; align-items: center; gap: var(--gap-ctl); }
 #ws-surprise .lbl { flex: none; width: 76px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 #ws-surprise .srow .track { flex: 1; }
+#ws-surprise .stylerow { align-items: flex-start; }
+#ws-surprise .stylerow .lbl { padding-top: 10px; }
+#ws-surprise .styles { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+#ws-surprise .stile { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 7px 4px 6px; border-radius: 10px; border: 1px solid var(--key-border); background: var(--key-bg); box-shadow: var(--key-shadow); color: var(--ink); font: inherit; cursor: pointer; }
+#ws-surprise .stile.on { border-color: var(--orange); background: var(--key-on-bg); box-shadow: var(--key-on-shadow); }
+#ws-surprise .stile .sw3 { display: inline-flex; gap: 3px; }
+#ws-surprise .stile .sw3 i { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .25); }
+#ws-surprise .stile .sname { font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; }
 #ws-surprise .ownedrow .chk { flex: 1; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 #ws-surprise .ownedrow .chk input { width: 16px; height: 16px; margin: 0; accent-color: var(--orange); }
 #ws-surprise .ownedrow .cnt { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
@@ -914,6 +922,8 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-surprise .head .sub { display: none; }
   #ws-surprise .lbl { width: 64px; }
   #ws-surprise .cacts .key { padding: 0 4px; font-size: 11px; }
+  #ws-surprise .styles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #ws-surprise .stile .sname { font-size: 10px; }
   /* Labels: the panel and the editor are sheets; the list scrolls with the sheet, not inside it */
   #ws-labels .scroll { flex: none; overflow: visible; min-height: 0; margin: 0; padding: 0; }
   #ws-labels .key.tile { height: 42px; }

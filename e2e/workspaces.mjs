@@ -1825,9 +1825,10 @@ test('Colors step 5: Surprise me draws three candidates of this build, a hovered
   const first = await page.evaluate(() => {
     const sp = window.__GEN2_SURPRISE__;
     const cards = [...document.querySelectorAll('#ws-surprise .cand')];
-    return { names: cards.map((c) => c.querySelector('.lname').textContent), counts: cards.map((c) => +c.querySelector('.lcount').textContent.split(' ')[0]), stray: [...document.querySelector('#ws-surprise').childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent), mood: sp.mood, cap: sp.cap, galleryHidden: document.querySelector('#ws-gallery').hidden, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea) };
+    return { names: cards.map((c) => c.querySelector('.lname').textContent), counts: cards.map((c) => +c.querySelector('.lcount').textContent.split(' ')[0]), stray: [...document.querySelector('#ws-surprise').childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent), style: sp.style, tile: document.querySelector('#ws-surprise .stile.on .sname')?.textContent, tiles: document.querySelectorAll('#ws-surprise .stile .sw3 i').length, cap: sp.cap, galleryHidden: document.querySelector('#ws-gallery').hidden, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea) };
   });
   assert.equal(new Set(first.names).size, 3, `three candidates, named apart: ${first.names.join(' / ')}`);
+  assert.ok(first.style === 'workshop' && first.tile === 'Workshop classic' && first.tiles === 15, `five style tiles with three swatches each, Workshop classic on (${first.tile}, ${first.tiles})`);
   assert.ok(first.counts.every((c) => c >= 1 && c <= first.cap), `every candidate within the cap of ${first.cap} on this build (${first.counts.join(', ')})`);
   assert.deepEqual(first.stray, [], 'no stray text in the panel');
   assert.ok(first.galleryHidden, 'the panel takes the gallery\'s spot; the gallery is closed');
@@ -1850,14 +1851,18 @@ test('Colors step 5: Surprise me draws three candidates of this build, a hovered
   assert.notDeepEqual(again.names, first.names, 'Try again rolls three others');
   assert.equal(again.cam, before.cam, 'the camera across Try again'); assert.equal(again.safe, before.safe, 'the safe area across Try again');
   assert.equal(again.previewing, false);
-  // the cap at 2: every candidate prints in two
+  // the cap at 2: every candidate prints in two; a quiet interpretation needs a third colour for its face, so two candidates
+  // (balanced and bold), said in the note, never padded (5b)
   await page.locator('#ws-surprise .cap .seg').nth(0).click();
-  await drawn3();
-  const capped = await page.evaluate(() => ({ counts: [...document.querySelectorAll('#ws-surprise .cand .lcount')].map((x) => +x.textContent.split(' ')[0]), whole: window.__GEN2_SURPRISE__.cands.map((c) => new Set(Object.entries(c.colors).filter(([k]) => k !== 'Magnet' && k !== 'Screw').map(([, f]) => f.name)).size) }));
+  const drawnAll = () => page.waitForFunction(() => { const c = document.querySelectorAll('#ws-surprise .cand canvas'); return c.length >= 1 && [...c].every((x) => x.classList.contains('drawn')); }, null, { timeout: 30_000 });
+  await drawnAll();
+  const capped = await page.evaluate(() => ({ counts: [...document.querySelectorAll('#ws-surprise .cand .lcount')].map((x) => +x.textContent.split(' ')[0]), whole: window.__GEN2_SURPRISE__.cands.map((c) => new Set(Object.entries(c.colors).filter(([k]) => k !== 'Magnet' && k !== 'Screw').map(([, f]) => f.name)).size), slots: window.__GEN2_SURPRISE__.cands.map((c) => c.slot), note: document.querySelector('#ws-surprise .short')?.textContent || null }));
   assert.ok(capped.counts.every((c) => c <= 2) && capped.whole.every((w) => w <= 2), `the cap of 2 holds on the build (${capped.counts.join(', ')}) and over the whole look (${capped.whole.join(', ')})`);
+  assert.deepEqual(capped.slots, ['balanced', 'bold'], 'two interpretations at a cap of 2');
+  assert.match(capped.note || '', /Only 2 looks fit/, 'and the note says so');
   // a lock on the case: every candidate keeps the case the build wears
   await page.locator('#ws-surprise .lchip', { hasText: 'Case' }).click();
-  await drawn3();
+  await drawnAll();
   const locked = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const sp = window.__GEN2_SURPRISE__; return { held: sp.locks.shell && sp.locks.shell.name, caseNow: v.palette().colors.Case.name, cases: sp.cands.map((c) => c.colors.Case.name), extenders: sp.cands.map((c) => c.colors.CaseExtender.name), chipOn: document.querySelector('#ws-surprise .lchip.on')?.textContent }; });
   assert.equal(locked.held, locked.caseNow, 'the lock holds the case the build wears');
   assert.ok(locked.cases.every((c) => c === locked.caseNow) && locked.extenders.every((c) => c === locked.caseNow), `every candidate keeps it (${locked.cases.join(', ')})`);
@@ -1869,7 +1874,7 @@ test('Colors step 5: Surprise me draws three candidates of this build, a hovered
   const kept = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const sp = window.__GEN2_SURPRISE__; return { palette: JSON.stringify(v.palette().colors), cand: JSON.stringify(sp.cands[0].colors), lname: document.querySelector('#ws-colors .lname').textContent, canUndo: window.__GEN2_STORE__.canUndo, previewing: v.previewing, badge: document.querySelector('#ws-surprise .cand .badge')?.textContent, keepBtn: document.querySelector('#ws-surprise .keep').textContent, panelOpen: !document.querySelector('#ws-surprise').hidden }; });
   assert.equal(kept.palette, kept.cand, 'the build wears the kept look');
   assert.equal(kept.lname, keepName, 'the panel is named after it');
-  assert.ok(kept.canUndo && !kept.previewing && kept.badge === 'ACTIVE' && kept.keepBtn === 'Applied' && kept.panelOpen, `kept: ${JSON.stringify(kept)}`);
+  assert.ok(kept.canUndo && !kept.previewing && kept.badge === 'ACTIVE' && kept.keepBtn === 'In use' && kept.panelOpen, `kept: ${JSON.stringify(kept)}`);
   await page.keyboard.press('Control+Z');
   await settle(page, 600);
   const undone = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), lname: document.querySelector('#ws-colors .lname').textContent, canUndo: window.__GEN2_STORE__.canUndo, presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
@@ -1885,7 +1890,7 @@ test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned l
   await page.waitForSelector('#ws-colors .surprise', { timeout: 30_000 });
   await page.locator('#ws-colors .surprise').click();
   await page.waitForFunction(() => document.querySelector('#ws-surprise').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
-  assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Surprise me/);
+  assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Find your next look/);
   await page.waitForFunction(() => document.querySelectorAll('#ws-surprise .cand canvas.drawn').length === 3, null, { timeout: 30_000 });
   await page.locator('#ws-surprise .cand .pick').nth(0).click();
   await settle(page, 300);
