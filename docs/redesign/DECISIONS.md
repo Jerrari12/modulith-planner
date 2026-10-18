@@ -686,7 +686,14 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Sol 01a15017, no findings. **Checks on the final code:** npm test 521 (516 passed, 0 failed, 5 skipped);
   e2e 46 of 46 (soft rendering, the Studio checkout served); the desktop tray case mutation-checked (a flip that chose
   the look through `setPalette` fails it at once). Flip latency measured by hand, STEP4.md §4: M8, M9 and M10 pass.
-- **Not deployed:** the branch is `colors-step4`, pushed; a feature deploys on Joey's own go.
+- **Live (Joey, 2026-10-18: "Deploy").** Main fast-forwarded to `6bf1853`; run 39152794735 green on the first try,
+  live stamp `6bf18532`. Checked in production with `D:\Claude - Output\planner-prod-checks-2026-10-18\step4-prod.mjs`,
+  desktop 1280×800 and a 390×844 phone viewport, both on Very High: two finalists from the gallery's "+", the head reads
+  "Compare (2)", the tray opens in the gallery's place (a sheet titled "Compare · 2 of 3" on the phone), a flip shows
+  Stealth (Case #2b2b2e) with the palette, the camera, the safe area and the history unchanged and the shown card
+  marked, the second finalist replaces it (Drawer #d23a2e), Current ends the preview, no preset event, no page errors
+  on the desktop (the phone run, opened seconds after the desktop one, logged the same single third-party 429 as the
+  step-3 check; a plain re-load does not reproduce it). Nothing was applied in production.
 
 ## 2026-10-18 (Colors, step 3 of the redesign plan: the current-look card, Browse looks, look details, the new presets)
 
