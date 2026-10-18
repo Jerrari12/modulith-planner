@@ -4986,6 +4986,10 @@ const STORES = [
   { id: 'makerworld', key: 'm', label: 'MakerWorld', host: 'makerworld.com' },
   { id: 'cults',      key: 'c', label: 'Cults 3D',   host: 'cults3d.com' },
 ];
+/* MakerWorld and Cults 3D are HIDDEN for now (Joey, 2026-10-18: "lets just hide makerworld and cults for now until
+   eventually i upload more models there"): few parts have a page on either. They stay in STORES so a visitor who
+   arrives from one (?from=, the referrer) is still counted, but no link, ▾ entry or picker option shows them. */
+const SHOWN_STORES = new Set(['printables', 'thangs']);
 const STORE_BY_ID = Object.fromEntries(STORES.map(s => [s.id, s]));
 const STORE_STORE_KEY = 'gen2-store'; // preference is a VIEWER-wide pref, not per-kit
 // Which platform's listing did they arrive from? `?from=` is OUR param, so
@@ -5014,8 +5018,9 @@ function storeFromEntry() {
 let storePref = (() => {
   let saved = null;
   try { saved = localStorage.getItem(STORE_STORE_KEY); } catch (e) { /* private mode */ }
-  if (saved && STORE_BY_ID[saved]) return saved;
-  return storeFromEntry() || STORES[0].id;
+  if (saved && STORE_BY_ID[saved] && SHOWN_STORES.has(saved)) return saved;
+  const entry = storeFromEntry();   // a visitor from a hidden store is still counted (`from:`), but prefers the first shown store
+  return entry && SHOWN_STORES.has(entry) ? entry : STORES[0].id;
 })();
 let storePrefT = 0; // stamp for the planner relay (newest-wins, like colors)
 try { storePrefT = +(localStorage.getItem(STORE_STORE_KEY + ':t') || 0) || 0; } catch (e) {}
@@ -5026,7 +5031,7 @@ function persistStorePref() {
   } catch (e) { /* private mode — the relay still works in-session */ }
 }
 function setStorePref(id, { relay = true } = {}) {
-  if (!STORE_BY_ID[id] || id === storePref) return; // the no-op guard also keeps the event honest
+  if (!STORE_BY_ID[id] || !SHOWN_STORES.has(id) || id === storePref) return; // the no-op guard also keeps the event honest; a hidden store (a relay from an older page) is not taken
   // only a LOCAL pick counts — this same function receives the planner's relay,
   // and the planner already tracks its own linksite: choice (double-counting a
   // single decision would make the store split look twice as busy as it is)
@@ -5044,7 +5049,7 @@ function setStorePref(id, { relay = true } = {}) {
 // every store that actually carries this part, preferred first then fallback order
 function storesFor(links) {
   if (!links) return [];
-  const have = STORES.filter(s => links[s.key]);
+  const have = STORES.filter(s => SHOWN_STORES.has(s.id) && links[s.key]);   // a hidden store never shows (SHOWN_STORES)
   const pref = have.filter(s => s.id === storePref);
   return [...pref, ...have.filter(s => s.id !== storePref)];
 }
@@ -5092,8 +5097,8 @@ function renderStorePicker() {
   const sel = $('store-select');
   if (!sel) return;
   if (!sel.options.length)
-    for (const s of STORES) sel.appendChild(Object.assign(document.createElement('option'), { value: s.id, textContent: s.label }));
-  sel.value = storePref;
+    for (const s of STORES) if (SHOWN_STORES.has(s.id)) sel.appendChild(Object.assign(document.createElement('option'), { value: s.id, textContent: s.label }));
+  sel.value = SHOWN_STORES.has(storePref) ? storePref : STORES[0].id;   // a preference for a hidden store shows as the first
 }
 $('store-select').onchange = e => setStorePref(e.target.value);
 renderStorePicker();
