@@ -1264,3 +1264,79 @@ test('the phone: Edit raises the label editor sheet, its close is reachable, and
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* The label previews (2026-10-17, Joey: "the small labels differ from the actual labels"): the panel draws each preview from
+   its 3D label's own sources (js/label-preview.js) - a part label from the layout its ink is extruded from, an ordinary label
+   from the cached geometry the stage builds - so the list, the drawer card and the model cannot disagree. */
+test('the label previews are drawn from the 3D label\'s own layout and geometry', async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1' });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await settle(page, 800);
+  const set = await page.evaluate(async () => {
+    const R = await import('/js/rules/labels.js');
+    const L = globalThis.GEN2LabelList;
+    const st = window.__GEN2_STORE__;
+    const item = (id, len) => ({ schema: 'part-picker-label-item/1', id, family: 'screw', head: 'socket-cap', units: 'mm', fields: ['M2', '× ' + len], value_missing: [],
+      attributes: [{ path: 'head', text: 'SHCS', meaning: 'Socket head cap' }], pinned: ['head'], optional: [], pinned_unprinted: [],
+      colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } });
+    const apply = (r) => { if (!r.ok) throw new Error(r.msg); st.flush(); st.commit((s) => R.applyResult(L, s, r), 'label'); st.flush(); };
+    apply(R.addPartItems(L, st.state, [item('p6', 6), item('p8', 8)]));
+    apply(R.add(L, st.state, { text: 'Torx bits' }));
+    const p6 = R.labelsOf(st.state).find((l) => l.hardware && l.hardware.id === 'p6');
+    const unit = R.drawers(st.state)[0];
+    apply(R.place(L, st.state, unit.id, p6.id, null, 'drawer'));
+    return { unit: unit.id };
+  });
+  // the panel loads the label font and the part-label files, then draws: every preview an image, none the CSS stand-in
+  const drawn = () => page.evaluate(() => ({ img: document.querySelectorAll('#ws-labels .lprev.img img').length, css: document.querySelectorAll('#ws-labels .lprev:not(.img)').length }));
+  let got = null;
+  for (let i = 0; i < 60; i++) { got = await drawn(); if (got.img >= 3 && got.css === 0) break; await settle(page, 500); }
+  assert.ok(got.img >= 3 && got.css === 0, `previews drawn: ${JSON.stringify(got)}`);
+  // one source: the preview's layout IS the 3D label's (the same cached object), and an ordinary label's flat ink comes from the
+  // stage's own cached geometry
+  const same = await page.evaluate(async () => {
+    const lt = await import('/js/label-text.js');
+    const lk = await import('/js/label-look.js');
+    const s = window.__GEN2_STORE__.state;
+    const part = s.labelList.labels.find((l) => l.hardware && l.hardware.id === 'p6');
+    const look = lk.labelLookOfLabel(part);
+    const geo = lt.partLabelGeometry(look.item, look.position), lay = lt.partLabelLayout(look.item, look.position);
+    const words = lt.labelGeometry('Torx bits', null, s.labelStyle || null, null), flat = lt.labelInk2d('Torx bits', null, s.labelStyle || null, null);
+    return { record: !!geo && geo.record === lay.record, v5: lay.record.layout, flat: !!flat && flat.tris === words.flat, tris: flat ? flat.tris.reduce((n, t) => n + t.length, 0) : 0 };
+  });
+  assert.equal(same.record, true, 'the preview and the 3D ink are one layout');
+  assert.equal(same.v5, 'v5', 'the socket-head part label is the profile layout (the drawing stands for SHCS)');
+  assert.equal(same.flat, true, 'an ordinary label\'s preview ink is the stage geometry\'s own top faces');
+  assert.ok(same.tris > 0);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* ...and a preview drawn LATE never costs the visitor a word (2026-10-17): the first version re-rendered the whole panel when
+   the label font arrived, which rebuilt an open editor and wiped a word being typed (the keyboard case above caught it, at
+   random). The stand-ins are now swapped for their images in place. The font is held back here so it lands mid-typing. */
+test('a label preview drawn late swaps in place: the editor keeps the keyboard and the words being typed', async () => {
+  const c = await freshContext();
+  await c.route('**/LiberationSansNarrow-Bold.ttf*', async (route) => { await new Promise((r) => setTimeout(r, 4000)); await route.continue(); });
+  const { ctx, page, errors } = await open('labels', { query: '&new=1', context: c });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await btn(page, 'Type a label', '#ws-labels').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 5000 });
+  await page.keyboard.type('Late font');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 5000 });
+  assert.equal(await page.evaluate(() => document.querySelectorAll('#ws-labels .lprev.img').length), 0, 'the font is still held back: the CSS stand-in shows');
+  await page.locator('#ws-labels button[title="Edit this label"]').first().focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-labeledit input.words'), null, { timeout: 5000 });
+  await page.keyboard.press('End'); await page.keyboard.type(' xyz');
+  // the font arrives: the previews are drawn in place
+  await page.waitForFunction(() => document.querySelectorAll('#ws-labels .lprev.img').length >= 1, null, { timeout: 30_000 });
+  await settle(page, 600);
+  assert.deepEqual(await page.evaluate(() => { const a = document.activeElement; return [a === document.querySelector('#ws-labeledit input.words'), a.value]; }), [true, 'Late font xyz'], 'still typing, nothing lost');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});

@@ -583,6 +583,10 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 /* the previews: the real outline (EdgeLabel's slanted edge; Classic Pro's bar), the icon art as a mask, the words */
 .lprev { flex: none; width: 84px; aspect-ratio: 55.6 / 27; position: relative; display: flex; align-items: center; gap: 3px; padding: 3px 4px; box-sizing: border-box; background: #f4f1ec; color: #1b1b1b; clip-path: polygon(0 0, 100% 0, 53.3% 100%, 0 100%); overflow: hidden; }
 .lprev.cp { aspect-ratio: 47 / 18; clip-path: none; border-radius: 3px; }
+/* the drawn preview (js/label-preview.js, 2026-10-17): the 3D label's own face, stripe and ink as an image, in the face's
+   proportions (55.587 x 26.001 mm); the CSS outline and words above stand in only until its data has loaded */
+.lprev.img { display: block; padding: 0; background: none; clip-path: none; aspect-ratio: 55.587 / 26.001; }
+.lprev.img img { display: block; width: 100%; height: 100%; }
 .lprev.big { width: 120px; }
 .lprev .lico { flex: 0 0 auto; width: 34%; height: 78%; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
 .lprev .lch { flex: 0 0 auto; width: 30%; font-weight: 800; font-size: 13px; text-align: center; line-height: 1; }

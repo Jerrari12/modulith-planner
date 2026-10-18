@@ -484,3 +484,34 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **A test-setup gotcha:** STUDIO_DIR must be a Windows path with backslashes. The e2e server refuses any file whose path
   does not start with that string, so a forward-slash path turns every Studio request into a 403, and the five
   Studio cases time out.
+
+## 2026-10-17 (label previews drawn from the 3D label; supersedes decision 3b)
+
+- **Joey's report (2026-10-17, with a screenshot):** "the small labels differ from the actual labels". On the model, a part
+  label for an M2 × 6 socket head printed "M2 × 6" over the screw drawing. Joey decided on 2026-10-07
+  that the drawing replaces the head word. The panel's preview showed "M2 × 5 / SHCS", from the label's stored words.
+- **Why they differed:** the previews were "decision 3b" (2026-10-13, the 2026-10-13 Labels entry above): the outline, the
+  icon art and the words, chosen because the separate planner had no label core (about 1.2 MB more to load). The merged app
+  loads that core for the stage anyway, so the reason no longer holds. A label's stored words keep SHCS on purpose: they are
+  what older tools read. So the fix changes how a preview is drawn, never the words.
+- **Now:** js/label-preview.js draws each EdgeLabel preview from the 3D label's own sources:
+  - a part label from the same layout its ink is extruded from (label-text.js partLabelLayout, shared with
+    partLabelGeometry), its even-odd outlines on a canvas;
+  - an ordinary label from the same cached geometry the stage builds (labelGeometry: the wrap, the shrink and the badge),
+    its top faces drawn flat;
+  - a stripe from the Label Studio's band pieces, the face from the vendored EdgeLabel face;
+  - the build's Label and Label:TEXT colours.
+  The drawer rows and the selected drawer's card use that drawer's own look (labelLookOf). A label still waiting to be
+  placed is drawn as a drawer wearing it would draw it (label-look.js labelLookOfLabel).
+- **Unchanged:**
+  - the CSS preview stands in until the font and the part data have loaded;
+  - Classic Pro keeps it, because the stage draws no text on Classic Pro;
+  - an icon-only label still shows its icon in the panel and nothing on the model (it has no words to mirror).
+- **Checks:**
+  - test/label-preview.test.mjs pins the face to the vendored data and the waiting-label look to the drawer's;
+  - the e2e case "the label previews are drawn from the 3D label's own layout and geometry" proves one source: the preview's
+    layout record is the 3D ink's, and an ordinary label's flat ink is the stage geometry's own.
+  - Review: Sol 01a14ca2 (no findings).
+- **Open:** the 3D label and the Label plate can still differ when this browser's print preference (the plate's stripe
+  position or drawings switch) differs from the defaults. The stage always draws the drawings, with the stripe at the
+  label's own position or the bottom.

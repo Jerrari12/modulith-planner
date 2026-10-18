@@ -208,6 +208,10 @@ jobs:
           # which drawer wears a part label or a colour stripe (2026-10-10) - a main.js import, and it imports label-spec.js
           sed -i "s|'./label-look.js'|'./label-look.js?v=$V'|" js/main.js
           sed -i "s|'./label-spec.js'|'./label-spec.js?v=$V'|" js/label-look.js
+          # the panel's drawn label previews (2026-10-17): labels.js imports label-look.js and label-preview.js, and
+          # label-preview.js imports label-text.js - stamped like main.js's, so all three share ONE label-text.js instance
+          sed -i "s|'../label-look.js'|'../label-look.js?v=$V'|; s|'../label-preview.js'|'../label-preview.js?v=$V'|" js/workspaces/labels.js
+          sed -i "s|'./label-text.js'|'./label-text.js?v=$V'|" js/label-preview.js
           # ⚠ The Label Studio's part-label files (js/vendor/label-hardware.js, hardware-layout.js, hardware-data.js,
           # hardware-v5-data.js, hardware-band-data.js) need NO line here: like the core and the icon catalog they are CLASSIC
           # scripts label-text.js loads itself (vendorUrl), by URL relative to its import.meta.url and carrying ITS OWN ?v=

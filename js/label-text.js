@@ -203,11 +203,22 @@ export function stripeGeometry(colours, position) {
    words instead. Laid out on EdgeLabel with the screw and nut drawings on (the Label Studio's default), the stripe at
    `position` (null: none); the ink stands 0.45 mm proud (the part label's own depth, not the build's text depth). */
 const partCache = new Map();
+/* The part label's LAYOUT - the Label Studio's layOut result: { elements, band, colours, record, ... } (elements null when it
+   cannot print) - shared by the 3D ink below and the panel's 2D preview (js/label-preview.js), so the two are drawn from one
+   layout and cannot disagree (Joey 2026-10-17: "the small labels differ from the actual labels"). One layOut per
+   (item, position); null until the part-label files have loaded. */
+const layoutCache = new Map();
+export function partLabelLayout(item, position) {
+  if (!parts || !partsHave.layout || !core) return null;
+  const key = JSON.stringify([item, position || 'off']);
+  if (!layoutCache.has(key)) layoutCache.set(key, parts.layOut(item, { type: 'edgelabel', profile: true, band: position || 'off' }));
+  return layoutCache.get(key);
+}
 export function partLabelGeometry(item, position) {
   if (!parts || !partsHave.layout || !core) return null;
   const key = JSON.stringify([item, position || 'off']);
   if (partCache.has(key)) return partCache.get(key);
-  const r = parts.layOut(item, { type: 'edgelabel', profile: true, band: position || 'off' });
+  const r = partLabelLayout(item, position);
   let out = null;
   if (r.elements) {
     const ink = parts.inkGeometry(r.elements, r.inkDepth);
@@ -220,3 +231,48 @@ export function partLabelGeometry(item, position) {
   partCache.set(key, out);
   return out;
 }
+
+/* ---- the same geometry, flat, for the panel's previews (js/label-preview.js) ------------------------------------------
+   Everything here is in the LABEL frame: mm, centred on the label, y up - the frame the part layout's rings are in. The
+   meshes above are in the model's frame (`frame` added), so a flat copy takes `frame` off again. Only the top faces are
+   kept: a side wall projects to nothing and a bottom face lies under its top face. */
+function topTriangles(geo, dx, dy) {
+  const pos = geo.getAttribute('position');
+  if (!pos) return new Float32Array(0);
+  const idx = geo.getIndex();
+  const n = idx ? idx.count : pos.count;
+  let zTop = -Infinity;
+  for (let i = 0; i < pos.count; i++) zTop = Math.max(zTop, pos.getZ(i));
+  const out = [];
+  for (let t = 0; t + 2 < n; t += 3) {
+    const a = idx ? idx.getX(t) : t, b = idx ? idx.getX(t + 1) : t + 1, c = idx ? idx.getX(t + 2) : t + 2;
+    if (Math.abs(pos.getZ(a) - zTop) > 1e-3 || Math.abs(pos.getZ(b) - zTop) > 1e-3 || Math.abs(pos.getZ(c) - zTop) > 1e-3) continue;
+    out.push(pos.getX(a) - dx, pos.getY(a) - dy, pos.getX(b) - dx, pos.getY(b) - dy, pos.getX(c) - dx, pos.getY(c) - dy);
+  }
+  return new Float32Array(out);
+}
+/* An ordinary label's ink, flat: { tris: [Float32Array x0,y0,x1,y1,x2,y2 ...], fits, shown } from the SAME cached geometry
+   labelGeometry gives the 3D label (its wrap, shrink and badge), or null (nothing to print, or the core not loaded). */
+export function labelInk2d(text, badge, style, upload) {
+  if (!core) return null;
+  const g = labelGeometry(text, badge, style, upload);
+  if (!g) return null;
+  if (!g.flat) g.flat = g.parts.map((p) => topTriangles(p.geo, frame[0], frame[1]));
+  return { tris: g.flat, fits: g.fits, shown: g.shown };
+}
+/* A stripe's body pieces, flat: [{ piece, tris, hex }] (hex null = the label's Body colour), or null - the band data not
+   loaded, or no stripe at that position. `colours` = a CLEANED { band, band_accent } (parts.colours), as for the meshes. */
+const flatPieceCache = new Map();
+export function stripePieces2d(position, colours) {
+  if (!parts || !partsHave.bands || !core) return null;
+  const bp = parts.bandParts(position, colours);
+  if (!bp) return null;
+  const kind = colours.band && colours.band.pattern === 'dashed' ? 'dashed' : 'solid';
+  return bp.map((p) => {
+    const key = position + '/' + kind + '/' + p.piece;
+    if (!flatPieceCache.has(key)) flatPieceCache.set(key, topTriangles(p.geo, 0, 0));   // label-hardware.js builds in the label frame
+    return { piece: p.piece, tris: flatPieceCache.get(key), hex: p.colour ? p.colour.hex.toLowerCase() : null };
+  });
+}
+/* The cleaned stripe colours for `colours` (label-hardware.js colour()), or null before the band data has loaded. */
+export function stripeColours(colours) { return parts && partsHave.bands ? parts.colours(colours || {}) : null; }
