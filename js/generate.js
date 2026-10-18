@@ -608,11 +608,15 @@ const SHELF_COLORS = {
    Slate blue-grey: reads as structure next to the dark case without colliding
    with FootrailL/U blue-cyan, QuickLock teal or the insert's pale teal. */
 const EXTENDER_COLOR = { CaseExtender: '#7d8496' };
-/* The side cover rides in conditionally like the shelf parts. Pink: of the hues tried, the farthest from every colour
-   already in use and from both stages (CIEDE2000, nearest the stopper's magenta at 19.5) - it is a large panel on the
-   outside of the build, so it must not read as a case, a cover or a drawer front. One colour for the whole part: the
-   FACE zone follows the body in the identification palette, as every zone does. */
-const SIDE_COVER_COLOR = { SideCover: '#ff9ec4' };
+/* The side cover rides in conditionally like the shelf parts. It is a large panel on the outside of the build, so it
+   must not read as a case, a cover or a drawer front. Raspberry (Joey, 2026-10-18), replacing the first pink #ff9ec4:
+   CIEDE2000 18.3 from the nearest part colour (the stopper's magenta) for normal vision, and at least 9 from every part
+   colour under deuteranopia and tritanopia (Machado 2009 simulation), where the pink fell to 2.5 from the shelf insert
+   for deuteranopes. Under protanopia it nears the adhesive feet's grey (2.0), a colour only stick-on-feet builds emit.
+   Against the light stage it holds 5.1:1 on the background and 4.3:1 on the floor (the pink: 1.7:1 and 1.4:1); the
+   dark stage loses some, 3.2:1 and 2.2:1 (the pink: 9.9:1 and 6.7:1). One colour for the whole part: the FACE zone
+   follows the body in the identification palette, as every zone does. */
+const SIDE_COVER_COLOR = { SideCover: '#c2185b' };
 
 // ---- official-kit build migrations -----------------------------------------
 // Official kits (builds/<id>.json) commit a planner build to the repo forever —

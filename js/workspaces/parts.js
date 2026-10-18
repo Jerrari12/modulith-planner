@@ -34,7 +34,7 @@ const CLUB = { edgelabel: 1, classicpro: 1, chevron: 1 };
 export function chipFor(name) {
   // the planner's names carry a "GEN2 <length>" prefix, so match anywhere; the order matters (a stopper is not a drawer)
   if (/Stopper/.test(name)) return '#E040A0';
-  if (/Side Cover/.test(name)) return '#ff9ec4';   // Assemble's own hue for the part (generate.js SIDE_COVER_COLOR)
+  if (/Side Cover/.test(name)) return '#c2185b';   // Assemble's own hue for the part (generate.js SIDE_COVER_COLOR)
   if (/QuickLock/.test(name)) return '#14B8A6';
   if (/Magnet Clip/.test(name)) return '#8B5CF6';
   if (/Cover Upper/.test(name)) return '#7CC25A';
