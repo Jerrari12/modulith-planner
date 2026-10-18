@@ -3776,10 +3776,15 @@ function cloneMaterial(mat) {
 // the shader PROGRAM changes (to or from Holographic). The reassignment onto
 // meshes rides regenerate()'s normal applyState path like every other build
 // option, and so does the relay to the planner.
-async function setBuildPlate(key) {
+async function setBuildPlate(key, opts = {}) {
   if (!build || !PLATE_FINISHES.includes(key)) return;
-  track('opt:buildplate:' + key);
+  if (!opts.quiet) track('opt:buildplate:' + key);   // `quiet`: an Undo putting the plate back is not a visitor's pick
   build.buildPlate = key;
+  resetPlateMaterials();
+  await regenerate();
+}
+/* the plate's materials, for a plate that just changed (setBuildPlate, or a record swap that carries another plate) */
+function resetPlateMaterials() {
   holoUniforms.length = 0;
   /* ⚠ THE LAYER HANDLES GO WITH THEM. The faceplate materials below are DELETED and rebuilt
      through newPartMaterial, which pushes fresh handles; keeping the old ones would leave the
@@ -3787,7 +3792,6 @@ async function setBuildPlate(key) {
      holoUniforms because it is the same class of live-handle registry, purged in the same place. */
   dropFaceplateMaterials();
   if (plateActive()) ensurePlateUVs();
-  await regenerate();
 }
 // Which single colour REPRESENTS a part where only one swatch fits (BOM chip,
 // identify-card header)? Not the base type when a zone covers the whole visible
@@ -3816,7 +3820,7 @@ const ALT_LIGHTEN = 0.16;
 // showed one black + one grey tile). Gate = the same test activeHex uses to
 // resolve a custom color, so a type still on instruction colors keeps its
 // two-shade tiling even while other types are customized.
-const altLerp = type => (useCustom && customColors[type] && !colorLocked(type)) ? 0 : ALT_LIGHTEN;
+const altLerp = type => ((previewLook || useCustom) && (previewLook ? previewLook.colors : customColors)[type] && !colorLocked(type)) ? 0 : ALT_LIGHTEN;
 const altMaterials = {};
 function altMatFor(type) {
   if (!altMaterials[type]) {
@@ -5886,11 +5890,11 @@ function plannedMatFor(src, cacheKey) {
 /* A unit's own pick wins over the palette (phase 4b, "This drawer only"): an exact key, or - for a zone with no
    build-level pick - the unit's Body pick, the way a zone follows its type in activeHex. */
 function overrideFor(uid, key) {
-  if (uid == null || !useCustom) return null;
-  const o = overrides[uid]; if (!o) return null;
+  if (uid == null || !(previewLook || useCustom)) return null;
+  const o = (previewLook ? previewLook.over : overrides)[uid]; if (!o) return null;   // a look being shown brings its own layer
   if (o[key]) return o[key];
   const base = key.split(':')[0];
-  return (base !== key && !customColors[key] && o[base]) ? o[base] : null;
+  return (base !== key && !(previewLook ? previewLook.colors : customColors)[key] && o[base]) ? o[base] : null;
 }
 const overrideMats = {};
 function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } }
@@ -6732,6 +6736,9 @@ const CLASSIC_FACE = {
 // two-tone look belongs to the instruction palette only (see applyPalette's
 // alt-shade gate). NB Magnet/Screw entries are inert (colorLocked purchased
 // hardware always renders its manifest colour) — kept for completeness.
+// LABEL TEXT (the Colors plan's decision D2, Joey 2026-10-18): the text is printed, so every preset names its filament.
+// It was the manifest's black #1a1a1a; each preset takes its own black, and Sandstone, which had none, gains Panchroma
+// Black - the same look, and a shopping list that says what printing it needs.
 const PRESETS = [
   // The Jerrari = the build Joey actually prints: Elegoo black shell,
   // Mystery Orange face/grip, silk-silver rod + handles, Burnt Titanium
@@ -6760,7 +6767,7 @@ const PRESETS = [
        example here (Elegoo black core, Mystery Orange face). test/presets.test.mjs pins it. */
     SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Printed Solid Mystery Orange'),
     ...CLASSIC_FACE, // black body / orange face + grip / silk-silver rod
-    Accent: _db('ERYONE Burnt Titanium'), Label: _db('Panchroma Cold White'),
+    Accent: _db('ERYONE Burnt Titanium'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Elegoo PLA Black'),
     BackCover: _db('Elegoo PLA Black'),
     Handle: _db('Panchroma Silk Silver'),
     QuickLock: _db('Polymaker PETG Orange'), MagnetClip: _db('Polymaker PETG Orange'),
@@ -6781,7 +6788,7 @@ const PRESETS = [
     // zones so nothing silently inherits the body (see renderZoneChips)
     Faceplate: _db('Panchroma Steel Grey'), 'Faceplate:FACE': _db('Panchroma Dark Grey'),
     'Faceplate:GRIP': _db('Panchroma Dark Grey'), 'Faceplate:GRIP ACCENT': _db('Panchroma Silk Silver'),
-    Accent: _db('Panchroma Black'), Label: _db('Panchroma Cold White'),
+    Accent: _db('Panchroma Black'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
     BackCover: _db('Panchroma Black'),
     Handle: _db('Panchroma Silk Silver'),
     QuickLock: _db('Panchroma Dark Grey'), MagnetClip: _db('Panchroma Dark Grey'),
@@ -6798,7 +6805,7 @@ const PRESETS = [
     SideCover: _db('Panchroma Black'), 'SideCover:FACE': _db('Panchroma Yellow'),
     Faceplate: _db('Panchroma Orange'), 'Faceplate:FACE': _db('Panchroma Yellow'),
     'Faceplate:GRIP': _db('Panchroma Yellow'), 'Faceplate:GRIP ACCENT': _db('Panchroma Polymaker Teal'),
-    Accent: _db('Panchroma Aqua Blue'), Label: _db('Panchroma Cold White'),
+    Accent: _db('Panchroma Aqua Blue'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
     BackCover: _db('Panchroma Steel Grey'),
     Handle: _db('Panchroma Yellow'),
     QuickLock: _db('Panchroma Polymaker Teal'), MagnetClip: _db('Panchroma Brown'),
@@ -6815,7 +6822,7 @@ const PRESETS = [
     SideCover: _db('Panchroma Brown'), 'SideCover:FACE': _db('Panchroma Brown'),
     Faceplate: _db('Panchroma Orange'), 'Faceplate:FACE': _db('Panchroma Brown'),
     'Faceplate:GRIP': _db('Panchroma Brown'), 'Faceplate:GRIP ACCENT': _db('Panchroma Steel Grey'),
-    Accent: _db('Panchroma Tan'), Label: _db('Panchroma Cream'),
+    Accent: _db('Panchroma Tan'), Label: _db('Panchroma Cream'), 'Label:TEXT': _db('Panchroma Black'),
     BackCover: _db('Panchroma Brown'),
     Handle: _db('Panchroma Steel Grey'),
     QuickLock: _db('Panchroma Tan'), MagnetClip: _db('Panchroma Brown'),
@@ -6830,6 +6837,11 @@ const PRESETS = [
 let COLOR_STORE_KEY = (typeof opts !== 'undefined' && opts && opts.colorStoreKey) || ('gen2-colors:' + (IS_BENCH ? 'bench' : BUILD_HASH ? 'custom-build' : OFFICIAL ? 'official-' + OFFICIAL.id : KIT));   // the workspace shell keys the palette per build (phase 4); setColorStoreKey moves it
 let overrides = {};   // per-unit picks on top of the palette: unitId -> { key -> { name, hex, url } } (phase 4b); cleared by a scheme or a preset
 let customColors = {}, useCustom = false; // customColors: type -> {name, hex, url}
+/* A LOOK SHOWN, NOT CHOSEN (the Colors plan's step 1, 2026-10-18): { colors, over } while the gallery, the compare tray
+   or Surprise me shows one, else null. activeHex, activeLabel, altLerp and overrideFor read it in place of the chosen
+   palette, so the model and the product previews wear it. Nothing saves it, relays it or snapshots it for Undo, and
+   palette() still answers the chosen palette. Every palette change ends it first (previewPalette / endPreview). */
+let previewLook = null;
 // userPalette = the last palette the user built BY HAND (individual swatch
 // picks / per-type resets / file upload). Hand edits mirror the whole working
 // state into it; presets never touch it — so one preset click can't destroy
@@ -6880,7 +6892,8 @@ const activeHex = key => {
   // a label's colour STRIPE is the label's own colour, never a filament pick (label-look.js stripeZone): the key carries it
   const stripe = stripeHexOfKey(key);
   if (stripe) return stripe;
-  if (useCustom && customColors[key] && !colorLocked(key)) return customColors[key].hex;
+  const cc = previewLook ? previewLook.colors : customColors;   // a look being shown stands in for the palette (previewLook)
+  if ((previewLook || useCustom) && cc[key] && !colorLocked(key)) return cc[key].hex;
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key];
   if (manifest.colors[key]) return manifest.colors[key];
   const base = key.split(':')[0];
@@ -6909,7 +6922,8 @@ const activeHex = key => {
  */
 const activeLabel = key => {
   if (stripeHexOfKey(key)) return null;   // a stripe wears its label's colour, not a filament (activeHex)
-  if (useCustom && customColors[key] && !colorLocked(key)) return customColors[key].name || null;
+  const cc = previewLook ? previewLook.colors : customColors;   // as activeHex: a look being shown stands in for the palette
+  if ((previewLook || useCustom) && cc[key] && !colorLocked(key)) return cc[key].name || null;
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return null;
   if (manifest.colors[key]) return null;
   const base = key.split(':')[0];
@@ -6978,6 +6992,7 @@ $('color-toggle').onclick = () => { useCustom = !useCustom; track('colors:' + (u
 function applyPreset(p, opts = {}) {
   // `quiet`: the planner's boot dresses the model in the first preset; that is not a visitor's pick (2026-10-16)
   if (!opts.quiet) track('preset:' + slug(p.name)); // preset names are OURS — a fixed, tiny vocabulary
+  previewLook = null;   // a real choice ends any look being shown (previewLook)
   customColors = {};
   for (const [type, f] of Object.entries(p.colors)) customColors[type] = { ...f };
   overrides = {};
@@ -6988,10 +7003,12 @@ function applyPreset(p, opts = {}) {
 }
 function restoreUserPalette() {
   track('preset:my-palette');
+  previewLook = null;
   customColors = structuredClone(userPalette);
   useCustom = true;
   saveColors();
   applyPalette();
+  refreshMaterials();   // as setColor: a unit's zone that followed its own Body pick stops once the build picks that zone
 }
 // order-independent palette identity — for highlighting the active chip
 const palKey = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]?.name, o[k]?.hex]));
@@ -8498,6 +8515,7 @@ function refreshMaterials() {
 }
 function setOverride(uid, key, f) {   // one unit, one region: a filament, or null for "use the build colour"
   if (uid == null) return;
+  previewLook = null;
   overrides[uid] = overrides[uid] || {};
   if (f) overrides[uid][key] = { name: f.name, hex: f.hex, url: f.url }; else delete overrides[uid][key];
   if (!Object.keys(overrides[uid]).length) delete overrides[uid];
@@ -8505,6 +8523,7 @@ function setOverride(uid, key, f) {   // one unit, one region: a filament, or nu
   saveColors(); applyPalette(); refreshMaterials();
 }
 function clearOverrides(uid = null, key = null) {   // every unit's own pick for one key, or one unit's picks, or all
+  previewLook = null;
   for (const u of Object.keys(overrides)) {
     if (uid != null && String(u) !== String(uid)) continue;
     if (key) delete overrides[u][key]; else delete overrides[u];
@@ -8515,6 +8534,7 @@ function clearOverrides(uid = null, key = null) {   // every unit's own pick for
 }
 function setColorStoreKey(key) { if (!key || key === COLOR_STORE_KEY) return; COLOR_STORE_KEY = key; persistColors(); }
 function setColor(key, f) {   // one region, build-wide: a filament { name, hex, url }, or null for the instruction colour; units' own picks stay
+  previewLook = null;
   if (f) customColors[key] = { name: f.name, hex: f.hex, url: f.url }; else delete customColors[key];
   useCustom = Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0;
   snapshotUserPalette(); saveColors(); applyPalette();
@@ -8525,14 +8545,27 @@ function setPalette(p) {   // the whole working palette (a scheme, an upload, an
   // every entry is checked like a relayed palette (cleanPalette: a real hex colour, an http(s) link or none). A shared
   // #scheme= link and an uploaded file are outside data, and these values reach swatch styles and buy-link hrefs: until
   // 2026-10-17 a crafted link could carry a javascript: "Buy" link or CSS into the Colors workspace
+  previewLook = null;
   customColors = cleanPalette(p && p.colors);
-  overrides = {};   // a scheme replaces the layer; an undo restores it
-  if (p && p.over && typeof p.over === 'object') for (const [u, m] of Object.entries(p.over)) { if (u === '__proto__' || u === 'constructor' || u === 'prototype') continue; const c = cleanPalette(m); if (Object.keys(c).length) overrides[u] = c; }
+  overrides = cleanOverrides(p && p.over);   // a scheme replaces the layer; an undo restores it
   useCustom = !!(p && p.on) && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0);
   if (p && p.user) userPalette = cleanPalette(p.user);
   saveColors(); applyPalette(); refreshMaterials();
 }
-function setUseCustom(on) { useCustom = !!on && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0); saveColors(); applyPalette(); refreshMaterials(); }
+function setUseCustom(on) { previewLook = null; useCustom = !!on && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0); saveColors(); applyPalette(); refreshMaterials(); }
+/* Show a look without choosing it (previewLook): checked like any outside palette, never saved, relayed or put in the
+   history. The workspace that shows one ends it before it commits anything or unmounts; a real palette change ends it
+   too. Returns whether a look was being shown. */
+function previewPalette(p) {
+  previewLook = { colors: cleanPalette(p && p.colors), over: cleanOverrides(p && p.over) };
+  applyPalette(); refreshMaterials();
+}
+function endPreview() {
+  if (!previewLook) return false;
+  previewLook = null;
+  applyPalette(); refreshMaterials();
+  return true;
+}
 /* every (type, zone) a mounted part draws, with how many parts carry it and whether it is purchased hardware */
 function keysInBuild() {
   const out = new Map();
@@ -8541,10 +8574,52 @@ function keysInBuild() {
     const zones = new Set(); inst.group.traverse(o => { if (o.isMesh && o.userData.zone && !isStripeZone(o.userData.zone)) zones.add(o.userData.zone); });
     for (const key of [t, ...[...zones].map(z => zoneKey(t, z))]) { const e = out.get(key) || { key, type: t, zone: key.includes(':') ? key.split(':')[1] : '', count: 0, locked: colorLocked(t) }; if (!key.includes(':')) e.count++; out.set(key, e); }
   }
-  for (const e of out.values()) { if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0; e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0; }
+  for (const e of out.values()) {
+    if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0;
+    e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0;
+    e.ownColor = !!(e.zone && manifest.colors[e.key]);   // a zone with a colour of its own (the label text) does not follow its body unpicked
+  }
   const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
+}
+/* THE FILAMENT COUNT (the Colors plan's decision D2, Joey 2026-10-18): every colour this build is printed in, under a look
+   ({ colors, over }) or, with none, the chosen palette, read part by part the way materialFor and activeHex paint them.
+   - Bought hardware never counts.
+   - A unit's own pick wins over the build's: an exact key, or its Body pick for a zone the build has not picked.
+   - A zone with no pick follows its body, unless it has a colour of its own (the label text).
+   - A label's stripes count, one per colour.
+   - A region left on an identification colour has no filament to buy, but it is still printed: it is listed in
+     `unpicked` (in the colour the stage shows it) and counted once per colour that no picked filament already wears.
+   Returns { filaments: [{ name, hex, url, keys }], unpicked: [{ key, hex, stripe }], count }. */
+function filamentsInBuild(look = null) {
+  const on = look ? true : useCustom;
+  const colors = (look ? look.colors : customColors) || {};
+  const over = (look ? look.over : overrides) || {};
+  // the colour a region with no pick shows: activeHex's chain past the custom pick (the dark stage's case, then the manifest)
+  const idHex = key => { if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key]; if (manifest.colors[key]) return manifest.colors[key]; const base = key.split(':')[0]; return base !== key ? idHex(base) : '#b9bcc2'; };
+  const fil = new Map(), loose = new Map();
+  const wear = (f, key) => { const id = f.name || f.hex; let r = fil.get(id); if (!r) fil.set(id, r = { name: f.name || f.hex, hex: f.hex, url: f.url, keys: [] }); if (!r.keys.includes(key)) r.keys.push(key); };
+  const bare = (key, hex, stripe = false) => { const id = stripe ? 'stripe:' + hex : key; if (!loose.has(id)) loose.set(id, { key, hex, stripe }); };
+  for (const inst of instances.values()) {
+    const t = typeByNode[inst.cfg.node]; if (!t || !inst.group || colorLocked(t)) continue;
+    const zones = new Set(); inst.group.traverse(o => { if (o.isMesh) zones.add(o.userData.zone || ''); });
+    const uid = inst.cfg.planned ? null : unitOf(inst);   // a planned part never takes a unit's own pick (materialFor)
+    for (const z of zones) {
+      const key = zoneKey(t, z);
+      const stripe = stripeHexOfKey(key);
+      if (stripe) { bare(key, stripe, true); continue; }
+      const o = on && uid != null ? over[uid] : null;
+      const own = o ? (o[key] || (z && !colors[key] && o[t]) || null) : null;
+      const pick = own || (on ? (colors[key] || (z && !manifest.colors[key] ? colors[t] : null)) : null);
+      if (pick && pick.hex) wear(pick, key);
+      else bare(key, idHex(key));
+    }
+  }
+  const unpicked = [...loose.values()];
+  const worn = new Set([...fil.values()].map(f => f.hex.toLowerCase()));   // a stripe or a bare region in a colour a picked filament already prints is that spool
+  const extra = new Set(unpicked.map(u => u.hex.toLowerCase()).filter(h => !worn.has(h)));
+  return { filaments: [...fil.values()], unpicked, count: fil.size + extra.size };
 }
 /* what the part card needs about one instance: its name, count, type, zones, the primary key, links, the unit it rides */
 function partInfo(instId) {
@@ -8563,7 +8638,9 @@ async function updateBuild(nb, pre) {
   if (!gen) { try { gen = generateManifest(nb); } catch (err) { return { ok: false, errors: [String((err && err.message) || err)] }; } }
   if (!gen.manifest) return { ok: false, errors: gen.errors && gen.errors.length ? gen.errors : ['This layout can’t be shown.'] };
   while (regenBusy) await new Promise(r => setTimeout(r, 16));
+  const plateMoved = (nb.buildPlate || 'powder') !== (build.buildPlate || 'powder');   // the generator never reads the plate
   build = nb; originalBuild = structuredClone(nb);
+  if (plateMoved && PLATE_FINISHES.includes(nb.buildPlate || 'powder')) resetPlateMaterials();
   setSpots(null); setFlags([]);
   await regenerate(gen);
   return { ok: true };
@@ -9393,11 +9470,23 @@ function cleanPalette(o) {
   }
   return out;
 }
+// a per-unit layer from outside data (a scheme, an undo entry, a look being shown): unitId -> a palette, each checked
+function cleanOverrides(o) {
+  const out = {};
+  if (!o || typeof o !== 'object') return out;
+  for (const [u, m] of Object.entries(o)) {
+    if (u === '__proto__' || u === 'constructor' || u === 'prototype') continue;
+    const c = cleanPalette(m);
+    if (Object.keys(c).length) out[u] = c;
+  }
+  return out;
+}
 function applyRemoteColors(d) {
   if (typeof d.t !== 'number' || !d.colors || typeof d.colors !== 'object') return;
   if (d.t <= colorsT) { if (colorsT > d.t) postColorsToPlanner(); return; } // ours is newer — teach the cache instead
   applyingRemoteColors = true;
   try {
+    previewLook = null;
     customColors = cleanPalette(d.colors);
     useCustom = !!d.on;
     userPalette = d.user && typeof d.user === 'object' ? cleanPalette(d.user) : structuredClone(customColors);
@@ -10420,6 +10509,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
     palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
     setOverride, clearOverrides, overrideFor, setColorStoreKey,
+    // a look shown and not chosen, and the filament count (the Colors plan's step 1, 2026-10-18)
+    previewPalette, endPreview, get previewing() { return !!previewLook; }, filamentsInBuild,
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;

@@ -139,11 +139,16 @@ function declAt(src, needle) {
   assert.fail('unterminated ' + needle);
 }
 test('activeHex / activeLabel (main.js, executed): a stripe wears its own colour, never a filament; other keys are unchanged', () => {
-  const make = (name) => new Function('stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest',
+  const make = (name) => new Function('stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest', 'previewLook',
     `${declAt(mainSrc, `const ${name} =`)} return ${name};`);
   const ctx = [stripeHexOfKey, true, { Label: { hex: '#123456', name: 'Some PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' } },
-    () => false, 'light', { Case: '#dfe3ec' }, { colors: { Label: '#eef0f4' } }];
+    () => false, 'light', { Case: '#dfe3ec' }, { colors: { Label: '#eef0f4' } }, null];
   const activeHex = make('activeHex')(...ctx), activeLabel = make('activeLabel')(...ctx);
+  // a look being shown (previewLook) stands in for the palette, even with the palette off, and a stripe still wears its own colour
+  const shown = [...ctx.slice(0, 1), false, ...ctx.slice(2, 7), { colors: { Label: { hex: '#654321', name: 'Shown PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' } }, over: {} }];
+  assert.equal(make('activeHex')(...shown)('Label'), '#654321', 'the shown look paints the body');
+  assert.equal(make('activeLabel')(...shown)('Label'), 'Shown PLA', 'and lends it its filament');
+  assert.equal(make('activeHex')(...shown)('Label:STRIPE#56b4e9'), '#56b4e9', 'a stripe ignores a shown look too');
   assert.equal(activeHex('Label:STRIPE#56b4e9'), '#56b4e9', 'even a palette entry for the key cannot repaint a stripe');
   assert.equal(activeLabel('Label:STRIPE#56b4e9'), null, 'a stripe wears no filament (no filament finish)');
   assert.equal(activeHex('Label'), '#123456', 'the control: the body still follows the palette');

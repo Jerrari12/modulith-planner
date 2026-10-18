@@ -47,7 +47,17 @@ export function mountColors(stage, ctx) {
   /* ---------------- the palette, as one undo step each ---------------- */
   const pal = () => stage.palette();
   const worn = (key) => { const p = pal(); return p.on && p.colors[key] ? p.colors[key] : null; };
-  function commitColors(why, fn) { if (ctx.ownPaletteKey) ctx.ownPaletteKey(); fn(); store.commit(() => {}, why); }   // the key is the build's own first; the store snapshots the palette with the build
+  // the key is the build's own first; the store snapshots the palette with the build. A whole look (a preset, a scheme,
+  // ★ My palette, an upload) is always its OWN undo step: the store merges changes made within 350 ms, so the history is
+  // flushed on both sides of it (the Colors plan's step 1, 2026-10-18)
+  const LOOK = new Set(['preset', 'scheme']);
+  function commitColors(why, fn) {
+    if (ctx.ownPaletteKey) ctx.ownPaletteKey();
+    stage.endPreview?.();   // a look being shown never outlives a real change
+    if (LOOK.has(why)) store.flush();
+    fn(); store.commit(() => {}, why);
+    if (LOOK.has(why)) store.flush();
+  }
   const unsub = store.subscribe((state, why) => { if (why === 'adopt') return; renderAll(); });
   const unitOfSel = () => { const info = st.sel ? stage.partInfo(st.sel.id) : null; return info && info.owner != null ? info.owner : null; };
   const unitWord = () => { const u = store.state.placed.find((p) => p.id === unitOfSel()); return FILL_WORD[u?.fill] || 'unit'; };
@@ -126,7 +136,7 @@ export function mountColors(stage, ctx) {
       rows.appendChild(el('button.crow.key' + (st.key === k.key ? '.on' : ''), { disabled: k.locked, title: k.locked ? 'Purchased hardware, not printed · no filament to pick' : `Pick a filament for ${keyLabel(k.key).toLowerCase()}`, onclick: () => openPicker(k.key) }, [
         el('span.sw', { style: `background:${hex}` }),
         el('span.lbl', {}, [el('b', { text: keyLabel(k.key) }), el('span.cnt', { text: ` ×${k.count}` })]),
-        el('span.fil', {}, [k.locked ? 'Bought' : w ? w.name.replace('Panchroma ', '') : p.on && k.key.includes(':') ? 'follows Body' : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
+        el('span.fil', {}, [k.locked ? 'Bought' : w ? w.name.replace('Panchroma ', '') : p.on && k.zone && !k.ownColor ? 'follows Body' : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
       ]));
     }
     inb.appendChild(rows);
@@ -134,7 +144,7 @@ export function mountColors(stage, ctx) {
     // the plate
     const plate = el('section');
     plate.appendChild(el('h3.h2', { text: 'Build plate finish' }));
-    plate.appendChild(el('div.track.seg3', { role: 'group', 'aria-label': 'Build plate finish' }, PLATE_FINISHES.map((k) => el('button.seg.sm' + ((store.state.buildPlate || 'powder') === k ? '.on' : ''), { text: PLATE_LABELS[k], onclick: async () => { await stage.setBuildPlate(k); store.load(stage.build, 'adopt'); renderAll(); } }))));
+    plate.appendChild(el('div.track.seg3', { role: 'group', 'aria-label': 'Build plate finish' }, PLATE_FINISHES.map((k) => el('button.seg.sm' + ((store.state.buildPlate || 'powder') === k ? '.on' : ''), { text: PLATE_LABELS[k], onclick: async () => { stage.endPreview?.(); store.flush(); await stage.setBuildPlate(k); store.load(stage.build, 'adopt'); store.flush(); renderAll(); } }))));   // its own undo step; app.js hands an undone plate back to the stage
     plate.appendChild(el('p.note', { text: 'Only changes how the bed faces render · bills nothing. Screen colors are approximate; the Day Grid gives the truest read.' }));
     panel.appendChild(plate);
   }
@@ -264,12 +274,14 @@ export function mountColors(stage, ctx) {
   root.appendChild(bar.el);
   const dock = el('footer.glass', { id: 'ws-dock' });
   root.appendChild(dock);
-  const filamentsOf = (colors, over = null) => { const seen = new Map(); const add = (k, c) => { if (!c || !c.name) return; if (!seen.has(c.name)) seen.set(c.name, { ...c, keys: [] }); if (!seen.get(c.name).keys.includes(k)) seen.get(c.name).keys.push(k); }; for (const [k, c] of Object.entries(colors || {})) add(k, c); for (const o of Object.values(over || {})) for (const [k, c] of Object.entries(o || {})) add(k, c); return [...seen.values()]; };
+  /* the one filament count (the Colors plan's decision D2): what this build prints in, from the stage, so the Dock, the
+     shopping list and a preset's Shop list agree - bought hardware never counts; the label text and stripes do */
   function renderDock() {
-    const p = pal(); const fils = p.on ? filamentsOf(p.colors, p.over).filter((f) => stage.keysInBuild().some((k) => f.keys.includes(k.key))) : [];
+    const p = pal(); const fc = p.on ? stage.filamentsInBuild() : null;
+    const count = fc ? fc.count : 0;
     const s = stage.buildSize?.(); const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
     dock.replaceChildren(
-      el('button.status.stack', { title: fils.length ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !fils.length, onclick: () => { st.shop = st.shop ? false : 'build'; renderShop(); renderCard(); } }, [el('span.stacks', {}, fils.slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), fils.length ? n(fils.length, 'filament') : 'Instruction colors']),
+      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { st.shop = st.shop ? false : 'build'; renderShop(); renderCard(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), count ? n(count, 'filament') : 'Instruction colors']),
       el('div.group', {}, [el('span.big', { text: String(store.state.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
       el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
@@ -280,13 +292,15 @@ export function mountColors(stage, ctx) {
   function renderShop() {
     if (!st.shop) { shop.hidden = true; return; }
     const preset = st.shop === 'build' ? null : st.shop;
-    const colors = preset ? preset.colors : pal().colors;
-    const inBuild = new Set(stage.keysInBuild().map((k) => k.key));
-    const fils = filamentsOf(colors, preset ? null : pal().over).map((f) => ({ ...f, uses: f.keys.filter((k) => preset ? true : inBuild.has(k)) })).filter((f) => f.uses.length);
+    // the build's own filaments, or a preset's as THIS build would wear it: only the regions the build has, never bought hardware
+    const fc = stage.filamentsInBuild(preset ? { colors: preset.colors, over: {} } : null);
+    const fils = fc.filaments;
     shop.hidden = false;
     shop.replaceChildren(
       el('div.ihead', {}, [el('b', { text: preset ? `Shop “${preset.name}”` : 'Filaments in this build' }), el('button.x', { 'aria-label': 'Close', onclick: () => { st.shop = false; renderShop(); renderCard(); } }, [icon('x', { size: 16 })])]),
-      ...fils.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw', { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.uses.map(keyLabel).join(' · ') })]), el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' })]); }),
+      ...fils.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw', { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' }) : null]); }),
+      // printed, but with no filament chosen: a region left on its instruction colour, a label stripe (the label's own colour)
+      ...fc.unpicked.map((u) => el('div.frow.well.bare', {}, [el('span.sw', { style: `background:${u.hex}` }), el('div.col', {}, [el('b', { text: u.stripe ? 'Label stripe' : keyLabel(u.key) }), el('span.meta', { text: u.stripe ? `Printed in the label’s own colour, ${u.hex}` : 'No filament picked yet' })])])),
       el('span.disc', { text: fils.some((f) => /polymaker/i.test(f.url)) ? 'Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission at no extra cost to you.' : fils.some((f) => isPaid(f.url)) ? 'Paid links · I earn a small commission at no extra cost to you.' : '' }),
     );
   }
@@ -318,6 +332,6 @@ export function mountColors(stage, ctx) {
 
   return {
     onSelect(sel) { st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; } renderAll(); },
-    unmount() { ac.abort(); unsub(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },
+    unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },   // a look being shown never outlives the workspace
   };
 }

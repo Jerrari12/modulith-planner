@@ -535,3 +535,61 @@ Dated calls made while building, with who made them. The brief and the inventory
     found only muted colours staying 11 or more apart under every vision type (for example `#876969`), and those would
     read as plain plastic among the saturated part colours.
 - **Changed:** generate.js `SIDE_COVER_COLOR` and the Parts list's chip (parts.js `chipFor`).
+
+## 2026-10-18 (Colors, step 1 of the redesign plan: the foundations)
+
+- **Joey's go (2026-10-18):** "Continue", answering "Start step 1 of the Colors plan with the proposed defaults?". The plan
+  is `D:\Claude - Output\colors-presets-2026-10-17\COLORS-PLAN.md`; it puts Astra's Colors notes, a read-only map of
+  this code and a real-world palette study into six steps. Sol reviewed it (thread 01a14d1f). Step 1 changes nothing a
+  visitor sees except the fixes; each step deploys only on Joey's go.
+- **The defaults it accepted:**
+  - D1: the side-cover face stays the faceplate's FACE colour.
+  - D2: count every colour that must be printed, including label text and stripes, never bought hardware.
+  - D3: applying a look sets the whole look.
+  - D4: an edited look is named "<look> · edited".
+  - D5: saved looks keep per-drawer colours.
+  - Step 1 builds on D2; D3 to D5 shape later steps.
+- **What step 1 adds:**
+  - **A look can be shown without being chosen.** `stage.previewPalette` / `endPreview`: activeHex, activeLabel,
+    altLerp and overrideFor read the shown look, so the model and the product previews wear it. Nothing saves it,
+    relays it or puts it in the history, and `palette()` keeps answering the chosen palette. Every palette setter
+    ends it first, and so does the Colors workspace before a commit or on unmount. No control calls it yet: the
+    gallery, the compare tray and Surprise me (steps 3 to 5) will.
+  - **A whole look is its own undo step.** The store merges any changes made within 350 ms, whatever they were, so a
+    preset, a scheme, ★ My palette or an upload flushes the history on both sides, and so does a plate change.
+  - **One filament count** (`stage.filamentsInBuild(look?)`, D2). It reads part by part the way the stage paints,
+    and the Dock and every Shop list use it.
+    - It fixes two bugs: the Dock counted bought hardware, and a preset's Shop list listed filaments for regions the
+      build does not have.
+    - A region on an identification colour, or a label stripe, is listed as printed with no filament picked.
+    - A colour a picked filament already prints counts once.
+  - **Every preset names its label-text filament** (it was the manifest's #1a1a1a): The Jerrari takes Elegoo PLA
+    Black; Stealth and Signal take Panchroma Black. Sandstone had no black, so it gains Panchroma Black: the same
+    look, and a shopping list that says what printing it needs.
+- **Bugs fixed** (from the code map):
+  - Undoing a plate finish left the stage on the new plate, because the generator never reads the plate. app.js now
+    hands an undone or redone plate back to the stage, and `update()` resets the plate materials when a record
+    swap carries another plate.
+  - ★ My palette did not re-point the materials.
+  - The label-text row said "follows Body" while it renders black.
+- **Also on this branch:** the share-link validation fix (2fc4a90). A crafted `#scheme=` link or an uploaded file can
+  no longer bring in a `javascript:` buy link, CSS or a `__proto__` key.
+- **Tests:**
+  - **Four new e2e cases:** a shown look leaves the palette, the saved palette and the history alone; a preset straight
+    after a pick is its own undo step; plate Undo and Redo move the stage with the store; the Dock and Signal's Shop
+    list count what this build prints.
+  - **Mutation-checked:** with the history flush removed, the undo case fails; with app.js's plate hand-back removed,
+    the plate case fails.
+  - **The axis guard** (layer-detail-seam.test.mjs) now follows `resetPlateMaterials`, and covers the record swap.
+  - **The totals:**
+    - npm test: 520 tests, 515 passed, 0 failed, 5 skipped. The axis guard's file failed before its update and passed
+      12 of 12 after.
+    - e2e: 38 of 39. The miss was the Label plate's stripe case, a click that timed out at 37 s; it passed on a rerun
+      (13 s), with the four new cases.
+- **Review:** Sol 01a14d4f.
+  - Held, and fixed:
+    - a stripe in a colour a picked filament already prints was counted twice;
+    - an unpicked region reported the manifest colour where the dark stage shows its light case.
+  - Set aside: "the Dock should count with instruction colours on". That text is unchanged; with no look chosen there
+    are no filaments to count.
+- **Not deployed.** It waits for Joey's go. It needs main's newer commits merged in first.

@@ -104,6 +104,14 @@ export async function boot() {
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
   const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user, over: p.over }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette and the per-unit layer ride along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); stage.setColorStoreKey(buildKey(store.state.buildId)); } catch { /* a very old browser */ } saveBuild(snap); } });
+  /* the plate is the one record field the generator never reads, so no workspace's regenerate puts it back: an Undo or a
+     Redo that moves it hands it to the stage here (the Colors plan's step 1, 2026-10-18; before, the stage kept the newer
+     plate while the store and the address went back) */
+  store.subscribe((state, why) => {
+    if (why !== 'undo' && why !== 'redo') return;
+    const want = state.buildPlate || 'powder';
+    if (stage.build && (stage.build.buildPlate || 'powder') !== want) stage.setBuildPlate(want, { quiet: true });
+  });
   /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
      silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
   let capPending = null;   // { drop: entry } while a new build is held back by the cap

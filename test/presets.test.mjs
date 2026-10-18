@@ -76,8 +76,9 @@ const SHELF_COLORS = objAt('const SHELF_COLORS') || {};
 const SIDE_COVER_COLOR = objAt('const SIDE_COVER_COLOR') || {};
 const extHex = (gen.match(/CaseExtender:\s*'([^']+)'/) || [])[1];
 
-/* the side cover's 0.8 mm FACE is a zone of its own (the GLB's FACE material), themed like the faceplate's */
-const ZONE_KEYS = ['Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT', 'SideCover:FACE'];
+/* the side cover's 0.8 mm FACE is a zone of its own (the GLB's FACE material), themed like the faceplate's; the label
+   text is printed, so a preset names its filament too (the Colors plan's decision D2, 2026-10-18) */
+const ZONE_KEYS = ['Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT', 'SideCover:FACE', 'Label:TEXT'];
 /* ⚠ FootAdhesive is deliberately EXCLUDED. It is a bought rubber foot, not
    filament: the row is `purchased`, so colorLocked always renders its real
    finish and a preset entry could never apply. Giving it one would contradict

@@ -1415,3 +1415,162 @@ test('Colors: a crafted #scheme= link cannot bring in a javascript: buy link, CS
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* The Colors plan's step 1 (2026-10-18): a look can be SHOWN without being chosen (the gallery, the compare tray and
+   Surprise me will show many); a whole look is its own undo step; an undone plate goes back on the stage; and one
+   filament count drives the Dock and every Shop list. */
+test('Colors: a shown look is worn by the model but never chosen - the palette, the saved palette and the history stay; endPreview and a real pick end it', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 600);
+  const r = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, st = window.__GEN2_STORE__;
+    const saved = () => JSON.stringify(Object.keys(localStorage).filter((k) => k.startsWith('gen2-colors:')).sort().map((k) => [k, localStorage.getItem(k)]));
+    const before = { pal: JSON.stringify(v.palette()), saved: saved(), undo: st.canUndo, caseHex: v.activeHex('Case') };
+    const stealth = v.PRESETS.find((p) => p.name === 'Stealth');
+    v.previewPalette({ colors: stealth.colors });
+    await new Promise((ok) => setTimeout(ok, 450));   // past the store's 350 ms window: a snapshot would have landed by now
+    const during = { pal: JSON.stringify(v.palette()), saved: saved(), undo: st.canUndo, caseHex: v.activeHex('Case'), previewing: v.previewing };
+    const ended = v.endPreview();
+    const after = { caseHex: v.activeHex('Case'), previewing: v.previewing, again: v.endPreview() };
+    v.previewPalette({ colors: stealth.colors });   // shown again, for the real pick below to end
+    return { before, during, ended, after, stealthCase: stealth.colors.Case.hex };
+  });
+  assert.notEqual(r.before.caseHex, r.stealthCase, 'the control: the chosen look and the shown one differ on the case');
+  assert.equal(r.during.caseHex, r.stealthCase, 'the model wears the shown look');
+  assert.equal(r.during.pal, r.before.pal, 'palette() still answers the chosen palette');
+  assert.equal(r.during.saved, r.before.saved, 'nothing was saved to this browser');
+  assert.equal(r.during.undo, r.before.undo, 'no history entry');
+  assert.equal(r.during.previewing, true);
+  assert.equal(r.ended, true, 'endPreview reports a look was shown');
+  assert.equal(r.after.caseHex, r.before.caseHex, 'endPreview puts the chosen look back');
+  assert.equal(r.after.previewing, false);
+  assert.equal(r.after.again, false, 'a second endPreview has nothing to end');
+  // a real change through the panel ends a shown look: open the first region's picker and pick a different filament
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  await page.evaluate(() => { const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')]; sws[sws.length - 1].click(); });
+  await settle(page, 500);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'a real pick ends the shown look');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: a preset applied straight after a region pick is its own undo step (the store merges changes within 350 ms)', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 600);
+  const palNow = () => page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
+  const start = await palNow();
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  // the pick and the preset in one task: well inside the store's 350 ms window
+  const picked = await page.evaluate(() => {
+    const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')]; sws[sws.length - 1].click();
+    const after = JSON.stringify(window.__GEN2_VIEWER__.palette().colors);
+    document.querySelectorAll('#ws-colors .scheme .apply')[1].click();
+    return after;
+  });
+  await settle(page, 600);
+  assert.notEqual(picked, start, 'the control: the pick changed the palette');
+  assert.notEqual(await palNow(), picked, 'the control: the preset changed it again');
+  await page.keyboard.press('Control+Z');
+  await settle(page, 600);
+  assert.equal(await palNow(), picked, 'one Undo takes the preset off and keeps the pick');
+  await page.keyboard.press('Control+Z');
+  await settle(page, 600);
+  assert.equal(await palNow(), start, 'a second Undo takes the pick off');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: Undo of a plate finish puts the stage back on the old plate, and Redo forward again', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .seg3 .seg', { timeout: 30_000 });
+  await settle(page, 600);
+  const plates = () => page.evaluate(() => ({ stage: window.__GEN2_VIEWER__.build.buildPlate || 'powder', store: window.__GEN2_STORE__.state.buildPlate || 'powder' }));
+  const first = await plates();
+  const target = first.stage === 'smooth' ? 'Powder-coated' : 'Smooth';
+  await page.locator('#ws-colors .seg3 .seg', { hasText: target }).click();
+  await page.waitForFunction((p) => (window.__GEN2_VIEWER__.build.buildPlate || 'powder') !== p, first.stage, { timeout: 30_000 });
+  await settle(page, 800);
+  const changed = await plates();
+  assert.equal(changed.stage, changed.store, 'the stage and the store agree after the pick');
+  assert.notEqual(changed.stage, first.stage, 'the control: the plate changed');
+  await page.keyboard.press('Control+Z');
+  await page.waitForFunction((p) => (window.__GEN2_VIEWER__.build.buildPlate || 'powder') === p, first.stage, { timeout: 30_000 }).catch(() => {});
+  await settle(page, 800);
+  assert.deepEqual(await plates(), { stage: first.stage, store: first.stage }, 'Undo: the stage is back on the old plate with the store');
+  await page.keyboard.press('Control+Y');
+  await page.waitForFunction((p) => (window.__GEN2_VIEWER__.build.buildPlate || 'powder') === p, changed.stage, { timeout: 30_000 }).catch(() => {});
+  await settle(page, 800);
+  assert.deepEqual(await plates(), { stage: changed.stage, store: changed.stage }, 'Redo: forward again, together');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1' });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await settle(page, 800);
+  // a part label with a stripe, on a drawer, so the build prints label text and a stripe colour
+  await page.evaluate(async () => {
+    const R = await import('/js/rules/labels.js');
+    const L = globalThis.GEN2LabelList;
+    const st = window.__GEN2_STORE__;
+    const item = { schema: 'part-picker-label-item/1', id: 'p6', family: 'screw', head: 'socket-cap', units: 'mm', fields: ['M2', '× 6'], value_missing: [],
+      attributes: [{ path: 'head', text: 'SHCS', meaning: 'Socket head cap' }], pinned: ['head'], optional: [], pinned_unprinted: [],
+      colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } };
+    const apply = (r) => { if (!r.ok) throw new Error(r.msg); st.flush(); st.commit((s) => R.applyResult(L, s, r), 'label'); st.flush(); };
+    apply(R.addPartItems(L, st.state, [item]));
+    const p6 = R.labelsOf(st.state).find((l) => l.hardware && l.hardware.id === 'p6');
+    apply(R.place(L, st.state, R.drawers(st.state)[0].id, p6.id, null, 'drawer'));
+  });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.keysInBuild().some((k) => k.key === 'Label:TEXT'), null, { timeout: 30_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  const r = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    const keys = v.keysInBuild(), locked = new Set(keys.filter((k) => k.locked).map((k) => k.key));
+    const mine = v.filamentsInBuild();
+    const signal = v.PRESETS.find((p) => p.name === 'Signal');
+    const sig = v.filamentsInBuild({ colors: signal.colors, over: {} });
+    const sigOnlyHardware = [...new Set(['Magnet', 'Screw'].map((k) => signal.colors[k] && signal.colors[k].name))].filter((n) => n && !Object.entries(signal.colors).some(([k, f]) => !['Magnet', 'Screw'].includes(k) && f.name === n));
+    return {
+      lockedKeys: [...locked], countedKeys: mine.filaments.flatMap((f) => f.keys),
+      count: mine.count, filaments: mine.filaments.length, stripes: mine.unpicked.filter((u) => u.stripe).map((u) => u.hex),
+      textWears: (mine.filaments.find((f) => f.keys.includes('Label:TEXT')) || {}).name || null,
+      sigRows: sig.filaments.length + sig.unpicked.length, sigNames: sig.filaments.map((f) => f.name), sigOnlyHardware,
+      sigLeaks: sig.filaments.flatMap((f) => f.keys).filter((k) => !keys.some((x) => x.key === k)),
+    };
+  });
+  assert.ok(r.lockedKeys.length > 0, 'the control: this build has bought hardware');
+  assert.deepEqual(r.countedKeys.filter((k) => r.lockedKeys.includes(k)), [], 'bought hardware never counts');
+  assert.ok(r.textWears, 'the label text counts, wearing the preset\'s own black');
+  assert.deepEqual(r.stripes, ['#56b4e9'], 'the stripe counts, in the label\'s own colour');
+  assert.equal(r.count, r.filaments + 1, 'the count: every filament plus the one stripe colour');
+  assert.match(await page.locator('#ws-dock .status.stack').textContent(), new RegExp(`\\b${r.count} filaments\\b`), 'the Dock shows that count');
+  // Signal's Shop list, as THIS build would wear it: only its regions, and no filament the preset gives bought hardware alone
+  assert.deepEqual(r.sigLeaks, [], 'no region the build lacks');
+  for (const n of r.sigOnlyHardware) assert.ok(!r.sigNames.includes(n), `${n} is only on bought hardware in Signal, so it is not listed`);
+  await page.locator('#ws-colors .scheme').filter({ hasText: 'Signal' }).locator('.shop').click();
+  await page.waitForSelector('#ws-shop .frow', { timeout: 5000 });
+  assert.equal(await page.locator('#ws-shop .frow').count(), r.sigRows, 'the Shop list lists exactly those rows');
+  // with no label-text pick, the label text row reads as its own colour, not "follows Body"
+  await page.keyboard.press('Escape');
+  const text = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__; const p = v.palette(); delete p.colors['Label:TEXT']; v.setPalette({ colors: p.colors, on: true, over: p.over });
+    return null;
+  });
+  void text;
+  await settle(page, 300);
+  await page.evaluate(() => window.__GEN2_STORE__.commit(() => {}, 'color'));   // the panel re-renders on a commit
+  await settle(page, 400);
+  const row = await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-colors .crow')].find((x) => /Label text/.test(x.textContent)); return b ? b.querySelector('.fil').textContent : null; });
+  assert.ok(row && !/follows Body/.test(row), `the label text row says what it wears, not "follows Body": ${row}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
