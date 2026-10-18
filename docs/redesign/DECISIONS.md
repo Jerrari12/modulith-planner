@@ -675,7 +675,8 @@ Dated calls made while building, with who made them. The brief and the inventory
   every face black, the body in neon yellow, handles in plain black PLA (that build wore a holographic build plate: the
   plate finish, not a colour). Shell in Neon Yellow; faces, grips, drawers, handles and the deck (13:1) in Elegoo PLA
   Black; accents and hardware neon. Terra 01a1508e, no findings. The presets test pins 12.
-- **Checks:** presets.test.mjs 17 of 17 and filament-db.test.mjs on the final code; a change Joey decided in words
+- **Checks:** presets.test.mjs 12 of 12 and filament-db.test.mjs 5 of 5 on the final code (Terra 01a150b8 caught the
+  earlier "17 of 17", which was both files together); a change Joey decided in words
   deploys once its checks pass.
 - **Live:** main 03ee0bd (261cc80 accent rule + Neon Yellow, 81ceda9 the preset, 03ee0bd the night grid and setup
   sheet), run 39161157605 green 16:26, live stamp `03ee0bdb`. Production check (evening-prod.mjs, desktop and
