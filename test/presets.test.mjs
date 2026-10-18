@@ -90,7 +90,10 @@ const TYPES = [...Object.keys(COLORS || {}), ...Object.keys(SHELF_COLORS), ...Ob
 test('the extraction actually found the catalog and the presets', () => {
   assert.ok(Array.isArray(FILAMENT_DB) && FILAMENT_DB.length >= 4, 'FILAMENT_DB looks wrong');
   assert.ok(FILAMENT_DB.reduce((a, b) => a + b.colors.length, 0) > 50, 'too few catalog colours - check the extraction');
-  assert.equal(PRESETS.length, 4, 'expected four presets');
+  /* the four of 2026-08 plus the palette study's seven (the Colors plan §2, landed with the gallery in step 3, 2026-10-18).
+     Tool-chest red is not among them: the plan admits it only once it is scored as a full palette */
+  assert.equal(PRESETS.length, 11, 'expected eleven presets');
+  assert.deepEqual(PRESETS.slice(4).map((p) => p.name), ['Racing silver & teal', 'Grey & sunlight yellow', 'Safety yellow & black', 'Printer black & red', 'Tri-stripe racing white', 'Black & gold', 'Flight-team navy & gold']);
   assert.ok(COLORS && Object.keys(COLORS).length > 10, 'COLORS did not extract');
   assert.ok(TYPES.includes('ShelfInsert') && TYPES.includes('CaseExtender') && TYPES.includes('SideCover'),
     'the type list is missing the newest parts - the extraction is stale');
@@ -138,6 +141,14 @@ test('a side cover wears the CASE colour on its core and the faceplate FACE on i
   }
   const j = PRESETS.find((p) => p.name === 'The Jerrari');
   assert.equal(j.colors['SideCover:FACE'].name, 'Printed Solid Mystery Orange', 'the rule\'s own example');
+});
+
+test('the faceplate GRIP wears the FACE colour in every preset (the grip accent may differ)', () => {
+  /* Joey 2026-10-18, on the gallery's first cards: "with this faceplate i'm not a fan of the grip being a different color
+     from the face". The four presets of 2026-08 already did this; the palette study's drafts split them, and were folded. */
+  for (const p of PRESETS)
+    assert.equal(p.colors['Faceplate:GRIP'].name, p.colors['Faceplate:FACE'].name,
+      `${p.name}: the grip is ${p.colors['Faceplate:GRIP'].name} but the face is ${p.colors['Faceplate:FACE'].name}`);
 });
 
 test('The Jerrari keeps the shelf colours Joey specified', () => {

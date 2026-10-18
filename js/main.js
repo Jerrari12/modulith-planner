@@ -4119,7 +4119,7 @@ function refreshLabelText(inst, draft) {
    stays on screen: its label is refreshed WITH the draft, the others from `build`. */
 function refreshLabelTexts() {
   if (IS_PART || !build) return;
-  lookOf = null;   // the label meshes change in place, with no new manifest: the look cards re-snapshot
+  sceneRev++;   // the label meshes change in place, with no new manifest: the look cards re-snapshot
   for (const inst of instances.values()) {
     if (!LABEL_TEXT_NODES.has(inst.cfg.node)) continue;
     refreshLabelText(inst, labelEdit && labelEdit.inst === inst ? labelEdit.draft : undefined);
@@ -5908,8 +5908,14 @@ function overrideFor(uid, key) {
 const overrideMats = {};
 function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } }
 // the look cards' state (lookCard, the Colors plan's step 2), here because the purges above can run before lookCard is defined
-let lookScene = null, lookCam = null, lookRT = null, lookItems = null, lookOf = null, lookBox = null, lookCmpRT = null, lookRig = null;
+let lookScene = null, lookCam = null, lookItems = null, lookBox = null, lookCmpRT = null, lookRig = null;
 let lookQueue = Promise.resolve();   // lookCard runs one card at a time
+/* THE SCENE REVISION (the Colors plan's step 3, 2026-10-18): a count of the changes to what the finished build is made of.
+   A new manifest bumps it (mountManifest), and so do the changes that alter the build WITHOUT one: the label meshes redrawn
+   in place (refreshLabelTexts) and a handle or faceplate style swapped in place. The look cards snapshot the build once per
+   revision (lookRev), and the Colors workspace keys its card cache on it, so a card of a build that has since changed is
+   never shown (Astra's check: the model, the cards and the inspector agree, after Undo and a build switch too). */
+let sceneRev = 0, lookRev = -1;
 const lookMats = new Map();   // key|hex|label|alt -> a clone of the live material in the look's colour and finish
 function overrideMatFor(key, ov, zone, alt) {
   const type = key.split(':')[0];
@@ -6842,6 +6848,141 @@ const PRESETS = [
     Stopper: _db('Panchroma Tan'),
     Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
   } },
+  /* THE PALETTE STUDY'S SEVEN (the Colors plan §2, 2026-10-17; landed with the gallery in step 3, 2026-10-18). Each is a
+     real-world palette whose every colour sits within dE00 6 of a catalog filament, and each passes the preset rules above
+     (the study: D:\Claude - Output\colors-presets-2026-10-17\palettes.html and results.json; the drafts: presets-draft.js).
+     The names stay descriptive; the real-world basis of each is in the study, not in the UI. The label TEXT takes a dark
+     filament the look already prints (decision D2: no spool bought for the text alone). Tool-chest red is NOT here: the plan
+     admits it only once it is scored as a full palette, and that scoring has not been run.
+     THE GRIP WEARS THE FACE COLOUR (Joey 2026-10-18, on the gallery's first cards: "i'm not a fan of the grip being a
+     different color from the face"): the four presets above already did; the drafts' split grips were folded into the
+     face colour here, and test/presets.test.mjs pins the rule. The GRIP ACCENT (the Classic Pro rod) may still differ. */
+  // Racing silver & teal: silver bodywork, black carbon, teal flashes
+  { name: 'Racing silver & teal', swatches: ['#CDD2D9', '#1C1D20', '#00A5A5'], colors: {
+    Case: _db('Panchroma Silk Silver'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Panchroma Silk Silver'), CoverU: _db('Panchroma Silk Silver'),
+    Bracket: _db('Panchroma Silk Silver'), FootrailL: _db('Panchroma Silk Silver'),
+    FootrailU: _db('Panchroma Silk Silver'), Foot: _db('Panchroma Silk Silver'),
+    Rail: _db('Panchroma Silk Silver'), CaseExtender: _db('Panchroma Silk Silver'),
+    ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Panchroma Silk Silver'),
+    SideCover: _db('Panchroma Silk Silver'), 'SideCover:FACE': _db('Elegoo PLA Black'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Panchroma Silk Silver'),
+    Accent: _db('Panchroma Polymaker Teal'), Label: _db('Panchroma Silk Silver'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Panchroma Silk Silver'),
+    Handle: _db('Panchroma Silk Silver'),
+    QuickLock: _db('Panchroma Polymaker Teal'), MagnetClip: _db('Panchroma Polymaker Teal'),
+    Stopper: _db('Panchroma Polymaker Teal'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Grey & sunlight yellow: a grey shell with a bright yellow face
+  { name: 'Grey & sunlight yellow', swatches: ['#9A9DA3', '#F8E35A', '#2B2B2E'], colors: {
+    Case: _db('Panchroma Grey'), Drawer: _db('Panchroma Grey'),
+    CoverL: _db('Panchroma Grey'), CoverU: _db('Panchroma Grey'),
+    Bracket: _db('Panchroma Grey'), FootrailL: _db('Panchroma Grey'),
+    FootrailU: _db('Panchroma Grey'), Foot: _db('Panchroma Grey'),
+    Rail: _db('Panchroma Grey'), CaseExtender: _db('Panchroma Grey'),
+    ShelfInsert: _db('Panchroma Black'), ShelfLip: _db('Panchroma Grey'),
+    SideCover: _db('Panchroma Grey'), 'SideCover:FACE': _db('Panchroma Lemon Yellow'),
+    Faceplate: _db('Panchroma Grey'), 'Faceplate:FACE': _db('Panchroma Lemon Yellow'),
+    'Faceplate:GRIP': _db('Panchroma Lemon Yellow'), 'Faceplate:GRIP ACCENT': _db('Panchroma Black'),
+    Accent: _db('Panchroma Lemon Yellow'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
+    BackCover: _db('Panchroma Grey'),
+    Handle: _db('Panchroma Black'),
+    QuickLock: _db('Panchroma Lemon Yellow'), MagnetClip: _db('Panchroma Lemon Yellow'),
+    Stopper: _db('Panchroma Lemon Yellow'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Safety yellow & black: the caution colours, a flammables-cabinet yellow with black marks
+  { name: 'Safety yellow & black', swatches: ['#F2C73B', '#1C1D20'], colors: {
+    Case: _db('Polymaker PETG Yellow'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Polymaker PETG Yellow'), CoverU: _db('Polymaker PETG Yellow'),
+    Bracket: _db('Polymaker PETG Yellow'), FootrailL: _db('Polymaker PETG Yellow'),
+    FootrailU: _db('Polymaker PETG Yellow'), Foot: _db('Polymaker PETG Yellow'),
+    Rail: _db('Polymaker PETG Yellow'), CaseExtender: _db('Polymaker PETG Yellow'),
+    ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Polymaker PETG Yellow'),
+    SideCover: _db('Polymaker PETG Yellow'), 'SideCover:FACE': _db('Elegoo PLA Black'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Polymaker PETG Yellow'),
+    Accent: _db('Elegoo PLA Black'), Label: _db('Polymaker PETG Yellow'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Polymaker PETG Yellow'),
+    Handle: _db('Elegoo PLA Black'),
+    QuickLock: _db('Elegoo PLA Black'), MagnetClip: _db('Elegoo PLA Black'),
+    Stopper: _db('Elegoo PLA Black'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Printer black & red: black printed parts with red accents, the open-source printer look
+  { name: 'Printer black & red', swatches: ['#1C1D20', '#EC2F26', '#EEF1F4'], colors: {
+    Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
+    Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
+    ShelfInsert: _db('Panchroma Cold White'), ShelfLip: _db('Elegoo PLA Black'),
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Printed Solid PS Red'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Printed Solid PS Red'),
+    'Faceplate:GRIP': _db('Printed Solid PS Red'), 'Faceplate:GRIP ACCENT': _db('Elegoo PLA Black'),
+    Accent: _db('Printed Solid PS Red'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Elegoo PLA Black'),
+    Handle: _db('Elegoo PLA Black'),
+    QuickLock: _db('Printed Solid PS Red'), MagnetClip: _db('Printed Solid PS Red'),
+    Stopper: _db('Printed Solid PS Red'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Tri-stripe racing white: a white body with dark blue, light blue and red stripes
+  { name: 'Tri-stripe racing white', swatches: ['#EEF1F4', '#23407F', '#5CC6E0'], colors: {
+    Case: _db('Panchroma Cold White'), Drawer: _db('Panchroma Cold White'),
+    CoverL: _db('Panchroma Cold White'), CoverU: _db('Panchroma Cold White'),
+    Bracket: _db('Panchroma Cold White'), FootrailL: _db('Panchroma Cold White'),
+    FootrailU: _db('Panchroma Cold White'), Foot: _db('Panchroma Cold White'),
+    Rail: _db('Panchroma Cold White'), CaseExtender: _db('Panchroma Cold White'),
+    ShelfInsert: _db('Polymaker PETG Dark Blue'), ShelfLip: _db('Panchroma Cold White'),
+    SideCover: _db('Panchroma Cold White'), 'SideCover:FACE': _db('Polymaker PETG Dark Blue'),
+    Faceplate: _db('Panchroma Cold White'), 'Faceplate:FACE': _db('Polymaker PETG Dark Blue'),
+    'Faceplate:GRIP': _db('Polymaker PETG Dark Blue'), 'Faceplate:GRIP ACCENT': _db('Printed Solid PS Red'),
+    Accent: _db('Printed Solid PS Red'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Polymaker PETG Dark Blue'),
+    BackCover: _db('Panchroma Cold White'),
+    Handle: _db('Panchroma Aqua Blue'),
+    QuickLock: _db('Polymaker PETG Dark Blue'), MagnetClip: _db('Polymaker PETG Dark Blue'),
+    Stopper: _db('Polymaker PETG Dark Blue'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Black & gold: deep black with gold pinstripes and lettering
+  { name: 'Black & gold', swatches: ['#1C1D20', '#C9A545'], colors: {
+    Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
+    Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
+    ShelfInsert: _db('Panchroma Silk Brass'), ShelfLip: _db('Elegoo PLA Black'),
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Elegoo PLA Black'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Panchroma Silk Brass'),
+    Accent: _db('Panchroma Silk Brass'), Label: _db('Panchroma Silk Brass'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Elegoo PLA Black'),
+    Handle: _db('Panchroma Silk Brass'),
+    QuickLock: _db('Elegoo PLA Black'), MagnetClip: _db('Elegoo PLA Black'),
+    Stopper: _db('Elegoo PLA Black'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Flight-team navy & gold: a navy shell with yellow trim and white lettering
+  { name: 'Flight-team navy & gold', swatches: ['#23407F', '#FDC230', '#EEF1F4'], colors: {
+    Case: _db('Polymaker PETG Dark Blue'), Drawer: _db('Polymaker PETG Dark Blue'),
+    CoverL: _db('Polymaker PETG Dark Blue'), CoverU: _db('Polymaker PETG Dark Blue'),
+    Bracket: _db('Polymaker PETG Dark Blue'), FootrailL: _db('Polymaker PETG Dark Blue'),
+    FootrailU: _db('Polymaker PETG Dark Blue'), Foot: _db('Polymaker PETG Dark Blue'),
+    Rail: _db('Polymaker PETG Dark Blue'), CaseExtender: _db('Polymaker PETG Dark Blue'),
+    ShelfInsert: _db('Panchroma Cold White'), ShelfLip: _db('Polymaker PETG Dark Blue'),
+    SideCover: _db('Polymaker PETG Dark Blue'), 'SideCover:FACE': _db('Printed Solid Yellow Bird'),
+    Faceplate: _db('Polymaker PETG Dark Blue'), 'Faceplate:FACE': _db('Printed Solid Yellow Bird'),
+    'Faceplate:GRIP': _db('Printed Solid Yellow Bird'), 'Faceplate:GRIP ACCENT': _db('Panchroma Cold White'),
+    Accent: _db('Printed Solid Yellow Bird'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Polymaker PETG Dark Blue'),
+    BackCover: _db('Polymaker PETG Dark Blue'),
+    Handle: _db('Polymaker PETG Dark Blue'),
+    QuickLock: _db('Printed Solid Yellow Bird'), MagnetClip: _db('Printed Solid Yellow Bird'),
+    Stopper: _db('Printed Solid Yellow Bird'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
 ];
 
 // official kits get their own palette slot (keyed by kit id) so a saved color
@@ -7344,7 +7485,7 @@ function faceplateHeightOf(node) {
 let activeHandleStyle = null; // the specific HANDLE_STYLES entry in use (BlockBar_D etc.), re-applied after a regenerate so a variant survives
 async function applyHandleStyle(style) {
   ao.rev++;   // static kits swap meshes/visibility in place - no mountManifest to bump it
-  lookOf = null;   // and so the look cards re-snapshot
+  sceneRev++;   // and so the look cards re-snapshot
   const prevActive = activeHandleStyle, prevPlanner = build && build.handleStyle;
   activeHandleStyle = style;
   if (build) build.handleStyle = style.planner; // keep the build in sync (regenerate/BOM/reset read this)
@@ -7525,6 +7666,7 @@ function pageVisibility(inst) {
 let activeFaceplateStyle = null; // kit-swap memory (generated builds carry the family in build.faceStyle instead)
 async function applyFaceplateStyle(style) {
   ao.rev++;   // static kits swap plates/dressing in place - no mountManifest to bump it
+  sceneRev++;   // (a generated build regenerates and bumps it again; the static path has only this one)
   /* ⚠ THE FAMILY DECIDES WHICH WAY THE PLATE PRINTS, so it decides which way its layer lines
      run: Classic/ClassicPro/EdgeLabel print back-down and grow along +Z, Essential and Chevron
      print FACE-down and grow along −Z. The Faceplate materials are keyed by type and are NOT
@@ -8535,10 +8677,10 @@ async function renderThumb(opts = {}) {
 function purgeLookCards() {   // (its state is declared beside overrideMats: the purges can run before this line has)
   for (const m of lookMats.values()) m.dispose();
   lookMats.clear();
-  lookItems = null; lookOf = null;   // the next card re-snapshots (its clones still point at the dead materials)
+  lookItems = null;   // the next card re-snapshots (its clones still point at the dead materials)
 }
 function lookSnapshot() {
-  if (lookItems && lookOf === manifest) return;
+  if (lookItems && lookRev === sceneRev) return;
   lookScene = new THREE.Scene();
   lookRig = { hemi: hemi.clone(), sun: sun.clone(), fill: fill.clone() };   // positions and colours; the strengths follow the tier (lookCard)
   lookRig.sun.castShadow = false; lookRig.fill.castShadow = false;
@@ -8556,7 +8698,7 @@ function lookSnapshot() {
     g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; lookItems.push({ mesh: o, type: t, zone: o.userData.zone || '', uid, alt: !!inst.alt }); } });
     g.updateWorldMatrix(true, true); lookBox.expandByObject(g);
   }
-  lookOf = manifest;
+  lookRev = sceneRev;
 }
 function lookMaterialFor(look, it) {
   const key = zoneKey(it.type, it.zone);
@@ -8584,13 +8726,32 @@ function lookMaterialFor(look, it) {
    live scene from the same camera for the gate's fidelity check: true into a second target of the same kind, 'canvas' into
    the canvas itself at the card's size (the screen's own path: tone mapping and output encoding; a test-only frame,
    redrawn at once). `xr` and `linear` default to the measured winner; the gate turns them off to show why.
-   Calls run one at a time: a card awaits its readback, and the targets and the snapshot are shared. */
-function lookCard(look, opts = {}) {
-  const run = lookQueue.then(() => lookCardNow(look, opts));
-  lookQueue = run.catch(() => {});
-  return run;
+   The DRAWS run one at a time (the snapshot and the look materials are shared), each into a target of its own from a small
+   pool; the READBACK of each card is awaited on its own, so the gallery's cards overlap on the GPU instead of each waiting
+   for the one before it to come back (step 3, 2026-10-18: a readback fence took 50 to 190 ms a card while the live view
+   was settling, so a serial gallery filled at one card per 25 to 66 ms). `sync` reads back at once instead. */
+const lookPool = [];   // { rt, busy }: a card's target stays busy until its pixels are back
+const LOOK_POOL_MAX = 12;
+function lookTarget(width, height, samples, xr, linear) {
+  const fits = (e) => e.rt.width === width && e.rt.height === height && e.rt.samples === samples && !!e.rt.isXRRenderTarget === xr && !!e.rt.lookLinear === linear;
+  let e = lookPool.find(x => !x.busy && fits(x));
+  if (!e) {
+    if (lookPool.length >= LOOK_POOL_MAX) { const i = lookPool.findIndex(x => !x.busy); if (i < 0) return null; lookPool[i].rt.dispose(); lookPool.splice(i, 1); }   // a free target of another size gives way
+    const n = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, samples });
+    n.texture.colorSpace = THREE.SRGBColorSpace;
+    if (xr) n.isXRRenderTarget = true;
+    if (linear) { n.texture.internalFormat = 'RGBA8'; n.lookLinear = true; }   // (a render target has no userData)
+    lookPool.push(e = { rt: n, busy: false });
+  }
+  e.busy = true;
+  return e;
 }
-async function lookCardNow(look, opts) {
+function lookCard(look, opts = {}) {
+  const drawn = lookQueue.then(() => lookCardDraw(look, opts));
+  lookQueue = drawn.catch(() => {});
+  return drawn.then((d) => (d ? lookCardRead(d) : null));
+}
+async function lookCardDraw(look, opts) {
   const { width = 384, height = 288, xr = true, linear = true, samples = 0, compare = false } = opts;
   if (!manifest || !instances.size) return null;
   const ts = performance.now();
@@ -8607,26 +8768,19 @@ async function lookCardNow(look, opts) {
   const dist = r / Math.sin(Math.min(vF, hF) / 2) * 1.02, th = THREE.MathUtils.degToRad(35), ph = THREE.MathUtils.degToRad(66);
   lookCam.position.set(c.x + dist * Math.sin(ph) * Math.sin(th), c.y + dist * Math.cos(ph), c.z + dist * Math.sin(ph) * Math.cos(th));
   lookCam.lookAt(c); lookCam.updateMatrixWorld(true);
-  const target = (rt) => {
-    if (rt && rt.width === width && rt.height === height && rt.samples === samples && !!rt.isXRRenderTarget === xr && !!rt.lookLinear === linear) return rt;
-    if (rt) rt.dispose();
-    const n = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, samples });
-    n.texture.colorSpace = THREE.SRGBColorSpace;
-    if (xr) n.isXRRenderTarget = true;
-    if (linear) { n.texture.internalFormat = 'RGBA8'; n.lookLinear = true; }   // (a render target has no userData)
-    return n;
-  };
-  lookRT = target(lookRT);
-  const items = lookItems.length, cardRT = lookRT;   // read before any await: a purge may clear the snapshot meanwhile
+  let slot; while (!(slot = lookTarget(width, height, samples, xr, linear))) await new Promise(r => requestAnimationFrame(r));   // every target is out with a readback: wait a frame
+  const cardRT = slot.rt, items = lookItems.length;
   const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
   const prevSize = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
   let cmp = null, cmpRT = null, resized = false;
   try {   // the live renderer is put back whatever happens below
-    renderer.setRenderTarget(lookRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+    renderer.setRenderTarget(cardRT); renderer.setClearColor(0x000000, 0); renderer.clear();
     renderer.render(lookScene, lookCam);
-    if (compare === true) {   // the live scene from the same camera, into a target of the same kind
-      cmpRT = lookCmpRT = target(lookCmpRT);
-      renderer.setRenderTarget(lookCmpRT); renderer.clear();
+    if (compare === true) {   // the live scene from the same camera, into a target of the same kind (the gate's path: one card at a time)
+      if (lookCmpRT && !(lookCmpRT.width === width && lookCmpRT.height === height && lookCmpRT.samples === samples && !!lookCmpRT.isXRRenderTarget === xr && !!lookCmpRT.lookLinear === linear)) { lookCmpRT.dispose(); lookCmpRT = null; }
+      if (!lookCmpRT) { lookCmpRT = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, samples }); lookCmpRT.texture.colorSpace = THREE.SRGBColorSpace; if (xr) lookCmpRT.isXRRenderTarget = true; if (linear) { lookCmpRT.texture.internalFormat = 'RGBA8'; lookCmpRT.lookLinear = true; } }
+      cmpRT = lookCmpRT;
+      renderer.setRenderTarget(cmpRT); renderer.clear();
       renderer.render(scene, lookCam);
     }
     if (compare === 'canvas') {   // the screen's own path, at the card's size, read back before anything else draws
@@ -8640,16 +8794,28 @@ async function lookCardNow(look, opts) {
       cmp = new Uint8Array(width * height * 4);
       gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, cmp);
     }
+  } catch (e) {
+    slot.busy = false; throw e;
   } finally {
     if (resized) { renderer.setSize(prevSize.x, prevSize.y, false); invalidateFrame(); }   // the canvas held a test frame: redraw (the gate's path, never the gallery's)
     renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
   }
   const t1 = performance.now();
+  return { width, height, slot, cardRT, cmpRT, cmp, sync: !!opts.sync, ms: { snap: t0 - ts, draw: t1 - t0 }, items, t1 };
+}
+async function lookCardRead(d) {
+  const { width, height, slot, cardRT, cmpRT, sync, t1 } = d;
+  let { cmp } = d;
   const pixels = new Uint8Array(width * height * 4);
-  await renderer.readRenderTargetPixelsAsync(cardRT, 0, 0, width, height, pixels);
-  if (cmpRT) { cmp = new Uint8Array(width * height * 4); await renderer.readRenderTargetPixelsAsync(cmpRT, 0, 0, width, height, cmp); }
+  try {
+    /* `sync` reads the card back at once (readRenderTargetPixels, a pipeline stall): a measurement's choice. The gallery
+       awaits the fence, and overlaps its cards' fences (see lookCard). */
+    if (sync) renderer.readRenderTargetPixels(cardRT, 0, 0, width, height, pixels);
+    else await renderer.readRenderTargetPixelsAsync(cardRT, 0, 0, width, height, pixels);
+    if (cmpRT) { cmp = new Uint8Array(width * height * 4); await renderer.readRenderTargetPixelsAsync(cmpRT, 0, 0, width, height, cmp); }
+  } finally { slot.busy = false; }
   const t2 = performance.now();
-  return { width, height, pixels, cmp, ms: { snap: t0 - ts, draw: t1 - t0, read: t2 - t1 }, programs: (renderer.info.programs || []).length, items, materials: lookMats.size };
+  return { width, height, pixels, cmp, ms: { ...d.ms, read: t2 - t1 }, programs: (renderer.info.programs || []).length, items: d.items, materials: lookMats.size };
 }
 /* ---- the palette API for the Colors workspace (phase 4) ---------------------------------------------------
    The palette stays the viewer's own (customColors keyed by part type or Type:zone, useCustom, userPalette); the
@@ -9861,6 +10027,7 @@ async function onPlannerMessage(d) {
 async function mountManifest(m) {
   manifest = m;
   ao.rev++;   // the parts are about to be rebuilt - never accumulate over stale normals
+  sceneRev++;   // a new finished build: the look cards re-snapshot, and the Colors workspace's cached cards are stale
   // a label's raised text is its own colour zone (label-text.js), dark like the generator's until a filament is picked
   // for it. Set before any material is built, so the zone's first material is already the right colour.
   if (m.instances.some((c) => LABEL_TEXT_NODES.has(c.node)) && !m.colors[zoneKey('Label', LABEL_TEXT_ZONE)]) {
@@ -10668,6 +10835,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     setOverride, clearOverrides, overrideFor, setColorStoreKey,
     // a look shown and not chosen, and the filament count (the Colors plan's step 1, 2026-10-18)
     previewPalette, endPreview, get previewing() { return !!previewLook; }, filamentsInBuild,
+    // the look cards (step 2's probe, now the gallery's renderer; step 3, 2026-10-18) and the scene revision they key on
+    lookCard, get sceneRev() { return sceneRev; },
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;

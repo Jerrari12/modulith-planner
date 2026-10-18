@@ -660,6 +660,58 @@ Dated calls made while building, with who made them. The brief and the inventory
   tone-mapped tiers.
 - **Not deployed.** The branch is `colors-step2-gate`; a debug hook has no reason to ship before step 3 uses it.
 
+## 2026-10-18 (Colors, step 3 of the redesign plan: the current-look card, Browse looks, look details, the new presets)
+
+- **Joey's go:** "Start Colors step 3" (the "MODULITH planner-2 | 10-18" session). The plan's step 3, as approved
+  (D:\Claude - Output\colors-presets-2026-10-17\COLORS-PLAN.md); the step's own record is STEP3.md beside it.
+- **The panel:** the premade list and "Your schemes" are gone from the sidebar (Astra: more rows pushed "Colors in this
+  build" down). In their place, one card: this build rendered in its current colours, the look's name (D4: the matching
+  preset or saved look, "<that look> · edited" after a hand change, "Custom look" with no source), its filament count and
+  swatches, then Browse looks, Surprise me (disabled until step 5), Save, and Download / Upload / Share behind "⋯".
+  "Colors in this build" sits directly under it.
+- **The gallery** opens over the stage's left (540 px; the view tools step right of it; the camera's safe area is never
+  touched, so the model stays put while looks are tried): Featured (the presets), My looks (★ My palette, the saved
+  looks), All looks; a search; a filament-count filter counted on THIS build. Every card is this build wearing that look,
+  from step 2's `lookCard`, keyed on the scene revision, the look as the build wears it, the tier and the stage theme;
+  drawn one per animation frame; dropped when the build changes or the gallery closes. Hovering or focusing a card shows
+  the look on the model (`previewPalette`: never saved, never in the history, never a preset event).
+- **The details** take the gallery's place: the big render, Apply this look (one undo step; closes the gallery), Delete
+  for a saved look, Shop this look (moved here from the preset rows: the filament rows as this build wears the look,
+  Buy links with the disclosure at the link), a screen-preview note, an appearance-not-suitability note, and a
+  translucent note where a look uses a translucent filament (the card shows it solid).
+- **Saved looks keep per-unit colours** (D5): Save stores `over` beside `colors`; Download and Share stay colours only,
+  for the Studio.
+- **The new presets:** seven from the palette study (Racing silver & teal, Grey & sunlight yellow, Safety yellow & black,
+  Printer black & red, Tri-stripe racing white, Black & gold, Flight-team navy & gold), each with the label text in a
+  dark filament the look already prints. **The grip wears the face colour** (Joey, on the first cards: "with this
+  faceplate i'm not a fan of the grip being a different color from the face"): four of the seven drafts split them and
+  were folded; the presets test pins the rule. Tool-chest red waits for its scoring. The presets test pins 11.
+- **The scene revision** (`stage.sceneRev`): bumped by a new manifest, by the label meshes redrawn in place, and by a
+  handle or faceplate style swapped in place; the look cards snapshot once per revision.
+- **`lookCard` reworked for a gallery:** the draw runs one at a time into a pooled target; each card's readback is
+  awaited on its own, so cards overlap on the GPU. Measured first: the step-2 shape (one card's fence before the next
+  draw) ran 50 to 190 ms a card in the planner's page, 1.2 s for 11 cards at 25 ms a frame.
+- **The first check, frame pacing** (STEP3.md, marks written before measuring): on this laptop in real Chrome, dpr 1,
+  1280×800, Balanced, one card a frame: 11 cards in 128 to 145 ms once warm, frames p95 16.7 ms, max 16.8 ms (M5 and M7
+  pass; the first fill after launch: 356 ms, p95 41.7 ms). Throttled 4× and Very High: STEP3.md §3.
+- **Phone:** the gallery is a third bottom sheet, one open at a time; the panel's card puts the render beside the name
+  so Browse looks stays in the first screen; closing the gallery returns to the Colors sheet. Checked in the desktop
+  app's browser pane at 375×812, not yet on a real phone (the plan's acceptance).
+- **Tests:** presets.test.mjs (11, the names, the grip rule); e2e: the Colors preset case moved to the gallery, the
+  350 ms case and the Shop case follow it, plus the gallery case (cards drawn and keyed, hover shown-not-chosen, cards
+  follow a build change and Undo, no preset event), the loose pacing gate, the phone sheet case.
+- **Reviews:** Sol 01a14f91 (substantial), 3 of 3 held and fixed: a saved look read as "Applied" when only its per-unit
+  colours differed (looks now match on colours AND the per-unit layer, which also names such a look "· edited"); a saved
+  look deleted by a captured index (now by name, read fresh, so another tab's save cannot shift it); the search box
+  rebuilt under the caret (the grid alone follows the search now). The Terra pair 01a14f96 (pair-sol-0335), 3 of 3 held:
+  the first two again, and Apply on the phone leaving every sheet collapsed (it returns to the Colors sheet).
+- **Checks on the final code:** npm test 521 (516 passed, 0 failed, 5 skipped); e2e 44 of 44 (soft rendering, the Studio
+  checkout served); the gallery case mutation-checked (with `mountManifest`'s revision bump removed it fails on "the
+  revision moved with the unit"). Two unit tests that lift the handle and faceplate swaps out of main.js needed
+  `let sceneRev = 0` in their sandboxes.
+- **Not deployed:** the branch is `colors-step3`, pushed. A feature deploys on Joey's go, and the go to start a step is
+  not the go to deploy it (the 10-17 session, 2026-10-18). The grip rule rides on the same branch.
+
 ## 2026-10-18 (MakerWorld and Cults 3D hidden from the store links)
 
 - **Joey's call (2026-10-18):** "I noticed i don't like how we link to makerworld or cults, if it doesn't exist on their

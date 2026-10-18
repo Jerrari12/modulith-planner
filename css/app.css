@@ -452,6 +452,64 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 @media (max-width: 1279px) { #ws-colors, #ws-picker { top: 134px; } }
 
+/* ---- Colors, step 3 (2026-10-18): the current-look card, the Browse looks gallery, a look's details ---- */
+#ws-colors .look { gap: 8px; }
+#ws .lookcard { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 12px; }
+#ws .lookcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws .lookcard canvas.render.drawn { opacity: 1; }
+#ws .lookcard .lmeta { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#ws .lookcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; }
+#ws .lookcard .lname { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws .lookcard .strip { display: inline-flex; gap: 2px; }
+#ws-colors .look .row4 .key { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-colors .look .row4 .more { width: 32px; padding: 0; justify-content: center; font-size: 15px; letter-spacing: .02em; }
+#ws-colors .look .key.sm.strong { background: var(--key-on-bg); border-color: var(--orange); }
+#ws-gallery { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 540px; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 7; }
+#ws-gallery[hidden] { display: none; }
+#ws-gallery .head { display: flex; align-items: center; gap: 10px; }
+#ws-gallery h2 { margin: 0; flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-gallery .head .sub { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+#ws-gallery .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-gallery .gfilter { display: flex; gap: var(--gap-ctl); align-items: center; }
+#ws-gallery .search { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-gallery .seg4 { grid-template-columns: repeat(4, minmax(0, 1fr)); flex: none; width: 196px; }
+#ws-gallery .seg4 .seg { font-size: 12px; padding: 0 2px; }
+#ws-gallery .lgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); align-content: start; }
+#ws-gallery .lcard { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; text-align: left; font: inherit; }
+#ws-gallery .lcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws-gallery .lcard canvas.render.drawn { opacity: 1; }
+#ws-gallery .lcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px; }
+#ws-gallery .lcard .lname { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-gallery .lcard .lcount { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+#ws-gallery .badge.active, #ws .lookcard .badge.active { font-size: 9px; letter-spacing: .06em; background: var(--orange); color: var(--on-orange); }
+#ws-gallery .lgrid .note { grid-column: 1 / -1; }
+#ws-gallery .back { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+#ws-gallery .lookcard.big { padding: 10px; }
+#ws-gallery .dacts { display: flex; gap: var(--gap-ctl); }
+#ws-gallery .dacts .key { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-gallery .dacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); }
+#ws-gallery .frows { display: flex; flex-direction: column; gap: var(--gap-row); }
+#ws-gallery .frow { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; border-radius: 10px; }
+#ws-gallery .frow .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ws-gallery .frow b { font-size: 13px; }
+#ws-gallery .frow .meta, #ws-gallery .disc { font-size: 11px; color: var(--ink-2); }
+#ws-gallery .disc { color: var(--ink-3); line-height: 1.4; }
+#ws-gallery .frow .sw { display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(128,128,128,.35); }
+#ws-gallery .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; }
+#ws-gallery .h2 { margin: 4px 0 0; }
+#ws-gallery .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+/* the primary actions (Browse looks, Apply this look) take the pressed key's colours: an orange-tinted key reads dark in
+   the dark theme otherwise (the first screenshot, 2026-10-18) */
+#ws-colors .look .key.sm.strong, #ws-gallery .dacts .key.strong { color: var(--ink); }
+[data-mode="dark"] #ws-colors .look .key.sm.strong, [data-mode="dark"] #ws-gallery .dacts .key.strong { color: #FFFFFF; }
+/* the card's actions: Browse looks and Save take the row's width, Surprise me and "more" sit beside them */
+#ws-colors .look .row4 { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+#ws-colors .look .row4.morerow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#ws-colors .look .row4.morerow .key { justify-content: center; padding: 0 6px; }
+/* the view tools step right of the open gallery (540 wide from 20) instead of running under it */
+html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
+@media (max-width: 1279px) { #ws-gallery { top: 134px; } }
+
 /* ---- Colors, the per-unit layer ---- */
 #ws-picker .head .region { font-size: 13px; color: var(--orange); }
 #ws-picker .resets { display: flex; gap: 6px; }
@@ -760,7 +818,16 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-parts .body { padding: 0 0 8px; }
   #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
-  #ws-colors .scheme .shop { display: none; }
+  /* Colors: the panel's card keeps its actions in the sheet's first screen (the render beside the name, not above it);
+     the gallery is a sheet like the panel, two cards a row at phone width */
+  #ws-colors .lookcard { flex-direction: row; align-items: center; gap: 12px; }
+  #ws-colors .lookcard canvas.render { width: 128px; flex: none; }
+  #ws-colors .lookcard .lmeta { flex: 1; }
+  #ws-colors .lookcard .lrow { flex-direction: column; align-items: flex-start; gap: 4px; }
+  #ws-gallery .lgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ws-gallery .gfilter { flex-wrap: wrap; }
+  #ws-gallery .seg4 { width: 100%; }
+  #ws-gallery .head .sub { display: none; }
   /* Labels: the panel and the editor are sheets; the list scrolls with the sheet, not inside it */
   #ws-labels .scroll { flex: none; overflow: visible; min-height: 0; margin: 0; padding: 0; }
   #ws-labels .key.tile { height: 42px; }

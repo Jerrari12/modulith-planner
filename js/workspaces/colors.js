@@ -1,19 +1,27 @@
-/* The Colors workspace (phase 4): click-a-part first, the Studio flow minus the clutter (the brief §0).
+/* The Colors workspace (phase 4; Astra's redesign in the Colors plan, step 3 on 2026-10-18): click-a-part first, the Studio
+ * flow minus the clutter (the brief §0).
  *
  * The palette is the viewer's own (main.js: customColors keyed by part type or Type:zone -> { name, hex, url },
  * useCustom, userPalette, PRESETS), reached through the stage's palette API, so the model, the product previews
  * (which key their cache on the live palette) and the inspector read one source. Every pick is one undo step:
  * the store snapshots the palette beside the build record (createStore's `extra`), and Undo restores both.
  *
- *   left panel   Your schemes (★ My palette, saved schemes, save / download /
- *                upload / share) · Premade by Jerrari (strips, Active, Shop this look) · Colors in this build
- *                (one row per region the build has) · Build plate finish
+ *   left panel   the current look as a CARD (a render of this build wearing it, its name - decision D4 - its filament
+ *                count and swatches; Browse looks, Surprise me (step 5), Save, and Download / Upload / Share behind
+ *                "more") · Colors in this build (one row per region the build has) · Build plate finish
+ *   gallery      over the stage on the left, never touching the camera's safe area: Featured (the presets), My looks
+ *                (★ My palette, the saved schemes) and All looks, with a search and a filament-count filter. Every
+ *                card is THIS build wearing that look (stage.lookCard, step 2's offscreen renderer), cached per scene
+ *                revision and look and drawn one per animation frame; hovering a card shows the look on the model
+ *                (previewPalette: never saved, never in the history); a click opens its details
+ *   details      in the gallery's place: the big card, the filament list with buy links (Shop this look, moved here
+ *                from the old preset rows), the notes, Apply (one undo step), Delete for a saved look
  *   stage        clicking a part opens the part card above the Dock: name, count, current filament, region chips
  *                (Body + the part's zones), Open the drawer; a chip opens the picker for that region
- *   right        the filament picker replaces the inspector: title, Apply to (all / only this one - the per-unit
- *                override layer is the next step of this phase), search, In this build, brand groups, a pinned buy
- *                footer with the disclosure, Reset
+ *   right        the filament picker replaces the inspector: title, Apply to (all / only this one), search, In this
+ *                build, brand groups, a pinned buy footer with the disclosure, Reset
  *   Dock         the filament stack opens "Filaments in this build", a buy link per row
+ *   phone        the panel, the picker and the gallery are bottom sheets, one open at a time; the model is the hero
  */
 import { icon } from '../ui/icons.js';
 import { el, makeToast } from '../ui/dom.js';
@@ -23,7 +31,7 @@ import { FILAMENT_DB } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 
-const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved schemes, in this browser
+const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : z.charAt(0) + z.slice(1).toLowerCase();
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
@@ -34,15 +42,97 @@ const FILL_WORD = { classic: 'drawer', decor: 'drawer', shelf: 'shelf', cabinet:
 const PAID = [/(^|\.)amazon\./, /(^|\.)amzn\.to$/, /(^|\.)shop\.polymaker\.com$/];
 const isPaid = (href) => { try { return PAID.some((re) => re.test(new URL(href).hostname.toLowerCase())); } catch { return false; } };
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
+const short = (name) => String(name).replace('Panchroma ', '');
+/* the catalog's translucent filaments: a card renders one as a solid tint (STEP2-GATE.md), so the details say so */
+const TRANSLUCENT = new Set(FILAMENT_DB.flatMap((b) => b.colors.filter((c) => c.translucent).map((c) => c.label)));
+const palKey = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]?.name, o[k]?.hex]));
+/* a look is the one worn when its colours AND its per-unit layer match (a saved look carries its own layer, D5; a hand
+   change to either makes the look "edited"). Sol 01a14f91: comparing colours alone called a saved look "Applied" with its
+   per-unit colours gone, and disabled the Apply that would have restored them. */
+const overKey = (o) => JSON.stringify(Object.keys(o || {}).sort().map((u) => [u, palKey(o[u])]));
+const wears = (p, l) => palKey(p.colors) === palKey(l.colors) && overKey(p.over) === overKey(l.over);
+
+/* ---- the look cards: THIS build wearing a look, from the stage's offscreen renderer (step 2), cached and paced -------
+   A card is keyed on everything that changes its picture: the scene revision (the build, its labels, the plate, the relief
+   and the styles all move it), the look as this build wears it (the filament of every region it has, overrides included),
+   the quality tier (tone mapping) and the stage theme. The cache is module-wide, so it survives a remount (the phone
+   breakpoint) and is bounded. Cards are drawn ONE PER ANIMATION FRAME (the plan's pacing rule): the live frame gets its
+   turn between cards, and a card whose canvas has gone (the gallery closed or re-rendered) or whose key is stale (the
+   build changed) is skipped - that is how rendering cancels on a build change. */
+const CARD = { w: 320, h: 240 }, HERO = { w: 544, h: 408 };   // twice the drawn size, for 2x displays
+const cardCache = new Map(); const CARD_CACHE_MAX = 60;
+function lookSig(stage, look) { const fc = stage.filamentsInBuild(look); return JSON.stringify([fc.filaments.map((f) => [f.hex, f.name, f.keys]), fc.unpicked.map((u) => [u.key, u.hex])]); }
+const cardKey = (stage, look, w, h) => JSON.stringify([stage.sceneRev, lookSig(stage, look), stage.quality, stage.stageTheme, w, h]);
+function toCanvas(card) {
+  const { width: W, height: H, pixels } = card;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c2 = cv.getContext('2d'); const img = c2.createImageData(W, H);
+  for (let y = 0; y < H; y++) img.data.set(pixels.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);   // GL rows run bottom-up
+  c2.putImageData(img, 0, 0);
+  return cv;
+}
+const CARDS_PER_FRAME = 1;   // draws issued per animation frame (2 to 5 ms each on the CPU); their readbacks overlap on the GPU
+function cardPump(stage) {
+  const queue = []; const inflight = new Map(); let pumping = false;   // inflight: key -> the card's promise, shared by every canvas that wants it
+  const stats = [];   // per card: { key: ms to key it, draw, read, canvas } (debug; the pacing harness reads them)
+  const paint = (canvas, img) => { canvas.width = img.width; canvas.height = img.height; canvas.getContext('2d').drawImage(img, 0, 0); canvas.classList.add('drawn'); };
+  const live = (job) => job.canvas.isConnected && job.canvas.dataset.key === job.key;
+  const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+  const remember = (key, img) => { cardCache.set(key, img); if (cardCache.size > CARD_CACHE_MAX) cardCache.delete(cardCache.keys().next().value); };
+  async function pump() {
+    if (pumping) return; pumping = true;
+    try {
+      while (queue.length) {
+        await nextFrame();   // a few draws per frame; and a canvas asked for while its panel was still being built is in the page by now
+        while (stage.regenBusy) await nextFrame();   // the scene is being rebuilt: wait, then see whether these cards still mean anything
+        let issued = 0;
+        while (queue.length && issued < CARDS_PER_FRAME) {
+          const job = queue.shift();
+          if (!live(job)) continue;
+          const hit = cardCache.get(job.key);
+          if (hit) { paint(job.canvas, hit); continue; }
+          const tk = performance.now();
+          if (job.key !== cardKey(stage, job.look, job.w, job.h)) continue;   // stale: the build changed since it was asked for
+          const keyMs = performance.now() - tk;
+          let p = inflight.get(job.key);
+          if (!p) {
+            issued++;
+            p = stage.lookCard(job.look, { width: job.w, height: job.h }).then((card) => { if (!card) return null; const tc = performance.now(); const img = toCanvas(card); remember(job.key, img); if (stats.length < 200) stats.push({ key: +keyMs.toFixed(1), snap: +card.ms.snap.toFixed(1), draw: +card.ms.draw.toFixed(1), read: +card.ms.read.toFixed(1), canvas: +(performance.now() - tc).toFixed(1) }); return img; }).finally(() => inflight.delete(job.key));
+            inflight.set(job.key, p);
+          }
+          p.then((img) => { if (img && live(job)) paint(job.canvas, img); }).catch(() => {});
+        }
+      }
+    } finally { pumping = false; }
+  }
+  return {
+    /* draw `look` (null = the live palette) on `canvas`, from the cache at once or from the renderer in its turn */
+    want(canvas, look, w, h) {
+      const key = cardKey(stage, look, w, h); canvas.dataset.key = key;
+      const hit = cardCache.get(key);
+      if (hit) { paint(canvas, hit); return; }
+      queue.push({ canvas, look, w, h, key }); pump();
+    },
+    get pending() { return queue.length + inflight.size; },
+    get state() { return { queue: queue.length, inflight: inflight.size, pumping, cached: cardCache.size }; },
+    get stats() { return stats.slice(); },
+  };
+}
+
+let lastLook = null;   // the look last chosen by name, for "<look> · edited" (decision D4); kept across remounts
 
 export function mountColors(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
-  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, mine: true, scope: 'all' };   // scope: 'all' (the build) | 'unit' (the clicked unit only)
+  // scope: 'all' (the build) | 'unit' (the clicked unit only); gallery: false | 'featured' | 'mine' | 'all'; detail: the look
+  // whose details are open; fmax: the filament-count filter (0 = any); more: the Download / Upload / Share row shown
+  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false };
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
   root.prepend(topbar(stage, { ...ctx, active: 'colors', say, soon, signal }));
+  const cards = cardPump(stage);
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_CARDS__ = cards;   // the pacing check reads what the gallery still owes
 
   /* ---------------- the palette, as one undo step each ---------------- */
   const pal = () => stage.palette();
@@ -68,65 +158,77 @@ export function mountColors(stage, ctx) {
     else commitColors('color', () => stage.setColor(key, fil));
   }
 
+  /* ---------------- the looks: the presets, ★ My palette, the saved schemes ---------------- */
+  const readSchemes = () => { try { const v = JSON.parse(localStorage.getItem(SCHEMES_KEY) || '[]'); return Array.isArray(v) ? v.filter((s) => s && s.name && s.colors) : []; } catch { return []; } };
+  const writeSchemes = (list) => { try { localStorage.setItem(SCHEMES_KEY, JSON.stringify(list)); } catch { /* private mode */ } };
+  /* every look the gallery can show: { id, kind, name, colors, over, swatches?, apply(), del?() }. A saved look keeps the
+     per-unit colours it was saved with (decision D5); a preset and ★ My palette have none */
+  function looksList() {
+    const p = pal(); const out = [];
+    for (const preset of stage.PRESETS) out.push({ id: 'preset:' + preset.name, kind: 'preset', name: preset.name, colors: preset.colors, over: {}, swatches: preset.swatches, apply: () => commitColors('preset', () => stage.applyPreset(preset)) });
+    if (Object.keys(p.user || {}).length) out.push({ id: 'mine', kind: 'mine', name: '★ My palette', colors: p.user, over: {}, apply: () => commitColors('scheme', () => stage.restoreUserPalette()) });
+    // deleted by NAME, read fresh: another tab may have saved a look since this list was built (Sol 01a14f91; names are unique, Save dedupes)
+    for (const s of readSchemes()) out.push({ id: 'scheme:' + s.name, kind: 'scheme', name: s.name, colors: s.colors, over: s.over || {}, apply: () => commitColors('scheme', () => stage.setPalette({ colors: s.colors, over: s.over || {}, on: true })), del: () => writeSchemes(readSchemes().filter((x) => x.name !== s.name)) });
+    return out;
+  }
+  const asLook = (l) => ({ colors: l.colors, over: l.over || {} });
+  const liveLook = (p) => (p.on ? { colors: p.colors, over: p.over } : null);   // null = the live palette as the stage has it (instruction colours)
+  /* the current look's name (decision D4): the matching preset or saved look; after a hand change, "<that look> · edited";
+     with no source, "Custom look" */
+  function lookName(p) {
+    if (!p.on || !Object.keys(p.colors).length) return 'Instruction colors';
+    const hit = looksList().find((l) => wears(p, l));
+    if (hit) return hit.name;
+    return lastLook ? `${lastLook} · edited` : 'Custom look';
+  }
+  function applyLook(look) { lastLook = look.name; look.apply(); say(`Applied “${look.name}”.`); }
+
   /* ---------------- left panel ---------------- */
   const panel = el('aside.glass', { id: 'ws-colors', 'aria-label': 'Colors' });
   root.appendChild(panel);
-  const readSchemes = () => { try { const v = JSON.parse(localStorage.getItem(SCHEMES_KEY) || '[]'); return Array.isArray(v) ? v.filter((s) => s && s.name && s.colors) : []; } catch { return []; } };
-  const writeSchemes = (list) => { try { localStorage.setItem(SCHEMES_KEY, JSON.stringify(list)); } catch { /* private mode */ } };
-  const palKey = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]?.name, o[k]?.hex]));
-  const strip = (colors, keys = ['Case', 'Faceplate:FACE', 'Faceplate', 'Drawer', 'Handle', 'CoverU']) => el('span.strip', {}, [...new Set(keys.filter((k) => colors[k]).map((k) => colors[k].hex))].slice(0, 4).map((h) => el('i', { style: `background:${h}` })));
+  const strip = (fc) => el('span.strip', {}, [...new Set([...fc.filaments, ...fc.unpicked].map((f) => f.hex))].slice(0, 8).map((h) => el('i', { style: `background:${h}` })));
   function renderPanel() {
-    const p = pal(); const cur = p.on ? palKey(p.colors) : null;
+    const p = pal();
     panel.replaceChildren();
     panel.appendChild(el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]));
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
     // 2026-10-16). Opening this tab turns the visitor's colours on (onEnter below).
-    // your schemes
-    const mine = el('section');
-    mine.appendChild(el('h3.h2', { text: 'Your schemes' }));
-    const list = el('div.schemes');
-    if (Object.keys(p.user || {}).length) {
-      const on = cur && cur === palKey(p.user);
-      list.appendChild(el('button.scheme.key' + (on ? '.on' : ''), { title: 'Your own hand-picked colours · presets never overwrite these', onclick: () => commitColors('scheme', () => stage.restoreUserPalette()) }, [strip(p.user), el('span.name', { text: '★ My palette' }), on ? el('span.badge', { text: 'ACTIVE' }) : null]));
-    }
-    for (const [i, s] of readSchemes().entries()) {
-      const on = cur && cur === palKey(s.colors);
-      list.appendChild(el('div.scheme.key' + (on ? '.on' : ''), {}, [
-        el('button.apply', { title: 'Apply this scheme', onclick: () => commitColors('scheme', () => stage.setPalette({ colors: s.colors, on: true })) }, [strip(s.colors), el('span.name', { text: s.name })]),
-        on ? el('span.badge', { text: 'ACTIVE' }) : null,
-        el('button.x', { title: 'Delete this scheme', 'aria-label': `Delete ${s.name}`, onclick: () => { const l = readSchemes(); l.splice(i, 1); writeSchemes(l); renderPanel(); } }, [icon('x', { size: 14 })]),
-      ]));
-    }
-    if (!list.children.length) list.appendChild(el('p.note', { text: 'Pick a few colours, then save them as a scheme to reuse on another build.' }));
-    mine.appendChild(list);
+    // THE CURRENT LOOK, as a card (Astra: a compact card at the top; the premade list moved into the gallery)
+    const look = el('section.look');
+    const fc = stage.filamentsInBuild();
+    const hero = el('canvas.render', { width: HERO.w, height: HERO.h, 'aria-label': 'This build in its current colours' });
+    cards.want(hero, liveLook(p), HERO.w, HERO.h);
+    const name = lookName(p);
+    look.appendChild(el('div.lookcard.well', {}, [
+      hero,
+      el('div.lmeta', {}, [   // beside the render on the phone, under it on the desktop
+        el('div.lrow', {}, [el('b.lname', { text: name, title: name }), el('span.lcount.badge', { text: fc.count ? n(fc.count, 'filament') : 'no filament' })]),
+        strip(fc),
+      ]),
+    ]));
+    look.appendChild(el('div.row4', {}, [
+      el('button.key.sm.strong.browse', { title: 'Every look, shown on this build', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']),
+      el('button.key.sm.surprise', { disabled: true, title: 'Surprise me comes with a later step of the Colors plan' }, [icon('sparkle', { size: 14 }), 'Surprise me']),
+      el('button.key.sm.save', { text: 'Save', title: 'Keep these colours as a look of your own, to reuse on another build', disabled: !p.on || !Object.keys(p.colors).length, onclick: () => { st.saving = !st.saving; renderPanel(); } }),
+      el('button.key.sm.more', { text: '⋯', title: 'Download, Upload, Share', 'aria-label': 'More', 'aria-expanded': String(st.more), onclick: () => { st.more = !st.more; renderPanel(); } }),
+    ]));
     if (st.saving) {
-      const input = el('input', { type: 'text', placeholder: 'Scheme name', maxlength: '40', 'aria-label': 'Scheme name' });
-      const save = () => { const name = input.value.trim(); if (!name) return; const l = readSchemes().filter((s) => s.name !== name); l.unshift({ name, colors: structuredClone(pal().colors), t: Date.now() }); writeSchemes(l.slice(0, 20)); st.saving = false; say(`Saved “${name}”.`); renderPanel(); };
+      const input = el('input', { type: 'text', placeholder: 'Name this look', maxlength: '40', 'aria-label': 'Look name' });
+      // a saved look keeps the per-unit colours too (decision D5); Download and Share stay colours only, for the Studio
+      const save = () => { const name2 = input.value.trim(); if (!name2) return; const l = readSchemes().filter((s) => s.name !== name2); const q = pal(); l.unshift({ name: name2, colors: structuredClone(q.colors), over: structuredClone(q.over || {}), t: Date.now() }); writeSchemes(l.slice(0, 20)); st.saving = false; lastLook = name2; say(`Saved “${name2}”.`); renderAll(); };
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { st.saving = false; renderPanel(); } });
-      mine.appendChild(el('div.saverow', {}, [input, el('button.key.sm.strong', { text: 'Save', onclick: save }), el('button.key.sm', { text: 'Cancel', onclick: () => { st.saving = false; renderPanel(); } })]));
+      look.appendChild(el('div.saverow', {}, [input, el('button.key.sm.strong', { text: 'Save', onclick: save }), el('button.key.sm', { text: 'Cancel', onclick: () => { st.saving = false; renderPanel(); } })]));
       setTimeout(() => input.focus(), 0);
-    } else {
-      mine.appendChild(el('div.row4', {}, [
-        el('button.key.sm', { text: '+ Save current colors', disabled: !p.on || !Object.keys(p.colors).length, onclick: () => { st.saving = true; renderPanel(); } }),
-        el('button.key.sm', { text: 'Download', title: 'The current colours as a file', disabled: !p.on || !Object.keys(p.colors).length, onclick: downloadScheme }),
-        el('button.key.sm', { text: 'Upload', title: 'A scheme file from this app or the Build Studio', onclick: uploadScheme }),
-        el('button.key.sm', { text: 'Share', title: 'Copy a link that opens this build with these colours', disabled: !p.on, onclick: shareScheme }),
+    }
+    if (st.more) {
+      look.appendChild(el('div.row4.morerow', {}, [
+        el('button.key.sm', { title: 'The current colours as a file', disabled: !p.on || !Object.keys(p.colors).length, onclick: downloadScheme }, [icon('download-simple', { size: 14 }), 'Download']),
+        el('button.key.sm', { title: 'A colour file from this app or the Build Studio', onclick: uploadScheme }, [icon('upload-simple', { size: 14 }), 'Upload']),
+        el('button.key.sm', { title: 'Copy a link that opens this build with these colours', disabled: !p.on, onclick: shareScheme }, [icon('share-network', { size: 14 }), 'Share']),
       ]));
     }
-    panel.appendChild(mine);
-    // premade
-    const pre = el('section');
-    pre.appendChild(el('h3.h2', { text: 'Premade by Jerrari' }));
-    for (const preset of stage.PRESETS) {
-      const on = cur && cur === palKey(preset.colors);
-      pre.appendChild(el('div.scheme.key' + (on ? '.on' : ''), {}, [
-        el('button.apply', { title: `Apply the “${preset.name}” preset`, onclick: () => commitColors('preset', () => stage.applyPreset(preset)) }, [el('span.strip', {}, preset.swatches.map((h) => el('i', { style: `background:${h}` }))), el('span.name', { text: preset.name })]),
-        on ? el('span.badge', { text: 'ACTIVE' }) : null,
-        el('button.shop', { title: 'The filaments this look uses, with buy links', onclick: () => { st.shop = preset; renderShop(); renderCard(); } }, ['Shop this look ↗']),
-      ]));
-    }
-    panel.appendChild(pre);
-    // colours in this build
+    panel.appendChild(look);
+    // colours in this build, directly under the card (Astra)
     const inb = el('section');
     inb.appendChild(el('h3.h2', { text: 'Colors in this build' }));
     const rows = el('div.crows');
@@ -136,7 +238,7 @@ export function mountColors(stage, ctx) {
       rows.appendChild(el('button.crow.key' + (st.key === k.key ? '.on' : ''), { disabled: k.locked, title: k.locked ? 'Purchased hardware, not printed · no filament to pick' : `Pick a filament for ${keyLabel(k.key).toLowerCase()}`, onclick: () => openPicker(k.key) }, [
         el('span.sw', { style: `background:${hex}` }),
         el('span.lbl', {}, [el('b', { text: keyLabel(k.key) }), el('span.cnt', { text: ` ×${k.count}` })]),
-        el('span.fil', {}, [k.locked ? 'Bought' : w ? w.name.replace('Panchroma ', '') : p.on && k.zone && !k.ownColor ? 'follows Body' : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
+        el('span.fil', {}, [k.locked ? 'Bought' : w ? short(w.name) : p.on && k.zone && !k.ownColor ? 'follows Body' : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
       ]));
     }
     inb.appendChild(rows);
@@ -162,6 +264,7 @@ export function mountColors(stage, ctx) {
         const clean = {};
         for (const [k, v] of Object.entries(colors)) if (v && typeof v === 'object' && /^#[0-9a-f]{6}$/i.test(v.hex || '')) clean[k] = { name: String(v.name || v.hex), hex: v.hex, url: typeof v.url === 'string' ? v.url : FILAMENT_DB[0].url };
         if (!Object.keys(clean).length) { say('That file holds no colours this app understands.'); return; }
+        lastLook = f.name.replace(/\.json$/i, '');
         commitColors('scheme', () => stage.setPalette({ colors: clean, on: true }));
         say(`Applied ${n(Object.keys(clean).length, 'colour')} from ${f.name}.`);
       } catch { say('That file is not a colour scheme.'); }
@@ -173,6 +276,94 @@ export function mountColors(stage, ctx) {
     const q = new URLSearchParams(location.search); q.set('ws', 'colors');
     const url = `${location.origin}${location.pathname}?${q}${location.hash}${location.hash ? '&' : '#'}scheme=${btoa(unescape(encodeURIComponent(JSON.stringify(p.colors))))}`;
     try { await navigator.clipboard.writeText(url); say('Link copied · it opens this build with these colours.'); } catch { say('Copy the address bar to share these colours.'); }
+  }
+
+  /* ---------------- the gallery: Browse looks, and a look's details ---------------- */
+  const gallery = el('aside.glass', { id: 'ws-gallery', role: 'dialog', 'aria-label': 'Looks', hidden: true });
+  root.appendChild(gallery);
+  function openGallery(tab) { st.gallery = tab || 'featured'; st.detail = null; renderAll(); if (phone) phone.open(gallery); else gallery.querySelector('.gq')?.focus(); }
+  function closeGallery() { st.gallery = false; st.detail = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(gallery); phone.open(panel); } }   // the phone comes back to the Colors sheet
+  /* a hovered or focused card shows its look on the model; leaving it puts the chosen look back, unless details are open
+     (the details keep their look shown while they are up) */
+  const show = (look) => { if (!st.detail) stage.previewPalette(asLook(look)); };
+  const unshow = () => { if (!st.detail) stage.endPreview?.(); };
+  /* the filament rows of a look as THIS build would wear it: a swatch, the name, the parts, Buy (the disclosure stays at the
+     link: `· paid`, rel=sponsored, the Polymaker and Amazon lines) */
+  function filamentRows(fc) {
+    return [
+      ...fc.filaments.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw', { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' + (paid ? ' · paid' : '') }) : null]); }),
+      // printed, but with no filament chosen: a region left on its instruction colour, a label stripe (the label's own colour)
+      ...fc.unpicked.map((u) => el('div.frow.well.bare', {}, [el('span.sw', { style: `background:${u.hex}` }), el('div.col', {}, [el('b', { text: u.stripe ? 'Label stripe' : keyLabel(u.key) }), el('span.meta', { text: u.stripe ? `Printed in the label’s own colour, ${u.hex}` : 'No filament picked yet' })])])),
+    ];
+  }
+  const disclosure = (fc) => el('span.disc', { text: fc.filaments.some((f) => /polymaker/i.test(f.url)) ? 'Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission at no extra cost to you.' : fc.filaments.some((f) => isPaid(f.url)) ? 'Paid links · I earn a small commission at no extra cost to you.' : '' });
+  function renderGallery() {
+    document.documentElement.classList.toggle('ws-gallery', !!st.gallery && !phone);   // the view tools step aside (app.css)
+    if (!st.gallery) { gallery.hidden = true; return; }
+    gallery.hidden = false;
+    gallery.replaceChildren();
+    if (st.detail) { renderDetail(); return; }
+    const p = pal();
+    const all = looksList().map((l) => ({ ...l, count: stage.filamentsInBuild(asLook(l)).count }));
+    const tab = st.gallery;
+    const grid = el('div.lgrid', { role: 'list' });
+    // the grid alone follows the search box, so the box is never rebuilt under the caret (Sol 01a14f91: a rebuilt, refocused
+    // input put the caret at the end after every character)
+    const fillGrid = () => {
+      const q = st.gq.trim().toLowerCase();
+      const shown = all.filter((l) => (tab === 'featured' ? l.kind === 'preset' : tab === 'mine' ? l.kind !== 'preset' : true))
+        .filter((l) => !st.fmax || l.count <= st.fmax)
+        .filter((l) => !q || l.name.toLowerCase().includes(q) || Object.values(l.colors).some((f) => f && f.name && f.name.toLowerCase().includes(q)));
+      grid.replaceChildren();
+      for (const l of shown) {
+        const on = p.on && wears(p, l);
+        const cv = el('canvas.render', { width: CARD.w, height: CARD.h, 'aria-hidden': 'true' });
+        cards.want(cv, asLook(l), CARD.w, CARD.h);
+        grid.appendChild(el('button.lcard.key' + (on ? '.on' : ''), { role: 'listitem', title: `${l.name} · ${n(l.count, 'filament')} on this build`, 'aria-label': `${l.name}, ${n(l.count, 'filament')}${on ? ', the current look' : ''}`,
+          onpointerenter: () => show(l), onpointerleave: unshow, onfocus: () => show(l), onblur: unshow,
+          onclick: () => { st.detail = l; stage.previewPalette(asLook(l)); renderGallery(); gallery.querySelector('.back')?.focus(); } }, [
+          cv,
+          el('div.lrow', {}, [el('span.lname', { text: l.name }), on ? el('span.badge.active', { text: 'ACTIVE' }) : el('span.lcount', { text: String(l.count), title: n(l.count, 'filament') })]),
+        ]));
+      }
+      if (!shown.length) grid.appendChild(el('p.note', { text: tab === 'mine' && !all.some((l) => l.kind !== 'preset') ? 'No looks of your own yet. Pick a few colours, then Save on the Colors panel.' : 'No look matches.' }));
+    };
+    gallery.append(
+      el('div.head', {}, [el('h2', { text: 'Looks' }), el('span.sub', { text: 'Every look is shown on this build.' }), el('button.x', { title: 'Close', 'aria-label': 'Close the looks', onclick: closeGallery }, [icon('x', { size: 16 })])]),
+      el('div.track.seg3.gtabs', { role: 'tablist', 'aria-label': 'Which looks' }, [['featured', 'Featured'], ['mine', 'My looks'], ['all', 'All looks']].map(([id, label]) => el('button.seg' + (tab === id ? '.on' : ''), { role: 'tab', 'aria-selected': String(tab === id), text: label, onclick: () => { st.gallery = id; renderGallery(); } }))),
+      el('div.gfilter', {}, [
+        el('input.gq.search', { type: 'search', placeholder: 'Search looks', value: st.gq, 'aria-label': 'Search looks', oninput: (e) => { st.gq = e.target.value; fillGrid(); } }),
+        el('div.track.seg4.fmax', { role: 'group', 'aria-label': 'Filaments at most' }, [[0, 'Any'], [2, '≤ 2'], [3, '≤ 3'], [4, '≤ 4']].map(([v, label]) => el('button.seg.sm' + (st.fmax === v ? '.on' : ''), { text: label, title: v ? `Looks this build prints in ${v} filaments or fewer` : 'Every look', onclick: () => { st.fmax = v; renderGallery(); } }))),
+      ]),
+      grid,
+    );
+    fillGrid();
+  }
+  function renderDetail() {
+    const l = st.detail; const look = asLook(l);
+    const fc = stage.filamentsInBuild(look);
+    const p = pal(); const on = p.on && wears(p, l);
+    const hero = el('canvas.render', { width: HERO.w, height: HERO.h, 'aria-label': `This build in ${l.name}` });
+    cards.want(hero, look, HERO.w, HERO.h);
+    const translucent = fc.filaments.filter((f) => TRANSLUCENT.has(f.name)).map((f) => short(f.name));
+    gallery.append(
+      el('div.head', {}, [
+        el('button.back.key.sm', { title: 'Back to the looks', onclick: () => { st.detail = null; stage.endPreview?.(); renderGallery(); } }, ['← Looks']),
+        el('h2', { text: l.name }),
+        el('button.x', { title: 'Close', 'aria-label': 'Close the looks', onclick: closeGallery }, [icon('x', { size: 16 })]),
+      ]),
+      el('div.lookcard.well.big', {}, [hero, el('div.lrow', {}, [el('span.lcount.badge', { text: n(fc.count, 'filament') + ' on this build' }), on ? el('span.badge.active', { text: 'ACTIVE' }) : null])]),
+      el('div.dacts', {}, [
+        el('button.key.sm.strong.apply', { text: on ? 'Applied' : 'Apply this look', disabled: on, title: 'Dress the whole build in this look · one undo step', onclick: () => { st.detail = null; st.gallery = false; applyLook(l); renderAll(); if (phone) { phone.collapse(gallery); phone.open(panel); } } }),   // the phone comes back to the Colors sheet (Terra 01a14f96)
+        l.del ? el('button.key.sm.del', { text: 'Delete', title: 'Forget this saved look (the colours on the model stay)', onclick: () => { l.del(); st.detail = null; stage.endPreview?.(); say(`Deleted “${l.name}”.`); renderAll(); } }) : null,
+      ]),
+      el('h3.h2', { text: 'Shop this look' }),
+      el('div.frows', {}, filamentRows(fc)),
+      disclosure(fc),
+      el('p.note', { text: 'A screen preview: colours are approximate, and the card shows the look without shadows. The Day Grid plate gives the truest read.' }),
+      el('p.note', { text: 'Appearance only: whether a filament suits a part (strength, heat, flex) is a separate question.' }),
+      translucent.length ? el('p.note', { text: `${translucent.join(', ')} ${translucent.length === 1 ? 'is' : 'are'} translucent; the card shows ${translucent.length === 1 ? 'it' : 'them'} solid.` }) : null,
+    );
   }
 
   /* ---------------- the picker (replaces the inspector) ---------------- */
@@ -189,7 +380,6 @@ export function mountColors(stage, ctx) {
     const uid = unitOfSel(); if (uid == null) st.scope = 'all';
     const unitPick = uid != null ? (pal().on && pal().over[uid] && pal().over[uid][key]) || null : null;
     const w = st.scope === 'unit' ? (unitPick || null) : worn(key);   // what the chosen scope is wearing
-    const q = st.query.trim().toLowerCase();
     const scopeText = st.scope === 'unit' ? `This ${unitWord()} only${unitNo()}` : `All ${typePlural(key)} · ${count}`;
     picker.append(
       el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: regionOf(key) }), ` · ${scopeText}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
@@ -197,7 +387,7 @@ export function mountColors(stage, ctx) {
         el('button.seg' + (st.scope === 'all' ? '.on' : ''), { text: `All ${typePlural(key)} · ${count}`, onclick: () => { st.scope = 'all'; renderAll(); } }),
         el('button.seg' + (st.scope === 'unit' ? '.on' : ''), { text: uid != null ? `This ${unitWord()} only` : 'This unit only', disabled: uid == null, title: uid == null ? 'Click a part of a unit on the model first' : `Only unit ${unitNo().replace(/[() ]|unit /g, '')} keeps this pick; the other ${typePlural(key)} follow the build colour`, onclick: () => { st.scope = 'unit'; renderAll(); } }),
       ]),
-      st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? worn(key).name.replace('Panchroma ', '') : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
+      st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? short(worn(key).name) : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
       el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
     );
     const brands = el('div.brands');
@@ -227,7 +417,7 @@ export function mountColors(stage, ctx) {
     renderBrands();
     const buyUrl = w ? w.url : FILAMENT_DB[0].url; const paid = isPaid(buyUrl); const poly = /polymaker/i.test(buyUrl);
     picker.appendChild(el('div.foot', {}, [
-      el('a.buy', { href: buyUrl, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: (w ? `Buy ${w.name.replace('Panchroma ', '')} →` : 'Shop filament →') + (paid ? ' · paid link' : '') }),
+      el('a.buy', { href: buyUrl, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: (w ? `Buy ${short(w.name)} →` : 'Shop filament →') + (paid ? ' · paid link' : '') }),
       el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
       el('div.resets', {}, st.scope === 'unit'
         ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]
@@ -275,13 +465,13 @@ export function mountColors(stage, ctx) {
   const dock = el('footer.glass', { id: 'ws-dock' });
   root.appendChild(dock);
   /* the one filament count (the Colors plan's decision D2): what this build prints in, from the stage, so the Dock, the
-     shopping list and a preset's Shop list agree - bought hardware never counts; the label text and stripes do */
+     shopping list and a look's Shop list agree - bought hardware never counts; the label text and stripes do */
   function renderDock() {
     const p = pal(); const fc = p.on ? stage.filamentsInBuild() : null;
     const count = fc ? fc.count : 0;
     const s = stage.buildSize?.(); const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
     dock.replaceChildren(
-      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { st.shop = st.shop ? false : 'build'; renderShop(); renderCard(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), count ? n(count, 'filament') : 'Instruction colors']),
+      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { st.shop = !st.shop; renderShop(); renderCard(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), count ? n(count, 'filament') : 'Instruction colors']),
       el('div.group', {}, [el('span.big', { text: String(store.state.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
       el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
@@ -291,17 +481,12 @@ export function mountColors(stage, ctx) {
   root.appendChild(shop);
   function renderShop() {
     if (!st.shop) { shop.hidden = true; return; }
-    const preset = st.shop === 'build' ? null : st.shop;
-    // the build's own filaments, or a preset's as THIS build would wear it: only the regions the build has, never bought hardware
-    const fc = stage.filamentsInBuild(preset ? { colors: preset.colors, over: {} } : null);
-    const fils = fc.filaments;
+    const fc = stage.filamentsInBuild();   // the build's own filaments: only the regions the build has, never bought hardware
     shop.hidden = false;
     shop.replaceChildren(
-      el('div.ihead', {}, [el('b', { text: preset ? `Shop “${preset.name}”` : 'Filaments in this build' }), el('button.x', { 'aria-label': 'Close', onclick: () => { st.shop = false; renderShop(); renderCard(); } }, [icon('x', { size: 16 })])]),
-      ...fils.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw', { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' }) : null]); }),
-      // printed, but with no filament chosen: a region left on its instruction colour, a label stripe (the label's own colour)
-      ...fc.unpicked.map((u) => el('div.frow.well.bare', {}, [el('span.sw', { style: `background:${u.hex}` }), el('div.col', {}, [el('b', { text: u.stripe ? 'Label stripe' : keyLabel(u.key) }), el('span.meta', { text: u.stripe ? `Printed in the label’s own colour, ${u.hex}` : 'No filament picked yet' })])])),
-      el('span.disc', { text: fils.some((f) => /polymaker/i.test(f.url)) ? 'Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission at no extra cost to you.' : fils.some((f) => isPaid(f.url)) ? 'Paid links · I earn a small commission at no extra cost to you.' : '' }),
+      el('div.ihead', {}, [el('b', { text: 'Filaments in this build' }), el('button.x', { 'aria-label': 'Close', onclick: () => { st.shop = false; renderShop(); renderCard(); } }, [icon('x', { size: 16 })])]),
+      ...filamentRows(fc),
+      disclosure(fc),
     );
   }
 
@@ -310,15 +495,24 @@ export function mountColors(stage, ctx) {
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'colors', soon }, { panels: [
     { el: panel, title: 'Colors', open: true },
     { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}` : typePlural(st.key)}` : 'Filament' },
+    { el: gallery, title: () => st.detail ? st.detail.name : 'Looks' },
   ] }) : null;
   if (phone) phone.onLayout(safe);
+  /* the gallery never moves the safe area (the plan: a change refits the camera, and a hovered look must be judged on a
+     still model); on the phone the sheet manager's heights already include an open sheet */
   function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 }); }
-  function renderAll() { renderPanel(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
+  function renderAll() { renderPanel(); renderGallery(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
-    if (e.key === 'Escape') { if (st.shop) { st.shop = false; renderShop(); renderCard(); return; } if (st.key) { closePicker(); return; } stage.setSelected(null); return; }
+    if (e.key === 'Escape') {
+      if (st.detail) { st.detail = null; stage.endPreview?.(); renderGallery(); if (phone) phone.refresh(); return; }
+      if (st.gallery) { closeGallery(); return; }
+      if (st.shop) { st.shop = false; renderShop(); renderCard(); return; }
+      if (st.key) { closePicker(); return; }
+      stage.setSelected(null); return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); store.redo(); }
   }, { signal });
@@ -332,6 +526,7 @@ export function mountColors(stage, ctx) {
 
   return {
     onSelect(sel) { st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; } renderAll(); },
-    unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },   // a look being shown never outlives the workspace
+    unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace
+    get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
   };
 }

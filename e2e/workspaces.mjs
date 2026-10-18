@@ -463,15 +463,22 @@ test('Build: a unit placed through the store reaches the stage; move, remove and
   await ctx.close();
 });
 
-test('Colors: a preset recolours the model, a region pick is one history entry, Undo restores it', async () => {
+/* the Colors plan's step 3 (2026-10-18): the presets live in the Browse looks gallery; a look is applied from its details */
+test('Colors: a preset applied from the gallery recolours the model as one history entry, and Undo restores it', async () => {
   const { ctx, page, errors } = await open('colors');
   const before = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
-  const presets = page.locator('#ws-colors .scheme .apply');
-  assert.ok(await presets.count() >= 2, 'presets listed');
-  await presets.nth(1).click();
+  await page.locator('#ws-colors .browse').click();
+  const cards = page.locator('#ws-gallery .lcard');
+  assert.ok(await cards.count() >= 11, 'the presets are listed as cards');
+  await cards.nth(1).click();   // Stealth, on a fresh profile
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  assert.match(await text(page, '#ws-gallery h2'), /Stealth/, 'its details open');
+  await page.locator('#ws-gallery .apply').click();
   await settle(page, 600);
   const after = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
   assert.notEqual(after, before, 'the preset changed the palette');
+  assert.equal(await page.locator('#ws-gallery').isHidden(), true, 'Apply closes the gallery');
+  assert.match(await text(page, '#ws-colors .lname'), /Stealth/, 'the card names the look (decision D4)');
   await page.keyboard.press('Control+Z');
   await settle(page, 800);
   const undone = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
@@ -1462,13 +1469,17 @@ test('Colors: a preset applied straight after a region pick is its own undo step
   await settle(page, 600);
   const palNow = () => page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
   const start = await palNow();
+  // the picker first (the gallery opens over the panel), then the preset's details (step 3): its Apply sits beside the picker
   await page.locator('#ws-colors .crow').first().click();
   await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  await page.locator('#ws-colors .browse').click();
+  await page.locator('#ws-gallery .lcard').nth(1).click();
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
   // the pick and the preset in one task: well inside the store's 350 ms window
   const picked = await page.evaluate(() => {
     const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')]; sws[sws.length - 1].click();
     const after = JSON.stringify(window.__GEN2_VIEWER__.palette().colors);
-    document.querySelectorAll('#ws-colors .scheme .apply')[1].click();
+    document.querySelector('#ws-gallery .apply').click();
     return after;
   });
   await settle(page, 600);
@@ -1543,7 +1554,7 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
       lockedKeys: [...locked], countedKeys: mine.filaments.flatMap((f) => f.keys),
       count: mine.count, filaments: mine.filaments.length, stripes: mine.unpicked.filter((u) => u.stripe).map((u) => u.hex),
       textWears: (mine.filaments.find((f) => f.keys.includes('Label:TEXT')) || {}).name || null,
-      sigRows: sig.filaments.length + sig.unpicked.length, sigNames: sig.filaments.map((f) => f.name), sigOnlyHardware,
+      sigRows: sig.filaments.length + sig.unpicked.length, sigCount: sig.count, sigNames: sig.filaments.map((f) => f.name), sigOnlyHardware,
       sigLeaks: sig.filaments.flatMap((f) => f.keys).filter((k) => !keys.some((x) => x.key === k)),
     };
   });
@@ -1556,11 +1567,15 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   // Signal's Shop list, as THIS build would wear it: only its regions, and no filament the preset gives bought hardware alone
   assert.deepEqual(r.sigLeaks, [], 'no region the build lacks');
   for (const n of r.sigOnlyHardware) assert.ok(!r.sigNames.includes(n), `${n} is only on bought hardware in Signal, so it is not listed`);
-  await page.locator('#ws-colors .scheme').filter({ hasText: 'Signal' }).locator('.shop').click();
-  await page.waitForSelector('#ws-shop .frow', { timeout: 5000 });
-  assert.equal(await page.locator('#ws-shop .frow').count(), r.sigRows, 'the Shop list lists exactly those rows');
+  // Shop this look lives in the look's details (step 3): the gallery, the Signal card, its filament rows
+  await page.locator('#ws-colors .browse').click();
+  await page.locator('#ws-gallery .lcard').filter({ hasText: 'Signal' }).click();
+  await page.waitForSelector('#ws-gallery .frow', { timeout: 5000 });
+  assert.equal(await page.locator('#ws-gallery .frow').count(), r.sigRows, 'the Shop list lists exactly those rows');
+  assert.match(await page.locator('#ws-gallery .lcount').textContent(), new RegExp(`^${r.sigCount} filaments`), 'the details say the count');   // (not the text() helper: this case declares its own `text` below)
   // with no label-text pick, the label text row reads as its own colour, not "follows Body"
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');   // the details close
+  await page.keyboard.press('Escape');   // the gallery closes
   const text = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__; const p = v.palette(); delete p.colors['Label:TEXT']; v.setPalette({ colors: p.colors, on: true, over: p.over });
     return null;
@@ -1603,6 +1618,115 @@ test('Colors step 2: a look card of this build compiles no shader program after 
   assert.ok(r.card.pixels > 1000, `the card shows the build (${r.card.pixels} pixels)`);
   assert.ok(r.card.median <= 6 && r.card.p95 <= 32, `the card matches the screen: median ${r.card.median}, p95 ${r.card.p95}`);
   assert.ok(r.plain.median > 12, `the control: an ordinary render target misses the tone mapping (median ${r.plain.median})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* The Colors plan's step 3 (2026-10-18): the Browse looks gallery. Every card is THIS build wearing a look (lookCard), keyed
+   on the scene revision so a card never outlives the build it shows; a hovered card is shown on the model and never chosen
+   (previewPalette), and nothing a card does sends a preset event (GoatCounter 429s are the history here, e2e 111). */
+test('Colors step 3: the gallery draws every look on this build, a hovered card is shown and not chosen, the cards follow the build and Undo, and no preset event is sent', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  const drawnAll = () => page.waitForFunction(() => { const c = document.querySelectorAll('#ws-gallery .lcard canvas'); return c.length >= 11 && [...c].every((x) => x.classList.contains('drawn')); }, null, { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await drawnAll();
+  const first = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    const cards = [...document.querySelectorAll('#ws-gallery .lcard')];
+    const key = (c) => JSON.parse(c.querySelector('canvas').dataset.key);
+    // a drawn card holds a picture: not every pixel is the empty background
+    const painted = cards.map((c) => { const cv = c.querySelector('canvas'); const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 250) n++; return n; });
+    return { names: cards.map((c) => c.querySelector('.lname').textContent), revs: [...new Set(cards.map((c) => key(c)[0]))], sceneRev: v.sceneRev, painted, active: cards.filter((c) => c.classList.contains('on')).map((c) => c.querySelector('.lname').textContent), hero: !!document.querySelector('#ws-colors canvas.drawn') };
+  });
+  assert.ok(first.names.length >= 11 && first.names.includes('Stealth') && first.names.includes('Black & gold'), `the presets are the cards: ${first.names.join(', ')}`);
+  assert.deepEqual(first.revs, [first.sceneRev], 'every card is keyed on the current scene revision');
+  assert.ok(first.painted.every((n) => n > 2000), `every card shows the build (${first.painted.join(', ')} opaque pixels)`);
+  assert.deepEqual(first.active, ['The Jerrari'], 'the boot preset is the active card');
+  assert.ok(first.hero, 'the panel\'s own card is drawn');
+  // hover: shown, not chosen
+  const before = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
+  await page.locator('#ws-gallery .lcard').nth(1).hover();
+  await settle(page, 300);
+  const hovered = await page.evaluate(() => ({ previewing: window.__GEN2_VIEWER__.previewing, caseHex: window.__GEN2_VIEWER__.activeHex('Case'), palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), canUndo: window.__GEN2_STORE__.canUndo }));
+  assert.ok(hovered.previewing && hovered.caseHex === '#2b2b2e', `the model wears Stealth while the card is hovered (${hovered.caseHex})`);
+  assert.equal(hovered.palette, before, 'the palette is not chosen');
+  await page.mouse.move(900, 400);
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'leaving the card puts the chosen look back');
+  // the build changes (in Build, whose store subscriber rebuilds the stage): back in Colors the cards are of the new build,
+  // the cache's old cards left aside; Undo in Build takes the unit away and the cards follow again
+  const units0 = await page.evaluate(() => window.__GEN2_VIEWER__.build.placed.length);
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.waitForSelector('#ws-lib', { timeout: 30_000 });
+  // a unit on the floor beside the build (as startBuild places them: anything floating is refused by the layout rules)
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed.push({ id: s.nextId++, x: s.gridW, y: s.gridH * 2 - 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }); s.gridW = Math.max(1, ...s.placed.map((p) => p.x + p.w)); }, 'edit'));
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n + 1 && !window.__GEN2_VIEWER__.regenBusy, units0, { timeout: 90_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await drawnAll();
+  const after = await page.evaluate(() => ({ revs: [...new Set([...document.querySelectorAll('#ws-gallery .lcard canvas')].map((c) => JSON.parse(c.dataset.key)[0]))], sceneRev: window.__GEN2_VIEWER__.sceneRev, units: window.__GEN2_VIEWER__.build.placed.length }));
+  assert.deepEqual(after.revs, [after.sceneRev], `after a build change every card is of the new build (revision ${after.sceneRev})`);
+  assert.ok(after.sceneRev > first.sceneRev && after.units === units0 + 1, 'the control: the revision moved with the unit');
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.waitForSelector('#ws-lib', { timeout: 30_000 });
+  await page.keyboard.press('Control+Z');
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n && !window.__GEN2_VIEWER__.regenBusy, units0, { timeout: 90_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await drawnAll();
+  const undone = await page.evaluate(() => ({ revs: [...new Set([...document.querySelectorAll('#ws-gallery .lcard canvas')].map((c) => JSON.parse(c.dataset.key)[0]))], sceneRev: window.__GEN2_VIEWER__.sceneRev, units: window.__GEN2_VIEWER__.build.placed.length, presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
+  assert.deepEqual(undone.revs, [undone.sceneRev], 'after Undo every card is of the restored build');
+  assert.ok(undone.units < after.units, 'the control: Undo took the unit away');
+  assert.deepEqual(undone.presetEvents, [], 'no card, hover or details sent a preset event');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* the pacing gate (STEP3.md, M5): the gallery fills a few cards an animation frame, with the page's frames measured
+   meanwhile. The marks proper are measured by hand on a real GPU (step3-pacing.mjs); this case only refuses a regression
+   to something pathological (a serial fill at one card per GPU fence, say) on whatever the suite runs on. */
+test('Colors step 3: the gallery fills within bounds and keeps the page\'s frames bounded', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 2000);
+  const r = await page.evaluate(async () => {
+    const frames = []; let last = performance.now(), go = true;
+    const tick = (t) => { frames.push(t - last); last = t; if (go) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    const t0 = performance.now();
+    document.querySelector('#ws-colors .browse').click();
+    const n = document.querySelectorAll('#ws-gallery .lcard').length;
+    while (document.querySelectorAll('#ws-gallery canvas.drawn').length < n && performance.now() - t0 < 20000) await new Promise((r) => setTimeout(r, 5));
+    const total = performance.now() - t0; go = false;
+    const f = frames.slice(1).sort((a, b) => a - b);
+    return { cards: n, drawn: document.querySelectorAll('#ws-gallery canvas.drawn').length, total: Math.round(total), frames: f.length, p50: Math.round(f[Math.floor(f.length / 2)] || 0), p95: Math.round(f[Math.floor(f.length * 0.95)] || 0), max: Math.round(f[f.length - 1] || 0) };
+  });
+  console.log(`      gallery fill: ${r.drawn}/${r.cards} cards in ${r.total} ms over ${r.frames} frames; frame p50 ${r.p50} p95 ${r.p95} max ${r.max} ms`);
+  assert.equal(r.drawn, r.cards, 'every card drawn');
+  assert.ok(r.total <= 5000, `the gallery filled within 5 s (${r.total} ms)`);
+  assert.ok(r.max <= 500, `no frame stalled half a second (max ${r.max} ms)`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* the phone: the gallery is a bottom sheet of its own, one open at a time with the Colors and picker sheets; the details
+   take the sheet's title; closing comes back to the Colors sheet */
+test('Colors step 3 on the phone: Browse looks opens the gallery sheet over the model, a card opens its details, closing returns to the Colors sheet', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-gallery .sheet-handle .ttl'), /Looks/);
+  await page.waitForFunction(() => document.querySelectorAll('#ws-gallery .lcard canvas.drawn').length >= 11, null, { timeout: 30_000 });
+  await page.locator('#ws-gallery .lcard').nth(1).click();
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  assert.match(await text(page, '#ws-gallery .sheet-handle .ttl'), /Stealth/, 'the sheet is titled after the look');
+  await page.locator('#ws-gallery .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').hidden && document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
