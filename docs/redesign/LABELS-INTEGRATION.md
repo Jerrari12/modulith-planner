@@ -99,9 +99,24 @@ capabilities, then named commands (the plan's "host commands independent of the 
   read-only (text readOnly, buttons disabled, remove and bulk hidden), tagged `data-label-id` and `#n` per drawer; the
   printer section and Download stay live. After the hello every message is read from the bound window at the bound origin
   with the bound session (Sol). Storage isolation: `EMBED` short-circuits autosave, the restore, the previous set and the
-  boot. A snapshot for another build replaces everything with no prompt. **Correction (2026-10-15, the stress test's
-  S-F6):** the printer settings do NOT persist in the plate. They live inside the standalone autosave, which EMBED skips,
-  so the plate's printer resets on every planner reload. The fix, storing them on their own in the embed, is still to do.
+  boot. A snapshot for another build replaces everything with no prompt.
+- **The plate's printer persists (2026-10-17, the stress test's S-F6).** Until then the plate's printer reset on every
+  planner reload: the Studio kept the printer settings only inside its standalone autosave, which `EMBED` skips. Now:
+  - **What:** the printer, its plate size, the export format, the purge area and the preview colours (the Studio's
+    `PRINTER_PREFS`), per browser, under a key of the plate's own: `labelstudio.plate-printer.v1` (plate-link.js
+    `PRINTER_KEY`; the record `{ v: 1, settings, printer }`). Nothing else of the autosave comes with them, and the
+    autosave stays unread and unwritten. The standalone Studio does not read this key: its own printer stays in its
+    autosave, so the two keep separate printers.
+  - **When:** restored when the frame boots; saved 400 ms after a change and at once on `pagehide`, so a reload right after
+    a change keeps it.
+  - **The printer by name:** three printers share 256×256 (two share 300×300), and a value alone came back as the first,
+    so the record names the chosen one.
+  - **Through a type switch:** the build's faceplate switching the Studio's label type no longer resets the preview colours;
+    on the plate they are the browser's, not the type's.
+  - **Not here:** the stripe and the drawings stay the planner's print preference (below).
+  - **Checked by** the e2e case "the Label plate keeps this browser's printer settings across a planner reload and a
+    label-type switch" and the Studio's plate-link tests. The case fails against the Studio before the fix, and with any
+    one of these taken out: the colours kept through the switch, the printer picked by name, the save on `pagehide`.
 - **Proved** by unit tests on both sides, an e2e case driving the real Studio from the checkout beside the repo, and the
   browser pane on loopback (desktop and phone).
 - **Found on the way**: the Studio page already had a `postToPlanner` (the tab link's, to the opener); a same-named embed
@@ -113,6 +128,14 @@ capabilities, then named commands (the plan's "host commands independent of the 
   and the plate's inputs send a `setting { id, value, rev, buildId }` back (capability `setting/1`). A plate-originated
   change keeps the rev (the Studio already holds that state) and echoes no snapshot. This is the one thing the read-only
   plate edits, and it is not label content.
+  - **A faceplate switch is not the visitor's change (fixed 2026-10-17).** With the plate open, a snapshot that switched
+    the Studio's label type gave the stripe and the drawings that type's defaults. The plate then sent them back as a
+    `setting`, which the planner took: this browser's End stripe became Bottom, and drawings that were Off came back On,
+    with nobody touching them.
+    - **The fix:** the Studio's `applySnapshot` unsets `EMBED.applied` while it switches type, which keeps the listener
+      silent. It then sets the snapshot's own values.
+    - **Checked by** the e2e case "a faceplate switch with the plate open leaves this browser's stripe and drawings as they
+      were". The case fails against the Studio without that line.
 - **Recorded gaps**: the Studio is dark only, so a light planner shows a dark plate (the plan's "takes the planner's theme"
   is not met in B1); stripes made in the standalone Studio are not in the shared list format, so none show on the plate
   (none are lost either); the 3D plate does not highlight the selected label, only its row; the stage keeps rendering

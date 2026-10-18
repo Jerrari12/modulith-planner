@@ -15,8 +15,10 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { generateManifest } from '../generate.js';
 import * as R from '../rules/labels.js';
 import * as P from '../rules/plate.js';
-import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle } from '../label-panel.js';
-import { loadLabelFont, labelIcons } from '../label-text.js';
+import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle, labelUploadFor, isLabelSvg } from '../label-panel.js';
+import { loadLabelFont, loadLabelParts, labelIcons } from '../label-text.js';
+import { labelLookOf, labelLookOfLabel } from '../label-look.js';
+import { labelPreviewUrl, previewNeeds, previewReady } from '../label-preview.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
 // eslint-disable-next-line no-undef
@@ -543,8 +545,62 @@ export function mountLabels(stage, ctx) {
   const iconName = (id) => { const I = labelIcons(); const i = I && I.find ? I.find(id) : null; return (i && i.name) || String(id || '').replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()); };
   const predicted = (words) => { const I = labelIcons(); try { return I && words && effectiveStyle(S()).predictIcons ? I.guessIconId(words) || null : null; } catch { return null; } };
   const maskUrl = (svg) => { try { return `url("data:image/svg+xml,${encodeURIComponent(typeof svg.toWellFormed === 'function' ? svg.toWellFormed() : svg)}")`; } catch { return null; } };
-  function preview(l, big = false) {
+  /* A label's preview is drawn by js/label-preview.js from its 3D label's own geometry (Joey 2026-10-17: "the small labels
+     differ from the actual labels"; supersedes decision 3b). `u` = the drawer that wears it, when there is one: its look is
+     then the drawer's own (label-look.js labelLookOf), exactly what the stage draws; a label still waiting to be placed is
+     drawn as a drawer wearing it would draw it. Until the data has loaded - and on Classic Pro, which the stage draws no
+     text on - the lightweight CSS preview below stands in. */
+  const previewLook = (l, u) => {
+    const s = S();
+    if (s.faceStyle === 'classicpro') return null;
+    const stripeOf = (lk) => (lk && lk.kind === 'stripe' ? { colours: lk.colours, position: lk.position } : null);
+    if (u) {
+      const lk = labelLookOf(s, u);
+      if (lk && lk.kind === 'part') return lk;
+      return { kind: 'words', text: u.label || '', badge: u.labelBadge || null, style: s.labelStyle || null, upload: labelUploadFor(s, u), stripe: stripeOf(lk) };
+    }
+    const lk = labelLookOfLabel(l);
+    if (lk && lk.kind === 'part') return lk;
+    if (R.isPartLabel(l)) return null;   // a part item that does not clean: the stage shows its words, the CSS preview too
+    const b = l.badge && typeof l.badge === 'object' ? l.badge : null;
+    return { kind: 'words', text: R.labelWords(l) || '', badge: b, style: s.labelStyle || null,
+      upload: b && b.type === 'icon' && isLabelSvg(b.svg) ? b.svg : null, stripe: stripeOf(lk) };
+  };
+  const drawnPreview = (look, big, width) => {
+    const url = labelPreviewUrl(look, { width: big ? 120 : width, dpr: Math.min(3, window.devicePixelRatio || 1),
+      body: stage.activeHex('Label'), ink: stage.activeHex('Label:TEXT') });
+    return url ? el('span.lprev.img' + (big ? '.big' : ''), { 'aria-hidden': 'true' }, [el('img', { src: url, alt: '', draggable: 'false' })]) : null;
+  };
+  /* A CSS stand-in shown while its data loads is swapped for the drawn image IN PLACE when the data arrives: nothing
+     re-renders, so no field loses its focus or its half-typed words (the keyboard e2e case, 2026-10-17: a whole renderAll on
+     arrival wiped a word being typed in the label editor). */
+  const pendingPreviews = new Map();   // stand-in element -> { look, big, width }
+  let previewLoading = null, previewFailed = false;
+  function settlePreviews() {
+    let wait = null;
+    for (const [box, p] of [...pendingPreviews]) {
+      if (!box.isConnected) { pendingPreviews.delete(box); continue; }
+      if (!previewReady(p.look)) { wait = wait || p.look; continue; }   // a look that needs more data than has arrived
+      pendingPreviews.delete(box);
+      const img = drawnPreview(p.look, p.big, p.width);
+      if (img) box.replaceWith(img);
+    }
+    if (wait) loadPreviewData(wait);
+  }
+  function loadPreviewData(look) {
+    if (previewLoading || previewFailed || previewReady(look)) return;
+    const n = previewNeeds(look);
+    previewLoading = (n.layout || n.bands ? loadLabelParts({ layout: n.layout, bands: n.bands }) : loadLabelFont())
+      .then(() => { previewLoading = null; settlePreviews(); })
+      .catch((e) => { previewLoading = null; previewFailed = true; pendingPreviews.clear(); console.warn(`[labels] the label previews stay simple: ${(e && e.message) || e}`); });
+  }
+  function preview(l, big = false, u = null, width = 84) {
+    const look = previewLook(l, u);
+    const img = look ? drawnPreview(look, big, width) : null;
+    if (img) return img;
     const box = el('span.lprev' + (S().faceStyle === 'classicpro' ? '.cp' : '') + (big ? '.big' : '') + (caps() ? '' : '.nocaps'), { 'aria-hidden': 'true' });
+    // not drawn yet because its data is still loading (not because nothing prints): it waits to be swapped in place
+    if (look && !previewReady(look) && !previewFailed) { pendingPreviews.set(box, { look, big, width }); loadPreviewData(look); }
     const words = R.labelWords(l);
     const b = L.cleanBadge(l.badge, { svg: true });
     let svg = null, ch = null;
@@ -674,7 +730,7 @@ export function mountLabels(stage, ctx) {
     if (onUnits.length) scroll.appendChild(el('div.placed', {}, [el('h4', { text: `On drawers (${onUnits.length})` }), el('div.rows', {}, onUnits.map((u) => {
       const l = R.labelById(s, carried[u.id]); const isSel = !!sel && sel.id === u.id;
       return el('button.prow' + (isSel ? '.sel' : '') + (st.selLabel === l.id ? '.lsel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on drawer ${R.drawerNumber(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
-        [preview(l), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: 'Drawer ' + R.drawerNumber(s, u.id) })]);
+        [preview(l, false, u, 56), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: 'Drawer ' + R.drawerNumber(s, u.id) })]);
     }))]));
     panel.appendChild(scroll);
     // the foot: ways in, fill, exports, settings, status
@@ -706,7 +762,7 @@ export function mountLabels(stage, ctx) {
     // a Decor drawer on a faceplate without labels: the callout above the card explains it and offers the switch
     if (!R.eligible(s, u) && !l) { box.appendChild(el('p.none', { text: u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : 'This faceplate style takes no label.' })); return box; }
     if (!l) { box.appendChild(el('p.none', { text: 'No label yet' + (readyN ? ' · click a label below to put it on this drawer.' : '.') })); return box; }
-    box.appendChild(el('div.dlabel', {}, [preview(l, true), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
+    box.appendChild(el('div.dlabel', {}, [preview(l, true, u), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
     const acts = el('div.acts');
     if (R.isPartLabel(l)) {
       acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker({ open: l.hardware }) }, ['Edit part details']));

@@ -73,7 +73,6 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws .h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
 #ws .mono { font-family: var(--font-mono); }
 #ws .badge { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; background: var(--badge-bg); color: var(--badge-fg); }
-#ws .preview { align-self: center; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; cursor: help; }
 #ws .hint { margin: 8px 2px 0; font-size: 12px; color: var(--ink-2); }
 #ws .readout { margin: 4px 2px 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
 #ws .ph { flex: none; fill: currentColor; }
@@ -584,6 +583,10 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 /* the previews: the real outline (EdgeLabel's slanted edge; Classic Pro's bar), the icon art as a mask, the words */
 .lprev { flex: none; width: 84px; aspect-ratio: 55.6 / 27; position: relative; display: flex; align-items: center; gap: 3px; padding: 3px 4px; box-sizing: border-box; background: #f4f1ec; color: #1b1b1b; clip-path: polygon(0 0, 100% 0, 53.3% 100%, 0 100%); overflow: hidden; }
 .lprev.cp { aspect-ratio: 47 / 18; clip-path: none; border-radius: 3px; }
+/* the drawn preview (js/label-preview.js, 2026-10-17): the 3D label's own face, stripe and ink as an image, in the face's
+   proportions (55.587 x 26.001 mm); the CSS outline and words above stand in only until its data has loaded */
+.lprev.img { display: block; padding: 0; background: none; clip-path: none; aspect-ratio: 55.587 / 26.001; }
+.lprev.img img { display: block; width: 100%; height: 100%; }
 .lprev.big { width: 120px; }
 .lprev .lico { flex: 0 0 auto; width: 34%; height: 78%; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
 .lprev .lch { flex: 0 0 auto; width: 30%; font-weight: 800; font-size: 13px; text-align: center; line-height: 1; }
@@ -699,7 +702,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   /* above an open sheet (13): the switcher's menu lives in this layer, and an open sheet covered its items (the phone
      check, 2026-10-17); an open sheet never reaches up to the bar itself (openHeight leaves 110 px) */
   #ws-top { top: 10px; left: 10px; right: 10px; gap: var(--gap-ctl); z-index: 14; }
-  #ws-top #ws-tabs, #ws-top .preview, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
+  #ws-top #ws-tabs, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
   #ws-top #ws-switch { flex: 1; min-width: 0; margin-left: 0; }
   #ws-top #ws-switch > .chip-btn { width: 100%; padding: 0 10px; gap: 6px; }
   #ws-top #ws-switch > .chip-btn > :first-child { display: none; }

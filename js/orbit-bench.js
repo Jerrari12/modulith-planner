@@ -46,6 +46,8 @@ export function benchBuild() {
     mount: 'tabletop', length: 185, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null,
     faceStyle: 'essential', doorStyle: 'essential', handleStyle: 'deco', wallStagger: false, backCover: true,
     buildPlate: 'powder', removedStoppers: [], gridW: cols, gridH: rows, placed, nextId: id,
+    // the side covers (2026-10-17) came after every measurement in the series: a different workload would not compare
+    sideCovers: false,
   };
 }
 

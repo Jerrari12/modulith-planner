@@ -417,3 +417,101 @@ Dated calls made while building, with who made them. The brief and the inventory
   - a keyboard path to place a label;
   - a compact panel foot for small screens;
   - the Studio's phone first screen.
+
+## 2026-10-17 (the Part Picker's round 3, live)
+
+- **Joey's rule (2026-10-17).**
+  - The Picker takes a value away only where a standard or physics rules it out.
+  - A value that is only hard to buy stays, with a warning.
+  - Custom is never refused.
+  - Round 2's not-sold removals became warnings under the same rule. Nylon heat-set inserts stay blocked (physics).
+  - His six round-3 answers are in the Picker repo's RESEARCH-HARDWARE-2026-10-16.md, section 6. The tables are in the
+    MODULITH vault's decisions.md, under "What the Part Picker offers".
+- **What changed, in the Picker:**
+  - 60869eb5, round 3:
+    - a hex head and a nut have no drive choice;
+    - connectors offer tin or gold contact plating;
+    - one ring size list per ring type;
+    - spring washer ranges follow the newest editions;
+    - inch lengths are suggested from commonly stocked ones.
+  - 9d05a7a5: only the looks a part can have ship. 240 finish variants stay out, and 80 gold-plating renders were added.
+  - fa512265: round 2's removals warn instead.
+  - Nothing in the planner's code changed. The planner's Part Picker dialog loads the Studio's parts/.
+- **Tests:**
+  - the Picker: 256 tests; 255 passed, 1 skipped;
+  - the Studio, on planner-plate with the republish staged: 18 files; 194 passed, 0 failed, 1 skipped.
+- **Deployed:**
+  1. The Studio: the republish was committed on labels-public in the ls-public worktree, as public main 8b29cb2b. Its
+     parts/SOURCE.json read fa512265 at 18:28:52Z.
+  2. The Picker repo's master was fast-forwarded to fa512265.
+  3. The Studio's source branch planner-plate carries the same republish: fb39932b, a cherry-pick of 8b29cb2b, pushed
+     to origin. Its parts/ tree is identical to 8b29cb2b's.
+- **Checked in production:**
+  - the round-3 blocks, warnings and Custom;
+  - a look a part can have loads (200), and a pruned one is gone (404);
+  - on planner.modulith.systems, the Part Picker dialog (parts/?embed=planner) reports ready, with open/1.
+- **Reviews:**
+  - the code: Sol 01a14a93 (2 of 2 held); Terra 01a14a99 (1, wrong); Sol 01a14ac2 (1 held); Terra 01a14ac4 (2, wrong);
+    Terra 01a14b05 (round 2's warnings);
+  - the vault entries: Sol 01a14aa0 (7 of 10 held); Terra 01a14aa6, 01a14ac8, 01a14b06 and 01a14b22.
+- **A caveat:** an open tab may still hold the old Picker. Reload it.
+
+## 2026-10-17 (side covers, live on every build)
+
+- **Joey's call (2026-10-17):** "Deploy side covers now, shown on every build". The default-off toggle of the 2026-10-09
+  decision is not built: the merged BOM already bills covers on every build, so the stage now shows them on every
+  build. A real toggle needs a new build field, and BUILD_FIELDS is pinned to the old planner's.
+- **What it is** (branch `side-covers`, `f28de1f` and `48f05b2`, by the side-covers session; Sol, two passes, no
+  findings):
+  - a cover goes on exactly the walls the BOM bills, at the release offsets; a test holds the stage to the BOM on the
+    kits, edge cases and 400 random builds;
+  - it is fitted after the case and before anything stacks on top: in from 30 mm off the wall, 3.8 mm up, a pause,
+    then the slide down, under a close camera;
+  - pink in Part colors; in the presets the core takes the case colour and the face the faceplate face colour;
+  - builds are 5 mm wider, because the covers count in W; the ten kits gain 4 × 1H covers each.
+- **Known limits:** a 4H–6H shelf end has no made cover size, so it stays bare with a warning (MODULITH known-gaps).
+  Reading "face = the accent colour" as the faceplate face makes Sandstone's covers all brown and Signal's faces
+  yellow; that reading is open for Joey.
+- **Deployed, in this order:**
+  1. gen2-parts master fast-forwarded to `d73facf` (the 27 GLBs and 27 thumbnails), served from 23:01:18Z;
+  2. the planner: `side-covers` merged into main as `d8f55bb` (no conflicts), pushed 23:34:50Z, run 39079574241
+     green at 23:49:48Z. The order matters: the side-covers session found that the planner's browser tests fail
+     while the parts host lacks the 27 files (its smoke run fetched SideCover_185-1H from the live host and failed).
+- **Tests on the merge, against the live parts host:** npm test 517 tests, 512 passed, 0 failed, 5 skipped; e2e with
+  E2E_SOFT=1 and the Studio at ls-public `fa87f8df`, 31 of 31.
+- **Checked in production:** the 185 2W-2H kit and a new build each draw 4 `SideCover_185-1H`; the Parts list shows
+  "×4 Side Cover 185 · 1H"; no page errors, and no failed requests apart from GoatCounter's (not checked).
+- **A test-setup gotcha:** STUDIO_DIR must be a Windows path with backslashes. The e2e server refuses any file whose path
+  does not start with that string, so a forward-slash path turns every Studio request into a 403, and the five
+  Studio cases time out.
+
+## 2026-10-17 (label previews drawn from the 3D label; supersedes decision 3b)
+
+- **Joey's report (2026-10-17, with a screenshot):** "the small labels differ from the actual labels". On the model, a part
+  label for an M2 × 6 socket head printed "M2 × 6" over the screw drawing. Joey decided on 2026-10-07
+  that the drawing replaces the head word. The panel's preview showed "M2 × 5 / SHCS", from the label's stored words.
+- **Why they differed:** the previews were "decision 3b" (2026-10-13, the 2026-10-13 Labels entry above): the outline, the
+  icon art and the words, chosen because the separate planner had no label core (about 1.2 MB more to load). The merged app
+  loads that core for the stage anyway, so the reason no longer holds. A label's stored words keep SHCS on purpose: they are
+  what older tools read. So the fix changes how a preview is drawn, never the words.
+- **Now:** js/label-preview.js draws each EdgeLabel preview from the 3D label's own sources:
+  - a part label from the same layout its ink is extruded from (label-text.js partLabelLayout, shared with
+    partLabelGeometry), its even-odd outlines on a canvas;
+  - an ordinary label from the same cached geometry the stage builds (labelGeometry: the wrap, the shrink and the badge),
+    its top faces drawn flat;
+  - a stripe from the Label Studio's band pieces, the face from the vendored EdgeLabel face;
+  - the build's Label and Label:TEXT colours.
+  The drawer rows and the selected drawer's card use that drawer's own look (labelLookOf). A label still waiting to be
+  placed is drawn as a drawer wearing it would draw it (label-look.js labelLookOfLabel).
+- **Unchanged:**
+  - the CSS preview stands in until the font and the part data have loaded;
+  - Classic Pro keeps it, because the stage draws no text on Classic Pro;
+  - an icon-only label still shows its icon in the panel and nothing on the model (it has no words to mirror).
+- **Checks:**
+  - test/label-preview.test.mjs pins the face to the vendored data and the waiting-label look to the drawer's;
+  - the e2e case "the label previews are drawn from the 3D label's own layout and geometry" proves one source: the preview's
+    layout record is the 3D ink's, and an ordinary label's flat ink is the stage geometry's own.
+  - Review: Sol 01a14ca2 (no findings).
+- **Open:** the 3D label and the Label plate can still differ when this browser's print preference (the plate's stripe
+  position or drawings switch) differs from the defaults. The stage always draws the drawings, with the stripe at the
+  label's own position or the bottom.

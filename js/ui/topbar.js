@@ -23,12 +23,11 @@ export function topbar(stage, ctx) {
     switcher(),
     el('div.spacer'),
     tabs(),
-    el('span.badge.preview', { text: 'Preview', title: 'A visual preview over the real scene. Adding, moving and removing units, per-unit type and the 2D board arrive with the Build rules (phase 3).' }),
     el('div.spacer'),
     el('button.chip.chip-btn.mount', { title: 'Mount and length · opens the setup sheet', onclick: ctx.openSetup ? () => ctx.openSetup('mount') : ctx.soon('The setup sheet', 'the next phase-0 step') }, [
       icon(MOUNT_ICON[build?.mount] || 'table'), el('span.lbl', { text: `${MOUNT_NAME[build?.mount] || 'Tabletop'} · ` }), el('span.mono', { text: String(length) }),
     ]),
-    el('button.chip.chip-btn.printer', { title: 'Printer · optional; only greys out sizes that will not fit', onclick: ctx.openSetup ? () => ctx.openSetup('printer') : ctx.soon('The printer picker', 'the setup sheet') }, [icon('printer'), el('span', { text: printerName(ctx.store?.state) })]),
+    el('button.chip.chip-btn.printer', { title: 'Printer · optional; only greys out sizes that will not fit', onclick: ctx.openSetup ? () => ctx.openSetup('printer') : ctx.soon('The printer picker', 'the setup sheet') }, [icon('printer-3d'), el('span', { text: printerName(ctx.store?.state) })]),
     themeToggle(),
     el('button.chip.chip-btn.share', { onclick: share, title: 'Share' }, [icon('share-network'), el('span', { text: 'Share' })]),
   );

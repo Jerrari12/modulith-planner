@@ -120,8 +120,15 @@ export function wornLabelOf(build, unit, words) {
 export function labelLookOf(build, unit, words) {
   const worn = wornLabelOf(build, unit, words);
   if (!worn) return null;
-  const l = worn.label;
-  const item = worn.exact && isObj(l.hardware) ? cleanPartItem(l.hardware) : null;
+  return lookOf(worn.label, worn.exact);
+}
+/* The look a list label WOULD draw on a drawer that wears it as its own (exact): the panel previews a label still waiting to
+   be placed with it, so a preview follows the same part-or-words rule as the 3D label (js/label-preview.js, 2026-10-17). */
+export function labelLookOfLabel(l) {
+  return isObj(l) ? lookOf(l, true) : null;
+}
+function lookOf(l, exact) {
+  const item = exact && isObj(l.hardware) ? cleanPartItem(l.hardware) : null;
   if (item) {
     const own = Object.prototype.hasOwnProperty.call(l, 'colours') ? cleanStripe(l.colours, true) : undefined;
     if (own === null) delete item.colours; else if (own) item.colours = own;
