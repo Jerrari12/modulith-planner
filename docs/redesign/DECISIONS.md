@@ -607,3 +607,55 @@ Dated calls made while building, with who made them. The brief and the inventory
   - a crafted `#scheme=` link loses its `javascript:` link and its `__proto__` key, and the page has no `javascript:`
     href;
   - no page errors.
+
+## 2026-10-18 (Colors, step 2 of the redesign plan: the look-card gate passes)
+
+- **What it was:** a measurement the plan's review asked for before step 3's gallery is built on it. Can each card show
+  the visitor's own build in a look, offscreen, without compiling shaders per look and fast enough for a gallery?
+  Joey's "Continue" took the plan on from step 1. The pass marks were written before anything was measured, in
+  `D:\Claude - Output\colors-presets-2026-10-17\STEP2-GATE.md`, which holds the full results.
+- **The probe:** `stage.lookCard(look, opts)`, debug-only, with no control calling it.
+  - It snapshots the finished build into its own scene once per manifest (2 to 3 ms), with the stage's light rig and
+    environment.
+  - Each look gets clones of the live materials (`cloneMaterial`, the same programs), resolved like `materialFor`.
+  - It renders into its own target, with no `invalidateFrame`.
+  - Its clones die with the base materials: `purgeLookCards` sits beside both material purges and in
+    `dropStaleAxisMaterials`.
+- **The result, at 384×288 on the root kit, dark stage:** it passes all four marks with one choice of target.
+  - 0 new shader programs across looks.
+  - About 6 ms per card on the laptop, and 13 to 16 ms with the CPU throttled 4×. That is a card's own time. Whether the
+    live frame plus a card fits a frame is step 3's first check.
+  - Against the real canvas, a median difference of 0 (p95 12 on Fast, 17 on Very High), on the build's interior. One
+    card per tier.
+- **The finding that decides step 3's render target:**
+  - An ordinary render target skips three.js's tone mapping: 28 of 255 off on Very High.
+  - A target flagged `isXRRenderTarget` with sRGB storage encodes twice: 73 off. three.js stores a render target's sRGB
+    colour texture as SRGB8_ALPHA8 even on an XR target (`setupFrameBufferTexture`), so the hardware encodes after the
+    shader has.
+  - XR-flagged with RGBA8 storage matches the screen. Even its first card added no shader program, which fits reusing
+    the screen's programs (same tone mapping and output colour space).
+  - The flag is internal to three.js. The e2e case "Colors step 2: a look card ..." pins the match, with an ordinary
+    target as the control. It was mutation-checked: with RGBA8 storage off, it fails.
+- **What a card still lacks:** Very High's ambient occlusion and settle accumulation, and shadows on the light stage.
+  Translucent filaments show as solid tints. Step 3 also needs a scene revision counter, because labels and style
+  swaps change the build without a new manifest.
+- **The method moved once, after the first results.**
+  - The first fidelity check compared each card with the live scene drawn into the same kind of target. Every
+    variant scored 0, so it could not see an encoding error.
+  - M4 was re-measured against the canvas itself, and the RGBA8 variant added; the marks did not change.
+  - The canvas comparison sizes the drawing buffer without touching the pixel ratio, which the relief's band limit
+    depends on (the layer-detail-seam guard).
+- **Review:** Sol 01a14f22. All 8 points held, and all are fixed:
+  - **in the code:**
+    - an unnamed filament pick no longer lightens alternate tiles;
+    - cards run one at a time;
+    - the live renderer is restored in a `finally`;
+    - label and handle changes re-snapshot;
+  - **in the report:** card latency is not frame pacing; one image does not prove the resolver; the discarded rerun
+    and when the filters were fixed are now recorded; the scope is stated.
+- **Tests on the final code:** npm test, 520 tests (515 passed, 0 failed, 5 skipped); e2e, 40 of 40, the gate case
+  included. The gate itself was rerun on the final code (`gate4`), and every fidelity figure reproduced.
+- **Recorded in the vault:** measurements.md, "Offscreen renders and the screen" (4e2c8bc; Sol 01a14f29). It includes
+  the unmeasured consequence that the Build workspace's product previews (`renderThumb`) get no tone mapping on the
+  tone-mapped tiers.
+- **Not deployed.** The branch is `colors-step2-gate`; a debug hook has no reason to ship before step 3 uses it.

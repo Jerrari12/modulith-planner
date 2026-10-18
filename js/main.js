@@ -3466,6 +3466,7 @@ function buildAxisForKey(key) {
    the FAMILY decides which way the plate prints at all, and therefore which way its layers run. */
 function dropFaceplateMaterials(types = ['Faceplate']) {
   purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
+  purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   const drop = new Set(types);   // the see-into rebuild also names 'Accent', a part of its own that a pick can make translucent
   for (const k of Object.keys(materials)) if (drop.has(k.split(':')[0])) delete materials[k];
   for (const k of Object.keys(highlightMats)) if (drop.has(k.split(':')[0])) delete highlightMats[k];
@@ -3549,6 +3550,7 @@ function syncRelief() {
    mesh from the rebuilt registries. */
 function purgePartMaterials() {
   purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
+  purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   for (const map of [materials, highlightMats, altMaterials, altHighlightMats,
     plannedMats, plannedHighlightMats]) {
     for (const k of Object.keys(map)) delete map[k];
@@ -3588,6 +3590,7 @@ function dropStaleAxisMaterials(onlyTypes = null) {
     for (const k of Object.keys(map)) if (stale.has(typeOf(k))) delete map[k];
   }
   for (const k of [...layerHandles.keys()]) if (stale.has(typeOf(k))) layerHandles.delete(k);
+  purgeLookCards();   // look-card clones of the dropped materials keep the old axis (the per-unit clones' gap, closed here for these)
   return [...stale];
 }
 /* The axis a part material was built with, as text (null and an array compare as strings), for
@@ -4116,6 +4119,7 @@ function refreshLabelText(inst, draft) {
    stays on screen: its label is refreshed WITH the draft, the others from `build`. */
 function refreshLabelTexts() {
   if (IS_PART || !build) return;
+  lookOf = null;   // the label meshes change in place, with no new manifest: the look cards re-snapshot
   for (const inst of instances.values()) {
     if (!LABEL_TEXT_NODES.has(inst.cfg.node)) continue;
     refreshLabelText(inst, labelEdit && labelEdit.inst === inst ? labelEdit.draft : undefined);
@@ -5898,6 +5902,10 @@ function overrideFor(uid, key) {
 }
 const overrideMats = {};
 function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } }
+// the look cards' state (lookCard, the Colors plan's step 2), here because the purges above can run before lookCard is defined
+let lookScene = null, lookCam = null, lookRT = null, lookItems = null, lookOf = null, lookBox = null, lookCmpRT = null, lookRig = null;
+let lookQueue = Promise.resolve();   // lookCard runs one card at a time
+const lookMats = new Map();   // key|hex|label|alt -> a clone of the live material in the look's colour and finish
 function overrideMatFor(key, ov, zone, alt) {
   const type = key.split(':')[0];
   const base = (alt && !zone) ? altMatFor(type) : baseMatFor(type, zone);
@@ -7331,6 +7339,7 @@ function faceplateHeightOf(node) {
 let activeHandleStyle = null; // the specific HANDLE_STYLES entry in use (BlockBar_D etc.), re-applied after a regenerate so a variant survives
 async function applyHandleStyle(style) {
   ao.rev++;   // static kits swap meshes/visibility in place - no mountManifest to bump it
+  lookOf = null;   // and so the look cards re-snapshot
   const prevActive = activeHandleStyle, prevPlanner = build && build.handleStyle;
   activeHandleStyle = style;
   if (build) build.handleStyle = style.planner; // keep the build in sync (regenerate/BOM/reset read this)
@@ -8503,6 +8512,140 @@ async function renderThumb(opts = {}) {
   job.catch(() => thumbCache.delete(key));
   return job;
 }
+/* ---- LOOK CARDS: the whole build wearing a look, offscreen (the Colors plan's step 2, 2026-10-18; debug-only) ---------
+   The gallery (step 3) wants every card to show THIS build in a look, and the plan's review asked for that to be MEASURED
+   before anything is built on it (D:\Claude - Output\colors-presets-2026-10-17\STEP2-GATE.md). So this is a probe:
+   - a snapshot of the finished build (the instances visible after the last step, at rest, styleHidden ones left out) is
+     cloned once per manifest into its own scene, with the stage's light rig as it stands and its environment;
+   - each look swaps materials on the clones: clones of the live materials (cloneMaterial: the same program), never
+     newPartMaterial, which registers live handles by key; resolved the way materialFor and activeHex paint;
+   - it renders into its own target, flagged as an XR one and stored as RGBA8: the only way three.js r185 tone-maps a
+     render target and writes its texture's colour space, so a card takes the screen's program parameters and matches it
+     (measured, STEP2-GATE.md: an ordinary target missed the tone mapping, median 28 of 255 off on Very High; the XR flag
+     with sRGB storage encoded twice, because setupFrameBufferTexture still stores an sRGB colour texture as SRGB8_ALPHA8,
+     median 73 off; XR with RGBA8 storage, median 0). `isXRRenderTarget` is internal to three.js, so the gate's e2e case
+     pins the match and an upgrade that breaks it fails there;
+   - no invalidateFrame: the main view's accumulation and the idle gate are not woken per card.
+   The clones die with the base materials (purgeLookCards beside purgeOverrideMats and dropStaleAxisMaterials). */
+function purgeLookCards() {   // (its state is declared beside overrideMats: the purges can run before this line has)
+  for (const m of lookMats.values()) m.dispose();
+  lookMats.clear();
+  lookItems = null; lookOf = null;   // the next card re-snapshots (its clones still point at the dead materials)
+}
+function lookSnapshot() {
+  if (lookItems && lookOf === manifest) return;
+  lookScene = new THREE.Scene();
+  lookRig = { hemi: hemi.clone(), sun: sun.clone(), fill: fill.clone() };   // positions and colours; the strengths follow the tier (lookCard)
+  lookRig.sun.castShadow = false; lookRig.fill.castShadow = false;
+  lookScene.add(lookRig.hemi, lookRig.sun, lookRig.fill);
+  lookCam = lookCam || new THREE.PerspectiveCamera(40, 4 / 3, 1, 20000);
+  lookItems = []; lookBox = new THREE.Box3();
+  const last = afterState[afterState.length - 1];
+  for (const inst of instances.values()) {
+    if (!last || !last.visible.has(inst.cfg.id) || inst.styleHidden) continue;
+    const g = inst.group.clone(true);   // geometry shared, label text included
+    g.position.copy(basePos(inst, false)); g.visible = true;
+    if (g.children[0]) { g.children[0].position.set(0, 0, 0); g.children[0].rotation.set(0, 0, 0); }   // no lift, no open drawer
+    lookScene.add(g);
+    const t = typeByNode[inst.cfg.node], uid = inst.cfg.planned ? null : unitOf(inst);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; lookItems.push({ mesh: o, type: t, zone: o.userData.zone || '', uid, alt: !!inst.alt }); } });
+    g.updateWorldMatrix(true, true); lookBox.expandByObject(g);
+  }
+  lookOf = manifest;
+}
+function lookMaterialFor(look, it) {
+  const key = zoneKey(it.type, it.zone);
+  if (colorLocked(key) || stripeHexOfKey(key)) return (it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone);
+  const colors = look.colors || {}, over = look.over || {};
+  const o = it.uid != null ? over[it.uid] : null;
+  const f = (o ? (o[key] || (it.zone && !colors[key] && o[it.type]) || null) : null)
+    || colors[key] || (it.zone && !manifest.colors[key] ? colors[it.type] : null) || null;
+  const picked = !!(f && f.hex);   // a filament pick, named or not (altLerp's test is the pick, not its name)
+  const hex = picked ? f.hex : identificationHex(key), label = picked ? (f.name || null) : null;
+  const alt = !picked && it.alt && !it.zone;   // the identification palette lightens alternate tiles; a filament never does
+  const k = key + '|' + hex + '|' + (label || '') + (picked ? '' : '|id') + (alt ? '|alt' : '');
+  let m = lookMats.get(k);
+  if (!m) {
+    m = cloneMaterial((it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone));
+    m.color.set(hex);
+    if (alt) m.color.lerp(new THREE.Color('#ffffff'), ALT_LIGHTEN);
+    const spec = partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label });
+    m.roughness = spec.roughness; m.metalness = spec.metalness;
+    lookMats.set(k, m);
+  }
+  return m;
+}
+/* one card: { width, height, pixels (RGBA, GL rows bottom-up), ms: { draw, read }, programs }. `compare` also renders the
+   live scene from the same camera for the gate's fidelity check: true into a second target of the same kind, 'canvas' into
+   the canvas itself at the card's size (the screen's own path: tone mapping and output encoding; a test-only frame,
+   redrawn at once). `xr` and `linear` default to the measured winner; the gate turns them off to show why.
+   Calls run one at a time: a card awaits its readback, and the targets and the snapshot are shared. */
+function lookCard(look, opts = {}) {
+  const run = lookQueue.then(() => lookCardNow(look, opts));
+  lookQueue = run.catch(() => {});
+  return run;
+}
+async function lookCardNow(look, opts) {
+  const { width = 384, height = 288, xr = true, linear = true, samples = 0, compare = false } = opts;
+  if (!manifest || !instances.size) return null;
+  const ts = performance.now();
+  lookSnapshot();   // once per manifest: its cost is ms.snap (0 when the snapshot stands)
+  const t0 = performance.now();
+  // the tier's light strengths, fill boost and environment, as the live scene has them now
+  lookRig.hemi.intensity = hemi.intensity; lookRig.sun.intensity = sun.intensity; lookRig.fill.intensity = fill.intensity;
+  lookScene.environment = scene.environment;
+  for (const it of lookItems) it.mesh.material = lookMaterialFor(look || {}, it);
+  // a fixed three-quarter view of the snapshot's bounds, independent of the live camera and the safe area
+  lookCam.aspect = width / height; lookCam.fov = 40; lookCam.updateProjectionMatrix();
+  const c = lookBox.getCenter(new THREE.Vector3()), r = lookBox.getSize(new THREE.Vector3()).length() / 2;
+  const vF = THREE.MathUtils.degToRad(lookCam.fov), hF = 2 * Math.atan(Math.tan(vF / 2) * lookCam.aspect);
+  const dist = r / Math.sin(Math.min(vF, hF) / 2) * 1.02, th = THREE.MathUtils.degToRad(35), ph = THREE.MathUtils.degToRad(66);
+  lookCam.position.set(c.x + dist * Math.sin(ph) * Math.sin(th), c.y + dist * Math.cos(ph), c.z + dist * Math.sin(ph) * Math.cos(th));
+  lookCam.lookAt(c); lookCam.updateMatrixWorld(true);
+  const target = (rt) => {
+    if (rt && rt.width === width && rt.height === height && rt.samples === samples && !!rt.isXRRenderTarget === xr && !!rt.lookLinear === linear) return rt;
+    if (rt) rt.dispose();
+    const n = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, samples });
+    n.texture.colorSpace = THREE.SRGBColorSpace;
+    if (xr) n.isXRRenderTarget = true;
+    if (linear) { n.texture.internalFormat = 'RGBA8'; n.lookLinear = true; }   // (a render target has no userData)
+    return n;
+  };
+  lookRT = target(lookRT);
+  const items = lookItems.length, cardRT = lookRT;   // read before any await: a purge may clear the snapshot meanwhile
+  const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  const prevSize = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
+  let cmp = null, cmpRT = null, resized = false;
+  try {   // the live renderer is put back whatever happens below
+    renderer.setRenderTarget(lookRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+    renderer.render(lookScene, lookCam);
+    if (compare === true) {   // the live scene from the same camera, into a target of the same kind
+      cmpRT = lookCmpRT = target(lookCmpRT);
+      renderer.setRenderTarget(lookCmpRT); renderer.clear();
+      renderer.render(scene, lookCam);
+    }
+    if (compare === 'canvas') {   // the screen's own path, at the card's size, read back before anything else draws
+      // the drawing buffer at the card's size WITHOUT touching the pixel ratio: the relief's band limit is stated per
+      // device pixel (setLayerDetailPixelRatio), so a changed ratio would draw this frame with a stale one
+      renderer.setClearColor(prevClear, prevAlpha);
+      renderer.setSize(width / pr, height / pr, false); resized = true;
+      renderer.setRenderTarget(null); renderer.clear();
+      renderer.render(scene, lookCam);
+      const gl = renderer.getContext();
+      cmp = new Uint8Array(width * height * 4);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, cmp);
+    }
+  } finally {
+    if (resized) { renderer.setSize(prevSize.x, prevSize.y, false); invalidateFrame(); }   // the canvas held a test frame: redraw (the gate's path, never the gallery's)
+    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
+  }
+  const t1 = performance.now();
+  const pixels = new Uint8Array(width * height * 4);
+  await renderer.readRenderTargetPixelsAsync(cardRT, 0, 0, width, height, pixels);
+  if (cmpRT) { cmp = new Uint8Array(width * height * 4); await renderer.readRenderTargetPixelsAsync(cmpRT, 0, 0, width, height, cmp); }
+  const t2 = performance.now();
+  return { width, height, pixels, cmp, ms: { snap: t0 - ts, draw: t1 - t0, read: t2 - t1 }, programs: (renderer.info.programs || []).length, items, materials: lookMats.size };
+}
 /* ---- the palette API for the Colors workspace (phase 4) ---------------------------------------------------
    The palette stays the viewer's own (customColors keyed by part type or Type:zone, useCustom, userPalette); the
    workspace reads and writes it through these, so the model, the product previews (keyed on paletteSig) and
@@ -8583,6 +8726,14 @@ function keysInBuild() {
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
 }
+/* the colour a region with no filament pick shows: activeHex's chain past the custom pick (the dark stage's case, then the
+   manifest, then a zone's body). The filament count and the look cards read it. */
+function identificationHex(key) {
+  if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key];
+  if (manifest.colors[key]) return manifest.colors[key];
+  const base = key.split(':')[0];
+  return base !== key ? identificationHex(base) : '#b9bcc2';
+}
 /* THE FILAMENT COUNT (the Colors plan's decision D2, Joey 2026-10-18): every colour this build is printed in, under a look
    ({ colors, over }) or, with none, the chosen palette, read part by part the way materialFor and activeHex paint them.
    - Bought hardware never counts.
@@ -8596,8 +8747,7 @@ function filamentsInBuild(look = null) {
   const on = look ? true : useCustom;
   const colors = (look ? look.colors : customColors) || {};
   const over = (look ? look.over : overrides) || {};
-  // the colour a region with no pick shows: activeHex's chain past the custom pick (the dark stage's case, then the manifest)
-  const idHex = key => { if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key]; if (manifest.colors[key]) return manifest.colors[key]; const base = key.split(':')[0]; return base !== key ? idHex(base) : '#b9bcc2'; };
+  const idHex = identificationHex;
   const fil = new Map(), loose = new Map();
   const wear = (f, key) => { const id = f.name || f.hex; let r = fil.get(id); if (!r) fil.set(id, r = { name: f.name || f.hex, hex: f.hex, url: f.url, keys: [] }); if (!r.keys.includes(key)) r.keys.push(key); };
   const bare = (key, hex, stripe = false) => { const id = stripe ? 'stripe:' + hex : key; if (!loose.has(id)) loose.set(id, { key, hex, stripe }); };
@@ -10444,6 +10594,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     // REASSIGNED (presets, uploads, relays) - returning the object once would hand out a stale one.
     // Debug-only, like everything else here.
     applyPalette, activeLabel, activeHex, get customColors() { return customColors; },
+    // the whole build wearing a look, offscreen: the Colors plan's step-2 probe (STEP2-GATE.md); no control calls it
+    lookCard,
     /* ⚠ `useCustom` IS THE GATE, and without it `customColors` is inert. A test
        that assigned customColors and called applyPalette repainted NOTHING and
        produced eighteen identical arms that looked like a working matrix. */

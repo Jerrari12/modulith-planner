@@ -1574,3 +1574,35 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* The Colors plan's step 2 (2026-10-18, STEP2-GATE.md): a look card renders THIS build wearing a look, offscreen. It must
+   compile no shader program per look (a gallery has dozens), and it must look like the screen. On a tone-mapped tier that
+   takes the XR-flagged, RGBA8-stored target: an ordinary render target misses the tone mapping, and the XR flag with sRGB
+   storage encodes twice. `isXRRenderTarget` is internal to three.js, so this case is what an upgrade would trip. */
+test('Colors step 2: a look card of this build compiles no shader program after the first, and matches the screen on a tone-mapped tier', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const { ctx, page, errors } = await open('colors', { context });
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 1500);
+  const r = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__;
+    const diff = (c) => { const d = []; for (let i = 0; i < c.pixels.length; i += 4) { if (c.pixels[i + 3] < 250) continue; d.push(Math.max(Math.abs(c.pixels[i] - c.cmp[i]), Math.abs(c.pixels[i + 1] - c.cmp[i + 1]), Math.abs(c.pixels[i + 2] - c.cmp[i + 2]))); } d.sort((a, b) => a - b); return { pixels: d.length, median: d[Math.floor(d.length / 2)], p95: d[Math.floor(d.length * 0.95)] }; };
+    const looks = v.PRESETS.map((p) => ({ colors: p.colors, over: {} }));
+    await v.lookCard(looks[0]);
+    const afterFirst = v.probe().programs;
+    for (const l of looks) await v.lookCard(l);
+    const afterAll = v.probe().programs;
+    const pal = v.palette(), chosen = { colors: pal.colors, over: pal.over };
+    const card = diff(await v.lookCard(chosen, { compare: 'canvas' }));
+    const plain = diff(await v.lookCard(chosen, { xr: false, linear: false, compare: 'canvas' }));   // the control: an ordinary target
+    return { tier: v.quality, afterFirst, afterAll, card, plain };
+  });
+  assert.equal(r.tier, 'balanced', 'the case runs on a tone-mapped tier');
+  assert.equal(r.afterAll, r.afterFirst, 'four more looks compile no shader program');
+  assert.ok(r.card.pixels > 1000, `the card shows the build (${r.card.pixels} pixels)`);
+  assert.ok(r.card.median <= 6 && r.card.p95 <= 32, `the card matches the screen: median ${r.card.median}, p95 ${r.card.p95}`);
+  assert.ok(r.plain.median > 12, `the control: an ordinary render target misses the tone mapping (median ${r.plain.median})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
