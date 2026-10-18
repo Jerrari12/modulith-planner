@@ -92,8 +92,8 @@ test('the extraction actually found the catalog and the presets', () => {
   assert.ok(FILAMENT_DB.reduce((a, b) => a + b.colors.length, 0) > 50, 'too few catalog colours - check the extraction');
   /* the four of 2026-08 plus the palette study's seven (the Colors plan §2, landed with the gallery in step 3, 2026-10-18).
      Tool-chest red is not among them: the plan admits it only once it is scored as a full palette */
-  assert.equal(PRESETS.length, 11, 'expected eleven presets');
-  assert.deepEqual(PRESETS.slice(4).map((p) => p.name), ['Racing silver & teal', 'Grey & sunlight yellow', 'Safety yellow & black', 'Printer black & red', 'Tri-stripe racing white', 'Black & gold', 'Flight-team navy & gold']);
+  assert.equal(PRESETS.length, 12, 'expected twelve presets');
+  assert.deepEqual(PRESETS.slice(4).map((p) => p.name), ['Racing silver & teal', 'Grey & sunlight yellow', 'Safety yellow & black', 'Printer black & red', 'Tri-stripe racing white', 'Black & gold', 'Flight-team navy & gold', 'Neon yellow & black']);   // the last: Joey's 3D Printopia build, 2026-10-18
   assert.ok(COLORS && Object.keys(COLORS).length > 10, 'COLORS did not extract');
   assert.ok(TYPES.includes('ShelfInsert') && TYPES.includes('CaseExtender') && TYPES.includes('SideCover'),
     'the type list is missing the newest parts - the extraction is stale');
