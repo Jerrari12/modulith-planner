@@ -261,6 +261,12 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .prow.done { opacity: .55; }
 #ws-parts .chip { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.35); }
 #ws-parts .chip.buy { background: transparent; border: 1.5px dashed var(--ink-3); }
+/* with the visitor's colours on, the chip is the filament the part prints in (several side by side when its zones or its
+   units wear more than one) and the ring is its identification colour, the one the Assemble instructions use */
+#ws-parts .chip.fil { outline: 2px solid var(--id); outline-offset: 1px; }
+#ws-parts .chip.multi { display: inline-flex; gap: 1px; width: auto; padding: 0; background: transparent; border: none; }
+#ws-parts .chip.multi i { display: block; width: 8px; height: 14px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
+#ws-parts .printin a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
 #ws-parts .qty { font-size: 12px; font-weight: 600; width: 34px; flex: none; }
 #ws-parts .mid { flex: 1; min-width: 0; }
 #ws-parts .name { font-size: 13px; font-weight: 600; }

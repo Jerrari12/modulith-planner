@@ -819,3 +819,37 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Live:** run 39133529005 green. Checked in production with saved choices of both hidden stores: the Parts list
   shows Printables and Thangs with Printables on, and so does the viewer's picker; no link to either store anywhere;
   no page errors.
+
+## 2026-10-18 (the Parts list names the filament each part prints in)
+
+- **Joey (2026-10-18), on the Parts tab after choosing colours:** "the parts have the instructions colors assigned to
+  them, which is kind of confusing after assigning chosen colors to it".
+- **The call:** with the visitor's colours on (`stage.palette().on`), a Parts row's chip is the filament the part prints
+  in, and the identification colour, the one the Assemble instructions use to tell parts apart, stays only as a thin ring
+  around it. With the colours off nothing changes: the chip is the identification colour, as before.
+- **Changed (branch `parts-print-colours`, not deployed):**
+  - `js/workspaces/parts.js`: a row's type comes from its BOM name (`typeOf`, ordered like `chipFor`; bought hardware and
+    anything the stage does not model answer null and keep the identification chip). One read per render of the Colors
+    tab's source, `stage.keysInBuild()` for a type's regions and `stage.filamentsInBuild()` for what each wears
+    (`paletteSnapshot`): a part with zones, or units with their own picks, shows the distinct colours side by side
+    (at most four), body first. Under the name: "Print in Black · face Mystery Orange", every filament name the buy link
+    the Colors tab uses (paid links marked as there); a zone that follows its body is not repeated; a region with no pick
+    reads "no pick yet", a row with none "No filament picked yet". The caption reads "Chip = the filament it prints in ·
+    ring = its colour in Assemble · dashed = buy" while the colours are on. Copy as text gains a "Print in:" line per
+    row and the CSV a "Print in" column (empty with the colours off); Print prints the list as shown. The list subscribes
+    to the store so an Undo of a colour change re-renders it.
+  - `js/workspaces/colors.js` exports `ZONE_LABEL`, `isPaid` and `short`, so both tabs word a zone, a filament and a paid
+    link the same way.
+  - `css/app.css`: `.chip.fil` (the ring), `.chip.multi` (the swatch strip), the dotted link in the line.
+- **Checks:**
+  - `test/parts-print-colours.test.mjs`: every BOM row name across the mounts, feet and faceplate styles maps to a stage
+    type (bought hardware to none); the snapshot, the words and the swatches on a fake stage;
+  - a new e2e case: Stealth applied through the Colors gallery, then Parts: the case row's chip is the case filament's
+    colour with the ring, the line names it with a buy link, the caption, the CSV column; `setUseCustom(false)` puts the
+    identification chip and the old caption back. Mutation-checked: a chip that ignores the palette fails it on the
+    chip's colour;
+  - npm test 525 (520 passed, 0 failed, 5 skipped); the Parts and Colors e2e cases 15 of 15;
+  - review: Terra 01a15119, 1 returned, 0 held (its "adopt commits are cross-tab changes the list misses" is wrong: an
+    adopt is a same-tab load of the stage record by a workspace's own handler, which re-renders itself; the Build, Colors
+    and Labels tabs skip it the same way).
+- **Not done:** the deploy and the merge are Joey's; the inspector's "This unit · parts" list still shows no colours.
