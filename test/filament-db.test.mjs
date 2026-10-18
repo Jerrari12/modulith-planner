@@ -65,7 +65,7 @@ test('every colour carries the four fields a consumer may rely on', () => {
       if ('pickNote' in c) assert.ok(c.pick === true, `${where}: pickNote without pick`);
     }
   }
-  assert.equal(n, 111, 'one hundred and eleven colours');
+  assert.equal(n, 112, 'one hundred and twelve colours (Jessie Neon Yellow joined 2026-10-18)');
 });
 
 test('⚔ every label is unique across every brand', () => {
@@ -78,7 +78,7 @@ test('⚔ every label is unique across every brand', () => {
     }
   }
   assert.deepEqual(clashes, [], 'labels collide, and customColors keys on them');
-  assert.equal(seen.size, 111, 'every colour contributed a distinct label');
+  assert.equal(seen.size, 112, 'every colour contributed a distinct label');
 });
 
 test('⚔ each brand builds its labels the way its block says it does', () => {

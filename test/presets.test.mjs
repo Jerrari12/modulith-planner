@@ -151,6 +151,17 @@ test('the faceplate GRIP wears the FACE colour in every preset (the grip accent 
       `${p.name}: the grip is ${p.colors['Faceplate:GRIP'].name} but the face is ${p.colors['Faceplate:FACE'].name}`);
 });
 
+test('the ACCENT differs from the faceplate FACE in every preset', () => {
+  /* Joey 2026-10-18, on his phone with EdgeLabel faceplates: "I shouldn't have the accent color the same as the face for
+     those". The EdgeLabel family's accent part sits on the face and vanishes into one of the same colour. The four presets
+     of 2026-08 never matched them (The Jerrari's accent is its own spool, Burnt Titanium, by design); four of the study's
+     seven did (Grey & sunlight yellow, Safety yellow & black, Printer black & red, Flight-team navy & gold) and now take
+     another colour the look already prints. */
+  for (const p of PRESETS)
+    assert.notEqual(p.colors.Accent.name, p.colors['Faceplate:FACE'].name,
+      `${p.name}: the accent and the face are both ${p.colors.Accent.name}`);
+});
+
 test('The Jerrari keeps the shelf colours Joey specified', () => {
   const j = PRESETS.find((p) => p.name === 'The Jerrari');
   assert.ok(j, 'The Jerrari preset is gone');

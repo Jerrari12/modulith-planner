@@ -6856,7 +6856,11 @@ const PRESETS = [
      admits it only once it is scored as a full palette, and that scoring has not been run.
      THE GRIP WEARS THE FACE COLOUR (Joey 2026-10-18, on the gallery's first cards: "i'm not a fan of the grip being a
      different color from the face"): the four presets above already did; the drafts' split grips were folded into the
-     face colour here, and test/presets.test.mjs pins the rule. The GRIP ACCENT (the Classic Pro rod) may still differ. */
+     face colour here, and test/presets.test.mjs pins the rule. The GRIP ACCENT (the Classic Pro rod) may still differ.
+     THE ACCENT DIFFERS FROM THE FACE (Joey 2026-10-18, on his phone with EdgeLabel faceplates: "I shouldn't have the
+     accent color the same as the face for those"): the EdgeLabel family's accent part vanishes into a face of the same
+     colour. The four presets above never matched them; four of the seven below did and take another colour the look
+     already prints. Pinned by the presets test. */
   // Racing silver & teal: silver bodywork, black carbon, teal flashes
   { name: 'Racing silver & teal', swatches: ['#CDD2D9', '#1C1D20', '#00A5A5'], colors: {
     Case: _db('Panchroma Silk Silver'), Drawer: _db('Elegoo PLA Black'),
@@ -6886,7 +6890,7 @@ const PRESETS = [
     SideCover: _db('Panchroma Grey'), 'SideCover:FACE': _db('Panchroma Lemon Yellow'),
     Faceplate: _db('Panchroma Grey'), 'Faceplate:FACE': _db('Panchroma Lemon Yellow'),
     'Faceplate:GRIP': _db('Panchroma Lemon Yellow'), 'Faceplate:GRIP ACCENT': _db('Panchroma Black'),
-    Accent: _db('Panchroma Lemon Yellow'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
+    Accent: _db('Panchroma Black'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
     BackCover: _db('Panchroma Grey'),
     Handle: _db('Panchroma Black'),
     QuickLock: _db('Panchroma Lemon Yellow'), MagnetClip: _db('Panchroma Lemon Yellow'),
@@ -6904,7 +6908,7 @@ const PRESETS = [
     SideCover: _db('Polymaker PETG Yellow'), 'SideCover:FACE': _db('Elegoo PLA Black'),
     Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
     'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Polymaker PETG Yellow'),
-    Accent: _db('Elegoo PLA Black'), Label: _db('Polymaker PETG Yellow'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    Accent: _db('Polymaker PETG Yellow'), Label: _db('Polymaker PETG Yellow'), 'Label:TEXT': _db('Elegoo PLA Black'),
     BackCover: _db('Polymaker PETG Yellow'),
     Handle: _db('Elegoo PLA Black'),
     QuickLock: _db('Elegoo PLA Black'), MagnetClip: _db('Elegoo PLA Black'),
@@ -6922,7 +6926,7 @@ const PRESETS = [
     SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Printed Solid PS Red'),
     Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Printed Solid PS Red'),
     'Faceplate:GRIP': _db('Printed Solid PS Red'), 'Faceplate:GRIP ACCENT': _db('Elegoo PLA Black'),
-    Accent: _db('Printed Solid PS Red'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    Accent: _db('Elegoo PLA Black'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Elegoo PLA Black'),
     BackCover: _db('Elegoo PLA Black'),
     Handle: _db('Elegoo PLA Black'),
     QuickLock: _db('Printed Solid PS Red'), MagnetClip: _db('Printed Solid PS Red'),
@@ -6976,7 +6980,7 @@ const PRESETS = [
     SideCover: _db('Polymaker PETG Dark Blue'), 'SideCover:FACE': _db('Printed Solid Yellow Bird'),
     Faceplate: _db('Polymaker PETG Dark Blue'), 'Faceplate:FACE': _db('Printed Solid Yellow Bird'),
     'Faceplate:GRIP': _db('Printed Solid Yellow Bird'), 'Faceplate:GRIP ACCENT': _db('Panchroma Cold White'),
-    Accent: _db('Printed Solid Yellow Bird'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Polymaker PETG Dark Blue'),
+    Accent: _db('Polymaker PETG Dark Blue'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Polymaker PETG Dark Blue'),   // navy on the yellow face: white faded into it (Terra 01a15087)
     BackCover: _db('Polymaker PETG Dark Blue'),
     Handle: _db('Polymaker PETG Dark Blue'),
     QuickLock: _db('Printed Solid Yellow Bird'), MagnetClip: _db('Printed Solid Yellow Bird'),
