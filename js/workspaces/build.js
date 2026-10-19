@@ -98,9 +98,17 @@ export function mountBuild(stage, ctx) {
   { const g = tryGen(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }
   /* every settled change: regenerate the scene when the manifest changed; an unshowable layout keeps the last good
      scene and lands its reasons in the issue card (the board always shows the true state) */
+  /* A record of another mount or length is not this stage's to show: the parts pool and the mount scene are fixed when
+     the page boots (main.js PARTS_BASE, isWallBuild), and the setup sheet reloads the page on exactly these two changes.
+     Its commit still reaches this subscriber in the 200 ms before the reload, and until 2026-10-19 the stage was asked to
+     rebuild on it - the old pool answered 404 for every part of the new length, the rebuild threw, and skipToEnd stepped
+     onto the half-mounted manifest (seen on a throttled software-rendered e2e run). The reload is the answer, so the sync
+     waits for it: no update, no issue, lastSig untouched. */
+  const otherScene = (rec) => !!stage.build && (rec.mount !== stage.build.mount || +rec.length !== +stage.build.length);
   function syncStage() {
     queue = queue.then(async () => {
       const rec = store.serialize();
+      if (otherScene(rec)) { st.stageErrors = null; renderAll(); return; }   // an earlier layout's reasons are not this record's (Terra 01a1557b)
       const gen = tryGen(rec);
       if (!gen.manifest) { st.stageErrors = gen.errors || ['This layout can’t be shown.']; renderAll(); return; }
       st.stageErrors = null;

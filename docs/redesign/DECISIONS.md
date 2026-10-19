@@ -1212,3 +1212,34 @@ Dated calls made while building, with who made them. The brief and the inventory
   proposed as a follow-up. Run 39289885703 then failed attempt 1 on the idle-gate case ("an edit is drawn at once": 3
   frames in 1.5 s on a runner during GitHub's degraded-Actions incident of the afternoon) and passed on attempt 2; live
   stamp `402cf6fe`, the three changed modules served. Not checked by hand in production.
+
+## 2026-10-19 (Build and Labels no longer push a record of another mount or length into the stage before the setup reload)
+
+- **The glitch.** The stage's parts pool (`PARTS_BASE`, from the first manifest's collection) and its mount scene (the
+  module-level `isWallBuild` / `isUnderTableBuild`: table, grid, wall, backdrop, polar limits) are fixed when the page
+  boots, which is why the setup sheet reloads the page on a mount or length change. Its apply() commits the new record
+  first and reloads 200 ms later, and the store notifies synchronously, so Build's `syncStage` (and Labels') generated a
+  manifest for the new record and asked the stage to rebuild on it: the old pool answered 404 for every part of the new
+  length (`parts/185/UnderTableRail_270-2W.lib.glb` and eight more), `mountManifest` threw, the "can't be shown" veil
+  showed, and `skipToEnd` did a goTo on the half-mounted manifest (TypeError reading 'title'). On a fast GPU the reload
+  usually won the race; a throttled software-rendered run (`E2E_SOFT=1 E2E_THROTTLE=4`, the deploy runner's conditions)
+  showed it every time, on the Wall-115 setup case and the under-table-270 bed-limit case alike. Found while the
+  bed-limit case was hardened for its deploy (above); Joey: "Do this task here".
+- **Changed (branch `setup-reload-sync`):**
+  - `js/workspaces/build.js` and `js/workspaces/labels.js`: `otherScene(rec)` - the record's mount or length differs from
+    `stage.build`'s - makes `syncStage` wait for the reload: no manifest, no `stage.update`, `lastSig` untouched; Build
+    clears a stale issue from an earlier layout and re-renders the board (Terra's finding), Labels also skips its
+    `setLabels` branch (those meshes belong to the old scene).
+  - `js/main.js` `updateBuild`: refuses a record of another mount or length with the reason ("This scene is built for the
+    185 tabletop collection · a 115 wall build needs the page reloaded on it"), the same test `applyRemoteLayout` already
+    reloads on. A second line of defence: with the workspace guard mutated off, the Wall-115 case still runs clean under
+    throttle on this refusal alone (Build shows the reason in the issue card for the 200 ms, no 404s).
+  - e2e: the Wall-115 setup case asserts no console errors over the whole trip; the bed-limit case drops its
+    `errors.length = 0` escape and its comment.
+- **Checks:** with both guards mutated off, both cases fail under `E2E_SOFT=1 E2E_THROTTLE=4` (eight to nine 404s and the
+  TypeError each); with the guards on they pass under throttle and on the GPU, with the Build and Labels cases (5 of 5);
+  the Wall-115 case under throttle went from 76 s to 24 s (no failed rebuild in the window); npm test as recorded in the
+  commit.
+- **Review:** Terra `01a1557b`, routine: 1 returned, 1 held (a stale `stageErrors` from an earlier invalid edit stayed
+  rendered for the 200 ms; cleared in the skip branch).
+- **Not deployed.** Left on the branch for Joey's go.

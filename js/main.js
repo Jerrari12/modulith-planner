@@ -9070,6 +9070,12 @@ function partInfo(instId) {
    unshowable layout leaves the last good scene standing and returns its reasons for the issue card */
 async function updateBuild(nb, pre) {
   if (!build) return { ok: false, errors: ['This page shows a static kit.'] };
+  // the parts pool (PARTS_BASE) and the mount scene (isWallBuild, isUnderTableBuild, the backdrop) are fixed at boot, so a
+  // record of another length or mount cannot be rebuilt in place: the planner reloads the page on such a change (its
+  // setup sheet; applyRemoteLayout above does the same), and a caller that asks anyway gets the reason, not a scene
+  // drawn from the wrong pool (the old pool answered 404 for every part of the new length, 2026-10-19)
+  if (nb && (nb.mount !== build.mount || +nb.length !== +build.length))
+    return { ok: false, errors: [`This scene is built for the ${build.length} ${build.mount} collection · a ${nb.length} ${nb.mount} build needs the page reloaded on it.`] };
   let gen = pre;
   if (!gen) { try { gen = generateManifest(nb); } catch (err) { return { ok: false, errors: [String((err && err.message) || err)] }; } }
   if (!gen.manifest) return { ok: false, errors: gen.errors && gen.errors.length ? gen.errors : ['This layout can’t be shown.'] };
