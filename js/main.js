@@ -8,6 +8,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { generateManifest, migrateOfficialBuild, resolvePartPreview, REQUIREMENT as REQ,
   shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, gridfinitySizeOk } from './generate.js';
 import { resolveEntry } from './entry.js';
+import { tabTitle } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
 import { createPlannerRelay } from './relay-auth.js';
 import { FILAMENT_DB } from './filament-db.js';
 import { partMaterialSpec } from './part-material.js';
@@ -10162,8 +10163,10 @@ async function mountManifest(m) {
   }
   $('kit-title').textContent = m.title;
   // in the planner (a workspace on <html>) the tab title is the build's, set by app.js (js/ui/names.js tabTitle); every
-  // regeneration here had put the generated "… · GEN2 Custom · 185" back (the UI review, 2026-10-16)
-  if (!document.documentElement.dataset.ws) document.title = m.title;
+  // regeneration here had put the generated "… · GEN2 Custom · 185" back (the UI review, 2026-10-16). The plain viewer
+  // (the bare address until the cutover) uses the same shape, the build then the product, so a search engine reads
+  // "MODULITH Planner" there too and not the generator's bare name (2026-10-19)
+  if (!document.documentElement.dataset.ws) document.title = tabTitle(m.title);
   typeByNode = Object.fromEntries(m.parts.map(p => [p.node, p.type]));
   partInfoByNode = Object.fromEntries(m.parts.map(p => [p.node, p]));
   syncBedFinish();   // before any material is built: the plate decides which program they get
