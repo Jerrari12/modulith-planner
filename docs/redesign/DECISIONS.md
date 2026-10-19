@@ -1280,7 +1280,14 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Also seen in the code, not exercised:** with Simplify, Compare or Find your next look up on a phone, a tap on the
   model steps that sheet down too (its handle brings it back; the proposal or the shown look stays on the model, since
   the state flags are untouched) - the rule is one rule, a tap on the model answers with the part.
-- **Review:** pending at the time of the first commit - the Plus reserve refused the Sol review (the 5-hour window at
-  95%, 2026-10-19 afternoon), and the local tier's advisory pass was a bare NO OBJECTION (`local-20261019-125423-669-2103960`,
-  adjudicated no-signal: not approval). The cloud review follows when the window allows, with its own entry line.
+- **Review:** the Plus reserve refused the Sol review at first (the 5-hour window at 95%, 2026-10-19 afternoon); the
+  local tier's advisory pass was a bare NO OBJECTION (`local-20261019-125423-669-2103960`, adjudicated no-signal: not
+  approval). Once the window reset: Sol `01a15524`, substantial - 2 returned, 2 held, both on `journey-prod.mjs` and
+  neither on the app or the e2e case: the live-only exemption of steps 4 and 10 also applied to a `--serve` run (now live
+  only: run against main's checkout, which lacks the fixes, the script fails both steps and exits 1), and a state
+  snapshot that threw counted as a pass (now a failure). Re-run after the fix: live 14 of 16 with the two steps waiting,
+  the branch 16 of 16.
+- **After main's 402cf6f was merged in:** E2E_SOFT=1 again, 57 of 58 - the bed-limit case passes now; the one failure
+  this time was the Label plate's faceplate-switch case, a 30 s click timeout while two other Chrome runs (the
+  production checks) shared the machine; alone under soft rendering it passes.
 - **Not deployed.** Left on `phone-journey` (pushed) for Joey's go; the deploy needs no new stamping line (no new module).
