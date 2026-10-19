@@ -1253,7 +1253,14 @@ Dated calls made while building, with who made them. The brief and the inventory
   filamentsInBuild's; a shown look (previewLook) cannot be live while the Parts inspector is, since the Colors workspace
   ends it on unmount; the subscription re-render touches no input or focus; the chip rules are scoped to
   `#ws-insp .uprow`, which only the Parts inspector has; the row names map through `typeOf` as the list's do.
-- **Not deployed.** Left on the branch for Joey's go.
+- **Live 2026-10-19** (Joey: "Deploy inspector-print-colours (f598504) and phone-journey (176c0a2) together"). Merged as
+  `198d088` (one DECISIONS conflict with the rail entry's Live line, both kept), then phone-journey as `cdd97b1`; on the
+  merged tree npm test 560 (555 passed, 0 failed, 5 skipped), e2e 59 of 59, the deploy's stamping step and module-graph
+  guard replayed locally (no new module in either branch). Run 39306087895 green on attempt 1, stamp `cdd97b1e`. Checked
+  live by `planner-prod-checks-2026-10-18\inspector-prod.mjs` (desktop: unit 1's case row's chip the colour of its own filament, ERYONE Burnt
+  Titanium, its ring the identification colour, its line "Print in ERYONE Burnt Titanium"; unit 2's chip the build's
+  Panchroma Black, its line "Print in Black" with the buy link; colours off the identification chip, no ring, no line; no
+  errors).
 
 ## 2026-10-19 (the phone pass: the 10-17 phone fixes on current main, and the complete phone journey)
 
@@ -1341,4 +1348,6 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **After main's 402cf6f was merged in:** E2E_SOFT=1 again, 57 of 58 - the bed-limit case passes now; the one failure
   this time was the Label plate's faceplate-switch case, a 30 s click timeout while two other Chrome runs (the
   production checks) shared the machine; alone under soft rendering it passes.
-- **Not deployed.** Left on `phone-journey` (pushed) for Joey's go; the deploy needs no new stamping line (no new module).
+- **Live 2026-10-19**, in the same deploy as the inspector colours above (main `cdd97b1`, run 39306087895, stamp
+  `cdd97b1e`). `journey-prod.mjs` against the live site: desktop 16 of 16, phone 16 of 16, nothing left "waiting on the
+  deploy", 0 errors (`journey-prod.live.json`; the pre-deploy run kept as `journey-prod.live.before.json`).
