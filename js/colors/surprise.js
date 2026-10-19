@@ -2,7 +2,7 @@
    refinement, step 5b, the same day): three whole looks for the build, from the real catalog, in a STYLE (styles.js),
    under the visitor's constraints, obeying every rule the presets are held to (test/presets.test.mjs).
 
-   A look is built from ROLES and written out to the 27 keys every preset sets, so the product rules hold by construction
+   A look is built from ROLES and written out to the 28 keys every preset sets, so the product rules hold by construction
    and are checked again before a look leaves (`checkLook`):
      shell       Case, CaseExtender, SideCover, ShelfLip, CoverL, CoverU, FootrailL, FootrailU, Foot, Rail, Bracket, BackCover
                  (the extender, the lip and the side-cover core take the case colour; lower and upper parts share one)
@@ -52,7 +52,7 @@ export const ROLE_KEYS = {
   deck: ['ShelfInsert'],
   hardware: ['Magnet', 'Screw'],
 };
-export const PALETTE_KEYS = Object.values(ROLE_KEYS).flat();   // the 27 keys every preset sets
+export const PALETTE_KEYS = Object.values(ROLE_KEYS).flat();   // the 28 keys every preset sets
 /* the regions a visitor can lock (a chip each, when the build has the region): the palette key, the role it fixes, its name */
 export const LOCKS = [['Case', 'shell', 'Case'], ['Drawer', 'drawer', 'Drawer body'], ['Faceplate:FACE', 'face', 'Face'], ['Accent', 'accent', 'Accent'], ['Handle', 'handle', 'Handle'], ['Label', 'label', 'Label'], ['ShelfInsert', 'deck', 'Shelf deck']];
 export const CAPS = [2, 3, 4];

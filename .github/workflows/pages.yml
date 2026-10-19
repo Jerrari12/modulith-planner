@@ -145,6 +145,9 @@ jobs:
           sed -i "s|'../colors/surprise.js'|'../colors/surprise.js?v=$V'|; s|'../colors/styles.js'|'../colors/styles.js?v=$V'|; s|'../state/owned.js'|'../state/owned.js?v=$V'|" js/workspaces/colors.js
           sed -i "s|'../filament-db.js'|'../filament-db.js?v=$V'|; s|'./colour.js'|'./colour.js?v=$V'|; s|'./styles.js'|'./styles.js?v=$V'|; s|'./words.js'|'./words.js?v=$V'|" js/colors/surprise.js
           sed -i "s|'./colour.js'|'./colour.js?v=$V'|" js/colors/words.js
+          # step 6 (2026-10-18): Simplify and the summary, imported by the Colors workspace
+          sed -i "s|'../colors/simplify.js'|'../colors/simplify.js?v=$V'|" js/workspaces/colors.js
+          sed -i "s|'./colour.js'|'./colour.js?v=$V'|; s|'./surprise.js'|'./surprise.js?v=$V'|" js/colors/simplify.js
           sed -i "s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/store.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../rules/bom.js'|'../rules/bom.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|" js/workspaces/parts.js
           # the Parts list names the filament a part prints in (2026-10-18): it reads the Colors tab's words from its module

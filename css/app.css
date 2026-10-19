@@ -538,6 +538,32 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 #ws-tray .tacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
 [data-mode="dark"] #ws-tray .tacts .key.strong { color: #FFFFFF; }
 #ws-tray .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+/* ---- the confidence summary on the current-look card, and Simplify (the Colors plan's step 6, 2026-10-18) ---- */
+#ws-colors .summary { display: flex; flex-direction: column; gap: 4px; padding: 0 2px; }
+#ws-colors .summary .sline { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-2); }
+#ws-colors .summary .sline b { color: var(--ink); font-weight: 700; }
+#ws-colors .summary .sgl { color: var(--ink-3); }
+#ws-colors .summary .sgf { color: var(--ink); font-weight: 600; }
+#ws-colors .summary .sacts { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+#ws-colors .summary .link { padding: 0; border: none; background: transparent; color: var(--orange); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#ws-simplify { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 480px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#ws-simplify[hidden] { display: none; }
+#ws-simplify .ihead { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+#ws-simplify .ihead .sub { flex: 1; min-width: 0; font-size: 11px; color: var(--ink-2); }
+#ws-simplify .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-simplify .srow { display: flex; align-items: center; gap: var(--gap-ctl); }
+#ws-simplify .lbl { flex: none; width: 64px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+#ws-simplify .srow .track { flex: 1; }
+#ws-simplify .changes { display: flex; flex-direction: column; gap: 6px; }
+#ws-simplify .chg { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border-radius: 10px; background: var(--key-bg); border: 1px solid var(--key-border); font-size: 12px; }
+#ws-simplify .chg .sw { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .25); flex: none; }
+#ws-simplify .chg .arrow { color: var(--ink-3); }
+#ws-simplify .chg .what { flex: 1; min-width: 0; }
+#ws-simplify .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+#ws-simplify .tacts { display: flex; gap: var(--gap-ctl); align-items: center; }
+#ws-simplify .tacts .key { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-simplify .tacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
+[data-mode="dark"] #ws-simplify .tacts .key.strong { color: #FFFFFF; }
 #ws-gallery .lwrap { position: relative; }
 #ws-gallery .lwrap .lcard { width: 100%; }
 #ws-gallery .cmp { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; padding: 0; border-radius: 8px; border: 1px solid var(--key-border); background: var(--glass-bg); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

@@ -966,3 +966,53 @@ Dated calls made while building, with who made them. The brief and the inventory
   ring, "Print in Black" with the Polymaker link, the caption "Chip = the filament it prints in · ring = its colour in
   Assemble · dashed = buy", four dashed buy chips kept; colours off: the identification colour, no line, the old
   caption; Undo restores The Jerrari; no page errors.
+
+## 2026-10-18 (Colors, step 6 of the redesign plan: Simplify to fewer filaments, and the confidence summary)
+
+- **Joey's go:** "go, but also what's left after that?", the last step of the Colors plan. The plan's step 6 as
+  approved (COLORS-PLAN.md §4): Simplify previews exactly which parts would change, then asks before applying; the
+  summary reads "3 filaments used · Case: Black · Fronts: Orange · Grips: Silver · Keep this look", with "Review
+  filaments" under it keeping appearance and material suitability apart.
+- **Simplify is a pure merge under the rules** (`js/colors/simplify.js`): one step at a time, the filament carrying the
+  least visible area (the role-area weights of step 5b, over the keys this build has) is mapped, per-unit picks
+  included, onto the closest colour of the look (CIEDE2000) under which every preset rule still holds on the look as
+  worn (a rule applies only when the build has both its keys: no shelf, no deck rule); when no colour can take it, the
+  next-least filament is tried; when no step is possible the result is short and says why ("Two filaments must stay:
+  the deck or the label text needs a colour that reads against its background"). Nothing from outside the look is
+  brought in; a key that wore no merged filament is never touched. `test/simplify.test.mjs` holds 1,476
+  simplifications of 900 generated looks on two builds to the rules re-stated independently, re-derives the
+  least-visible / closest-colour choice for 572 single steps, and checks that per-unit picks move with their filament.
+- **The panel** (`#ws-simplify`, the tray's spot; a sheet on the phone): "Down to" with the counts from one fewer to
+  two, the changed regions as rows reading original → final per filament (a filament merged twice shows once, where it
+  ends up: the first rows listed the generator's steps and read as two changes for one filament), the outcome line,
+  "Apply · N filaments" and Cancel. The proposal is shown on the model through `previewPalette` while the panel is up
+  and never chosen; Apply is one undo step (`commitColors('scheme', ...)`), after which the card reads "<the look> ·
+  edited" (D4). It closes the gallery, the tray and Find your next look and never touches the safe area.
+- **The summary** sits under the current-look card's swatch strip: "<count> filaments used" (the one count, D2) then
+  the regions the build has grouped in a fixed order (Case, drawers, fronts, grips, grip accents, accents, handles,
+  labels, label text, deck, small parts), neighbours sharing a filament joined ("Case, drawers: Black"), filaments by
+  their short names; beside it "Keep this look" (Save, the name field focused), "Review filaments" (the shopping list,
+  which gains "Appearance only: whether a filament suits a part (strength, heat, flex, the printer) is a separate
+  question.") and "Simplify…" at three filaments or more.
+- **Caught while building:** the module's `worn` import shadowed the workspace's own `worn(key)` helper and broke the
+  panel at boot; renamed on import. The deploy's stamping lines for the new module went in with the code (the lesson of
+  step 5's first run).
+- **No stage change. No analytics.**
+- **From the review (Sol 01a151f0, three findings, all held at least in part):** the units' own picks are now worn,
+  counted and validated through each unit's own view of the rules (a merge may not add a rule problem; one the look
+  already had neither blocks it nor is its to fix); the bought hardware's stored entries are left alone by a merge,
+  while the rest of the palette follows it on purpose (D3: a part added later matches the look; that half discarded,
+  recorded); a group worn in two filaments splits by key in the summary ("Case: Black · Feet: Orange") and the line
+  counts the units with their own colours.
+- **Measured (STEP6.md, marks written first):** 1,476 simplifications of 900 generated looks on two builds, none
+  breaks a rule, every target reached on the root kit, 95 short on the fuller build with a reason each; 572 single
+  steps re-derived as least-visible → closest valid colour; the twelve presets' summary lines match the Dock's count
+  with every region once; preview / Cancel / Apply as one undo step with the camera and the safe area unchanged; a
+  simplification in a median 0.05 ms.
+- **Checks:** npm test 554 (549 passed, 0 failed, 5 skipped, run alone: a run beside the e2e suite timed three
+  browser-based cases out at 73 s that pass alone in 9 s); the two step-6 e2e cases three of three under soft rendering
+  after one flake of the case's own making (it asserted the Save row's focus before the tick that sets it; it now
+  waits); the whole e2e suite 49 of 51 under soft rendering, the two failures that flake and the Label plate's
+  faceplate-switch case (the load flake recorded under 5b). Mutation checks: the rule check removed fails the unit test;
+  Apply only previewing fails the e2e case. Review Sol 01a151f0, three findings, all held at least in part.
+- **Not deployed:** branch `colors-step6`; deploys on Joey's go.

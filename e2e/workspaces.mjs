@@ -1928,6 +1928,103 @@ test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned l
   await ctx.close();
 });
 
+/* The Colors plan's step 6 (2026-10-18): the confidence summary and Simplify. The summary's count is the Dock's (D2) and
+   its regions are the build's, for every preset; Simplify shows the proposal on the model (previewPalette, never chosen)
+   and lists exactly which regions change; Cancel leaves nothing; Apply is one undo step; the camera and the safe area stay. */
+test('Colors step 6: the summary line matches the Dock for every preset; Simplify previews the change, Cancel leaves nothing, Apply is one undo step and the Dock drops; the camera stays', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .summary', { timeout: 30_000 });
+  await settle(page, 800);
+  // M26: the twelve presets, applied through the stage (no history noise), each read off the panel against the Dock
+  const presets = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__; const out = [];
+    for (const p of v.PRESETS) {
+      v.applyPreset(p, { quiet: true }); window.__GEN2_STORE__.commit(() => {}, 'preset'); window.__GEN2_STORE__.flush();
+      await new Promise((r) => setTimeout(r, 150));
+      const line = document.querySelector('#ws-colors .summary .sline').textContent;
+      const groups = [...document.querySelectorAll('#ws-colors .summary .sgl')].map((x) => x.textContent.replace(/: $/, ''));
+      out.push({ name: p.name, line, groups, count: v.filamentsInBuild().count, dock: document.querySelector('#ws-dock .status').textContent });
+    }
+    return out;
+  });
+  assert.equal(presets.length, 12);
+  for (const p of presets) {
+    assert.ok(p.line.startsWith(`${p.count} filament${p.count === 1 ? '' : 's'} used`), `${p.name}: "${p.line}" against a count of ${p.count}`);
+    assert.ok(p.dock.startsWith(`${p.count} filament`), `${p.name}: the Dock says ${p.dock}`);
+    const words = p.groups.flatMap((g) => g.split(', ').map((w) => w.toLowerCase()));
+    assert.equal(new Set(words).size, words.length, `${p.name}: every region once (${p.groups.join(' | ')})`);
+    assert.ok(words.includes('case') && words.includes('fronts') && !words.some((w) => /deck|labels|handles|^accents$/.test(w)), `${p.name}: the root kit's regions, nothing it lacks (${words.join(', ')})`);
+  }
+  // back to The Jerrari for the Simplify flow (4 filaments: black, orange, silk silver, PETG orange on the small parts)
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.applyPreset(v.PRESETS[0], { quiet: true }); window.__GEN2_STORE__.commit(() => {}, 'preset'); window.__GEN2_STORE__.flush(); });
+  await settle(page, 400);
+  const before = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), count: window.__GEN2_VIEWER__.filamentsInBuild().count, canUndo: window.__GEN2_STORE__.canUndo }));
+  assert.equal(before.count, 4, 'the control: The Jerrari prints in four on the root kit');
+  await page.locator('#ws-colors .summary .simplify').click();
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  const opened = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const s = document.querySelector('#ws-simplify'); return { targets: [...s.querySelectorAll('.tgt .seg')].map((b) => b.textContent), on: s.querySelector('.tgt .seg.on').textContent, rows: [...s.querySelectorAll('.chg .what')].map((x) => x.textContent), apply: s.querySelector('.apply').textContent, previewing: v.previewing, gripAccentHex: v.activeHex('Faceplate:GRIP ACCENT'), palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), canUndo: window.__GEN2_STORE__.canUndo, trayHidden: document.querySelector('#ws-tray').hidden, galleryHidden: document.querySelector('#ws-gallery').hidden }; });
+  assert.deepEqual(opened.targets, ['3 filaments', '2 filaments']); assert.equal(opened.on, '3 filaments');
+  assert.equal(opened.rows.length, 1); assert.match(opened.rows[0], /^Grip accents: Silk Silver → /, 'the least visible filament (the grip accent alone) is the one to go');
+  assert.ok(opened.previewing && opened.gripAccentHex.toLowerCase() !== '#cdd2d9', 'the model shows the proposal: the grip accent is no longer silk silver');
+  assert.equal(opened.palette, before.palette, 'nothing is chosen'); assert.equal(opened.canUndo, before.canUndo, 'nothing in the history');
+  assert.equal(opened.cam, before.cam, 'the camera stays'); assert.equal(opened.safe, before.safe, 'the safe area stays');
+  assert.ok(opened.trayHidden && opened.galleryHidden);
+  // down to two: the rows read original → final, one per filament
+  await page.locator('#ws-simplify .tgt .seg', { hasText: '2 filaments' }).click();
+  await settle(page, 300);
+  const two = await page.evaluate(() => ({ rows: [...document.querySelectorAll('#ws-simplify .chg .what')].map((x) => x.textContent), apply: document.querySelector('#ws-simplify .apply').textContent }));
+  assert.equal(two.rows.length, 2, `two rows for two filaments merged (${two.rows.join(' | ')})`);
+  assert.ok(two.rows.every((r) => !/→ .*→/.test(r)), 'no chained arrow: each row is original → final');
+  assert.equal(two.apply, 'Apply · 2 filaments');
+  // Cancel: nothing kept
+  await page.locator('#ws-simplify .cancel').click();
+  await settle(page, 300);
+  const cancelled = await page.evaluate(() => ({ hidden: document.querySelector('#ws-simplify').hidden, previewing: window.__GEN2_VIEWER__.previewing, palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), canUndo: window.__GEN2_STORE__.canUndo, count: window.__GEN2_VIEWER__.filamentsInBuild().count }));
+  assert.ok(cancelled.hidden && !cancelled.previewing && cancelled.palette === before.palette && cancelled.canUndo === before.canUndo && cancelled.count === 4, JSON.stringify(cancelled));
+  // Apply at the default target: one undo step, the Dock drops to three, the panel reads "The Jerrari · edited"
+  await page.locator('#ws-colors .summary .simplify').click();
+  await page.waitForSelector('#ws-simplify .apply', { timeout: 10_000 });
+  await page.locator('#ws-simplify .apply').click();
+  await settle(page, 600);
+  const applied = await page.evaluate(() => ({ hidden: document.querySelector('#ws-simplify').hidden, previewing: window.__GEN2_VIEWER__.previewing, count: window.__GEN2_VIEWER__.filamentsInBuild().count, dock: document.querySelector('#ws-dock .status').textContent, lname: document.querySelector('#ws-colors .lname').textContent, summary: document.querySelector('#ws-colors .summary .sline').textContent, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
+  assert.ok(applied.hidden && !applied.previewing, 'the panel closes and the preview ends');
+  assert.equal(applied.count, 3); assert.match(applied.dock, /^3 filaments/); assert.match(applied.summary, /^3 filaments used/);
+  assert.equal(applied.lname, 'The Jerrari · edited');
+  assert.equal(applied.cam, before.cam); assert.equal(applied.safe, before.safe);
+  assert.deepEqual(applied.presetEvents, [], 'Simplify sends no preset event');
+  await page.keyboard.press('Control+Z');
+  await settle(page, 500);
+  const undone = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), count: window.__GEN2_VIEWER__.filamentsInBuild().count, lname: document.querySelector('#ws-colors .lname').textContent }));
+  assert.equal(undone.palette, before.palette, 'one Undo restores the look'); assert.equal(undone.count, 4); assert.equal(undone.lname, 'The Jerrari');
+  // Review filaments opens the shopping list with the suitability note; Keep this look opens Save with the name field
+  await page.locator('#ws-colors .summary .review').click();
+  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 5000 });
+  assert.match(await page.locator('#ws-shop .note').last().textContent(), /whether a filament suits a part/);
+  await page.locator('#ws-shop .x').click();
+  await page.locator('#ws-colors .summary .keeplook').click();
+  await page.waitForSelector('#ws-colors .saverow input', { timeout: 5000 });
+  // the Save row focuses its input on the next tick; under the software rasteriser that tick can land after the selector
+  await page.waitForFunction(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Look name', null, { timeout: 5000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors step 6 on the phone: Simplify is a sheet of its own; Apply closes it back to the Colors sheet with the count dropped', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .summary .simplify', { timeout: 30_000 });
+  await page.locator('#ws-colors .summary .simplify').click();
+  await page.waitForFunction(() => document.querySelector('#ws-simplify').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-simplify .sheet-handle .ttl'), /Simplify/);
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the proposal is shown on the phone too');
+  await page.locator('#ws-simplify .apply').click();
+  await page.waitForFunction(() => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-dock .status'), /^3 filaments/);
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), true);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* Joey, 2026-10-18: "lets just hide makerworld and cults for now until eventually i upload more models there". Few parts
    have a page on either, and choosing one in the Parts list turned most rows into a site search. */
 test('Parts and the viewer offer and link only Printables and Thangs (MakerWorld and Cults 3D are hidden)', async () => {
