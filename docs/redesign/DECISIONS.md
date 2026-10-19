@@ -1015,4 +1015,14 @@ Dated calls made while building, with who made them. The brief and the inventory
   waits); the whole e2e suite 49 of 51 under soft rendering, the two failures that flake and the Label plate's
   faceplate-switch case (the load flake recorded under 5b). Mutation checks: the rule check removed fails the unit test;
   Apply only previewing fails the e2e case. Review Sol 01a151f0, three findings, all held at least in part.
-- **Not deployed:** branch `colors-step6`; deploys on Joey's go.
+- **Live:** Joey, "Deploy Colors step 6", 2026-10-19 morning. Main fast-forwarded to `dddbdaf`, run 39242318988
+  green, live stamp `dddbdaf1`. Production check `step6-prod.mjs` on the desktop and a 390×844 phone viewport: the
+  summary's "4 filaments used" matches the Dock and `filamentsInBuild()`; Simplify opens in the tray's spot (a sheet on
+  the phone) with "3 filaments" and "2 filaments", the row "Grip accents: Silk Silver → Orange", the proposal shown on
+  the model with the palette, the history, the camera and the safe area untouched; Cancel leaves nothing; Apply drops
+  the Dock to 3 as one undo step and the card reads "The Jerrari · edited"; Undo restores The Jerrari; Review filaments
+  opens the shopping list with the suitability note; no preset event; no page errors (the phone run logged a
+  third-party 429, as the earlier checks did). This closes the Colors plan, steps 1 to 6.
+- **A wording nit seen in production:** with the Classic faceplate's body in black and its face in orange, the line
+  reads "Fronts: Mystery Orange · Faceplate bodies: Black · Grips: Mystery Orange" (the split keeps fronts and grips
+  from joining); accurate, but "faceplate bodies" would sit better after the grips. Left for Astra's eye.
