@@ -1203,3 +1203,45 @@ Dated calls made while building, with who made them. The brief and the inventory
   migrated, since the old key was ambiguous), 1 discarded (a `|` in a section title, name or variant could collide the
   key - every one of them is a catalog constant and none contains one; the construction predates the change).
 - **Not deployed.** Left on the branch for Joey's go.
+
+## 2026-10-19 (the inspector's "This unit · parts" rows name and show the filament each part prints in, per unit)
+
+- **Why.** The Parts list has named the filament each part prints in since 2026-10-18 (the entry above, live as
+  `26a4123`); its own entry left one thing undone: "the inspector's 'This unit · parts' list still shows no colours".
+  Astra put "preview fidelity and inspector colours" first among what was left (2026-10-19): they decide whether the
+  chosen look matches the finished build. The brief placed the list in the Build workspace's inspector; it lives in the
+  PARTS workspace's inspector (`js/workspaces/parts.js` renderInspector; Build's "This unit only" inspector has no parts
+  rows), and that is where the change went.
+- **What a row shows now.** With the visitor's colours on, each row of the selected unit's parts carries the list's own
+  chip (parts.js `chipEl`: the filament, the identification colour as the 2 px ring, several swatches when the part's
+  regions wear more than one) and the list's "Print in <short name>" line under the part name, with the Colors tab's buy
+  link. Colours off: the identification chip alone, no line (the rows had no chip at all before; the list's rows always
+  had one). The chip, the words and the swatches are the list's code, not a copy: both lists are in parts.js, so the
+  helpers are shared by scope, and no new module (no stamping line) was needed.
+- **The resolution is per UNIT, which the list's snapshot cannot give.** `paletteSnapshot` pools every unit's picks under
+  a type (filamentsInBuild's `keys`), so a type worn in two filaments reads "Black / Teal" there, and that is right for a
+  list of the whole build. The inspector's rows are one unit's, so `unitRegions(stage, pal, unitId, type)` resolves each
+  of the type's regions for THAT unit the way the stage paints it (main.js materialFor / filamentsInBuild): the unit's
+  own pick first (`stage.overrideFor`, which already answers a zone with the unit's Body pick when the build has not
+  picked the zone), else the build's pick for the key, else a zone follows its body unless it has a colour of its own
+  (the label text; keysInBuild's `ownColor`, now carried on the snapshot), else bare in the identification colour (the
+  snapshot's `bare`, or `activeHex` when no unit shows that region bare). A store commit (a palette change, an undo of
+  one) re-renders the inspector after the list, since the list's render refreshes the snapshot the rows resolve against.
+- **Checks.** `test/parts-print-colours.test.mjs`: a stage with the build's picks and two units' own (the faceplate body
+  on one, the drawer body on the other), resolved per unit against the pooled list; the own-body-covers-an-unpicked-zone
+  case; the label text keeping its own colour; the bare fallback; colours off, bought hardware, an unmodelled type and a
+  throwing `overrideFor` all answering null or the build's. An e2e case: Stealth applied in Colors, unit 1's case picked
+  "This drawer only" through the real picker (the case instance found through `partInfo().owner`, since case ids are
+  positional), then in Parts the inspector on unit 1 shows its own filament and names it, on unit 2 the build's with
+  the buy link, and colours off the identification colour with no line. Mutation-checked: the resolver ignoring the own
+  pick fails the case on the own-filament assertion ("actual rgb(43, 43, 46), expected rgb(49, 81, 126)"). npm test 560
+  (555 passed, 0 failed, 5 skipped); e2e Build + Parts + Colors cases 24 of 24 with the new one.
+- **Review:** Terra `01a1551d`, routine: NO FINDINGS on the diff, the tests and the e2e case. It ran after a wait: the
+  Plus reserve gate refused the first call (the 5-hour window at 95% from the other sessions' reviews, reset 12:58), the
+  local tier's advisory pass in between returned a bare NO OBJECTION (`local-20261019-123426-495-2104172`, adjudicated
+  no-signal, not taken as approval), and the commit waited for the cloud review at the parent session's direction.
+  Self-review beside it, what was checked: the per-unit resolution against overrideFor's zone fallback and
+  filamentsInBuild's; a shown look (previewLook) cannot be live while the Parts inspector is, since the Colors workspace
+  ends it on unmount; the subscription re-render touches no input or focus; the chip rules are scoped to
+  `#ws-insp .uprow`, which only the Parts inspector has; the row names map through `typeOf` as the list's do.
+- **Not deployed.** Left on the branch for Joey's go.

@@ -259,14 +259,15 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .rows { display: flex; flex-direction: column; gap: 4px; }
 #ws-parts .prow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 44px; padding: 6px 8px; border-radius: 10px; }
 #ws-parts .prow.done { opacity: .55; }
-#ws-parts .chip { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.35); }
-#ws-parts .chip.buy { background: transparent; border: 1.5px dashed var(--ink-3); }
+/* the chip, in the list and in the inspector's "This unit · parts" rows (the same element, parts.js chipEl) */
+#ws-parts .chip, #ws-insp .uprow .chip { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.35); }
+#ws-parts .chip.buy, #ws-insp .uprow .chip.buy { background: transparent; border: 1.5px dashed var(--ink-3); }
 /* with the visitor's colours on, the chip is the filament the part prints in (several side by side when its zones or its
    units wear more than one) and the ring is its identification colour, the one the Assemble instructions use */
-#ws-parts .chip.fil { outline: 2px solid var(--id); outline-offset: 1px; }
-#ws-parts .chip.multi { display: inline-flex; gap: 1px; width: auto; padding: 0; background: transparent; border: none; }
-#ws-parts .chip.multi i { display: block; width: 8px; height: 14px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
-#ws-parts .printin a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+#ws-parts .chip.fil, #ws-insp .uprow .chip.fil { outline: 2px solid var(--id); outline-offset: 1px; }
+#ws-parts .chip.multi, #ws-insp .uprow .chip.multi { display: inline-flex; gap: 1px; width: auto; padding: 0; background: transparent; border: none; }
+#ws-parts .chip.multi i, #ws-insp .uprow .chip.multi i { display: block; width: 8px; height: 14px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
+#ws-parts .printin a, #ws-insp .uprow .printin a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
 #ws-parts .qty { font-size: 12px; font-weight: 600; width: 34px; flex: none; }
 #ws-parts .mid { flex: 1; min-width: 0; }
 #ws-parts .name { font-size: 13px; font-weight: 600; }
@@ -284,8 +285,13 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .left { font-size: 11px; color: var(--ink-2); min-width: 44px; text-align: right; }
 #ws-parts .foot { margin: 14px 0 0; font-size: 11px; color: var(--ink-3); }
 #ws-insp .uparts { display: flex; flex-direction: column; gap: 4px; }
-#ws-insp .uprow { display: flex; justify-content: space-between; align-items: center; height: 34px; padding: 0 10px; border-radius: 9px; font-size: 12px; }
-#ws-insp .uprow .mono { font-weight: 600; }
+/* a row: the chip (8 px off the words, the planner's control gap), the part with its "Print in" line under it, the count;
+   34 px with no line (as before the chips), taller with one */
+#ws-insp .uprow { display: flex; align-items: center; gap: 8px; min-height: 34px; box-sizing: border-box; padding: 5px 10px; border-radius: 9px; font-size: 12px; }
+#ws-insp .uprow .mid { flex: 1; min-width: 0; }
+#ws-insp .uprow .name { overflow-wrap: anywhere; }
+#ws-insp .uprow .printin { margin-top: 1px; font-size: 11px; color: var(--ink-2); }
+#ws-insp .uprow .mono { font-weight: 600; flex: none; }
 #ws-dock .pbar { display: flex; flex-direction: column; gap: 5px; width: 170px; }
 #ws-dock .pbar .track { display: block; height: 6px; border-radius: 3px; background: var(--seg-track); overflow: hidden; padding: 0; }
 #ws-dock .pbar .fill { display: block; height: 6px; background: var(--orange); }

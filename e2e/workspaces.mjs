@@ -2185,6 +2185,80 @@ test('Parts: with chosen colours on, a row shows and names the filament it print
   await ctx.close();
 });
 
+/* THE INSPECTOR'S ROWS (2026-10-19; Astra put "inspector colours" first among what was left). The Parts tab's "This unit ·
+   parts" list is one unit's rows, so each chip is the filament THAT unit's part prints in: its own pick (the picker's "This
+   unit only") first, else the build's. The list beside it pools every unit's picks. */
+test('Parts: the inspector\'s "This unit · parts" rows show the filament each part prints in for that unit - its own pick first, the build\'s for another unit; colours off, the identification colour', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .browse').click();
+  await page.locator('#ws-gallery .lcard').nth(1).click();   // Stealth, on a fresh profile
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.locator('#ws-gallery .apply').click();
+  await settle(page, 600);
+  const ids = await page.evaluate(() => window.__GEN2_STORE__.state.placed.map((p) => p.id));
+  assert.ok(ids.length >= 2, `the control: the kit has two units or more (${ids.length})`);
+  const [mine, other] = ids;
+  // a unit's case on the model: the case instances are numbered by position (generate.js `case${i}`), the stage maps them
+  // to the units (partInfo().owner), so the selection goes through that map rather than guessing the id
+  const selectCase = (uid) => page.evaluate((u) => { const v = window.__GEN2_VIEWER__; const i = v.manifest.instances.find((x) => /^case\d+$/.test(x.id) && (v.partInfo(x.id) || {}).owner === u); if (!i) throw new Error('no case instance for unit ' + u); v.setSelected(i.id); }, uid);
+  // the first unit's case, clicked on the model: the picker opens on the case; "This unit only", then a filament the build does not wear
+  await selectCase(mine);
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  assert.match(await text(page, '#ws-picker .head'), /^Body · All case/i, 'the control: the picker is on the case body');
+  await page.locator('#ws-picker .seg:has-text("only")').click();
+  await page.waitForFunction(() => /only \(unit 1\)/.test(document.querySelector('#ws-picker .head').textContent), null, { timeout: 5000 });
+  const own = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__; const build = v.palette().colors.Case;
+    const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')].filter((s) => s.getAttribute('aria-label') !== build.name);
+    const sw = sws[sws.length - 1]; sw.click();
+    return { name: sw.getAttribute('aria-label'), hex: sw.style.backgroundColor };
+  });
+  await settle(page, 500);
+  const picks = await page.evaluate(([a, b]) => { const v = window.__GEN2_VIEWER__; return { mine: v.overrideFor(a, 'Case'), other: v.overrideFor(b, 'Case'), build: v.palette().colors.Case }; }, [mine, other]);
+  assert.equal(picks.mine && picks.mine.name, own.name, 'the control: unit 1 has its own case filament');
+  assert.equal(picks.other, null, 'the control: unit 2 has none');
+  assert.notEqual(picks.build.hex.toLowerCase(), picks.mine.hex.toLowerCase(), 'the control: the own pick differs from the build\'s');
+  // the Parts tab: the inspector on unit 1, then on unit 2
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const inspect = async (uid) => {
+    await selectCase(uid);
+    await page.waitForSelector('#ws-insp:not([hidden]) .uprow', { timeout: 5000 });
+    return page.evaluate(() => {
+      const rgb = (h) => { const s = document.createElement('span'); s.style.background = h; document.body.appendChild(s); const c = getComputedStyle(s).backgroundColor; s.remove(); return c; };
+      const rows = [...document.querySelectorAll('#ws-insp .uprow')];
+      const row = rows.find((r) => /\bCase - /.test(r.querySelector('.name').textContent));
+      const chip = row.querySelector('.chip');
+      return { idx: document.querySelector('#ws-insp .idx').textContent, chipRgb: getComputedStyle(chip).backgroundColor, ring: getComputedStyle(chip).outlineStyle, ringRgb: getComputedStyle(chip).outlineColor, idRgb: rgb('#E9E9EC'),
+        line: (row.querySelector('.printin') || {}).textContent || '', link: (row.querySelector('.printin a') || {}).href || '', chips: rows.filter((r) => r.querySelector('.chip')).length, rows: rows.length };
+    });
+  };
+  // the colours as the page computes them, and the names as the Colors tab shortens them (its own module, already loaded)
+  const rgb = (hex) => page.evaluate((h) => { const s = document.createElement('span'); s.style.background = h; document.body.appendChild(s); const c = getComputedStyle(s).backgroundColor; s.remove(); return c; }, hex);
+  const shortOf = (name) => page.evaluate(async (n) => (await import('/js/workspaces/colors.js')).short(n), name);
+  const a = await inspect(mine);
+  assert.match(a.idx, /^Unit 1 of/, 'the control: the inspector is on unit 1');
+  assert.equal(a.chipRgb, await rgb(picks.mine.hex), `unit 1's case row is its OWN filament (${own.name}), not the build's`);
+  assert.equal(a.ring, 'solid', 'the identification colour stays as a ring');
+  assert.equal(a.ringRgb, a.idRgb, 'the ring is the case\'s identification colour');
+  assert.ok(a.line.startsWith(`Print in ${await shortOf(own.name)}`), `the row names the unit's filament: "${a.line}"`);
+  assert.equal(a.chips, a.rows, 'every row has a chip');
+  const b = await inspect(other);
+  assert.match(b.idx, /^Unit 2 of/, 'the control: the inspector is on unit 2');
+  assert.equal(b.chipRgb, await rgb(picks.build.hex), `unit 2's case row is the BUILD's filament (${picks.build.name})`);
+  assert.ok(b.line.startsWith(`Print in ${await shortOf(picks.build.name)}`), `the row names the build's filament: "${b.line}"`);
+  assert.ok(/^https?:/.test(b.link), 'the name is the buy link the Colors tab uses');
+  // colours off: the identification colour, no line
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setUseCustom(false); window.__GEN2_STORE__.commit(() => {}, 'color'); });
+  await settle(page, 400);
+  const off = await inspect(mine);
+  assert.equal(off.chipRgb, off.idRgb, 'the chip is the identification colour again');
+  assert.equal(off.ring, 'none', 'no ring');
+  assert.equal(off.line, '', 'no Print in line');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE BED LIMIT ON THE RAILS (2026-10-19). A user of the original planner, relayed by Joey: "the table rails list on the left
    are 3 270x3w rails + 1 270x2w ... The 3D diagram shows 2 270x4w + 1 270x3w. While technically that works, a Core One L
    cannot print something 4w." The Parts list caps a rail section at the widest the chosen bed prints (js/rules/bom.js);
