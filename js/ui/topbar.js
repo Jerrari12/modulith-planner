@@ -84,7 +84,11 @@ export function topbar(stage, ctx) {
     const items = () => [...menu.querySelectorAll('button')].filter((x) => !x.disabled && x.offsetParent !== null);
     const focusItem = (i) => { const all = items(); if (all.length) all[((i % all.length) + all.length) % all.length].focus(); };
     let rendering = Promise.resolve();   // the open menu's render in flight: a key pressed before Recent builds are listed waits for it (Terra 01a136de)
-    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) { rendering = render(); return rendering; } renaming = false; confirmId = null; return rendering; };
+    /* the menu is shown at once with its LAST render's rows while render() awaits the Recent list from IndexedDB, so the
+       current build's count is refreshed synchronously here: a read right after the click saw the previous count for a
+       few ms ("185 · 4 units" with 1 in the store; the phone-check case flaked on it, deploy run 39317757575, 2026-10-19) */
+    const freshCount = () => { const m = menu.querySelector('.item.current .meta'); if (m) m.textContent = `${length} · ${units()}`; };
+    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) { freshCount(); rendering = render(); return rendering; } renaming = false; confirmId = null; return rendering; };
     btn.addEventListener('click', () => set(!open));
     /* keyboard: Down or Enter on the chip opens with the first item focused; arrows walk the items (the delete marks too),
        Home and End jump, Escape closes and returns to the chip; a Tab leaves the menu as it would any popup */
