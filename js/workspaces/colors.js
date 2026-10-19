@@ -240,7 +240,7 @@ export function mountColors(stage, ctx) {
         el('p.sline', {}, [el('b', { text: `${n(fc.count, 'filament')} used` }), ...groups.map((g) => el('span.sg', {}, [' · ', el('span.sgl', { text: `${g.label}: ` }), el('span.sgf', { text: g.filament, title: g.name })])), ownUnits ? el('span.sg.own', { text: ` · ${n(ownUnits, 'unit')} with ${ownUnits === 1 ? 'its' : 'their'} own colours` }) : null]),
         el('div.sacts', {}, [
           el('button.link.keeplook', { text: 'Keep this look', title: 'Save these colours as a look of your own', onclick: () => { st.saving = true; renderPanel(); } }),
-          el('button.link.review', { text: 'Review filaments', title: 'Every filament this build prints in, with where to buy it', onclick: () => { st.shop = true; renderShop(); renderCard(); } }),
+          el('button.link.review', { text: 'Review filaments', title: 'Every filament this build prints in, with where to buy it', onclick: openShop }),
           fc.count >= 3 ? el('button.link.simplify', { text: 'Simplify…', title: 'Print this look in fewer filaments: see what would change first', onclick: openSimplify }) : null,
         ]),
       ]));
@@ -741,7 +741,7 @@ export function mountColors(stage, ctx) {
     const count = fc ? fc.count : 0;
     const s = stage.buildSize?.(); const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
     dock.replaceChildren(
-      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { st.shop = !st.shop; if (st.shop && phone) phone.collapse(); renderShop(); renderCard(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), count ? n(count, 'filament') : 'Instruction colors']),   // on a phone the list shows over the sheets' handles: the Colors sheet (up on arrival) covered it (the phone check, 2026-10-17)
+      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { if (st.shop) { st.shop = false; renderShop(); renderCard(); } else openShop(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), count ? n(count, 'filament') : 'Instruction colors']),
       el('div.group', {}, [el('span.big', { text: String(store.state.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
       el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
@@ -749,6 +749,11 @@ export function mountColors(stage, ctx) {
   }
   const shop = el('div.glass', { id: 'ws-shop', role: 'dialog', 'aria-label': 'Filaments in this build', hidden: true });
   root.appendChild(shop);
+  /* the one way the shopping list opens (the Dock's filament stack, the summary's Review filaments): on a phone it is a
+     floating card over the collapsed handles, and an open sheet (13) covers it, so the sheets step down first. The Dock's
+     path had this since the phone check (2026-10-17); Review filaments, added by step 6 on the desktop, opened the list
+     under the Colors sheet, which is up on arrival: the tap seemed to do nothing (the phone journey, 2026-10-19) */
+  function openShop() { st.shop = true; if (phone) phone.collapse(); renderShop(); renderCard(); }
   function renderShop() {
     if (!st.shop) { shop.hidden = true; return; }
     const fc = stage.filamentsInBuild();   // the build's own filaments: only the regions the build has, never bought hardware
@@ -805,7 +810,16 @@ export function mountColors(stage, ctx) {
   renderAll();
 
   return {
-    onSelect(sel) { st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; } renderAll(); },
+    onSelect(sel) {
+      st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; }
+      /* on a phone a tapped part answers with its card (over the collapsed handles) and the picker's handle, named after
+         the region; a tap on a chip or the handle opens the picker. An open sheet covers both (13 over 12), so the sheets
+         step down, as Build's inspector does - unless the picker itself is the open sheet: a visitor picking colours taps
+         part after part, and the picker follows the tap (the phone journey, 2026-10-19: with the Colors sheet up on
+         arrival, a tap on the model lit the part and showed nothing else) */
+      if (phone && sel && !phone.isOpen(picker)) phone.collapse();
+      renderAll();
+    },
     unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace
     get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
     get tray() { return trayLooks.map((t) => t.name); },   // the finalists, for a check

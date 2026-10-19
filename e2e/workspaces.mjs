@@ -2384,3 +2384,134 @@ test('the phone check, at every width: an edit keeps Measure as it was, the swit
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* THE PHONE JOURNEY (Astra, 2026-10-19: "the complete journey - choose a look, adjust a part, simplify, review filaments,
+   continue to Parts - rather than another round of isolated colour features"), as a visitor does it at 390×844 with real
+   taps: one sheet open at a time, the model never covered by what should not cover it, no field taking focus by itself,
+   the Dock's count agreeing with the summary line, the shopping list and the Parts list, Undo working at every step.
+   Walking it on the merged code found two breaks: a part tapped on the model with the Colors sheet up (it opens on
+   arrival) lit the part and showed nothing else - its card and the picker's handle were under the open sheet; and the
+   summary's Review filaments opened the shopping list under the same sheet. Both step the sheets down now. */
+test('the phone journey: a look from the gallery, a part tapped and recoloured (the build, then one unit), Simplify, Review filaments, Parts, back to the model', async () => {
+  const { ctx, page, errors } = await open('build', { phone: true });
+  const openSheets = () => page.evaluate(() => [...document.querySelectorAll('#ws .sheet.open:not([hidden])')].map((s) => s.id));
+  const onTop = (sel) => page.evaluate((sel) => { const e = document.querySelector(sel); if (!e || e.hidden) return false; const r = e.getBoundingClientRect(); const h = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(20, r.height / 2)); return !!(h && e.contains(h)); }, sel);
+  const noKeyboard = async (where) => assert.ok(!/^(INPUT|TEXTAREA|SELECT)$/.test(await page.evaluate(() => (document.activeElement && document.activeElement.tagName) || '')), `no field took focus by itself (${where})`);
+  const counts = () => page.evaluate(() => { const fc = window.__GEN2_VIEWER__.filamentsInBuild(); const num = (t) => { const m = (t || '').match(/^(\d+) filament/); return m ? +m[1] : null; }; return { fc: fc.count, names: fc.filaments.map((f) => f.name), dock: num(document.querySelector('#ws-dock .status')?.textContent), summary: num(document.querySelector('#ws-colors .summary .sline')?.textContent), own: document.querySelector('#ws-colors .summary .own')?.textContent || '' }; });
+  const agree = async (where) => { const c = await counts(); assert.equal(c.dock, c.fc, `${where}: the Dock counts what the build prints in`); assert.equal(c.summary, c.fc, `${where}: the summary line agrees with the Dock`); return c; };
+  const stillCamera = () => page.waitForFunction(() => { const p = JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()); const same = window.__camPrev === p; window.__camPrev = p; return same; }, null, { polling: 300, timeout: 20_000 });
+  // a swatch the build does not print in yet, by name (the picker lists the build's own filaments first, then the catalogue):
+  // tapped, then waited for in the filament list. The count need not rise: a region that alone wore a filament swaps it
+  const wears = (label) => page.evaluate((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), label);
+  const pickFresh = async (what) => {
+    const label = await page.evaluate(() => { const names = new Set(window.__GEN2_VIEWER__.filamentsInBuild().filaments.map((f) => f.name)); return [...document.querySelectorAll('#ws-picker .bhead.toggle + .swatches .sw')].map((b) => b.getAttribute('aria-label')).find((l) => l && !names.has(l) && !names.has('Panchroma ' + l)) || null; });
+    assert.ok(label, `a filament not yet in the build (${what})`);
+    await page.locator(`#ws-picker .sw[aria-label="${label}"]`).first().tap();
+    await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), label, { timeout: 10_000 }).catch(() => assert.fail(`${what}: ${label} did not reach the build`));
+    return label;
+  };
+  // 1 Build: the model is the hero - no sheet open
+  assert.deepEqual(await openSheets(), [], 'Build opens with its sheets down');
+  // 2 Colors from the tab bar: its sheet opens on arrival, alone; the Dock becomes the filament count
+  await page.locator('#ws-tabbar .tab:has-text("Colors")').tap();
+  await page.waitForSelector('#ws-colors .summary .simplify', { timeout: 30_000 });
+  assert.deepEqual(await openSheets(), ['ws-colors']);
+  await agree('on arrival'); await noKeyboard('Colors');
+  // 3 Browse looks: the gallery sheet alone; a card shows its look without choosing it; Apply is one undo step and comes back to the Colors sheet
+  await page.locator('#ws-colors .browse').tap();
+  await page.waitForFunction(() => document.querySelectorAll('#ws-gallery .lcard canvas.drawn').length >= 6, null, { timeout: 40_000 });
+  assert.deepEqual(await openSheets(), ['ws-gallery']);
+  await page.locator('#ws-gallery .lcard').nth(1).tap();
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the look is shown on the model');
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), false, 'and not chosen');
+  await page.locator('#ws-gallery .apply').tap();
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  assert.equal(await text(page, '#ws-colors .lname'), 'Stealth');
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), true, 'the look applied is an undo step');
+  const toast = await page.evaluate(() => { const t = document.querySelector('#ws-toast'); return { shown: t.classList.contains('show'), text: t.textContent, z: Number(getComputedStyle(t).zIndex) || 0 }; });
+  assert.ok(toast.shown && /Applied/.test(toast.text) && toast.z > 13, `the toast says so over the sheets: ${JSON.stringify(toast)}`);
+  const c1 = await agree('after the look');
+  // 4 a part tapped on the model while the Colors sheet is up: the sheets step down; the part's card and the picker's handle
+  //   show over the collapsed handles; nothing opens by itself (they were under the open sheet: the tap seemed to do nothing)
+  await stillCamera();
+  const unitId = await page.evaluate(() => window.__GEN2_STORE__.state.placed[0].id);
+  const sp = await page.evaluate((id) => window.__GEN2_VIEWER__.unitScreen(id), unitId);
+  assert.ok(sp && await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName === 'CANVAS', sp), `the first unit's front is on the model, uncovered (${JSON.stringify(sp)})`);
+  await page.touchscreen.tap(sp.x, sp.y);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.selectedId != null, null, { timeout: 10_000 }).catch(() => assert.fail('the tap selected no part'));
+  await settle(page, 600);
+  assert.deepEqual(await openSheets(), [], 'no sheet is open after a tap on the model');
+  assert.ok(await onTop('#ws-partcard'), 'the part card shows over the handles');
+  assert.ok(await onTop('#ws-picker'), 'the picker’s handle can be reached');
+  await noKeyboard('a tapped part');
+  // 5 a chip on the card opens the picker sheet, alone, its search field quiet; a swatch recolours the build's region
+  await page.locator('#ws-partcard .zchip').first().tap();
+  await page.waitForFunction(() => document.querySelector('#ws-picker').classList.contains('open'), null, { timeout: 10_000 });
+  assert.deepEqual(await openSheets(), ['ws-picker']);
+  await noKeyboard('the picker');
+  const buildPick = await pickFresh('the build pick');
+  assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_VIEWER__.palette().over || {}).length), 0, 'the build pick is no unit’s own');
+  const c2 = await agree('after the build pick');
+  // 6 This unit only: a second swatch is this unit's own colour; the summary says so
+  const unitSeg = page.locator('#ws-picker .seg2 .seg').nth(1);
+  assert.equal(await unitSeg.isDisabled(), false, 'the tapped part belongs to a unit, so "This unit only" is offered');
+  await unitSeg.tap();
+  await page.waitForFunction(() => /this/.test(document.querySelector('#ws-picker .sheet-handle .ttl').textContent), null, { timeout: 5000 });
+  await settle(page, 500);   // a visitor's pace: the store merges commits made within 350 ms into one undo step
+  const unitPick = await pickFresh('the unit pick');
+  assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_VIEWER__.palette().over || {}).length), 1, 'one unit wears its own colour');
+  assert.ok(await wears(buildPick), 'the build pick stays for the other units');
+  const c3 = await agree('after the unit pick');
+  assert.match(c3.own, /1 unit with its own colours/);
+  // 7 Undo takes the unit's colour back, Redo returns it; the picker stays up through both
+  await page.locator('#ws-tools button[title^="Undo"]').tap();
+  await settle(page, 500);
+  await page.waitForFunction((l) => !window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l) && !Object.keys(window.__GEN2_VIEWER__.palette().over || {}).length, unitPick, { timeout: 10_000 })
+    .catch(async () => assert.fail(`Undo did not take the unit’s colour back: ${JSON.stringify(await page.evaluate(() => ({ names: window.__GEN2_VIEWER__.filamentsInBuild().filaments.map((f) => f.name), over: window.__GEN2_VIEWER__.palette().over, canUndo: window.__GEN2_STORE__.canUndo, canRedo: window.__GEN2_STORE__.canRedo })))}`));
+  assert.equal((await counts()).own, '', 'Undo: no unit wears its own colour');
+  assert.equal((await counts()).fc, c2.fc, 'Undo: the count is the build pick’s again');
+  await page.locator('#ws-tools button[title^="Redo"]').tap();
+  await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), unitPick, { timeout: 10_000 }).catch(() => assert.fail('Redo did not return the unit’s colour'));
+  assert.deepEqual(await openSheets(), ['ws-picker'], 'the picker stays up through Undo and Redo');
+  assert.equal((await agree('after Redo')).fc, c3.fc);
+  // 8 the picker's close: the sheets down, the model and the card
+  await page.locator('#ws-picker .x').tap();
+  await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 5000 });
+  assert.deepEqual(await openSheets(), []);
+  // 9 Simplify from the Colors sheet: its own sheet, the proposal shown; Apply is one undo step, one filament fewer, back to the Colors sheet
+  await page.locator('#ws-colors .sheet-handle').tap();
+  await page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 5000 });
+  await page.locator('#ws-colors .summary .simplify').tap();
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  assert.deepEqual(await openSheets(), ['ws-simplify']);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the proposal is shown');
+  await page.locator('#ws-simplify .apply').tap();
+  await page.waitForFunction((n) => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing && window.__GEN2_VIEWER__.filamentsInBuild().count === n - 1, c3.fc, { timeout: 10_000 });
+  const c4 = await agree('after Simplify');
+  // 10 Review filaments: the shopping list shows over the handles (it opened under the Colors sheet), one row per filament, as many as the Dock
+  await page.locator('#ws-colors .summary .review').tap();
+  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 5000 });
+  await settle(page, 500);
+  assert.deepEqual(await openSheets(), [], 'the sheets step down for the shopping list');
+  assert.ok(await onTop('#ws-shop'), 'the shopping list is not under a sheet');
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#ws-shop .frow b')].map((b) => b.textContent));
+  assert.deepEqual(rows, c4.names, 'the shopping list names the build’s filaments');
+  assert.equal(rows.length, c4.dock, 'as many as the Dock says');
+  // 11 Get parts list: the Parts sheet opens on arrival; the rows name the filaments they print in - the same set, no more
+  await page.locator('#ws-dock .cta').tap();
+  await page.waitForSelector('#ws-parts .printin', { timeout: 30_000 });
+  assert.deepEqual(await openSheets(), ['ws-parts']);
+  const named = await page.evaluate(() => { const out = new Set(); for (const l of document.querySelectorAll('#ws-parts .printin')) { const t = l.textContent.replace(/^Print in /, ''); if (/^No filament/.test(t)) continue; for (const part of t.split(' · ')) for (const nm of part.replace(/^[a-z][a-z ]*?(?= [A-Z])/, '').trim().split(' / ')) out.add(nm.trim()); } return [...out]; });
+  const shortNames = c4.names.map((s) => s.replace('Panchroma ', ''));
+  assert.deepEqual(named.sort(), [...shortNames].sort(), 'the Parts list prints in exactly the filaments the Colors Dock counted');
+  // 12 back to the model: Build from the tab bar, its sheets down; Undo there takes Simplify back
+  await page.locator('#ws-tabbar .tab:has-text("Build")').tap();
+  await page.waitForSelector('#ws-lib', { timeout: 30_000 });
+  await settle(page, 800);
+  assert.deepEqual(await openSheets(), [], 'Build: the model is the hero again');
+  await page.locator('#ws-tools button[title^="Undo"]').tap();
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.filamentsInBuild().count === n, c3.fc, { timeout: 10_000 }).catch(() => assert.fail('Undo in Build did not take Simplify back'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
