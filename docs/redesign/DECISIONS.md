@@ -1202,4 +1202,13 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Terra `01a154c7`, routine: 2 returned, 1 held (the pre-change tick is not migrated - documented, not
   migrated, since the old key was ambiguous), 1 discarded (a `|` in a section title, name or variant could collide the
   key - every one of them is a catalog constant and none contains one; the construction predates the change).
-- **Not deployed.** Left on the branch for Joey's go.
+- **Live.** Joey, "Merge rail-bed-limit (57e1b39) into main and deploy." Merged as `2b620c8` (one DECISIONS conflict, both
+  kept); on the merged tree npm test 554 passed, 0 failed, 5 skipped. Run 39280964212 failed on the new e2e case alone:
+  on the runner's software rasteriser the case switched to Parts while the stage was still rebuilding after its three
+  units landed, and Parts' goTo stepped onto instances that did not exist yet. `402cf6f` makes both waits also wait for
+  `regenBusy` to clear (as the Colors cases do) and drops what the page logged before its reload - a throttled software
+  run (`E2E_SOFT=1 E2E_THROTTLE=4`) showed Start build's commit reaching the stage 200 ms before the sheet reloads, the
+  stage asking the 185 pool for 270 parts (404s, a goTo on the half-mounted manifest): pre-existing, outside this change,
+  proposed as a follow-up. Run 39289885703 then failed attempt 1 on the idle-gate case ("an edit is drawn at once": 3
+  frames in 1.5 s on a runner during GitHub's degraded-Actions incident of the afternoon) and passed on attempt 2; live
+  stamp `402cf6fe`, the three changed modules served. Not checked by hand in production.
