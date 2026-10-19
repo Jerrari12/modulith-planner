@@ -2226,7 +2226,8 @@ test('Parts: the inspector\'s "This unit · parts" rows show the filament each p
   await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
   const inspect = async (uid) => {
     await selectCase(uid);
-    await page.waitForSelector('#ws-insp:not([hidden]) .uprow', { timeout: 5000 });
+    // 30 s, the runner's bound (its 2026-10-19 image timed out at 5 s on a 32-minute e2e step; 4x-throttled here it is ~1 s)
+    await page.waitForSelector('#ws-insp:not([hidden]) .uprow', { timeout: 30_000 });
     return page.evaluate(() => {
       const rgb = (h) => { const s = document.createElement('span'); s.style.background = h; document.body.appendChild(s); const c = getComputedStyle(s).backgroundColor; s.remove(); return c; };
       const rows = [...document.querySelectorAll('#ws-insp .uprow')];
@@ -2325,12 +2326,13 @@ test('the phone: Place / Cancel, the issue card and the toast sit above the shee
   const sp = await page.evaluate(() => { const c = document.querySelector('canvas'); return window.__GEN2_VIEWER__.spotScreens().find((s) => document.elementFromPoint(s.sx, s.sy) === c) || null; });
   assert.ok(sp, 'a "+" a finger can reach');
   await page.touchscreen.tap(sp.sx, sp.sy);
-  await page.waitForSelector('#ws-choice:not([hidden])', { timeout: 10_000 });
+  // 30 s, the runner's bound (10 s timed out on the slow 2026-10-19 runner; the card is up within a second here)
+  await page.waitForSelector('#ws-choice:not([hidden])', { timeout: 30_000 });
   await page.locator('#ws-choice button:has-text("Cancel")').tap({ timeout: 5000 });
   await page.waitForSelector('#ws-choice[hidden]', { state: 'attached', timeout: 5000 });
   const n0 = await units(page);
   await page.touchscreen.tap(sp.sx, sp.sy);
-  await page.waitForSelector('#ws-choice:not([hidden])', { timeout: 10_000 });
+  await page.waitForSelector('#ws-choice:not([hidden])', { timeout: 30_000 });
   await page.locator('#ws-choice button:has-text("Place")').tap({ timeout: 5000 });
   await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n + 1 && window.__GEN2_VIEWER__.build.placed.length === n + 1, n0, { timeout: 60_000 })
     .catch(() => assert.fail('Place placed nothing within 60 s'));
