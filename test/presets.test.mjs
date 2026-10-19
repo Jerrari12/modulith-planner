@@ -76,8 +76,9 @@ const SHELF_COLORS = objAt('const SHELF_COLORS') || {};
 const SIDE_COVER_COLOR = objAt('const SIDE_COVER_COLOR') || {};
 const extHex = (gen.match(/CaseExtender:\s*'([^']+)'/) || [])[1];
 
-/* the side cover's 0.8 mm FACE is a zone of its own (the GLB's FACE material), themed like the faceplate's */
-const ZONE_KEYS = ['Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT', 'SideCover:FACE'];
+/* the side cover's 0.8 mm FACE is a zone of its own (the GLB's FACE material), themed like the faceplate's; the label
+   text is printed, so a preset names its filament too (the Colors plan's decision D2, 2026-10-18) */
+const ZONE_KEYS = ['Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT', 'SideCover:FACE', 'Label:TEXT'];
 /* ⚠ FootAdhesive is deliberately EXCLUDED. It is a bought rubber foot, not
    filament: the row is `purchased`, so colorLocked always renders its real
    finish and a preset entry could never apply. Giving it one would contradict
@@ -89,7 +90,10 @@ const TYPES = [...Object.keys(COLORS || {}), ...Object.keys(SHELF_COLORS), ...Ob
 test('the extraction actually found the catalog and the presets', () => {
   assert.ok(Array.isArray(FILAMENT_DB) && FILAMENT_DB.length >= 4, 'FILAMENT_DB looks wrong');
   assert.ok(FILAMENT_DB.reduce((a, b) => a + b.colors.length, 0) > 50, 'too few catalog colours - check the extraction');
-  assert.equal(PRESETS.length, 4, 'expected four presets');
+  /* the four of 2026-08 plus the palette study's seven (the Colors plan §2, landed with the gallery in step 3, 2026-10-18).
+     Tool-chest red is not among them: the plan admits it only once it is scored as a full palette */
+  assert.equal(PRESETS.length, 12, 'expected twelve presets');
+  assert.deepEqual(PRESETS.slice(4).map((p) => p.name), ['Racing silver & teal', 'Grey & sunlight yellow', 'Safety yellow & black', 'Printer black & red', 'Tri-stripe racing white', 'Black & gold', 'Flight-team navy & gold', 'Neon yellow & black']);   // the last: Joey's 3D Printopia build, 2026-10-18
   assert.ok(COLORS && Object.keys(COLORS).length > 10, 'COLORS did not extract');
   assert.ok(TYPES.includes('ShelfInsert') && TYPES.includes('CaseExtender') && TYPES.includes('SideCover'),
     'the type list is missing the newest parts - the extraction is stale');
@@ -137,6 +141,25 @@ test('a side cover wears the CASE colour on its core and the faceplate FACE on i
   }
   const j = PRESETS.find((p) => p.name === 'The Jerrari');
   assert.equal(j.colors['SideCover:FACE'].name, 'Printed Solid Mystery Orange', 'the rule\'s own example');
+});
+
+test('the faceplate GRIP wears the FACE colour in every preset (the grip accent may differ)', () => {
+  /* Joey 2026-10-18, on the gallery's first cards: "with this faceplate i'm not a fan of the grip being a different color
+     from the face". The four presets of 2026-08 already did this; the palette study's drafts split them, and were folded. */
+  for (const p of PRESETS)
+    assert.equal(p.colors['Faceplate:GRIP'].name, p.colors['Faceplate:FACE'].name,
+      `${p.name}: the grip is ${p.colors['Faceplate:GRIP'].name} but the face is ${p.colors['Faceplate:FACE'].name}`);
+});
+
+test('the ACCENT differs from the faceplate FACE in every preset', () => {
+  /* Joey 2026-10-18, on his phone with EdgeLabel faceplates: "I shouldn't have the accent color the same as the face for
+     those". The EdgeLabel family's accent part sits on the face and vanishes into one of the same colour. The four presets
+     of 2026-08 never matched them (The Jerrari's accent is its own spool, Burnt Titanium, by design); four of the study's
+     seven did (Grey & sunlight yellow, Safety yellow & black, Printer black & red, Flight-team navy & gold) and now take
+     another colour the look already prints. */
+  for (const p of PRESETS)
+    assert.notEqual(p.colors.Accent.name, p.colors['Faceplate:FACE'].name,
+      `${p.name}: the accent and the face are both ${p.colors.Accent.name}`);
 });
 
 test('The Jerrari keeps the shelf colours Joey specified', () => {

@@ -261,6 +261,12 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .prow.done { opacity: .55; }
 #ws-parts .chip { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.35); }
 #ws-parts .chip.buy { background: transparent; border: 1.5px dashed var(--ink-3); }
+/* with the visitor's colours on, the chip is the filament the part prints in (several side by side when its zones or its
+   units wear more than one) and the ring is its identification colour, the one the Assemble instructions use */
+#ws-parts .chip.fil { outline: 2px solid var(--id); outline-offset: 1px; }
+#ws-parts .chip.multi { display: inline-flex; gap: 1px; width: auto; padding: 0; background: transparent; border: none; }
+#ws-parts .chip.multi i { display: block; width: 8px; height: 14px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
+#ws-parts .printin a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
 #ws-parts .qty { font-size: 12px; font-weight: 600; width: 34px; flex: none; }
 #ws-parts .mid { flex: 1; min-width: 0; }
 #ws-parts .name { font-size: 13px; font-weight: 600; }
@@ -452,6 +458,181 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 @media (max-width: 1279px) { #ws-colors, #ws-picker { top: 134px; } }
 
+/* ---- Colors, step 3 (2026-10-18): the current-look card, the Browse looks gallery, a look's details ---- */
+#ws-colors .look { gap: 8px; }
+#ws .lookcard { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 12px; }
+#ws .lookcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws .lookcard canvas.render.drawn { opacity: 1; }
+#ws .lookcard .lmeta { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#ws .lookcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; }
+#ws .lookcard .lname { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws .lookcard .strip { display: inline-flex; gap: 2px; }
+#ws-colors .look .row4 .key { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-colors .look .row4 .more { width: 32px; padding: 0; justify-content: center; font-size: 15px; letter-spacing: .02em; }
+#ws-colors .look .key.sm.strong { background: var(--key-on-bg); border-color: var(--orange); }
+#ws-gallery { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 540px; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 7; }
+#ws-gallery[hidden] { display: none; }
+#ws-gallery .head { display: flex; align-items: center; gap: 10px; }
+#ws-gallery h2 { margin: 0; flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-gallery .head .sub { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+#ws-gallery .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-gallery .gfilter { display: flex; gap: var(--gap-ctl); align-items: center; }
+#ws-gallery .search { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-gallery .seg4 { grid-template-columns: repeat(4, minmax(0, 1fr)); flex: none; width: 196px; }
+#ws-gallery .seg4 .seg { font-size: 12px; padding: 0 2px; }
+#ws-gallery .lgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); align-content: start; }
+#ws-gallery .lcard { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; text-align: left; font: inherit; }
+#ws-gallery .lcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws-gallery .lcard canvas.render.drawn { opacity: 1; }
+#ws-gallery .lcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px; }
+#ws-gallery .lcard .lname { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-gallery .lcard .lcount { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+#ws-gallery .badge.active, #ws .lookcard .badge.active { font-size: 9px; letter-spacing: .06em; background: var(--orange); color: var(--on-orange); }
+#ws-gallery .lgrid .note { grid-column: 1 / -1; }
+#ws-gallery .back { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+#ws-gallery .lookcard.big { padding: 10px; }
+#ws-gallery .dacts { display: flex; gap: var(--gap-ctl); }
+#ws-gallery .dacts .key { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-gallery .dacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); }
+#ws-gallery .frows { display: flex; flex-direction: column; gap: var(--gap-row); }
+#ws-gallery .frow { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; border-radius: 10px; }
+#ws-gallery .frow .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ws-gallery .frow b { font-size: 13px; }
+#ws-gallery .frow .meta, #ws-gallery .disc { font-size: 11px; color: var(--ink-2); }
+#ws-gallery .disc { color: var(--ink-3); line-height: 1.4; }
+#ws-gallery .frow .sw { display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(128,128,128,.35); }
+#ws-gallery .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; }
+#ws-gallery .h2 { margin: 4px 0 0; }
+#ws-gallery .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+/* the primary actions (Browse looks, Apply this look) take the pressed key's colours: an orange-tinted key reads dark in
+   the dark theme otherwise (the first screenshot, 2026-10-18) */
+#ws-colors .look .key.sm.strong, #ws-gallery .dacts .key.strong { color: var(--ink); }
+[data-mode="dark"] #ws-colors .look .key.sm.strong, [data-mode="dark"] #ws-gallery .dacts .key.strong { color: #FFFFFF; }
+/* the card's actions: Browse looks and Save take the row's width, Surprise me and "more" sit beside them */
+#ws-colors .look .row4 { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+#ws-colors .look .row4.morerow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#ws-colors .look .row4.morerow .key { justify-content: center; padding: 0 6px; }
+/* the view tools step right of the open gallery (540 wide from 20) instead of running under it */
+html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
+@media (max-width: 1279px) { #ws-gallery { top: 134px; } }
+
+/* ---- Colors, step 4 (2026-10-18): the compare tray, and the gallery's "+" into it ---- */
+#ws-tray { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 560px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#ws-tray[hidden] { display: none; }
+#ws-tray .ihead { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+#ws-tray .ihead .sub { flex: 1; min-width: 0; font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-tray .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-tray .trow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); }
+#ws-tray .tcard { position: relative; border-radius: 12px; border: 1px solid var(--key-border); background: var(--key-bg); box-shadow: var(--key-shadow); }
+#ws-tray .tcard.on { border-color: var(--orange); box-shadow: var(--key-on-shadow); background: var(--key-on-bg); }
+#ws-tray .tcard .pick { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 6px; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 12px; }
+#ws-tray .tcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws-tray .tcard canvas.render.drawn { opacity: 1; }
+#ws-tray .tcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px; }
+#ws-tray .tcard .lname { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-tray .tcard .x { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; padding: 0; border: none; border-radius: 7px; background: var(--glass-bg); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-tray .badge.active, #ws-tray .badge.shown { font-size: 9px; letter-spacing: .06em; }
+#ws-tray .badge.active { background: var(--orange); color: var(--on-orange); }
+#ws-tray .tacts { display: flex; flex-wrap: wrap; gap: var(--gap-ctl); align-items: center; }
+#ws-tray .tacts .key { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-tray .tacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
+[data-mode="dark"] #ws-tray .tacts .key.strong { color: #FFFFFF; }
+#ws-tray .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+/* ---- the confidence summary on the current-look card, and Simplify (the Colors plan's step 6, 2026-10-18) ---- */
+#ws-colors .summary { display: flex; flex-direction: column; gap: 4px; padding: 0 2px; }
+#ws-colors .summary .sline { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-2); }
+#ws-colors .summary .sline b { color: var(--ink); font-weight: 700; }
+#ws-colors .summary .sgl { color: var(--ink-3); }
+#ws-colors .summary .sgf { color: var(--ink); font-weight: 600; }
+#ws-colors .summary .sacts { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+#ws-colors .summary .link { padding: 0; border: none; background: transparent; color: var(--orange); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#ws-simplify { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 480px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#ws-simplify[hidden] { display: none; }
+#ws-simplify .ihead { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+#ws-simplify .ihead .sub { flex: 1; min-width: 0; font-size: 11px; color: var(--ink-2); }
+#ws-simplify .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-simplify .srow { display: flex; align-items: center; gap: var(--gap-ctl); }
+#ws-simplify .lbl { flex: none; width: 64px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+#ws-simplify .srow .track { flex: 1; }
+#ws-simplify .changes { display: flex; flex-direction: column; gap: 6px; }
+#ws-simplify .chg { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border-radius: 10px; background: var(--key-bg); border: 1px solid var(--key-border); font-size: 12px; }
+#ws-simplify .chg .sw { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .25); flex: none; }
+#ws-simplify .chg .arrow { color: var(--ink-3); }
+#ws-simplify .chg .what { flex: 1; min-width: 0; }
+#ws-simplify .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+#ws-simplify .tacts { display: flex; gap: var(--gap-ctl); align-items: center; }
+#ws-simplify .tacts .key { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-simplify .tacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
+[data-mode="dark"] #ws-simplify .tacts .key.strong { color: #FFFFFF; }
+#ws-gallery .lwrap { position: relative; }
+#ws-gallery .lwrap .lcard { width: 100%; }
+#ws-gallery .cmp { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; padding: 0; border-radius: 8px; border: 1px solid var(--key-border); background: var(--glass-bg); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-gallery .cmp.on { background: var(--orange); color: var(--on-orange); border-color: var(--orange); }
+#ws-gallery .head .cmp-open { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+#ws-gallery .dacts .key.cmp { gap: 5px; }
+
+/* ---- Surprise me (the Colors plan's step 5, 2026-10-18): the gallery's spot; the settings, the locks, three candidates
+   in a row (the tray's cards), the owned-filaments editor in its place ---- */
+#ws-surprise { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 540px; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 7; }
+#ws-surprise[hidden] { display: none; }
+#ws-surprise .head { display: flex; align-items: center; gap: 10px; }
+#ws-surprise h2 { margin: 0; flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-surprise .head .sub { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+#ws-surprise .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-surprise .back { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+#ws-surprise .srow { display: flex; align-items: center; gap: var(--gap-ctl); }
+#ws-surprise .lbl { flex: none; width: 76px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+#ws-surprise .srow .track { flex: 1; }
+#ws-surprise .stylerow { align-items: flex-start; }
+#ws-surprise .stylerow .lbl { padding-top: 10px; }
+#ws-surprise .styles { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+#ws-surprise .stile { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 7px 4px 6px; border-radius: 10px; border: 1px solid var(--key-border); background: var(--key-bg); box-shadow: var(--key-shadow); color: var(--ink); font: inherit; cursor: pointer; }
+#ws-surprise .stile.on { border-color: var(--orange); background: var(--key-on-bg); box-shadow: var(--key-on-shadow); }
+#ws-surprise .stile .sw3 { display: inline-flex; gap: 3px; }
+#ws-surprise .stile .sw3 i { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .25); }
+#ws-surprise .stile .sname { font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; }
+#ws-surprise .ownedrow .chk { flex: 1; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+#ws-surprise .ownedrow .chk input { width: 16px; height: 16px; margin: 0; accent-color: var(--orange); }
+#ws-surprise .ownedrow .cnt { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+#ws-surprise .ownedrow .edit { display: inline-flex; align-items: center; gap: 5px; }
+#ws-surprise .locks { display: flex; align-items: flex-start; gap: var(--gap-ctl); }
+#ws-surprise .locks .lbl { padding-top: 7px; }
+#ws-surprise .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-surprise .lchip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--key-border); background: var(--key-bg); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+#ws-surprise .lchip i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .25); }
+#ws-surprise .lchip svg { opacity: .45; }
+#ws-surprise .lchip.on { border-color: var(--orange); background: var(--key-on-bg); box-shadow: var(--key-on-shadow); }
+#ws-surprise .lchip.on svg { opacity: 1; color: var(--orange); }
+#ws-surprise .lchip:disabled { opacity: .5; cursor: default; }
+#ws-surprise .cands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); }
+#ws-surprise .cand { border-radius: 12px; border: 1px solid var(--key-border); background: var(--key-bg); box-shadow: var(--key-shadow); display: flex; flex-direction: column; }
+#ws-surprise .cand.on { border-color: var(--orange); box-shadow: var(--key-on-shadow); background: var(--key-on-bg); }
+#ws-surprise .cand .pick { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 6px; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 12px 12px 0 0; }
+#ws-surprise .cand canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws-surprise .cand canvas.render.drawn { opacity: 1; }
+#ws-surprise .cand .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px; min-height: 18px; }
+#ws-surprise .cand .lname { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding: 0 2px; font-size: 12px; font-weight: 600; line-height: 1.25; min-height: 30px; }
+#ws-surprise .cand .lcount { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+#ws-surprise .badge.active, #ws-surprise .badge.shown { font-size: 9px; letter-spacing: .06em; }
+#ws-surprise .badge.active { background: var(--orange); color: var(--on-orange); }
+#ws-surprise .cacts { display: flex; flex-direction: column; gap: 6px; padding: 0 6px 6px; }
+#ws-surprise .cacts .key { height: 30px; padding: 0 8px; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+#ws-surprise .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
+[data-mode="dark"] #ws-surprise .key.strong { color: #FFFFFF; }
+#ws-surprise .sacts { display: flex; align-items: center; gap: var(--gap-ctl); }
+#ws-surprise .sacts .again { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+#ws-surprise .note { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-surprise .search { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-surprise .brands { display: flex; flex-direction: column; gap: 8px; }
+#ws-surprise .bhead { font-size: 12px; font-weight: 700; }
+#ws-surprise .bhead i { font-style: normal; font-weight: 500; color: var(--ink-3); }
+#ws-surprise .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-surprise .sw { position: relative; width: 26px; height: 26px; padding: 0; border-radius: 8px; border: 1px solid rgba(0, 0, 0, .25); cursor: pointer; }
+#ws-surprise .sw.own { outline: 2px solid var(--orange); outline-offset: 1px; }
+#ws-surprise .sw.own::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; font-weight: 800; color: #fff; mix-blend-mode: difference; }
+#ws-surprise .ofoot { display: flex; align-items: center; gap: var(--gap-ctl); }
+@media (max-width: 1279px) { #ws-surprise { top: 134px; } }
+
 /* ---- Colors, the per-unit layer ---- */
 #ws-picker .head .region { font-size: 13px; color: var(--orange); }
 #ws-picker .resets { display: flex; gap: 6px; }
@@ -618,9 +799,11 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 #ws-labeledit .igroup.open .ghead svg { transform: rotate(90deg); }
 #ws-labeledit .cells { display: none; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; padding: 2px 0 6px; }
 #ws-labeledit .igroup.open .cells { display: grid; }
-#ws-labeledit .cell { aspect-ratio: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--hair); background: var(--input-bg); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* an icon tile shows the icon as it prints: its art carries its own black fill, so the tile is the label's light body, in
+   both themes (Joey 2026-10-17: black on dark grey had "terrible contrast") */
+#ws-labeledit .cell { aspect-ratio: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--hair); background: #f4f1ec; color: #1b1b1b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 #ws-labeledit .cell svg { width: 100%; height: 100%; }
-#ws-labeledit .cell:hover { background: var(--track); }
+#ws-labeledit .cell:hover { background: #e6e1d8; }
 #ws-labeledit .cell.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
 #ws-labeledit .row { display: flex; gap: 6px; }
 /* the dialog: Replace, Fill, Use custom wording, Add a label */
@@ -769,7 +952,21 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-parts .body { padding: 0 0 8px; }
   #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
-  #ws-colors .scheme .shop { display: none; }
+  /* Colors: the panel's card keeps its actions in the sheet's first screen (the render beside the name, not above it);
+     the gallery is a sheet like the panel, two cards a row at phone width */
+  #ws-colors .lookcard { flex-direction: row; align-items: center; gap: 12px; }
+  #ws-colors .lookcard canvas.render { width: 128px; flex: none; }
+  #ws-colors .lookcard .lmeta { flex: 1; }
+  #ws-colors .lookcard .lrow { flex-direction: column; align-items: flex-start; gap: 4px; }
+  #ws-gallery .lgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ws-gallery .gfilter { flex-wrap: wrap; }
+  #ws-gallery .seg4 { width: 100%; }
+  #ws-gallery .head .sub { display: none; }
+  #ws-surprise .head .sub { display: none; }
+  #ws-surprise .lbl { width: 64px; }
+  #ws-surprise .cacts .key { padding: 0 4px; font-size: 11px; }
+  #ws-surprise .styles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #ws-surprise .stile .sname { font-size: 10px; }
   /* Labels: the panel and the editor are sheets; the list scrolls with the sheet, not inside it */
   #ws-labels .scroll { flex: none; overflow: visible; min-height: 0; margin: 0; padding: 0; }
   #ws-labels .key.tile { height: 42px; }
@@ -818,3 +1015,13 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-dock { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }
+
+/* THE SETUP SHEET ON A PHONE (Joey, 2026-10-18, tapping the mount chip on his phone: "it just opens a broken menu and
+   expands my keyboard"). Its box carries the class `sheet` and sits inside #ws, so at phone width the bottom-sheet rules
+   above took it: positioned at the Dock, slid down to its 44 px peek and clipped - "Build setup" and one line showing
+   behind the Dock. It is a modal, not a bottom sheet: here it takes the modal's own layout back, full width under the
+   top bar, scrolling inside. (Same specificity as `#ws .sheet`, so this must stay below the phone block.) */
+@media (max-width: 1023px) {
+  #ws-setup { align-items: flex-start; padding: 64px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  #ws-setup .sheet, #ws-setup .sheet.open { position: relative; left: auto; right: auto; top: auto; bottom: auto; width: 100%; max-height: 100%; padding: 16px 16px 14px; border-radius: 18px; transform: none; clip-path: none; overflow-y: auto; z-index: auto; transition: none; }
+}

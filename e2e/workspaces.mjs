@@ -463,15 +463,22 @@ test('Build: a unit placed through the store reaches the stage; move, remove and
   await ctx.close();
 });
 
-test('Colors: a preset recolours the model, a region pick is one history entry, Undo restores it', async () => {
+/* the Colors plan's step 3 (2026-10-18): the presets live in the Browse looks gallery; a look is applied from its details */
+test('Colors: a preset applied from the gallery recolours the model as one history entry, and Undo restores it', async () => {
   const { ctx, page, errors } = await open('colors');
   const before = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
-  const presets = page.locator('#ws-colors .scheme .apply');
-  assert.ok(await presets.count() >= 2, 'presets listed');
-  await presets.nth(1).click();
+  await page.locator('#ws-colors .browse').click();
+  const cards = page.locator('#ws-gallery .lcard');
+  assert.ok(await cards.count() >= 11, 'the presets are listed as cards');
+  await cards.nth(1).click();   // Stealth, on a fresh profile
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  assert.match(await text(page, '#ws-gallery h2'), /Stealth/, 'its details open');
+  await page.locator('#ws-gallery .apply').click();
   await settle(page, 600);
   const after = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
   assert.notEqual(after, before, 'the preset changed the palette');
+  assert.equal(await page.locator('#ws-gallery').isHidden(), true, 'Apply closes the gallery');
+  assert.match(await text(page, '#ws-colors .lname'), /Stealth/, 'the card names the look (decision D4)');
   await page.keyboard.press('Control+Z');
   await settle(page, 800);
   const undone = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
@@ -620,12 +627,12 @@ test('the build store: an edit autosaves, a bare address reopens the build, Rena
   await p2.getByRole('menuitem', { name: 'Rename', exact: true }).click();
   await p2.fill('#ws-switch input.rename', 'E2E bench');
   await p2.keyboard.press('Enter');
-  await p2.waitForFunction(() => document.title === 'E2E bench · MODULITH', null, { timeout: 30_000 });   // the rename lands after an IndexedDB write
+  await p2.waitForFunction(() => document.title === 'E2E bench · MODULITH Planner', null, { timeout: 30_000 });   // the rename lands after an IndexedDB write
   // duplicate (navigates), then delete the original from the copy's menu
   await p2.getByRole('menuitem', { name: 'Duplicate', exact: true }).click();
   await p2.waitForFunction((old) => window.__GEN2_STORE__ && window.__GEN2_STORE__.state.buildId !== old, id, { timeout: 60_000 });
   await waitBoot(p2);
-  assert.equal(await p2.evaluate(() => document.title), 'Copy of E2E bench · MODULITH');   // the tab is the build, then the product (js/ui/names.js)
+  assert.equal(await p2.evaluate(() => document.title), 'Copy of E2E bench · MODULITH Planner');   // the tab is the build, then the product (js/ui/names.js)
   await p2.click('#ws-switch .chip-btn');
   await p2.locator('#ws-switch .item.recent .x').first().click();
   await p2.locator('#ws-switch .item.confirm button:text-is("Delete")').click();
@@ -659,7 +666,7 @@ test('the journeys: a share link opens the same build elsewhere, Load build file
   await page.locator('#ws-switch input[type="file"]').setInputFiles({ name: 'bench.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ gen2Build: 1, name: 'From a file', data: rec })) });
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.buildId === 'e2efile00001', null, { timeout: 90_000 });
   await waitBoot(page);
-  assert.equal(await page.evaluate(() => document.title), 'From a file · MODULITH');
+  assert.equal(await page.evaluate(() => document.title), 'From a file · MODULITH Planner');
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.feet), 'adhesive');
   // THE CAP: Recent builds full at 20 - a new build's first change is held, the switcher asks, Drop it makes room
   await page.evaluate(() => new Promise((r) => { const q = indexedDB.open('modulith-planner'); q.onsuccess = () => { const t = q.result.transaction('builds', 'readwrite'); const st = t.objectStore('builds'); st.clear(); for (let i = 0; i < 20; i++) st.put({ id: 'e2ecapfill' + String(i).padStart(2, '0'), name: 'Filler ' + i, savedAt: 1000 + i, openedAt: 1000 + i, kit: null, mount: 'tabletop', length: 185, units: 1, record: { mount: 'tabletop', length: 185, placed: [], nextId: 1, buildId: 'e2ecapfill' + String(i).padStart(2, '0') } }); t.oncomplete = () => r(); }; }));
@@ -1045,7 +1052,7 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   const s = await S(page);
   assert.equal(s.printer, 'mk4');
   assert.equal(s.placed.length, 1, 'one starter drawer');
-  assert.equal(await page.evaluate(() => document.title), 'E2E wall · MODULITH');
+  assert.equal(await page.evaluate(() => document.title), 'E2E wall · MODULITH Planner');
   assert.match(await text(page, '#ws-top .chip-btn.mount'), /Wall Mount · 115/);
   await ctx.close();
 });
@@ -1337,6 +1344,887 @@ test('a label preview drawn late swaps in place: the editor keeps the keyboard a
   await page.waitForFunction(() => document.querySelectorAll('#ws-labels .lprev.img').length >= 1, null, { timeout: 30_000 });
   await settle(page, 600);
   assert.deepEqual(await page.evaluate(() => { const a = document.activeElement; return [a === document.querySelector('#ws-labeledit input.words'), a.value]; }), [true, 'Late font xyz'], 'still typing, nothing lost');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A part label prints its part's drawing, never an icon (2026-10-17, Joey: "it's kind of weird that i can select icons for
+   these part picker labels, it doesnt seem to apply them"): its editor offers no icon controls and says why. An ordinary
+   label keeps them, and its icon tiles show the icon as it prints, dark art on the label's light body ("terrible contrast"). */
+test('the label editor: a part label offers no icon choice; an ordinary label\'s icon tiles are dark on light', async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1' });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await settle(page, 800);
+  await page.evaluate(async () => {
+    const R = await import('/js/rules/labels.js');
+    const L = globalThis.GEN2LabelList;
+    const st = window.__GEN2_STORE__;
+    const item = { schema: 'part-picker-label-item/1', id: 'p6', family: 'screw', head: 'socket-cap', units: 'mm', fields: ['M2', '× 6'], value_missing: [],
+      attributes: [{ path: 'head', text: 'SHCS', meaning: 'Socket head cap' }], pinned: ['head'], optional: [], pinned_unprinted: [] };
+    const apply = (r) => { if (!r.ok) throw new Error(r.msg); st.flush(); st.commit((s) => R.applyResult(L, s, r), 'label'); st.flush(); };
+    apply(R.addPartItems(L, st.state, [item]));
+    apply(R.add(L, st.state, { text: 'Torx bits' }));
+  });
+  await settle(page, 600);
+  const editFor = async (title) => {
+    const chip = page.locator('#ws-labels .chip-l').filter({ hasText: title }).first();
+    const row = chip.locator('xpath=ancestor::*[.//button[@title="Edit this label"]][1]');
+    await row.locator('button[title="Edit this label"]').first().click();
+    await page.waitForFunction(() => !document.getElementById('ws-labeledit').hidden, null, { timeout: 5000 });
+    await settle(page, 300);
+  };
+  await editFor('M2');
+  assert.deepEqual(await page.evaluate(() => ({ grid: !!document.querySelector('#ws-labeledit .igrid'), seg: !!document.querySelector('#ws-labeledit .track.badge'), note: !!document.querySelector('#ws-labeledit .noicon') })),
+    { grid: false, seg: false, note: true }, 'a part label: no icon controls, and a note says why');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.getElementById('ws-labeledit').hidden, null, { timeout: 5000 });
+  await editFor('TORX');
+  await page.waitForFunction(() => document.querySelector('#ws-labeledit .igrid'), null, { timeout: 10_000 });
+  // open the first group so its tiles lay out, then read a tile's colours
+  await page.evaluate(() => { const h = document.querySelector('#ws-labeledit .igroup:not(.open) .ghead'); if (h) h.click(); });
+  const tile = await page.evaluate(() => {
+    const c = document.querySelector('#ws-labeledit .igroup.open .cell');
+    if (!c) return null;
+    const lum = (s) => { const m = s.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map((v) => v / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+    return { bg: lum(getComputedStyle(c).backgroundColor) };
+  });
+  assert.ok(tile && tile.bg > 0.8, `an icon tile is light behind the black art: luminance ${tile && tile.bg}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A shared colour scheme is outside data (2026-10-17): a #scheme= link went into the palette unchecked, so a crafted one
+   could carry a javascript: "Buy" link into the shopping list and the picker, or CSS into the swatches. Every whole-palette
+   entry now passes the relay's own check (main.js cleanPalette): a real hex colour, an http(s) link or none. */
+test('Colors: a crafted #scheme= link cannot bring in a javascript: buy link, CSS, or a __proto__ key', async () => {
+  const colors = JSON.parse('{"Case":{"name":"Bad hex","hex":"red;background-image:url(https://example.invalid/leak)","url":"https://example.invalid/ok"},'
+    + '"Drawer":{"name":"Evil link","hex":"#ff0000","url":"javascript:alert(1)"},'
+    + '"Faceplate":{"name":"Fine","hex":"#00aa55","url":"https://example.invalid/fine"},'
+    + '"__proto__":{"name":"Proto","hex":"#00ff00"}}');
+  const b64 = Buffer.from(JSON.stringify(colors), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('colors', { query: '&new=1#scheme=' + encodeURIComponent(b64) });
+  await page.waitForSelector('#ws-colors', { timeout: 30_000 });
+  await settle(page, 800);
+  const pal = await page.evaluate(() => { const p = window.__GEN2_VIEWER__.palette(); return { keys: Object.keys(p.colors), drawer: p.colors.Drawer || null, face: p.colors.Faceplate || null, proto: Object.getPrototypeOf(p.colors) === Object.prototype }; });
+  assert.ok(!pal.keys.includes('Case'), 'a hex that is not a colour is dropped');
+  assert.ok(pal.drawer && pal.drawer.hex === '#ff0000' && pal.drawer.url === undefined, 'a javascript: link is dropped, the colour kept');
+  assert.ok(pal.face && pal.face.url === 'https://example.invalid/fine', 'a good entry keeps its link');
+  assert.ok(pal.proto && !pal.keys.includes('__proto__'), 'no __proto__ key');
+  // the shopping list renders the buy links: none may be javascript:
+  const stack = page.locator('#ws-dock button.status.stack');
+  if (await stack.isEnabled()) { await stack.click(); await settle(page, 300); }
+  const bad = await page.evaluate(() => [...document.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')).filter((h) => /^\s*javascript:/i.test(h)));
+  assert.deepEqual(bad, [], 'no javascript: href anywhere on the page');
+  const css = await page.evaluate(() => [...document.querySelectorAll('[style]')].map((x) => x.getAttribute('style')).filter((s) => /example\.invalid\/leak/.test(s)));
+  assert.deepEqual(css, [], 'no injected CSS');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* The Colors plan's step 1 (2026-10-18): a look can be SHOWN without being chosen (the gallery, the compare tray and
+   Surprise me will show many); a whole look is its own undo step; an undone plate goes back on the stage; and one
+   filament count drives the Dock and every Shop list. */
+test('Colors: a shown look is worn by the model but never chosen - the palette, the saved palette and the history stay; endPreview and a real pick end it', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 600);
+  const r = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, st = window.__GEN2_STORE__;
+    const saved = () => JSON.stringify(Object.keys(localStorage).filter((k) => k.startsWith('gen2-colors:')).sort().map((k) => [k, localStorage.getItem(k)]));
+    const before = { pal: JSON.stringify(v.palette()), saved: saved(), undo: st.canUndo, caseHex: v.activeHex('Case') };
+    const stealth = v.PRESETS.find((p) => p.name === 'Stealth');
+    v.previewPalette({ colors: stealth.colors });
+    await new Promise((ok) => setTimeout(ok, 450));   // past the store's 350 ms window: a snapshot would have landed by now
+    const during = { pal: JSON.stringify(v.palette()), saved: saved(), undo: st.canUndo, caseHex: v.activeHex('Case'), previewing: v.previewing };
+    const ended = v.endPreview();
+    const after = { caseHex: v.activeHex('Case'), previewing: v.previewing, again: v.endPreview() };
+    v.previewPalette({ colors: stealth.colors });   // shown again, for the real pick below to end
+    return { before, during, ended, after, stealthCase: stealth.colors.Case.hex };
+  });
+  assert.notEqual(r.before.caseHex, r.stealthCase, 'the control: the chosen look and the shown one differ on the case');
+  assert.equal(r.during.caseHex, r.stealthCase, 'the model wears the shown look');
+  assert.equal(r.during.pal, r.before.pal, 'palette() still answers the chosen palette');
+  assert.equal(r.during.saved, r.before.saved, 'nothing was saved to this browser');
+  assert.equal(r.during.undo, r.before.undo, 'no history entry');
+  assert.equal(r.during.previewing, true);
+  assert.equal(r.ended, true, 'endPreview reports a look was shown');
+  assert.equal(r.after.caseHex, r.before.caseHex, 'endPreview puts the chosen look back');
+  assert.equal(r.after.previewing, false);
+  assert.equal(r.after.again, false, 'a second endPreview has nothing to end');
+  // a real change through the panel ends a shown look: open the first region's picker and pick a different filament
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  await page.evaluate(() => { const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')]; sws[sws.length - 1].click(); });
+  await settle(page, 500);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'a real pick ends the shown look');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: a preset applied straight after a region pick is its own undo step (the store merges changes within 350 ms)', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 600);
+  const palNow = () => page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
+  const start = await palNow();
+  // the picker first (the gallery opens over the panel), then the preset's details (step 3): its Apply sits beside the picker
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  await page.locator('#ws-colors .browse').click();
+  await page.locator('#ws-gallery .lcard').nth(1).click();
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  // the pick and the preset in one task: well inside the store's 350 ms window
+  const picked = await page.evaluate(() => {
+    const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')]; sws[sws.length - 1].click();
+    const after = JSON.stringify(window.__GEN2_VIEWER__.palette().colors);
+    document.querySelector('#ws-gallery .apply').click();
+    return after;
+  });
+  await settle(page, 600);
+  assert.notEqual(picked, start, 'the control: the pick changed the palette');
+  assert.notEqual(await palNow(), picked, 'the control: the preset changed it again');
+  await page.keyboard.press('Control+Z');
+  await settle(page, 600);
+  assert.equal(await palNow(), picked, 'one Undo takes the preset off and keeps the pick');
+  await page.keyboard.press('Control+Z');
+  await settle(page, 600);
+  assert.equal(await palNow(), start, 'a second Undo takes the pick off');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: Undo of a plate finish puts the stage back on the old plate, and Redo forward again', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .seg3 .seg', { timeout: 30_000 });
+  await settle(page, 600);
+  const plates = () => page.evaluate(() => ({ stage: window.__GEN2_VIEWER__.build.buildPlate || 'powder', store: window.__GEN2_STORE__.state.buildPlate || 'powder' }));
+  const first = await plates();
+  const target = first.stage === 'smooth' ? 'Powder-coated' : 'Smooth';
+  await page.locator('#ws-colors .seg3 .seg', { hasText: target }).click();
+  await page.waitForFunction((p) => (window.__GEN2_VIEWER__.build.buildPlate || 'powder') !== p, first.stage, { timeout: 30_000 });
+  await settle(page, 800);
+  const changed = await plates();
+  assert.equal(changed.stage, changed.store, 'the stage and the store agree after the pick');
+  assert.notEqual(changed.stage, first.stage, 'the control: the plate changed');
+  await page.keyboard.press('Control+Z');
+  await page.waitForFunction((p) => (window.__GEN2_VIEWER__.build.buildPlate || 'powder') === p, first.stage, { timeout: 30_000 }).catch(() => {});
+  await settle(page, 800);
+  assert.deepEqual(await plates(), { stage: first.stage, store: first.stage }, 'Undo: the stage is back on the old plate with the store');
+  await page.keyboard.press('Control+Y');
+  await page.waitForFunction((p) => (window.__GEN2_VIEWER__.build.buildPlate || 'powder') === p, changed.stage, { timeout: 30_000 }).catch(() => {});
+  await settle(page, 800);
+  assert.deepEqual(await plates(), { stage: changed.stage, store: changed.stage }, 'Redo: forward again, together');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&new=1' });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await settle(page, 800);
+  // a part label with a stripe, on a drawer, so the build prints label text and a stripe colour
+  await page.evaluate(async () => {
+    const R = await import('/js/rules/labels.js');
+    const L = globalThis.GEN2LabelList;
+    const st = window.__GEN2_STORE__;
+    const item = { schema: 'part-picker-label-item/1', id: 'p6', family: 'screw', head: 'socket-cap', units: 'mm', fields: ['M2', '× 6'], value_missing: [],
+      attributes: [{ path: 'head', text: 'SHCS', meaning: 'Socket head cap' }], pinned: ['head'], optional: [], pinned_unprinted: [],
+      colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } };
+    const apply = (r) => { if (!r.ok) throw new Error(r.msg); st.flush(); st.commit((s) => R.applyResult(L, s, r), 'label'); st.flush(); };
+    apply(R.addPartItems(L, st.state, [item]));
+    const p6 = R.labelsOf(st.state).find((l) => l.hardware && l.hardware.id === 'p6');
+    apply(R.place(L, st.state, R.drawers(st.state)[0].id, p6.id, null, 'drawer'));
+  });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.keysInBuild().some((k) => k.key === 'Label:TEXT'), null, { timeout: 30_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  const r = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    const keys = v.keysInBuild(), locked = new Set(keys.filter((k) => k.locked).map((k) => k.key));
+    const mine = v.filamentsInBuild();
+    const signal = v.PRESETS.find((p) => p.name === 'Signal');
+    const sig = v.filamentsInBuild({ colors: signal.colors, over: {} });
+    const sigOnlyHardware = [...new Set(['Magnet', 'Screw'].map((k) => signal.colors[k] && signal.colors[k].name))].filter((n) => n && !Object.entries(signal.colors).some(([k, f]) => !['Magnet', 'Screw'].includes(k) && f.name === n));
+    return {
+      lockedKeys: [...locked], countedKeys: mine.filaments.flatMap((f) => f.keys),
+      count: mine.count, filaments: mine.filaments.length, stripes: mine.unpicked.filter((u) => u.stripe).map((u) => u.hex),
+      textWears: (mine.filaments.find((f) => f.keys.includes('Label:TEXT')) || {}).name || null,
+      sigRows: sig.filaments.length + sig.unpicked.length, sigCount: sig.count, sigNames: sig.filaments.map((f) => f.name), sigOnlyHardware,
+      sigLeaks: sig.filaments.flatMap((f) => f.keys).filter((k) => !keys.some((x) => x.key === k)),
+    };
+  });
+  assert.ok(r.lockedKeys.length > 0, 'the control: this build has bought hardware');
+  assert.deepEqual(r.countedKeys.filter((k) => r.lockedKeys.includes(k)), [], 'bought hardware never counts');
+  assert.ok(r.textWears, 'the label text counts, wearing the preset\'s own black');
+  assert.deepEqual(r.stripes, ['#56b4e9'], 'the stripe counts, in the label\'s own colour');
+  assert.equal(r.count, r.filaments + 1, 'the count: every filament plus the one stripe colour');
+  assert.match(await page.locator('#ws-dock .status.stack').textContent(), new RegExp(`\\b${r.count} filaments\\b`), 'the Dock shows that count');
+  // Signal's Shop list, as THIS build would wear it: only its regions, and no filament the preset gives bought hardware alone
+  assert.deepEqual(r.sigLeaks, [], 'no region the build lacks');
+  for (const n of r.sigOnlyHardware) assert.ok(!r.sigNames.includes(n), `${n} is only on bought hardware in Signal, so it is not listed`);
+  // Shop this look lives in the look's details (step 3): the gallery, the Signal card, its filament rows
+  await page.locator('#ws-colors .browse').click();
+  await page.locator('#ws-gallery .lcard').filter({ hasText: 'Signal' }).click();
+  await page.waitForSelector('#ws-gallery .frow', { timeout: 5000 });
+  assert.equal(await page.locator('#ws-gallery .frow').count(), r.sigRows, 'the Shop list lists exactly those rows');
+  assert.match(await page.locator('#ws-gallery .lcount').textContent(), new RegExp(`^${r.sigCount} filaments`), 'the details say the count');   // (not the text() helper: this case declares its own `text` below)
+  // with no label-text pick, the label text row reads as its own colour, not "follows Body"
+  await page.keyboard.press('Escape');   // the details close
+  await page.keyboard.press('Escape');   // the gallery closes
+  const text = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__; const p = v.palette(); delete p.colors['Label:TEXT']; v.setPalette({ colors: p.colors, on: true, over: p.over });
+    return null;
+  });
+  void text;
+  await settle(page, 300);
+  await page.evaluate(() => window.__GEN2_STORE__.commit(() => {}, 'color'));   // the panel re-renders on a commit
+  await settle(page, 400);
+  const row = await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-colors .crow')].find((x) => /Label text/.test(x.textContent)); return b ? b.querySelector('.fil').textContent : null; });
+  assert.ok(row && !/follows Body/.test(row), `the label text row says what it wears, not "follows Body": ${row}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* The Colors plan's step 2 (2026-10-18, STEP2-GATE.md): a look card renders THIS build wearing a look, offscreen. It must
+   compile no shader program per look (a gallery has dozens), and it must look like the screen. On a tone-mapped tier that
+   takes the XR-flagged, RGBA8-stored target: an ordinary render target misses the tone mapping, and the XR flag with sRGB
+   storage encodes twice. `isXRRenderTarget` is internal to three.js, so this case is what an upgrade would trip. */
+test('Colors step 2: a look card of this build compiles no shader program after the first, and matches the screen on a tone-mapped tier', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const { ctx, page, errors } = await open('colors', { context });
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 1500);
+  const r = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__;
+    const diff = (c) => { const d = []; for (let i = 0; i < c.pixels.length; i += 4) { if (c.pixels[i + 3] < 250) continue; d.push(Math.max(Math.abs(c.pixels[i] - c.cmp[i]), Math.abs(c.pixels[i + 1] - c.cmp[i + 1]), Math.abs(c.pixels[i + 2] - c.cmp[i + 2]))); } d.sort((a, b) => a - b); return { pixels: d.length, median: d[Math.floor(d.length / 2)], p95: d[Math.floor(d.length * 0.95)] }; };
+    const looks = v.PRESETS.map((p) => ({ colors: p.colors, over: {} }));
+    await v.lookCard(looks[0]);
+    const afterFirst = v.probe().programs;
+    for (const l of looks) await v.lookCard(l);
+    const afterAll = v.probe().programs;
+    const pal = v.palette(), chosen = { colors: pal.colors, over: pal.over };
+    const card = diff(await v.lookCard(chosen, { compare: 'canvas' }));
+    const plain = diff(await v.lookCard(chosen, { xr: false, linear: false, compare: 'canvas' }));   // the control: an ordinary target
+    return { tier: v.quality, afterFirst, afterAll, card, plain };
+  });
+  assert.equal(r.tier, 'balanced', 'the case runs on a tone-mapped tier');
+  assert.equal(r.afterAll, r.afterFirst, 'four more looks compile no shader program');
+  assert.ok(r.card.pixels > 1000, `the card shows the build (${r.card.pixels} pixels)`);
+  assert.ok(r.card.median <= 6 && r.card.p95 <= 32, `the card matches the screen: median ${r.card.median}, p95 ${r.card.p95}`);
+  assert.ok(r.plain.median > 12, `the control: an ordinary render target misses the tone mapping (median ${r.plain.median})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* The Colors plan's step 3 (2026-10-18): the Browse looks gallery. Every card is THIS build wearing a look (lookCard), keyed
+   on the scene revision so a card never outlives the build it shows; a hovered card is shown on the model and never chosen
+   (previewPalette), and nothing a card does sends a preset event (GoatCounter 429s are the history here, e2e 111). */
+test('Colors step 3: the gallery draws every look on this build, a hovered card is shown and not chosen, the cards follow the build and Undo, and no preset event is sent', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  const drawnAll = () => page.waitForFunction(() => { const c = document.querySelectorAll('#ws-gallery .lcard canvas'); return c.length >= 11 && [...c].every((x) => x.classList.contains('drawn')); }, null, { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await drawnAll();
+  const first = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    const cards = [...document.querySelectorAll('#ws-gallery .lcard')];
+    const key = (c) => JSON.parse(c.querySelector('canvas').dataset.key);
+    // a drawn card holds a picture: not every pixel is the empty background
+    const painted = cards.map((c) => { const cv = c.querySelector('canvas'); const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 250) n++; return n; });
+    return { names: cards.map((c) => c.querySelector('.lname').textContent), revs: [...new Set(cards.map((c) => key(c)[0]))], sceneRev: v.sceneRev, painted, active: cards.filter((c) => c.classList.contains('on')).map((c) => c.querySelector('.lname').textContent), hero: !!document.querySelector('#ws-colors canvas.drawn') };
+  });
+  assert.ok(first.names.length >= 11 && first.names.includes('Stealth') && first.names.includes('Black & gold'), `the presets are the cards: ${first.names.join(', ')}`);
+  assert.deepEqual(first.revs, [first.sceneRev], 'every card is keyed on the current scene revision');
+  assert.ok(first.painted.every((n) => n > 2000), `every card shows the build (${first.painted.join(', ')} opaque pixels)`);
+  assert.deepEqual(first.active, ['The Jerrari'], 'the boot preset is the active card');
+  assert.ok(first.hero, 'the panel\'s own card is drawn');
+  // hover: shown, not chosen
+  const before = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
+  await page.locator('#ws-gallery .lcard').nth(1).hover();
+  await settle(page, 300);
+  const hovered = await page.evaluate(() => ({ previewing: window.__GEN2_VIEWER__.previewing, caseHex: window.__GEN2_VIEWER__.activeHex('Case'), palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), canUndo: window.__GEN2_STORE__.canUndo }));
+  assert.ok(hovered.previewing && hovered.caseHex === '#2b2b2e', `the model wears Stealth while the card is hovered (${hovered.caseHex})`);
+  assert.equal(hovered.palette, before, 'the palette is not chosen');
+  await page.mouse.move(900, 400);
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'leaving the card puts the chosen look back');
+  // the build changes (in Build, whose store subscriber rebuilds the stage): back in Colors the cards are of the new build,
+  // the cache's old cards left aside; Undo in Build takes the unit away and the cards follow again
+  const units0 = await page.evaluate(() => window.__GEN2_VIEWER__.build.placed.length);
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.waitForSelector('#ws-lib', { timeout: 30_000 });
+  // a unit on the floor beside the build (as startBuild places them: anything floating is refused by the layout rules)
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed.push({ id: s.nextId++, x: s.gridW, y: s.gridH * 2 - 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }); s.gridW = Math.max(1, ...s.placed.map((p) => p.x + p.w)); }, 'edit'));
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n + 1 && !window.__GEN2_VIEWER__.regenBusy, units0, { timeout: 90_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await drawnAll();
+  const after = await page.evaluate(() => ({ revs: [...new Set([...document.querySelectorAll('#ws-gallery .lcard canvas')].map((c) => JSON.parse(c.dataset.key)[0]))], sceneRev: window.__GEN2_VIEWER__.sceneRev, units: window.__GEN2_VIEWER__.build.placed.length }));
+  assert.deepEqual(after.revs, [after.sceneRev], `after a build change every card is of the new build (revision ${after.sceneRev})`);
+  assert.ok(after.sceneRev > first.sceneRev && after.units === units0 + 1, 'the control: the revision moved with the unit');
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.waitForSelector('#ws-lib', { timeout: 30_000 });
+  await page.keyboard.press('Control+Z');
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n && !window.__GEN2_VIEWER__.regenBusy, units0, { timeout: 90_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await drawnAll();
+  const undone = await page.evaluate(() => ({ revs: [...new Set([...document.querySelectorAll('#ws-gallery .lcard canvas')].map((c) => JSON.parse(c.dataset.key)[0]))], sceneRev: window.__GEN2_VIEWER__.sceneRev, units: window.__GEN2_VIEWER__.build.placed.length, presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
+  assert.deepEqual(undone.revs, [undone.sceneRev], 'after Undo every card is of the restored build');
+  assert.ok(undone.units < after.units, 'the control: Undo took the unit away');
+  assert.deepEqual(undone.presetEvents, [], 'no card, hover or details sent a preset event');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* the pacing gate (STEP3.md, M5): the gallery fills a few cards an animation frame, with the page's frames measured
+   meanwhile. The marks proper are measured by hand on a real GPU (step3-pacing.mjs); this case only refuses a regression
+   to something pathological (a serial fill at one card per GPU fence, say) on whatever the suite runs on. */
+test('Colors step 3: the gallery fills within bounds and keeps the page\'s frames bounded', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 2000);
+  const r = await page.evaluate(async () => {
+    const frames = []; let last = performance.now(), go = true;
+    const tick = (t) => { frames.push(t - last); last = t; if (go) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    const t0 = performance.now();
+    document.querySelector('#ws-colors .browse').click();
+    const n = document.querySelectorAll('#ws-gallery .lcard').length;
+    while (document.querySelectorAll('#ws-gallery canvas.drawn').length < n && performance.now() - t0 < 30000) await new Promise((r) => setTimeout(r, 5));
+    const total = performance.now() - t0; go = false;
+    const f = frames.slice(1).sort((a, b) => a - b);
+    return { cards: n, drawn: document.querySelectorAll('#ws-gallery canvas.drawn').length, total: Math.round(total), frames: f.length, p50: Math.round(f[Math.floor(f.length / 2)] || 0), p95: Math.round(f[Math.floor(f.length * 0.95)] || 0), max: Math.round(f[f.length - 1] || 0) };
+  });
+  console.log(`      gallery fill: ${r.drawn}/${r.cards} cards in ${r.total} ms over ${r.frames} frames; frame p50 ${r.p50} p95 ${r.p95} max ${r.max} ms`);
+  assert.equal(r.drawn, r.cards, 'every card drawn');
+  // the bounds are the CI runner's, not a GPU's: its software rasteriser took 8.9 s for the 11 cards on 2026-10-18 (run
+  // 39142321766 failed a 5 s bound; this laptop's soft run takes 1.7 s with 250 ms frames, a real GPU 150 ms with 17 ms
+  // frames). The marks proper are in STEP3.md, measured by step3-pacing.mjs on a GPU; this gate catches only a fill that
+  // never ends or a frame that stalls for seconds. It cannot see the serial-fence pathology (11 cards in 1.2 s on a GPU,
+  // Terra 01a14fce): that is the harness's job
+  assert.ok(r.total <= 30_000, `the gallery filled within 30 s (${r.total} ms)`);
+  assert.ok(r.max <= 2000, `no frame stalled two seconds (max ${r.max} ms)`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* the phone: the gallery is a bottom sheet of its own, one open at a time with the Colors and picker sheets; the details
+   take the sheet's title; closing comes back to the Colors sheet */
+test('Colors step 3 on the phone: Browse looks opens the gallery sheet over the model, a card opens its details, closing returns to the Colors sheet', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-gallery .sheet-handle .ttl'), /Looks/);
+  await page.waitForFunction(() => document.querySelectorAll('#ws-gallery .lcard canvas.drawn').length >= 11, null, { timeout: 30_000 });
+  await page.locator('#ws-gallery .lcard').nth(1).click();
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  assert.match(await text(page, '#ws-gallery .sheet-handle .ttl'), /Stealth/, 'the sheet is titled after the look');
+  await page.locator('#ws-gallery .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').hidden && document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* The Colors plan's step 4 (2026-10-18): the compare tray. Two or three finalists from the gallery; a flip SHOWS one on the
+   model (previewPalette: never saved, never in the history) with the camera and the safe area untouched; Apply is one
+   undo step through the look's own apply; the tray and the gallery never show together. */
+test('Colors step 4: finalists enter the tray from the gallery, a flip shows one on a still model and chooses nothing, Apply is one undo step', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  await page.locator('#ws-colors .browse').click();
+  await page.waitForSelector('#ws-gallery .cmp', { timeout: 10_000 });
+  assert.equal(await page.locator('#ws-gallery .cmp-open').isDisabled(), true, 'Compare is disabled while the tray is empty');
+  await page.locator('#ws-gallery .cmp').nth(1).click();   // Stealth
+  await page.locator('#ws-gallery .cmp').nth(2).click();   // Signal
+  assert.equal(await text(page, '#ws-gallery .cmp-open'), 'Compare (2)', 'the head counts the finalists');
+  assert.equal(await page.locator('#ws-gallery .cmp.on').count(), 2, 'their corner buttons read as in');
+  await page.locator('#ws-gallery .cmp-open').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-tray').hidden && document.querySelector('#ws-gallery').hidden, null, { timeout: 5000 });   // the tray, not the gallery
+  await page.waitForFunction(() => document.querySelectorAll('#ws-tray canvas.drawn').length === 2, null, { timeout: 30_000 });
+  // the tray's opening lifted the safe area's floor once, and the camera eases to its new fit: the flips are judged only
+  // once it has come to rest (the same position read twice, 300 ms apart)
+  await page.waitForFunction(() => { const p = JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()); const same = window.__camPrev === p; window.__camPrev = p; return same; }, null, { polling: 300, timeout: 15_000 });
+  const before = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), canUndo: window.__GEN2_STORE__.canUndo }; });
+  await page.locator('#ws-tray .pick').nth(0).click();
+  await settle(page, 300);
+  const flipped = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { previewing: v.previewing, caseHex: v.activeHex('Case'), palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), shown: document.querySelectorAll('#ws-tray .tcard.on').length, canUndo: window.__GEN2_STORE__.canUndo }; });
+  assert.ok(flipped.previewing && flipped.caseHex === '#2b2b2e', `the model wears Stealth after the flip (${flipped.caseHex})`);
+  assert.equal(flipped.palette, before.palette, 'the palette is not chosen by a flip');
+  assert.equal(flipped.cam, before.cam, 'the camera stays where it was');
+  assert.equal(flipped.safe, before.safe, 'the safe area is untouched by a flip');
+  assert.equal(flipped.canUndo, before.canUndo, 'a flip is not an undo step');
+  assert.equal(flipped.shown, 1, 'the shown card is marked');
+  await page.locator('#ws-tray .pick').nth(1).click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.activeHex('Drawer')), '#d23a2e', 'the second finalist (Signal) replaces the first on the model');
+  await page.locator('#ws-tray .current').click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'Current puts the chosen look back');
+  await page.locator('#ws-tray .pick').nth(0).click();
+  await settle(page, 300);
+  await page.locator('#ws-tray .apply').click();
+  await settle(page, 600);
+  const applied = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), previewing: window.__GEN2_VIEWER__.previewing, name: document.querySelector('#ws-colors .lname').textContent, trayOpen: !document.querySelector('#ws-tray').hidden }));
+  assert.notEqual(applied.palette, before.palette, 'Apply chose the look');
+  assert.ok(!applied.previewing && /Stealth/.test(applied.name) && applied.trayOpen, `applied for real, named on the card, the tray still open (${applied.name})`);
+  await page.keyboard.press('Control+Z');
+  await settle(page, 800);
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors)), before.palette, 'one Undo takes it off again');
+  await page.locator('#ws-tray .tcard .x').nth(0).click();
+  await settle(page, 200);
+  assert.equal(await page.locator('#ws-tray .tcard').count(), 1, 'a finalist can be removed');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden, null, { timeout: 5000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors step 4 on the phone: the tray is a sheet of its own, opened from the gallery and closed back to the Colors sheet', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
+  await page.locator('#ws-colors .browse').click();
+  await page.waitForSelector('#ws-gallery .cmp', { timeout: 10_000 });
+  await page.locator('#ws-gallery .cmp').nth(1).click();
+  await page.locator('#ws-gallery .cmp').nth(2).click();
+  await page.locator('#ws-gallery .cmp-open').click();
+  await page.waitForFunction(() => document.querySelector('#ws-tray').classList.contains('open') && !document.querySelector('#ws-gallery').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-tray .sheet-handle .ttl'), /Compare · 2 of 3/);
+  await page.locator('#ws-tray .pick').nth(0).click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'a flip shows the look on the phone too');
+  await page.locator('#ws-tray .ihead .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* The Colors plan's step 5 (2026-10-18): Surprise me. Three generated candidates for THIS build under a mood, a filament
+   cap, locks and (on the phone case) the owned list; shown on the model like the tray's finalists (previewPalette: never
+   chosen), with the camera and the safe area untouched; Keep is one undo step; the generator's rules are the unit test's
+   (test/surprise.test.mjs), this case proves the workspace around it. */
+test('Colors step 5: Surprise me draws three candidates of this build, a hovered one is shown and not chosen, the cap and a lock hold, Keep is one undo step, the camera stays', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 800);
+  const drawn3 = () => page.waitForFunction(() => document.querySelectorAll('#ws-surprise .cand canvas.drawn').length === 3, null, { timeout: 30_000 });
+  const before = await page.evaluate(() => ({ cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors) }));
+  await page.locator('#ws-colors .surprise').click();
+  await drawn3();
+  const first = await page.evaluate(() => {
+    const sp = window.__GEN2_SURPRISE__;
+    const cards = [...document.querySelectorAll('#ws-surprise .cand')];
+    return { names: cards.map((c) => c.querySelector('.lname').textContent), counts: cards.map((c) => +c.querySelector('.lcount').textContent.split(' ')[0]), stray: [...document.querySelector('#ws-surprise').childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent), style: sp.style, tile: document.querySelector('#ws-surprise .stile.on .sname')?.textContent, tiles: document.querySelectorAll('#ws-surprise .stile .sw3 i').length, cap: sp.cap, galleryHidden: document.querySelector('#ws-gallery').hidden, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea) };
+  });
+  assert.equal(new Set(first.names).size, 3, `three candidates, named apart: ${first.names.join(' / ')}`);
+  assert.ok(first.style === 'workshop' && first.tile === 'Workshop classic' && first.tiles === 15, `five style tiles with three swatches each, Workshop classic on (${first.tile}, ${first.tiles})`);
+  assert.ok(first.counts.every((c) => c >= 1 && c <= first.cap), `every candidate within the cap of ${first.cap} on this build (${first.counts.join(', ')})`);
+  assert.deepEqual(first.stray, [], 'no stray text in the panel');
+  assert.ok(first.galleryHidden, 'the panel takes the gallery\'s spot; the gallery is closed');
+  assert.equal(first.safe, before.safe, 'opening the panel leaves the safe area alone');
+  assert.equal(first.cam, before.cam, 'and the camera');
+  // hover: shown, not chosen
+  await page.locator('#ws-surprise .cand .pick').nth(0).hover();
+  await settle(page, 300);
+  const hovered = await page.evaluate(() => ({ previewing: window.__GEN2_VIEWER__.previewing, caseHex: window.__GEN2_VIEWER__.activeHex('Case'), palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), canUndo: window.__GEN2_STORE__.canUndo, candCase: window.__GEN2_SURPRISE__.cands[0].colors.Case.hex }));
+  assert.ok(hovered.previewing && hovered.caseHex.toLowerCase() === hovered.candCase.toLowerCase(), `the model wears the candidate's case while hovered (${hovered.caseHex} for ${hovered.candCase})`);
+  assert.equal(hovered.palette, before.palette, 'the palette is not chosen');
+  assert.equal(hovered.canUndo, false, 'nothing in the history');
+  await page.mouse.move(900, 400);
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'leaving the card puts the chosen look back');
+  // Try again: three others, the camera and the safe area still where they were
+  await page.locator('#ws-surprise .again').click();
+  await drawn3();
+  const again = await page.evaluate(() => ({ names: [...document.querySelectorAll('#ws-surprise .cand .lname')].map((x) => x.textContent), cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), previewing: window.__GEN2_VIEWER__.previewing }));
+  assert.notDeepEqual(again.names, first.names, 'Try again rolls three others');
+  assert.equal(again.cam, before.cam, 'the camera across Try again'); assert.equal(again.safe, before.safe, 'the safe area across Try again');
+  assert.equal(again.previewing, false);
+  // the cap at 2: every candidate prints in two; a quiet interpretation needs a third colour for its face, so two candidates
+  // (balanced and bold), said in the note, never padded (5b)
+  await page.locator('#ws-surprise .cap .seg').nth(0).click();
+  const drawnAll = () => page.waitForFunction(() => { const c = document.querySelectorAll('#ws-surprise .cand canvas'); return c.length >= 1 && [...c].every((x) => x.classList.contains('drawn')); }, null, { timeout: 30_000 });
+  await drawnAll();
+  const capped = await page.evaluate(() => ({ counts: [...document.querySelectorAll('#ws-surprise .cand .lcount')].map((x) => +x.textContent.split(' ')[0]), whole: window.__GEN2_SURPRISE__.cands.map((c) => new Set(Object.entries(c.colors).filter(([k]) => k !== 'Magnet' && k !== 'Screw').map(([, f]) => f.name)).size), slots: window.__GEN2_SURPRISE__.cands.map((c) => c.slot), note: document.querySelector('#ws-surprise .short')?.textContent || null }));
+  assert.ok(capped.counts.every((c) => c <= 2) && capped.whole.every((w) => w <= 2), `the cap of 2 holds on the build (${capped.counts.join(', ')}) and over the whole look (${capped.whole.join(', ')})`);
+  assert.deepEqual(capped.slots, ['balanced', 'bold'], 'two interpretations at a cap of 2');
+  assert.match(capped.note || '', /Only 2 looks fit/, 'and the note says so');
+  // a lock on the case: every candidate keeps the case the build wears
+  await page.locator('#ws-surprise .lchip', { hasText: 'Case' }).click();
+  await drawnAll();
+  const locked = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const sp = window.__GEN2_SURPRISE__; return { held: sp.locks.shell && sp.locks.shell.name, caseNow: v.palette().colors.Case.name, cases: sp.cands.map((c) => c.colors.Case.name), extenders: sp.cands.map((c) => c.colors.CaseExtender.name), chipOn: document.querySelector('#ws-surprise .lchip.on')?.textContent }; });
+  assert.equal(locked.held, locked.caseNow, 'the lock holds the case the build wears');
+  assert.ok(locked.cases.every((c) => c === locked.caseNow) && locked.extenders.every((c) => c === locked.caseNow), `every candidate keeps it (${locked.cases.join(', ')})`);
+  assert.equal(locked.chipOn, 'Case');
+  // Keep: one undo step, the panel named after the candidate, Undo takes it back
+  const keepName = await page.locator('#ws-surprise .cand .lname').nth(0).textContent();
+  await page.locator('#ws-surprise .keep').nth(0).click();
+  await settle(page, 600);
+  const kept = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const sp = window.__GEN2_SURPRISE__; return { palette: JSON.stringify(v.palette().colors), cand: JSON.stringify(sp.cands[0].colors), lname: document.querySelector('#ws-colors .lname').textContent, canUndo: window.__GEN2_STORE__.canUndo, previewing: v.previewing, badge: document.querySelector('#ws-surprise .cand .badge')?.textContent, keepBtn: document.querySelector('#ws-surprise .keep').textContent, panelOpen: !document.querySelector('#ws-surprise').hidden }; });
+  assert.equal(kept.palette, kept.cand, 'the build wears the kept look');
+  assert.equal(kept.lname, keepName, 'the panel is named after it');
+  assert.ok(kept.canUndo && !kept.previewing && kept.badge === 'ACTIVE' && kept.keepBtn === 'In use' && kept.panelOpen, `kept: ${JSON.stringify(kept)}`);
+  await page.keyboard.press('Control+Z');
+  await settle(page, 600);
+  const undone = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), lname: document.querySelector('#ws-colors .lname').textContent, canUndo: window.__GEN2_STORE__.canUndo, presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
+  assert.equal(undone.palette, before.palette, 'one Undo restores the palette');
+  assert.equal(undone.lname, 'The Jerrari'); assert.equal(undone.canUndo, false, 'Keep was exactly one step');
+  assert.deepEqual(undone.presetEvents, [], 'no candidate, hover or Keep sent a preset event');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned list is ticked in it and "only filaments I own" keeps every candidate inside it; closing returns to the Colors sheet', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .surprise', { timeout: 30_000 });
+  await page.locator('#ws-colors .surprise').click();
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Find your next look/);
+  await page.waitForFunction(() => document.querySelectorAll('#ws-surprise .cand canvas.drawn').length === 3, null, { timeout: 30_000 });
+  await page.locator('#ws-surprise .cand .pick').nth(0).click();
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'a tap shows the candidate on the phone');
+  assert.equal(await page.evaluate(() => document.querySelector('#ws-surprise .ownedonly').disabled), true, 'with nothing owned the switch is off');
+  await page.locator('#ws-surprise .edit').click();
+  await page.waitForSelector('#ws-surprise .sw', { timeout: 5000 });
+  assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Filaments I own/, 'the sheet is titled after the editor');
+  for (const label of ['Elegoo PLA Black', 'Printed Solid Mystery Orange', 'Panchroma Cold White']) await page.locator(`#ws-surprise .sw[aria-label="${label}"]`).click();
+  assert.match(await text(page, '#ws-surprise .ocount'), /3 filaments/);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gen2-owned')).labels.length), 3, 'the list is kept in this browser');
+  await page.locator('#ws-surprise .back').click();
+  await page.waitForSelector('#ws-surprise .ownedonly:not([disabled])', { timeout: 5000 });
+  await page.locator('#ws-surprise .ownedonly').click();
+  await page.waitForFunction(() => { const sp = window.__GEN2_SURPRISE__; return sp.ownedOnly && sp.cands.length && [...document.querySelectorAll('#ws-surprise .cand canvas')].every((c) => c.classList.contains('drawn')); }, null, { timeout: 30_000 });
+  const owned = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name))), n: sp.cands.length, short: sp.short, note: document.querySelector('#ws-surprise .short')?.textContent || null }; });
+  assert.ok(owned.within, 'every candidate prints only in owned filaments');
+  assert.ok(!owned.short || /fit these settings/.test(owned.note), `fewer than three is said, never hidden (${owned.n}: ${owned.note})`);
+  // the list shrinks under the switch and the editor is left by its close button, not Back: the candidates are rolled again
+  // inside the new list when the panel reopens (Sol 01a150df: Escape and close skipped the re-roll, so Keep could apply a
+  // filament no longer owned)
+  await page.locator('#ws-surprise .edit').click();
+  await page.waitForSelector('#ws-surprise .sw', { timeout: 5000 });
+  await page.locator('#ws-surprise .sw[aria-label="Printed Solid Mystery Orange"]').click();
+  await page.locator('#ws-surprise .head .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden, null, { timeout: 10_000 });
+  await page.locator('#ws-colors .surprise').click();
+  await page.waitForFunction(() => { const sp = window.__GEN2_SURPRISE__; return document.querySelector('#ws-surprise').classList.contains('open') && (!sp.cands.length || [...document.querySelectorAll('#ws-surprise .cand canvas')].every((c) => c.classList.contains('drawn'))); }, null, { timeout: 30_000 });
+  const shrunk = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { have: [...have], ownedOnly: sp.ownedOnly, within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name))), n: sp.cands.length }; });
+  assert.deepEqual(shrunk.have, ['Elegoo PLA Black', 'Panchroma Cold White']);
+  assert.ok(shrunk.ownedOnly && shrunk.within, `after the list shrank, every candidate is inside it (${shrunk.n} candidates)`);
+  await page.locator('#ws-surprise .head .x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* The Colors plan's step 6 (2026-10-18): the confidence summary and Simplify. The summary's count is the Dock's (D2) and
+   its regions are the build's, for every preset; Simplify shows the proposal on the model (previewPalette, never chosen)
+   and lists exactly which regions change; Cancel leaves nothing; Apply is one undo step; the camera and the safe area stay. */
+test('Colors step 6: the summary line matches the Dock for every preset; Simplify previews the change, Cancel leaves nothing, Apply is one undo step and the Dock drops; the camera stays', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .summary', { timeout: 30_000 });
+  await settle(page, 800);
+  // M26: the twelve presets, applied through the stage (no history noise), each read off the panel against the Dock
+  const presets = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__; const out = [];
+    for (const p of v.PRESETS) {
+      v.applyPreset(p, { quiet: true }); window.__GEN2_STORE__.commit(() => {}, 'preset'); window.__GEN2_STORE__.flush();
+      await new Promise((r) => setTimeout(r, 150));
+      const line = document.querySelector('#ws-colors .summary .sline').textContent;
+      const groups = [...document.querySelectorAll('#ws-colors .summary .sgl')].map((x) => x.textContent.replace(/: $/, ''));
+      out.push({ name: p.name, line, groups, count: v.filamentsInBuild().count, dock: document.querySelector('#ws-dock .status').textContent });
+    }
+    return out;
+  });
+  assert.equal(presets.length, 12);
+  for (const p of presets) {
+    assert.ok(p.line.startsWith(`${p.count} filament${p.count === 1 ? '' : 's'} used`), `${p.name}: "${p.line}" against a count of ${p.count}`);
+    assert.ok(p.dock.startsWith(`${p.count} filament`), `${p.name}: the Dock says ${p.dock}`);
+    const words = p.groups.flatMap((g) => g.split(', ').map((w) => w.toLowerCase()));
+    assert.equal(new Set(words).size, words.length, `${p.name}: every region once (${p.groups.join(' | ')})`);
+    assert.ok(words.includes('case') && words.includes('fronts') && !words.some((w) => /deck|labels|handles|^accents$/.test(w)), `${p.name}: the root kit's regions, nothing it lacks (${words.join(', ')})`);
+  }
+  // back to The Jerrari for the Simplify flow (4 filaments: black, orange, silk silver, PETG orange on the small parts)
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.applyPreset(v.PRESETS[0], { quiet: true }); window.__GEN2_STORE__.commit(() => {}, 'preset'); window.__GEN2_STORE__.flush(); });
+  await settle(page, 400);
+  const before = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), count: window.__GEN2_VIEWER__.filamentsInBuild().count, canUndo: window.__GEN2_STORE__.canUndo }));
+  assert.equal(before.count, 4, 'the control: The Jerrari prints in four on the root kit');
+  await page.locator('#ws-colors .summary .simplify').click();
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  const opened = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const s = document.querySelector('#ws-simplify'); return { targets: [...s.querySelectorAll('.tgt .seg')].map((b) => b.textContent), on: s.querySelector('.tgt .seg.on').textContent, rows: [...s.querySelectorAll('.chg .what')].map((x) => x.textContent), apply: s.querySelector('.apply').textContent, previewing: v.previewing, gripAccentHex: v.activeHex('Faceplate:GRIP ACCENT'), palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), canUndo: window.__GEN2_STORE__.canUndo, trayHidden: document.querySelector('#ws-tray').hidden, galleryHidden: document.querySelector('#ws-gallery').hidden }; });
+  assert.deepEqual(opened.targets, ['3 filaments', '2 filaments']); assert.equal(opened.on, '3 filaments');
+  assert.equal(opened.rows.length, 1); assert.match(opened.rows[0], /^Grip accents: Silk Silver → /, 'the least visible filament (the grip accent alone) is the one to go');
+  assert.ok(opened.previewing && opened.gripAccentHex.toLowerCase() !== '#cdd2d9', 'the model shows the proposal: the grip accent is no longer silk silver');
+  assert.equal(opened.palette, before.palette, 'nothing is chosen'); assert.equal(opened.canUndo, before.canUndo, 'nothing in the history');
+  assert.equal(opened.cam, before.cam, 'the camera stays'); assert.equal(opened.safe, before.safe, 'the safe area stays');
+  assert.ok(opened.trayHidden && opened.galleryHidden);
+  // down to two: the rows read original → final, one per filament
+  await page.locator('#ws-simplify .tgt .seg', { hasText: '2 filaments' }).click();
+  await settle(page, 300);
+  const two = await page.evaluate(() => ({ rows: [...document.querySelectorAll('#ws-simplify .chg .what')].map((x) => x.textContent), apply: document.querySelector('#ws-simplify .apply').textContent }));
+  assert.equal(two.rows.length, 2, `two rows for two filaments merged (${two.rows.join(' | ')})`);
+  assert.ok(two.rows.every((r) => !/→ .*→/.test(r)), 'no chained arrow: each row is original → final');
+  assert.equal(two.apply, 'Apply · 2 filaments');
+  // Cancel: nothing kept
+  await page.locator('#ws-simplify .cancel').click();
+  await settle(page, 300);
+  const cancelled = await page.evaluate(() => ({ hidden: document.querySelector('#ws-simplify').hidden, previewing: window.__GEN2_VIEWER__.previewing, palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), canUndo: window.__GEN2_STORE__.canUndo, count: window.__GEN2_VIEWER__.filamentsInBuild().count }));
+  assert.ok(cancelled.hidden && !cancelled.previewing && cancelled.palette === before.palette && cancelled.canUndo === before.canUndo && cancelled.count === 4, JSON.stringify(cancelled));
+  // Apply at the default target: one undo step, the Dock drops to three, the panel reads "The Jerrari · edited"
+  await page.locator('#ws-colors .summary .simplify').click();
+  await page.waitForSelector('#ws-simplify .apply', { timeout: 10_000 });
+  await page.locator('#ws-simplify .apply').click();
+  await settle(page, 600);
+  const applied = await page.evaluate(() => ({ hidden: document.querySelector('#ws-simplify').hidden, previewing: window.__GEN2_VIEWER__.previewing, count: window.__GEN2_VIEWER__.filamentsInBuild().count, dock: document.querySelector('#ws-dock .status').textContent, lname: document.querySelector('#ws-colors .lname').textContent, summary: document.querySelector('#ws-colors .summary .sline').textContent, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
+  assert.ok(applied.hidden && !applied.previewing, 'the panel closes and the preview ends');
+  assert.equal(applied.count, 3); assert.match(applied.dock, /^3 filaments/); assert.match(applied.summary, /^3 filaments used/);
+  assert.equal(applied.lname, 'The Jerrari · edited');
+  assert.equal(applied.cam, before.cam); assert.equal(applied.safe, before.safe);
+  assert.deepEqual(applied.presetEvents, [], 'Simplify sends no preset event');
+  await page.keyboard.press('Control+Z');
+  await settle(page, 500);
+  const undone = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), count: window.__GEN2_VIEWER__.filamentsInBuild().count, lname: document.querySelector('#ws-colors .lname').textContent }));
+  assert.equal(undone.palette, before.palette, 'one Undo restores the look'); assert.equal(undone.count, 4); assert.equal(undone.lname, 'The Jerrari');
+  // Review filaments opens the shopping list with the suitability note; Keep this look opens Save with the name field
+  await page.locator('#ws-colors .summary .review').click();
+  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 5000 });
+  assert.match(await page.locator('#ws-shop .note').last().textContent(), /whether a filament suits a part/);
+  await page.locator('#ws-shop .x').click();
+  await page.locator('#ws-colors .summary .keeplook').click();
+  await page.waitForSelector('#ws-colors .saverow input', { timeout: 5000 });
+  // the Save row focuses its input on the next tick; under the software rasteriser that tick can land after the selector
+  await page.waitForFunction(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Look name', null, { timeout: 5000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors step 6 on the phone: Simplify is a sheet of its own; Apply closes it back to the Colors sheet with the count dropped', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForSelector('#ws-colors .summary .simplify', { timeout: 30_000 });
+  await page.locator('#ws-colors .summary .simplify').click();
+  await page.waitForFunction(() => document.querySelector('#ws-simplify').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-simplify .sheet-handle .ttl'), /Simplify/);
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the proposal is shown on the phone too');
+  await page.locator('#ws-simplify .apply').click();
+  await page.waitForFunction(() => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  assert.match(await text(page, '#ws-dock .status'), /^3 filaments/);
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), true);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* Joey, 2026-10-18: "lets just hide makerworld and cults for now until eventually i upload more models there". Few parts
+   have a page on either, and choosing one in the Parts list turned most rows into a site search. */
+test('Parts and the viewer offer and link only Printables and Thangs (MakerWorld and Cults 3D are hidden)', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  // saved choices of the two hidden stores, from before: each must read as Printables
+  await context.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-link-store', 'makerworld'); localStorage.setItem('gen2-store', 'cults'); } catch {} });
+  const { ctx, page, errors } = await open('parts', { context });
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const parts = await page.evaluate(() => ({
+    sites: [...document.querySelectorAll('#ws-parts .track.sites .seg')].map((b) => b.textContent.trim()),
+    on: document.querySelector('#ws-parts .track.sites .seg.on')?.textContent.trim() || null,
+    printables: [...document.querySelectorAll('#ws-parts a[href]')].filter((a) => /printables\.com/.test(a.href)).length,
+    hidden: [...document.querySelectorAll('#ws-parts a[href]')].map((a) => a.href).filter((h) => /makerworld\.com|cults3d\.com/.test(h)),
+    labels: [...document.querySelectorAll('#ws-parts a.link')].map((a) => a.textContent).filter((t) => /MakerWorld|Cults/.test(t)),
+  }));
+  assert.deepEqual(parts.sites, ['Printables', 'Thangs'], 'the download-site choice offers only Printables and Thangs');
+  assert.equal(parts.on, 'Printables', 'a saved MakerWorld choice reads as Printables');
+  assert.ok(parts.printables > 0, 'the control: the rows link to Printables');
+  assert.deepEqual(parts.hidden, [], 'no row links to MakerWorld or Cults 3D');
+  assert.deepEqual(parts.labels, [], 'no row is labelled with either');
+  // the viewer's own panels, which the bare address shows until the cutover: its store picker and its parts' links
+  const viewer = await context.newPage();
+  const verrors = []; viewer.on('pageerror', (e) => verrors.push(e.message));
+  await viewer.goto(`${base}/index.html?debug=1`, { waitUntil: 'load', timeout: 90_000 });
+  await viewer.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#store-select option'), null, { timeout: 90_000 });
+  await settle(viewer, 1500);
+  const v = await viewer.evaluate(() => ({
+    options: [...document.querySelectorAll('#store-select option')].map((o) => o.textContent.trim()),
+    value: document.querySelector('#store-select').value,
+    printables: [...document.querySelectorAll('a[href]')].filter((a) => /printables\.com/.test(a.href)).length,
+    hidden: [...document.querySelectorAll('a[href]')].map((a) => a.href).filter((h) => /makerworld\.com|cults3d\.com/.test(h)),
+  }));
+  assert.deepEqual(v.options, ['Printables', 'Thangs'], 'the viewer\'s store picker offers only Printables and Thangs');
+  assert.equal(v.value, 'printables', 'a saved Cults 3D choice shows as Printables');
+  assert.ok(v.printables > 0, 'the control: the viewer\'s parts list links to Printables');
+  assert.deepEqual(v.hidden, [], 'no MakerWorld or Cults 3D link in the viewer\'s panels');
+  assert.deepEqual(clean([...errors, ...verrors]), []);
+  await ctx.close();
+});
+
+/* BUILD'S PRODUCT PREVIEWS MATCH THE MODEL (PREVIEW-FIDELITY.md, 2026-10-18). A preview is drawn into a render target of its
+   own, and three.js r185 tone-maps only the screen and XR-flagged targets: on the tone-mapped tiers (Balanced and up; Very
+   High is the default) the previews sat a median 17 to 31 of 255 off the model. They now take the XR flag with RGBA8 storage,
+   and the stage's own light rig and environment. Here the first unit's inspector and tile previews are compared with that
+   unit on the stage, drawn through the screen's own path from the same camera: the colour over the preview's own pixels
+   (median <= 6, p95 <= 32 of 255), and the silhouettes 2 px in from their edges (at most 0.5% of the model's pixels in one
+   and not the other), on Balanced and then on Fast. On Balanced the ordinary target, the previews' old one, is the control
+   and must miss. `isXRRenderTarget` is internal to three.js, so an upgrade that changes it fails here. Between the two
+   tiers, the quality pill: a preview is drawn for a tier, so a new tier repaints the tiles. Dark stage only: on the light
+   stage the model also carries the stage's cast shadows (from the rest of the build and from its own parts), and a
+   preview draws none. */
+test('Build: a product preview matches the model on a tone-mapped tier and on Fast (an ordinary render target is the control), and a new tier repaints the tiles', async () => {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const { ctx, page, errors } = await open('build', { context });
+  await page.waitForSelector('#ws .pv img', { timeout: 30_000 });
+  await settle(page, 1500);
+  const compare = () => page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, u = window.__GEN2_STORE__.state.placed[0];
+    const colour = (p, m) => {   // the largest channel difference over the preview's own pixels: the true median and the p95
+      const d = []; for (let i = 0; i < p.length; i += 4) { if (p[i + 3] < 250) continue; d.push(Math.max(Math.abs(p[i] - m[i]), Math.abs(p[i + 1] - m[i + 1]), Math.abs(p[i + 2] - m[i + 2]))); }
+      d.sort((a, b) => a - b); const n = d.length;
+      return { pixels: n, median: n % 2 ? d[(n - 1) / 2] : (d[n / 2 - 1] + d[n / 2]) / 2, p95: d[Math.floor(n * 0.95)] };
+    };
+    const cover = (p, m, W, H) => {   // silhouette pixels (alpha >= 250) whose whole 5x5 neighbourhood is in one silhouette and that the other lacks
+      const P = new Uint8Array(W * H), M = new Uint8Array(W * H); let nM = 0;
+      for (let i = 0; i < W * H; i++) { P[i] = p[i * 4 + 3] >= 250 ? 1 : 0; M[i] = m[i * 4 + 3] >= 250 ? 1 : 0; nM += M[i]; }
+      const inner = (S, x, y) => { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H || !S[yy * W + xx]) return false; } return true; };
+      let off = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if ((M[i] && !P[i] && inner(M, x, y)) || (P[i] && !M[i] && inner(P, x, y))) off++; }
+      return { modelPixels: nM, share: 100 * off / Math.max(1, nM) };
+    };
+    const out = { tier: v.quality };
+    const look = { fill: u.fill, w: u.w, hh: u.hh, variant: u.variant || null, lip: u.lip || null };
+    for (const [name, spec] of [['inspector', { ...look, view: 'three', fit: 1.0, size: 512, unitId: u.id }], ['tile', { ...look, view: 'front' }]]) {
+      const shown = await v.thumbDraw(spec), model = v.thumbModel(shown, u.id);
+      out[name] = { ...colour(shown.pixels, model), cover: cover(shown.pixels, model, shown.width, shown.height) };
+      if (name === 'inspector' && v.quality === 'balanced') out.plain = colour((await v.thumbDraw(spec, { plain: true })).pixels, model);
+    }
+    return out;
+  });
+  const matches = (r) => {
+    for (const k of ['inspector', 'tile']) {
+      const c = r[k];
+      assert.ok(c.pixels > 1000, `${r.tier}, ${k}: the preview shows the unit (${c.pixels} pixels)`);
+      assert.ok(c.median <= 6 && c.p95 <= 32, `${r.tier}, ${k}: the preview's colours match the model: median ${c.median}, p95 ${c.p95}`);
+      assert.ok(c.cover.share <= 0.5, `${r.tier}, ${k}: the preview covers what the model covers: ${c.cover.share.toFixed(2)}% of ${c.cover.modelPixels} pixels differ`);
+    }
+  };
+  const b = await compare();
+  assert.equal(b.tier, 'balanced', 'the case starts on a tone-mapped tier');
+  matches(b);
+  assert.ok(b.plain.median > 12, `the control: an ordinary render target misses the tone mapping (median ${b.plain.median})`);
+  // a new tier, a new picture: the pill (Balanced, then Fast) repaints the tiles, and so does a tier the stage sets itself
+  // (setQuality, the auto-downgrade's path), since the stage tells the workspace (opts.onQuality)
+  const repainted = async (src, how) => {
+    await page.waitForFunction((s) => { const i = document.querySelector('#ws .pv img'); return !!i && i.getAttribute('src') !== s; }, src, { timeout: 30_000 })
+      .catch(async () => assert.fail(`${how}: the tiles were not repainted for the ${await page.evaluate(() => window.__GEN2_VIEWER__.quality)} tier`));
+    return page.locator('#ws .pv img').first().getAttribute('src');
+  };
+  const atBalanced = await page.locator('#ws .pv img').first().getAttribute('src');
+  await page.locator('#ws-tools button.quality').click();
+  const atFast = await repainted(atBalanced, 'the pill');
+  const f = await compare();
+  assert.equal(f.tier, 'fast', 'the pill moved Balanced on to Fast');
+  matches(f);
+  await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('balanced'));
+  assert.equal(await repainted(atFast, 'setQuality'), atBalanced, 'back on Balanced, the tiles are the Balanced ones again');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* Joey, 2026-10-18, on the Parts tab after choosing colours: "the parts have the instructions colors assigned to them, which
+   is kind of confusing after assigning chosen colors to it". With the visitor's colours on, a row's chip is the filament the
+   part prints in (the identification colour stays as a ring), the row names it, and so does the CSV. */
+test('Parts: with chosen colours on, a row shows and names the filament it prints in; off, the identification colour; the CSV carries the name', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .browse').click();
+  await page.locator('#ws-gallery .lcard').nth(1).click();   // Stealth, on a fresh profile
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.locator('#ws-gallery .apply').click();
+  await settle(page, 600);
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const read = () => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__; const pal = v.palette();
+    const rgb = (h) => { const s = document.createElement('span'); s.style.background = h; document.body.appendChild(s); const c = getComputedStyle(s).backgroundColor; s.remove(); return c; };
+    const row = [...document.querySelectorAll('#ws-parts .prow')].find((x) => /^Case\b/.test(x.querySelector('.name').textContent));
+    const chip = row.querySelector('.chip');
+    return { on: pal.on, caseName: pal.colors.Case ? pal.colors.Case.name : null, caseRgb: pal.colors.Case ? rgb(pal.colors.Case.hex) : null, idRgb: rgb('#E9E9EC'),
+      chipRgb: getComputedStyle(chip).backgroundColor, ring: getComputedStyle(chip).outlineStyle, swatches: chip.querySelectorAll('i').length,
+      line: (row.querySelector('.printin') || {}).textContent || '', link: (row.querySelector('.printin a') || {}).href || '', caption: document.querySelector('#ws-parts .row2 .dim').textContent,
+      buyChips: [...document.querySelectorAll('#ws-parts .chip.buy')].filter((c) => c.classList.contains('fil')).length };
+  });
+  const on = await read();
+  assert.ok(on.on && on.caseName, 'the control: the preset is on and picks the case');
+  assert.equal(on.chipRgb, on.caseRgb, `the case row's chip is the case filament (${on.caseName}), not the identification colour`);
+  assert.equal(on.ring, 'solid', 'the identification colour stays as a ring');
+  const shortName = on.caseName.replace('Panchroma ', '');   // the brand prefix is stripped, as the Colors tab strips it
+  assert.ok(on.line.startsWith(`Print in ${shortName}`), `the row names the filament: "${on.line}" (expected "Print in ${shortName}…")`);
+  assert.ok(/^https?:/.test(on.link), 'the name is the buy link the Colors tab uses');
+  assert.match(on.caption, /Chip = the filament it prints in · ring = its colour in Assemble/, 'the caption says what the chip is');
+  assert.equal(on.buyChips, 0, 'bought hardware keeps its dashed chip');
+  // the CSV names it too
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10_000 }), btn(page, 'Download CSV', '#ws-parts').click()]);
+  const csv = await readFile(await dl.path(), 'utf8');
+  const caseLine = csv.split(/\r?\n/).find((l) => /"Case 185/.test(l));
+  assert.ok(/"Section","Qty","Part","Print in"/.test(csv), 'the CSV has a Print in column');
+  assert.ok(caseLine && caseLine.includes(`"${on.caseName.replace('Panchroma ', '')}`), `the case line carries the filament: ${caseLine}`);
+  // colours off: the identification colour, as today
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setUseCustom(false); window.__GEN2_STORE__.commit(() => {}, 'color'); });
+  await settle(page, 400);
+  const off = await read();
+  assert.equal(off.on, false, 'the control: the colours are off');
+  assert.equal(off.chipRgb, off.idRgb, 'the chip is the identification colour again');
+  assert.equal(off.line, '', 'no Print in line');
+  assert.match(off.caption, /^Chips = part colors in Assemble/, 'the caption is the old one');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE BED LIMIT ON THE RAILS (2026-10-19). A user of the original planner, relayed by Joey: "the table rails list on the left
+   are 3 270x3w rails + 1 270x2w ... The 3D diagram shows 2 270x4w + 1 270x3w. While technically that works, a Core One L
+   cannot print something 4w." The Parts list caps a rail section at the widest the chosen bed prints (js/rules/bom.js);
+   the generator now tiles with the same cap (generate.js bedLimits), and the list names each row's width. */
+test('Build: on a bed-limited printer the stage tiles the under-table rails as the Parts list bills them (a Core One L at 270: 3W+3W+3W+2W, never a 4W)', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Under-Table")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.locator('#ws-setup .card.len:has-text("270 mm")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.selectOption('#ws-setup select.printer', 'coreonel');
+  assert.match(await text(page, '#ws-setup .fit'), /Bed 300×300/);
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });   // gone once the sheet's reload lands
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
+  await waitBoot(page);
+  assert.equal((await S(page)).printer, 'coreonel');
+  // an 11W top row: three 3W drawers beside the 2W starter, through the store the way the Build case places
+  await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s) => { let x = Math.max(...s.placed.map((p) => p.x + p.w)); const y = Math.min(...s.placed.map((p) => p.y)); for (const w of [3, 3, 3]) { s.placed.push({ id: s.nextId++, x, y, w, hh: 2, fill: 'decor', shelves: 0 }); x += w; } s.gridW = Math.max(s.gridW, x); }, 'edit'); });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 4, null, { timeout: 90_000 });
+  const rails = () => page.evaluate(() => { const out = {}; for (const i of window.__GEN2_VIEWER__.manifest.instances) { const m = /^UnderTableRail_270-(\d)W$/.exec(i.node); if (m) out[m[1]] = (out[m[1]] || 0) + 1; } return out; });
+  assert.deepEqual(await rails(), { 3: 3, 2: 1 }, 'the stage: three 3W rails and one 2W, as a 300×300 bed prints them');
+  // the Parts list: the same sections, each row naming its width
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const listed = () => page.evaluate(() => { const out = {}; for (const row of document.querySelectorAll('#ws-parts .prow')) { const m = /^Under Table Rails - 270 · (\d)W section$/.exec(row.querySelector('.name').textContent); if (m) out[m[1]] = (out[m[1]] || 0) + parseInt(row.querySelector('.qty').textContent.replace('×', ''), 10); } return out; });
+  assert.deepEqual(await listed(), { 3: 3, 2: 1 }, 'the Parts list bills the sections the stage shows, each row naming its width');
+  // Any printer, chosen in the setup sheet from here (Parts does not sync the stage itself, so the sheet does), lifts the
+  // cap on both at once: 4W+4W+3W in the model and in the list
+  await page.evaluate(() => window.__GEN2_CTX__().openSetup('printer'));
+  await page.waitForSelector('#ws-setup select.printer', { timeout: 10_000 });
+  await page.selectOption('#ws-setup select.printer', 'any');
+  await btn(page, 'Apply', '#ws-setup').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-setup'), null, { timeout: 30_000 });
+  assert.equal((await S(page)).printer, 'any', 'the sheet applied the printer');
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-parts .prow .name')].some((n) => /4W section/.test(n.textContent)), null, { timeout: 30_000 });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.manifest.instances.some((i) => i.node === 'UnderTableRail_270-4W'), null, { timeout: 90_000 });
+  assert.deepEqual(await rails(), { 4: 2, 3: 1 }, 'any printer: the stage reaches for 4W again');
+  assert.deepEqual(await listed(), { 4: 2, 3: 1 }, 'and so does the list');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

@@ -873,6 +873,17 @@ export function mountLabels(stage, ctx) {
     editor.appendChild(el('label.frow', {}, [el('span', { text: 'Words' }), words]));
     const long = R.labelWords(l).length;
     if (long > L.MIRROR_MAX) editor.appendChild(el('p.note', { text: `These words are ${long} characters long. Labels made here hold ${L.MIRROR_MAX}, so a change keeps the first ${L.MIRROR_MAX}.` }));
+    const place = e.unitId == null && !shared.length ? el('div.row', {}, [el('button.key.sm', { onclick: () => { const id = st.edit.id; closeEdit(); chooseLabel(id); } }, [icon('hand-pointing', { size: 16 }), 'Place this label'])]) : null;
+    // a part label prints its part's drawing (the Label Studio's layout), never an icon, so icon controls would do nothing
+    // (Joey 2026-10-17: "it's kind of weird that i can select icons for these part picker labels, it doesnt seem to apply
+    // them"). The look decides it exactly as for the 3D label: a drawer whose words were changed draws words and an icon.
+    const editUnit = e.unitId != null ? R.drawers(S()).find((u) => u.id === e.unitId) : null;
+    const lookNow = editUnit ? labelLookOf(S(), editUnit) : labelLookOfLabel(l);
+    if (lookNow && lookNow.kind === 'part') {
+      editor.appendChild(el('p.note.noicon', { text: 'Icons don’t apply here: the part’s drawing prints in their place. To use an icon instead, choose “Use custom wording” on the drawer.' }));
+      if (place) editor.appendChild(place);
+      return;
+    }
     // the icon
     const b = L.cleanBadge(l.badge, { svg: true });
     const state = !b ? 'auto' : b.type === 'none' ? 'none' : b.type === 'char' ? 'char' : b.svg ? 'upload' : 'icon';
@@ -911,7 +922,6 @@ export function mountLabels(stage, ctx) {
       }
     }
     renderGrid();
-    const place = e.unitId == null && !shared.length ? el('div.row', {}, [el('button.key.sm', { onclick: () => { const id = st.edit.id; closeEdit(); chooseLabel(id); } }, [icon('hand-pointing', { size: 16 }), 'Place this label'])]) : null;
     if (place) editor.appendChild(place);
   }
 

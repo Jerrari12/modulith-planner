@@ -39,7 +39,8 @@ const mutate = (code, from, to) => {
   return code.replace(from, to);
 };
 
-const HELPERS = [takeAt('function markShadowDirty()', { fn: true }), takeAt('function setPartShadows(root, on)', { fn: true })].join('\n');
+const HELPERS = [takeAt('function markShadowDirty()', { fn: true }), takeAt('function setPartShadows(root, on)', { fn: true }),
+  'let sceneRev = 0;'].join('\n');   // the scene revision both swaps bump (the Colors plan's step 3): module state the lifted functions read
 const SHADOW_QUALITY = [takeAt('function shadowsWanted()', { fn: true }), takeAt('function applyShadowQuality()', { fn: true })].join('\n');
 const HANDLE_SWAP = takeAt('async function applyHandleStyle(style)', { fn: true });
 const FACEPLATE_SWAP = takeAt('async function applyFaceplateStyle(style)', { fn: true });

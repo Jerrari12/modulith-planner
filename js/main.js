@@ -8,6 +8,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { generateManifest, migrateOfficialBuild, resolvePartPreview, REQUIREMENT as REQ,
   shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, gridfinitySizeOk } from './generate.js';
 import { resolveEntry } from './entry.js';
+import { tabTitle } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
 import { createPlannerRelay } from './relay-auth.js';
 import { FILAMENT_DB } from './filament-db.js';
 import { partMaterialSpec } from './part-material.js';
@@ -465,11 +466,13 @@ const STAGE_THEMES = {
   // point of this stage, so this is the brightest rung that keeps it.
   dark:  { bg: 0x0d0e21, bgWall: 0x150f30, table: 0x282c66, wall: 0x50526e,
            surface: 0x6e7090, grid: 0x2b7f9e, dim: 0x8f9ad8 },
-  // the workspace shell's night stage (2026-10-12): the dark stage with the grid two steps quieter and the floor
-  // reflection halved, so the product is the focal point under the glass chrome (Astra's review of the first
-  // Build screen). Everything else is `dark`; the plain viewer never selects it.
+  // the workspace shell's night stage (2026-10-12): the dark stage with the grid two steps quieter (0x1f5a70) and the
+  // floor reflection halved (refl 0.08), so the product is the focal point under the glass chrome (Astra's review of
+  // the first Build screen). REVERSED 2026-10-18: Joey, comparing the old viewer and the planner on his phone, "Is it
+  // just me or does the new grid feel darker" ... "I like the old more" - the night stage now matches `dark` exactly;
+  // the entry stays so the shell's mode name and a future variant have somewhere to live.
   night: { bg: 0x0d0e21, bgWall: 0x150f30, table: 0x282c66, wall: 0x50526e,
-           surface: 0x6e7090, grid: 0x1f5a70, dim: 0x8f9ad8, refl: 0.08 },
+           surface: 0x6e7090, grid: 0x2b7f9e, dim: 0x8f9ad8 },
 };
 // DARK IS THE DEFAULT (Joey 2026-08-08). Both choices are stored explicitly,
 // so "no key" can't mean light and a blocked localStorage fails safe to the
@@ -691,11 +694,19 @@ const LIGHT_RIG = {
   key:     { hemi: 0.15, sun: 1.2, fill: 0.3 },
 };
 let baseHemi = LIGHT_RIG.shipped.hemi;   // updateCinema fades FROM this, per tier
+/* the light strengths a tier gives the stage: its rig, with the fill the workspace asks for on top (opts.fillBoost,
+   2026-10-12: a black shell in the Jerrari palette lost its side faces at the stage's resting fill; the boost reveals the
+   shape without changing the filament colour). The product previews read it too (drawThumb), so they are lit as the model is. */
+function rigFor(name) {
+  const q = QUALITY[name], rig = q.key ? LIGHT_RIG.key : LIGHT_RIG.shipped;
+  return { hemi: rig.hemi, sun: rig.sun, fill: rig.fill * ((typeof opts !== 'undefined' && opts.fillBoost) || 1) };
+}
 
 function applyQuality(name) {
   /* every tier change and every re-mount (mountManifest calls this) compiles programs on the next frames;
      the auto-downgrade must not read those stalls as the new tier's frame rate */
   perfGrace();
+  const was = quality;
   quality = QUALITY[name] ? name : 'high';
   const q = QUALITY[quality];
 
@@ -703,13 +714,11 @@ function applyQuality(name) {
   // ⚠ NOT ACES. Measured median hue error: none 0.9 deg, Khronos Neutral 2.5 deg,
   // ACES 5.3 deg. Neutral exists for product rendering where colour is a promise.
 
-  const rig = q.key ? LIGHT_RIG.key : LIGHT_RIG.shipped;
+  const rig = rigFor(quality);
   baseHemi = rig.hemi;
   if (!cinema.on) hemi.intensity = rig.hemi;
   sun.intensity = rig.sun;
-  /* the workspace asks for more fill (opts.fillBoost, 2026-10-12): a black shell in the Jerrari palette lost its
-     side faces at the stage's resting fill; the boost reveals the shape without changing the filament colour */
-  fill.intensity = rig.fill * ((typeof opts !== 'undefined' && opts.fillBoost) || 1);
+  fill.intensity = rig.fill;
 
   // The outro owns scene.environment while it runs — don't stomp the party room.
   if (!cinema.on) scene.environment = q.env ? studioEnv() : null;
@@ -722,6 +731,9 @@ function applyQuality(name) {
   applyShadowQuality();
   guardFx('reflection', applyReflectionQuality);   // also builds the render target
   labelQualityBtn();
+  // a NEW tier (the pill, or the auto-downgrade; a re-mount at the same tier is none) tells the workspace, which redraws
+  // whatever it drew for a tier: Build's product previews are lit, tone-mapped and keyed per tier (drawThumb)
+  if (quality !== was && typeof opts !== 'undefined' && opts.onQuality) opts.onQuality(quality);
 }
 function setQuality(name, { user = false } = {}) {
   applyQuality(name);
@@ -3466,6 +3478,7 @@ function buildAxisForKey(key) {
    the FAMILY decides which way the plate prints at all, and therefore which way its layers run. */
 function dropFaceplateMaterials(types = ['Faceplate']) {
   purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
+  purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   const drop = new Set(types);   // the see-into rebuild also names 'Accent', a part of its own that a pick can make translucent
   for (const k of Object.keys(materials)) if (drop.has(k.split(':')[0])) delete materials[k];
   for (const k of Object.keys(highlightMats)) if (drop.has(k.split(':')[0])) delete highlightMats[k];
@@ -3549,6 +3562,7 @@ function syncRelief() {
    mesh from the rebuilt registries. */
 function purgePartMaterials() {
   purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
+  purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   for (const map of [materials, highlightMats, altMaterials, altHighlightMats,
     plannedMats, plannedHighlightMats]) {
     for (const k of Object.keys(map)) delete map[k];
@@ -3588,6 +3602,7 @@ function dropStaleAxisMaterials(onlyTypes = null) {
     for (const k of Object.keys(map)) if (stale.has(typeOf(k))) delete map[k];
   }
   for (const k of [...layerHandles.keys()]) if (stale.has(typeOf(k))) layerHandles.delete(k);
+  purgeLookCards();   // look-card clones of the dropped materials keep the old axis (the per-unit clones' gap, closed here for these)
   return [...stale];
 }
 /* The axis a part material was built with, as text (null and an array compare as strings), for
@@ -3776,10 +3791,15 @@ function cloneMaterial(mat) {
 // the shader PROGRAM changes (to or from Holographic). The reassignment onto
 // meshes rides regenerate()'s normal applyState path like every other build
 // option, and so does the relay to the planner.
-async function setBuildPlate(key) {
+async function setBuildPlate(key, opts = {}) {
   if (!build || !PLATE_FINISHES.includes(key)) return;
-  track('opt:buildplate:' + key);
+  if (!opts.quiet) track('opt:buildplate:' + key);   // `quiet`: an Undo putting the plate back is not a visitor's pick
   build.buildPlate = key;
+  resetPlateMaterials();
+  await regenerate();
+}
+/* the plate's materials, for a plate that just changed (setBuildPlate, or a record swap that carries another plate) */
+function resetPlateMaterials() {
   holoUniforms.length = 0;
   /* ⚠ THE LAYER HANDLES GO WITH THEM. The faceplate materials below are DELETED and rebuilt
      through newPartMaterial, which pushes fresh handles; keeping the old ones would leave the
@@ -3787,7 +3807,6 @@ async function setBuildPlate(key) {
      holoUniforms because it is the same class of live-handle registry, purged in the same place. */
   dropFaceplateMaterials();
   if (plateActive()) ensurePlateUVs();
-  await regenerate();
 }
 // Which single colour REPRESENTS a part where only one swatch fits (BOM chip,
 // identify-card header)? Not the base type when a zone covers the whole visible
@@ -3816,7 +3835,7 @@ const ALT_LIGHTEN = 0.16;
 // showed one black + one grey tile). Gate = the same test activeHex uses to
 // resolve a custom color, so a type still on instruction colors keeps its
 // two-shade tiling even while other types are customized.
-const altLerp = type => (useCustom && customColors[type] && !colorLocked(type)) ? 0 : ALT_LIGHTEN;
+const altLerp = type => ((previewLook || useCustom) && (previewLook ? previewLook.colors : customColors)[type] && !colorLocked(type)) ? 0 : ALT_LIGHTEN;
 const altMaterials = {};
 function altMatFor(type) {
   if (!altMaterials[type]) {
@@ -4112,6 +4131,7 @@ function refreshLabelText(inst, draft) {
    stays on screen: its label is refreshed WITH the draft, the others from `build`. */
 function refreshLabelTexts() {
   if (IS_PART || !build) return;
+  sceneRev++;   // the label meshes change in place, with no new manifest: the look cards re-snapshot
   for (const inst of instances.values()) {
     if (!LABEL_TEXT_NODES.has(inst.cfg.node)) continue;
     refreshLabelText(inst, labelEdit && labelEdit.inst === inst ? labelEdit.draft : undefined);
@@ -4973,6 +4993,10 @@ const STORES = [
   { id: 'makerworld', key: 'm', label: 'MakerWorld', host: 'makerworld.com' },
   { id: 'cults',      key: 'c', label: 'Cults 3D',   host: 'cults3d.com' },
 ];
+/* MakerWorld and Cults 3D are HIDDEN for now (Joey, 2026-10-18: "lets just hide makerworld and cults for now until
+   eventually i upload more models there"): few parts have a page on either. They stay in STORES so a visitor who
+   arrives from one (?from=, the referrer) is still counted, but no link, ▾ entry or picker option shows them. */
+const SHOWN_STORES = new Set(['printables', 'thangs']);
 const STORE_BY_ID = Object.fromEntries(STORES.map(s => [s.id, s]));
 const STORE_STORE_KEY = 'gen2-store'; // preference is a VIEWER-wide pref, not per-kit
 // Which platform's listing did they arrive from? `?from=` is OUR param, so
@@ -5001,8 +5025,9 @@ function storeFromEntry() {
 let storePref = (() => {
   let saved = null;
   try { saved = localStorage.getItem(STORE_STORE_KEY); } catch (e) { /* private mode */ }
-  if (saved && STORE_BY_ID[saved]) return saved;
-  return storeFromEntry() || STORES[0].id;
+  if (saved && STORE_BY_ID[saved] && SHOWN_STORES.has(saved)) return saved;
+  const entry = storeFromEntry();   // a visitor from a hidden store is still counted (`from:`), but prefers the first shown store
+  return entry && SHOWN_STORES.has(entry) ? entry : STORES[0].id;
 })();
 let storePrefT = 0; // stamp for the planner relay (newest-wins, like colors)
 try { storePrefT = +(localStorage.getItem(STORE_STORE_KEY + ':t') || 0) || 0; } catch (e) {}
@@ -5013,7 +5038,7 @@ function persistStorePref() {
   } catch (e) { /* private mode — the relay still works in-session */ }
 }
 function setStorePref(id, { relay = true } = {}) {
-  if (!STORE_BY_ID[id] || id === storePref) return; // the no-op guard also keeps the event honest
+  if (!STORE_BY_ID[id] || !SHOWN_STORES.has(id) || id === storePref) return; // the no-op guard also keeps the event honest; a hidden store (a relay from an older page) is not taken
   // only a LOCAL pick counts — this same function receives the planner's relay,
   // and the planner already tracks its own linksite: choice (double-counting a
   // single decision would make the store split look twice as busy as it is)
@@ -5031,7 +5056,7 @@ function setStorePref(id, { relay = true } = {}) {
 // every store that actually carries this part, preferred first then fallback order
 function storesFor(links) {
   if (!links) return [];
-  const have = STORES.filter(s => links[s.key]);
+  const have = STORES.filter(s => SHOWN_STORES.has(s.id) && links[s.key]);   // a hidden store never shows (SHOWN_STORES)
   const pref = have.filter(s => s.id === storePref);
   return [...pref, ...have.filter(s => s.id !== storePref)];
 }
@@ -5079,8 +5104,8 @@ function renderStorePicker() {
   const sel = $('store-select');
   if (!sel) return;
   if (!sel.options.length)
-    for (const s of STORES) sel.appendChild(Object.assign(document.createElement('option'), { value: s.id, textContent: s.label }));
-  sel.value = storePref;
+    for (const s of STORES) if (SHOWN_STORES.has(s.id)) sel.appendChild(Object.assign(document.createElement('option'), { value: s.id, textContent: s.label }));
+  sel.value = SHOWN_STORES.has(storePref) ? storePref : STORES[0].id;   // a preference for a hidden store shows as the first
 }
 $('store-select').onchange = e => setStorePref(e.target.value);
 renderStorePicker();
@@ -5886,14 +5911,24 @@ function plannedMatFor(src, cacheKey) {
 /* A unit's own pick wins over the palette (phase 4b, "This drawer only"): an exact key, or - for a zone with no
    build-level pick - the unit's Body pick, the way a zone follows its type in activeHex. */
 function overrideFor(uid, key) {
-  if (uid == null || !useCustom) return null;
-  const o = overrides[uid]; if (!o) return null;
+  if (uid == null || !(previewLook || useCustom)) return null;
+  const o = (previewLook ? previewLook.over : overrides)[uid]; if (!o) return null;   // a look being shown brings its own layer
   if (o[key]) return o[key];
   const base = key.split(':')[0];
-  return (base !== key && !customColors[key] && o[base]) ? o[base] : null;
+  return (base !== key && !(previewLook ? previewLook.colors : customColors)[key] && o[base]) ? o[base] : null;
 }
 const overrideMats = {};
 function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } }
+// the look cards' state (lookCard, the Colors plan's step 2), here because the purges above can run before lookCard is defined
+let lookScene = null, lookCam = null, lookItems = null, lookBox = null, lookCmpRT = null, lookRig = null;
+let lookQueue = Promise.resolve();   // lookCard runs one card at a time
+/* THE SCENE REVISION (the Colors plan's step 3, 2026-10-18): a count of the changes to what the finished build is made of.
+   A new manifest bumps it (mountManifest), and so do the changes that alter the build WITHOUT one: the label meshes redrawn
+   in place (refreshLabelTexts) and a handle or faceplate style swapped in place. The look cards snapshot the build once per
+   revision (lookRev), and the Colors workspace keys its card cache on it, so a card of a build that has since changed is
+   never shown (Astra's check: the model, the cards and the inspector agree, after Undo and a build switch too). */
+let sceneRev = 0, lookRev = -1;
+const lookMats = new Map();   // key|hex|label|alt -> a clone of the live material in the look's colour and finish
 function overrideMatFor(key, ov, zone, alt) {
   const type = key.split(':')[0];
   const base = (alt && !zone) ? altMatFor(type) : baseMatFor(type, zone);
@@ -6732,6 +6767,9 @@ const CLASSIC_FACE = {
 // two-tone look belongs to the instruction palette only (see applyPalette's
 // alt-shade gate). NB Magnet/Screw entries are inert (colorLocked purchased
 // hardware always renders its manifest colour) — kept for completeness.
+// LABEL TEXT (the Colors plan's decision D2, Joey 2026-10-18): the text is printed, so every preset names its filament.
+// It was the manifest's black #1a1a1a; each preset takes its own black, and Sandstone, which had none, gains Panchroma
+// Black - the same look, and a shopping list that says what printing it needs.
 const PRESETS = [
   // The Jerrari = the build Joey actually prints: Elegoo black shell,
   // Mystery Orange face/grip, silk-silver rod + handles, Burnt Titanium
@@ -6760,7 +6798,7 @@ const PRESETS = [
        example here (Elegoo black core, Mystery Orange face). test/presets.test.mjs pins it. */
     SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Printed Solid Mystery Orange'),
     ...CLASSIC_FACE, // black body / orange face + grip / silk-silver rod
-    Accent: _db('ERYONE Burnt Titanium'), Label: _db('Panchroma Cold White'),
+    Accent: _db('ERYONE Burnt Titanium'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Elegoo PLA Black'),
     BackCover: _db('Elegoo PLA Black'),
     Handle: _db('Panchroma Silk Silver'),
     QuickLock: _db('Polymaker PETG Orange'), MagnetClip: _db('Polymaker PETG Orange'),
@@ -6781,7 +6819,7 @@ const PRESETS = [
     // zones so nothing silently inherits the body (see renderZoneChips)
     Faceplate: _db('Panchroma Steel Grey'), 'Faceplate:FACE': _db('Panchroma Dark Grey'),
     'Faceplate:GRIP': _db('Panchroma Dark Grey'), 'Faceplate:GRIP ACCENT': _db('Panchroma Silk Silver'),
-    Accent: _db('Panchroma Black'), Label: _db('Panchroma Cold White'),
+    Accent: _db('Panchroma Black'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
     BackCover: _db('Panchroma Black'),
     Handle: _db('Panchroma Silk Silver'),
     QuickLock: _db('Panchroma Dark Grey'), MagnetClip: _db('Panchroma Dark Grey'),
@@ -6798,7 +6836,7 @@ const PRESETS = [
     SideCover: _db('Panchroma Black'), 'SideCover:FACE': _db('Panchroma Yellow'),
     Faceplate: _db('Panchroma Orange'), 'Faceplate:FACE': _db('Panchroma Yellow'),
     'Faceplate:GRIP': _db('Panchroma Yellow'), 'Faceplate:GRIP ACCENT': _db('Panchroma Polymaker Teal'),
-    Accent: _db('Panchroma Aqua Blue'), Label: _db('Panchroma Cold White'),
+    Accent: _db('Panchroma Aqua Blue'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
     BackCover: _db('Panchroma Steel Grey'),
     Handle: _db('Panchroma Yellow'),
     QuickLock: _db('Panchroma Polymaker Teal'), MagnetClip: _db('Panchroma Brown'),
@@ -6815,11 +6853,171 @@ const PRESETS = [
     SideCover: _db('Panchroma Brown'), 'SideCover:FACE': _db('Panchroma Brown'),
     Faceplate: _db('Panchroma Orange'), 'Faceplate:FACE': _db('Panchroma Brown'),
     'Faceplate:GRIP': _db('Panchroma Brown'), 'Faceplate:GRIP ACCENT': _db('Panchroma Steel Grey'),
-    Accent: _db('Panchroma Tan'), Label: _db('Panchroma Cream'),
+    Accent: _db('Panchroma Tan'), Label: _db('Panchroma Cream'), 'Label:TEXT': _db('Panchroma Black'),
     BackCover: _db('Panchroma Brown'),
     Handle: _db('Panchroma Steel Grey'),
     QuickLock: _db('Panchroma Tan'), MagnetClip: _db('Panchroma Brown'),
     Stopper: _db('Panchroma Tan'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  /* THE PALETTE STUDY'S SEVEN (the Colors plan §2, 2026-10-17; landed with the gallery in step 3, 2026-10-18). Each is a
+     real-world palette whose every colour sits within dE00 6 of a catalog filament, and each passes the preset rules above
+     (the study: D:\Claude - Output\colors-presets-2026-10-17\palettes.html and results.json; the drafts: presets-draft.js).
+     The names stay descriptive; the real-world basis of each is in the study, not in the UI. The label TEXT takes a dark
+     filament the look already prints (decision D2: no spool bought for the text alone). Tool-chest red is NOT here: the plan
+     admits it only once it is scored as a full palette, and that scoring has not been run.
+     THE GRIP WEARS THE FACE COLOUR (Joey 2026-10-18, on the gallery's first cards: "i'm not a fan of the grip being a
+     different color from the face"): the four presets above already did; the drafts' split grips were folded into the
+     face colour here, and test/presets.test.mjs pins the rule. The GRIP ACCENT (the Classic Pro rod) may still differ.
+     THE ACCENT DIFFERS FROM THE FACE (Joey 2026-10-18, on his phone with EdgeLabel faceplates: "I shouldn't have the
+     accent color the same as the face for those"): the EdgeLabel family's accent part vanishes into a face of the same
+     colour. The four presets above never matched them; four of the seven below did and take another colour the look
+     already prints. Pinned by the presets test. */
+  // Racing silver & teal: silver bodywork, black carbon, teal flashes
+  { name: 'Racing silver & teal', swatches: ['#CDD2D9', '#1C1D20', '#00A5A5'], colors: {
+    Case: _db('Panchroma Silk Silver'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Panchroma Silk Silver'), CoverU: _db('Panchroma Silk Silver'),
+    Bracket: _db('Panchroma Silk Silver'), FootrailL: _db('Panchroma Silk Silver'),
+    FootrailU: _db('Panchroma Silk Silver'), Foot: _db('Panchroma Silk Silver'),
+    Rail: _db('Panchroma Silk Silver'), CaseExtender: _db('Panchroma Silk Silver'),
+    ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Panchroma Silk Silver'),
+    SideCover: _db('Panchroma Silk Silver'), 'SideCover:FACE': _db('Elegoo PLA Black'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Panchroma Silk Silver'),
+    Accent: _db('Panchroma Polymaker Teal'), Label: _db('Panchroma Silk Silver'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Panchroma Silk Silver'),
+    Handle: _db('Panchroma Silk Silver'),
+    QuickLock: _db('Panchroma Polymaker Teal'), MagnetClip: _db('Panchroma Polymaker Teal'),
+    Stopper: _db('Panchroma Polymaker Teal'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Grey & sunlight yellow: a grey shell with a bright yellow face
+  { name: 'Grey & sunlight yellow', swatches: ['#9A9DA3', '#F8E35A', '#2B2B2E'], colors: {
+    Case: _db('Panchroma Grey'), Drawer: _db('Panchroma Grey'),
+    CoverL: _db('Panchroma Grey'), CoverU: _db('Panchroma Grey'),
+    Bracket: _db('Panchroma Grey'), FootrailL: _db('Panchroma Grey'),
+    FootrailU: _db('Panchroma Grey'), Foot: _db('Panchroma Grey'),
+    Rail: _db('Panchroma Grey'), CaseExtender: _db('Panchroma Grey'),
+    ShelfInsert: _db('Panchroma Black'), ShelfLip: _db('Panchroma Grey'),
+    SideCover: _db('Panchroma Grey'), 'SideCover:FACE': _db('Panchroma Lemon Yellow'),
+    Faceplate: _db('Panchroma Grey'), 'Faceplate:FACE': _db('Panchroma Lemon Yellow'),
+    'Faceplate:GRIP': _db('Panchroma Lemon Yellow'), 'Faceplate:GRIP ACCENT': _db('Panchroma Black'),
+    Accent: _db('Panchroma Black'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Panchroma Black'),
+    BackCover: _db('Panchroma Grey'),
+    Handle: _db('Panchroma Black'),
+    QuickLock: _db('Panchroma Lemon Yellow'), MagnetClip: _db('Panchroma Lemon Yellow'),
+    Stopper: _db('Panchroma Lemon Yellow'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Safety yellow & black: the caution colours, a flammables-cabinet yellow with black marks
+  { name: 'Safety yellow & black', swatches: ['#F2C73B', '#1C1D20'], colors: {
+    Case: _db('Polymaker PETG Yellow'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Polymaker PETG Yellow'), CoverU: _db('Polymaker PETG Yellow'),
+    Bracket: _db('Polymaker PETG Yellow'), FootrailL: _db('Polymaker PETG Yellow'),
+    FootrailU: _db('Polymaker PETG Yellow'), Foot: _db('Polymaker PETG Yellow'),
+    Rail: _db('Polymaker PETG Yellow'), CaseExtender: _db('Polymaker PETG Yellow'),
+    ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Polymaker PETG Yellow'),
+    SideCover: _db('Polymaker PETG Yellow'), 'SideCover:FACE': _db('Elegoo PLA Black'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Polymaker PETG Yellow'),
+    Accent: _db('Polymaker PETG Yellow'), Label: _db('Polymaker PETG Yellow'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Polymaker PETG Yellow'),
+    Handle: _db('Elegoo PLA Black'),
+    QuickLock: _db('Elegoo PLA Black'), MagnetClip: _db('Elegoo PLA Black'),
+    Stopper: _db('Elegoo PLA Black'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Printer black & red: black printed parts with red accents, the open-source printer look
+  { name: 'Printer black & red', swatches: ['#1C1D20', '#EC2F26', '#EEF1F4'], colors: {
+    Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
+    Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
+    ShelfInsert: _db('Panchroma Cold White'), ShelfLip: _db('Elegoo PLA Black'),
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Printed Solid PS Red'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Printed Solid PS Red'),
+    'Faceplate:GRIP': _db('Printed Solid PS Red'), 'Faceplate:GRIP ACCENT': _db('Elegoo PLA Black'),
+    Accent: _db('Elegoo PLA Black'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Elegoo PLA Black'),
+    Handle: _db('Elegoo PLA Black'),
+    QuickLock: _db('Printed Solid PS Red'), MagnetClip: _db('Printed Solid PS Red'),
+    Stopper: _db('Printed Solid PS Red'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Tri-stripe racing white: a white body with dark blue, light blue and red stripes
+  { name: 'Tri-stripe racing white', swatches: ['#EEF1F4', '#23407F', '#5CC6E0'], colors: {
+    Case: _db('Panchroma Cold White'), Drawer: _db('Panchroma Cold White'),
+    CoverL: _db('Panchroma Cold White'), CoverU: _db('Panchroma Cold White'),
+    Bracket: _db('Panchroma Cold White'), FootrailL: _db('Panchroma Cold White'),
+    FootrailU: _db('Panchroma Cold White'), Foot: _db('Panchroma Cold White'),
+    Rail: _db('Panchroma Cold White'), CaseExtender: _db('Panchroma Cold White'),
+    ShelfInsert: _db('Polymaker PETG Dark Blue'), ShelfLip: _db('Panchroma Cold White'),
+    SideCover: _db('Panchroma Cold White'), 'SideCover:FACE': _db('Polymaker PETG Dark Blue'),
+    Faceplate: _db('Panchroma Cold White'), 'Faceplate:FACE': _db('Polymaker PETG Dark Blue'),
+    'Faceplate:GRIP': _db('Polymaker PETG Dark Blue'), 'Faceplate:GRIP ACCENT': _db('Printed Solid PS Red'),
+    Accent: _db('Printed Solid PS Red'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Polymaker PETG Dark Blue'),
+    BackCover: _db('Panchroma Cold White'),
+    Handle: _db('Panchroma Aqua Blue'),
+    QuickLock: _db('Polymaker PETG Dark Blue'), MagnetClip: _db('Polymaker PETG Dark Blue'),
+    Stopper: _db('Polymaker PETG Dark Blue'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Black & gold: deep black with gold pinstripes and lettering
+  { name: 'Black & gold', swatches: ['#1C1D20', '#C9A545'], colors: {
+    Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
+    Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
+    ShelfInsert: _db('Panchroma Silk Brass'), ShelfLip: _db('Elegoo PLA Black'),
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Elegoo PLA Black'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Panchroma Silk Brass'),
+    Accent: _db('Panchroma Silk Brass'), Label: _db('Panchroma Silk Brass'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Elegoo PLA Black'),
+    Handle: _db('Panchroma Silk Brass'),
+    QuickLock: _db('Elegoo PLA Black'), MagnetClip: _db('Elegoo PLA Black'),
+    Stopper: _db('Elegoo PLA Black'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Flight-team navy & gold: a navy shell with yellow trim and white lettering
+  { name: 'Flight-team navy & gold', swatches: ['#23407F', '#FDC230', '#EEF1F4'], colors: {
+    Case: _db('Polymaker PETG Dark Blue'), Drawer: _db('Polymaker PETG Dark Blue'),
+    CoverL: _db('Polymaker PETG Dark Blue'), CoverU: _db('Polymaker PETG Dark Blue'),
+    Bracket: _db('Polymaker PETG Dark Blue'), FootrailL: _db('Polymaker PETG Dark Blue'),
+    FootrailU: _db('Polymaker PETG Dark Blue'), Foot: _db('Polymaker PETG Dark Blue'),
+    Rail: _db('Polymaker PETG Dark Blue'), CaseExtender: _db('Polymaker PETG Dark Blue'),
+    ShelfInsert: _db('Panchroma Cold White'), ShelfLip: _db('Polymaker PETG Dark Blue'),
+    SideCover: _db('Polymaker PETG Dark Blue'), 'SideCover:FACE': _db('Printed Solid Yellow Bird'),
+    Faceplate: _db('Polymaker PETG Dark Blue'), 'Faceplate:FACE': _db('Printed Solid Yellow Bird'),
+    'Faceplate:GRIP': _db('Printed Solid Yellow Bird'), 'Faceplate:GRIP ACCENT': _db('Panchroma Cold White'),
+    Accent: _db('Polymaker PETG Dark Blue'), Label: _db('Panchroma Cold White'), 'Label:TEXT': _db('Polymaker PETG Dark Blue'),   // navy on the yellow face: white faded into it (Terra 01a15087)
+    BackCover: _db('Polymaker PETG Dark Blue'),
+    Handle: _db('Polymaker PETG Dark Blue'),
+    QuickLock: _db('Printed Solid Yellow Bird'), MagnetClip: _db('Printed Solid Yellow Bird'),
+    Stopper: _db('Printed Solid Yellow Bird'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  /* JOEY'S 3D PRINTOPIA BUILD (2026-10-18, from his photo: "Chevron faceplates, all faces were still black, and the body
+     was neon yellow ... Handles I just did in standard PLA black"; that one wore a holographic build plate, which is the
+     plate finish, not a colour). The shell in Jessie Neon Yellow; every face, grip, drawer, handle and the deck in plain
+     black; the accents and the hardware neon. */
+  { name: 'Neon yellow & black', swatches: ['#E4E202', '#1c1d20'], colors: {
+    Case: _db('Printed Solid Neon Yellow'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Printed Solid Neon Yellow'), CoverU: _db('Printed Solid Neon Yellow'),
+    Bracket: _db('Printed Solid Neon Yellow'), FootrailL: _db('Printed Solid Neon Yellow'),
+    FootrailU: _db('Printed Solid Neon Yellow'), Foot: _db('Printed Solid Neon Yellow'),
+    Rail: _db('Printed Solid Neon Yellow'), CaseExtender: _db('Printed Solid Neon Yellow'),
+    ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Printed Solid Neon Yellow'),
+    SideCover: _db('Printed Solid Neon Yellow'), 'SideCover:FACE': _db('Elegoo PLA Black'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Printed Solid Neon Yellow'),
+    Accent: _db('Printed Solid Neon Yellow'), Label: _db('Printed Solid Neon Yellow'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Printed Solid Neon Yellow'),
+    Handle: _db('Elegoo PLA Black'),
+    QuickLock: _db('Printed Solid Neon Yellow'), MagnetClip: _db('Printed Solid Neon Yellow'),
+    Stopper: _db('Printed Solid Neon Yellow'),
     Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
   } },
 ];
@@ -6830,6 +7028,11 @@ const PRESETS = [
 let COLOR_STORE_KEY = (typeof opts !== 'undefined' && opts && opts.colorStoreKey) || ('gen2-colors:' + (IS_BENCH ? 'bench' : BUILD_HASH ? 'custom-build' : OFFICIAL ? 'official-' + OFFICIAL.id : KIT));   // the workspace shell keys the palette per build (phase 4); setColorStoreKey moves it
 let overrides = {};   // per-unit picks on top of the palette: unitId -> { key -> { name, hex, url } } (phase 4b); cleared by a scheme or a preset
 let customColors = {}, useCustom = false; // customColors: type -> {name, hex, url}
+/* A LOOK SHOWN, NOT CHOSEN (the Colors plan's step 1, 2026-10-18): { colors, over } while the gallery, the compare tray
+   or Surprise me shows one, else null. activeHex, activeLabel, altLerp and overrideFor read it in place of the chosen
+   palette, so the model and the product previews wear it. Nothing saves it, relays it or snapshots it for Undo, and
+   palette() still answers the chosen palette. Every palette change ends it first (previewPalette / endPreview). */
+let previewLook = null;
 // userPalette = the last palette the user built BY HAND (individual swatch
 // picks / per-type resets / file upload). Hand edits mirror the whole working
 // state into it; presets never touch it — so one preset click can't destroy
@@ -6880,7 +7083,8 @@ const activeHex = key => {
   // a label's colour STRIPE is the label's own colour, never a filament pick (label-look.js stripeZone): the key carries it
   const stripe = stripeHexOfKey(key);
   if (stripe) return stripe;
-  if (useCustom && customColors[key] && !colorLocked(key)) return customColors[key].hex;
+  const cc = previewLook ? previewLook.colors : customColors;   // a look being shown stands in for the palette (previewLook)
+  if ((previewLook || useCustom) && cc[key] && !colorLocked(key)) return cc[key].hex;
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key];
   if (manifest.colors[key]) return manifest.colors[key];
   const base = key.split(':')[0];
@@ -6909,7 +7113,8 @@ const activeHex = key => {
  */
 const activeLabel = key => {
   if (stripeHexOfKey(key)) return null;   // a stripe wears its label's colour, not a filament (activeHex)
-  if (useCustom && customColors[key] && !colorLocked(key)) return customColors[key].name || null;
+  const cc = previewLook ? previewLook.colors : customColors;   // as activeHex: a look being shown stands in for the palette
+  if ((previewLook || useCustom) && cc[key] && !colorLocked(key)) return cc[key].name || null;
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return null;
   if (manifest.colors[key]) return null;
   const base = key.split(':')[0];
@@ -6978,6 +7183,7 @@ $('color-toggle').onclick = () => { useCustom = !useCustom; track('colors:' + (u
 function applyPreset(p, opts = {}) {
   // `quiet`: the planner's boot dresses the model in the first preset; that is not a visitor's pick (2026-10-16)
   if (!opts.quiet) track('preset:' + slug(p.name)); // preset names are OURS — a fixed, tiny vocabulary
+  previewLook = null;   // a real choice ends any look being shown (previewLook)
   customColors = {};
   for (const [type, f] of Object.entries(p.colors)) customColors[type] = { ...f };
   overrides = {};
@@ -6988,10 +7194,12 @@ function applyPreset(p, opts = {}) {
 }
 function restoreUserPalette() {
   track('preset:my-palette');
+  previewLook = null;
   customColors = structuredClone(userPalette);
   useCustom = true;
   saveColors();
   applyPalette();
+  refreshMaterials();   // as setColor: a unit's zone that followed its own Body pick stops once the build picks that zone
 }
 // order-independent palette identity — for highlighting the active chip
 const palKey = o => JSON.stringify(Object.keys(o).sort().map(k => [k, o[k]?.name, o[k]?.hex]));
@@ -7314,6 +7522,7 @@ function faceplateHeightOf(node) {
 let activeHandleStyle = null; // the specific HANDLE_STYLES entry in use (BlockBar_D etc.), re-applied after a regenerate so a variant survives
 async function applyHandleStyle(style) {
   ao.rev++;   // static kits swap meshes/visibility in place - no mountManifest to bump it
+  sceneRev++;   // and so the look cards re-snapshot
   const prevActive = activeHandleStyle, prevPlanner = build && build.handleStyle;
   activeHandleStyle = style;
   if (build) build.handleStyle = style.planner; // keep the build in sync (regenerate/BOM/reset read this)
@@ -7494,6 +7703,7 @@ function pageVisibility(inst) {
 let activeFaceplateStyle = null; // kit-swap memory (generated builds carry the family in build.faceStyle instead)
 async function applyFaceplateStyle(style) {
   ao.rev++;   // static kits swap plates/dressing in place - no mountManifest to bump it
+  sceneRev++;   // (a generated build regenerates and bumps it again; the static path has only this one)
   /* ⚠ THE FAMILY DECIDES WHICH WAY THE PLATE PRINTS, so it decides which way its layer lines
      run: Classic/ClassicPro/EdgeLabel print back-down and grow along +Z, Essential and Chevron
      print FACE-down and grow along −Z. The Faceplate materials are keyed by type and are NOT
@@ -8391,100 +8601,336 @@ canvas.addEventListener('contextmenu', e => {
    One unit of the asked size, fill, faceplate family, handle and drawer variant, built by the real generator and
    drawn from the real GLBs with the SAME shared materials the model wears (so a filament pick, the dark-stage
    palette and the plate finish all follow), rendered once into an offscreen target and cached as a PNG data URL.
+   Lit, tone-mapped and encoded as the stage draws the model on the current tier (drawThumb), so the colours match too.
    A front view for comparing faceplate styles; a slight three-quarter where depth or grip shape matters. Covers,
    rails, feet, QuickLocks and stoppers are left out: the preview is the unit, not the kit around it. */
 const THUMB_TYPES = new Set(['Case', 'CaseExtender', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip']);
 const thumbCache = new Map();
-let thumbScene = null, thumbCam = null, thumbRT = null;
+let thumbScene = null, thumbCam = null, thumbRT = null, thumbRig = null;
 function paletteSig() { return Object.keys(manifest.colors || {}).sort().map(k => k + '=' + activeHex(k)).join(',') + '|' + stageTheme + '|' + (useCustom ? 1 : 0) + '|' + JSON.stringify(overrides); }
-async function renderThumb(opts = {}) {
-  if (!build) return null;
+/* a preview's spec with its defaults filled in, the handle variant it wears and its cache key. The quality tier is in the
+   key: it decides the light rig, the environment and the tone mapping a preview is drawn with, as the model is. */
+function thumbSpec(opts = {}) {
   const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08, unitId = null } = opts;
   const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
-  const sig = paletteSig();
-  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, sig]);
-  if (thumbCache.has(key)) return thumbCache.get(key);
-  const job = (async () => {
-    const gridH = Math.max(1, Math.ceil(hh / 2));
-    const unit = { id: 1, x: 0, y: gridH * 2 - hh, w, hh, fill, shelves: 0 };
-    if (variant) unit.variant = variant; if (lip) unit.lip = lip;
-    const rec = { mount: 'tabletop', length: build.length, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null, faceStyle, doorStyle: build.doorStyle, handleStyle, wallStagger: false, backCover: false, feet: 'tpu', buildPlate: build.buildPlate, removedStoppers: [], gridW: w, gridH, placed: [unit], nextId: 2 };
-    const gen = generateManifest(rec);
-    if (!gen.manifest) throw new Error((gen.errors || []).join(' · ') || 'no preview');
-    const m = gen.manifest;
-    for (const part of m.parts) { if (!typeByNode[part.node]) typeByNode[part.node] = part.type; if (!partInfoByNode[part.node]) partInfoByNode[part.node] = part; }
-    const keep = m.instances.filter(c => THUMB_TYPES.has(typeByNode[c.node]));
-    if (handle && !typeByNode[handle.node]) typeByNode[handle.node] = 'Handle';   // a variant the build has never worn (applyHandleStyle does the same)
-    const nodes = [...new Set(keep.map(c => c.node).concat(handle ? [handle.node] : []))];
-    const missing = [];
-    await Promise.all(nodes.filter(n => !templates[n]).map(async node => {
-      try { const gltf = await loader.loadAsync(`${PARTS_BASE}${node}.lib.glb`); templates[node] = adoptTemplate(gltf.scene, typeByNode[node] || 'Handle', node); }
-      catch (e) { missing.push(node); }
-    }));
-    if (missing.length) throw new Error('part models missing: ' + missing.join(', '));
-    if (paletteSig() !== sig) throw new Error('palette changed while loading');   // the shared materials now wear another palette: this key must not cache them (Sol 01a132de)
-    if (!thumbScene) {
-      thumbScene = new THREE.Scene();
-      const h = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.1);
-      const s1 = new THREE.DirectionalLight(0xffffff, 1.6); s1.position.set(300, 600, 400);
-      const s2 = new THREE.DirectionalLight(0xffffff, 0.5); s2.position.set(-400, 200, -300);
-      thumbScene.add(h, s1, s2);
-      thumbCam = new THREE.PerspectiveCamera(22, 4 / 3, 1, 6000);
-    }
-    const group = new THREE.Group();
-    for (const c of keep) {
-      let node = c.node, pos = c.pos;
-      if (handle && typeByNode[c.node] === 'Handle') {   // the handle VARIANT in use lives outside the generator (applyHandleStyle)
-        const fp = keep.find(x => x.rides && x.rides === c.rides && typeByNode[x.node] === 'Faceplate');
-        node = handle.node;
-        if (fp && templates[fp.node]) pos = [c.pos[0], fp.pos[1] + (faceplateHeightOf(fp.node) - handle.h) / 2 - 0.5, fp.pos[2] + nodeDepth(fp.node) / 2 + handle.d / 2];
-      }
-      const g = templates[node].clone(true);
-      g.userData.node = node;
-      g.position.set(pos[0], pos[1], pos[2]);
-      const rot = c.rot || [0, c.yaw || 0, 0];
-      g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
-      const t = typeByNode[node];
-      g.traverse(o => { if (o.isMesh) { const z = o.userData.zone || ''; const ov = unitId != null ? overrideFor(unitId, zoneKey(t, z)) : null; o.material = ov ? overrideMatFor(zoneKey(t, z), ov, z, false) : baseMatFor(t, z); o.castShadow = false; o.receiveShadow = false; } });
-      group.add(g);
-    }
-    thumbScene.add(group); group.updateWorldMatrix(true, true);
-    let box = new THREE.Box3().setFromObject(group);
-    if (frame === 'handle') {   // Astra: frame the handle, with just enough plate behind it for context
-      const hb = new THREE.Box3();
-      for (const g of group.children) if (typeByNode[g.userData.node] === 'Handle') hb.expandByObject(g);
-      if (!hb.isEmpty()) { const hs = hb.getSize(new THREE.Vector3()); hb.expandByVector(new THREE.Vector3(hs.x * 0.35 + 6, hs.y * 0.9 + 10, 0)); box = hb; }
-    }
-    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
-    const W = size, H = Math.round(size * 3 / 4);
-    if (!thumbRT || thumbRT.width !== W || thumbRT.height !== H) {
-      if (thumbRT) thumbRT.dispose();
-      thumbRT = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true });
-      thumbRT.texture.colorSpace = THREE.SRGBColorSpace;   // the output transform the canvas gets, so the PNG matches the screen (Sol 01a132de)
-    }
-    thumbCam.aspect = W / H; thumbCam.updateProjectionMatrix();
-    const fovV = THREE.MathUtils.degToRad(thumbCam.fov), fovH = 2 * Math.atan(Math.tan(fovV / 2) * thumbCam.aspect);
-    const dir = (view === 'front' ? new THREE.Vector3(0, 0.1, 1) : new THREE.Vector3(0.6, 0.35, 1)).normalize();
-    const fitW = view === 'front' ? sz.x : sz.x * 0.85 + sz.z * 0.55;
-    const dist = Math.max((sz.y / 2) / Math.tan(fovV / 2), (fitW / 2) / Math.tan(fovH / 2)) * fit + (frame === 'handle' ? 0 : sz.z / 2);
-    thumbCam.position.copy(c).add(dir.multiplyScalar(dist)); thumbCam.lookAt(c); thumbCam.updateMatrixWorld(true);
-    const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
-    renderer.setRenderTarget(thumbRT); renderer.setClearColor(0x000000, 0); renderer.clear();
-    renderer.render(thumbScene, thumbCam);
-    const px = new Uint8Array(W * H * 4);
-    renderer.readRenderTargetPixels(thumbRT, 0, 0, W, H, px);
-    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
-    thumbScene.remove(group);
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const ctx2 = cv.getContext('2d'); const img = ctx2.createImageData(W, H);
-    for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);   // GL rows run bottom-up
-    ctx2.putImageData(img, 0, 0);
-    invalidateFrame();
-    return cv.toDataURL('image/png');
-  })();
-  thumbCache.set(key, job);
-  job.catch(() => thumbCache.delete(key));
+  const sig = paletteSig(), tier = quality;
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, sig, tier]);
+  return { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier, key };
+}
+async function renderThumb(opts = {}) {
+  if (!build) return null;
+  const s = thumbSpec(opts);
+  if (thumbCache.has(s.key)) return thumbCache.get(s.key);
+  const job = drawThumb(s).then(thumbPng);
+  thumbCache.set(s.key, job);
+  job.catch(() => thumbCache.delete(s.key));
   return job;
+}
+/* one preview drawn, uncached: { width, height, pixels (RGBA, GL rows bottom-up), box (the unit's bounds where it was
+   built, as two arrays), cam (the camera it was seen from) }. The box and the camera are for thumbModel. `plain` draws
+   into the ordinary render target the previews used before 2026-10-18: the measured control, never a control's choice. */
+async function drawThumb(s, { plain = false } = {}) {
+  const { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier } = s;
+  const gridH = Math.max(1, Math.ceil(hh / 2));
+  const unit = { id: 1, x: 0, y: gridH * 2 - hh, w, hh, fill, shelves: 0 };
+  if (variant) unit.variant = variant; if (lip) unit.lip = lip;
+  const rec = { mount: 'tabletop', length: build.length, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null, faceStyle, doorStyle: build.doorStyle, handleStyle, wallStagger: false, backCover: false, feet: 'tpu', buildPlate: build.buildPlate, removedStoppers: [], gridW: w, gridH, placed: [unit], nextId: 2 };
+  const gen = generateManifest(rec);
+  if (!gen.manifest) throw new Error((gen.errors || []).join(' · ') || 'no preview');
+  const m = gen.manifest;
+  for (const part of m.parts) { if (!typeByNode[part.node]) typeByNode[part.node] = part.type; if (!partInfoByNode[part.node]) partInfoByNode[part.node] = part; }
+  const keep = m.instances.filter(c => THUMB_TYPES.has(typeByNode[c.node]));
+  if (handle && !typeByNode[handle.node]) typeByNode[handle.node] = 'Handle';   // a variant the build has never worn (applyHandleStyle does the same)
+  const nodes = [...new Set(keep.map(c => c.node).concat(handle ? [handle.node] : []))];
+  const missing = [];
+  await Promise.all(nodes.filter(n => !templates[n]).map(async node => {
+    try { const gltf = await loader.loadAsync(`${PARTS_BASE}${node}.lib.glb`); templates[node] = adoptTemplate(gltf.scene, typeByNode[node] || 'Handle', node); }
+    catch (e) { missing.push(node); }
+  }));
+  if (missing.length) throw new Error('part models missing: ' + missing.join(', '));
+  if (paletteSig() !== sig) throw new Error('palette changed while loading');   // the shared materials now wear another palette: this key must not cache them (Sol 01a132de)
+  if (quality !== tier) throw new Error('quality tier changed while loading');   // and the light, the environment and the tone mapping another tier's
+  if (!thumbScene) {
+    thumbScene = new THREE.Scene();
+    // the stage's lights, placed where the stage places them (the strengths are set per tier below)
+    thumbRig = { hemi: new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.1), sun: new THREE.DirectionalLight(0xffffff, 1.6), fill: new THREE.DirectionalLight(0xffffff, 0.5) };
+    thumbRig.sun.position.set(300, 600, 400); thumbRig.fill.position.set(-400, 200, -300);
+    thumbScene.add(thumbRig.hemi, thumbRig.sun, thumbRig.fill);
+    thumbCam = new THREE.PerspectiveCamera(22, 4 / 3, 1, 6000);
+  }
+  /* lit as the stage lights the model on this tier (applyQuality): the rig's strengths with the workspace's fill boost, and
+     the studio environment where the tier has one. The tier's own numbers, not the live lights': the outro animates those. */
+  const rig = rigFor(tier);
+  thumbRig.hemi.intensity = rig.hemi; thumbRig.sun.intensity = rig.sun; thumbRig.fill.intensity = rig.fill;
+  thumbScene.environment = QUALITY[tier].env ? studioEnv() : null;
+  const group = new THREE.Group();
+  for (const c of keep) {
+    let node = c.node, pos = c.pos;
+    if (handle && typeByNode[c.node] === 'Handle') {   // the handle VARIANT in use lives outside the generator (applyHandleStyle)
+      const fp = keep.find(x => x.rides && x.rides === c.rides && typeByNode[x.node] === 'Faceplate');
+      node = handle.node;
+      if (fp && templates[fp.node]) pos = [c.pos[0], fp.pos[1] + (faceplateHeightOf(fp.node) - handle.h) / 2 - 0.5, fp.pos[2] + nodeDepth(fp.node) / 2 + handle.d / 2];
+    }
+    const g = templates[node].clone(true);
+    g.userData.node = node;
+    g.position.set(pos[0], pos[1], pos[2]);
+    const rot = c.rot || [0, c.yaw || 0, 0];
+    g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
+    const t = typeByNode[node];
+    g.traverse(o => { if (o.isMesh) { const z = o.userData.zone || ''; const ov = unitId != null ? overrideFor(unitId, zoneKey(t, z)) : null; o.material = ov ? overrideMatFor(zoneKey(t, z), ov, z, false) : baseMatFor(t, z); o.castShadow = false; o.receiveShadow = false; } });
+    group.add(g);
+  }
+  thumbScene.add(group); group.updateWorldMatrix(true, true);
+  let box = new THREE.Box3().setFromObject(group);
+  const bounds = [box.min.toArray(), box.max.toArray()];
+  if (frame === 'handle') {   // Astra: frame the handle, with just enough plate behind it for context
+    const hb = new THREE.Box3();
+    for (const g of group.children) if (typeByNode[g.userData.node] === 'Handle') hb.expandByObject(g);
+    if (!hb.isEmpty()) { const hs = hb.getSize(new THREE.Vector3()); hb.expandByVector(new THREE.Vector3(hs.x * 0.35 + 6, hs.y * 0.9 + 10, 0)); box = hb; }
+  }
+  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  const W = size, H = Math.round(size * 3 / 4);
+  if (!thumbRT || thumbRT.width !== W || thumbRT.height !== H || !!thumbRT.isXRRenderTarget === plain) {
+    if (thumbRT) thumbRT.dispose();
+    thumbRT = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true });
+    thumbRT.texture.colorSpace = THREE.SRGBColorSpace;   // the output transform the canvas gets, so the PNG matches the screen (Sol 01a132de)
+    /* ⚠ FLAGGED AS AN XR TARGET AND STORED AS RGBA8, or the preview is not the model. three r185 tone-maps only the screen
+       and XR targets, and an ordinary target writes the working colour space: on the tone-mapped tiers (Balanced and up;
+       Very High is the default) the previews sat a median 17 to 31 of 255 off the model (PREVIEW-FIDELITY.md, 2026-10-18).
+       The flag gives a target the screen's tone mapping and its texture's colour space; RGBA8 storage keeps the sRGB
+       texture from being stored as SRGB8_ALPHA8, whose hardware encode would encode it a second time (the Colors step-2
+       gate, STEP2-GATE.md). The flag is internal to three ("TODO Remove this when possible", three.module.js line 14372):
+       the e2e case "Build: a product preview matches the model ..." pins the match, with the ordinary target as control. */
+    if (!plain) { thumbRT.isXRRenderTarget = true; thumbRT.texture.internalFormat = 'RGBA8'; }
+  }
+  thumbCam.aspect = W / H; thumbCam.updateProjectionMatrix();
+  const fovV = THREE.MathUtils.degToRad(thumbCam.fov), fovH = 2 * Math.atan(Math.tan(fovV / 2) * thumbCam.aspect);
+  const dir = (view === 'front' ? new THREE.Vector3(0, 0.1, 1) : new THREE.Vector3(0.6, 0.35, 1)).normalize();
+  const fitW = view === 'front' ? sz.x : sz.x * 0.85 + sz.z * 0.55;
+  const dist = Math.max((sz.y / 2) / Math.tan(fovV / 2), (fitW / 2) / Math.tan(fovH / 2)) * fit + (frame === 'handle' ? 0 : sz.z / 2);
+  thumbCam.position.copy(c).add(dir.multiplyScalar(dist)); thumbCam.lookAt(c); thumbCam.updateMatrixWorld(true);
+  const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  renderer.setRenderTarget(thumbRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+  renderer.render(thumbScene, thumbCam);
+  const px = new Uint8Array(W * H * 4);
+  renderer.readRenderTargetPixels(thumbRT, 0, 0, W, H, px);
+  renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
+  thumbScene.remove(group);
+  invalidateFrame();
+  const cam = { position: thumbCam.position.toArray(), quaternion: thumbCam.quaternion.toArray(), fov: thumbCam.fov, aspect: thumbCam.aspect, near: thumbCam.near, far: thumbCam.far };
+  return { width: W, height: H, pixels: px, box: bounds, cam };
+}
+function thumbPng({ width: W, height: H, pixels: px }) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx2 = cv.getContext('2d'); const img = ctx2.createImageData(W, H);
+  for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);   // GL rows run bottom-up
+  ctx2.putImageData(img, 0, 0);
+  return cv.toDataURL('image/png');
+}
+/* THE PREVIEW AGAINST THE MODEL (debug-only; PREVIEW-FIDELITY.md, 2026-10-18). The live unit `unitId`, its preview parts
+   alone (every other object hidden but the lights), drawn through the screen's own path - renderer.render into the
+   canvas, so its tone mapping and output encoding - at a drawn preview's size, from the camera that preview `r` was seen
+   from, moved onto the live unit. RGB as the screen shows it, over the stage colour; alpha the unit's silhouette, from a
+   second draw over a transparent clear. GL rows bottom-up, like drawThumb's pixels. A test-only frame, redrawn at once. */
+function thumbModel(r, unitId) {
+  const parts = [...instances.values()].filter(i => unitOf(i) === unitId && THUMB_TYPES.has(typeByNode[i.cfg.node]) && i.group.visible && !i.styleHidden);
+  if (!parts.length) throw new Error('unit ' + unitId + ' has no preview parts on the stage');
+  const box = new THREE.Box3();
+  for (const i of parts) { i.group.updateWorldMatrix(true, true); box.expandByObject(i.group); }
+  const built = new THREE.Box3(new THREE.Vector3().fromArray(r.box[0]), new THREE.Vector3().fromArray(r.box[1]));
+  const d = box.getSize(new THREE.Vector3()).sub(built.getSize(new THREE.Vector3()));
+  if (Math.max(Math.abs(d.x), Math.abs(d.y), Math.abs(d.z)) > 0.5) throw new Error('unit ' + unitId + ' on the stage is not the previewed unit: its bounds differ by ' + d.toArray().map(v => v.toFixed(1)).join(', ') + ' mm');
+  const cam = new THREE.PerspectiveCamera(r.cam.fov, r.cam.aspect, r.cam.near, r.cam.far);
+  cam.position.fromArray(r.cam.position).add(box.getCenter(new THREE.Vector3()).sub(built.getCenter(new THREE.Vector3())));
+  cam.quaternion.fromArray(r.cam.quaternion); cam.updateMatrixWorld(true);
+  const keep = new Set(parts.map(i => i.group)), hidden = [];
+  for (const o of scene.children) if (o.visible && !o.isLight && !keep.has(o)) { o.visible = false; hidden.push(o); }
+  const { width: W, height: H } = r, out = new Uint8Array(W * H * 4);
+  const prevRT = renderer.getRenderTarget(), prevSize = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
+  const prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha(), prevBg = scene.background;
+  const shadowNeeds = renderer.shadowMap.needsUpdate;
+  try {
+    // the drawing buffer at the preview's size WITHOUT touching the pixel ratio (the relief's band limit is per device
+    // pixel); the half pixel keeps the floor three takes from landing one short
+    renderer.setSize((W + 0.5) / pr, (H + 0.5) / pr, false);
+    if (renderer.domElement.width !== W || renderer.domElement.height !== H) throw new Error('the drawing buffer is ' + renderer.domElement.width + 'x' + renderer.domElement.height + ', not ' + W + 'x' + H);
+    renderer.shadowMap.needsUpdate = false;   // the stage's shadow map as it stands, not one of the lone unit
+    renderer.setRenderTarget(null); renderer.clear();
+    renderer.render(scene, cam);
+    const gl = renderer.getContext();
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    // and once more over a transparent clear: that alpha is the unit's silhouette, and it replaces the stage colour's 255s
+    const sil = new Uint8Array(W * H * 4);
+    scene.background = null; renderer.setClearColor(0x000000, 0);
+    renderer.clear(); renderer.render(scene, cam);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, sil);
+    for (let i = 3; i < out.length; i += 4) out[i] = sil[i];
+  } finally {
+    for (const o of hidden) o.visible = true;
+    scene.background = prevBg; renderer.setClearColor(prevClear, prevAlpha);
+    renderer.shadowMap.needsUpdate = shadowNeeds;
+    renderer.setSize(prevSize.x, prevSize.y, false); renderer.setRenderTarget(prevRT);
+    invalidateFrame();
+  }
+  return out;
+}
+/* ---- LOOK CARDS: the whole build wearing a look, offscreen (the Colors plan's step 2, 2026-10-18; debug-only) ---------
+   The gallery (step 3) wants every card to show THIS build in a look, and the plan's review asked for that to be MEASURED
+   before anything is built on it (D:\Claude - Output\colors-presets-2026-10-17\STEP2-GATE.md). So this is a probe:
+   - a snapshot of the finished build (the instances visible after the last step, at rest, styleHidden ones left out) is
+     cloned once per manifest into its own scene, with the stage's light rig as it stands and its environment;
+   - each look swaps materials on the clones: clones of the live materials (cloneMaterial: the same program), never
+     newPartMaterial, which registers live handles by key; resolved the way materialFor and activeHex paint;
+   - it renders into its own target, flagged as an XR one and stored as RGBA8: the only way three.js r185 tone-maps a
+     render target and writes its texture's colour space, so a card takes the screen's program parameters and matches it
+     (measured, STEP2-GATE.md: an ordinary target missed the tone mapping, median 28 of 255 off on Very High; the XR flag
+     with sRGB storage encoded twice, because setupFrameBufferTexture still stores an sRGB colour texture as SRGB8_ALPHA8,
+     median 73 off; XR with RGBA8 storage, median 0). `isXRRenderTarget` is internal to three.js, so the gate's e2e case
+     pins the match and an upgrade that breaks it fails there;
+   - no invalidateFrame: the main view's accumulation and the idle gate are not woken per card.
+   The clones die with the base materials (purgeLookCards beside purgeOverrideMats and dropStaleAxisMaterials). */
+function purgeLookCards() {   // (its state is declared beside overrideMats: the purges can run before this line has)
+  for (const m of lookMats.values()) m.dispose();
+  lookMats.clear();
+  lookItems = null;   // the next card re-snapshots (its clones still point at the dead materials)
+}
+function lookSnapshot() {
+  if (lookItems && lookRev === sceneRev) return;
+  lookScene = new THREE.Scene();
+  lookRig = { hemi: hemi.clone(), sun: sun.clone(), fill: fill.clone() };   // positions and colours; the strengths follow the tier (lookCard)
+  lookRig.sun.castShadow = false; lookRig.fill.castShadow = false;
+  lookScene.add(lookRig.hemi, lookRig.sun, lookRig.fill);
+  lookCam = lookCam || new THREE.PerspectiveCamera(40, 4 / 3, 1, 20000);
+  lookItems = []; lookBox = new THREE.Box3();
+  const last = afterState[afterState.length - 1];
+  for (const inst of instances.values()) {
+    if (!last || !last.visible.has(inst.cfg.id) || inst.styleHidden) continue;
+    const g = inst.group.clone(true);   // geometry shared, label text included
+    g.position.copy(basePos(inst, false)); g.visible = true;
+    if (g.children[0]) { g.children[0].position.set(0, 0, 0); g.children[0].rotation.set(0, 0, 0); }   // no lift, no open drawer
+    lookScene.add(g);
+    const t = typeByNode[inst.cfg.node], uid = inst.cfg.planned ? null : unitOf(inst);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; lookItems.push({ mesh: o, type: t, zone: o.userData.zone || '', uid, alt: !!inst.alt }); } });
+    g.updateWorldMatrix(true, true); lookBox.expandByObject(g);
+  }
+  lookRev = sceneRev;
+}
+function lookMaterialFor(look, it) {
+  const key = zoneKey(it.type, it.zone);
+  if (colorLocked(key) || stripeHexOfKey(key)) return (it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone);
+  const colors = look.colors || {}, over = look.over || {};
+  const o = it.uid != null ? over[it.uid] : null;
+  const f = (o ? (o[key] || (it.zone && !colors[key] && o[it.type]) || null) : null)
+    || colors[key] || (it.zone && !manifest.colors[key] ? colors[it.type] : null) || null;
+  const picked = !!(f && f.hex);   // a filament pick, named or not (altLerp's test is the pick, not its name)
+  const hex = picked ? f.hex : identificationHex(key), label = picked ? (f.name || null) : null;
+  const alt = !picked && it.alt && !it.zone;   // the identification palette lightens alternate tiles; a filament never does
+  const k = key + '|' + hex + '|' + (label || '') + (picked ? '' : '|id') + (alt ? '|alt' : '');
+  let m = lookMats.get(k);
+  if (!m) {
+    m = cloneMaterial((it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone));
+    m.color.set(hex);
+    if (alt) m.color.lerp(new THREE.Color('#ffffff'), ALT_LIGHTEN);
+    const spec = partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label });
+    m.roughness = spec.roughness; m.metalness = spec.metalness;
+    lookMats.set(k, m);
+  }
+  return m;
+}
+/* one card: { width, height, pixels (RGBA, GL rows bottom-up), ms: { draw, read }, programs }. `compare` also renders the
+   live scene from the same camera for the gate's fidelity check: true into a second target of the same kind, 'canvas' into
+   the canvas itself at the card's size (the screen's own path: tone mapping and output encoding; a test-only frame,
+   redrawn at once). `xr` and `linear` default to the measured winner; the gate turns them off to show why.
+   The DRAWS run one at a time (the snapshot and the look materials are shared), each into a target of its own from a small
+   pool; the READBACK of each card is awaited on its own, so the gallery's cards overlap on the GPU instead of each waiting
+   for the one before it to come back (step 3, 2026-10-18: a readback fence took 50 to 190 ms a card while the live view
+   was settling, so a serial gallery filled at one card per 25 to 66 ms). `sync` reads back at once instead. */
+const lookPool = [];   // { rt, busy }: a card's target stays busy until its pixels are back
+const LOOK_POOL_MAX = 12;
+function lookTarget(width, height, samples, xr, linear) {
+  const fits = (e) => e.rt.width === width && e.rt.height === height && e.rt.samples === samples && !!e.rt.isXRRenderTarget === xr && !!e.rt.lookLinear === linear;
+  let e = lookPool.find(x => !x.busy && fits(x));
+  if (!e) {
+    if (lookPool.length >= LOOK_POOL_MAX) { const i = lookPool.findIndex(x => !x.busy); if (i < 0) return null; lookPool[i].rt.dispose(); lookPool.splice(i, 1); }   // a free target of another size gives way
+    const n = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, samples });
+    n.texture.colorSpace = THREE.SRGBColorSpace;
+    if (xr) n.isXRRenderTarget = true;
+    if (linear) { n.texture.internalFormat = 'RGBA8'; n.lookLinear = true; }   // (a render target has no userData)
+    lookPool.push(e = { rt: n, busy: false });
+  }
+  e.busy = true;
+  return e;
+}
+function lookCard(look, opts = {}) {
+  const drawn = lookQueue.then(() => lookCardDraw(look, opts));
+  lookQueue = drawn.catch(() => {});
+  return drawn.then((d) => (d ? lookCardRead(d) : null));
+}
+async function lookCardDraw(look, opts) {
+  const { width = 384, height = 288, xr = true, linear = true, samples = 0, compare = false } = opts;
+  if (!manifest || !instances.size) return null;
+  const ts = performance.now();
+  lookSnapshot();   // once per manifest: its cost is ms.snap (0 when the snapshot stands)
+  const t0 = performance.now();
+  // the tier's light strengths, fill boost and environment, as the live scene has them now
+  lookRig.hemi.intensity = hemi.intensity; lookRig.sun.intensity = sun.intensity; lookRig.fill.intensity = fill.intensity;
+  lookScene.environment = scene.environment;
+  for (const it of lookItems) it.mesh.material = lookMaterialFor(look || {}, it);
+  // a fixed three-quarter view of the snapshot's bounds, independent of the live camera and the safe area
+  lookCam.aspect = width / height; lookCam.fov = 40; lookCam.updateProjectionMatrix();
+  const c = lookBox.getCenter(new THREE.Vector3()), r = lookBox.getSize(new THREE.Vector3()).length() / 2;
+  const vF = THREE.MathUtils.degToRad(lookCam.fov), hF = 2 * Math.atan(Math.tan(vF / 2) * lookCam.aspect);
+  const dist = r / Math.sin(Math.min(vF, hF) / 2) * 1.02, th = THREE.MathUtils.degToRad(35), ph = THREE.MathUtils.degToRad(66);
+  lookCam.position.set(c.x + dist * Math.sin(ph) * Math.sin(th), c.y + dist * Math.cos(ph), c.z + dist * Math.sin(ph) * Math.cos(th));
+  lookCam.lookAt(c); lookCam.updateMatrixWorld(true);
+  let slot; while (!(slot = lookTarget(width, height, samples, xr, linear))) await new Promise(r => requestAnimationFrame(r));   // every target is out with a readback: wait a frame
+  const cardRT = slot.rt, items = lookItems.length;
+  const prevRT = renderer.getRenderTarget(), prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+  const prevSize = renderer.getSize(new THREE.Vector2()), pr = renderer.getPixelRatio();
+  let cmp = null, cmpRT = null, resized = false;
+  try {   // the live renderer is put back whatever happens below
+    renderer.setRenderTarget(cardRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+    renderer.render(lookScene, lookCam);
+    if (compare === true) {   // the live scene from the same camera, into a target of the same kind (the gate's path: one card at a time)
+      if (lookCmpRT && !(lookCmpRT.width === width && lookCmpRT.height === height && lookCmpRT.samples === samples && !!lookCmpRT.isXRRenderTarget === xr && !!lookCmpRT.lookLinear === linear)) { lookCmpRT.dispose(); lookCmpRT = null; }
+      if (!lookCmpRT) { lookCmpRT = new THREE.WebGLRenderTarget(width, height, { depthBuffer: true, samples }); lookCmpRT.texture.colorSpace = THREE.SRGBColorSpace; if (xr) lookCmpRT.isXRRenderTarget = true; if (linear) { lookCmpRT.texture.internalFormat = 'RGBA8'; lookCmpRT.lookLinear = true; } }
+      cmpRT = lookCmpRT;
+      renderer.setRenderTarget(cmpRT); renderer.clear();
+      renderer.render(scene, lookCam);
+    }
+    if (compare === 'canvas') {   // the screen's own path, at the card's size, read back before anything else draws
+      // the drawing buffer at the card's size WITHOUT touching the pixel ratio: the relief's band limit is stated per
+      // device pixel (setLayerDetailPixelRatio), so a changed ratio would draw this frame with a stale one
+      renderer.setClearColor(prevClear, prevAlpha);
+      renderer.setSize(width / pr, height / pr, false); resized = true;
+      renderer.setRenderTarget(null); renderer.clear();
+      renderer.render(scene, lookCam);
+      const gl = renderer.getContext();
+      cmp = new Uint8Array(width * height * 4);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, cmp);
+    }
+  } catch (e) {
+    slot.busy = false; throw e;
+  } finally {
+    if (resized) { renderer.setSize(prevSize.x, prevSize.y, false); invalidateFrame(); }   // the canvas held a test frame: redraw (the gate's path, never the gallery's)
+    renderer.setRenderTarget(prevRT); renderer.setClearColor(prevClear, prevAlpha);
+  }
+  const t1 = performance.now();
+  return { width, height, slot, cardRT, cmpRT, cmp, sync: !!opts.sync, ms: { snap: t0 - ts, draw: t1 - t0 }, items, t1 };
+}
+async function lookCardRead(d) {
+  const { width, height, slot, cardRT, cmpRT, sync, t1 } = d;
+  let { cmp } = d;
+  const pixels = new Uint8Array(width * height * 4);
+  try {
+    /* `sync` reads the card back at once (readRenderTargetPixels, a pipeline stall): a measurement's choice. The gallery
+       awaits the fence, and overlaps its cards' fences (see lookCard). */
+    if (sync) renderer.readRenderTargetPixels(cardRT, 0, 0, width, height, pixels);
+    else await renderer.readRenderTargetPixelsAsync(cardRT, 0, 0, width, height, pixels);
+    if (cmpRT) { cmp = new Uint8Array(width * height * 4); await renderer.readRenderTargetPixelsAsync(cmpRT, 0, 0, width, height, cmp); }
+  } finally { slot.busy = false; }
+  const t2 = performance.now();
+  return { width, height, pixels, cmp, ms: { ...d.ms, read: t2 - t1 }, programs: (renderer.info.programs || []).length, items: d.items, materials: lookMats.size };
 }
 /* ---- the palette API for the Colors workspace (phase 4) ---------------------------------------------------
    The palette stays the viewer's own (customColors keyed by part type or Type:zone, useCustom, userPalette); the
@@ -8498,6 +8944,7 @@ function refreshMaterials() {
 }
 function setOverride(uid, key, f) {   // one unit, one region: a filament, or null for "use the build colour"
   if (uid == null) return;
+  previewLook = null;
   overrides[uid] = overrides[uid] || {};
   if (f) overrides[uid][key] = { name: f.name, hex: f.hex, url: f.url }; else delete overrides[uid][key];
   if (!Object.keys(overrides[uid]).length) delete overrides[uid];
@@ -8505,6 +8952,7 @@ function setOverride(uid, key, f) {   // one unit, one region: a filament, or nu
   saveColors(); applyPalette(); refreshMaterials();
 }
 function clearOverrides(uid = null, key = null) {   // every unit's own pick for one key, or one unit's picks, or all
+  previewLook = null;
   for (const u of Object.keys(overrides)) {
     if (uid != null && String(u) !== String(uid)) continue;
     if (key) delete overrides[u][key]; else delete overrides[u];
@@ -8515,6 +8963,7 @@ function clearOverrides(uid = null, key = null) {   // every unit's own pick for
 }
 function setColorStoreKey(key) { if (!key || key === COLOR_STORE_KEY) return; COLOR_STORE_KEY = key; persistColors(); }
 function setColor(key, f) {   // one region, build-wide: a filament { name, hex, url }, or null for the instruction colour; units' own picks stay
+  previewLook = null;
   if (f) customColors[key] = { name: f.name, hex: f.hex, url: f.url }; else delete customColors[key];
   useCustom = Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0;
   snapshotUserPalette(); saveColors(); applyPalette();
@@ -8522,13 +8971,30 @@ function setColor(key, f) {   // one region, build-wide: a filament { name, hex,
   if (selectedId && instances.has(selectedId)) refreshSelHighlight();
 }
 function setPalette(p) {   // the whole working palette (a scheme, an upload, an undo)
-  customColors = {}; for (const [k, v] of Object.entries((p && p.colors) || {})) if (v && v.hex) customColors[k] = { name: v.name, hex: v.hex, url: v.url };
-  overrides = (p && p.over && typeof p.over === 'object') ? structuredClone(p.over) : {};   // a scheme replaces the layer; an undo restores it
+  // every entry is checked like a relayed palette (cleanPalette: a real hex colour, an http(s) link or none). A shared
+  // #scheme= link and an uploaded file are outside data, and these values reach swatch styles and buy-link hrefs: until
+  // 2026-10-17 a crafted link could carry a javascript: "Buy" link or CSS into the Colors workspace
+  previewLook = null;
+  customColors = cleanPalette(p && p.colors);
+  overrides = cleanOverrides(p && p.over);   // a scheme replaces the layer; an undo restores it
   useCustom = !!(p && p.on) && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0);
-  if (p && p.user) userPalette = structuredClone(p.user);
+  if (p && p.user) userPalette = cleanPalette(p.user);
   saveColors(); applyPalette(); refreshMaterials();
 }
-function setUseCustom(on) { useCustom = !!on && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0); saveColors(); applyPalette(); refreshMaterials(); }
+function setUseCustom(on) { previewLook = null; useCustom = !!on && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0); saveColors(); applyPalette(); refreshMaterials(); }
+/* Show a look without choosing it (previewLook): checked like any outside palette, never saved, relayed or put in the
+   history. The workspace that shows one ends it before it commits anything or unmounts; a real palette change ends it
+   too. Returns whether a look was being shown. */
+function previewPalette(p) {
+  previewLook = { colors: cleanPalette(p && p.colors), over: cleanOverrides(p && p.over) };
+  applyPalette(); refreshMaterials();
+}
+function endPreview() {
+  if (!previewLook) return false;
+  previewLook = null;
+  applyPalette(); refreshMaterials();
+  return true;
+}
 /* every (type, zone) a mounted part draws, with how many parts carry it and whether it is purchased hardware */
 function keysInBuild() {
   const out = new Map();
@@ -8537,10 +9003,59 @@ function keysInBuild() {
     const zones = new Set(); inst.group.traverse(o => { if (o.isMesh && o.userData.zone && !isStripeZone(o.userData.zone)) zones.add(o.userData.zone); });
     for (const key of [t, ...[...zones].map(z => zoneKey(t, z))]) { const e = out.get(key) || { key, type: t, zone: key.includes(':') ? key.split(':')[1] : '', count: 0, locked: colorLocked(t) }; if (!key.includes(':')) e.count++; out.set(key, e); }
   }
-  for (const e of out.values()) { if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0; e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0; }
+  for (const e of out.values()) {
+    if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0;
+    e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0;
+    e.ownColor = !!(e.zone && manifest.colors[e.key]);   // a zone with a colour of its own (the label text) does not follow its body unpicked
+  }
   const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
+}
+/* the colour a region with no filament pick shows: activeHex's chain past the custom pick (the dark stage's case, then the
+   manifest, then a zone's body). The filament count and the look cards read it. */
+function identificationHex(key) {
+  if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key];
+  if (manifest.colors[key]) return manifest.colors[key];
+  const base = key.split(':')[0];
+  return base !== key ? identificationHex(base) : '#b9bcc2';
+}
+/* THE FILAMENT COUNT (the Colors plan's decision D2, Joey 2026-10-18): every colour this build is printed in, under a look
+   ({ colors, over }) or, with none, the chosen palette, read part by part the way materialFor and activeHex paint them.
+   - Bought hardware never counts.
+   - A unit's own pick wins over the build's: an exact key, or its Body pick for a zone the build has not picked.
+   - A zone with no pick follows its body, unless it has a colour of its own (the label text).
+   - A label's stripes count, one per colour.
+   - A region left on an identification colour has no filament to buy, but it is still printed: it is listed in
+     `unpicked` (in the colour the stage shows it) and counted once per colour that no picked filament already wears.
+   Returns { filaments: [{ name, hex, url, keys }], unpicked: [{ key, hex, stripe }], count }. */
+function filamentsInBuild(look = null) {
+  const on = look ? true : useCustom;
+  const colors = (look ? look.colors : customColors) || {};
+  const over = (look ? look.over : overrides) || {};
+  const idHex = identificationHex;
+  const fil = new Map(), loose = new Map();
+  const wear = (f, key) => { const id = f.name || f.hex; let r = fil.get(id); if (!r) fil.set(id, r = { name: f.name || f.hex, hex: f.hex, url: f.url, keys: [] }); if (!r.keys.includes(key)) r.keys.push(key); };
+  const bare = (key, hex, stripe = false) => { const id = stripe ? 'stripe:' + hex : key; if (!loose.has(id)) loose.set(id, { key, hex, stripe }); };
+  for (const inst of instances.values()) {
+    const t = typeByNode[inst.cfg.node]; if (!t || !inst.group || colorLocked(t)) continue;
+    const zones = new Set(); inst.group.traverse(o => { if (o.isMesh) zones.add(o.userData.zone || ''); });
+    const uid = inst.cfg.planned ? null : unitOf(inst);   // a planned part never takes a unit's own pick (materialFor)
+    for (const z of zones) {
+      const key = zoneKey(t, z);
+      const stripe = stripeHexOfKey(key);
+      if (stripe) { bare(key, stripe, true); continue; }
+      const o = on && uid != null ? over[uid] : null;
+      const own = o ? (o[key] || (z && !colors[key] && o[t]) || null) : null;
+      const pick = own || (on ? (colors[key] || (z && !manifest.colors[key] ? colors[t] : null)) : null);
+      if (pick && pick.hex) wear(pick, key);
+      else bare(key, idHex(key));
+    }
+  }
+  const unpicked = [...loose.values()];
+  const worn = new Set([...fil.values()].map(f => f.hex.toLowerCase()));   // a stripe or a bare region in a colour a picked filament already prints is that spool
+  const extra = new Set(unpicked.map(u => u.hex.toLowerCase()).filter(h => !worn.has(h)));
+  return { filaments: [...fil.values()], unpicked, count: fil.size + extra.size };
 }
 /* what the part card needs about one instance: its name, count, type, zones, the primary key, links, the unit it rides */
 function partInfo(instId) {
@@ -8559,7 +9074,9 @@ async function updateBuild(nb, pre) {
   if (!gen) { try { gen = generateManifest(nb); } catch (err) { return { ok: false, errors: [String((err && err.message) || err)] }; } }
   if (!gen.manifest) return { ok: false, errors: gen.errors && gen.errors.length ? gen.errors : ['This layout can’t be shown.'] };
   while (regenBusy) await new Promise(r => setTimeout(r, 16));
+  const plateMoved = (nb.buildPlate || 'powder') !== (build.buildPlate || 'powder');   // the generator never reads the plate
   build = nb; originalBuild = structuredClone(nb);
+  if (plateMoved && PLATE_FINISHES.includes(nb.buildPlate || 'powder')) resetPlateMaterials();
   setSpots(null); setFlags([]);
   await regenerate(gen);
   return { ok: true };
@@ -9381,10 +9898,22 @@ function cleanPalette(o) {
   const out = {};
   if (!o || typeof o !== 'object') return out;
   for (const [k, v] of Object.entries(o)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;   // a crafted key must not reach `out`'s prototype
     if (!v || typeof v.hex !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(v.hex)) continue;
     const e = { name: String(v.name || ''), hex: v.hex };
     if (typeof v.url === 'string' && /^https?:\/\//.test(v.url)) e.url = v.url;
     out[k] = e;
+  }
+  return out;
+}
+// a per-unit layer from outside data (a scheme, an undo entry, a look being shown): unitId -> a palette, each checked
+function cleanOverrides(o) {
+  const out = {};
+  if (!o || typeof o !== 'object') return out;
+  for (const [u, m] of Object.entries(o)) {
+    if (u === '__proto__' || u === 'constructor' || u === 'prototype') continue;
+    const c = cleanPalette(m);
+    if (Object.keys(c).length) out[u] = c;
   }
   return out;
 }
@@ -9393,6 +9922,7 @@ function applyRemoteColors(d) {
   if (d.t <= colorsT) { if (colorsT > d.t) postColorsToPlanner(); return; } // ours is newer — teach the cache instead
   applyingRemoteColors = true;
   try {
+    previewLook = null;
     customColors = cleanPalette(d.colors);
     useCustom = !!d.on;
     userPalette = d.user && typeof d.user === 'object' ? cleanPalette(d.user) : structuredClone(customColors);
@@ -9612,6 +10142,7 @@ async function onPlannerMessage(d) {
 async function mountManifest(m) {
   manifest = m;
   ao.rev++;   // the parts are about to be rebuilt - never accumulate over stale normals
+  sceneRev++;   // a new finished build: the look cards re-snapshot, and the Colors workspace's cached cards are stale
   // a label's raised text is its own colour zone (label-text.js), dark like the generator's until a filament is picked
   // for it. Set before any material is built, so the zone's first material is already the right colour.
   if (m.instances.some((c) => LABEL_TEXT_NODES.has(c.node)) && !m.colors[zoneKey('Label', LABEL_TEXT_ZONE)]) {
@@ -9632,8 +10163,10 @@ async function mountManifest(m) {
   }
   $('kit-title').textContent = m.title;
   // in the planner (a workspace on <html>) the tab title is the build's, set by app.js (js/ui/names.js tabTitle); every
-  // regeneration here had put the generated "… · GEN2 Custom · 185" back (the UI review, 2026-10-16)
-  if (!document.documentElement.dataset.ws) document.title = m.title;
+  // regeneration here had put the generated "… · GEN2 Custom · 185" back (the UI review, 2026-10-16). The plain viewer
+  // (the bare address until the cutover) uses the same shape, the build then the product, so a search engine reads
+  // "MODULITH Planner" there too and not the generator's bare name (2026-10-19)
+  if (!document.documentElement.dataset.ws) document.title = tabTitle(m.title);
   typeByNode = Object.fromEntries(m.parts.map(p => [p.node, p.type]));
   partInfoByNode = Object.fromEntries(m.parts.map(p => [p.node, p]));
   syncBedFinish();   // before any material is built: the plate decides which program they get
@@ -10350,6 +10883,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     // REASSIGNED (presets, uploads, relays) - returning the object once would hand out a stale one.
     // Debug-only, like everything else here.
     applyPalette, activeLabel, activeHex, get customColors() { return customColors; },
+    // the whole build wearing a look, offscreen: the Colors plan's step-2 probe (STEP2-GATE.md); no control calls it
+    lookCard,
     /* ⚠ `useCustom` IS THE GATE, and without it `customColors` is inert. A test
        that assigned customColors and called applyPalette repainted NOTHING and
        produced eighteen identical arms that looked like a working matrix. */
@@ -10412,9 +10947,15 @@ for (const m of ['toDataURL', 'toBlob']) {
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,
+    // and, for the check that they match the model (PREVIEW-FIDELITY.md): one drawn uncached, and the live unit from its camera
+    thumbDraw: (o, x) => drawThumb(thumbSpec(o), x), thumbModel,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
     palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
     setOverride, clearOverrides, overrideFor, setColorStoreKey,
+    // a look shown and not chosen, and the filament count (the Colors plan's step 1, 2026-10-18)
+    previewPalette, endPreview, get previewing() { return !!previewLook; }, filamentsInBuild,
+    // the look cards (step 2's probe, now the gallery's renderer; step 3, 2026-10-18) and the scene revision they key on
+    lookCard, get sceneRev() { return sceneRev; },
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;

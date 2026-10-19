@@ -52,6 +52,8 @@ Phase 1 (Assemble, same day): `opts.onPage(i)` fires from `goTo` with the new pa
 
 Phase 4b adds the per-unit layer: `setOverride(unitId, key, filament | null)`, `clearOverrides(unitId?, key?)`, `overrideFor(unitId, key)`; `palette()` carries `over`; `setPalette({ over })` restores or clears it (a scheme clears it); `keysInBuild()` entries carry `own` (units with their own pick for the key) and `partInfo` carries `own` (this unit's overridden keys); `thumb({ unitId })` renders a unit with its own picks; `setColorStoreKey(key)` moves the saved palette to another key (a build's own).
 
+The Colors plan (2026-10-18) adds: `previewPalette({ colors, over })` / `endPreview()` / `previewing` (a look shown on the model and never saved, relayed or put in the history; step 1); `filamentsInBuild(look?)` (the one filament count, decision D2: `{ filaments: [{ name, hex, url, keys }], unpicked: [{ key, hex, stripe }], count }` for the live palette or a look); `lookCard(look, { width, height, sync? })` (step 2's offscreen render of THIS build wearing a look: `{ width, height, pixels (RGBA, GL rows bottom-up), ms, programs }`; draws run one at a time into a pooled target, readbacks overlap; `look` null = the live palette); `sceneRev` (step 3: a counter of the changes to what the finished build is made of - a new manifest, the label meshes redrawn in place, a handle or faceplate style swapped - which the Colors workspace keys its card cache on).
+
 All overlays live in one `edit-overlays` group outside `instances` (flagged `userData.ghost`), so the BOM, the callouts, measuring, shadows, AO and the reflection never see them. `regenerate(pre)` takes an optional pre-generated result.
 
 ## What the goldens do and do not prove

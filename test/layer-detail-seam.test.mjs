@@ -174,11 +174,17 @@ test('⚔ both build options that change a faceplate\'s axis invalidate its mate
   /* The family swap is the one that was missing: ensureMaterials is idempotent, so a Faceplate
      material built under `classic` (grows +Z) survived a swap to `essential` (grows −Z) with the
      old axis baked into its uniform. Neither symptom is an error — the bands simply run the wrong
-     way on a part that looks otherwise correct. */
-  for (const fn of ['setBuildPlate', 'applyFaceplateStyle']) {
-    assert.match(body(fn), /dropFaceplateMaterials\(\)/,
-      `${fn} changes what a faceplate's material should be without invalidating it`);
-  }
+     way on a part that looks otherwise correct.
+     The plate's invalidation lives in resetPlateMaterials (2026-10-18), which setBuildPlate calls, and so does a record
+     swap that carries another plate (updateBuild: an Undo of a plate change in the Build workspace). */
+  assert.match(body('resetPlateMaterials'), /dropFaceplateMaterials\(\)/,
+    'resetPlateMaterials changes what a faceplate\'s material should be without invalidating it');
+  assert.match(body('setBuildPlate'), /resetPlateMaterials\(\)/,
+    'setBuildPlate changes what a faceplate\'s material should be without invalidating it');
+  assert.match(body('updateBuild'), /plateMoved[^\n]*resetPlateMaterials\(\)/,
+    'a record swap that carries another plate must invalidate the faceplate materials too');
+  assert.match(body('applyFaceplateStyle'), /dropFaceplateMaterials\(\)/,
+    'applyFaceplateStyle changes what a faceplate\'s material should be without invalidating it');
 });
 
 test('⚔ BOTH device-pixel-ratio paths re-push it, and there are two', () => {
