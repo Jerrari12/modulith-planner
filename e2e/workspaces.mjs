@@ -2596,3 +2596,24 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* THE STOP (2026-10-19, Joey: "they should open all the way, until the inside back wall of the drawer collides with the
+   drawer stopper"). Measured in the scene: the stopper's tab sits 2 mm behind the case front and the drawer's inner back
+   face 10 mm inside the case back, so the wall meets the tab after collection − 13.5 mm (171.5 on a 185). Build's "Peek
+   inside" and the Colors card's "Open the drawer" both go through the stage's peekUnit. */
+test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.5 mm), and Close it brings it back', async () => {
+  const { ctx, page, errors } = await open('build');
+  const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: d.id, owner: v.partInfo(d.id).owner, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
+  const peek = btn(page, 'Peek inside', '#ws-insp');
+  await peek.click({ timeout: 30_000 });
+  const stop = drawer.collection - 13.5;
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 })
+    .catch(async () => assert.fail(`the drawer did not land at base + ${stop}: z ${await page.evaluate((id) => window.__GEN2_VIEWER__.instances.get(id).group.position.z, drawer.id)} from ${drawer.z0}`));
+  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 })
+    .catch(() => assert.fail('Close it did not bring the drawer back'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});

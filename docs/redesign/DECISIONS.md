@@ -1401,3 +1401,29 @@ Dated calls made while building, with who made them. The brief and the inventory
   "Case, drawers: Black · Fronts, grips: Silk Black · Grip accents, faceplate bodies, small parts: Neon Yellow".
 - **Review:** Terra `01a155f4`, routine: NO OBJECTION.
 - **Deploy:** a change Joey decided in words deploys once its checks pass.
+
+## 2026-10-19 (a drawer opens to its stopper)
+
+- **Joey, with a drawer open on the Colors tab:** "i feel like when we open the drawers, they should open all the way,
+  until the inside back wall of the drawer collides with the drawer stopper, so maybe about 95% open-ish".
+- **What stopped it before.** Every pull took a `travel` of collection − 20 ("case depth − rear engagement", an
+  estimate): the body's deep pull and its camera focus went to 90 % of that (148.5 mm on a 185), the Colors card's "Open
+  the drawer" (`peekUnit`) to the 40 mm rider peek, the cinema to 30-95 % of it, and the cavity fill read its openness
+  from it.
+- **The stop, measured in the scene** (world mm, the GLBs as generate.js places them; a 185 Tabletop 2W-2H and a 270 made
+  from the setup sheet, `?debug=1`): the stopper's tab is the only part of it below the drawer's rim (1.72 mm, the
+  vault's figure), and it sits 2 mm behind the case front: its rear face at z 89 against a front at 92.5 (185), 131.5
+  against 135 (270); the part's centre is the 16 mm behind the front the vault records, not the tab. The drawer's inner
+  back face rests 10 mm inside the case back (−82.5 in a −92.5 case; −125 in −135): an 8.1 mm gap and a 2 mm wall. So
+  the wall meets the tab after collection − 13.5 mm on both: 171.5 mm of the 185 drawer's 179.3 mm length (95.6 %),
+  256.5 of the 270's. The old pull left a 185 drawer 23 mm short of its stopper.
+- **What changed (js/main.js):** one `drawerStop()` = collection − 13.5 replaces the four `travel` sites. In the merged
+  app the explicit opens are `peekUnit` (Build's "Peek inside", the Colors card's "Open the drawer"), which went to the
+  40 mm rider peek and now goes the whole way to the stop; the stage's own deep pull on a body selection (the old
+  viewer's identify flow, which the workspaces select quietly) and its focus camera take the stop too; a rider (handle,
+  magnet) keeps its 40 mm peek; the cinema's fractions and the cavity fill's openness now run over the real travel.
+  Checked in the browser on the 185: "Open the drawer" and "Peek inside" both land the drawer at base + 171.5 (its
+  z 5.24 → 176.74); a plain selection in Build or Colors does not pull, before or after.
+- **Checks:** e2e Colors, phone, journey, Parts and Build cases (see the commit); no test pinned the old figures.
+- **Review:** Terra, routine (thread in the commit).
+- **Deploy:** a change Joey decided in words deploys once its checks pass.

@@ -2456,7 +2456,7 @@ function updateCavityFill() {
      sampled profile, from a session that ran slow; vault measurements.md). */
   if (MOVE_OPT.cavity && !on && !cavity.clones) return;
   const list = cavityDrawers();
-  const travel = Math.max(1, (parseInt(manifest && manifest.collection, 10) || 185) - 20);
+  const travel = Math.max(1, drawerStop());
   for (const d of list) {
     const g = d.inst.group;
     if (!g) continue;
@@ -5968,8 +5968,16 @@ function materialFor(inst, highlighted, zone = '') {
   return cache[key];
 }
 // selecting a seated drawer (or anything riding it — faceplate, handle, clip)
-// slides it open 40 mm like a real drawer; deselecting slides it shut
+// slides it open like a real drawer; deselecting slides it shut
 let openCarrier = null;
+/* THE STOP (Joey 2026-10-19: "they should open all the way, until the inside back wall of the drawer collides with the
+   drawer stopper, so maybe about 95% open-ish"). Measured in the scene (world mm, the GLBs as placed): the stopper's tab
+   hangs 1.72 mm below the drawer's rim 2 mm behind the case front (its rear face at z 89 on a 185 whose front is at
+   92.5, 131.5 on a 270 whose front is at 135), and the drawer's inner back face sits at rest 10 mm inside the case's
+   back (−82.5 on the 185, −125 on the 270; an 8.1 mm gap plus a 2 mm wall). The wall meets the tab after
+   collection − 13.5 mm on both: 171.5 of the 185 drawer's 179.3 mm length, Joey's 95 %. The former figure,
+   collection − 20 pulled to 90 %, stopped a 185 drawer at 148.5 mm, 23 mm short of its stopper. */
+function drawerStop() { return (parseInt(manifest && manifest.collection, 10) || 185) - 13.5; }   // a declaration: updateCavityFill above it runs per frame
 function drawerCarrier(inst) {
   if (typeByNode[inst.cfg.node] === 'Drawer') return inst;
   if (inst.cfg.rides && instances.has(inst.cfg.rides)) {
@@ -6403,13 +6411,13 @@ function setSelected(id) {
   if (prevOpen && (prevOpen !== carrier || isFp)) slideDrawer(prevOpen, false); // switching drawers (or isolating a plate) → shut the old one
   let drawerGliding = false;
   if (!quiet && seatable && !isFp && !keepIso) {
-    const travel = (parseInt(manifest.collection, 10) || 185) - 20;
+    const travel = drawerStop();
     // back-cover work happens on an OPEN drawer — selecting it must not yank an
     // already-open drawer back to the 40 mm peek (Joey); anything else follows
     // the normal body → deep pull / rider → peek rule
     const keepOpen = selType === 'BackCover' && carrier === prevOpen;
     if (!keepOpen) {
-      const dist = carrier === inst ? travel * 0.9 : 40;
+      const dist = carrier === inst ? travel : 40;   // the body: out to the stopper; a rider: the 40 mm peek
       const target = basePos(carrier, false); target.z += dist;
       drawerGliding = carrier.group.position.distanceTo(target) > 1; // a real glide, not a re-target no-op
       slideDrawer(carrier, true, dist);
@@ -6524,8 +6532,7 @@ function enterDrawerFocus(carrier) {
   carrier.group.add(dFocus.group);
   // camera: frame the drawer's OPEN position from front-above (≈50° down) on
   // whichever side the camera is already on — floor + back wall both visible
-  const travel = (parseInt(manifest.collection, 10) || 185) - 20;
-  const openPos = basePos(carrier, false); openPos.z += travel * 0.9;
+  const openPos = basePos(carrier, false); openPos.z += drawerStop();
   const target = new THREE.Vector3(openPos.x + (it.xL + it.xR) / 2, openPos.y + (it.yF + it.yT) / 2, openPos.z + (it.zB + it.zF) / 2);
   const s = Math.max(it.w, it.d);
   const side = Math.sign(camera.position.x - target.x) || 1;
@@ -9115,7 +9122,7 @@ function peekUnit(unitId) {
   const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
   if (!d) return false;
   if (openCarrier && openCarrier !== d) slideDrawer(openCarrier, false);
-  openCarrier = d; slideDrawer(d, true); invalidateFrame();
+  openCarrier = d; slideDrawer(d, true, drawerStop()); invalidateFrame();   // "Open the drawer": out to the stopper
   return true;
 }
 function unpeek() { if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; invalidateFrame(); } }
@@ -9728,7 +9735,7 @@ function updateCinema(now) {
       const carrier = (cinema.featureOn && drawers.includes(cinema.featureOn))
         ? cinema.featureOn : drawers[Math.floor(Math.random() * drawers.length)];
       const feature = carrier === cinema.featureOn;
-      const travel = (parseInt(manifest.collection, 10) || 185) - 20; // full pull ≈ case depth − rear engagement
+      const travel = drawerStop();                                    // the full pull: the back wall at the stopper
       const frac = feature ? 0.55 + Math.random() * 0.25              // enough to read, not a full yank
         : 0.3 + Math.random() * 0.65;                                 // 30%..95% open
       const members = [carrier, ...[...instances.values()].filter(x => x.cfg.rides === carrier.cfg.id)];
