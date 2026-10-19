@@ -1411,7 +1411,12 @@ Dated calls made while building, with who made them. The brief and the inventory
   fails the suite; e2e Colors cases 16 of 16; in the browser the card reads "3 filaments", applying it gives the summary
   "Case, drawers: Black · Fronts, grips: Silk Black · Grip accents, faceplate bodies, small parts: Neon Yellow".
 - **Review:** Terra `01a155f4`, routine: NO OBJECTION.
-- **Deploy:** a change Joey decided in words deploys once its checks pass.
+- **Live 2026-10-19**, stamp `69ca2a2a` (main `5b2a7e7`; its run and the next died in the e2e step, whose two 5 s and 10 s waits timed out on a
+  32-minute step and took the 30 s bound in `e26de9a`, then on the drawer-stop commit's unit step, fixed in `69ca2a2`;
+  run 39332085367 green). Checked live by
+  `planner-prod-checks-2026-10-18\preset-v2-prod.mjs`: the twelfth preset's Case, side-cover core, handle Elegoo PLA
+  Black; face, grip and side-cover face Panchroma Silk Black; faceplate body, grip accent and deck Printed Solid Neon
+  Yellow; the card "Neon yellow & black · 3"; the accent and grip rules hold on all 12; no errors.
 
 ## 2026-10-19 (a drawer opens to its stopper)
 
@@ -1436,5 +1441,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   Checked in the browser on the 185: "Open the drawer" and "Peek inside" both land the drawer at base + 171.5 (its
   z 5.24 → 176.74); a plain selection in Build or Colors does not pull, before or after.
 - **Checks:** e2e Colors, phone, journey, Parts and Build cases (see the commit); no test pinned the old figures.
-- **Review:** Terra, routine (thread in the commit).
-- **Deploy:** a change Joey decided in words deploys once its checks pass.
+- **Review:** Terra `01a15623`, routine: NO OBJECTION on the stage change, the e2e case and this entry.
+- **Live 2026-10-19**, stamp `69ca2a2a` (main `3912af4`, then `69ca2a2`: the deploy's unit step failed on
+  `test/move-opt.test.mjs`, whose sandbox runs updateCavityFill's text through `new Function` and did not know
+  `drawerStop`; it now injects it. Luna `01a1562b`. The lesson, in memory: run the full `npm test` when main.js gains a
+  helper). Checked live by `planner-prod-checks-2026-10-18\drawer-stop-prod.mjs` on the 185 kit: Peek inside lands the
+  drawer at base + 171.5 and Close it at base; on the Colors tab `peekUnit` (the card's "Open the drawer") lands at
+  base + 171.5 and `unpeek` at base; no errors.
