@@ -41,7 +41,8 @@ const mutate = (code, from, to) => {
   return code.replace(from, to);
 };
 
-const HELPERS = [takeAt('function markShadowDirty()', { fn: true }), takeAt('function setPartShadows(root, on)', { fn: true })].join('\n');
+const HELPERS = [takeAt('function markShadowDirty()', { fn: true }), takeAt('function setPartShadows(root, on)', { fn: true }),
+  'let sceneRev = 0;'].join('\n');   // the scene revision both swaps bump (the Colors plan's step 3): module state the lifted functions read
 const APPLY_STATE = takeAt('function applyState(i)', { fn: true });
 const APPLY_EXPLODED = takeAt('function applyExploded()', { fn: true });
 const COMPUTE_BOUNDS = takeAt('function computeBounds()', { fn: true });

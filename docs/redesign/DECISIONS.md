@@ -608,6 +608,197 @@ Dated calls made while building, with who made them. The brief and the inventory
     href;
   - no page errors.
 
+## 2026-10-18 (Colors, step 2 of the redesign plan: the look-card gate passes)
+
+- **What it was:** a measurement the plan's review asked for before step 3's gallery is built on it. Can each card show
+  the visitor's own build in a look, offscreen, without compiling shaders per look and fast enough for a gallery?
+  Joey's "Continue" took the plan on from step 1. The pass marks were written before anything was measured, in
+  `D:\Claude - Output\colors-presets-2026-10-17\STEP2-GATE.md`, which holds the full results.
+- **The probe:** `stage.lookCard(look, opts)`, debug-only, with no control calling it.
+  - It snapshots the finished build into its own scene once per manifest (2 to 3 ms), with the stage's light rig and
+    environment.
+  - Each look gets clones of the live materials (`cloneMaterial`, the same programs), resolved like `materialFor`.
+  - It renders into its own target, with no `invalidateFrame`.
+  - Its clones die with the base materials: `purgeLookCards` sits beside both material purges and in
+    `dropStaleAxisMaterials`.
+- **The result, at 384×288 on the root kit, dark stage:** it passes all four marks with one choice of target.
+  - 0 new shader programs across looks.
+  - About 6 ms per card on the laptop, and 13 to 16 ms with the CPU throttled 4×. That is a card's own time. Whether the
+    live frame plus a card fits a frame is step 3's first check.
+  - Against the real canvas, a median difference of 0 (p95 12 on Fast, 17 on Very High), on the build's interior. One
+    card per tier.
+- **The finding that decides step 3's render target:**
+  - An ordinary render target skips three.js's tone mapping: 28 of 255 off on Very High.
+  - A target flagged `isXRRenderTarget` with sRGB storage encodes twice: 73 off. three.js stores a render target's sRGB
+    colour texture as SRGB8_ALPHA8 even on an XR target (`setupFrameBufferTexture`), so the hardware encodes after the
+    shader has.
+  - XR-flagged with RGBA8 storage matches the screen. Even its first card added no shader program, which fits reusing
+    the screen's programs (same tone mapping and output colour space).
+  - The flag is internal to three.js. The e2e case "Colors step 2: a look card ..." pins the match, with an ordinary
+    target as the control. It was mutation-checked: with RGBA8 storage off, it fails.
+- **What a card still lacks:** Very High's ambient occlusion and settle accumulation, and shadows on the light stage.
+  Translucent filaments show as solid tints. Step 3 also needs a scene revision counter, because labels and style
+  swaps change the build without a new manifest.
+- **The method moved once, after the first results.**
+  - The first fidelity check compared each card with the live scene drawn into the same kind of target. Every
+    variant scored 0, so it could not see an encoding error.
+  - M4 was re-measured against the canvas itself, and the RGBA8 variant added; the marks did not change.
+  - The canvas comparison sizes the drawing buffer without touching the pixel ratio, which the relief's band limit
+    depends on (the layer-detail-seam guard).
+- **Review:** Sol 01a14f22. All 8 points held, and all are fixed:
+  - **in the code:**
+    - an unnamed filament pick no longer lightens alternate tiles;
+    - cards run one at a time;
+    - the live renderer is restored in a `finally`;
+    - label and handle changes re-snapshot;
+  - **in the report:** card latency is not frame pacing; one image does not prove the resolver; the discarded rerun
+    and when the filters were fixed are now recorded; the scope is stated.
+- **Tests on the final code:** npm test, 520 tests (515 passed, 0 failed, 5 skipped); e2e, 40 of 40, the gate case
+  included. The gate itself was rerun on the final code (`gate4`), and every fidelity figure reproduced.
+- **Recorded in the vault:** measurements.md, "Offscreen renders and the screen" (4e2c8bc; Sol 01a14f29). It includes
+  the unmeasured consequence that the Build workspace's product previews (`renderThumb`) get no tone mapping on the
+  tone-mapped tiers.
+- **Not deployed.** The branch is `colors-step2-gate`; a debug hook has no reason to ship before step 3 uses it.
+
+## 2026-10-18 (Presets: the accent differs from the face; Jessie Neon Yellow; the "Neon yellow & black" preset)
+
+- **Joey, on his phone with EdgeLabel faceplates:** "I shouldn't have the accent color the same as the face for those".
+  The EdgeLabel family's accent part sits on the face and vanishes into one of the same colour. The four presets of
+  2026-08 never matched them; four of step 3's seven did (Grey & sunlight yellow, Safety yellow & black, Printer black &
+  red, Flight-team navy & gold) and now take another colour the look already prints; Flight-team's is the navy, since
+  white would fade on its yellow face (Terra 01a15087). `test/presets.test.mjs` pins Accent ≠ Faceplate:FACE.
+- **"Can we add Jessie neon yellow as an available color?"** Printed Solid Neon Yellow joins the catalog (112 colours).
+  Its hex `#E4E202` is the median of the centre third of the maker's swatch photo (no colour code is published). The
+  catalog's source of truth, `gen2-visual-animator/viewer/js/filament-db.js`, and the Filament Material Lab's copy (its
+  pinned hash bumped) were re-vendored the same day. Terra 01a1508a.
+- **"Neon yellow & black"**, the twelfth preset, is Joey's own 3D Printopia build (his photo): Chevron faceplates with
+  every face black, the body in neon yellow, handles in plain black PLA (that build wore a holographic build plate: the
+  plate finish, not a colour). Shell in Neon Yellow; faces, grips, drawers, handles and the deck (13:1) in Elegoo PLA
+  Black; accents and hardware neon. Terra 01a1508e, no findings. The presets test pins 12.
+- **Checks:** presets.test.mjs 12 of 12 and filament-db.test.mjs 5 of 5 on the final code (Terra 01a150b8 caught the
+  earlier "17 of 17", which was both files together); a change Joey decided in words
+  deploys once its checks pass.
+- **Live:** main 03ee0bd (261cc80 accent rule + Neon Yellow, 81ceda9 the preset, 03ee0bd the night grid and setup
+  sheet), run 39161157605 green 16:26, live stamp `03ee0bdb`. Production check (evening-prod.mjs, desktop and
+  375×844): 112 colours with Neon Yellow `#E4E202` and its Printed Solid URL; 12 presets, the last "Neon yellow &
+  black" (Case Printed Solid Neon Yellow, Faceplate:FACE Elegoo PLA Black); accent ≠ face and grip = face hold on
+  every preset.
+
+## 2026-10-18 (the night stage's grid back to the old cyan; the setup sheet on a phone)
+
+- **Joey, comparing the old viewer and the planner on his phone:** "Is it just me or does the new grid feel darker" ...
+  "I like the old more". The shell's `night` stage (2026-10-12: the grid two steps quieter and the floor reflection
+  halved, from Astra's review of the first Build screen) now matches `dark` exactly: grid `0x2b7f9e`, the reflection at
+  the stage's default. The entry stays as the shell's mode name. This reverses the 2026-10-12 choice on Joey's word.
+- **Joey, tapping the mount chip on his phone:** "it just opens a broken menu and expands my keyboard". The Build setup
+  sheet's box carries the class `sheet` inside `#ws`, so the phone's bottom-sheet rules took it: positioned at the Dock,
+  slid to its 44 px peek and clipped (measured at 375×812: top 642, translateY 410 px, clip-path to 44 px), with the name
+  field focused and the keyboard up. A phone rule below the phone block gives the modal its own layout back (top 64,
+  full width, scrolling inside), and on a phone the dialog's focus lands on its close button; the desktop keeps the name
+  field focused (the keyboard e2e case). `matchMedia` guarded for environments without it (Terra 01a15096, held).
+- **Checks:** the keyboard, setup-sheet and every-workspace-boots e2e cases (5 of 5) on the final code; node --check
+  on setup.js. Both changes are Joey's in words, so they deploy once checks pass.
+- **Live:** main 03ee0bd, run 39161157605 green, stamp `03ee0bdb` (see the entry above). Production check: the
+  `night` theme's grid reads `#2b7f9e` on both viewports; the setup sheet at 375×844 sits at top 64 with no transform
+  and no clip-path, focus on `BUTTON.x`; on the desktop it keeps the name field focused.
+
+## 2026-10-18 (Colors, step 4 of the redesign plan: the compare tray)
+
+- **Joey's go:** "Go" to the proposed step 4, the same day step 3 went live. The plan's step 4 as approved
+  (COLORS-PLAN.md): two or three finalists, flipped with the camera held still, flips through the preview API, never
+  touching the safe area; the step's record is `D:\Claude - Output\colors-presets-2026-10-17\STEP4.md`.
+- **Finalists:** up to three, in a list that survives the gallery closing and a remount. They come in from a "+" on
+  every gallery card, from "Add to Compare" in a look's details, and from "Add current look" in the tray; the gallery's
+  head counts them ("Compare (2)") and opens the tray.
+- **The tray** sits over the stage above the Dock (a sheet on the phone). The gallery and the tray never show together
+  (Astra: contextual panels do not pile up over the model): opening one closes the other, and the finalists keep. The
+  part card hides while the tray is open, as under the shopping list.
+- **A flip shows a finalist and nothing more:** `previewPalette`, no re-render of the workspace, so the safe area is
+  never set and the camera stays. "Current" puts the chosen look back. Measured (STEP4.md, marks written first): on this
+  laptop at Balanced, dpr 1, a flip reaches the next drawn frame in a median 10 ms (max 16) over 20 flips; the camera
+  and the safe area are unchanged to the number (M8 and M10 pass; 4× throttled and Very High: STEP4.md).
+- **The safe area's floor lifts once, when the tray opens,** by the tray's height, so an auto-fitted model rises above
+  it; the stage refits only a camera the visitor has not taken. A flip never touches it.
+- **Apply** goes through the gallery look the finalist came from (a preset's own apply and its event; a saved look's
+  per-unit layer), or as a scheme of the finalist's colours when that look is gone; one undo step. The tray stays open.
+  Deleting a saved look in the details also takes it out of the tray.
+- **Tests:** two e2e cases (the desktop flow: enter, Compare (2), the tray replaces the gallery, a flip is shown and
+  not chosen with the palette, the camera, the safe area and the history untouched, the second finalist replaces the
+  first, Current, Apply as one undo step, remove, Escape; the phone sheet), one mutation-checked.
+- **Review:** Sol 01a15017, no findings. **Checks on the final code:** npm test 521 (516 passed, 0 failed, 5 skipped);
+  e2e 46 of 46 (soft rendering, the Studio checkout served); the desktop tray case mutation-checked (a flip that chose
+  the look through `setPalette` fails it at once). Flip latency measured by hand, STEP4.md §4: M8, M9 and M10 pass.
+- **Live (Joey, 2026-10-18: "Deploy").** Main fast-forwarded to `6bf1853`; run 39152794735 green on the first try,
+  live stamp `6bf18532`. Checked in production with `D:\Claude - Output\planner-prod-checks-2026-10-18\step4-prod.mjs`,
+  desktop 1280×800 and a 390×844 phone viewport, both on Very High: two finalists from the gallery's "+", the head reads
+  "Compare (2)", the tray opens in the gallery's place (a sheet titled "Compare · 2 of 3" on the phone), a flip shows
+  Stealth (Case #2b2b2e) with the palette, the camera, the safe area and the history unchanged and the shown card
+  marked, the second finalist replaces it (Drawer #d23a2e), Current ends the preview, no preset event, no page errors
+  on the desktop (the phone run, opened seconds after the desktop one, logged the same single third-party 429 as the
+  step-3 check; a plain re-load does not reproduce it). Nothing was applied in production.
+
+## 2026-10-18 (Colors, step 3 of the redesign plan: the current-look card, Browse looks, look details, the new presets)
+
+- **Joey's go:** "Start Colors step 3" (the "MODULITH planner-2 | 10-18" session). The plan's step 3, as approved
+  (D:\Claude - Output\colors-presets-2026-10-17\COLORS-PLAN.md); the step's own record is STEP3.md beside it.
+- **The panel:** the premade list and "Your schemes" are gone from the sidebar (Astra: more rows pushed "Colors in this
+  build" down). In their place, one card: this build rendered in its current colours, the look's name (D4: the matching
+  preset or saved look, "<that look> · edited" after a hand change, "Custom look" with no source), its filament count and
+  swatches, then Browse looks, Surprise me (disabled until step 5), Save, and Download / Upload / Share behind "⋯".
+  "Colors in this build" sits directly under it.
+- **The gallery** opens over the stage's left (540 px; the view tools step right of it; the camera's safe area is never
+  touched, so the model stays put while looks are tried): Featured (the presets), My looks (★ My palette, the saved
+  looks), All looks; a search; a filament-count filter counted on THIS build. Every card is this build wearing that look,
+  from step 2's `lookCard`, keyed on the scene revision, the look as the build wears it, the tier and the stage theme;
+  drawn one per animation frame; dropped when the build changes or the gallery closes. Hovering or focusing a card shows
+  the look on the model (`previewPalette`: never saved, never in the history, never a preset event).
+- **The details** take the gallery's place: the big render, Apply this look (one undo step; closes the gallery), Delete
+  for a saved look, Shop this look (moved here from the preset rows: the filament rows as this build wears the look,
+  Buy links with the disclosure at the link), a screen-preview note, an appearance-not-suitability note, and a
+  translucent note where a look uses a translucent filament (the card shows it solid).
+- **Saved looks keep per-unit colours** (D5): Save stores `over` beside `colors`; Download and Share stay colours only,
+  for the Studio.
+- **The new presets:** seven from the palette study (Racing silver & teal, Grey & sunlight yellow, Safety yellow & black,
+  Printer black & red, Tri-stripe racing white, Black & gold, Flight-team navy & gold), each with the label text in a
+  dark filament the look already prints. **The grip wears the face colour** (Joey, on the first cards: "with this
+  faceplate i'm not a fan of the grip being a different color from the face"): four of the seven drafts split them and
+  were folded; the presets test pins the rule. Tool-chest red waits for its scoring. The presets test pins 11.
+- **The scene revision** (`stage.sceneRev`): bumped by a new manifest, by the label meshes redrawn in place, and by a
+  handle or faceplate style swapped in place; the look cards snapshot once per revision.
+- **`lookCard` reworked for a gallery:** the draw runs one at a time into a pooled target; each card's readback is
+  awaited on its own, so cards overlap on the GPU. Measured first: the step-2 shape (one card's fence before the next
+  draw) ran 50 to 190 ms a card in the planner's page, 1.2 s for 11 cards at 25 ms a frame.
+- **The first check, frame pacing** (STEP3.md, marks written before measuring): on this laptop in real Chrome, dpr 1,
+  1280×800, Balanced, one card a frame: 11 cards in 128 to 145 ms once warm, frames p95 16.7 ms, max 16.8 ms (M5 and M7
+  pass; the first fill after launch: 356 ms, p95 41.7 ms). Throttled 4× and Very High: STEP3.md §3.
+- **Phone:** the gallery is a third bottom sheet, one open at a time; the panel's card puts the render beside the name
+  so Browse looks stays in the first screen; closing the gallery returns to the Colors sheet. Checked in the desktop
+  app's browser pane at 375×812, not yet on a real phone (the plan's acceptance).
+- **Tests:** presets.test.mjs (11, the names, the grip rule); e2e: the Colors preset case moved to the gallery, the
+  350 ms case and the Shop case follow it, plus the gallery case (cards drawn and keyed, hover shown-not-chosen, cards
+  follow a build change and Undo, no preset event), the loose pacing gate, the phone sheet case.
+- **Reviews:** Sol 01a14f91 (substantial), 3 of 3 held and fixed: a saved look read as "Applied" when only its per-unit
+  colours differed (looks now match on colours AND the per-unit layer, which also names such a look "· edited"); a saved
+  look deleted by a captured index (now by name, read fresh, so another tab's save cannot shift it); the search box
+  rebuilt under the caret (the grid alone follows the search now). The Terra pair 01a14f96 (pair-sol-0335), 3 of 3 held:
+  the first two again, and Apply on the phone leaving every sheet collapsed (it returns to the Colors sheet).
+- **Checks on the final code:** npm test 521 (516 passed, 0 failed, 5 skipped); e2e 44 of 44 (soft rendering, the Studio
+  checkout served); the gallery case mutation-checked (with `mountManifest`'s revision bump removed it fails on "the
+  revision moved with the unit"). Two unit tests that lift the handle and faceplate swaps out of main.js needed
+  `let sceneRev = 0` in their sandboxes.
+- **Live (Joey's go, 2026-10-18: "Deploy Colors step 3").** Main fast-forwarded to `66d91b0`. The first run
+  (39142321766) failed on the new pacing gate itself: the runner's software rasteriser filled the 11 cards in 8.9 s
+  against a 5 s bound, so the gate took the runner's bounds (`a4a49ee`, 30 s and a 2 s frame; Terra 01a14fce). The
+  second (39144483279) fell on the idle-gate case's 1.5 s window, which passes locally and had passed the run before;
+  an empty commit (`3011d62`) re-ran it: green, live stamp `3011d62a`. Checked in production with
+  `D:\Claude - Output\planner-prod-checks-2026-10-18\step3-prod.mjs`, desktop 1280×800 and a 390×844 phone, both on
+  Very High: 11 presets, the grip rule holds in every one, the panel's card names "The Jerrari · 4 filaments" and is
+  drawn, the gallery's 11 cards fill in about 200 ms keyed on the live scene revision, a hovered card shows Stealth on
+  the model (Case #2b2b2e) with the palette unchanged and leaving ends it, the details show Stealth with 4 filament
+  rows and 4 Buy links and Apply, the phone's gallery sheet is titled after the look, no preset event, no page errors
+  (the phone run, opened seconds after the desktop one, logged a single third-party 429 that a plain re-load of both
+  viewports did not reproduce).
+
 ## 2026-10-18 (MakerWorld and Cults 3D hidden from the store links)
 
 - **Joey's call (2026-10-18):** "I noticed i don't like how we link to makerworld or cults, if it doesn't exist on their
@@ -628,6 +819,213 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Live:** run 39133529005 green. Checked in production with saved choices of both hidden stores: the Parts list
   shows Printables and Thangs with Printables on, and so does the viewer's picker; no link to either store anywhere;
   no page errors.
+
+## 2026-10-18 (Colors, step 5 of the redesign plan: Surprise me, with constraints)
+
+- **Joey's go:** "continue with colors step 5", the evening the batch of fixes went live. The plan's step 5 as approved
+  (COLORS-PLAN.md §4): lock colours or parts; Subtle, Playful or Wild; a cap of 2, 3 or 4 filaments set by the visitor
+  (the planner cannot know a printer's colour count); optionally only filaments the visitor owns, a new list kept
+  outside the vendored catalog and keyed by label; three candidates with Keep, More like this and Try again; generated
+  looks under the preset rules (the deck at 4.5:1 from inside the look, lower and upper parts sharing a colour, the
+  extender, the lip and the side-cover core in the case colour, the side-cover face as D1 reads it).
+- **The generator is pure and seeded** (`js/colors/surprise.js`): a look is built from roles (shell, drawer, face,
+  grip accent, accent, handle, label and its text, the small parts, the deck, the bought hardware) and written out to
+  the 27 keys every preset sets, so the product rules hold by construction and are checked once more before a look
+  leaves (`checkLook`). `test/surprise.test.mjs` re-states every rule independently of the generator and holds 6,800
+  looks (3 moods × 3 caps × 3 catalogs × 100 seeds) to them: 100 % pass, and the share of settings that return fewer
+  than three is printed, never hidden. The study's colour maths (CIELAB, CIEDE2000 against the 34 Sharma pairs, WCAG
+  contrast) moved into the runtime as `js/colors/colour.js`.
+- **Moods read the catalog in LCh:** neutral under C 10, muted to 25, mid to 45, vivid above. Subtle: a neutral or
+  muted shell, nothing vivid, at most one colour above C 25, hues within 60°. Playful: a neutral shell, the rest neutral
+  or vivid with at least one vivid, in a harmony (hues within 40° or 100–180° apart). Wild: a mid or vivid shell, the
+  rest mid or vivid at least 60° apart or neutral. Two filaments in one look read as two colours (CIEDE2000 ≥ 10); no
+  translucent filament is picked (a card would show it solid). **Two things moved while building:** Wild as first
+  designed ("everything mid or vivid") found nothing for an eight-filament owned list, because a deck or a label text at
+  4.5:1 needs a light or a dark colour and the vivid part of the catalog sits at mid lightness, so Wild admits neutrals;
+  and the cap is a ceiling, not a count, because Subtle at cap 4 found nothing where four neutrals read as three.
+- **Locks** are per role, offered as chips for the regions that drive a look and that the build has (Case, Drawer body,
+  Face, Accent, Handle, Label, Shelf deck); a chip holds the filament the region wears now (a region on an
+  identification colour cannot be locked: there is no filament to keep). A locked colour wins over the mood and over the
+  owned list, and counts toward the cap. A rolled face is never the shell's filament (the face is the look's statement);
+  a locked one may be, as Black & gold's is (Sol 01a150df: the generator refused the pair as "No look fits"), and such a
+  look is named by its accent.
+- **The owned list** is `gen2-owned` in this browser (`js/state/owned.js`: catalog labels only, each once; a label that
+  leaves the catalog drops out on the next read; a storage that throws reads as nothing owned). It is edited in the
+  panel: every catalog colour by brand, ticked or not, with a search. "Only filaments I own" stays off and disabled until
+  the list has two. Every way out of the editor (Back, Escape, the close button) reconciles: the switch drops under two,
+  and the candidates roll again when the list changed under the switch (Sol 01a150df: Escape and close skipped it, so
+  Keep could apply a filament just unticked); the panel also re-rolls on opening when its candidates no longer fit the
+  list.
+- **The panel takes the gallery's spot** and closes the gallery and the tray (contextual panels do not pile up over the
+  model). Candidates draw through the gallery's card pump and `stage.lookCard`, one a frame, and show through
+  `previewPalette`: hovering shows one while none is pinned, a click pins it (a phone has no hover), the same click frees
+  it. Keep applies a candidate as a scheme of its own (one undo step; the current-look card then reads the candidate's
+  name, decision D4). More like this keeps a candidate's shell and face and re-rolls the rest; Try again rolls three
+  more. Fewer than three is said in a note, never hidden. Opening, hovering, rolling and keeping never touch the safe
+  area, so the camera stays (step 4's rule). Names read "<face> on <shell>", with the third colour when the look has one.
+- **No stage change.** No analytics: a candidate never goes through `applyPreset`.
+- **Measured (STEP5.md, marks written first):** 6,800 generated looks, none breaks a rule; the three candidates always
+  differ in shell and face, 23 distinct shells over 50 rolls; a roll of three in a median 0.2 ms under node; the safe
+  area and the camera unchanged to the number across opening the panel and 20 Try agains at Balanced, 4× CPU and Very
+  High; Try again to the third card drawn in a median 43–56 ms at Balanced (max 95), 44 ms at Very High (max 123),
+  289–364 ms at 4× CPU (max 607, one re-render frame of up to 308 ms, reported with no mark).
+- **Checks:** npm test 537 (532 passed, 0 failed, 5 skipped); e2e 48 of 48 (soft rendering, as CI runs it), two new
+  cases, the desktop one mutation-checked (Keep through `previewPalette` fails it at "the build wears the kept look");
+  review Sol 01a150df, two findings, both held and fixed before the commit.
+- **Live (with 5b below):** Joey, "Deploy Colors step 5 + 5b", 2026-10-18. Main fast-forwarded to `3526e5a`; run
+  39172061740 passed the tests and the smoke and failed at the deploy's module-graph guard (the new modules' imports
+  carried no `?v=` stamp), so nothing shipped; `aedb37a` added the stamping lines (replayed locally with the guard;
+  Luna 01a1512b); run 39173205072 green, live stamp `aedb37a3`. Production check `step5-prod.mjs` on the desktop and
+  a 390×844 phone viewport: the panel opens in the gallery's spot with the five tiles (15 swatches), three candidates
+  drawn and named in colour words with the accent share rising (quiet / balanced / bold), a hovered candidate shown and
+  not chosen, Show three more with the camera and the safe area unchanged, Use this look wearing the look as one undo
+  step and the panel named after it, Undo restoring The Jerrari, no preset event, no page errors.
+
+## 2026-10-18 (Colors, step 5b: "Find your next look", Astra's refinement of Surprise me)
+
+- **Astra, relayed by Joey the same evening,** on the step-5 panel: "'Mood' ... describes how adventurous the generator
+  is, but doesn't help someone picture the result"; styles "with a sense of place, rather than literal room categories",
+  five of them, "each as a small palette tile with three swatches"; "make the three results deliberately different
+  interpretations of the chosen style - one mostly neutral, one balanced, one with a stronger accent", counting "the
+  visible area carrying the accent, not simply how many part categories receive it"; "Keep" → "Use this look", "Try
+  again" → "Show three more", keep "More like this"; short names "such as 'Sand & charcoal'" with the filaments in
+  Details; Face and Handle locks kept; "Let Retro pop be a smaller, well-curated collection"; shiny finishes not the
+  default; and "the generator's rules make a look consistent with the planner's constraints; they don't by themselves
+  establish that every material is suitable for every printed part". Joey: implement it before deploying (her "settled
+  enough to implement now", relayed, read as the go to start, not to deploy).
+- **Styles are pools and relationships** (`js/colors/styles.js`): Warm & natural (warm neutrals and whites shell it, the
+  earths accent it, nothing vivid), Clean & calm (whites, greys, silvers; the quiet blues and soft greys), Workshop
+  classic (blacks, charcoals, steel grey, deep blues; reds, oranges, yellows), Retro pop (a named collection: eight
+  shells, cream one of them; thirteen accents), Anything goes (a neutral or chromatic shell, any mid or vivid accent).
+  Each has a least hue distance and a silk weight (a silk survives a pick at 0.25 in the two calm styles, 0.5 in the
+  workshop and retro ones). `test/styles.test.mjs` pins every pool as a label list.
+- **Three interpretations, told apart by visible area** (`AREA` in surprise.js: an estimate of the root kit's silhouette
+  by role; shell 0.44, face 0.24, deck, drawer, handle, accent, label, small, grip accent the rest): quiet puts the
+  accent colour on the Accent part and the grip accent only, balanced on the face, bold on the face, handle, small parts
+  and drawer body too; the share must rise slot to slot or the slot is dropped; nothing is padded. A cap of 2 gives two
+  (a quiet look needs a third colour for its face).
+- **Names are colour words** (`js/colors/words.js`, 36 words over LCh regions with named overrides for the finishes:
+  chrome, gold, brass, bronze, rose gold, titanium, clear, natural), "<Shell> & <accent>" from the two colours carrying
+  the most visible area, locked colours included; the filament names stay in the tooltip, the toast and Details.
+- **Details** is the gallery's own look details for the candidate; Back returns to the panel.
+- **Measured (STEP5B.md, marks written first):** 8,400 generated looks, none breaks a rule; every colour inside its
+  style's pools; the accent's visible share rises slot to slot in 600 of 600 sets (medians 0.07 / 0.27 / 0.40); silk
+  shells 5–8 % in the three calm styles; three candidates in 100 % of calls on the whole catalog at caps 3 and 4, Retro
+  pop included (a cap of 2 gives two, by design); 112 of 112 colours have a word, rolls named apart; Show three more to
+  the third card drawn in a median 38–43 ms at Balanced, 40 ms at Very High, 120–129 ms at 4× CPU (faster than step
+  5, whose mood generator re-rolled whole sets); the camera and the safe area unchanged to the number in every round.
+- **From the review (Sol 01a15101):** "More like this" could hand back the candidate's own shell: held and fixed (the
+  candidate's shell is passed as `notShell`). That the three interpretations may carry different accent colours was
+  read as the design (three interpretations of the style, not one colour three times) and left as is, recorded for
+  Astra and Joey.
+- **Checks:** npm test 546 (541 passed, 0 failed, 5 skipped); the two step-5 e2e cases extended (the tiles, "In use",
+  the cap of 2 giving two with its note) and green; the whole e2e suite under soft rendering 47 of 48, the one failure the
+  Label plate's faceplate-switch case on a visibility wait (37 s), which touches nothing 5b changed and passed on the
+  5b worktree and on main, with and without soft rendering, when run again (four of four): a load flake, recorded, not
+  fixed. Review Sol 01a15101, one finding held and fixed, one discarded as the design.
+- **Live:** with step 5, 2026-10-18 (see the step-5 entry: run 39173205072, stamp `aedb37a3`, the production check).
+
+## 2026-10-18 (the Parts list names the filament each part prints in)
+
+- **Joey (2026-10-18), on the Parts tab after choosing colours:** "the parts have the instructions colors assigned to
+  them, which is kind of confusing after assigning chosen colors to it".
+- **The call:** with the visitor's colours on (`stage.palette().on`), a Parts row's chip is the filament the part prints
+  in, and the identification colour, the one the Assemble instructions use to tell parts apart, stays only as a thin ring
+  around it. With the colours off nothing changes: the chip is the identification colour, as before.
+- **Changed (branch `parts-print-colours`, not deployed):**
+  - `js/workspaces/parts.js`: a row's type comes from its BOM name (`typeOf`, ordered like `chipFor`; bought hardware and
+    anything the stage does not model answer null and keep the identification chip). One read per render of the Colors
+    tab's source, `stage.keysInBuild()` for a type's regions and `stage.filamentsInBuild()` for what each wears
+    (`paletteSnapshot`): a part with zones, or units with their own picks, shows the distinct colours side by side
+    (at most four), body first. Under the name: "Print in Black · face Mystery Orange", every filament name the buy link
+    the Colors tab uses (paid links marked as there); a zone that follows its body is not repeated; a region with no pick
+    reads "no pick yet", a row with none "No filament picked yet". The caption reads "Chip = the filament it prints in ·
+    ring = its colour in Assemble · dashed = buy" while the colours are on. Copy as text gains a "Print in:" line per
+    row and the CSV a "Print in" column (empty with the colours off); Print prints the list as shown. The list subscribes
+    to the store so an Undo of a colour change re-renders it.
+  - `js/workspaces/colors.js` exports `ZONE_LABEL`, `isPaid` and `short`, so both tabs word a zone, a filament and a paid
+    link the same way.
+  - `css/app.css`: `.chip.fil` (the ring), `.chip.multi` (the swatch strip), the dotted link in the line.
+- **Checks:**
+  - `test/parts-print-colours.test.mjs`: every BOM row name across the mounts, feet and faceplate styles maps to a stage
+    type (bought hardware to none); the snapshot, the words and the swatches on a fake stage;
+  - a new e2e case: Stealth applied through the Colors gallery, then Parts: the case row's chip is the case filament's
+    colour with the ring, the line names it with a buy link, the caption, the CSV column; `setUseCustom(false)` puts the
+    identification chip and the old caption back. Mutation-checked: a chip that ignores the palette fails it on the
+    chip's colour;
+  - npm test 525 (520 passed, 0 failed, 5 skipped); the Parts and Colors e2e cases 15 of 15;
+  - review: Terra 01a15119, 1 returned, 0 held (its "adopt commits are cross-tab changes the list misses" is wrong: an
+    adopt is a same-tab load of the stage record by a workspace's own handler, which re-renders itself; the Build, Colors
+    and Labels tabs skip it the same way).
+- **Not done:** the inspector's "This unit · parts" list still shows no colours.
+- **Live:** Joey, "Deploy the Parts-list change", 2026-10-18. Merged into main as `26a4123` (the DECISIONS conflict
+  resolved with both entries kept; the deploy's stamping line added for parts.js's new `./colors.js` import, the
+  module-graph guard replayed locally); on the merge npm test 544 passed, 0 failed, 5 skipped, e2e Parts + Colors + boot
+  18 of 18; run 39177428150 green, live stamp `26a41231`. Production check `parts-colours-prod.mjs` on the desktop and
+  a 390×844 phone viewport, Stealth applied: the case row's chip is Panchroma Black with the identification colour as a
+  ring, "Print in Black" with the Polymaker link, the caption "Chip = the filament it prints in · ring = its colour in
+  Assemble · dashed = buy", four dashed buy chips kept; colours off: the identification colour, no line, the old
+  caption; Undo restores The Jerrari; no page errors.
+
+## 2026-10-18 (Colors, step 6 of the redesign plan: Simplify to fewer filaments, and the confidence summary)
+
+- **Joey's go:** "go, but also what's left after that?", the last step of the Colors plan. The plan's step 6 as
+  approved (COLORS-PLAN.md §4): Simplify previews exactly which parts would change, then asks before applying; the
+  summary reads "3 filaments used · Case: Black · Fronts: Orange · Grips: Silver · Keep this look", with "Review
+  filaments" under it keeping appearance and material suitability apart.
+- **Simplify is a pure merge under the rules** (`js/colors/simplify.js`): one step at a time, the filament carrying the
+  least visible area (the role-area weights of step 5b, over the keys this build has) is mapped, per-unit picks
+  included, onto the closest colour of the look (CIEDE2000) under which every preset rule still holds on the look as
+  worn (a rule applies only when the build has both its keys: no shelf, no deck rule); when no colour can take it, the
+  next-least filament is tried; when no step is possible the result is short and says why ("Two filaments must stay:
+  the deck or the label text needs a colour that reads against its background"). Nothing from outside the look is
+  brought in; a key that wore no merged filament is never touched. `test/simplify.test.mjs` holds 1,476
+  simplifications of 900 generated looks on two builds to the rules re-stated independently, re-derives the
+  least-visible / closest-colour choice for 572 single steps, and checks that per-unit picks move with their filament.
+- **The panel** (`#ws-simplify`, the tray's spot; a sheet on the phone): "Down to" with the counts from one fewer to
+  two, the changed regions as rows reading original → final per filament (a filament merged twice shows once, where it
+  ends up: the first rows listed the generator's steps and read as two changes for one filament), the outcome line,
+  "Apply · N filaments" and Cancel. The proposal is shown on the model through `previewPalette` while the panel is up
+  and never chosen; Apply is one undo step (`commitColors('scheme', ...)`), after which the card reads "<the look> ·
+  edited" (D4). It closes the gallery, the tray and Find your next look and never touches the safe area.
+- **The summary** sits under the current-look card's swatch strip: "<count> filaments used" (the one count, D2) then
+  the regions the build has grouped in a fixed order (Case, drawers, fronts, grips, grip accents, accents, handles,
+  labels, label text, deck, small parts), neighbours sharing a filament joined ("Case, drawers: Black"), filaments by
+  their short names; beside it "Keep this look" (Save, the name field focused), "Review filaments" (the shopping list,
+  which gains "Appearance only: whether a filament suits a part (strength, heat, flex, the printer) is a separate
+  question.") and "Simplify…" at three filaments or more.
+- **Caught while building:** the module's `worn` import shadowed the workspace's own `worn(key)` helper and broke the
+  panel at boot; renamed on import. The deploy's stamping lines for the new module went in with the code (the lesson of
+  step 5's first run).
+- **No stage change. No analytics.**
+- **From the review (Sol 01a151f0, three findings, all held at least in part):** the units' own picks are now worn,
+  counted and validated through each unit's own view of the rules (a merge may not add a rule problem; one the look
+  already had neither blocks it nor is its to fix); the bought hardware's stored entries are left alone by a merge,
+  while the rest of the palette follows it on purpose (D3: a part added later matches the look; that half discarded,
+  recorded); a group worn in two filaments splits by key in the summary ("Case: Black · Feet: Orange") and the line
+  counts the units with their own colours.
+- **Measured (STEP6.md, marks written first):** 1,476 simplifications of 900 generated looks on two builds, none
+  breaks a rule, every target reached on the root kit, 95 short on the fuller build with a reason each; 572 single
+  steps re-derived as least-visible → closest valid colour; the twelve presets' summary lines match the Dock's count
+  with every region once; preview / Cancel / Apply as one undo step with the camera and the safe area unchanged; a
+  simplification in a median 0.05 ms.
+- **Checks:** npm test 554 (549 passed, 0 failed, 5 skipped, run alone: a run beside the e2e suite timed three
+  browser-based cases out at 73 s that pass alone in 9 s); the two step-6 e2e cases three of three under soft rendering
+  after one flake of the case's own making (it asserted the Save row's focus before the tick that sets it; it now
+  waits); the whole e2e suite 49 of 51 under soft rendering, the two failures that flake and the Label plate's
+  faceplate-switch case (the load flake recorded under 5b). Mutation checks: the rule check removed fails the unit test;
+  Apply only previewing fails the e2e case. Review Sol 01a151f0, three findings, all held at least in part.
+- **Live:** Joey, "Deploy Colors step 6", 2026-10-19 morning. Main fast-forwarded to `dddbdaf`, run 39242318988
+  green, live stamp `dddbdaf1`. Production check `step6-prod.mjs` on the desktop and a 390×844 phone viewport: the
+  summary's "4 filaments used" matches the Dock and `filamentsInBuild()`; Simplify opens in the tray's spot (a sheet on
+  the phone) with "3 filaments" and "2 filaments", the row "Grip accents: Silk Silver → Orange", the proposal shown on
+  the model with the palette, the history, the camera and the safe area untouched; Cancel leaves nothing; Apply drops
+  the Dock to 3 as one undo step and the card reads "The Jerrari · edited"; Undo restores The Jerrari; Review filaments
+  opens the shopping list with the suitability note; no preset event; no page errors (the phone run logged a
+  third-party 429, as the earlier checks did). This closes the Colors plan, steps 1 to 6.
+- **A wording nit seen in production:** with the Classic faceplate's body in black and its face in orange, the line
+  reads "Fronts: Mystery Orange · Faceplate bodies: Black · Grips: Mystery Orange" (the split keeps fronts and grips
+  from joining); accurate, but "faceplate bodies" would sit better after the grips. Left for Astra's eye.
 
 ## 2026-10-18 (Build's product previews match the model on every tier)
 
@@ -692,3 +1090,41 @@ Dated calls made while building, with who made them. The brief and the inventory
   - two claims went past their evidence (the light stage's shadows, the shared shader programs) and are now worded as
     above.
 - **Not deployed:** branch `preview-fidelity`, waiting for Joey's go.
+
+## 2026-10-19 (preview-fidelity brought up to current main by hand, and proved again)
+
+- **Why:** the branch (`a0c5dc0`, merged with main `8b1b965` as `9df500a`) had fallen 22 commits behind: the Colors
+  plan's steps 2 to 6, the Parts list's filament chips, the night stage's grid revert, the evening batch. Main put the
+  look cards (`lookCard`, `lookCardDraw`, `lookCardRead`, `lookPool`, `lookRig`, `sceneRev`) directly beside the preview
+  section of `js/main.js` that the branch rewrites. Astra's ordering (2026-10-19) put preview fidelity first among what
+  is left, so the branch was brought up to main `0b9406d` by hand, not fast-forwarded.
+- **What conflicted:** three files, each a "both sides appended at the same spot" case.
+  - `js/main.js`: the branch's `drawThumb` / `thumbPng` / `thumbModel` against main's look-card block, at the same point
+    before the palette API. Both kept, the preview block first. Both behaviours stand: Build's previews take the
+    XR-flagged RGBA8 target, the tier's rig with the fill boost (`rigFor`) and the studio environment, keyed on the tier;
+    the look cards keep their pooled targets, their cloned rig read from the live lights and their revision key. The
+    branch's `rigFor` and `applyQuality` hunks and main's `purgeLookCards()` calls and `sceneRev++` bumps merged
+    themselves; no shared helper was renamed or moved by either side.
+  - `e2e/workspaces.mjs`: the branch's preview case against main's Parts-print-colours case, both appended after the
+    store-links case. Both kept, the preview case first.
+  - `docs/redesign/DECISIONS.md`: entries, main's first (as the previous merge did), then the branch's.
+- **Proved again on the merged tree** (every number of PREVIEW-FIDELITY.md's marks, recorded beside the old ones in its
+  section 6):
+  - P1, P2, P3, P5 the same as the final run to within one integer median: dark inspector 0/4 and 0/6, tile 0/0 and
+    0/11; light tone-mapped inspector 3/31 and 2/8, tile 2/31 (1-2/31 before) and 1/11; Fast at most 0/11; coverage 0%
+    in all 48; the ordinary target 26 to 32; the contrasting-filament control 148 to 190. The first unit's preview PNGs
+    are byte-identical to the 2026-10-18 run's in 15 of 16 cells and differ by one pixel at one level in the 16th.
+  - P4 against main `0b9406d` itself as the shipped code: Fast -0.55, -0.95, -0.9 ms; Very High +2.4, +2.3, -0.5 ms
+    (the mark is +4); no new program from the second preview on; boot one program fewer.
+  - The sweep now covers the 12 presets main has (step 3 added eight; the sweep reads the app's list): 245 images plus
+    6 diagnostic, all pass; the largest p95 is 13 (inspector previews on four of the new presets, median 0; the
+    registered four are unchanged at 9 and 11);
+    Chevron's tile 0/20, the handles 0/5, the light baseline 3/32 and 1/4 without the cast shadow; coverage 0 in all
+    251; the injection fails at 47.8% to 58.7% in all 18.
+  - npm test 554 (549 pass, 0 fail, 5 skipped); e2e 52 of 52 on the GPU and 52 of 52 under SwiftShader, the Colors
+    step-2 look-card gate and the preview case both passing; goldens 60 of 60; the deploy's stamping guard replayed
+    locally on a copy prints `module graph OK` (the branch adds no module import, so no stamping line is needed).
+- **Review:** Sol `01a1542f`, two turns: NO FINDINGS on the merge diff with the neighbouring look-card code; four
+  findings on the report's section 6, all held (claims stated past their evidence), corrected there, with the median
+  shift then settled from the saved images.
+- **Not deployed, not merged into main:** the merge is committed on `preview-fidelity` and pushed, waiting for Joey's go.

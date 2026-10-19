@@ -18,6 +18,7 @@ import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
+import { ZONE_LABEL, isPaid, short } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid buy link
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -52,6 +53,72 @@ export function chipFor(name) {
   if (/Foot|Rail|Bracket|Wall Mount/i.test(name)) return '#A855F7';
   return '#9CA3AF';
 }
+
+/* the stage's part TYPE of a row (main.js typeByNode's names, generate.js's `add` calls), so a row can ask the palette what it
+   prints in. The names are the planner's BOM names (data.js partNames and bom.js's hardware rows); the order matters as in
+   chipFor (a stopper is not a drawer, a back cover is not a faceplate). Bought hardware and a row the stage does not model
+   answer null, and keep the identification chip. */
+export function typeOf(name) {
+  if (/Stopper/.test(name)) return 'Stopper';
+  if (/Side Cover/.test(name)) return 'SideCover';
+  if (/QuickLock/.test(name)) return 'QuickLock';
+  if (/Magnet Clip/.test(name)) return 'MagnetClip';
+  if (/Cover Upper/.test(name)) return 'CoverU';
+  if (/Cover Lower/.test(name)) return 'CoverL';
+  if (/Foot ?rail Upper/i.test(name)) return 'FootrailU';
+  if (/Foot ?rail Lower/i.test(name)) return 'FootrailL';
+  if (/Back Cover/.test(name)) return 'BackCover';
+  if (/Faceplate/.test(name)) return 'Faceplate';
+  if (/Handle/.test(name)) return 'Handle';
+  if (/Drawer/.test(name)) return 'Drawer';
+  if (/Case Extender/.test(name)) return 'CaseExtender';
+  if (/Case/.test(name)) return 'Case';
+  if (/Shelf Insert/.test(name)) return 'ShelfInsert';
+  if (/Shelf Lip/.test(name)) return 'ShelfLip';
+  if (/^GEN2 Foot\b/.test(name)) return 'Foot';
+  if (/Wall Mount/i.test(name)) return 'Bracket';
+  if (/Rail/i.test(name)) return 'Rail';
+  return null;
+}
+/* WHAT A ROW PRINTS IN (Joey, 2026-10-18, on the Parts tab after choosing colours: "the parts have the instructions colors
+   assigned to them, which is kind of confusing after assigning chosen colors to it"). With the visitor's colours on, the
+   list reads the stage's palette API, the Colors tab's one source: keysInBuild for the regions of every type (its body,
+   then its zones), filamentsInBuild for the filament each region wears, a unit's own pick included, and the identification
+   colour where none is picked. Returns Map type -> [{ key, zone, filaments: [{ name, hex, url }], bare: hex | null }], or
+   null while the colours are off, when the chip stays the identification colour. */
+export function paletteSnapshot(stage) {
+  let on = false; try { on = !!stage.palette?.().on; } catch { on = false; }
+  if (!on) return null;
+  let keys, fc; try { keys = stage.keysInBuild(); fc = stage.filamentsInBuild(); } catch { return null; }
+  const byType = new Map();
+  for (const k of keys) {
+    if (k.locked) continue;
+    const filaments = fc.filaments.filter((f) => f.keys.includes(k.key));
+    const bare = fc.unpicked.find((u) => u.key === k.key && !u.stripe);
+    if (!byType.has(k.type)) byType.set(k.type, []);
+    byType.get(k.type).push({ key: k.key, zone: k.zone, filaments, bare: bare ? bare.hex : null });
+  }
+  return byType;
+}
+/* the regions of a row as words: the body's filament(s), then each zone that wears something else -
+   [{ zone: '' | 'face', items: [{ name, url }] }]; a region with no pick is "no pick yet" */
+const NO_PICK = 'no pick yet';
+export function printRegions(regions) {
+  const items = (g) => [...g.filaments.map((f) => ({ name: short(f.name), url: f.url || null })), ...(g.bare ? [{ name: NO_PICK, url: null }] : [])];
+  const body = regions.find((g) => !g.zone) || regions[0];
+  const out = [{ zone: '', items: items(body) }];
+  const names = (its) => its.map((i) => i.name).join('/');
+  for (const g of regions) if (g !== body && names(items(g)) !== names(out[0].items)) out.push({ zone: ZONE_LABEL(g.zone).toLowerCase(), items: items(g) });
+  return out;
+}
+/* "Black · face Mystery Orange" for the exports and titles; "no filament picked yet" when nothing is */
+export function printText(regions) {
+  const parts = printRegions(regions);
+  if (parts.length === 1 && parts[0].items.every((i) => i.name === NO_PICK)) return 'no filament picked yet';
+  return parts.map((p) => (p.zone ? p.zone + ' ' : '') + p.items.map((i) => i.name).join(' / ')).join(' · ');
+}
+/* the distinct colours a row prints in, body first */
+export const swatchesOf = (regions) => [...new Set(regions.flatMap((g) => [...g.filaments.map((f) => f.hex), g.bare].filter(Boolean)))];
 
 /* the four numbers of one row, from the stored progress */
 const rowKey = (r) => `${r.section}|${r.name}`;
@@ -111,8 +178,39 @@ export function mountParts(stage, ctx) {
 
   const panel = el('aside.glass', { id: 'ws-parts', 'aria-label': 'Parts list' });
   root.appendChild(panel);
+  /* the palette, read once per render (paletteSnapshot); null with the visitor's colours off */
+  let pal = null;
+  const printLook = (r) => { if (!pal || r.hardware) return null; const t = typeOf(r.name); const regions = t && pal.get(t); return regions && regions.length ? regions : null; };
+  /* the row's chip: the filament(s) it prints in with the identification colour as a ring (colours on), else the
+     identification colour alone, as the Assemble instructions paint it; bought hardware keeps its dashed outline */
+  function chipEl(r, regions) {
+    if (r.hardware) return el('span.chip.buy', { title: 'Bought, not printed' });
+    const id = chipFor(r.name);
+    if (!regions) { const c = el('span.chip', { title: 'Part color in Assemble' }); c.style.background = id; return c; }
+    const sw = swatchesOf(regions).slice(0, 4);
+    const c = el('span.chip.fil' + (sw.length > 1 ? '.multi' : ''), { title: `Prints in ${printText(regions)} · the ring is its colour in Assemble` });
+    c.style.setProperty('--id', id);
+    if (sw.length > 1) for (const h of sw) c.appendChild(el('i', { style: `background:${h}` })); else c.style.background = sw[0] || hex(regions[0].key, id);
+    return c;
+  }
+  /* "Print in Black · face Mystery Orange" under the name, every filament name the buy link the Colors tab uses for it */
+  function printLine(regions) {
+    const parts = printRegions(regions);
+    if (parts.length === 1 && parts[0].items.every((i) => i.name === NO_PICK)) return el('div.note.printin', { text: 'No filament picked yet' });
+    const kids = ['Print in '];
+    parts.forEach((p, i) => {
+      if (i) kids.push(' · ');
+      if (p.zone) kids.push(p.zone + ' ');
+      p.items.forEach((it, j) => {
+        if (j) kids.push(' / ');
+        kids.push(it.url ? el('a', { href: it.url, target: '_blank', rel: isPaid(it.url) ? 'noopener sponsored' : 'noopener', title: `Buy ${it.name} ↗` + (isPaid(it.url) ? ' · paid link' : ''), text: it.name }) : it.name);
+      });
+    });
+    return el('div.note.printin', {}, kids);
+  }
   function renderPanel() {
     const { rs, printCount, files, toGo, missing, optMissing } = counts();
+    pal = paletteSnapshot(stage);
     panel.replaceChildren();
     const head = el('div.head');
     head.append(
@@ -121,7 +219,7 @@ export function mountParts(stage, ctx) {
       el('div.row2', {}, [
         missing ? el('span.warn', { text: `⚠ ${missing} required part${missing === 1 ? '' : 's'} not released yet` })
           : el('span.ok', { text: optMissing ? `✓ All required parts are available · ${optMissing} optional in development` : '✓ All required parts are available.' }),
-        el('span.dim', { text: 'Chips = part colors in Assemble · dashed = buy' }),
+        el('span.dim', { text: pal ? 'Chip = the filament it prints in · ring = its colour in Assemble · dashed = buy' : 'Chips = part colors in Assemble · dashed = buy' }),
       ]),
       el('div.row3', {}, [
         el('div.track.sites', { role: 'group', 'aria-label': 'Download site' }, STORES.map(([id, name]) =>
@@ -154,10 +252,10 @@ export function mountParts(stage, ctx) {
     const p = st.progress[rowKey(r)] || { had: 0, made: 0 };
     const left = remaining(r, p);
     const row = el('div.prow.well' + (st.tracking && left === 0 ? '.done' : ''));
-    const chip = el('span.chip' + (r.hardware ? '.buy' : ''), { title: r.hardware ? 'Bought, not printed' : 'Part color in Assemble' });
-    if (!r.hardware) chip.style.background = chipFor(r.name);
-    row.append(chip, el('span.qty.mono', { text: `×${r.qty}` }));
+    const regions = printLook(r);
+    row.append(chipEl(r, regions), el('span.qty.mono', { text: `×${r.qty}` }));
     const mid = el('div.mid', {}, [el('div.name', { text: partName(r.name) })]);
+    if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     row.appendChild(mid);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
@@ -184,10 +282,11 @@ export function mountParts(stage, ctx) {
     const p = st.progress[rowKey(r)] || { had: 0, made: 0 };
     const left = remaining(r, p);
     const row = el('div.prow.trow.well' + (left === 0 ? '.done' : ''));
-    const chip = el('span.chip' + (r.hardware ? '.buy' : ''), { title: r.hardware ? 'Bought, not printed' : 'Part color in Assemble' });
-    if (!r.hardware) chip.style.background = chipFor(r.name);
+    const regions = printLook(r);
+    const chip = chipEl(r, regions);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
     const mid = el('div.mid', {}, [el('div.name', {}, [partName(r.name), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
+    if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     const counter = (field, label) => {
       const v = p[field] || 0;
@@ -225,6 +324,8 @@ export function mountParts(stage, ctx) {
     for (const r of rows()) {
       if (r.section !== last) { txt += `\n[${r.section}]\n`; last = r.section; }
       txt += `${r.qty}x ${partName(r.name)}${r.optional ? ' (optional)' : ''}${r.unreleased ? ' (coming soon)' : ''}\n`;
+      const regions = printLook(r);   // the filament it prints in, as the list shows it (a list without it is the same confusion on paper)
+      if (regions) txt += `    Print in:   ${printText(regions)}\n`;
       if (r.links) { txt += `    Printables: ${r.links.printables}\n    Thangs:     ${r.links.thangs}\n`; }
     }
     try { await navigator.clipboard.writeText(txt); say('Parts list copied.'); } catch { say('Could not reach the clipboard.'); }
@@ -232,8 +333,8 @@ export function mountParts(stage, ctx) {
   function downloadCsv() {
     const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const m = meta();
-    const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Printables', 'Thangs'].map(esc).join(',')];
-    for (const r of rows()) lines.push([r.section, r.qty, partName(r.name) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), r.links?.printables || '', r.links?.thangs || ''].map(esc).join(','));
+    const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Print in', 'Printables', 'Thangs'].map(esc).join(',')];
+    for (const r of rows()) { const regions = printLook(r); lines.push([r.section, r.qty, partName(r.name) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), regions ? printText(regions) : '', r.links?.printables || '', r.links?.thangs || ''].map(esc).join(',')); }
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `modulith-${length}-parts.csv` });
     document.body.appendChild(a); a.click(); a.remove();
@@ -323,10 +424,13 @@ export function mountParts(stage, ctx) {
   if (steps && stage.cur !== steps) stage.goTo(steps, { animate: false });
   stage.setDims(false);
   renderPanel(); renderInspector(); renderDock(); safe();
+  /* a commit while this tab is open is a palette change or an undo of one (the store restores the palette beside the
+     record): the chips and the "Print in" lines follow it */
+  const unsub = ctx.store?.subscribe ? ctx.store.subscribe((state, why) => { if (why === 'adopt') return; renderPanel(); }) : null;
 
   return {
     onSelect(sel) { st.sel = sel; renderInspector(); if (phone) { if (sel) phone.open(insp); else phone.collapse(insp); phone.refresh(); safe(); } },
-    unmount() { ac.abort(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },
+    unmount() { ac.abort(); if (unsub) unsub(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },
   };
 }
 
