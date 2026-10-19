@@ -114,7 +114,8 @@ export function simplify({ colors = {}, over = {}, keys = [], target = 2 } = {})
 /* the summary groups, in the order the line reads them */
 export const SUMMARY = [
   ['Case', ['Case', 'CaseExtender', 'SideCover', 'ShelfLip', 'CoverL', 'CoverU', 'FootrailL', 'FootrailU', 'Foot', 'Rail', 'Bracket', 'BackCover']],
-  ['drawers', ['Drawer']], ['fronts', ['Faceplate:FACE', 'Faceplate', 'SideCover:FACE']], ['grips', ['Faceplate:GRIP']], ['grip accents', ['Faceplate:GRIP ACCENT']],
+  // the visible, recognisable surfaces first (Astra, 2026-10-19: fronts, grips, then the faceplate bodies)
+  ['drawers', ['Drawer']], ['fronts', ['Faceplate:FACE', 'SideCover:FACE']], ['grips', ['Faceplate:GRIP']], ['grip accents', ['Faceplate:GRIP ACCENT']], ['faceplate bodies', ['Faceplate']],
   ['accents', ['Accent']], ['handles', ['Handle']], ['labels', ['Label']], ['label text', ['Label:TEXT']], ['deck', ['ShelfInsert']], ['small parts', ['QuickLock', 'MagnetClip', 'Stopper']],
 ];
 /* a key's own word, for a group whose keys wear more than one filament (Sol 01a151f0: "Case: Black" hid orange feet) */

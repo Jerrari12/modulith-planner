@@ -1023,9 +1023,15 @@ Dated calls made while building, with who made them. The brief and the inventory
   the Dock to 3 as one undo step and the card reads "The Jerrari · edited"; Undo restores The Jerrari; Review filaments
   opens the shopping list with the suitability note; no preset event; no page errors (the phone run logged a
   third-party 429, as the earlier checks did). This closes the Colors plan, steps 1 to 6.
-- **A wording nit seen in production:** with the Classic faceplate's body in black and its face in orange, the line
-  reads "Fronts: Mystery Orange · Faceplate bodies: Black · Grips: Mystery Orange" (the split keeps fronts and grips
-  from joining); accurate, but "faceplate bodies" would sit better after the grips. Left for Astra's eye.
+- **A wording nit seen in production, and Astra's answer (2026-10-19):** with the Classic faceplate's body in black and
+  its face in orange, the line read "Fronts: Mystery Orange · Faceplate bodies: Black · Grips: Mystery Orange" (the
+  split kept fronts and grips from joining). Astra: "Fronts → Grips → Faceplate bodies. Keep the visible, recognisable
+  surfaces first." The faceplate body is its own summary group after the grip accents, so The Jerrari reads "Case,
+  drawers: Black · Fronts, grips: Mystery Orange · Grip accents: Silk Silver · Faceplate bodies: Black · Small parts:
+  Orange". And on Simplify's outcome line, her distinction kept: "fewer distinct filaments doesn't necessarily mean
+  fewer printing colour changes or less waste" — the line now says fewer filaments means fewer spools to own and load,
+  and that colour changes within one print depend on which parts print together. Both on branch `colors-polish`
+  (Luna 01a15408), to ride the next deploy rather than a release of their own, as Astra said.
 
 ## 2026-10-18 (Build's product previews match the model on every tier)
 
