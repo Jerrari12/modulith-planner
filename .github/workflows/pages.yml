@@ -158,7 +158,7 @@ jobs:
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|" js/ui/board.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./names.js'|'./names.js?v=$V'|" js/ui/topbar.js
           # the shown names (2026-10-16): imported by app.js, the top bar and the Parts workspace
-          sed -i "s|'./ui/names.js'|'./ui/names.js?v=$V'|" js/app.js
+          sed -i "s|'./ui/names.js'|'./ui/names.js?v=$V'|" js/app.js js/main.js   # main.js imports it too since 2026-10-19 (the viewer's tab title)
           sed -i "s|'../ui/names.js'|'../ui/names.js?v=$V'|" js/workspaces/parts.js js/workspaces/build.js
           sed -i "s|js/catalog/data.js|js/catalog/data.js?v=$V|; s|css/tokens.css|css/tokens.css?v=$V|; s|css/app.css|css/app.css?v=$V|; s|css/fonts.css|css/fonts.css?v=$V|" index.html
           # ⚠ the vendored requirement-scope contract is a CLASSIC script tag,

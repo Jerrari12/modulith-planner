@@ -26,6 +26,6 @@ test('build names and the tab title', () => {
   assert.equal(buildName('The Mighty Bit Bunker · GEN2 Custom · 185'), 'The Mighty Bit Bunker · Custom · 185');
   assert.equal(buildName('GEN2 185 Tabletop Kit 2W-2H'), '185 Tabletop Kit 2W-2H');
   assert.equal(buildName('My shop wall'), 'My shop wall');
-  assert.equal(tabTitle('The Mighty Bit Bunker · GEN2 Custom · 185'), 'The Mighty Bit Bunker · Custom · 185 · MODULITH');
-  assert.equal(tabTitle(null), 'MODULITH Planner');
+  assert.equal(tabTitle('The Mighty Bit Bunker · GEN2 Custom · 185'), 'The Mighty Bit Bunker · Custom · 185 · MODULITH Planner');
+  assert.equal(tabTitle(null), 'MODULITH Planner · plan a 3D-printable modular storage build');
 });
