@@ -1213,6 +1213,135 @@ Dated calls made while building, with who made them. The brief and the inventory
   frames in 1.5 s on a runner during GitHub's degraded-Actions incident of the afternoon) and passed on attempt 2; live
   stamp `402cf6fe`, the three changed modules served. Not checked by hand in production.
 
+## 2026-10-19 (the inspector's "This unit · parts" rows name and show the filament each part prints in, per unit)
+
+- **Why.** The Parts list has named the filament each part prints in since 2026-10-18 (the entry above, live as
+  `26a4123`); its own entry left one thing undone: "the inspector's 'This unit · parts' list still shows no colours".
+  Astra put "preview fidelity and inspector colours" first among what was left (2026-10-19): they decide whether the
+  chosen look matches the finished build. The brief placed the list in the Build workspace's inspector; it lives in the
+  PARTS workspace's inspector (`js/workspaces/parts.js` renderInspector; Build's "This unit only" inspector has no parts
+  rows), and that is where the change went.
+- **What a row shows now.** With the visitor's colours on, each row of the selected unit's parts carries the list's own
+  chip (parts.js `chipEl`: the filament, the identification colour as the 2 px ring, several swatches when the part's
+  regions wear more than one) and the list's "Print in <short name>" line under the part name, with the Colors tab's buy
+  link. Colours off: the identification chip alone, no line (the rows had no chip at all before; the list's rows always
+  had one). The chip, the words and the swatches are the list's code, not a copy: both lists are in parts.js, so the
+  helpers are shared by scope, and no new module (no stamping line) was needed.
+- **The resolution is per UNIT, which the list's snapshot cannot give.** `paletteSnapshot` pools every unit's picks under
+  a type (filamentsInBuild's `keys`), so a type worn in two filaments reads "Black / Teal" there, and that is right for a
+  list of the whole build. The inspector's rows are one unit's, so `unitRegions(stage, pal, unitId, type)` resolves each
+  of the type's regions for THAT unit the way the stage paints it (main.js materialFor / filamentsInBuild): the unit's
+  own pick first (`stage.overrideFor`, which already answers a zone with the unit's Body pick when the build has not
+  picked the zone), else the build's pick for the key, else a zone follows its body unless it has a colour of its own
+  (the label text; keysInBuild's `ownColor`, now carried on the snapshot), else bare in the identification colour (the
+  snapshot's `bare`, or `activeHex` when no unit shows that region bare). A store commit (a palette change, an undo of
+  one) re-renders the inspector after the list, since the list's render refreshes the snapshot the rows resolve against.
+- **Checks.** `test/parts-print-colours.test.mjs`: a stage with the build's picks and two units' own (the faceplate body
+  on one, the drawer body on the other), resolved per unit against the pooled list; the own-body-covers-an-unpicked-zone
+  case; the label text keeping its own colour; the bare fallback; colours off, bought hardware, an unmodelled type and a
+  throwing `overrideFor` all answering null or the build's. An e2e case: Stealth applied in Colors, unit 1's case picked
+  "This drawer only" through the real picker (the case instance found through `partInfo().owner`, since case ids are
+  positional), then in Parts the inspector on unit 1 shows its own filament and names it, on unit 2 the build's with
+  the buy link, and colours off the identification colour with no line. Mutation-checked: the resolver ignoring the own
+  pick fails the case on the own-filament assertion ("actual rgb(43, 43, 46), expected rgb(49, 81, 126)"). npm test 560
+  (555 passed, 0 failed, 5 skipped); e2e Build + Parts + Colors cases 24 of 24 with the new one.
+- **Review:** Terra `01a1551d`, routine: NO FINDINGS on the diff, the tests and the e2e case. It ran after a wait: the
+  Plus reserve gate refused the first call (the 5-hour window at 95% from the other sessions' reviews, reset 12:58), the
+  local tier's advisory pass in between returned a bare NO OBJECTION (`local-20261019-123426-495-2104172`, adjudicated
+  no-signal, not taken as approval), and the commit waited for the cloud review at the parent session's direction.
+  Self-review beside it, what was checked: the per-unit resolution against overrideFor's zone fallback and
+  filamentsInBuild's; a shown look (previewLook) cannot be live while the Parts inspector is, since the Colors workspace
+  ends it on unmount; the subscription re-render touches no input or focus; the chip rules are scoped to
+  `#ws-insp .uprow`, which only the Parts inspector has; the row names map through `typeOf` as the list's do.
+- **Not deployed.** Left on the branch for Joey's go.
+
+## 2026-10-19 (the phone pass: the 10-17 phone fixes on current main, and the complete phone journey)
+
+- **Why now.** Astra (2026-10-19): "Re-test the phone fixes on current main. Checking Simplify at a phone viewport is
+  useful, but the complete phone workflow still needs verification", and her next review is "the complete journey -
+  choose a look, adjust a part, simplify, review filaments, continue to Parts - rather than another round of isolated
+  colour features". Branch `phone-check-fixes` (67ec611, the 10-17 phone acceptance check's eleven fixes) had fallen a
+  long way behind main (the Colors plan's steps 3-6, the filament chips, the previews, the setup-sheet phone fix, the
+  brand title, the bed-limited rails).
+- **Part 1: the merge, and the fixes re-tested.** Branch `phone-journey`, cut from `phone-check-fixes`, main (2b620c8)
+  merged by hand. Two conflicts, both behaviours kept: the Dock's filament stack takes main's one filament count
+  (`filamentsInBuild`, decision D2) and keeps the branch's phone collapse; the e2e file is main's with the four phone-check
+  cases appended. Every phone fix holds on current main at 390×844: the four phone-check cases (Place / Cancel, the issue
+  card and the toast above the sheets; the setup sheet whole; the switcher's items and the shopping list over an open
+  sheet; Measure, the switcher's count, no "null") and the six other phone cases (the Build and Labels sheets, Colors
+  steps 3-6 on the phone) pass, 10 of 10, before any further change.
+- **Part 2: the journey, step by step, as a visitor does it on a phone** (390×844, real touch, dark theme, the Fast tier;
+  the same walk at 1280×800 with a mouse). What was seen, and what changed:
+  1. **Build.** The model is the hero: no sheet open, the Dock reads "Layout valid". Fine.
+  2. **Colors from the tab bar.** The Colors sheet opens on arrival, alone; the Dock turns into "4 filaments", the summary
+     line says "4 filaments used"; no field takes focus. Fine.
+  3. **Browse looks → a look chosen.** The gallery sheet opens alone (the Colors sheet steps down); a card shows its look
+     on the model without choosing it (previewing, nothing in the history); Apply is one undo step, the gallery closes and
+     the Colors sheet comes back, the toast "Applied “Stealth”" shows over the sheets (z 14), the Dock and the summary
+     still agree (4). Fine.
+  4. **A part tapped on the model - BROKEN.** With the Colors sheet up (it is, on arrival), a tap on a drawer's front lit
+     the faceplate and showed nothing else: the part card (`#ws-partcard`, z 12) and the picker's handle (a collapsed
+     sheet at the bottom of the stack) were both under the open sheet (z 13). On the desktop the same tap shows the card
+     and the picker aside. **Changed:** `onSelect` steps the sheets down when a part is selected on a phone, as Build's
+     inspector does, unless the picker itself is the open sheet (a visitor picking colours taps part after part, and the
+     picker follows the tap - checked: with the picker open, a tap on a second unit's front switched its region from Body
+     to Face and the sheet stayed up). After the tap: no sheet open, the card over the collapsed handles (Colors, and
+     "Face · faceplates" above it), both reachable.
+  5. **The picker.** A chip on the card opens the picker sheet alone; its search field does not take focus; a swatch
+     recolours the build's region. The count need not rise: a region that alone wore a filament swaps one for another
+     (Stealth's faceplate bodies, Steel Grey → a new pick, stays at 4; the drawer fronts, shared with the drawers, 4 → 5).
+     The Dock and the summary agree after the pick. Fine.
+  6. **This unit only.** The second segment is offered (the tapped part belongs to a unit); a second swatch becomes that
+     unit's own colour; the summary adds "· 1 unit with its own colours"; the count rises by one; the Dock agrees. Fine.
+     One finding for the checks, not the app: two picks within 350 ms are one undo step (the store coalesces, by design);
+     a visitor's pace separates them, so the e2e case waits 500 ms between them.
+  7. **Undo / Redo.** The toolbar's Undo takes the unit's colour back (the summary's "own" clause goes, the count is the
+     build pick's again); Redo returns it; the picker stays up through both. Fine.
+  8. **The picker's close.** The sheets down, the model and the card. Fine.
+  9. **Simplify.** From the Colors sheet (its handle opens it): Simplify's own sheet, the proposal shown on the model;
+     Apply is one undo step, one filament fewer, the Colors sheet back, the toast "Simplified to N filaments.", the Dock
+     and the summary agree. Fine.
+  10. **Review filaments - BROKEN.** The summary's link set `st.shop` and rendered the list, which on a phone is a floating
+      card over the collapsed handles: with the Colors sheet up, it opened under it, and the tap seemed to do nothing. The
+      Dock's filament stack had the collapse since the phone check; the summary link, added by step 6 on the desktop, did
+      not. **Changed:** one `openShop()` for both (the sheets step down on a phone). After: the list over the handles, one
+      row per filament, the rows the build's filaments in the Dock's order, as many as the Dock says.
+  11. **Get parts list.** The Parts sheet opens on arrival ("Parts · 43 to print"); the rows' "Print in …" lines name the
+      filaments; the distinct names (the zone words and the "A / B" of a unit's own colour parsed out) are exactly the
+      Colors Dock's filaments, no more. Parts' own Dock is structural ("Layout valid"), by design. Fine.
+  12. **Back to the model.** Build from the tab bar: no sheet open; Undo there takes Simplify back (the count rises by
+      one). Fine.
+  Also seen, not changed: the toast sits on the same floor as the floating cards (`--sheet-stack` + 10 px), so for its 2.6 s
+  it can overlap a card's lower row (the part card's "Open the drawer", the shopping list's note); it takes no pointer
+  events and passes. The gallery's search field takes focus on the desktop by design and not on the phone.
+- **Checks.** The journey is an e2e case (`the phone journey: …`, twelve steps with real taps, the Dock against the summary
+  at every count change, the shopping list and the Parts list by name), mutation-checked: with `onSelect`'s collapse
+  removed it fails at "no sheet is open after a tap on the model". `D:\Claude - Output\planner-prod-checks-2026-10-18\
+  journey-prod.mjs` walks the same journey against the live site, desktop and the phone viewport, reporting each step's
+  state as JSON (the sheets open, what is on top, the counts, the names, the focused element, errors), with `--serve DIR`
+  for a checkout under test. Against the live site (stamp `da764f81`): desktop 16 of 16; phone 14 of 16, the two named
+  steps waiting on this branch's deploy (4: the tapped part's card and picker under the open sheet; 10: Review filaments
+  under it) reported and not counted; no page errors. Against this branch served locally: 16 of 16 on both.
+  npm test 554 passed, 0 failed, 5 skipped. e2e 58 of 58 on the GPU; E2E_SOFT=1 57 of 58, the one failure the
+  bed-limited-rails case of the morning (main's own): under soft rendering it recorded the 404s and the `goTo` error the
+  page logs in the 200 ms between Start build's commit and its reload (Build syncs the stage with the 270 record while the
+  stage's pool is still 185) - a pre-existing transient, nothing of this branch's (the case fails the same with main's
+  build.js swapped in, and passes with main's newer e2e file); main fixed the case itself an hour later (402cf6f: it
+  discards what the page logged before the reload and waits for the rebuild), merged in below.
+- **Also seen in the code, not exercised:** with Simplify, Compare or Find your next look up on a phone, a tap on the
+  model steps that sheet down too (its handle brings it back; the proposal or the shown look stays on the model, since
+  the state flags are untouched) - the rule is one rule, a tap on the model answers with the part.
+- **Review:** the Plus reserve refused the Sol review at first (the 5-hour window at 95%, 2026-10-19 afternoon); the
+  local tier's advisory pass was a bare NO OBJECTION (`local-20261019-125423-669-2103960`, adjudicated no-signal: not
+  approval). Once the window reset: Sol `01a15524`, substantial - 2 returned, 2 held, both on `journey-prod.mjs` and
+  neither on the app or the e2e case: the live-only exemption of steps 4 and 10 also applied to a `--serve` run (now live
+  only: run against main's checkout, which lacks the fixes, the script fails both steps and exits 1), and a state
+  snapshot that threw counted as a pass (now a failure). Re-run after the fix: live 14 of 16 with the two steps waiting,
+  the branch 16 of 16.
+- **After main's 402cf6f was merged in:** E2E_SOFT=1 again, 57 of 58 - the bed-limit case passes now; the one failure
+  this time was the Label plate's faceplate-switch case, a 30 s click timeout while two other Chrome runs (the
+  production checks) shared the machine; alone under soft rendering it passes.
+- **Not deployed.** Left on `phone-journey` (pushed) for Joey's go; the deploy needs no new stamping line (no new module).
 ## 2026-10-19 (Build and Labels no longer push a record of another mount or length into the stage before the setup reload)
 
 - **The glitch.** The stage's parts pool (`PARTS_BASE`, from the first manifest's collection) and its mount scene (the

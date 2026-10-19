@@ -94,6 +94,10 @@ export function mountBuild(stage, ctx) {
 
   /* ---------------- the record ↔ the stage ---------------- */
   let lastSig = null, syncing = false, unmounting = false, queue = Promise.resolve();
+  /* Measure is the visitor's: the finished step a regenerate lands on shows the W/H/L callouts by itself (an edit switched
+     them on, the phone check, 2026-10-17), so the choice is kept here, from the toolbar's own button, and put back after
+     every regenerate; a snapshot taken before the update lost a toggle made while it ran (Sol 01a14b32) */
+  let measureOn = false;
   const tryGen = (rec) => { try { return generateManifest(rec); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
   { const g = tryGen(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }
   /* every settled change: regenerate the scene when the manifest changed; an unshowable layout keeps the last good
@@ -115,7 +119,7 @@ export function mountBuild(stage, ctx) {
       const sig = sigOf(gen.manifest);
       if (sig !== lastSig) {
         lastSig = sig; syncing = true;
-        try { const r = await stage.update(rec, gen); if (!r.ok) st.stageErrors = r.errors; else stage.skipToEnd(); }
+        try { const r = await stage.update(rec, gen); if (!r.ok) st.stageErrors = r.errors; else { stage.skipToEnd(); stage.setDims(measureOn); } }
         finally { syncing = false; }
         if (st.selId != null && !stage.selectUnit(st.selId)) { st.selId = null; st.sel = null; }
       }
@@ -687,6 +691,7 @@ export function mountBuild(stage, ctx) {
     eraser: { get: () => st.eraser, set: (on) => { st.eraser = on; if (on) { st.armed = false; select(null); } renderAll(); } },
   });
   const tools = bar.el;
+  tools.querySelector('.measure').addEventListener('click', () => { measureOn = stage.dimsOn; });   // after the toolbar's own toggle
   root.appendChild(tools);
   const brd = board({
     state: S, colors: () => ({ ...colors }), armed: () => st.armed ? armedSize() : null, selected: () => st.selId,
@@ -726,7 +731,7 @@ export function mountBuild(stage, ctx) {
   function renderDock() {
     const list = issues(); const k = list.length; const secs = sectionCount();
     dock.replaceChildren(...[
-      el('button.status' + (k ? '.issue' : ''), { title: k ? 'Open the issue card' : 'Every unit is supported and in the collection', 'aria-expanded': String(st.issuesOpen), onclick: () => { st.issuesOpen = !st.issuesOpen; renderIssues(); renderDock(); } }, [el('span.dot'), k ? n(k, 'issue') : 'Layout valid']),
+      el('button.status' + (k ? '.issue' : ''), { title: k ? 'Open the issue card' : 'Every unit is supported and in the collection', 'aria-expanded': String(st.issuesOpen), onclick: () => { st.issuesOpen = !st.issuesOpen; if (st.issuesOpen && phone) phone.collapse(); renderIssues(); renderDock(); } }, [el('span.dot'), k ? n(k, 'issue') : 'Layout valid']),   // on a phone the card shows over the sheets' handles: an open sheet would cover it
       el('div.group', {}, [el('span.big', { text: String(S().placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims() }), el('span.unit-lbl', { text: 'mm' })]),
       secs > 1 ? el('div.group.sections', { title: `A gap splits the build into ${secs} separate sections · each gets ${SECTION_WHY[S().mount] || 'its own mounting parts'} (the parts list counts them)` }, [el('span.big', { text: String(secs) }), el('span.unit-lbl', { text: 'sections' })]) : null,
@@ -870,12 +875,16 @@ export function mountBuild(stage, ctx) {
   return {
     onSelect(sel) {
       if (syncing || unmounting) return;   // the rebuild's own deselect (the selection comes back right after), or the unmount's (the memo keeps it)
+      const before = st.selId;
       st.sel = sel; st.selId = sel ? (sel.owner ?? null) : null;
       S().selectedUnit = st.selId; ctx.memo.buildSel = st.selId;
       if (st.peeking != null && st.peeking !== st.selId) { st.peeking = null; }
       const was = st.collapsed; applyNarrow(); if (st.collapsed !== was) renderLib();
       renderInspector(); renderOverlays(); layout();
-      if (phone) { phone.collapse(insp); phone.refresh(); safe(); }   // a selection shows as the inspector's handle (its name); a tap on it opens the sheet - never over the model by itself
+      // a selection shows as the inspector's handle (its name); a tap on it opens the sheet - never over the model by itself.
+      // The same unit selected again (the inspector's own Move re-selects it) leaves the sheet as it was: it closed after
+      // every column (the phone check, 2026-10-17)
+      if (phone) { if (st.selId !== before) phone.collapse(insp); phone.refresh(); safe(); }
     },
     onContext: openMenu,
     /* the stage changed its quality tier (the pill, or the auto-downgrade from the render loop): the product previews are

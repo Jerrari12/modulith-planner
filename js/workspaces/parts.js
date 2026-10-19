@@ -84,8 +84,9 @@ export function typeOf(name) {
    assigned to them, which is kind of confusing after assigning chosen colors to it"). With the visitor's colours on, the
    list reads the stage's palette API, the Colors tab's one source: keysInBuild for the regions of every type (its body,
    then its zones), filamentsInBuild for the filament each region wears, a unit's own pick included, and the identification
-   colour where none is picked. Returns Map type -> [{ key, zone, filaments: [{ name, hex, url }], bare: hex | null }], or
-   null while the colours are off, when the chip stays the identification colour. */
+   colour where none is picked. Returns Map type -> [{ key, zone, ownColor, filaments: [{ name, hex, url }], bare: hex | null }],
+   or null while the colours are off, when the chip stays the identification colour. `ownColor` marks a zone with a colour
+   of its own (the label text), which does not follow its body unpicked (keysInBuild). */
 export function paletteSnapshot(stage) {
   let on = false; try { on = !!stage.palette?.().on; } catch { on = false; }
   if (!on) return null;
@@ -96,9 +97,28 @@ export function paletteSnapshot(stage) {
     const filaments = fc.filaments.filter((f) => f.keys.includes(k.key));
     const bare = fc.unpicked.find((u) => u.key === k.key && !u.stripe);
     if (!byType.has(k.type)) byType.set(k.type, []);
-    byType.get(k.type).push({ key: k.key, zone: k.zone, filaments, bare: bare ? bare.hex : null });
+    byType.get(k.type).push({ key: k.key, zone: k.zone, ownColor: !!k.ownColor, filaments, bare: bare ? bare.hex : null });
   }
   return byType;
+}
+/* WHAT ONE UNIT'S PART PRINTS IN (2026-10-19; Astra put "inspector colours" first among what was left: they decide whether
+   the chosen look matches the finished build). The list's snapshot pools every unit's picks under a type; the inspector's
+   "This unit · parts" rows are one unit's, so each region is resolved for THAT unit the way the stage paints it
+   (main.js materialFor / filamentsInBuild): the unit's own pick first (stage.overrideFor: an exact key, else its Body pick
+   for a zone the build has not picked), else the build's pick for the key (a zone follows its body unless it has a colour
+   of its own), else bare in the identification colour. Returns the snapshot's shape for one type, or null (colours off, or
+   a type the stage does not model), so the chip, the words and the swatches are the list's own. */
+export function unitRegions(stage, pal, uid, type) {
+  const regions = pal && type ? pal.get(type) : null;
+  if (!regions || !regions.length) return null;
+  let colors = {}; try { colors = stage.palette().colors || {}; } catch { colors = {}; }
+  const idHex = (key) => { try { return stage.activeHex(key) || '#b9bcc2'; } catch { return '#b9bcc2'; } };
+  return regions.map((g) => {
+    let own = null; try { own = uid != null ? stage.overrideFor(uid, g.key) : null; } catch { own = null; }
+    const pick = own || colors[g.key] || (g.zone && !g.ownColor ? colors[type] : null);
+    if (pick && pick.hex) return { key: g.key, zone: g.zone, ownColor: g.ownColor, filaments: [{ name: pick.name || pick.hex, hex: pick.hex, url: pick.url || null }], bare: null };
+    return { key: g.key, zone: g.zone, ownColor: g.ownColor, filaments: [], bare: g.bare || idHex(g.key) };
+  });
 }
 /* the regions of a row as words: the body's filament(s), then each zone that wears something else -
    [{ zone: '' | 'face', items: [{ name, url }] }]; a region with no pick is "no pick yet" */
@@ -393,7 +413,15 @@ export function mountParts(stage, ctx) {
     insp.append(
       el('div.head', {}, [el('h2.h2', { text: 'This unit · parts' }), el('span.idx', { text: `Unit ${idx} of ${placed.length}` }), el('button.x', { title: 'Deselect', 'aria-label': 'Deselect', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })])]),
       el('div.ident', {}, [el('div.wellbox.well', {}, [glyphEl(kind, 79, 50, colors)]), el('div.col', {}, [el('h3', { text: fill?.label || unit.fill }), el('div.dims', { text: `${unit.w}W·${unit.hh / 2}H · inside ${unit.w * 88 - wall.wWall} × ${Math.round((unit.hh / 2) * 56 - wall.hWall)} × ${INSIDE[length] ?? length} mm` })])]),
-      el('div.uparts', {}, unitParts(unit).map(([name, qty]) => el('div.uprow.well', {}, [el('span', { text: name }), el('span.mono', { text: `×${qty}` })]))),
+      /* each row as the list draws its own: the chip is the filament THIS unit's part prints in (its own pick first), the
+         identification colour its ring, the filament named under the part with the buy link; colours off, the
+         identification chip alone. The rows are one unit's, so the regions are resolved per unit (unitRegions). */
+      el('div.uparts', {}, unitParts(unit).map(([name, qty]) => {
+        const regions = unitRegions(stage, pal, unit.id, typeOf(name));
+        const mid = el('div.mid', {}, [el('div.name', { text: name })]);
+        if (regions) mid.appendChild(printLine(regions));
+        return el('div.uprow.well', {}, [chipEl({ name, hardware: false }, regions), mid, el('span.mono', { text: `×${qty}` })]);
+      })),
     );
   }
 
@@ -435,8 +463,9 @@ export function mountParts(stage, ctx) {
   stage.setDims(false);
   renderPanel(); renderInspector(); renderDock(); safe();
   /* a commit while this tab is open is a palette change or an undo of one (the store restores the palette beside the
-     record): the chips and the "Print in" lines follow it */
-  const unsub = ctx.store?.subscribe ? ctx.store.subscribe((state, why) => { if (why === 'adopt') return; renderPanel(); }) : null;
+     record): the chips and the "Print in" lines follow it, in the list and in the inspector's rows (renderPanel reads the
+     snapshot the inspector's rows resolve against, so it goes first) */
+  const unsub = ctx.store?.subscribe ? ctx.store.subscribe((state, why) => { if (why === 'adopt') return; renderPanel(); renderInspector(); }) : null;
 
   return {
     onSelect(sel) { st.sel = sel; renderInspector(); if (phone) { if (sel) phone.open(insp); else phone.collapse(insp); phone.refresh(); safe(); } },

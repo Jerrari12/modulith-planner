@@ -54,7 +54,7 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   let cur = STEPS.includes(step) ? step : 'mount';
   const prev = document.getElementById('ws-setup'); if (prev) prev.remove();
   const veil = el('div', { id: 'ws-setup', role: 'dialog', 'aria-modal': 'true', 'aria-label': fresh ? 'Set up your build' : 'Build setup' });
-  const box = el('div.glass.sheet');
+  const box = el('div.glass.setup-box');   // not .sheet: that is the phone's bottom-sheet class (a collapsed peek)
   veil.appendChild(box);
   (document.getElementById('ws') || document.body).appendChild(veil);   // inside the workspace root: the glass rules are scoped to #ws, and its children take pointer events
   const ret = document.activeElement;   // where focus goes back to when the sheet closes
