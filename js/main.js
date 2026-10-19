@@ -6999,22 +6999,25 @@ const PRESETS = [
     Stopper: _db('Printed Solid Yellow Bird'),
     Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
   } },
-  /* JOEY'S 3D PRINTOPIA BUILD (2026-10-18, from his photo: "Chevron faceplates, all faces were still black, and the body
-     was neon yellow ... Handles I just did in standard PLA black"; that one wore a holographic build plate, which is the
-     plate finish, not a colour). The shell in Jessie Neon Yellow; every face, grip, drawer, handle and the deck in plain
-     black; the accents and the hardware neon. */
-  { name: 'Neon yellow & black', swatches: ['#E4E202', '#1c1d20'], colors: {
-    Case: _db('Printed Solid Neon Yellow'), Drawer: _db('Elegoo PLA Black'),
-    CoverL: _db('Printed Solid Neon Yellow'), CoverU: _db('Printed Solid Neon Yellow'),
-    Bracket: _db('Printed Solid Neon Yellow'), FootrailL: _db('Printed Solid Neon Yellow'),
-    FootrailU: _db('Printed Solid Neon Yellow'), Foot: _db('Printed Solid Neon Yellow'),
-    Rail: _db('Printed Solid Neon Yellow'), CaseExtender: _db('Printed Solid Neon Yellow'),
-    ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Printed Solid Neon Yellow'),
-    SideCover: _db('Printed Solid Neon Yellow'), 'SideCover:FACE': _db('Elegoo PLA Black'),
-    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Elegoo PLA Black'),
-    'Faceplate:GRIP': _db('Elegoo PLA Black'), 'Faceplate:GRIP ACCENT': _db('Printed Solid Neon Yellow'),
+  /* JOEY'S NEON COMBO, the 2026-10-19 version (replacing the 10-18 one drawn from his 3D Printopia photo, which put the
+     neon on the shell): "the body is black like The Jerrari, but the face(s) are silk black, the faceplate body is neon
+     yellow, and the side covers are silk black. handles are pla black". So: the shell as The Jerrari's (Elegoo PLA
+     Black); faces and grips Panchroma Silk Black; the faceplate BODY, the accents, the deck and the hardware in Jessie
+     Neon Yellow; handles plain black. */
+  { name: 'Neon yellow & black', swatches: ['#1c1d20', '#E4E202', '#3a3b40'], colors: {
+    Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
+    Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
+    // the deck in the neon (12.7:1 against the black case), the lip the case colour, as the shelf rule says
+    ShelfInsert: _db('Printed Solid Neon Yellow'), ShelfLip: _db('Elegoo PLA Black'),
+    // the side cover rule gives what Joey asked for by itself: black core, silk-black face
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Panchroma Silk Black'),
+    Faceplate: _db('Printed Solid Neon Yellow'), 'Faceplate:FACE': _db('Panchroma Silk Black'),
+    'Faceplate:GRIP': _db('Panchroma Silk Black'), 'Faceplate:GRIP ACCENT': _db('Printed Solid Neon Yellow'),
     Accent: _db('Printed Solid Neon Yellow'), Label: _db('Printed Solid Neon Yellow'), 'Label:TEXT': _db('Elegoo PLA Black'),
-    BackCover: _db('Printed Solid Neon Yellow'),
+    BackCover: _db('Elegoo PLA Black'),
     Handle: _db('Elegoo PLA Black'),
     QuickLock: _db('Printed Solid Neon Yellow'), MagnetClip: _db('Printed Solid Neon Yellow'),
     Stopper: _db('Printed Solid Neon Yellow'),

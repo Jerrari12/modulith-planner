@@ -151,6 +151,20 @@ test('the faceplate GRIP wears the FACE colour in every preset (the grip accent 
       `${p.name}: the grip is ${p.colors['Faceplate:GRIP'].name} but the face is ${p.colors['Faceplate:FACE'].name}`);
 });
 
+test('Neon yellow & black is the combo Joey specified on 2026-10-19', () => {
+  /* Joey: "the body is black like The Jerrari, but the face(s) are silk black, the faceplate body is neon yellow, and the
+     side covers are silk black. handles are pla black" - replacing the 10-18 version, which put the neon on the shell. */
+  const n = PRESETS.find((p) => p.name === 'Neon yellow & black');
+  const j = PRESETS.find((p) => p.name === 'The Jerrari');
+  assert.ok(n && j, 'both presets exist');
+  for (const k of ['Case', 'Drawer', 'CoverL', 'CoverU', 'Bracket', 'FootrailL', 'FootrailU', 'Foot', 'Rail', 'CaseExtender', 'ShelfLip', 'BackCover'])
+    assert.equal(n.colors[k].name, j.colors[k].name, `${k}: the body is The Jerrari's black`);
+  assert.equal(n.colors['Faceplate:FACE'].name, 'Panchroma Silk Black', 'the faces are silk black');
+  assert.equal(n.colors.Faceplate.name, 'Printed Solid Neon Yellow', 'the faceplate body is neon yellow');
+  assert.equal(n.colors['SideCover:FACE'].name, 'Panchroma Silk Black', 'the side covers show silk black');
+  assert.equal(n.colors.Handle.name, 'Elegoo PLA Black', 'the handles are plain PLA black');
+});
+
 test('the ACCENT differs from the faceplate FACE in every preset', () => {
   /* Joey 2026-10-18, on his phone with EdgeLabel faceplates: "I shouldn't have the accent color the same as the face for
      those". The EdgeLabel family's accent part sits on the face and vanishes into one of the same colour. The four presets

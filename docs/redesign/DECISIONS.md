@@ -1382,3 +1382,22 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Terra `01a1557b`, routine: 1 returned, 1 held (a stale `stageErrors` from an earlier invalid edit stayed
   rendered for the 200 ms; cleared in the skip branch).
 - **Not deployed.** Left on the branch for Joey's go.
+
+## 2026-10-19 (the "Neon yellow & black" preset becomes Joey's black-shell combo)
+
+- **Joey, on the look's card:** "can we make a new custom color combo, essentially replacing this one. essentially the
+  body is black like The Jerrari, but the face(s) are silk black, the faceplate body is neon yellow, and the side covers
+  are silk black. handles are pla black". The 10-18 preset (his 3D Printopia photo) put the neon on the shell; this one
+  keeps the name and the twelfth slot and swaps the assignment.
+- **What it is now (js/main.js PRESETS):** every body key as The Jerrari's (Elegoo PLA Black: case, drawers, covers,
+  brackets, rails, feet, extender, lip, back cover); faces and grips Panchroma Silk Black; the faceplate BODY, the grip
+  accents, the accent, the label, the deck (12.7:1 against the black case, from a colour the look already prints) and the
+  small parts (QuickLock, magnet clip, stopper) in Printed Solid Neon Yellow; handles Elegoo PLA Black; magnets and
+  screws Silk Silver as before. The side-cover rule (core = case, face = faceplate face) gives a black core with a
+  silk-black face, which is what he asked for, so no rule bends. Card strip: black, neon, silk black.
+- **Checks:** `test/presets.test.mjs` pins the combo (body keys equal The Jerrari's, face and side-cover face Silk Black,
+  faceplate body Neon Yellow, handle PLA Black); presets 13 + filament-db 5 pass, mutation (the face set to PLA Black)
+  fails the suite; e2e Colors cases 16 of 16; in the browser the card reads "3 filaments", applying it gives the summary
+  "Case, drawers: Black · Fronts, grips: Silk Black · Grip accents, faceplate bodies, small parts: Neon Yellow".
+- **Review:** Terra `01a155f4`, routine: NO OBJECTION.
+- **Deploy:** a change Joey decided in words deploys once its checks pass.
