@@ -50,6 +50,9 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
       e.el.style.bottom = `${b + off}px`;
       off += collapsedHeight(e);
     }
+    // the top edge of the collapsed handles: the floating cards (Place / Cancel, the issue card...) and the toast sit on
+    // it, not under it (the phone check, 2026-10-17: Place / Cancel and every toast were under the Library's handle)
+    root.style.setProperty('--sheet-stack', `${b + off}px`);
   }
   function open(panel, on = true) {
     const entry = sheets.get(panel); if (!entry) return;

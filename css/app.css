@@ -827,7 +827,9 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 
 /* ---- the setup sheet: mount, length, printer, the name (js/ui/setup.js) ---- */
 #ws-setup { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .4); font-family: var(--font-ui); color: var(--ink); font-size: 13px; }
-#ws-setup .sheet { width: 680px; max-width: 100%; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 18px 20px 16px; border-radius: 20px; display: flex; flex-direction: column; gap: 12px; }
+/* .setup-box, not .sheet: the phone's bottom-sheet rule (#ws .sheet) made a `.sheet` here a collapsed 44 px peek behind the
+   backdrop (the phone check, 2026-10-17: New build on a phone was a dead end) */
+#ws-setup .setup-box { width: 680px; max-width: 100%; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 18px 20px 16px; border-radius: 20px; display: flex; flex-direction: column; gap: 12px; }
 #ws-setup .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 #ws-setup h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 22px; font-stretch: 108%; }
 #ws-setup .sub { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
@@ -874,7 +876,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 #ws-setup .cta { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 12px; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); font-family: var(--font-display); font-weight: 800; font-size: 15px; font-stretch: 110%; cursor: pointer; box-shadow: var(--cta-shadow); }
 @media (max-width: 1023px) {
   #ws-setup { padding: 0; align-items: flex-end; }
-  #ws-setup .sheet { width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  #ws-setup .setup-box { width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
   #ws-setup .cards.mounts { grid-template-columns: 1fr; }
   #ws-setup .cards.mounts .card { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
   #ws-setup .cards.lengths { grid-template-columns: 1fr 1fr; }
@@ -886,8 +888,10 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   /* the bar (Joey's phone, 2026-10-13: at 390-412 px the switcher was a sliver under the wordmark): the wordmark,
      the build name with its caret, mount·length as icon + number, and ONE theme button (the other mode's icon);
      Share lives in the switcher menu, the printer chip waits for the setup sheet, the tabs are the bottom bar */
-  #ws-top { top: 10px; left: 10px; right: 10px; gap: 6px; }
-  #ws-top #ws-tabs, #ws-top .preview, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
+  /* above an open sheet (13): the switcher's menu lives in this layer, and an open sheet covered its items (the phone
+     check, 2026-10-17); an open sheet never reaches up to the bar itself (openHeight leaves 110 px) */
+  #ws-top { top: 10px; left: 10px; right: 10px; gap: var(--gap-ctl); z-index: 14; }
+  #ws-top #ws-tabs, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
   #ws-top #ws-switch { flex: 1; min-width: 0; margin-left: 0; }
   #ws-top #ws-switch > .chip-btn { width: 100%; padding: 0 10px; gap: 6px; }
   #ws-top #ws-switch > .chip-btn > :first-child { display: none; }
@@ -904,10 +908,11 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   /* the tools row: every workspace's desktop offset (left: 320/344/480/860 px) loses to the phone's full row */
   #ws-tools, html[data-ws] #ws-tools, html.ws-parts-wide[data-ws="parts"] #ws-tools { top: 64px; left: 10px; right: 10px; gap: 6px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   #ws-tools .quality { display: none; }
-  /* the dock: status and the CTA always fit; the units·mm group yields to a progress bar or a filament stack */
+  /* the dock: status and the CTA always fit; the units·mm group yields to a progress bar or a filament stack, and the
+     units count to a gap build's sections count (the phone check, 2026-10-17: with "2 sections" the CTA stuck out) */
   #ws-dock { left: 10px; right: 10px; bottom: 70px; transform: none; padding: 6px 6px 6px 8px; gap: 8px; justify-content: space-between; border-radius: 14px; z-index: 11; min-width: 0; }
   #ws-dock .group { gap: 4px; }
-  #ws-dock .group:nth-of-type(2), #ws-dock:has(.pbar) .group, #ws-dock:has(.status.stack) .group { display: none; }
+  #ws-dock .group:nth-of-type(2), #ws-dock:has(.pbar) .group, #ws-dock:has(.status.stack) .group, #ws-dock:has(.group.sections) .group:not(.sections) { display: none; }
   #ws-dock .big { font-size: 16px; }
   #ws-dock .unit-lbl { font-size: 11px; }
   #ws-dock .status { height: 36px; padding: 0 10px; font-size: 12px; flex: none; }
@@ -931,7 +936,13 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws .sheet .collapse, #ws .sheet.rail .expand, #ws .sheet .railbtn { display: none; }
   #ws-lib.sheet.rail { width: auto; padding: 0 14px 14px; align-items: stretch; }
   #ws-board { top: 110px; left: 10px; right: 10px; bottom: 176px; }
-  #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: 132px; max-height: 44vh; }
+  /* the floating cards sit on the collapsed handles (the sheet manager publishes their top edge as --sheet-stack) and
+     over them; an open sheet (13) still covers them. At a fixed 132 px with z-index 6 they were under the handles: Place /
+     Cancel, the issue card's text and its buttons (the phone check, 2026-10-17) */
+  #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: calc(var(--sheet-stack, 126px) + 6px); max-height: 44vh; z-index: 12; }
+  /* the toast likewise, over everything (it takes no pointer events), at a readable width: left 50% held it to half the
+     screen, and at the desktop's 100 px it sat behind the dock and the handles */
+  #ws #ws-toast { bottom: calc(var(--sheet-stack, 126px) + 10px); z-index: 14; width: max-content; max-width: calc(100vw - 40px); box-sizing: border-box; text-align: center; }   /* #ws: the toast's own rule comes later in this file */
   #ws-menu { width: 180px; }
   /* Parts: the head wraps (the four download sites on a row of their own, Track under them); Expand is a desktop
      control */
@@ -995,8 +1006,9 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-switch > .chip-btn > span { max-width: clamp(120px, calc(100vw - 1260px), 240px); }
 }
 /* narrow desktop (1024-1279): the workspace tabs keep their names on a row of their own under the bar, and the
-   panels start below it; the chips go icon-only */
-@media (max-width: 1279px) {
+   panels start below it; the chips go icon-only. From 1024 up only: this block comes after the phone's, so without the
+   floor its rules won ties there (the phone check, 2026-10-17: its 14 px Dock gap pushed Get parts list out of the Dock) */
+@media (min-width: 1024px) and (max-width: 1279px) {
   #ws-tools .quality span { display: none; }
   #ws-top .printer span, #ws-top .share span { display: none; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
