@@ -1036,7 +1036,7 @@ test('the Label plate: a faceplate switch with the plate open leaves this browse
 });
 
 test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build rebuilds on the record', async () => {
-  const { ctx, page } = await open('build', { query: '&new=1&setup=1' });
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
   await page.fill('#ws-setup input.name', 'E2E wall');
   await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
@@ -1054,6 +1054,9 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   assert.equal(s.placed.length, 1, 'one starter drawer');
   assert.equal(await page.evaluate(() => document.title), 'E2E wall · MODULITH Planner');
   assert.match(await text(page, '#ws-top .chip-btn.mount'), /Wall Mount · 115/);
+  // the whole trip is quiet, the 200 ms between Start build's commit and the reload included: Build does not push the
+  // 115 record into a stage built for the 185 pool (a throttled software run showed 404s for every 115 part otherwise)
+  assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
 
@@ -2276,11 +2279,6 @@ test('Build: on a bed-limited printer the stage tiles the under-table rails as t
   await btn(page, 'Start build', '#ws-setup').click();
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
   await waitBoot(page);
-  /* what the page logged BEFORE its reload is not this case's subject: Start build commits the 270 record 200 ms before
-     the sheet reloads on it, and in that window Build syncs the stage with it, which asks the 185 pool (the stage's pool
-     is fixed at boot) for 270 parts - 404s and a goTo on the half-mounted manifest. Pre-existing (the setup-sheet cases
-     assert no errors for the same reason); seen on a throttled software run, 2026-10-19. */
-  errors.length = 0;
   assert.equal((await S(page)).printer, 'coreonel');
   // an 11W top row: three 3W drawers beside the 2W starter, through the store the way the Build case places
   await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s) => { let x = Math.max(...s.placed.map((p) => p.x + p.w)); const y = Math.min(...s.placed.map((p) => p.y)); for (const w of [3, 3, 3]) { s.placed.push({ id: s.nextId++, x, y, w, hh: 2, fill: 'decor', shelves: 0 }); x += w; } s.gridW = Math.max(s.gridW, x); }, 'edit'); });

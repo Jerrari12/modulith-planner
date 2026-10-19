@@ -138,9 +138,13 @@ export function mountLabels(stage, ctx) {
   const tryGen = (rec) => { try { return generateManifest(rec); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
   let lastSig = null, queue = Promise.resolve();
   { const g = tryGen(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }
+  /* a record of another mount or length is the setup sheet's reload, not a scene this stage can show (its parts pool and
+     mount scene are fixed at boot) - the same wait as Build's syncStage, 2026-10-19 */
+  const otherScene = (rec) => !!stage.build && (rec.mount !== stage.build.mount || +rec.length !== +stage.build.length);
   function syncStage() {
     queue = queue.then(async () => {
       const rec = store.serialize();
+      if (otherScene(rec)) return;
       const gen = tryGen(rec);
       if (!gen.manifest) return;
       const sig = sigOf(gen.manifest);
