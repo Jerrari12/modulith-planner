@@ -1381,7 +1381,18 @@ Dated calls made while building, with who made them. The brief and the inventory
   commit.
 - **Review:** Terra `01a1557b`, routine: 1 returned, 1 held (a stale `stageErrors` from an earlier invalid edit stayed
   rendered for the 200 ms; cleared in the skip branch).
-- **Not deployed.** Left on the branch for Joey's go.
+- **Live.** Joey, "Merge setup-reload-sync (876eca0) into main and deploy." Merged as `ec4f666` (one DECISIONS conflict:
+  main's "Live" line for the phone journey kept, the branch's stale copy dropped); npm test 555 passed, 0 failed, 5 skipped
+  on the merged tree. Its run 39317757575 failed on the new phone-check case, "one unit is singular": not this change but a
+  race in the build switcher - `set(true)` unhides the menu with its previous rows and only then awaits the Recent list
+  from IndexedDB before rebuilding them, so a read right after the click saw "185 · 4 units" with 1 unit in the store
+  (3 of 5 local runs failed on the merged tree, 0 of 5 on main before the merge; a probe showed store 1, stage 1, the
+  menu's text stale). `590be04` (topbar.js) writes the current build's count synchronously at open; the case passed 6 of 6
+  after. Terra `01a155eb`, routine: 1 returned, discarded (a count that changes while the list loads shows the newer value,
+  the current truth). Then four sibling pushes in a row cancelled each run (Pages concurrency); the last, `3912af4`, failed
+  npm test in `test/move-opt.test.mjs` until its author's `69ca2a2` injected `drawerStop` into the sandbox. Run 39332085367
+  green; live stamp `69ca2a2a`; the guard (`otherScene` in build.js and labels.js, the refusal in main.js) and the
+  switcher's `freshCount` are served. Not checked by hand in production.
 
 ## 2026-10-19 (the "Neon yellow & black" preset becomes Joey's black-shell combo)
 
