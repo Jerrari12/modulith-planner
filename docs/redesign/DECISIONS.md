@@ -957,4 +957,12 @@ Dated calls made while building, with who made them. The brief and the inventory
   - review: Terra 01a15119, 1 returned, 0 held (its "adopt commits are cross-tab changes the list misses" is wrong: an
     adopt is a same-tab load of the stage record by a workspace's own handler, which re-renders itself; the Build, Colors
     and Labels tabs skip it the same way).
-- **Not done:** the deploy and the merge are Joey's; the inspector's "This unit · parts" list still shows no colours.
+- **Not done:** the inspector's "This unit · parts" list still shows no colours.
+- **Live:** Joey, "Deploy the Parts-list change", 2026-10-18. Merged into main as `26a4123` (the DECISIONS conflict
+  resolved with both entries kept; the deploy's stamping line added for parts.js's new `./colors.js` import, the
+  module-graph guard replayed locally); on the merge npm test 544 passed, 0 failed, 5 skipped, e2e Parts + Colors + boot
+  18 of 18; run 39177428150 green, live stamp `26a41231`. Production check `parts-colours-prod.mjs` on the desktop and
+  a 390×844 phone viewport, Stealth applied: the case row's chip is Panchroma Black with the identification colour as a
+  ring, "Print in Black" with the Polymaker link, the caption "Chip = the filament it prints in · ring = its colour in
+  Assemble · dashed = buy", four dashed buy chips kept; colours off: the identification colour, no line, the old
+  caption; Undo restores The Jerrari; no page errors.
