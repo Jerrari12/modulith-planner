@@ -635,10 +635,45 @@ export function migrateOfficialBuild(b, v) {
   }
 }
 
-export function generateManifest(build) {
+/* THE BED LIMIT ON SECTIONAL PARTS (2026-10-19). The under-table rails and the wall brackets come in interchangeable
+   widths and are tiled greedy, biggest-first, over each run - and the parts list (js/rules/bom.js railSections /
+   wallSections, the planner's own rule) caps the width at what the chosen printer's bed prints. Until now the generator
+   always reached for 4W, so on a Core One L (300 x 300) an 11W under-table row was billed 3W+3W+3W+2W while the model
+   showed 4W+4W+3W - a user's report, 2026-10-19 (docs/redesign/DECISIONS.md). The limits are the bill's own rules,
+   restated here against the catalog so the three views agree:
+     rail    = the widest of railWidths whose section (w x 88 by the length) fits the bed either way round, never
+               below 1 (bom.js maxRailW); no bed = 4.
+     bracket = GEN2.wallMount.maxW(bed): 3 with no bed or the diagonal trick, else 2 or 1.
+   The foot rails and the covers are NOT bed-limited: they exist in 1W and 2W only and both sides tile them with the
+   brick stagger (brickTiling / tilesLower / tilesUpper), so a bed changes nothing there.
+   `catalog` is the planner's GEN2 catalog (js/catalog/data.js: printers, railWidths, units.widthMM, wallMount.maxW).
+   generateManifest takes it in `opts.catalog`, and reaches for the page's global GEN2 when none is passed (the catalog
+   is a classic script every module reads that way); node tests pass theirs, or pass none and get the unlimited tiling
+   the goldens were recorded with. */
+const UNLIMITED = { rail: 4, bracket: 3 };
+export function bedOfBuild(build, catalog) {
+  if (!build || !catalog || !build.printer || build.printer === 'any') return null;
+  if (build.printer === 'custom') { const x = Number(build.customBed?.x), y = Number(build.customBed?.y); return x > 0 && y > 0 ? { x, y } : null; }
+  const p = (catalog.printers || []).find((q) => q.id === build.printer);
+  return p && p.x ? { x: p.x, y: p.y } : null;
+}
+export function bedLimits(build, catalog) {
+  const bed = bedOfBuild(build, catalog);
+  if (!bed) return { ...UNLIMITED };
+  const len = +build.length || 0, unit = catalog.units?.widthMM || 88;
+  const fits = (fw, fl) => (fw <= bed.x && fl <= bed.y) || (fw <= bed.y && fl <= bed.x);
+  let rail = 1;
+  for (const w of catalog.railWidths || [1, 2, 3, 4]) if (fits(w * unit, len)) rail = Math.max(rail, w);
+  const bracket = typeof catalog.wallMount?.maxW === 'function' ? catalog.wallMount.maxW(bed) : UNLIMITED.bracket;
+  return { rail, bracket };
+}
+const pageCatalog = () => (typeof GEN2 !== 'undefined' ? GEN2 : null);   // eslint-disable-line no-undef
+
+export function generateManifest(build, opts = {}) {
   const errors = [], warnings = [];
   if (!build || !Array.isArray(build.placed) || !build.placed.length)
     return { errors: ['This link has no build in it.'], warnings, manifest: null };
+  const limits = bedLimits(build, opts.catalog === undefined ? pageCatalog() : opts.catalog);
   const isWall = build.mount === 'wall';
   const isUT = build.mount === 'under-table';
   const hangs = isWall || isUT; // both hang top-down from a mounting surface
@@ -1105,9 +1140,10 @@ export function generateManifest(build) {
   const utIds = [], utScrewIds = [];          // under-table only
   const flatTopY = row0 + maxTop * PITCH_HALF_Y;
   if (isUT) {
-    // one rail course spans the flat top, tiled biggest-first 1–4W per contiguous
-    // top-row run (same greedy fill as the planner's railSections; a bed-limited
-    // printer may split differently — the parts are interchangeable widths).
+    // one rail course spans the flat top, tiled biggest-first per contiguous
+    // top-row run up to the bed's widest section (limits.rail: 4W with no
+    // printer chosen) — the same greedy fill as the parts list's railSections,
+    // so the model shows the sections the list bills.
     const topCols = new Set();
     units.filter(u => u.topIdx === maxTop).forEach(u => { for (let c = u.col; c < u.col + u.w; c++) topCols.add(c); });
     const topRuns = [];
@@ -1116,7 +1152,7 @@ export function generateManifest(build) {
       else run = null;
     }
     for (const run of topRuns) for (let c = run.c0; c <= run.c1; ) {
-      const w = Math.min(4, run.c1 - c + 1);
+      const w = Math.min(limits.rail, run.c1 - c + 1);
       const t = { col: c, w };
       const id = `utr${utIds.length}`;
       utIds.push(id);
@@ -1139,12 +1175,13 @@ export function generateManifest(build) {
       c += w;
     }
   } else if (isWall) {
-    // one bracket course spans the flat top, tiled 1/2/3W (no 4W bracket).
+    // one bracket course spans the flat top, tiled 1/2/3W (no 4W bracket) up to
+    // the bed's widest bracket (limits.bracket, the parts list's wallSections cap).
     // Brackets screw to the wall; the top row of cases then hangs on the pegs.
     const bracketBaseY = flatTopY - WALL.bracketH; // base flush with the top-row case base
     const pegY = flatTopY - WALL.pegBelowTop;
     for (let c = 0; c < totalW; ) {
-      const w = Math.min(3, totalW - c);
+      const w = Math.min(limits.bracket, totalW - c);
       const r = { col: c, w };
       const id = `br${bracketIds.length}`;
       bracketIds.push(id);
