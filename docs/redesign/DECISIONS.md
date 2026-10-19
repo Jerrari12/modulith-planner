@@ -1144,3 +1144,21 @@ Dated calls made while building, with who made them. The brief and the inventory
   units): P1 holds on every image, medians 0 of 255, p95 at most 11 against a mark of 6 / 32; no new shader program
   from the second preview on (programs 5, 5, 5 at Balanced, 16, 16, 16 at Very High); a preview in a median 9.4 ms at
   Balanced, 5.3 ms at Very High; no page errors. Results in `live/`.
+
+## 2026-10-19 (the planner says what it is to a search engine; the brand on Google)
+
+- **Joey:** "how come modulith doesn't appear to be ranking in google anywhere yet?" Checked that morning:
+  modulith.systems IS indexed (a `site:` query returns the home page crawled 7 days before, About, Story, Catalog,
+  Instructions, Builds, Support, the GEN2 page, Size guide); robots.txt allows all, the sitemap is served, the home page
+  has a canonical, a title and a description. The bare word belongs to Spring Modulith, a Java framework with years of
+  links; Google already suggests "Modulith 3d". So nothing was broken: a contested word and a two-week-old brand.
+- **What changed (the site-seo session, local_0ac401e1, on Joey's "yes" and "Go"):** the planner's `index.html` title
+  reads "MODULITH Planner · plan a 3D-printable modular storage build" with a meta description, and the document title
+  becomes "<build name> · MODULITH Planner" once a build is open (`js/ui/names.js`, `js/main.js`; the display-names
+  test and the boot e2e case pin it); on the site repo, Organization + WebSite JSON-LD on the home page and /about/
+  (name MODULITH, alternateName GEN2, logo, four sameAs links) and `docs/seo/SEARCH-CONSOLE.md`, Joey's checklist
+  (verify the domain property, add planner.modulith.systems, submit the sitemap, request indexing, what to read weekly,
+  the links that carry the brand). Search Console itself is not set up: that is Joey's to verify.
+- **Live:** branch `seo-brand-titles` (fcaebd8) merged as `da764f8`, live stamp `da764f81`, the title and description
+  read on the live page and the build-first title once a build is open; the site's main pushed (efc09cb, acce273) and
+  the JSON-LD parsed from the live pages.
