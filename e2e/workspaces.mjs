@@ -2184,3 +2184,47 @@ test('Parts: with chosen colours on, a row shows and names the filament it print
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* THE BED LIMIT ON THE RAILS (2026-10-19). A user of the original planner, relayed by Joey: "the table rails list on the left
+   are 3 270x3w rails + 1 270x2w ... The 3D diagram shows 2 270x4w + 1 270x3w. While technically that works, a Core One L
+   cannot print something 4w." The Parts list caps a rail section at the widest the chosen bed prints (js/rules/bom.js);
+   the generator now tiles with the same cap (generate.js bedLimits), and the list names each row's width. */
+test('Build: on a bed-limited printer the stage tiles the under-table rails as the Parts list bills them (a Core One L at 270: 3W+3W+3W+2W, never a 4W)', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Under-Table")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.locator('#ws-setup .card.len:has-text("270 mm")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.selectOption('#ws-setup select.printer', 'coreonel');
+  assert.match(await text(page, '#ws-setup .fit'), /Bed 300×300/);
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });   // gone once the sheet's reload lands
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
+  await waitBoot(page);
+  assert.equal((await S(page)).printer, 'coreonel');
+  // an 11W top row: three 3W drawers beside the 2W starter, through the store the way the Build case places
+  await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s) => { let x = Math.max(...s.placed.map((p) => p.x + p.w)); const y = Math.min(...s.placed.map((p) => p.y)); for (const w of [3, 3, 3]) { s.placed.push({ id: s.nextId++, x, y, w, hh: 2, fill: 'decor', shelves: 0 }); x += w; } s.gridW = Math.max(s.gridW, x); }, 'edit'); });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 4, null, { timeout: 90_000 });
+  const rails = () => page.evaluate(() => { const out = {}; for (const i of window.__GEN2_VIEWER__.manifest.instances) { const m = /^UnderTableRail_270-(\d)W$/.exec(i.node); if (m) out[m[1]] = (out[m[1]] || 0) + 1; } return out; });
+  assert.deepEqual(await rails(), { 3: 3, 2: 1 }, 'the stage: three 3W rails and one 2W, as a 300×300 bed prints them');
+  // the Parts list: the same sections, each row naming its width
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const listed = () => page.evaluate(() => { const out = {}; for (const row of document.querySelectorAll('#ws-parts .prow')) { const m = /^Under Table Rails - 270 · (\d)W section$/.exec(row.querySelector('.name').textContent); if (m) out[m[1]] = (out[m[1]] || 0) + parseInt(row.querySelector('.qty').textContent.replace('×', ''), 10); } return out; });
+  assert.deepEqual(await listed(), { 3: 3, 2: 1 }, 'the Parts list bills the sections the stage shows, each row naming its width');
+  // Any printer, chosen in the setup sheet from here (Parts does not sync the stage itself, so the sheet does), lifts the
+  // cap on both at once: 4W+4W+3W in the model and in the list
+  await page.evaluate(() => window.__GEN2_CTX__().openSetup('printer'));
+  await page.waitForSelector('#ws-setup select.printer', { timeout: 10_000 });
+  await page.selectOption('#ws-setup select.printer', 'any');
+  await btn(page, 'Apply', '#ws-setup').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-setup'), null, { timeout: 30_000 });
+  assert.equal((await S(page)).printer, 'any', 'the sheet applied the printer');
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-parts .prow .name')].some((n) => /4W section/.test(n.textContent)), null, { timeout: 30_000 });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.manifest.instances.some((i) => i.node === 'UnderTableRail_270-4W'), null, { timeout: 90_000 });
+  assert.deepEqual(await rails(), { 4: 2, 3: 1 }, 'any printer: the stage reaches for 4W again');
+  assert.deepEqual(await listed(), { 4: 2, 3: 1 }, 'and so does the list');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});

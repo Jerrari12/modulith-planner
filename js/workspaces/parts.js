@@ -120,8 +120,18 @@ export function printText(regions) {
 /* the distinct colours a row prints in, body first */
 export const swatchesOf = (regions) => [...new Set(regions.flatMap((g) => [...g.filaments.map((f) => f.hex), g.bare].filter(Boolean)))];
 
+/* A ROW'S VARIANT IS PART OF ITS NAME (2026-10-19). The sectional mount parts share one product name across their widths
+   - "GEN2 Under Table Rails - 270" with the variant "3W section", "GEN2 Wall Mount Kit - Lite - 185" with "2W section" -
+   and until now the list showed the name alone: two rows "Under Table Rails - 270", ×3 and ×1, with no way to tell
+   which was which (the old planner wrote "name — variant"). A user's report, 2026-10-19, had the list and the model
+   disagreeing on the sections; the list has to SAY the sections before the two can be compared. The variant goes into
+   the shown name, the copied text and the CSV, and into the progress key, which the two widths used to share (one row's
+   tick counted for the other). A row without a variant keeps the key it had, so stored progress survives; a tick made on
+   a width row BEFORE this change is not carried over (Terra 01a154c7): the old key never said which width it was for,
+   so there is nothing correct to migrate it to, and the tracking is days old. */
+const rowName = (r) => partName(r.name) + (r.variant ? ` · ${r.variant}` : '');
 /* the four numbers of one row, from the stored progress */
-const rowKey = (r) => `${r.section}|${r.name}`;
+const rowKey = (r) => `${r.section}|${r.name}${r.variant ? `|${r.variant}` : ''}`;
 /* SIDE COVERS ARE RELEASED (v2609, 2026-10-10: Printables and Thangs pages live, one per collection; the site ticket
    TICKET-side-covers-2026-10-10.md carries the ids). The planner's catalog, vendored here verbatim and sha-pinned,
    still lists `sideCover` under `unreleased` until the planner's own commit lands and the catalog is re-vendored
@@ -254,7 +264,7 @@ export function mountParts(stage, ctx) {
     const row = el('div.prow.well' + (st.tracking && left === 0 ? '.done' : ''));
     const regions = printLook(r);
     row.append(chipEl(r, regions), el('span.qty.mono', { text: `×${r.qty}` }));
-    const mid = el('div.mid', {}, [el('div.name', { text: partName(r.name) })]);
+    const mid = el('div.mid', {}, [el('div.name', { text: rowName(r) })]);
     if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     row.appendChild(mid);
@@ -285,7 +295,7 @@ export function mountParts(stage, ctx) {
     const regions = printLook(r);
     const chip = chipEl(r, regions);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
-    const mid = el('div.mid', {}, [el('div.name', {}, [partName(r.name), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
+    const mid = el('div.mid', {}, [el('div.name', {}, [rowName(r), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
     if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     const counter = (field, label) => {
@@ -323,7 +333,7 @@ export function mountParts(stage, ctx) {
     let last = '';
     for (const r of rows()) {
       if (r.section !== last) { txt += `\n[${r.section}]\n`; last = r.section; }
-      txt += `${r.qty}x ${partName(r.name)}${r.optional ? ' (optional)' : ''}${r.unreleased ? ' (coming soon)' : ''}\n`;
+      txt += `${r.qty}x ${rowName(r)}${r.optional ? ' (optional)' : ''}${r.unreleased ? ' (coming soon)' : ''}\n`;
       const regions = printLook(r);   // the filament it prints in, as the list shows it (a list without it is the same confusion on paper)
       if (regions) txt += `    Print in:   ${printText(regions)}\n`;
       if (r.links) { txt += `    Printables: ${r.links.printables}\n    Thangs:     ${r.links.thangs}\n`; }
@@ -334,7 +344,7 @@ export function mountParts(stage, ctx) {
     const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const m = meta();
     const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Print in', 'Printables', 'Thangs'].map(esc).join(',')];
-    for (const r of rows()) { const regions = printLook(r); lines.push([r.section, r.qty, partName(r.name) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), regions ? printText(regions) : '', r.links?.printables || '', r.links?.thangs || ''].map(esc).join(',')); }
+    for (const r of rows()) { const regions = printLook(r); lines.push([r.section, r.qty, rowName(r) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), regions ? printText(regions) : '', r.links?.printables || '', r.links?.thangs || ''].map(esc).join(',')); }
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `modulith-${length}-parts.csv` });
     document.body.appendChild(a); a.click(); a.remove();

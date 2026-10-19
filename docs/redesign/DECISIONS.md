@@ -1144,3 +1144,45 @@ Dated calls made while building, with who made them. The brief and the inventory
   units): P1 holds on every image, medians 0 of 255, p95 at most 11 against a mark of 6 / 32; no new shader program
   from the second preview on (programs 5, 5, 5 at Balanced, 16, 16, 16 at Very High); a preview in a median 9.4 ms at
   Balanced, 5.3 ms at Very High; no page errors. Results in `live/`.
+
+## 2026-10-19 (the 3D model tiles the under-table rails and wall brackets with the printer's bed limit, as the parts list bills them)
+
+- **The report.** A user of the original GEN2 planner, relayed by Joey, 2026-10-19: "the table rails list on the left are
+  3 270x3w rails + 1 270x2w ... The 3D diagram shows 2 270x4w + 1 270x3w. While technically that works, a Core One L
+  cannot print something 4w."
+- **What was wrong, and where.** The parts list is the planner's own bill (`js/rules/bom.js`, ported by copy from the old
+  planner): `railSections = sectionsFor(railWidths, maxRailW())` caps an under-table rail section at the widest width
+  whose section (W × 88 mm by the build's length) fits the chosen bed either way round, never below 1W; a Core One L
+  (300 × 300) prints a 3W 270 rail (264 mm) and not a 4W (352 mm). The generator (`js/generate.js`) tiled every
+  contiguous top-row run biggest-first with a hard-coded 4W, and its own comment admitted "a bed-limited printer may
+  split differently". The wall brackets had the same shape of gap: the bill caps them at `GEN2.wallMount.maxW(bed)` (2W
+  on an MK4's 250 × 210, since the 3W bracket needs the diagonal trick on a 250 × 220 bed), the generator at a hard-coded
+  3W. The merged planner inherited both, since it carries the same generator and the same bill. The foot rails and the
+  covers were NOT part of it: they exist in 1W and 2W only and both sides tile them with the same brick stagger
+  (`brickTiling` in the catalog, `tilesLower` / `tilesUpper` in the generator), so a bed changes nothing there - the
+  task's brief named them, and the code says otherwise.
+- **A second defect the report exposed.** The merged Parts list dropped a bill row's `variant`: the two width rows of an
+  under-table build both read "Under Table Rails - 270", ×3 and ×1, with nothing saying which was 3W and which 2W (the old
+  planner wrote "name — variant"), and the two rows shared one progress key, so a tick on one counted for the other.
+- **Changed (branch `rail-bed-limit`):**
+  - `generateManifest(build, opts)` takes the catalog in `opts.catalog` (the page's global `GEN2` by default, so no call
+    site changes; null in node tests that pass nothing, which keeps every golden as recorded) and tiles the under-table
+    rails with `bedLimits(build, catalog).rail` and the wall brackets with `.bracket` - the bill's own rules, restated
+    against the catalog. `bedOfBuild` and `bedLimits` are exported for the tests.
+  - the Parts list's row name, copied text, CSV and progress key carry the variant ("Under Table Rails - 270 · 3W
+    section"). A row without a variant keeps its key. A tick made on a width row before this change is not carried over:
+    the old key never said which width it was for (Terra's finding, accepted rather than migrated).
+  - the setup sheet pushes the record into the stage after a non-reload apply when the workspace is not Build or Labels
+    (the two that sync the stage themselves): a printer change now changes the model, and the Parts list reads the
+    stage's record, so from Parts, Assemble or Colors neither would have followed the new printer until the next edit.
+- **Checks:** `test/rail-bed-limit.test.mjs` (the 11W row: 3+3+3+2 on a Core One L, 4+4+3 on any printer, the manifest
+  rows in step with the instances; generator-against-bill parity for every catalog printer and seven row widths on the
+  under-table rails and their screws, four widths on the wall brackets; the foot rails' stagger and bill unchanged on
+  any, Core One L and MK4); an e2e case (Under-Table 270 on a Core One L from the setup sheet, an 11W row through the
+  store, the stage's instances against the Parts rows, then Any printer chosen in the sheet from Parts lifts both to
+  4+4+3), mutation-checked (the generator ignoring the limit fails it and two unit tests); npm test 554 passed, 0 failed,
+  5 skipped; e2e Build + Parts + setup-sheet cases 9 of 9 with the new one. No new module, so no stamping line.
+- **Review:** Terra `01a154c7`, routine: 2 returned, 1 held (the pre-change tick is not migrated - documented, not
+  migrated, since the old key was ambiguous), 1 discarded (a `|` in a section title, name or variant could collide the
+  key - every one of them is a catalog constant and none contains one; the construction predates the change).
+- **Not deployed.** Left on the branch for Joey's go.
