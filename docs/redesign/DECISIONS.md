@@ -1031,7 +1031,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   Orange". And on Simplify's outcome line, her distinction kept: "fewer distinct filaments doesn't necessarily mean
   fewer printing colour changes or less waste" — the line now says fewer filaments means fewer spools to own and load,
   and that colour changes within one print depend on which parts print together. Both on branch `colors-polish`
-  (Luna 01a15408), to ride the next deploy rather than a release of their own, as Astra said.
+  (Luna 01a15408), to ride the next deploy rather than a release of their own, as Astra said. **Live** with the
+  previews deploy of 2026-10-19 (main `b32fcca`, stamp `b32fcca0`): the live Colors tab reads "4 filaments used ·
+  Case, drawers: Black · Fronts, grips: Mystery Orange · Grip accents: Silk Silver · Faceplate bodies: Black · Small
+  parts: Orange" and Simplify's line carries the spools sentence.
 
 ## 2026-10-18 (Build's product previews match the model on every tier)
 
@@ -1133,4 +1136,11 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Sol `01a1542f`, two turns: NO FINDINGS on the merge diff with the neighbouring look-card code; four
   findings on the report's section 6, all held (claims stated past their evidence), corrected there, with the median
   shift then settled from the saved images.
-- **Not deployed, not merged into main:** the merge is committed on `preview-fidelity` and pushed, waiting for Joey's go.
+- **Live:** Joey, "Deploy preview-fidelity (e43cb8d) and the Colors polish (cdbe59b) together", 2026-10-19 morning. Main
+  fast-forwarded to `e43cb8d`, the polish merged on top as `b32fcca` (one DECISIONS conflict, both kept); on the merged
+  tree npm test 549 passed, 0 failed, 5 skipped, e2e 51 of 52 under soft rendering (the Label plate's faceplate-switch
+  load flake), the module-graph guard replayed locally; run 39259811585 green, live stamp `b32fcca0`. The preview
+  harness pointed at the live site (`harness/measure-live.mjs`, Balanced and Very High, dark, the root kit's three
+  units): P1 holds on every image, medians 0 of 255, p95 at most 11 against a mark of 6 / 32; no new shader program
+  from the second preview on (programs 5, 5, 5 at Balanced, 16, 16, 16 at Very High); a preview in a median 9.4 ms at
+  Balanced, 5.3 ms at Very High; no page errors. Results in `live/`.
