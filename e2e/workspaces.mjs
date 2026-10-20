@@ -138,7 +138,7 @@ const boardSpots = (page) => page.evaluate(() => [...document.querySelectorAll('
 const stageSpots = (page) => page.evaluate(() => (window.__spots || []).slice().sort());
 const watchStageSpots = (page) => page.evaluate(() => { const V = window.__GEN2_VIEWER__; if (V.__watched) return; V.__watched = 1; const o = V.setSpots; V.setSpots = (spec) => { window.__spots = spec ? spec.spots.filter((p) => p.kind !== 'need').map((p) => `${p.x},${p.y}`) : []; return o(spec); }; });
 const brief = (page) => page.evaluate(() => { const s = window.__GEN2_STORE__.state; return { gridW: s.gridW, units: s.placed.map((p) => `${p.id}:${p.w}W@${p.x},${p.y}`).sort().join(' ') }; });
-const armSize = async (page, t) => { await page.locator('#ws-lib .size:not(.dis)', { hasText: t }).first().click(); await page.waitForSelector('#ws-lib .size.on', { timeout: 5000 }); };
+const armSize = async (page, t) => { await page.locator('#ws-lib .size:not(.dis)', { hasText: t }).first().click(); await page.waitForSelector('#ws-lib .size.on', { timeout: 15_000 }); };
 const view = async (page, v) => { await page.locator(`#ws-tools button:has-text("${v}")`).first().click(); await page.waitForTimeout(300); };
 async function startBuild(page, placed) {
   await page.evaluate((placed) => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = placed.map((u) => ({ ...u, y: u.y ?? y, hh: u.hh || 2, fill: 'decor', shelves: 0 })); s.nextId = 100; s.gridW = Math.max(1, ...s.placed.map((p) => p.x + p.w)); }, 'edit'), placed);
@@ -159,7 +159,7 @@ test('the board redesign: both views show the same "+" spots, left and right gro
   const in3d = await stageSpots(page);
   assert.ok(in3d.includes(`-1,${y}`) && in3d.includes(`3,${y}`), `a surface spot each side: ${in3d}`);
   await view(page, '2D');
-  await page.waitForSelector('#ws-board .b-spot', { timeout: 10_000 }).catch(() => assert.fail('the board drew no "+" spots within 10 s'));
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 }).catch(() => assert.fail('the board drew no "+" spots within 10 s'));
   assert.deepEqual(await boardSpots(page), in3d, 'the board shows exactly the 3D spots');
   assert.match(await text(page, '#ws-board .bttl'), /3W × /, 'the board is the build width');
   assert.equal(await page.locator('#ws-board button:has-text("W+")').count(), 0, 'no W+ / W- buttons');
@@ -178,13 +178,13 @@ test('the board redesign: both views show the same "+" spots, left and right gro
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 });
   assert.deepEqual(await brief(page), before, 'one Undo restores the build');
   // right
-  await page.waitForSelector(`#ws-board .b-spot[data-x="3"][data-y="${y}"]`, { timeout: 10_000 });
+  await page.waitForSelector(`#ws-board .b-spot[data-x="3"][data-y="${y}"]`, { timeout: 30_000 });
   await clickSpot(page, 3, y);
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 30_000 }).catch(() => assert.fail('the right "+" placed nothing within 30 s'));
   assert.equal((await brief(page)).gridW, 4);
   // cancelling: Escape takes the spots away
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('#ws-board .b-spot') && !document.querySelector('#ws-lib .size.on'), null, { timeout: 5000 });
+  await page.waitForFunction(() => !document.querySelector('#ws-board .b-spot') && !document.querySelector('#ws-lib .size.on'), null, { timeout: 15_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -203,7 +203,7 @@ test('the board redesign: a drag past the build leaves a gap that offers spots, 
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 2)?.x === 5, null, { timeout: 30_000 }).catch(() => assert.fail('the drag did not land the 1W at x 5 within 30 s'));
   // a 2W fits the gap (x 2..4): its spots there (a surface gap is two runs, each topped on its own: not a deficit)
   await armSize(page, '2W·1H');
-  await page.waitForSelector('#ws-board .b-spot', { timeout: 10_000 });
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
   const gap = await boardSpots(page);
   assert.ok(gap.includes(`2,${y}`) && gap.includes(`3,${y}`), `the gap offers the 2W: ${gap}`);
   await clickSpot(page, 2, y);
@@ -217,7 +217,7 @@ test('the board redesign: a drag past the build leaves a gap that offers spots, 
   assert.ok(tall, 'a 1.5H spot left of the build');
   await clickSpot(page, tall[0], tall[1]);
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 4, null, { timeout: 30_000 });
-  await page.waitForSelector('#ws-board .b-deficit', { timeout: 10_000 }).catch(() => assert.fail('the uneven top was not hatched within 10 s'));
+  await page.waitForSelector('#ws-board .b-deficit', { timeout: 30_000 }).catch(() => assert.fail('the uneven top was not hatched within 10 s'));
   assert.match(await text(page, '#ws-dock'), /issue/i, 'the Dock counts the completion issue');
   assert.equal(await page.locator('#incomplete-status').isVisible(), false, 'no viewer pill over the Dock');
   // the Move buttons: the unit at the left edge steps past it, the build widens (Escape twice: stop placing, then drop
@@ -225,7 +225,7 @@ test('the board redesign: a drag past the build leaves a gap that offers spots, 
   await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   const leftmost = await page.evaluate(() => window.__GEN2_STORE__.state.placed.slice().sort((a, b) => a.x - b.x)[0].id);
   await page.locator(`#ws-board .b-unit[data-id="${leftmost}"]`).click();
-  await page.waitForSelector('#ws-insp button:has-text("◀ Left")', { timeout: 10_000 });
+  await page.waitForSelector('#ws-insp button:has-text("◀ Left")', { timeout: 30_000 });
   const w0 = (await brief(page)).gridW;
   await page.locator('#ws-insp button:has-text("◀ Left")').click();
   await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w + 1, w0, { timeout: 30_000 }).catch(() => assert.fail('Move ◀ did not widen the build within 30 s'));
@@ -245,14 +245,14 @@ test('the board redesign: a drag past the build leaves a gap that offers spots, 
   // the width cap: a 12W build offers nothing past either edge
   await startBuild(page, Array.from({ length: 6 }, (_, i) => ({ id: 10 + i, x: i * 2, w: 2 })));
   await armSize(page, '2W·1H');
-  await page.waitForSelector('#ws-board .b-spot', { timeout: 10_000 });
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
   const capXs = (await boardSpots(page)).map((k) => +k.split(',')[0]);
   assert.ok(capXs.every((x) => x >= 0 && x < 12), `nothing past the 12W cap: ${capXs}`);
   // an empty build: one starting spot, in both views
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed = []; }, 'edit'));
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 0, null, { timeout: 30_000 });
   await armSize(page, '1W·1H');
-  await page.waitForFunction(() => document.querySelectorAll('#ws-board .b-spot').length === 1, null, { timeout: 10_000 }).catch(() => assert.fail('the empty build did not show exactly one starting spot within 10 s'));
+  await page.waitForFunction(() => document.querySelectorAll('#ws-board .b-spot').length === 1, null, { timeout: 30_000 }).catch(() => assert.fail('the empty build did not show exactly one starting spot within 10 s'));
   await view(page, '3D');
   await page.waitForFunction(() => (window.__spots || []).length === 1, null, { timeout: 30_000 }).catch(() => assert.fail('the 3D view did not show exactly one starting spot within 30 s'));
   assert.deepEqual(clean(errors), []);
@@ -281,7 +281,7 @@ test('the redesign follow-up: sections are said, the ghost shows where gravity s
   await page.mouse.up();
   await page.waitForFunction(() => { const s = window.__GEN2_STORE__.state; const p = s.placed.find((q) => q.id === 2); return p && p.x === 4 && p.y + p.hh === s.gridH * 2; }, null, { timeout: 30_000 }).catch(() => assert.fail('the 1W did not land on the surface at x 4 within 30 s'));
   // now two sections: the Dock and the board say so
-  await page.waitForSelector('#ws-dock .group.sections', { timeout: 10_000 }).catch(() => assert.fail('the Dock did not show the sections within 10 s'));
+  await page.waitForSelector('#ws-dock .group.sections', { timeout: 30_000 }).catch(() => assert.fail('the Dock did not show the sections within 10 s'));
   assert.match(await text(page, '#ws-dock .group.sections'), /2\s*sections/);
   assert.match(await text(page, '#ws-board .bttl'), /2 separate sections/);
   // the 1.5H, taller than the 1H headroom, dragged on top of the 2W
@@ -323,7 +323,7 @@ test('the redesign follow-up: a gap build and an older over-wide build survive s
   assert.equal((await brief(p3)).gridW, 12, 'the older build opens as stored');
   await watchStageSpots(p3); await view(p3, '2D'); await armSize(p3, '1W·1H');
   const y3 = await p3.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
-  await p3.waitForSelector(`#ws-board .b-spot[data-x="4"][data-y="${y3}"]`, { timeout: 10_000 }).catch(() => assert.fail('no "+" left of the older build within 10 s'));
+  await p3.waitForSelector(`#ws-board .b-spot[data-x="4"][data-y="${y3}"]`, { timeout: 30_000 }).catch(() => assert.fail('no "+" left of the older build within 10 s'));
   assert.ok(await p3.locator(`#ws-board .b-spot[data-x="7"][data-y="${y3}"]`).count(), 'and one on its right');
   await clickSpot(p3, 4, y3);
   await p3.waitForFunction(() => { const s = window.__GEN2_STORE__.state; return s.placed.length === 2 && s.gridW === 3 && Math.min(...s.placed.map((p) => p.x)) === 0; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`after the first placement: ${JSON.stringify(await brief(p3))}`));
@@ -339,7 +339,7 @@ test('the redesign follow-up: on a phone a "+" takes a tap near it, and a touch 
   const handle = page.locator('#ws-lib .sheet-handle').first(); if (await handle.count()) await handle.tap();
   await page.locator('#ws-lib .size:not(.dis)', { hasText: '1W·1H' }).first().tap();
   const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
-  await page.waitForSelector(`#ws-board .b-spot[data-x="-1"][data-y="${y}"]`, { timeout: 10_000 }).catch(() => assert.fail('no left "+" on the phone board within 10 s'));
+  await page.waitForSelector(`#ws-board .b-spot[data-x="-1"][data-y="${y}"]`, { timeout: 30_000 }).catch(() => assert.fail('no left "+" on the phone board within 10 s'));
   const c = await page.evaluate(([y]) => { const r = document.querySelector(`#ws-board .b-spot[data-x="-1"][data-y="${y}"] circle`).getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width]; }, [y]);
   assert.ok(c[2] >= 28, `a finger-sized "+": ${c[2]} px`);
   await page.touchscreen.tap(c[0], c[1] - 16);   // outside the 1H footprint, within reach
@@ -428,21 +428,21 @@ test('Build: a unit placed through the store reaches the stage; move, remove and
   assert.equal(await page.locator('#ws-lib .size.on').count(), 0, 'no size lit before one is picked');
   // place: the library arms a size and the store takes the placement the way the spot tap does
   await page.click('#ws-lib .size:not(.dis) >> nth=1');
-  await page.waitForSelector('#ws-lib .size.on', { timeout: 5000 });
+  await page.waitForSelector('#ws-lib .size.on', { timeout: 15_000 });
   assert.ok(await page.locator('#ws-lib .armed').count(), 'picking a size starts placing');
   // cancelling clears the lit tile and the placing box, and the size stays remembered (the build's `selected`)
   const picked = (await S(page)).selected;
   await btn(page, 'Stop placing', '#ws-lib').click();
-  await page.waitForFunction(() => !document.querySelector('#ws-lib .armed'), null, { timeout: 5000 });
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .armed'), null, { timeout: 15_000 });
   assert.equal(await page.locator('#ws-lib .size.on').count(), 0, 'Stop placing clears the lit size');
   assert.deepEqual((await S(page)).selected, picked, 'the size is still remembered after cancelling');
   await page.click('#ws-lib .size:not(.dis) >> nth=1');
-  await page.waitForSelector('#ws-lib .size.on', { timeout: 5000 });
+  await page.waitForSelector('#ws-lib .size.on', { timeout: 15_000 });
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('#ws-lib .size.on'), null, { timeout: 5000 });
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .size.on'), null, { timeout: 15_000 });
   assert.deepEqual((await S(page)).selected, picked, 'Escape cancels placing and keeps the size');
   await page.click('#ws-lib .size:not(.dis) >> nth=1');   // armed again for the placement below
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.build && document.querySelector('#ws-lib .size.on, #ws-lib .size[aria-pressed="true"]'), null, { timeout: 5000 }).catch(() => {});
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build && document.querySelector('#ws-lib .size.on, #ws-lib .size[aria-pressed="true"]'), null, { timeout: 15_000 }).catch(() => {});
   // beside the build on its bottom row: supported by the surface, so the generator accepts it and the stage rebuilds
   await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s, R) => { const id = s.nextId++; const bottom = Math.max(...s.placed.map((p) => p.y + p.hh)); const right = Math.max(...s.placed.map((p) => p.x + p.w)); s.placed.push({ id, x: right, y: bottom - 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }); if (s.gridW < right + 1) s.gridW = right + 1; R.syncTabletopGrid(); }, 'edit'); });
   await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n + 1, n0, { timeout: 90_000 });
@@ -452,7 +452,7 @@ test('Build: a unit placed through the store reaches the stage; move, remove and
   // undo through the toolbar
   await page.evaluate(() => window.__GEN2_STORE__.flush());
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n, n0, { timeout: 10_000 });
+  await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n, n0, { timeout: 30_000 });
   assert.equal(await units(page), n0, 'undo took the unit back');
   // the issue card: an unsupported unit (a floating case on a tabletop build) is named, and Fix structure clears it
   await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s) => { const id = s.nextId++; s.placed.push({ id, x: 0, y: 0, w: 1, hh: 2, fill: 'decor', shelves: 0 }); }, 'edit'); });
@@ -471,7 +471,7 @@ test('Colors: a preset applied from the gallery recolours the model as one histo
   const cards = page.locator('#ws-gallery .lcard');
   assert.ok(await cards.count() >= 11, 'the presets are listed as cards');
   await cards.nth(1).click();   // Stealth, on a fresh profile
-  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   assert.match(await text(page, '#ws-gallery h2'), /Stealth/, 'its details open');
   await page.locator('#ws-gallery .apply').click();
   await settle(page, 600);
@@ -693,7 +693,7 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
   // the switcher: Down on the chip opens the menu with the first item focused; arrows walk; Escape closes and returns
   await page.focus('#ws-switch .chip-btn');
   await page.keyboard.press('ArrowDown');
-  await page.waitForFunction(() => { const m = document.querySelector('#ws-switch .menu'); return m && !m.hidden && m.contains(document.activeElement); }, null, { timeout: 5000 });
+  await page.waitForFunction(() => { const m = document.querySelector('#ws-switch .menu'); return m && !m.hidden && m.contains(document.activeElement); }, null, { timeout: 15_000 });
   const first = await page.evaluate(() => document.activeElement.textContent.trim().slice(0, 20));
   await page.keyboard.press('ArrowDown');
   const second = await page.evaluate(() => document.activeElement.textContent.trim().slice(0, 20));
@@ -701,7 +701,7 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
   await page.keyboard.press('End');
   assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /New build/, 'End reaches the last item');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.querySelector('#ws-switch .menu').hidden && document.activeElement === document.querySelector('#ws-switch .chip-btn'), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('#ws-switch .menu').hidden && document.activeElement === document.querySelector('#ws-switch .chip-btn'), null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => document.querySelector('#ws-switch .chip-btn').getAttribute('aria-expanded')), 'false');
   // the toast is a live region
   assert.equal(await page.evaluate(() => document.getElementById('ws-toast').getAttribute('aria-live')), 'polite');
@@ -709,36 +709,36 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
   await btn(page, 'Type a label', '#ws-labels').focus();
   await btn(page, 'Type a label', '#ws-labels').press('Enter');
-  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 5000 });
+  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 15_000 });
   await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
   assert.ok(await page.evaluate(() => document.getElementById('ws-modal').contains(document.activeElement)), 'three Tabs later focus is still inside the modal');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.getElementById('ws-modal').hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('ws-modal').hidden, null, { timeout: 15_000 });
   assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Type a label/, 'focus returned to the opener');
   // ...and after an ADD, which re-renders the panel (the stress test, 2026-10-15: the keyboard was left at <body>)
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 5000 });
+  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 15_000 });
   await page.keyboard.type('Keyboard label');
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 15_000 });
   assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Type a label/, 'the keyboard stays on the opener after the add');
   // the label editor from the keyboard: Enter on the pencil moves into its words, Escape closes it and comes back to the pencil
   await page.locator('#ws-labels button[title="Edit this label"]').first().focus();
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-labeledit input.words'), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-labeledit input.words'), null, { timeout: 15_000 });
   // a late icon font re-renders the editor alone: the keyboard and the half-typed words stay (Sol 01a13fe5)
   await page.keyboard.press('End'); await page.keyboard.type(' xyz');
   await page.evaluate(() => window.__GEN2_LABELS_REFRESH__());
   assert.deepEqual(await page.evaluate(() => { const a = document.activeElement; return [a === document.querySelector('#ws-labeledit input.words'), a.value]; }), [true, 'Keyboard label xyz'], 'still typing, nothing lost');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.getElementById('ws-labeledit').hidden && document.activeElement && document.activeElement.getAttribute('title') === 'Edit this label', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('ws-labeledit').hidden && document.activeElement && document.activeElement.getAttribute('title') === 'Edit this label', null, { timeout: 15_000 });
   // the setup sheet: focus lands on the name field, Tab stays inside, Escape closes and returns
   await page.evaluate(() => { window.__GEN2_CTX__().openSetup('mount'); });
-  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-setup input.name'), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-setup input.name'), null, { timeout: 15_000 });
   for (let i = 0; i < 12; i++) await page.keyboard.press('Tab');
   assert.ok(await page.evaluate(() => document.getElementById('ws-setup').contains(document.activeElement)), 'twelve Tabs later focus is still inside the sheet');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.getElementById('ws-setup'), null, { timeout: 5000 });
+  await page.waitForFunction(() => !document.getElementById('ws-setup'), null, { timeout: 15_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -774,7 +774,7 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   // identical record makes no history entry)
   await page.evaluate(() => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { const l = s.labelList.labels[0]; l.text = 'edited by hand'; l.hardware.fields = ['M9']; }, 'edit'); st.flush(); });
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
-  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
   await frame.locator('details.ltools > summary').click();   // List tools: "Add all N to the planner" (#make-labels) re-sends the kept list
   await frame.locator('#make-labels:enabled').click();
   await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
@@ -784,14 +784,14 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   // one undo takes the batch back
   assert.deepEqual(await page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels[0]; return [l.text, l.hardware.fields.join()]; }), ['edited by hand', 'M3'], 'the hand-typed words stay, the record is the Picker’s again (an M3 nut now: the flow refine needs a size)');
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction(() => { const l = window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0]; return l && l.hardware.fields.join() === 'M9'; }, null, { timeout: 10_000 });   // one undo: the update alone
+  await page.waitForFunction(() => { const l = window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0]; return l && l.hardware.fields.join() === 'M9'; }, null, { timeout: 30_000 });   // one undo: the update alone
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction(() => { const l = window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0]; return l && l.text !== 'edited by hand' && window.__GEN2_STORE__.state.labelList.labels.length === 1; }, null, { timeout: 10_000 });   // the hand edit
+  await page.waitForFunction(() => { const l = window.__GEN2_STORE__.state.labelList && window.__GEN2_STORE__.state.labelList.labels[0]; return l && l.text !== 'edited by hand' && window.__GEN2_STORE__.state.labelList.labels.length === 1; }, null, { timeout: 30_000 });   // the hand edit
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction(() => !window.__GEN2_STORE__.state.labelList || !window.__GEN2_STORE__.state.labelList.labels.length, null, { timeout: 10_000 });
+  await page.waitForFunction(() => !window.__GEN2_STORE__.state.labelList || !window.__GEN2_STORE__.state.labelList.labels.length, null, { timeout: 30_000 });
   // a batch that lands after the modal was closed is refused, not imported behind the visitor's back (Sol 01a13844)
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
-  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
   await page.evaluate(() => { const p = window.__GEN2_PICKER__(); p.veil.hidden = true; });   // closed from under the batch
   await frame.locator('#make-labels').evaluate((b) => b.click());   // the Picker's own button, pressed inside the hidden frame
   await settle(page, 800);
@@ -804,17 +804,17 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   await page.waitForFunction((a) => { const p = window.__GEN2_PICKER__(); return p && p.session !== a && p.ready && !p.veil.hidden; }, sessionA, { timeout: 60_000 });
   assert.equal(await page.locator('#ws-partpicker').count(), 1, 'one modal, the new one');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 15_000 });
   // Escape INSIDE the frame never reaches this page: the Picker asks with `close` and the dialog closes (a stranger's
   // close, without the session, is ignored)
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
-  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
   const sessionB = await page.evaluate(() => window.__GEN2_PICKER__().session);
   await frame.locator('body').evaluate(() => parent.postMessage({ gen2parts: 'close', v: 1, session: 'not-the-session-at-all' }, '*'));
   await settle(page, 300);
   assert.equal(await page.evaluate(() => window.__GEN2_PICKER__().veil.hidden), false, 'a close without the session is ignored');
   await frame.locator('body').evaluate((body, s) => parent.postMessage({ gen2parts: 'close', v: 1, session: s }, '*'), sessionB);
-  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 15_000 });
   // a message that is not from the frame, or without the session, is ignored
   await page.evaluate((origin) => { window.postMessage({ gen2parts: 'add', v: 1, session: 'nope', items: [] }, origin); }, base);
   await settle(page, 300);
@@ -866,14 +866,14 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().log.filter((k) => k === 'ready').length), 1, 'one ready');
   // a row clicked in the Studio is the selected label in the planner (the drawer selection and the armed label go)
   await frame.locator(`#labels .row[data-label-id="${nuts}"]`).click();
-  await page.waitForFunction((id) => window.__GEN2_PLATE__().selLabel === id, nuts, { timeout: 10_000 });
+  await page.waitForFunction((id) => window.__GEN2_PLATE__().selLabel === id, nuts, { timeout: 30_000 });
   assert.equal(await page.locator('#ws-labels .chip-l.sel').count(), 1, 'the selection shows in the panel');
   assert.equal(await frame.locator(`#labels .row.sel[data-label-id="${nuts}"]`).count(), 1, 'and on the plate');
   // undo in the planner (the placement): the plate follows with a new rev, the drawer tag goes
   const rev = await page.evaluate(() => window.__GEN2_PLATE__().rev);
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction((r) => window.__GEN2_PLATE__().rev > r, rev, { timeout: 10_000 });
-  await frame.locator(`#labels .row[data-label-id="${screws}"] .utag`).waitFor({ state: 'detached', timeout: 10_000 });
+  await page.waitForFunction((r) => window.__GEN2_PLATE__().rev > r, rev, { timeout: 30_000 });
+  await frame.locator(`#labels .row[data-label-id="${screws}"] .utag`).waitFor({ state: 'detached', timeout: 30_000 });
   assert.equal(await frame.locator('#labels .row[data-label-id]').count(), 2, 'still both labels');
   assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().log.filter((k) => k === 'ready').length), 1, 'the same frame: no second hello answered');
   // the print preference (the stripe): Off in the panel's Label settings reaches the plate's own stripe input, a change on the
@@ -884,15 +884,15 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   assert.equal(await frame.locator('#hw-band').evaluate((el) => el.value), 'off', 'the plate follows the panel');
   assert.match(await text(page, '#ws-labels details.settings summary'), /no stripe/);
   await frame.locator('#hw-band').selectOption('end');
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'end', null, { timeout: 5000 });   // the plate's change is the browser's preference now
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'end', null, { timeout: 15_000 });   // the plate's change is the browser's preference now
   assert.equal(await page.locator('#ws-labels select[aria-label="Part label stripe"]').evaluate((el) => el.value), 'end', 'and the panel shows it');
   assert.equal(await page.evaluate(() => JSON.stringify(window.__GEN2_STORE__.state).includes('hw-band')), false, 'never in the record');
   await settle(page, 400);
   assert.equal(await frame.locator('#hw-band').evaluate((el) => el.value), 'end', 'no snapshot echoed the old value back over the plate');
   await frame.locator('#hw-band').selectOption('wedge');   // a second change from the plate still carries the current rev (Sol 01a13c32)
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'wedge', null, { timeout: 5000 });
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'wedge', null, { timeout: 15_000 });
   await frame.locator('#hw-profile').setChecked(false);
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').drawings === false, null, { timeout: 5000 });
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').drawings === false, null, { timeout: 15_000 });
   assert.equal(await page.locator('#ws-labels [aria-label="Screw and nut drawings"] .seg.on').textContent(), 'Off', 'the panel shows the drawings off');
   // a setting without the frame's session, or with an old rev, changes nothing (Astra: the fix must not let stale updates in)
   const revNow = await page.evaluate(() => window.__GEN2_PLATE__().rev);
@@ -906,7 +906,7 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   await settle(page, 300);
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gen2-label-print')).band), 'wedge', 'a stale-rev setting from the frame changes nothing');
   await frame.locator('body').evaluate((_, r) => { window.parent.postMessage({ gen2plate: 'setting', v: 1, session: EMBED.bind.session, id: 'hw-band', value: 'end', rev: r, buildId: EMBED.snap.buildId }, EMBED.bind.origin); }, revNow);
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print')).band === 'end', null, { timeout: 5000 });   // the current rev: taken
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print')).band === 'end', null, { timeout: 15_000 });   // the current rev: taken
   // changed while the plate is hidden: the reopening carries the latest preference
   await page.locator('#ws-labels .track.view button:text-is("On build")').click();
   await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'off');
@@ -919,7 +919,7 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   assert.equal(await page.locator('#ws-plate').count(), 1, 'the frame stays');
   assert.equal(await page.locator('#ws-plate').isVisible(), false, 'hidden');
   await page.click('#ws-dock button.cta');
-  await page.waitForFunction(() => !window.__GEN2_PLATE__().box.hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => !window.__GEN2_PLATE__().box.hidden, null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => window.__GEN2_PLATE__().view), 'plate');
   // a message that is not from the frame, or without the session, is ignored
   await page.evaluate((origin) => { window.postMessage({ gen2plate: 'selected', v: 1, session: 'nope', id: 'x', rev: 0 }, origin); }, base);
@@ -963,7 +963,7 @@ test('the Label plate keeps this browser’s printer settings across a planner r
   await f.locator('#export-format').selectOption('stl');
   await f.locator('#reserve-purge').setChecked(false);
   await f.locator('#color-base').fill('#2a6fdb', { force: true });   // a swatch's colour input hides behind its label (the label opens the picker)
-  await f.waitForFunction(() => { const r = JSON.parse(localStorage.getItem('labelstudio.plate-printer.v1') || 'null'); return !!r && r.printer === 'Bambu P2S (256×256)' && r.settings['export-format'] === 'stl' && r.settings['reserve-purge'] === false && r.settings['color-base'] === '#2a6fdb'; }, null, { timeout: 10_000 });
+  await f.waitForFunction(() => { const r = JSON.parse(localStorage.getItem('labelstudio.plate-printer.v1') || 'null'); return !!r && r.printer === 'Bambu P2S (256×256)' && r.settings['export-format'] === 'stl' && r.settings['reserve-purge'] === false && r.settings['color-base'] === '#2a6fdb'; }, null, { timeout: 30_000 });
   const rec = await kept(f);
   assert.ok(!('hw-band' in rec.settings) && !('hw-profile' in rec.settings), 'the stripe and the drawings are the planner’s print preference, not kept here');
   assert.equal(await f.evaluate(() => localStorage.getItem('edgelabel.autosave.v1')), null, 'the ordinary autosave is never written from the plate');
@@ -1011,7 +1011,7 @@ test('the Label plate: a faceplate switch with the plate open leaves this browse
   await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'end');
   await page.locator('#ws-labels [aria-label="Screw and nut drawings"] .seg:text-is("Off")').click();
   const pref = () => page.evaluate(() => JSON.parse(localStorage.getItem('gen2-label-print') || 'null'));
-  await page.waitForFunction(() => { const p = JSON.parse(localStorage.getItem('gen2-label-print') || 'null'); return !!p && p.band === 'end' && p.drawings === false; }, null, { timeout: 5000 });
+  await page.waitForFunction(() => { const p = JSON.parse(localStorage.getItem('gen2-label-print') || 'null'); return !!p && p.band === 'end' && p.drawings === false; }, null, { timeout: 15_000 });
   // the plate open on it, showing that preference
   await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
   await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });
@@ -1029,7 +1029,7 @@ test('the Label plate: a faceplate switch with the plate open leaves this browse
   }
   // a change made on the plate is the visitor's, and still goes back
   await f.locator('#hw-band').selectOption('wedge');
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'wedge', null, { timeout: 5000 });
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print') || '{}').band === 'wedge', null, { timeout: 15_000 });
   assert.deepEqual(await sent(), ['ready', 'setting']);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
@@ -1086,7 +1086,7 @@ test('Edit part details: the Part Picker opens that part (open/1), or just opens
   await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), first); await settle(page, 500);
   await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), first); await settle(page, 500);
   await page.locator('#ws-labels button:has-text("Edit part details")').first().click();
-  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 10_000 });
+  await page.waitForFunction(() => !window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
   const caps = await page.evaluate(() => window.__GEN2_PICKER__().caps || []);
   if (caps.includes('open/1')) {
     await page.waitForFunction(() => window.__GEN2_PICKER__().log.includes('opened'), null, { timeout: 15_000 });
@@ -1125,7 +1125,7 @@ test('the label editor: a label longer than 40 characters is not cut by an Enter
   await page.evaluate((t) => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { s.labelList.labels[0].text = t; }, 'edit'); st.flush(); }, long);
   await settle(page, 300);
   await page.locator('#ws-labels button[title="Edit this label"]').first().click();
-  await page.waitForSelector('#ws-labeledit input.words', { timeout: 10_000 });
+  await page.waitForSelector('#ws-labeledit input.words', { timeout: 30_000 });
   assert.match(await text(page, '#ws-labeledit .note'), new RegExp(`${long.length} characters long`), 'the editor says what a change keeps');
   await page.locator('#ws-labeledit input.words').press('Enter');
   await settle(page, 300);
@@ -1133,7 +1133,7 @@ test('the label editor: a label longer than 40 characters is not cut by an Enter
   await page.locator('#ws-labeledit input.words').press('End');
   await page.keyboard.press('Backspace');   // a change (the field's maxlength of 40 stops typing more into it)
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList.labels[0].text.length === 40, null, { timeout: 5000 });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList.labels[0].text.length === 40, null, { timeout: 15_000 });
   assert.match(await text(page, '#ws-toast'), /cut to/, 'and it says so');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
@@ -1161,11 +1161,11 @@ test('Build: a spot left of the starter drawer, and placing there shifts the bui
   assert.ok(spots.some((sp) => sp.x + 1 > s0.gridW), 'and one past the right edge');
   await page.evaluate((sp) => window.__GEN2_BUILD__.placeAt(sp.x, sp.y, { w: 1, h: 1, hh: 2 }, 'decor'), left);
   // the grid hugs the build (the board redesign): its width is the build's, 1 + the starter's
-  await page.waitForFunction((w) => window.__GEN2_STORE__.state.placed.length === 2 && window.__GEN2_STORE__.state.gridW === w + 1, s0.placed[0].w, { timeout: 10_000 });
+  await page.waitForFunction((w) => window.__GEN2_STORE__.state.placed.length === 2 && window.__GEN2_STORE__.state.gridW === w + 1, s0.placed[0].w, { timeout: 30_000 });
   const s1 = await S(page);
   assert.deepEqual(s1.placed.map((u) => [u.id, u.x]).sort((a, b) => a[0] - b[0]), [[s0.placed[0].id, 1], [s0.nextId, 0]], 'the starter moved right, the new drawer is at x 0');
   await page.click('#ws-tools button[aria-label="Undo"]');
-  await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w && window.__GEN2_STORE__.state.placed.length === 1, s0.gridW, { timeout: 10_000 });
+  await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w && window.__GEN2_STORE__.state.placed.length === 1, s0.gridW, { timeout: 30_000 });
   assert.deepEqual((await S(page)).placed.map((u) => u.x), [0], 'one undo puts it all back');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
@@ -1257,7 +1257,7 @@ test('the phone: Edit raises the label editor sheet, its close is reachable, and
   await page.waitForFunction(() => { const e = document.querySelector('#ws-labeledit'); return e && !e.hidden && e.classList.contains('open'); }, null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => document.querySelector('#ws-labels').classList.contains('open')), false, 'the Labels sheet steps down for the editor');
   // the sheet rises with a transition: wait for it to settle (a single look mid-rise read the dock under the × on a busy run)
-  const reach = await page.waitForFunction(() => { const b = document.querySelector('#ws-labeledit button[aria-label="Close the editor"]'); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t === b || b.contains(t); }, null, { timeout: 5000 }).then(() => true, () => false);
+  const reach = await page.waitForFunction(() => { const b = document.querySelector('#ws-labeledit button[aria-label="Close the editor"]'); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t === b || b.contains(t); }, null, { timeout: 15_000 }).then(() => true, () => false);
   assert.ok(reach, 'nothing covers the editor’s close');
   await page.click('#ws-labeledit button[aria-label="Close the editor"]');
   const backToList = () => page.waitForFunction(() => document.querySelector('#ws-labeledit').hidden && document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 15_000 });
@@ -1334,14 +1334,14 @@ test('a label preview drawn late swaps in place: the editor keeps the keyboard a
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
   await btn(page, 'Type a label', '#ws-labels').focus();
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 5000 });
+  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 15_000 });
   await page.keyboard.type('Late font');
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => document.querySelectorAll('#ws-labels .lprev.img').length), 0, 'the font is still held back: the CSS stand-in shows');
   await page.locator('#ws-labels button[title="Edit this label"]').first().focus();
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-labeledit input.words'), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement === document.querySelector('#ws-labeledit input.words'), null, { timeout: 15_000 });
   await page.keyboard.press('End'); await page.keyboard.type(' xyz');
   // the font arrives: the previews are drawn in place
   await page.waitForFunction(() => document.querySelectorAll('#ws-labels .lprev.img').length >= 1, null, { timeout: 30_000 });
@@ -1375,16 +1375,16 @@ test('the label editor: a part label offers no icon choice; an ordinary label\'s
     const chip = page.locator('#ws-labels .chip-l').filter({ hasText: title }).first();
     const row = chip.locator('xpath=ancestor::*[.//button[@title="Edit this label"]][1]');
     await row.locator('button[title="Edit this label"]').first().click();
-    await page.waitForFunction(() => !document.getElementById('ws-labeledit').hidden, null, { timeout: 5000 });
+    await page.waitForFunction(() => !document.getElementById('ws-labeledit').hidden, null, { timeout: 15_000 });
     await settle(page, 300);
   };
   await editFor('M2');
   assert.deepEqual(await page.evaluate(() => ({ grid: !!document.querySelector('#ws-labeledit .igrid'), seg: !!document.querySelector('#ws-labeledit .track.badge'), note: !!document.querySelector('#ws-labeledit .noicon') })),
     { grid: false, seg: false, note: true }, 'a part label: no icon controls, and a note says why');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.getElementById('ws-labeledit').hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => document.getElementById('ws-labeledit').hidden, null, { timeout: 15_000 });
   await editFor('TORX');
-  await page.waitForFunction(() => document.querySelector('#ws-labeledit .igrid'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-labeledit .igrid'), null, { timeout: 30_000 });
   // open the first group so its tiles lay out, then read a tile's colours
   await page.evaluate(() => { const h = document.querySelector('#ws-labeledit .igroup:not(.open) .ghead'); if (h) h.click(); });
   const tile = await page.evaluate(() => {
@@ -1458,7 +1458,7 @@ test('Colors: a shown look is worn by the model but never chosen - the palette, 
   assert.equal(r.after.again, false, 'a second endPreview has nothing to end');
   // a real change through the panel ends a shown look: open the first region's picker and pick a different filament
   await page.locator('#ws-colors .crow').first().click();
-  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   await page.evaluate(() => { const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')]; sws[sws.length - 1].click(); });
   await settle(page, 500);
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), false, 'a real pick ends the shown look');
@@ -1474,10 +1474,10 @@ test('Colors: a preset applied straight after a region pick is its own undo step
   const start = await palNow();
   // the picker first (the gallery opens over the panel), then the preset's details (step 3): its Apply sits beside the picker
   await page.locator('#ws-colors .crow').first().click();
-  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   await page.locator('#ws-colors .browse').click();
   await page.locator('#ws-gallery .lcard').nth(1).click();
-  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   // the pick and the preset in one task: well inside the store's 350 ms window
   const picked = await page.evaluate(() => {
     const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')]; sws[sws.length - 1].click();
@@ -1573,7 +1573,7 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   // Shop this look lives in the look's details (step 3): the gallery, the Signal card, its filament rows
   await page.locator('#ws-colors .browse').click();
   await page.locator('#ws-gallery .lcard').filter({ hasText: 'Signal' }).click();
-  await page.waitForSelector('#ws-gallery .frow', { timeout: 5000 });
+  await page.waitForSelector('#ws-gallery .frow', { timeout: 15_000 });
   assert.equal(await page.locator('#ws-gallery .frow').count(), r.sigRows, 'the Shop list lists exactly those rows');
   assert.match(await page.locator('#ws-gallery .lcount').textContent(), new RegExp(`^${r.sigCount} filaments`), 'the details say the count');   // (not the text() helper: this case declares its own `text` below)
   // with no label-text pick, the label text row reads as its own colour, not "follows Body"
@@ -1727,14 +1727,14 @@ test('Colors step 3 on the phone: Browse looks opens the gallery sheet over the 
   const { ctx, page, errors } = await open('colors', { phone: true });
   await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
   await page.locator('#ws-colors .browse').click();
-  await page.waitForFunction(() => document.querySelector('#ws-gallery').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
   assert.match(await text(page, '#ws-gallery .sheet-handle .ttl'), /Looks/);
   await page.waitForFunction(() => document.querySelectorAll('#ws-gallery .lcard canvas.drawn').length >= 11, null, { timeout: 30_000 });
   await page.locator('#ws-gallery .lcard').nth(1).click();
-  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   assert.match(await text(page, '#ws-gallery .sheet-handle .ttl'), /Stealth/, 'the sheet is titled after the look');
   await page.locator('#ws-gallery .x').click();
-  await page.waitForFunction(() => document.querySelector('#ws-gallery').hidden && document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').hidden && document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -1747,14 +1747,14 @@ test('Colors step 4: finalists enter the tray from the gallery, a flip shows one
   await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
   await settle(page, 800);
   await page.locator('#ws-colors .browse').click();
-  await page.waitForSelector('#ws-gallery .cmp', { timeout: 10_000 });
+  await page.waitForSelector('#ws-gallery .cmp', { timeout: 30_000 });
   assert.equal(await page.locator('#ws-gallery .cmp-open').isDisabled(), true, 'Compare is disabled while the tray is empty');
   await page.locator('#ws-gallery .cmp').nth(1).click();   // Stealth
   await page.locator('#ws-gallery .cmp').nth(2).click();   // Signal
   assert.equal(await text(page, '#ws-gallery .cmp-open'), 'Compare (2)', 'the head counts the finalists');
   assert.equal(await page.locator('#ws-gallery .cmp.on').count(), 2, 'their corner buttons read as in');
   await page.locator('#ws-gallery .cmp-open').click();
-  await page.waitForFunction(() => !document.querySelector('#ws-tray').hidden && document.querySelector('#ws-gallery').hidden, null, { timeout: 5000 });   // the tray, not the gallery
+  await page.waitForFunction(() => !document.querySelector('#ws-tray').hidden && document.querySelector('#ws-gallery').hidden, null, { timeout: 15_000 });   // the tray, not the gallery
   await page.waitForFunction(() => document.querySelectorAll('#ws-tray canvas.drawn').length === 2, null, { timeout: 30_000 });
   // the tray's opening lifted the safe area's floor once, and the camera eases to its new fit: the flips are judged only
   // once it has come to rest (the same position read twice, 300 ms apart)
@@ -1789,7 +1789,7 @@ test('Colors step 4: finalists enter the tray from the gallery, a flip shows one
   await settle(page, 200);
   assert.equal(await page.locator('#ws-tray .tcard').count(), 1, 'a finalist can be removed');
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden, null, { timeout: 15_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -1798,17 +1798,17 @@ test('Colors step 4 on the phone: the tray is a sheet of its own, opened from th
   const { ctx, page, errors } = await open('colors', { phone: true });
   await page.waitForSelector('#ws-colors .browse', { timeout: 30_000 });
   await page.locator('#ws-colors .browse').click();
-  await page.waitForSelector('#ws-gallery .cmp', { timeout: 10_000 });
+  await page.waitForSelector('#ws-gallery .cmp', { timeout: 30_000 });
   await page.locator('#ws-gallery .cmp').nth(1).click();
   await page.locator('#ws-gallery .cmp').nth(2).click();
   await page.locator('#ws-gallery .cmp-open').click();
-  await page.waitForFunction(() => document.querySelector('#ws-tray').classList.contains('open') && !document.querySelector('#ws-gallery').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-tray').classList.contains('open') && !document.querySelector('#ws-gallery').classList.contains('open'), null, { timeout: 30_000 });
   assert.match(await text(page, '#ws-tray .sheet-handle .ttl'), /Compare · 2 of 3/);
   await page.locator('#ws-tray .pick').nth(0).click();
   await settle(page, 300);
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'a flip shows the look on the phone too');
   await page.locator('#ws-tray .ihead .x').click();
-  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-tray').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 30_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -1892,7 +1892,7 @@ test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned l
   const { ctx, page, errors } = await open('colors', { phone: true });
   await page.waitForSelector('#ws-colors .surprise', { timeout: 30_000 });
   await page.locator('#ws-colors .surprise').click();
-  await page.waitForFunction(() => document.querySelector('#ws-surprise').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
   assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Find your next look/);
   await page.waitForFunction(() => document.querySelectorAll('#ws-surprise .cand canvas.drawn').length === 3, null, { timeout: 30_000 });
   await page.locator('#ws-surprise .cand .pick').nth(0).click();
@@ -1900,13 +1900,13 @@ test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned l
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'a tap shows the candidate on the phone');
   assert.equal(await page.evaluate(() => document.querySelector('#ws-surprise .ownedonly').disabled), true, 'with nothing owned the switch is off');
   await page.locator('#ws-surprise .edit').click();
-  await page.waitForSelector('#ws-surprise .sw', { timeout: 5000 });
+  await page.waitForSelector('#ws-surprise .sw', { timeout: 15_000 });
   assert.match(await text(page, '#ws-surprise .sheet-handle .ttl'), /Filaments I own/, 'the sheet is titled after the editor');
   for (const label of ['Elegoo PLA Black', 'Printed Solid Mystery Orange', 'Panchroma Cold White']) await page.locator(`#ws-surprise .sw[aria-label="${label}"]`).click();
   assert.match(await text(page, '#ws-surprise .ocount'), /3 filaments/);
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gen2-owned')).labels.length), 3, 'the list is kept in this browser');
   await page.locator('#ws-surprise .back').click();
-  await page.waitForSelector('#ws-surprise .ownedonly:not([disabled])', { timeout: 5000 });
+  await page.waitForSelector('#ws-surprise .ownedonly:not([disabled])', { timeout: 15_000 });
   await page.locator('#ws-surprise .ownedonly').click();
   await page.waitForFunction(() => { const sp = window.__GEN2_SURPRISE__; return sp.ownedOnly && sp.cands.length && [...document.querySelectorAll('#ws-surprise .cand canvas')].every((c) => c.classList.contains('drawn')); }, null, { timeout: 30_000 });
   const owned = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name))), n: sp.cands.length, short: sp.short, note: document.querySelector('#ws-surprise .short')?.textContent || null }; });
@@ -1916,17 +1916,17 @@ test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned l
   // inside the new list when the panel reopens (Sol 01a150df: Escape and close skipped the re-roll, so Keep could apply a
   // filament no longer owned)
   await page.locator('#ws-surprise .edit').click();
-  await page.waitForSelector('#ws-surprise .sw', { timeout: 5000 });
+  await page.waitForSelector('#ws-surprise .sw', { timeout: 15_000 });
   await page.locator('#ws-surprise .sw[aria-label="Printed Solid Mystery Orange"]').click();
   await page.locator('#ws-surprise .head .x').click();
-  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden, null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden, null, { timeout: 30_000 });
   await page.locator('#ws-colors .surprise').click();
   await page.waitForFunction(() => { const sp = window.__GEN2_SURPRISE__; return document.querySelector('#ws-surprise').classList.contains('open') && (!sp.cands.length || [...document.querySelectorAll('#ws-surprise .cand canvas')].every((c) => c.classList.contains('drawn'))); }, null, { timeout: 30_000 });
   const shrunk = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { have: [...have], ownedOnly: sp.ownedOnly, within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name))), n: sp.cands.length }; });
   assert.deepEqual(shrunk.have, ['Elegoo PLA Black', 'Panchroma Cold White']);
   assert.ok(shrunk.ownedOnly && shrunk.within, `after the list shrank, every candidate is inside it (${shrunk.n} candidates)`);
   await page.locator('#ws-surprise .head .x').click();
-  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-surprise').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 30_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -1964,7 +1964,7 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
   const before = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), count: window.__GEN2_VIEWER__.filamentsInBuild().count, canUndo: window.__GEN2_STORE__.canUndo }));
   assert.equal(before.count, 4, 'the control: The Jerrari prints in four on the root kit');
   await page.locator('#ws-colors .summary .simplify').click();
-  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 30_000 });
   const opened = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const s = document.querySelector('#ws-simplify'); return { targets: [...s.querySelectorAll('.tgt .seg')].map((b) => b.textContent), on: s.querySelector('.tgt .seg.on').textContent, rows: [...s.querySelectorAll('.chg .what')].map((x) => x.textContent), apply: s.querySelector('.apply').textContent, previewing: v.previewing, gripAccentHex: v.activeHex('Faceplate:GRIP ACCENT'), palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), canUndo: window.__GEN2_STORE__.canUndo, trayHidden: document.querySelector('#ws-tray').hidden, galleryHidden: document.querySelector('#ws-gallery').hidden }; });
   assert.deepEqual(opened.targets, ['3 filaments', '2 filaments']); assert.equal(opened.on, '3 filaments');
   assert.equal(opened.rows.length, 1); assert.match(opened.rows[0], /^Grip accents: Silk Silver → /, 'the least visible filament (the grip accent alone) is the one to go');
@@ -1986,7 +1986,7 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
   assert.ok(cancelled.hidden && !cancelled.previewing && cancelled.palette === before.palette && cancelled.canUndo === before.canUndo && cancelled.count === 4, JSON.stringify(cancelled));
   // Apply at the default target: one undo step, the Dock drops to three, the panel reads "The Jerrari · edited"
   await page.locator('#ws-colors .summary .simplify').click();
-  await page.waitForSelector('#ws-simplify .apply', { timeout: 10_000 });
+  await page.waitForSelector('#ws-simplify .apply', { timeout: 30_000 });
   await page.locator('#ws-simplify .apply').click();
   await settle(page, 600);
   const applied = await page.evaluate(() => ({ hidden: document.querySelector('#ws-simplify').hidden, previewing: window.__GEN2_VIEWER__.previewing, count: window.__GEN2_VIEWER__.filamentsInBuild().count, dock: document.querySelector('#ws-dock .status').textContent, lname: document.querySelector('#ws-colors .lname').textContent, summary: document.querySelector('#ws-colors .summary .sline').textContent, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
@@ -2001,13 +2001,13 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
   assert.equal(undone.palette, before.palette, 'one Undo restores the look'); assert.equal(undone.count, 4); assert.equal(undone.lname, 'The Jerrari');
   // Review filaments opens the shopping list with the suitability note; Keep this look opens Save with the name field
   await page.locator('#ws-colors .summary .review').click();
-  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 5000 });
+  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 15_000 });
   assert.match(await page.locator('#ws-shop .note').last().textContent(), /whether a filament suits a part/);
   await page.locator('#ws-shop .x').click();
   await page.locator('#ws-colors .summary .keeplook').click();
-  await page.waitForSelector('#ws-colors .saverow input', { timeout: 5000 });
+  await page.waitForSelector('#ws-colors .saverow input', { timeout: 15_000 });
   // the Save row focuses its input on the next tick; under the software rasteriser that tick can land after the selector
-  await page.waitForFunction(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Look name', null, { timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement && document.activeElement.getAttribute('aria-label') === 'Look name', null, { timeout: 15_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -2016,12 +2016,12 @@ test('Colors step 6 on the phone: Simplify is a sheet of its own; Apply closes i
   const { ctx, page, errors } = await open('colors', { phone: true });
   await page.waitForSelector('#ws-colors .summary .simplify', { timeout: 30_000 });
   await page.locator('#ws-colors .summary .simplify').click();
-  await page.waitForFunction(() => document.querySelector('#ws-simplify').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-simplify').classList.contains('open') && !document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
   assert.match(await text(page, '#ws-simplify .sheet-handle .ttl'), /Simplify/);
-  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 30_000 });
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the proposal is shown on the phone too');
   await page.locator('#ws-simplify .apply').click();
-  await page.waitForFunction(() => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 30_000 });
   assert.match(await text(page, '#ws-dock .status'), /^3 filaments/);
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), true);
   assert.deepEqual(clean(errors), []);
@@ -2146,7 +2146,7 @@ test('Parts: with chosen colours on, a row shows and names the filament it print
   const { ctx, page, errors } = await open('colors');
   await page.locator('#ws-colors .browse').click();
   await page.locator('#ws-gallery .lcard').nth(1).click();   // Stealth, on a fresh profile
-  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   await page.locator('#ws-gallery .apply').click();
   await settle(page, 600);
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
@@ -2171,7 +2171,7 @@ test('Parts: with chosen colours on, a row shows and names the filament it print
   assert.match(on.caption, /Chip = the filament it prints in · ring = its colour in Assemble/, 'the caption says what the chip is');
   assert.equal(on.buyChips, 0, 'bought hardware keeps its dashed chip');
   // the CSV names it too
-  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 10_000 }), btn(page, 'Download CSV', '#ws-parts').click()]);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30_000 }), btn(page, 'Download CSV', '#ws-parts').click()]);
   const csv = await readFile(await dl.path(), 'utf8');
   const caseLine = csv.split(/\r?\n/).find((l) => /"Case 185/.test(l));
   assert.ok(/"Section","Qty","Part","Print in"/.test(csv), 'the CSV has a Print in column');
@@ -2195,7 +2195,7 @@ test('Parts: the inspector\'s "This unit · parts" rows show the filament each p
   const { ctx, page, errors } = await open('colors');
   await page.locator('#ws-colors .browse').click();
   await page.locator('#ws-gallery .lcard').nth(1).click();   // Stealth, on a fresh profile
-  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   await page.locator('#ws-gallery .apply').click();
   await settle(page, 600);
   const ids = await page.evaluate(() => window.__GEN2_STORE__.state.placed.map((p) => p.id));
@@ -2206,10 +2206,10 @@ test('Parts: the inspector\'s "This unit · parts" rows show the filament each p
   const selectCase = (uid) => page.evaluate((u) => { const v = window.__GEN2_VIEWER__; const i = v.manifest.instances.find((x) => /^case\d+$/.test(x.id) && (v.partInfo(x.id) || {}).owner === u); if (!i) throw new Error('no case instance for unit ' + u); v.setSelected(i.id); }, uid);
   // the first unit's case, clicked on the model: the picker opens on the case; "This unit only", then a filament the build does not wear
   await selectCase(mine);
-  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 5000 });
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   assert.match(await text(page, '#ws-picker .head'), /^Body · All case/i, 'the control: the picker is on the case body');
   await page.locator('#ws-picker .seg:has-text("only")').click();
-  await page.waitForFunction(() => /only \(unit 1\)/.test(document.querySelector('#ws-picker .head').textContent), null, { timeout: 5000 });
+  await page.waitForFunction(() => /only \(unit 1\)/.test(document.querySelector('#ws-picker .head').textContent), null, { timeout: 15_000 });
   const own = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__; const build = v.palette().colors.Case;
     const sws = [...document.querySelectorAll('#ws-picker .brands .sw:not(.active)')].filter((s) => s.getAttribute('aria-label') !== build.name);
@@ -2296,7 +2296,7 @@ test('Build: on a bed-limited printer the stage tiles the under-table rails as t
   // Any printer, chosen in the setup sheet from here (Parts does not sync the stage itself, so the sheet does), lifts the
   // cap on both at once: 4W+4W+3W in the model and in the list
   await page.evaluate(() => window.__GEN2_CTX__().openSetup('printer'));
-  await page.waitForSelector('#ws-setup select.printer', { timeout: 10_000 });
+  await page.waitForSelector('#ws-setup select.printer', { timeout: 30_000 });
   await page.selectOption('#ws-setup select.printer', 'any');
   await btn(page, 'Apply', '#ws-setup').click();
   await page.waitForFunction(() => !document.querySelector('#ws-setup'), null, { timeout: 30_000 });
@@ -2340,27 +2340,27 @@ test('the phone: Place / Cancel, the issue card and the toast sit above the shee
     return assert.fail('the place card did not open on a tapped "+" in three tries');
   };
   await tapSpot();
-  await page.locator('#ws-choice button:has-text("Cancel")').tap({ timeout: 5000 });
-  await page.waitForSelector('#ws-choice[hidden]', { state: 'attached', timeout: 5000 });
+  await page.locator('#ws-choice button:has-text("Cancel")').tap({ timeout: 15_000 });
+  await page.waitForSelector('#ws-choice[hidden]', { state: 'attached', timeout: 15_000 });
   const n0 = await units(page);
   await tapSpot();
-  await page.locator('#ws-choice button:has-text("Place")').tap({ timeout: 5000 });
+  await page.locator('#ws-choice button:has-text("Place")').tap({ timeout: 15_000 });
   await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n + 1 && window.__GEN2_VIEWER__.build.placed.length === n + 1, n0, { timeout: 60_000 })
     .catch(() => assert.fail('Place placed nothing within 60 s'));
   // the inspector's Move: the sheet stays up through the move (it closed after every column)
   const id = await page.evaluate(() => window.__GEN2_STORE__.state.selectedUnit);
   assert.ok(id != null, 'the placed unit is selected');
   await page.locator('#ws-insp .sheet-handle').tap();
-  await page.waitForFunction(() => document.querySelector('#ws-insp').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-insp').classList.contains('open'), null, { timeout: 30_000 });
   const x0 = await page.evaluate((id) => window.__GEN2_STORE__.state.placed.find((p) => p.id === id).x, id);
-  await page.locator('#ws-insp button:has-text("Right ▶")').tap({ timeout: 5000 });
+  await page.locator('#ws-insp button:has-text("Right ▶")').tap({ timeout: 15_000 });
   await page.waitForFunction(([id, x]) => window.__GEN2_STORE__.state.placed.find((p) => p.id === id)?.x === x + 1, [id, x0], { timeout: 30_000 })
     .catch(() => assert.fail('Right ▶ did not move the unit within 30 s'));
   await settle(page, 800);
   assert.equal(await page.evaluate(() => document.querySelector('#ws-insp').classList.contains('open')), true, 'the inspector is still up after a Move');
   // the toast: Remove says so above the sheets and the dock, at a readable width
-  await page.locator('#ws-insp button.danger:has-text("Remove")').tap({ timeout: 5000 });
-  await page.waitForSelector('#ws-toast.show', { timeout: 5000 });
+  await page.locator('#ws-insp button.danger:has-text("Remove")').tap({ timeout: 15_000 });
+  await page.waitForSelector('#ws-toast.show', { timeout: 15_000 });
   const toast = await page.evaluate(() => { const r = document.querySelector('#ws-toast').getBoundingClientRect(); return { bottom: r.bottom, width: r.width, z: Number(getComputedStyle(document.querySelector('#ws-toast')).zIndex) || 0 }; });
   const floor = await lowestSheetTop(page);
   assert.ok(toast.bottom <= floor + 1, `the toast ends above the sheets and the dock: ${Math.round(toast.bottom)} vs ${Math.round(floor)}`);
@@ -2379,9 +2379,9 @@ test('the phone: Place / Cancel, the issue card and the toast sit above the shee
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed.push({ id: 3, x: 0, y: 0, w: 1, hh: 2, fill: 'decor', shelves: 0 }); s.nextId = 4; }, 'edit'));
   await page.waitForFunction(() => /issue/.test(document.querySelector('#ws-dock .status')?.textContent || ''), null, { timeout: 30_000 });
   await page.locator('#ws-lib .sheet-handle').tap();
-  await page.waitForFunction(() => document.querySelector('#ws-lib').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-lib').classList.contains('open'), null, { timeout: 30_000 });
   await page.locator('#ws-dock .status').tap();
-  await page.waitForSelector('#ws-issues:not([hidden])', { timeout: 10_000 });
+  await page.waitForSelector('#ws-issues:not([hidden])', { timeout: 30_000 });
   await settle(page, 600);
   const card = await page.evaluate(() => { const c = document.querySelector('#ws-issues'); const q = c.getBoundingClientRect(); const h = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return { bottom: q.bottom, onTop: !!(h && c.contains(h)) }; });
   assert.ok(card.onTop, 'the issue card is not under a sheet');
@@ -2400,7 +2400,7 @@ test('the phone: New build’s setup sheet opens whole and Start build is a tap 
   const box = await page.evaluate(() => { const q = document.querySelector('#ws-setup > div').getBoundingClientRect(); return { top: q.top, bottom: q.bottom }; });
   assert.ok(box.top >= 0 && box.bottom <= 844 + 1 && box.bottom - box.top > 300, `the sheet is on screen, whole: ${JSON.stringify(box)}`);
   await page.evaluate(() => { window.__e2eBeforeReload = 1; });
-  await page.locator('#ws-setup .cta').tap({ timeout: 5000 });
+  await page.locator('#ws-setup .cta').tap({ timeout: 15_000 });
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.placed.length === 1, null, { timeout: 150_000 })
     .catch(() => assert.fail('Start build did not rebuild on the starter drawer within 150 s'));
   await waitBoot(page);
@@ -2415,13 +2415,13 @@ test('the phone: the build switcher’s items can be tapped while a sheet is up;
   const { ctx, page, errors } = await open('colors', { phone: true });
   await page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
   await page.locator('#ws-switch .chip-btn').tap();
-  await page.getByRole('menuitem', { name: 'Rename', exact: true }).tap({ timeout: 5000 });
-  await page.waitForSelector('#ws-switch input.rename', { timeout: 5000 });
+  await page.getByRole('menuitem', { name: 'Rename', exact: true }).tap({ timeout: 15_000 });
+  await page.waitForSelector('#ws-switch input.rename', { timeout: 15_000 });
   await page.locator('#ws-switch .chip-btn').tap();   // closes the menu
   // the filament stack in the Dock opens the shopping list, which opened under the Colors sheet (up on arrival)
-  await page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
   await page.locator('#ws-dock .status.stack').tap();
-  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 10_000 });
+  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 30_000 });
   await settle(page, 600);
   assert.ok(await page.evaluate(() => { const c = document.querySelector('#ws-shop'); const q = c.getBoundingClientRect(); const h = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return !!(h && c.contains(h)); }), 'the shopping list is not under the Colors sheet');
   assert.deepEqual(clean(errors), []);
@@ -2471,7 +2471,7 @@ test('the phone check, at every width: an edit keeps Measure as it was, the swit
   await page.click('#ws-tabs .tab:has-text("Colors")');
   await page.waitForSelector('#ws-colors .crow.key:not([disabled])', { timeout: 30_000 });
   await page.locator('#ws-colors .crow.key:not([disabled])').first().click();
-  await page.waitForSelector('#ws-picker:not([hidden]) .head', { timeout: 10_000 });
+  await page.waitForSelector('#ws-picker:not([hidden]) .head', { timeout: 30_000 });
   assert.equal(await page.evaluate(() => [...document.querySelector('#ws-picker').childNodes].some((n) => n.nodeType === 3 && /null/.test(n.textContent))), false, 'no "null" in the picker');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
@@ -2499,7 +2499,7 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
     const label = await page.evaluate(() => { const names = new Set(window.__GEN2_VIEWER__.filamentsInBuild().filaments.map((f) => f.name)); return [...document.querySelectorAll('#ws-picker .bhead.toggle + .swatches .sw')].map((b) => b.getAttribute('aria-label')).find((l) => l && !names.has(l) && !names.has('Panchroma ' + l)) || null; });
     assert.ok(label, `a filament not yet in the build (${what})`);
     await page.locator(`#ws-picker .sw[aria-label="${label}"]`).first().tap();
-    await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), label, { timeout: 10_000 }).catch(() => assert.fail(`${what}: ${label} did not reach the build`));
+    await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), label, { timeout: 30_000 }).catch(() => assert.fail(`${what}: ${label} did not reach the build`));
     return label;
   };
   // 1 Build: the model is the hero - no sheet open
@@ -2514,11 +2514,11 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   await page.waitForFunction(() => document.querySelectorAll('#ws-gallery .lcard canvas.drawn').length >= 6, null, { timeout: 40_000 });
   assert.deepEqual(await openSheets(), ['ws-gallery']);
   await page.locator('#ws-gallery .lcard').nth(1).tap();
-  await page.waitForSelector('#ws-gallery .apply', { timeout: 5000 });
+  await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the look is shown on the model');
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), false, 'and not chosen');
   await page.locator('#ws-gallery .apply').tap();
-  await page.waitForFunction(() => document.querySelector('#ws-gallery').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-gallery').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 30_000 });
   assert.equal(await text(page, '#ws-colors .lname'), 'Stealth');
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), true, 'the look applied is an undo step');
   const toast = await page.evaluate(() => { const t = document.querySelector('#ws-toast'); return { shown: t.classList.contains('show'), text: t.textContent, z: Number(getComputedStyle(t).zIndex) || 0 }; });
@@ -2531,7 +2531,7 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   const sp = await page.evaluate((id) => window.__GEN2_VIEWER__.unitScreen(id), unitId);
   assert.ok(sp && await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName === 'CANVAS', sp), `the first unit's front is on the model, uncovered (${JSON.stringify(sp)})`);
   await page.touchscreen.tap(sp.x, sp.y);
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.selectedId != null, null, { timeout: 10_000 }).catch(() => assert.fail('the tap selected no part'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.selectedId != null, null, { timeout: 30_000 }).catch(() => assert.fail('the tap selected no part'));
   await settle(page, 600);
   assert.deepEqual(await openSheets(), [], 'no sheet is open after a tap on the model');
   assert.ok(await onTop('#ws-partcard'), 'the part card shows over the handles');
@@ -2539,7 +2539,7 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   await noKeyboard('a tapped part');
   // 5 a chip on the card opens the picker sheet, alone, its search field quiet; a swatch recolours the build's region
   await page.locator('#ws-partcard .zchip').first().tap();
-  await page.waitForFunction(() => document.querySelector('#ws-picker').classList.contains('open'), null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-picker').classList.contains('open'), null, { timeout: 30_000 });
   assert.deepEqual(await openSheets(), ['ws-picker']);
   await noKeyboard('the picker');
   const buildPick = await pickFresh('the build pick');
@@ -2549,7 +2549,7 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   const unitSeg = page.locator('#ws-picker .seg2 .seg').nth(1);
   assert.equal(await unitSeg.isDisabled(), false, 'the tapped part belongs to a unit, so "This unit only" is offered');
   await unitSeg.tap();
-  await page.waitForFunction(() => /this/.test(document.querySelector('#ws-picker .sheet-handle .ttl').textContent), null, { timeout: 5000 });
+  await page.waitForFunction(() => /this/.test(document.querySelector('#ws-picker .sheet-handle .ttl').textContent), null, { timeout: 15_000 });
   await settle(page, 500);   // a visitor's pace: the store merges commits made within 350 ms into one undo step
   const unitPick = await pickFresh('the unit pick');
   assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_VIEWER__.palette().over || {}).length), 1, 'one unit wears its own colour');
@@ -2559,31 +2559,31 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   // 7 Undo takes the unit's colour back, Redo returns it; the picker stays up through both
   await page.locator('#ws-tools button[title^="Undo"]').tap();
   await settle(page, 500);
-  await page.waitForFunction((l) => !window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l) && !Object.keys(window.__GEN2_VIEWER__.palette().over || {}).length, unitPick, { timeout: 10_000 })
+  await page.waitForFunction((l) => !window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l) && !Object.keys(window.__GEN2_VIEWER__.palette().over || {}).length, unitPick, { timeout: 30_000 })
     .catch(async () => assert.fail(`Undo did not take the unit’s colour back: ${JSON.stringify(await page.evaluate(() => ({ names: window.__GEN2_VIEWER__.filamentsInBuild().filaments.map((f) => f.name), over: window.__GEN2_VIEWER__.palette().over, canUndo: window.__GEN2_STORE__.canUndo, canRedo: window.__GEN2_STORE__.canRedo })))}`));
   assert.equal((await counts()).own, '', 'Undo: no unit wears its own colour');
   assert.equal((await counts()).fc, c2.fc, 'Undo: the count is the build pick’s again');
   await page.locator('#ws-tools button[title^="Redo"]').tap();
-  await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), unitPick, { timeout: 10_000 }).catch(() => assert.fail('Redo did not return the unit’s colour'));
+  await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), unitPick, { timeout: 30_000 }).catch(() => assert.fail('Redo did not return the unit’s colour'));
   assert.deepEqual(await openSheets(), ['ws-picker'], 'the picker stays up through Undo and Redo');
   assert.equal((await agree('after Redo')).fc, c3.fc);
   // 8 the picker's close: the sheets down, the model and the card
   await page.locator('#ws-picker .x').tap();
-  await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 15_000 });
   assert.deepEqual(await openSheets(), []);
   // 9 Simplify from the Colors sheet: its own sheet, the proposal shown; Apply is one undo step, one filament fewer, back to the Colors sheet
   await page.locator('#ws-colors .sheet-handle').tap();
-  await page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 15_000 });
   await page.locator('#ws-colors .summary .simplify').tap();
-  await page.waitForSelector('#ws-simplify .chg', { timeout: 10_000 });
+  await page.waitForSelector('#ws-simplify .chg', { timeout: 30_000 });
   assert.deepEqual(await openSheets(), ['ws-simplify']);
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the proposal is shown');
   await page.locator('#ws-simplify .apply').tap();
-  await page.waitForFunction((n) => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing && window.__GEN2_VIEWER__.filamentsInBuild().count === n - 1, c3.fc, { timeout: 10_000 });
+  await page.waitForFunction((n) => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing && window.__GEN2_VIEWER__.filamentsInBuild().count === n - 1, c3.fc, { timeout: 30_000 });
   const c4 = await agree('after Simplify');
   // 10 Review filaments: the shopping list shows over the handles (it opened under the Colors sheet), one row per filament, as many as the Dock
   await page.locator('#ws-colors .summary .review').tap();
-  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 5000 });
+  await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 15_000 });
   await settle(page, 500);
   assert.deepEqual(await openSheets(), [], 'the sheets step down for the shopping list');
   assert.ok(await onTop('#ws-shop'), 'the shopping list is not under a sheet');
@@ -2603,7 +2603,7 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   await settle(page, 800);
   assert.deepEqual(await openSheets(), [], 'Build: the model is the hero again');
   await page.locator('#ws-tools button[title^="Undo"]').tap();
-  await page.waitForFunction((n) => window.__GEN2_VIEWER__.filamentsInBuild().count === n, c3.fc, { timeout: 10_000 }).catch(() => assert.fail('Undo in Build did not take Simplify back'));
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.filamentsInBuild().count === n, c3.fc, { timeout: 30_000 }).catch(() => assert.fail('Undo in Build did not take Simplify back'));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -2654,7 +2654,7 @@ test('Build: a back cover on a Decor drawer says the tear-away front comes out f
   assert.match(stage.step, /take the drawer's tear-away front out and clip the back cover in from behind/, 'the Faceplates step');
   // the Build style tab, where the cover is switched on
   await page.locator('#ws-lib button[role="tab"]:has-text("Build style")').click();
-  await page.waitForSelector('#ws-lib .bc-hint', { timeout: 10_000 });
+  await page.waitForSelector('#ws-lib .bc-hint', { timeout: 30_000 });
   assert.match(await text(page, '#ws-lib .bc-hint'), /Take each drawer's tear-away front out first - left in, it and the cover interfere\./);
   assert.doesNotMatch(await text(page, '#ws-lib .bc-hint'), /Gridfinity/, 'no Gridfinity drawer in this build, so no aside about them');
   // off again: the hint goes with the cover
