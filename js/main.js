@@ -4005,7 +4005,13 @@ function attachLabelTexts() {
   const list = [...instances.values()].filter((i) => LABEL_TEXT_NODES.has(i.cfg.node) && labelTextFor(i));
   if (!list.length) return;
   const need = labelLookNeeds(build);
-  if (labelFontReady() && !needsLoad(need)) { placeLabelTexts(list); return; }
+  /* the meshes went in: shade, shadow and settle again, in this branch as in the loading one below. Without it a
+     regenerate that changed only the BOM (a part label with a stripe placed: the same instances, the same step) left
+     the accumulation key and the idle gate's signature untouched, so on a Very High tier the accumulated image stayed
+     the one from before the label, and the label showed only when the NEXT placement's setLabels invalidated a frame
+     (Joey 2026-10-20: "they didn't show up until i dragged and dropped the next one ... the third one ... won't show up
+     at all"; Terra 01a15aaa). Tiers without the accumulation drew the keepalive frame straight and never showed it. */
+  if (labelFontReady() && !needsLoad(need)) { placeLabelTexts(list); ao.rev++; markShadowDirty(); invalidateFrame(); return; }
   Promise.all([loadLabelFont(), needsLoad(need) ? loadLabelPartsOnce(need) : null]).then(() => {
     if (tok !== labelTextTok) return;
     placeLabelTexts(list);

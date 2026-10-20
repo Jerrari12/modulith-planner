@@ -1545,3 +1545,29 @@ Dated calls made while building, with who made them. The brief and the inventory
   attempt 1 (e2e 27 min on the pinned 24.04 image). Checked live by
   `planner-prod-checks-2026-10-18\labels-callout-prod.mjs`: the callout on the root kit reads the two buttons in order, Switch to
   Classic Pro sets faceStyle classicpro and the callout goes; at 1280 wide the buttons wrap with 8 px between the rows.
+
+## 2026-10-20 (a label placed after a regenerate shows at once on Very High)
+
+- **Joey:** "i made 3 labels with the part picker, i noticed when i dragged and dropped them though, they didn't show up
+  until i dragged and dropped the next one, making it so that the thrid one i place but it won't show up at all" (his
+  screenshot: a 7-drawer EdgeLabel build, Quality Very High, M3 × 10 and M3 × 12 drawn, M3 × 16 on a 0.5H drawer not).
+- **What was tried and did not reproduce it** (the built-in browser pane, the same code locally and the live site):
+  typed labels by tap and by a real pointer drag; part labels with stripes through store commits, on 1H and 0.5H
+  drawers; three real Part Picker labels dragged one after another on the live site at the default tier and again
+  with `gen2-quality` set to veryhigh. Every label drew at once, store and stage in step. The pane's GPU evidently fails
+  the accumulation probe (`acc.ok`), which is where the difference lives.
+- **The path (Terra `01a15aaa`, its first hypothesis; the code agrees):** a part label with a stripe changes only the BOM,
+  so its placement takes syncStage's regenerate branch with the same instances and step. `attachLabelTexts()` at the
+  end of regenerate placed the meshes synchronously (fonts and part files already loaded) WITHOUT `ao.rev++;
+  markShadowDirty(); invalidateFrame();`, which its loading branch has. The accumulation key
+  (`instances.size|cur|ao.rev|accRev|quality`) and the idle gate's signature were therefore unchanged, and on a tier
+  with the accumulation buffer the image from before the label stayed up until the next placement's `end()` →
+  setLabels → refreshLabelText invalidated a frame: each label one placement late, the last never. Tiers without the
+  accumulation draw the keepalive frame straight, so they never showed it.
+- **What changed:** the synchronous branch does the same three calls (js/main.js). `test/label-attach-invalidate.test.mjs`
+  runs the extracted function against stubs: loaded → placed once and invalidated once, shadow dirty, ao.rev bumped;
+  still loading → nothing synchronous. With the three calls removed the test fails.
+- **Checks:** that test 2 of 2; npm test 566 (561 passed, 0 failed, 5 skipped); not reproducible here, so the fix is by reasoning and the
+  reviewer's reading, and Joey confirms on his machine after the deploy.
+- **Review:** Terra `01a15aad`, routine: NO OBJECTION.
+- **Deploy:** a fix for a bug Joey reports deploys once its checks pass.
