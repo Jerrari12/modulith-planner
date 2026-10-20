@@ -1520,3 +1520,21 @@ Dated calls made while building, with who made them. The brief and the inventory
   suite's bounds were tuned for the 24.04 software rasteriser (the 2026-10-13 and 10-18 entries); on 26.04 the same
   cases take about twice as long. When the bounds are retuned for the new image, unpin; until then a timing failure on
   the pinned image is a real regression, not the runner.
+
+## 2026-10-20 (the Labels callout offers both label families)
+
+- **Joey, on the Labels tab of a Classic build (2026-10-19):** "for the labels column, in this menu, why not show both
+  edgelabel and classic pro as clickable options?" The callout named both families and offered one button, "Switch to
+  EdgeLabel ✦": the brief's wording (the 2026-10-13 entry, "never hidden or greyed out"), not a decision against Classic
+  Pro, which is a full label family (its own faceplate style, Label Studio type and Part Picker type).
+- **What changed (js/workspaces/labels.js, css/app.css):** the callout's buttons come from the stage's
+  `availableFaceplateStyles()` filtered to the label-taking families, EdgeLabel first and starred, Classic Pro beside it
+  in a `.btns` row at the planner's 8 px control gap (wrapping on a narrow panel); each applies its faceplate style the
+  way the EdgeLabel button did (applyFaceplateStyle, setDims off, the store adopting the build, the signature refreshed)
+  and the toast names the family. A family the stage does not offer for the build's collection gets no button.
+- **Checks:** an e2e case opens Labels on the root kit (Classic faceplates), reads both buttons in order, clicks Switch
+  to Classic Pro, and waits for `faceStyle === 'classicpro'` with the callout gone and the toast naming Classic Pro;
+  the Labels cases that click Switch to EdgeLabel are unchanged (the Labels pattern 11 of 11 with the new case);
+  mutation-checked (every button wired to the first style fails the case); test/labels.test.mjs 13 of 13. In the browser the two buttons measure 143 and 132 px wide; on the narrow pane they wrap with an 8 px gap.
+- **Review:** Terra `01a15a57`, routine: NO OBJECTION.
+- **Not deployed.** Left on `labels-callout-classicpro` for Joey's go.

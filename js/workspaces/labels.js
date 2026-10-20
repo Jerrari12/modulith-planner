@@ -698,10 +698,15 @@ export function mountLabels(stage, ctx) {
     if (picked) panel.appendChild(el('div.banner', { role: 'status' }, [el('span', { text: `Place ${quote(picked)} · tap a drawer` }), el('button.key.sm', { text: 'Done placing', onclick: () => armPlacing(null) })]));
     // no label faceplate: the callout (the spec: never hidden or greyed out)
     if (!faceOk) {
-      const edge = (stage.availableFaceplateStyles?.() || []).find((x) => x.key === 'edgelabel');
+      // both label families as buttons (Joey 2026-10-19: "why not show both edgelabel and classic pro as clickable
+      // options?"), from the stage's own style list so a family it does not offer for this collection gets no button;
+      // EdgeLabel first and starred, the Studio's default family
+      const LABEL_FAMILIES = ['edgelabel', 'classicpro'];
+      const styles = (stage.availableFaceplateStyles?.() || []).filter((x) => LABEL_FAMILIES.includes(x.key)).sort((a, b) => LABEL_FAMILIES.indexOf(a.key) - LABEL_FAMILIES.indexOf(b.key));
+      const switchTo = (style) => async () => { await stage.applyFaceplateStyle(style); stage.setDims(false); store.load(stage.build, 'adopt'); lastSig = (() => { const g = tryGen(store.serialize()); return g.manifest ? sigOf(g.manifest) : lastSig; })(); renderAll(); say(`${style.label} faceplates · the drawers can take labels now.`); };
       panel.appendChild(el('div.callout', {}, [
         el('p', { text: `${FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] + ' faceplates take' : 'These faceplates take'} no printed labels. EdgeLabel and Classic Pro do; the list below can still be built and exported.` }),
-        edge ? el('button.key.sm', { onclick: async () => { await stage.applyFaceplateStyle(edge); stage.setDims(false); store.load(stage.build, 'adopt'); lastSig = (() => { const g = tryGen(store.serialize()); return g.manifest ? sigOf(g.manifest) : lastSig; })(); renderAll(); say('EdgeLabel faceplates · the drawers can take labels now.'); } }, ['Switch to EdgeLabel ✦']) : null,
+        styles.length ? el('div.btns', {}, styles.map((style) => el('button.key.sm', { onclick: switchTo(style) }, [`Switch to ${style.label}${style.key === 'edgelabel' ? ' ✦' : ''}`]))) : null,
         el('p.dim', { text: 'Paper and label-maker labels are coming later.' }),
       ]));
     }

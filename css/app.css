@@ -688,6 +688,7 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 #ws-labels .banner.copy .btns { display: flex; gap: 6px; flex-wrap: wrap; }
 #ws-labels .callout { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-fg); font-size: 12px; }
 #ws-labels .callout p { margin: 0; }
+#ws-labels .callout .btns { display: flex; flex-wrap: wrap; gap: 8px; }   /* the two label families side by side, the planner's control gap */
 #ws-labels .callout .dim, #ws-labels .why, #ws-labels .dim, #ws-labeledit .dim { font-size: 11px; color: var(--ink-3); }
 #ws-labels .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
 #ws-labels .scroll { flex: 1; min-height: 60px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin: 0 -6px; padding: 0 6px; }

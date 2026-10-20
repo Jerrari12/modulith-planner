@@ -2669,3 +2669,20 @@ test('Build: a back cover on a Decor drawer says the tear-away front comes out f
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* BOTH LABEL FAMILIES IN THE CALLOUT (2026-10-20, Joey: "why not show both edgelabel and classic pro as clickable options?").
+   A build whose faceplates take no labels opens Labels to the callout; it offered Switch to EdgeLabel alone, after naming
+   both families. Now both are buttons, EdgeLabel first and starred; Classic Pro applies the Classic Pro faceplate. */
+test('Labels: the no-label-faceplate callout offers Switch to EdgeLabel and Switch to Classic Pro; Classic Pro applies that family and the callout goes', async () => {
+  const { ctx, page, errors } = await open('labels');
+  await page.waitForSelector('#ws-labels .callout', { timeout: 30_000 });
+  const before = await S(page);
+  assert.notEqual(before.faceStyle, 'classicpro', `the control: the build starts on a no-label faceplate (${before.faceStyle})`);
+  const buttons = await page.evaluate(() => [...document.querySelectorAll('#ws-labels .callout .btns button')].map((b) => b.textContent.trim()));
+  assert.deepEqual(buttons, ['Switch to EdgeLabel ✦', 'Switch to Classic Pro'], 'both label families, EdgeLabel first and starred');
+  await page.locator('#ws-labels .callout button:has-text("Switch to Classic Pro")').click({ timeout: 30_000 });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro' && !document.querySelector('#ws-labels .callout'), null, { timeout: 60_000 })
+    .catch(async () => assert.fail(`Classic Pro did not apply: faceStyle ${(await S(page)).faceStyle}, callout ${await page.locator('#ws-labels .callout').count()}`));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
