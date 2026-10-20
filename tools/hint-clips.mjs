@@ -5,7 +5,7 @@
    MP4s under img/hints/ (the names js/workspaces/labels.js looks for; img/hints/README.md). Playwright's own recordVideo is
    not used: its ffmpeg download is unreachable from this machine, and the system ffmpeg is.
 
-     node tools/hint-clips.mjs            -> img/hints/labels-{type,file,studio,picker,fill,several}.mp4
+     node tools/hint-clips.mjs            -> img/hints/labels-{type,file,picker,fill,several}.mp4
      node tools/hint-clips.mjs fill       -> one clip
 
    The Label Studio and Part Picker clips open the live Studio (labels.modulith.systems) in the tab the tile opens, so they
@@ -127,7 +127,6 @@ const CLIPS = {
       await sleep(1500);
     },
   },
-  studio: { popup: true, crop: PANEL, async run(page, d) { await d.to(tile('Label Studio'), 700); await sleep(600); await d.click(); await sleep(400); } },
   picker: { popup: true, crop: PANEL, async run(page, d) { await d.to(tile('Part Picker'), 700); await sleep(600); await d.click(); await sleep(400); } },
 };
 

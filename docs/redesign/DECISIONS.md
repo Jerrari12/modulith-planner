@@ -1609,3 +1609,23 @@ Dated calls made while building, with who made them. The brief and the inventory
   `planner-prod-checks-2026-10-18\side-cover-toggle-prod.mjs` on the root kit: the segment reads Off | On with On lit; Off takes
   the four covers off the stage and the bill with the record's `sideCovers` false; On brings the four back with the
   record true; the share-link hash carries the field in both states.
+
+## 2026-10-20 (Labels: the Part Picker modal is the one Studio tile; the full Studio is a link)
+
+- **Joey:** "On the label page, we have where you can open the label studio both as a modal or in a new tab, I think
+  I'd prefer we only have it open as a modal for now which would remove a button from the left menu, what do you
+  think?" My read, which he took: drop the new-tab tile, keep the Part Picker modal as the one Studio tile, and keep the
+  full Label Studio (icons, stripes, uploads, the print plate - none of which the modal has) one click away as a plain
+  link in the panel's intro sentence, so nothing is lost but a button.
+- **What changed (js/workspaces/labels.js, css/app.css):** the foot's "ways in" are three tiles - Type a label, From a
+  file…, Part Picker - the Picker tile spanning the second row (`.span2`); the empty list's sentence reads "Make your
+  labels in the Label Studio, …" with "Label Studio" a link to the Studio with the planner's `?from=planner … &return=`
+  query (new tab, noopener; `studioHref()` now serves both the link and the dock's "Make labels" button, which stays);
+  the tile's hint entry, its hover scene, its icon, its clip job in tools/hint-clips.mjs, its README row and
+  img/hints/labels-studio.mp4 are gone. The Studio's own "Add to planner build" hand-off and the #labels-add= link are
+  untouched.
+- **Checks:** the Labels e2e cases 11 of 11 (none clicked the old tile); in the browser the foot reads two tiles over one
+  (141 / 141 / 290 px at the desktop panel, 169 / 169 / 346 on a 375-wide phone) and the sentence's link carries the
+  `?from=planner … &return=` query, new tab, noopener.
+- **Review:** Terra `01a15b57`, routine: NO OBJECTION (no TDZ: the hint builds the href at render, after mount).
+- **Not deployed.** Branch `labels-one-tile`, for Joey's go.

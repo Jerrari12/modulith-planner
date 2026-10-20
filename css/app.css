@@ -658,6 +658,7 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 #ws-labels .count { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
 #ws-labels .head .tools { display: inline-flex; gap: var(--gap-row); align-self: center; }
 #ws-labels .ways { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-ctl); }
+#ws-labels .ways .tile.span2 { grid-column: 1 / -1; }   /* three tiles since 2026-10-20: the Part Picker takes the second row whole */
 #ws-labels .key.tile { display: flex; align-items: center; justify-content: flex-start; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; }
 #ws-labels .key.tile svg { flex: none; color: var(--ink-2); }
 #ws-labels .key.tile.brand svg:first-child { width: 16px; height: 16px; color: var(--orange); }

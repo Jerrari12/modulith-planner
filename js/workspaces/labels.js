@@ -24,8 +24,7 @@ import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.j
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog: a classic-script LEXICAL global, not a globalThis property
 
-/* ---- the brand icons of the two Label Studio tiles (its own tag and the Part Picker's bolt), and the hover scenes ---- */
-const STUDIO_ICON = () => scene('0 0 16 16', '<path fill="currentColor" fill-rule="evenodd" d="M2 2h6l6.3 6.3a1.5 1.5 0 0 1 0 2.1l-3.9 3.9a1.5 1.5 0 0 1-2.1 0L2 8V2zm3.2 1.9a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/>');
+/* ---- the Part Picker tile's brand icon (its bolt), and the hover scenes ---- */
 const PICKER_ICON = () => scene('0 0 16 16', '<path fill="currentColor" d="M4.2 1h7.6l1.7 2.6-1.7 2.6H4.2L2.5 3.6zM6.6 6.2h2.8V15H6.6z"/>');
 /* every scene is 240 x 110 on one 4 s loop; a label strip is the EdgeLabel outline (the slanted right edge) */
 const strip = (x, y, w = 92, h = 34, extra = '') => `<g transform="translate(${x} ${y})" ${extra}><polygon points="0,0 ${w},0 ${w - h * 0.9},${h} 0,${h}" fill="#f4f1ec"/>`;
@@ -46,14 +45,6 @@ const SCENES = {
     <g opacity="0">${appear(0.34)}${strip(112, 18, 100, 28)}<text x="10" y="19" font-family="Archivo, system-ui" font-weight="800" font-size="12" fill="#1b1b1b">M4 × 16</text></g></g>
     <g opacity="0">${appear(0.48)}${strip(112, 52, 100, 28)}<text x="10" y="19" font-family="Archivo, system-ui" font-weight="800" font-size="12" fill="#1b1b1b">HEX KEYS</text></g></g>
     <text x="120" y="100" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a" opacity="0">${appear(0.6)}a label list, a Part Picker file, a Studio set</text>`),
-  studio: () => scene('0 0 240 110', `
-    ${strip(24, 22, 150, 52)}
-      <text x="48" y="31" font-family="Archivo, system-ui" font-weight="800" font-size="17" fill="#1b1b1b">COFFEE</text>
-      <path transform="translate(10 12)" d="M3 6h16v8a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6V6zm16 2h3a3 3 0 0 1 0 6h-3M2 24h18" fill="none" stroke="#1b1b1b" stroke-width="2.2" stroke-linecap="round"/>
-      <rect x="0" y="44" width="150" height="8" fill="#2f6fd6"><animate attributeName="fill" values="#2f6fd6;#2f6fd6;#d6392f;#d6392f;#2e9e63;#2e9e63;#2f6fd6" keyTimes="0;.28;.33;.61;.66;.94;1" dur="4s" repeatCount="indefinite"/></rect>
-    </g>
-    <g transform="translate(190 30)" opacity="0">${appear(0.5)}<rect x="0" y="0" width="30" height="40" rx="3" fill="none" stroke="#9a9a9a" stroke-width="1.5"/><rect x="4" y="5" width="22" height="7" fill="#f4f1ec"/><rect x="4" y="16" width="22" height="7" fill="#f4f1ec"/><rect x="4" y="27" width="22" height="7" fill="#f4f1ec"/></g>
-    <text x="120" y="100" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a">icons · stripes · uploads · the print plate</text>`),
   picker: () => scene('0 0 240 110', `
     ${[0, 1, 2].map((i) => `<g transform="translate(${26 + i * 34} 18)"><rect x="0" y="0" width="16" height="9" rx="2" fill="#8a8f98"/><rect x="4" y="9" width="8" height="${22 + i * 10}" fill="#aab0b8"/></g>`).join('')}
     <rect x="56" y="12" width="28" height="56" rx="6" fill="none" stroke="#FF6A1A" stroke-width="2" opacity="0">${appear(0.34)}</rect>
@@ -75,7 +66,6 @@ const SCENES = {
 const HINTS = {
   type: { title: 'Type a label', text: 'Words for one drawer; the icon is guessed, or pick one after.', scene: SCENES.type, video: `img/hints/labels-type.mp4` },
   file: { title: 'Add from a file', text: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set.', scene: SCENES.file, video: `img/hints/labels-file.mp4` },
-  studio: { title: 'Label Studio', text: 'Make labels with icons, stripes and uploads, and print the plate. Opens in a new tab.', scene: SCENES.studio, video: `img/hints/labels-studio.mp4` },
   picker: { title: 'Part Picker', text: 'Choose screws, nuts, washers and inserts; each becomes a label laid out from its part record.', scene: SCENES.picker, video: `img/hints/labels-picker.mp4` },
   fill: { title: 'Fill empty drawers', text: 'Every waiting label onto an empty drawer, top row first, left to right. One Undo takes it back.', scene: SCENES.fill, video: `img/hints/labels-fill.mp4` },
   several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several, video: `img/hints/labels-several.mp4` },
@@ -442,11 +432,11 @@ export function mountLabels(stage, ctx) {
     if (r && typeof r.focus === 'function' && document.contains(r)) { try { r.focus(); } catch { /* gone */ } }
     else restoreFocus(picker.retKey, true);   // the add re-rendered the opener (the stress test, 2026-10-15: the keyboard stayed on the hidden frame)
   }
+  // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
+  // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
+  const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
   function openStudio(parts) {
-    // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
-    // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
-    const q = '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels');
-    try { window.open(LABEL_STUDIO_URL + q + (parts ? '#parts' : ''), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
+    try { window.open(studioHref(parts), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
   }
   /* THE LABEL PLATE VIEW (docs/redesign/LABELS-INTEGRATION.md, step B1, read-only): the Label Studio in a frame over the
      stage, headerless, showing this build's committed list as it lays it out (its Download print file works there). The
@@ -714,14 +704,15 @@ export function mountLabels(stage, ctx) {
     if (sel) panel.appendChild(renderDrawer(sel, selL, ready.length));
     // the hint. None under the faceplate callout: it already says so and offers the switch (the stress test, 2026-10-15:
     // on a Classic build the same sentence stood three times and squeezed the list to two rows)
-    const hint = !labels.length ? 'Make your labels in the Label Studio, or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'
+    // the empty list's sentence carries the one link to the full Label Studio (a new tab; the tile went on 2026-10-20)
+    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
       : !faceOk ? null
       : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
       : sel && R.eligible(s, sel) && ready.length ? (selL ? `Drawer ${R.drawerNumber(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on drawer ${R.drawerNumber(s, sel.id)}. The drawer stays selected afterwards.`)
       : !ready.length ? 'Tap a drawer on the model to change or remove its label.'
       : !empties.length ? 'Every drawer has a label. Tap one on the model to replace its label.'
       : 'Tap a drawer on the model to give it a label, or use Place several to label drawers one after another.';
-    if (hint) panel.appendChild(el('p.hint', { text: hint }));
+    if (hint) panel.appendChild(typeof hint === 'string' ? el('p.hint', { text: hint }) : hint);
     // the waiting labels
     const scroll = el('div.scroll');
     scroll.appendChild(el('div.list', {}, waitingAll.map((l) => {
@@ -745,14 +736,16 @@ export function mountLabels(stage, ctx) {
     // the foot: ways in, fill, exports, settings, status
     const pairs = R.fillPairs(L, s);
     const foot = el('div.foot');
-    /* the ways in, as four equal tiles (Joey 2026-10-13: a pile of mismatched buttons read as messy); Fill is an action on the
-       build and gets a row of its own; the exports are the two icon buttons in the head; the settings stay last, collapsed */
+    /* the ways in, as equal tiles (Joey 2026-10-13: a pile of mismatched buttons read as messy); Fill is an action on the
+       build and gets a row of its own; the exports are the two icon buttons in the head; the settings stay last, collapsed.
+       Three since 2026-10-20 (Joey: "I'd prefer we only have it open as a modal for now which would remove a button from
+       the left menu"): the new-tab Label Studio tile is gone, the Part Picker modal is the one Studio tile and takes the
+       second row whole; the full Studio stays one click away as the link in the intro sentence above. */
     foot.appendChild(el('div.ways', { role: 'group', 'aria-label': 'Add labels' }, [
       attachHint(el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']), HINTS.type, panel),
       attachHint(el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']), HINTS.file, panel),
-      attachHint(el('button.key.tile.brand', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', onclick: () => openStudio(false) }, [STUDIO_ICON(), 'Label Studio', icon('arrow-square-out', { size: 12 })]), HINTS.studio, panel),
-      // the Part Picker opens in the page now (step A), so no new-tab glyph: that one is the Label Studio's
-      attachHint(el('button.key.tile.brand', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker']), HINTS.picker, panel),
+      // the Part Picker opens in the page (step A): no new-tab glyph
+      attachHint(el('button.key.tile.brand.span2', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker']), HINTS.picker, panel),
     ]));
     if (labels.length) foot.appendChild(el('div.fillrow', {}, [
       attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),

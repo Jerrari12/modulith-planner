@@ -16,7 +16,6 @@ Names the hints look for:
 |---|---|
 | `labels-type.mp4` | Type a label |
 | `labels-file.mp4` | Add from a file |
-| `labels-studio.mp4` | Label Studio |
 | `labels-picker.mp4` | Part Picker |
 | `labels-fill.mp4` | Fill empty drawers |
 | `labels-several.mp4` | Place several |
