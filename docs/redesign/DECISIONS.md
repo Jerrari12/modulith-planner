@@ -1601,4 +1601,11 @@ Dated calls made while building, with who made them. The brief and the inventory
   writes only its own fields; the cutover retires that planner, and until then the merged planner is where side covers
   are set. Sol's other two questions: the fitting steps follow the generator's instances, which read the same field (no
   bill-based step count); `!== false` is the right reading of a JSON record (the string "false" is not a switch-off).
-- **Not deployed.** Branch `side-cover-toggle`, for Joey's go.
+- **Live 2026-10-20**, stamp `a1f085f5` (Joey: "Deploy"). Fast-forwarded onto main as `b1b8994`; the Build e2e cases on
+  it found the back-cover case clicking the library's LAST Off segment, which the new Side covers segment now owns, so
+  `a1f085f` scoped that click to the Back cover section (Luna `01a15b2d`; a test selector, not the toggle); that commit
+  is what deployed. Its run 39499191693 passed on attempt 1 (e2e 37 min on the pinned image, within the 15 s / 30 s
+  waits of `00c4602`). Checked live by
+  `planner-prod-checks-2026-10-18\side-cover-toggle-prod.mjs` on the root kit: the segment reads Off | On with On lit; Off takes
+  the four covers off the stage and the bill with the record's `sideCovers` false; On brings the four back with the
+  record true; the share-link hash carries the field in both states.
