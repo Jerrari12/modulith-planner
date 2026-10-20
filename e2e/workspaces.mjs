@@ -2658,7 +2658,8 @@ test('Build: a back cover on a Decor drawer says the tear-away front comes out f
   assert.match(await text(page, '#ws-lib .bc-hint'), /Take each drawer's tear-away front out first - left in, it and the cover interfere\./);
   assert.doesNotMatch(await text(page, '#ws-lib .bc-hint'), /Gridfinity/, 'no Gridfinity drawer in this build, so no aside about them');
   // off again: the hint goes with the cover
-  await page.locator('#ws-lib .seg.sm:has-text("Off")').last().click();
+  // the Back cover section's own Off: Build style has other Off / On segments (Side covers, 2026-10-20), so never the last one
+  await page.locator('#ws-lib section', { has: page.locator('h2:has-text("Back cover")') }).locator('button.seg.sm:has-text("Off")').click({ timeout: 30_000 });
   await page.waitForFunction(() => !document.querySelector('#ws-lib .bc-hint') && window.__GEN2_STORE__.state.backCover === false, null, { timeout: 30_000 });
   // Gridfinity by the generator's rule (Terra 01a1594c): every drawer a real Gridfinity one (1W-1H at 185) - the hint
   // says only that the cover is not for them; a `variant` kept on a size with no Gridfinity drawer (1W-3H) renders
