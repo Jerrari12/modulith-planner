@@ -1570,4 +1570,7 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Checks:** that test 2 of 2; npm test 566 (561 passed, 0 failed, 5 skipped); not reproducible here, so the fix is by reasoning and the
   reviewer's reading, and Joey confirms on his machine after the deploy.
 - **Review:** Terra `01a15aad`, routine: NO OBJECTION.
-- **Deploy:** a fix for a bug Joey reports deploys once its checks pass.
+- **Live 2026-10-20**, stamp `00c4602d` (main `d427d1e`; its first run 39480049390 failed on two 5 s waits with the e2e
+  step at 37 min on the pinned image, so `00c4602` scaled every 5 s and 10 s wait in e2e/workspaces.mjs to 15 s and
+  30 s, the tap helper's 10 s retry kept, Luna `01a15ad7`; run 39486096891 then passed on attempt 1, e2e 34 min). The
+  served main.js carries the branch. Not checked by eye: the pane never showed the bug; Joey's machine is the check.
