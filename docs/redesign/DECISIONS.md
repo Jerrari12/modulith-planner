@@ -1629,3 +1629,21 @@ Dated calls made while building, with who made them. The brief and the inventory
   `?from=planner … &return=` query, new tab, noopener.
 - **Review:** Terra `01a15b57`, routine: NO OBJECTION (no TDZ: the hint builds the href at render, after mount).
 - **Not deployed.** Branch `labels-one-tile`, for Joey's go.
+
+## 2026-10-20 (the Part Picker's hover clip shows the modal)
+
+- **Joey:** "We might also want to replace our animated screen capture pop-up for when hovering over the part picker
+  button as that is now out of date." The clip (img/hints/labels-picker.mp4, 2026-10-13) showed the Label Studio opening
+  in a new tab, from before the Picker became a modal in the page; the README said so and asked for a hand recording.
+- **What changed (tools/hint-clips.mjs, img/hints/):** the recorder can cut a clip between framings - `d.cut(crop)` marks
+  the moment, the frames are split on their timestamps and the segments joined - so the Picker clip follows the gesture
+  from the panel into the modal and back: the tile, the modal with Nuts → Hex nut → M3 picked and Add pressed (no
+  lengths step; the e2e case's path), the label landing in the list. The modal frame is the Label Studio checkout
+  beside the repo on a second loopback server, as the e2e suite serves it: the live Studio's Picker refuses a loopback
+  planner as its parent, so the first recording sat on "hasn't answered yet". The clip is 16.5 s, 77 KB, 480 × 222;
+  HINTS.picker's words were already right ("Choose screws, nuts, washers and inserts …"). The README's note is updated.
+- **Checks:** five frames read from the clip show the panel, the modal with Nuts lit, the sizes, M3 ticked, the label in the
+  list; in the browser the bubble on the tile plays it (16.5 s, 486 × 222 as shown). The e2e Labels cases do not touch
+  the clips.
+- **Review:** Luna `01a15b5e`, mechanical: NO OBJECTION.
+- **Not deployed.** On branch `picker-hint-clip`, stacked on `labels-one-tile`, for Joey's go.

@@ -6,9 +6,9 @@ inline SVG scene while it is missing (Joey, 2026-10-13: a short recording like t
 **These six were recorded from the app itself by `node tools/hint-clips.mjs`** (headless Chrome driving the Labels
 workspace with a drawn cursor, Chrome's screencast for the frames, ffmpeg for the MP4; `node tools/hint-clips.mjs fill`
 redoes one). Re-run it after a change to the panel. A hand-made recording of the same name replaces a generated one;
-the Label Studio and Part Picker clips open the live Studio, so they need the network, and the Picker clip shows the
-Studio opening rather than the Picker itself (the Studio's `#parts` route did not open it headless) - a hand recording
-would improve that one first.
+the Part Picker clip serves the Label Studio checkout beside this repo for the planner's modal (the live Studio refuses a
+loopback planner origin), and since 2026-10-20 it shows the modal itself (the tile, Nuts → Hex nut → M3, Add, the label landing in the list), the clip cut between the panel's
+framing and the modal's by the recorder's `d.cut(crop)` marks.
 
 Names the hints look for:
 
