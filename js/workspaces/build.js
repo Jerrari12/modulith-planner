@@ -33,7 +33,7 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
 import { layoutRules } from '../rules/layout.js';
 import { serializeBuild } from '../rules/schema.js';
-import { generateManifest } from '../generate.js';
+import { generateManifest, isGridfinity } from '../generate.js';
 
 /* `const GEN2` at a classic script's top level is a global LEXICAL binding: visible to modules by name, absent from globalThis */
 // eslint-disable-next-line no-undef
@@ -578,6 +578,17 @@ export function mountBuild(stage, ctx) {
     ]));
     two.append(stp, bc);
     lib.appendChild(two);
+    /* the cover's one condition, where it is switched on (v2609: the standard drawer's tear-away front and the cover
+       interfere, so the front comes out first; a Gridfinity drawer keeps its front and takes no cover). Gridfinity by
+       the generator's own rule: a `variant` kept on a size with no Gridfinity drawer renders the standard drawer and
+       takes a cover like one (Terra 01a1594c) */
+    if (s.backCover) {
+      const std = s.placed.some((u) => u.fill === 'decor' && !isGridfinity(+s.length, u));
+      const grid = s.placed.some((u) => isGridfinity(+s.length, u));
+      const words = [std ? "Take each drawer's tear-away front out first - left in, it and the cover interfere." : '',
+        grid ? 'Not on the Gridfinity drawers: their tear-away front does the same job.' : ''].filter(Boolean).join(' ');
+      if (words) lib.appendChild(el('p.hint.bc-hint', { text: words }));
+    }
 
     if (s.mount === 'tabletop') {
       const ft = el('section');

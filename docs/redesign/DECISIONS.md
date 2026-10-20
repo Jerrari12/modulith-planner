@@ -1453,3 +1453,49 @@ Dated calls made while building, with who made them. The brief and the inventory
   helper). Checked live by `planner-prod-checks-2026-10-18\drawer-stop-prod.mjs` on the 185 kit: Peek inside lands the
   drawer at base + 171.5 and Close it at base; on the Colors tab `peekUnit` (the card's "Open the drawer") lands at
   base + 171.5 and `unpeek` at base; no errors.
+
+## 2026-10-20 (the back cover on a v2609 Decor drawer: the tear-away front comes out first)
+
+- **Why now.** The v2609 standard Decor drawers (all 94 sizes) print with the same tear-away front as the Gridfinity
+  ones, and the GLBs rebuilt from the release STLs carry it (gen2-parts `decor-drawers-v2609` 1d869e1, published
+  2026-10-20). The planner places the faceplate back cover in the drawer-front gap, so in the model the cover's volume
+  (z 90.57-95.02 on a 185 1W-1H) now holds the whole panel (z 90.59-92.49). Joey's rule (vault rules.md "Drawers,
+  faceplates and handles", 2026-10-19): the faceplate slides on with the front left in; a faceplate WITH its back cover
+  collides with it, so either take the front out or leave the cover off, "either way works".
+- **The rule the planner follows:** the smallest honest one. The back cover stays optional (it is still the user's
+  trade: a stiffer plate on wide drawers against more printing). Wherever a build bills or fits one, it says the
+  drawer's tear-away front comes out first: the back cover row of the generated manifest and of the planner's
+  `computeBom` (one wording, `test/back-cover-tearaway.test.mjs` pins them equal), the Faceplates step ("take the
+  drawer's tear-away front out and clip the back cover in from behind", after the EdgeLabel dressing when there is
+  one), and a hint under Build style's Back cover toggle. The Gridfinity rule is unchanged: no cover billed, the aside
+  "not on the Gridfinity drawers" stays, and a Gridfinity-only build never mentions a front to take out. The old
+  viewer's options panel (`#build-options`, hidden in the merged app) keeps its Gridfinity note only.
+- **What the stage does: nothing new, and why.** The v2609 GLB is one node, one mesh, one primitive
+  (`DecorDrawer_185-1W-1H.lib.glb`): the panel is not a node the stage could hide, so hiding it would mean cutting
+  the drawer's geometry, and the brief said to stop at the note in that case. Checked in the scene with the branch's
+  parts (`GEN2_PARTS_LOCAL=1`): with a cover on, the cover's back face at 90.57 draws clean over the panel's at 90.59
+  (no z-fighting at 0.02 mm, Quality High), so from inside the pulled-out drawer the user sees the cover, as on a
+  print with the front out; from the front the faceplate hides both. Shots in
+  `D:\Claude - Output\decor-back-cover-2026-10-20\`.
+- **The BOM parity gate, told.** `test/parity/bom-parity.test.mjs` boots the OLD planner's own app.js and compares
+  its computeBom with the ported one, notes included; the old planner's back cover note (app.js 5402 at 7beb165) is
+  the old wording, so the new sentence failed 55 of 250 comparisons (main: 250 of 250 match). The old planner is not
+  edited from here (port-rules.mjs: ported by copy, never edited in the old repo), so the gate carries a dated
+  `AHEAD` entry that compares the back cover row as the old planner still writes it; it goes when the old planner
+  carries the sentence or is retired at the cutover. Whether the old planner gets the same one-line note before then
+  is Joey's call. The earlier side-cover gap fix (2026-10-16) already left this repo's bom.js ahead of the old planner
+  without an entry; the random builds the gate draws never have a gap, so it never showed.
+- **Checks:** `test/back-cover-tearaway.test.mjs` (3 tests: the manifest row on every length and family, the step
+  clause bare / dressed / mixed / off / Gridfinity-only, the computeBom row and its parity with the manifest's);
+  the e2e case "a back cover on a Decor drawer says the tear-away front comes out first" (the stage keeps the cover and
+  the whole drawer visible, the manifest row and step, the Build style hint on and gone when off, Gridfinity by the
+  generator's rule on a real 1W-1H and on a kept `variant` on a 1W-3H, the Parts row and its OPTIONAL badge), green
+  against the v2609 parts. Mutation-checked, 7 of 7 caught: the manifest note, the bare and the dressed step clause,
+  the computeBom note, the hint, the hint's Gridfinity rule (the raw `variant` check back: the 3H case times out), the
+  parity entry (off: 55 of 250 differ). Full `npm test` and `npm run e2e` with the v2609 parts: see the commit.
+- **Review:** Terra `01a1594c`, routine: 1 finding, confirmed and fixed (the hint read Gridfinity from the raw
+  `variant` field, where the generator and the BOM use `isGridfinity(L, u)`, so a variant kept on a size with no
+  Gridfinity drawer, which renders the standard drawer and takes a cover, got the "not on the Gridfinity drawers" line
+  and no "front out"); the follow-up with the fix, the parity entry and the e2e extension: NO FINDINGS.
+- **Not deployed, waiting on Joey's go.** Branch `decor-back-cover-note`. Deploy order unchanged: gen2-parts is
+  already live, so the live planner shows the front under the cover today with no note; this branch adds the words.

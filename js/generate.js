@@ -868,7 +868,19 @@ export function generateManifest(build, opts = {}) {
   // seats the same per-size part — the GLB family name is historical, from the
   // EdgeLabel exporter blend). Optional: fills the new open-front Decor
   // drawer's gap; off = older closed-front drawers. Shared hardware → −dz.
+  // Since the v2609 release (2026-10-19) the standard Decor drawer prints with
+  // the same TEAR-AWAY FRONT as the Gridfinity one, and the GLB carries it (one
+  // mesh with the body, so the stage cannot hide it). Joey's rule (vault
+  // rules.md "Drawers, faceplates and handles"): the faceplate goes on with the
+  // front left in, but the back cover does not - "otherwise they would
+  // interfere"; "if you remove the front support piece the back cover of the
+  // faceplate does fit fine". So the cover stays optional, and the row and the
+  // step say the front comes out first. In the model the cover's volume
+  // (z 90.57-95.02 on a 185) holds the whole panel (90.59-92.49), so a cover on
+  // the stage already looks like a drawer whose front is out.
   const bcOn = !!build.backCover;
+  const BC_NOTE = "Optional · clips in behind the faceplate to close the open-front Decor drawer. Take the drawer's " +
+    'tear-away front out first - left in, it and the cover interfere. Included in the faceplate download.';
   // Feet (2026-08-21, confirmed): printed TPU feet OR adhesive rubber feet -
   // one-for-one alternatives with the same count at the same support spots.
   // The planner's build carries the pick (`feet`); the BOM bills ONLY the
@@ -2234,7 +2246,7 @@ export function generateManifest(build, opts = {}) {
       inst.push({ id: `bc${i}`, node: `BackCover_EdgeLabel_${u.w}W-${H}H`, pos: [cx + 0.47, bottom + 3.72 + 7.22, 92.795 - dz], rides: `drw${i}` });
       // the cover files ship inside every faceplate series download (v2602+),
       // so the row links the active family's page — mirrors the planner's linkAs
-      add(`BackCover_EdgeLabel_${u.w}W-${H}H`, `Faceplate Back Cover ${u.w}W-${H}H`, 'BackCover', face.links);
+      add(`BackCover_EdgeLabel_${u.w}W-${H}H`, `Faceplate Back Cover ${u.w}W-${H}H`, 'BackCover', face.links, 1, false, false, null, BC_NOTE);
     }
     if (face.extras) {
       // EdgeLabel dressing (offsets DERIVED from the EdgeLabel B blend @1W-1H,
@@ -2584,7 +2596,10 @@ export function generateManifest(build, opts = {}) {
     // a build of nothing but Gridfinity drawers never mentions the cover.
     const anyBc = bcOn && units.some(v => v.fill === 'decor' && !isGridfinity(L, v));
     const gridBc = bcOn && units.some(v => isGridfinity(L, v));
-    const bcClause = anyBc ? (dress ? ', then clip the back cover in from behind' : 'clip the back cover in from behind') +
+    // the v2609 drawer's tear-away front and the cover interfere (Joey), so the
+    // front comes out before the cover goes in - said here, where the cover is fitted
+    const bcClause = anyBc ? (dress ? ", then take the drawer's tear-away front out and clip the back cover in from behind"
+      : "take the drawer's tear-away front out and clip the back cover in from behind") +
       (gridBc ? ' (not on the Gridfinity drawers - leave their tear-away front in instead)' : '') : '';
     const prep = dress || bcClause
       ? `Assemble the faceplate first: ${dress}${bcClause}. `

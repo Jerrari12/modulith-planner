@@ -22,9 +22,20 @@ test('the ported computeBom matches the planner on the official kits and on seed
   const { GEN2 } = loadCatalog();
   const { app } = await bootPlanner(20261013);
   let compared = 0, mismatches = [];
+  /* Where this repo's rules moved AHEAD of the old planner on purpose, dated: the ported row is compared as the old
+     planner still writes it. Remove an entry when the old planner carries the change, or is retired at the cutover.
+     - 2026-10-20: the back cover row says the v2609 drawer's tear-away front comes out first (DECISIONS.md of that
+       date; test/back-cover-tearaway.test.mjs pins the words). The old planner's note (app.js 5402 at 7beb165) does not. */
+  const AHEAD = [
+    { name: /Faceplate Back Cover/, strip: " Take the drawer's tear-away front out first - left in, it and the cover interfere." },
+  ];
+  const asOld = (sections) => sections.map((sec) => ({ ...sec, items: sec.items.map((it) => {
+    const a = AHEAD.find((x) => x.name.test(it.name) && typeof it.note === 'string' && it.note.includes(x.strip));
+    return a ? { ...it, note: it.note.replace(a.strip, '') } : it;
+  }) }));
   const compare = (label) => {
     const theirs = app.computeBom();
-    const mine = computeBom(app.state, GEN2);
+    const mine = asOld(computeBom(app.state, GEN2) || []);
     compared++;
     const a = canon(theirs), b = canon(mine);
     if (a !== b) mismatches.push({ label, theirs: a.slice(0, 400), mine: b.slice(0, 400) });

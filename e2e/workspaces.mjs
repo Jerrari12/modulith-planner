@@ -2617,3 +2617,55 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* THE BACK COVER AND THE v2609 DRAWER'S TEAR-AWAY FRONT (2026-10-20). The standard Decor drawer now prints with the
+   same tear-away front as the Gridfinity one, and its GLB carries it as one mesh with the body. Joey's rule: the
+   faceplate goes on with the front left in, the back cover only with it out ("otherwise they would interfere"). The
+   cover stays optional; the Parts row, the Build style hint and the Faceplates step say the front comes out first;
+   the stage hides nothing (the panel is not a node of its own, and the cover's volume holds all of it). */
+test('Build: a back cover on a Decor drawer says the tear-away front comes out first - the Build style hint, the Parts row, the Faceplates step; the stage keeps the drawer whole', async () => {
+  const { ctx, page, errors } = await open('build');
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.backCover = true; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.backCover === true && window.__GEN2_VIEWER__.manifest.instances.some((i) => /^BackCover_/.test(i.node)), null, { timeout: 60_000 });
+  await settle(page, 800);
+  // the stage: the cover rides a standard Decor drawer, both whole and visible - nothing of the drawer is hidden
+  const stage = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    const bc = v.manifest.instances.find((i) => /^BackCover_/.test(i.node));
+    const drw = v.manifest.instances.find((i) => i.id === bc.rides);
+    const meshes = (id) => { const out = []; v.instances.get(id).group.traverse((o) => { if (o.isMesh) out.push(o.visible); }); return out; };
+    return { rides: drw && drw.node, cover: meshes(bc.id), drawer: meshes(drw.id), note: v.manifest.parts.find((p) => /^BackCover_/.test(p.node))?.note || '', step: v.manifest.steps.find((s) => /^Faceplates/.test(s.title))?.note || '' };
+  });
+  assert.match(stage.rides, /^DecorDrawer_/, 'the cover rides the standard Decor drawer');
+  assert.ok(stage.cover.length >= 1 && stage.cover.every(Boolean), 'the cover is on the stage, visible');
+  assert.ok(stage.drawer.length >= 1 && stage.drawer.every(Boolean), 'the drawer body is whole: no mesh of it hidden');
+  assert.match(stage.note, /Take the drawer's tear-away front out first/, 'the manifest row');
+  assert.match(stage.step, /take the drawer's tear-away front out and clip the back cover in from behind/, 'the Faceplates step');
+  // the Build style tab, where the cover is switched on
+  await page.locator('#ws-lib button[role="tab"]:has-text("Build style")').click();
+  await page.waitForSelector('#ws-lib .bc-hint', { timeout: 10_000 });
+  assert.match(await text(page, '#ws-lib .bc-hint'), /Take each drawer's tear-away front out first - left in, it and the cover interfere\./);
+  assert.doesNotMatch(await text(page, '#ws-lib .bc-hint'), /Gridfinity/, 'no Gridfinity drawer in this build, so no aside about them');
+  // off again: the hint goes with the cover
+  await page.locator('#ws-lib .seg.sm:has-text("Off")').last().click();
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .bc-hint') && window.__GEN2_STORE__.state.backCover === false, null, { timeout: 30_000 });
+  // Gridfinity by the generator's rule (Terra 01a1594c): every drawer a real Gridfinity one (1W-1H at 185) - the hint
+  // says only that the cover is not for them; a `variant` kept on a size with no Gridfinity drawer (1W-3H) renders
+  // the standard drawer and takes a cover, so the hint says the front comes out and nothing about Gridfinity
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.backCover = true; s.placed.forEach((u) => { if (u.fill === 'decor') u.variant = 'gridfinity'; }); }, 'edit'));
+  await page.waitForSelector('#ws-lib .bc-hint', { timeout: 30_000 });
+  assert.equal(await text(page, '#ws-lib .bc-hint'), 'Not on the Gridfinity drawers: their tear-away front does the same job.');
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed = [{ id: 'g1', x: 0, y: s.gridH * 2 - 6, w: 1, hh: 6, fill: 'decor', shelves: 0, variant: 'gridfinity' }]; s.nextId = 100; s.gridW = 1; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 1 && window.__GEN2_VIEWER__.build.placed[0].hh === 6 && /tear-away front out first/.test(document.querySelector('#ws-lib .bc-hint')?.textContent || ''), null, { timeout: 60_000 });
+  assert.equal(await text(page, '#ws-lib .bc-hint'), "Take each drawer's tear-away front out first - left in, it and the cover interfere.");
+  assert.ok(await page.evaluate(() => window.__GEN2_VIEWER__.manifest.instances.some((i) => /^BackCover_/.test(i.node)) && window.__GEN2_VIEWER__.manifest.instances.some((i) => /^DecorDrawer_185-1W-3H$/.test(i.node))), 'the stage: a standard 3H drawer with its cover');
+  // the Parts list's row, from the same record (the 3H drawer's cover)
+  await page.click('#ws-tabs .tab:has-text("Parts")');
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-parts .prow')].some((r) => /Back Cover/.test(r.querySelector('.name')?.textContent || '')), null, { timeout: 60_000 });
+  const row = await page.evaluate(() => { const r = [...document.querySelectorAll('#ws-parts .prow')].find((r) => /Back Cover/.test(r.querySelector('.name')?.textContent || '')); return { note: r.querySelector('.note:not(.printin)')?.textContent || '', badge: r.querySelector('.badge')?.textContent || '' }; });
+  assert.match(row.note, /^Optional · clips in behind the faceplate/, 'still the optional accessory');
+  assert.match(row.note, /Take the drawer's tear-away front out first - left in, it and the cover interfere\./);
+  assert.equal(row.badge, 'OPTIONAL');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});

@@ -339,7 +339,9 @@ export function computeBom(build, GEN2) {
         // so the row links the chosen style's page
         if (build.backCover && coverable.get(size)) items.push({
           name: P.backCover(len, size), qty: coverable.get(size),
-          note: "Optional · clips in behind the faceplate to close the open-front Decor drawer. Included in the faceplate download.",
+          /* v2609 (2026-10-19): the standard drawer prints with a tear-away front like the
+             Gridfinity one; left in, it and the cover interfere (Joey), so the front comes out first */
+          note: "Optional · clips in behind the faceplate to close the open-front Decor drawer. Take the drawer's tear-away front out first - left in, it and the cover interfere. Included in the faceplate download.",
           optional: true,
           linkAs: `GEN2 Decor - Faceplates - ${faceDef.label} Series`,
           unreleased: GEN2.unreleased.includes("backCover"),
