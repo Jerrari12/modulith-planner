@@ -1537,4 +1537,11 @@ Dated calls made while building, with who made them. The brief and the inventory
   the Labels cases that click Switch to EdgeLabel are unchanged (the Labels pattern 11 of 11 with the new case);
   mutation-checked (every button wired to the first style fails the case); test/labels.test.mjs 13 of 13. In the browser the two buttons measure 143 and 132 px wide; on the narrow pane they wrap with an 8 px gap.
 - **Review:** Terra `01a15a57`, routine: NO OBJECTION.
-- **Not deployed.** Left on `labels-callout-classicpro` for Joey's go.
+- **Live 2026-10-20**, stamp `31bec955` (Joey: "Deploy labels-callout-classicpro (4b79e4e)"). Fast-forwarded onto main;
+  npm test 564 (559 passed, 0 failed, 5 skipped), the Labels e2e cases 11 of 11, the stamping guard replayed clean. The
+  first run (39467212905) failed on the phone Place / Cancel e2e case, the fourth time since 2026-10-19: its tap read a
+  "+" position after a fixed 1.5 s settle, stale on a slow run; `31bec95` makes it wait until the positions hold still
+  and tap again if no card follows (Luna `01a15a7f`; 7.5 s plain, 30 s throttled 4x here). Run 39472127020 then passed on
+  attempt 1 (e2e 27 min on the pinned 24.04 image). Checked live by
+  `planner-prod-checks-2026-10-18\labels-callout-prod.mjs`: the callout on the root kit reads the two buttons in order, Switch to
+  Classic Pro sets faceStyle classicpro and the callout goes; at 1280 wide the buttons wrap with 8 px between the rows.
