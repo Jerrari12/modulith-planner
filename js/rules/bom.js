@@ -292,7 +292,8 @@ export function computeBom(build, GEN2) {
       const runStarts = new Set(columnRuns().map((r) => r.start));
       const runEnds = new Set(columnRuns().map((r) => r.start + r.len));
       const sideCovers = new Map(); // height -> qty
-      build.placed.forEach((p) => {
+      // switched off in Build style (build.sideCovers === false, 2026-10-20): no rows, as the stage places none
+      if (build.sideCovers !== false) build.placed.forEach((p) => {
         const exposedSides = (runStarts.has(p.x) ? 1 : 0) + (runEnds.has(p.x + p.w) ? 1 : 0);
         if (!exposedSides) return;
         if (p.fill === "cabinet") count(sideCovers, 1, exposedSides * (p.hh / 2));

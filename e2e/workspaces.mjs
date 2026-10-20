@@ -2697,3 +2697,28 @@ test('Labels: the no-label-faceplate callout offers Switch to EdgeLabel and Swit
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* SIDE COVERS OFF AND ON (2026-10-20). Since 2026-10-17 every build wears side covers; Build style now has the toggle the
+   decision left unbuilt. Off takes them off the model and off the parts list together, and the record carries it; On
+   puts them back. */
+test('Build style: Side covers Off removes every side cover from the stage and the bill, the record says so, On brings them back', async () => {
+  const { ctx, page, errors } = await open('build');
+  const covers = () => page.evaluate(() => ({ stage: window.__GEN2_VIEWER__.manifest.instances.filter((i) => /^SideCover_/.test(i.node)).length, billed: window.__GEN2_VIEWER__.manifest.parts.filter((p) => /^SideCover_/.test(p.node)).reduce((n, p) => n + (p.qty || 1), 0), rec: window.__GEN2_STORE__.state.sideCovers }));
+  const before = await covers();
+  assert.ok(before.stage > 0 && before.billed > 0, `the control: the kit wears side covers (${JSON.stringify(before)})`);
+  assert.notEqual(before.rec, false, 'the control: the record does not say off');
+  await page.locator('#ws-lib button[role="tab"]:has-text("Build style")').click({ timeout: 30_000 });
+  const section = page.locator('#ws-lib section', { has: page.locator('h2:has-text("Side covers")') });
+  await section.locator('button.seg.sm:has-text("Off")').click({ timeout: 30_000 });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.sideCovers === false && !window.__GEN2_VIEWER__.manifest.instances.some((i) => /^SideCover_/.test(i.node)) && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 })
+    .catch(async () => assert.fail(`Off did not take: ${JSON.stringify(await covers())}`));
+  const off = await covers();
+  assert.equal(off.stage, 0, 'off: no side cover on the stage');
+  assert.equal(off.billed, 0, 'off: none billed');
+  await section.locator('button.seg.sm:has-text("On")').click({ timeout: 30_000 });
+  await page.waitForFunction((n) => window.__GEN2_STORE__.state.sideCovers === true && window.__GEN2_VIEWER__.manifest.instances.filter((i) => /^SideCover_/.test(i.node)).length === n && !window.__GEN2_VIEWER__.regenBusy, before.stage, { timeout: 60_000 })
+    .catch(async () => assert.fail(`On did not bring them back: ${JSON.stringify(await covers())}`));
+  assert.deepEqual(await covers(), { ...before, rec: true }, 'on: as before, the record saying on');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});

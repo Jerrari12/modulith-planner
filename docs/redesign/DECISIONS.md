@@ -1574,3 +1574,31 @@ Dated calls made while building, with who made them. The brief and the inventory
   step at 37 min on the pinned image, so `00c4602` scaled every 5 s and 10 s wait in e2e/workspaces.mjs to 15 s and
   30 s, the tap helper's 10 s retry kept, Luna `01a15ad7`; run 39486096891 then passed on attempt 1, e2e 34 min). The
   served main.js carries the branch. Not checked by eye: the pane never showed the bug; Joey's machine is the check.
+
+## 2026-10-20 (Build style: a Side covers On / Off toggle)
+
+- **Joey:** "Let's tackle the unbuilt" (the 2026-10-17 side-covers entry: "The default-off toggle of the 2026-10-09
+  decision is not built ... A real toggle needs a new build field, and BUILD_FIELDS is pinned to the old planner's").
+  Since 2026-10-17 every build wears side covers; this adds the switch, with ON as its default so nothing changes for
+  a build, a share link or a saved file from before the field.
+- **The field.** `sideCovers` joins BUILD_FIELDS (js/rules/schema.js) as the planner's own field, which the old planner
+  never writes; sanitize reads only an explicit `false` as off (`d.sideCovers = d.sideCovers !== false`), so a missing
+  field, a 0 or a string is on. The parity test against the old planner (test/parity/layout-parity.test.mjs) strips the
+  planner's own fields before comparing serialized records: the old planner's state has none, sanitize gives the
+  default, and parity is about the shared fields. No schema bump: an optional field with a default.
+- **What reads it.** The generator already did (`build.sideCovers === false` skips the covers and the too-tall warning,
+  generate.js ~1312 and ~1612, from the side-covers session); the bill now does too (js/rules/bom.js: no side-cover
+  rows when off, so the list and the stage agree either way); the stage gains `setSideCovers(v)` beside `setBackCover`
+  (a regenerate); Build style gains a "Side covers" Off / On segment in a row beside Feet (alone on the other mounts),
+  through the same `adopt()` as the other toggles, so the record carries it and Undo takes it back.
+- **Checks.** test/side-covers.test.mjs: absent reads as on; false empties both the bill and the stage; true equals
+  absent; 0 / '' / null / 'off' / 'false' read as on. Mutation-checked three ways: the bill's gate removed, the schema
+  default removed, the generator's gate removed - each fails the test. An e2e case switches Off in Build style and
+  waits for zero SideCover instances and zero billed, the record saying false, then On and the count as before.
+  npm test 567 (562 passed, 0 failed, 5 skipped) with the parity test and the store test's key list updated for the field.
+- **Review:** Sol `01a15b12`, substantial: one finding, held as a documented limitation rather than a change: a build
+  saved with the covers OFF and re-saved through the OLD planner comes back ON, because the old planner's serializer
+  writes only its own fields; the cutover retires that planner, and until then the merged planner is where side covers
+  are set. Sol's other two questions: the fitting steps follow the generator's instances, which read the same field (no
+  bill-based step count); `!== false` is the right reading of a JSON record (the string "false" is not a switch-off).
+- **Not deployed.** Branch `side-cover-toggle`, for Joey's go.

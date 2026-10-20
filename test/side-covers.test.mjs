@@ -240,3 +240,22 @@ test('a side cover prints face-down: its build axis is its thickness, face first
     assert.ok(Math.abs(z - (L - 8)) < 0.02, `SideCover_${L}-${H_TOKEN[hh]}H is ${z} long, the release says ${L - 8}`);
   }
 });
+
+/* THE TOGGLE (2026-10-20, the "default-off toggle" the 2026-10-17 entry left unbuilt, now an On/Off in Build style whose
+   default is on). `sideCovers` is the record's own field: absent or anything but false reads as on, so every older record
+   and share link keeps its covers; an explicit false takes them off the stage AND off the bill together. */
+test('sideCovers: absent reads as on, false switches the stage and the bill off together, true puts them back', () => {
+  const base = rec({ placed: [unit(1, 0, 10, 2, 2), unit(2, 2, 10, 1, 2), unit(3, 0, 8, 3, 2)], gridW: 3, gridH: 6 });
+  const on = sanitized(base);
+  assert.equal(on.sideCovers, true, 'a record without the field reads as on');
+  assert.ok(Object.keys(billed(on)).length > 0, 'the control: the build bills side covers');
+  assert.ok(Object.keys(drawn(generateManifest(on).manifest)).length > 0, 'the control: the stage draws them');
+  const off = sanitized({ ...base, sideCovers: false });
+  assert.equal(off.sideCovers, false, 'an explicit false survives sanitize');
+  assert.deepEqual(billed(off), {}, 'off: the bill has no side-cover rows');
+  assert.deepEqual(drawn(generateManifest(off).manifest), {}, 'off: the stage draws none');
+  const back = sanitized({ ...base, sideCovers: true });
+  assert.deepEqual(billed(back), billed(on), 'true: the bill as with the field absent');
+  assert.deepEqual(drawn(generateManifest(back).manifest), drawn(generateManifest(on).manifest), 'true: the stage as with the field absent');
+  for (const junk of [0, '', null, 'off', 'false']) assert.equal(sanitized({ ...base, sideCovers: junk }).sideCovers, true, `${JSON.stringify(junk)} is not an explicit false: on`);
+});

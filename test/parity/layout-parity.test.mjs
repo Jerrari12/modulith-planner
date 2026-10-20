@@ -102,6 +102,9 @@ test('the ported layout rules and schema match the planner on kits, random build
       const a = serializeBuild(app.state), b = serializeBuild(d);
       const keepId = typeof v.buildId === 'string' && /^[a-z0-9]{8,32}$/.test(v.buildId);
       if (!keepId) { delete a.buildId; delete b.buildId; }
+      // the planner's own fields, which the old planner never writes (schema.js BUILD_FIELDS says which): sanitize
+      // gives them their default here, the old planner's state has none, and parity is about the shared fields
+      for (const k of ['sideCovers']) { delete a[k]; delete b[k]; }
       same(label + ' ' + name + ' kept', a, b);
     }
   }

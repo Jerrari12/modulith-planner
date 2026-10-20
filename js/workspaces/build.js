@@ -590,6 +590,16 @@ export function mountBuild(stage, ctx) {
       if (words) lib.appendChild(el('p.hint.bc-hint', { text: words }));
     }
 
+    // side covers: on every build since 2026-10-17; the toggle (2026-10-20) is the record's own field, off only when
+    // switched off here. Beside Feet on a tabletop, alone on the other mounts.
+    const sc = el('section');
+    sc.appendChild(el('h2.h2', { text: 'Side covers' }));
+    sc.appendChild(el('div.track.seg2', { role: 'group' }, [
+      el('button.seg.sm' + (s.sideCovers === false ? '.on' : ''), { text: 'Off', onclick: async () => { await stage.setSideCovers(false); await adopt(); } }),
+      el('button.seg.sm' + (s.sideCovers !== false ? '.on' : ''), { text: 'On', onclick: async () => { await stage.setSideCovers(true); await adopt(); } }),
+    ]));
+    const two2 = el('div.two');
+    two2.appendChild(sc);
     if (s.mount === 'tabletop') {
       const ft = el('section');
       ft.appendChild(el('h2.h2', { text: 'Feet' }));
@@ -597,8 +607,9 @@ export function mountBuild(stage, ctx) {
         el('button.seg.sm' + (s.feet !== 'adhesive' ? '.on' : ''), { text: 'Print TPU', onclick: async () => { await stage.setFeet('tpu'); await adopt(); } }),
         el('button.seg.sm' + (s.feet === 'adhesive' ? '.on' : ''), { text: 'Buy adhesive', onclick: async () => { await stage.setFeet('adhesive'); await adopt(); } }),
       ]));
-      lib.appendChild(ft);
+      two2.appendChild(ft);
     }
+    lib.appendChild(two2);
     const gridable = s.placed.filter((u) => u.fill === 'decor');
     if (gridable.length) {
       const vals = gridable.map((u) => u.variant === 'gridfinity' ? 'gridfinity' : 'standard');

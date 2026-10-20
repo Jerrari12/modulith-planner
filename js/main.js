@@ -10946,6 +10946,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // same functions (phase 0 composition; the planner's rules replace these in phase 3)
     setAllClosure, setAllStoppers, setAllVariant, drawersInBuild,
     async setBackCover(v) { track('opt:backcover:' + (v ? 'on' : 'off')); build.backCover = !!v; await regenerate(); },
+    async setSideCovers(v) { track('opt:sidecovers:' + (v ? 'on' : 'off')); build.sideCovers = !!v; await regenerate(); },   // the generator reads build.sideCovers === false
     async setFeet(v) { track('opt:feet:' + v); build.feet = v; await regenerate(); },
     currentFaceplateStyle, availableFaceplateStyles,
     currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
