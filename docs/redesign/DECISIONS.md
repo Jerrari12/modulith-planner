@@ -1497,5 +1497,26 @@ Dated calls made while building, with who made them. The brief and the inventory
   `variant` field, where the generator and the BOM use `isGridfinity(L, u)`, so a variant kept on a size with no
   Gridfinity drawer, which renders the standard drawer and takes a cover, got the "not on the Gridfinity drawers" line
   and no "front out"); the follow-up with the fix, the parity entry and the e2e extension: NO FINDINGS.
-- **Not deployed, waiting on Joey's go.** Branch `decor-back-cover-note`. Deploy order unchanged: gen2-parts is
-  already live, so the live planner shows the front under the cover today with no note; this branch adds the words.
+- **Live 2026-10-20**, stamp `5113693d` (Joey: "Deploy decor-back-cover-note (ed17c41)"). Fast-forwarded onto main as
+  `ed17c41`; on it npm test 564 (559 passed, 0 failed, 5 skipped) and the Build, Parts, Colors and back-cover e2e cases
+  28 of 28; the stamping guard replayed clean (build.js's line already carried `../generate.js`). The two deploy runs before the pin
+  (39429860751, and 39433302069 after an empty re-run commit `c0184c2`) failed in the e2e step on the runner image, see
+  the next entry; run 39439350464 on the pinned image passed on attempt 1. Checked live by
+  `planner-prod-checks-2026-10-18\back-cover-note-prod.mjs`: with the cover switched on, the BackCover row carries
+  "Take the drawer's tear-away front out first", the Faceplates step says to take it out and clip the cover in from
+  behind, the Build style hint reads "Take each drawer's tear-away front out first - left in, it and the cover
+  interfere." with no Gridfinity aside, the drawer's meshes stay visible under the cover; off again, the hint goes.
+
+## 2026-10-20 (the deploy runs on ubuntu-24.04, not ubuntu-latest)
+
+- **What happened.** From the evening of 2026-10-19 most deploy runs failed in the browser e2e step on waits that pass
+  locally in seconds (5 s, 10 s, 30 s and 150 s bounds; the first two were widened to 30 s in `e26de9a` before the cause
+  was known). The job logs, read in Joey's Chrome (the public API carries annotations but not the runner image), show
+  the pattern: the failed runs 39429860751 and 39433302069 ran on "Runner Image: ubuntu-26.04" with the e2e step at 21,
+  34 and 35 minutes; the green runs 39332085367, 39335008933 and 39439350464 on ubuntu-24.04 at 18 minutes; all with
+  the same Chrome for Testing 153.0.8010.12. GitHub's notice on every run: "The ubuntu-latest label will migrate to
+  Ubuntu 26 beginning October 19, 2026" (runner-images issue 14748).
+- **What changed.** `pages.yml` `runs-on: ubuntu-24.04` (`5113693`, Luna `01a159b5`), with the evidence in a comment. The
+  suite's bounds were tuned for the 24.04 software rasteriser (the 2026-10-13 and 10-18 entries); on 26.04 the same
+  cases take about twice as long. When the bounds are retuned for the new image, unpin; until then a timing failure on
+  the pinned image is a real regression, not the runner.
