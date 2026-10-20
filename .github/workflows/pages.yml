@@ -26,7 +26,11 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest: GitHub began moving ubuntu-latest to Ubuntu 26.04 on 2026-10-19 (runner-images
+    # issue 14748), and on the 26.04 image this job's browser e2e step runs about twice as slow (33-35 min against 18 on
+    # 24.04, the same Chrome for Testing 153 build) and dies on its waits: runs 39429860751 and 39433302069 were 26.04 and
+    # failed, 39332085367 and 39335008933 were 24.04 and passed, the code the same. Revisit when the e2e bounds are retuned.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       # The part pools. parts/ and img/parts/ moved to Jerrari12/gen2-parts on
