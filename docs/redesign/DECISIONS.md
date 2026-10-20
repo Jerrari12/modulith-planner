@@ -1211,7 +1211,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   stage asking the 185 pool for 270 parts (404s, a goTo on the half-mounted manifest): pre-existing, outside this change,
   proposed as a follow-up. Run 39289885703 then failed attempt 1 on the idle-gate case ("an edit is drawn at once": 3
   frames in 1.5 s on a runner during GitHub's degraded-Actions incident of the afternoon) and passed on attempt 2; live
-  stamp `402cf6fe`, the three changed modules served. Not checked by hand in production.
+  stamp `402cf6fe`, the three changed modules served. Checked by hand in production on 2026-10-19 (stamp `96bbf81d`, the
+  built-in browser): a New build, Under-Table 270 on a Core One L, three 3W drawers beside the 2W starter; the stage holds
+  three `UnderTableRail_270-3W` and one `-2W`, the Parts list "Under Table Rails - 270 · 3W section ×3" and "· 2W section
+  ×1"; Any printer chosen in the setup sheet from Parts turns both into 4W ×2 and 3W ×1.
 
 ## 2026-10-19 (the inspector's "This unit · parts" rows name and show the filament each part prints in, per unit)
 
@@ -1392,7 +1395,9 @@ Dated calls made while building, with who made them. The brief and the inventory
   the current truth). Then four sibling pushes in a row cancelled each run (Pages concurrency); the last, `3912af4`, failed
   npm test in `test/move-opt.test.mjs` until its author's `69ca2a2` injected `drawerStop` into the sandbox. Run 39332085367
   green; live stamp `69ca2a2a`; the guard (`otherScene` in build.js and labels.js, the refusal in main.js) and the
-  switcher's `freshCount` are served. Not checked by hand in production.
+  switcher's `freshCount` are served. Checked by hand in production on 2026-10-19 (stamp `96bbf81d`): the setup sheet's
+  Under-Table 270 on a Core One L from the root kit, then Any printer from Parts, with the stage and the list following
+  each time; the trip from Start build to the reload is the one the guard covers.
 
 ## 2026-10-19 (the "Neon yellow & black" preset becomes Joey's black-shell combo)
 
