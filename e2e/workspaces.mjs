@@ -2322,17 +2322,28 @@ test('the phone: Place / Cancel, the issue card and the toast sit above the shee
   await page.locator('#ws-lib .size:not(.dis)', { hasText: '1W·1H' }).first().tap();
   await page.waitForFunction(() => window.__GEN2_VIEWER__.spotScreens().length > 0 && !document.querySelector('#ws-lib').classList.contains('open'), null, { timeout: 30_000 })
     .catch(() => assert.fail('no "+" on the model within 30 s, or the library stayed up'));
-  await settle(page, 1500);   // the camera re-frames for the spots, the sheet slides down
-  const sp = await page.evaluate(() => { const c = document.querySelector('canvas'); return window.__GEN2_VIEWER__.spotScreens().find((s) => document.elementFromPoint(s.sx, s.sy) === c) || null; });
-  assert.ok(sp, 'a "+" a finger can reach');
-  await page.touchscreen.tap(sp.sx, sp.sy);
-  // 30 s, the runner's bound (10 s timed out on the slow 2026-10-19 runner; the card is up within a second here)
-  await page.waitForSelector('#ws-choice:not([hidden])', { timeout: 30_000 });
+  // the camera re-frames for the spots and the sheet slides down: wait until the "+" screen positions hold still (two
+  // reads 400 ms apart), then tap the spot read at that moment, and tap again if no card follows. A fixed 1.5 s settle
+  // and one tap left the finger on a stale position on slow runs (runs 39323798304, 39433302069, 39467212905: the card
+  // never opened within 30 s, where it opens within a second here)
+  const spotsStill = () => page.waitForFunction(() => { const now = window.__GEN2_VIEWER__.spotScreens().map((s) => Math.round(s.sx) + ',' + Math.round(s.sy)).join(';'); const same = window.__e2eSpots === now; window.__e2eSpots = now; return same; }, null, { polling: 400, timeout: 30_000 }).catch(() => {});
+  const tapSpot = async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // a card that opened just after the last try's 10 s is the answer, not a reason to tap on top of it (Luna 01a15a7f)
+      if (attempt && await page.locator('#ws-choice:not([hidden])').count()) return null;
+      await spotsStill();
+      const sp = await page.evaluate(() => { const c = document.querySelector('canvas'); return window.__GEN2_VIEWER__.spotScreens().find((s) => document.elementFromPoint(s.sx, s.sy) === c) || null; });
+      assert.ok(sp, 'a "+" a finger can reach');
+      await page.touchscreen.tap(sp.sx, sp.sy);
+      if (await page.waitForSelector('#ws-choice:not([hidden])', { timeout: 10_000 }).then(() => true, () => false)) return sp;
+    }
+    return assert.fail('the place card did not open on a tapped "+" in three tries');
+  };
+  await tapSpot();
   await page.locator('#ws-choice button:has-text("Cancel")').tap({ timeout: 5000 });
   await page.waitForSelector('#ws-choice[hidden]', { state: 'attached', timeout: 5000 });
   const n0 = await units(page);
-  await page.touchscreen.tap(sp.sx, sp.sy);
-  await page.waitForSelector('#ws-choice:not([hidden])', { timeout: 30_000 });
+  await tapSpot();
   await page.locator('#ws-choice button:has-text("Place")').tap({ timeout: 5000 });
   await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n + 1 && window.__GEN2_VIEWER__.build.placed.length === n + 1, n0, { timeout: 60_000 })
     .catch(() => assert.fail('Place placed nothing within 60 s'));
