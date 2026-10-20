@@ -31,7 +31,7 @@ import { toolbar } from '../ui/toolbar.js';
 import { board } from '../ui/board.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
-import { layoutRules } from '../rules/layout.js';
+import { layoutRules, refusalReason } from '../rules/layout.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
 
@@ -178,14 +178,18 @@ export function mountBuild(stage, ctx) {
   /* a trial on a clone: the layout stays showable, no structural problem appears that is not there already, and
      the unit in question has none (the prototype's rule; bow is advisory and never blocks) */
   const problems = (s, Rs) => { const set = new Set(); for (const u of Rs.unsupportedUnits()) set.add('u:' + u.id); for (const id of Rs.sagRisks()) set.add('s:' + id); for (const id of Rs.wallTopHalfHeight()) set.add('w:' + id); return set; };
-  function judge(trialFn, id, selected) {
+  function judge(trialFn, id, selected) { return judgeWhy(trialFn, id, selected) === null; }
+  /* the same trial, saying WHY it refuses (2026-10-20, the coworker's question): null when the trial passes, else the
+     code refusalReason() takes - 'fit' (the trial itself said no), the first new problem's key prefix ('s' sag, 'u'
+     unsupported, 'w' wall-top 0.5H), or 'gen' (the generator could not build it) */
+  function judgeWhy(trialFn, id, selected) {
     const s = S(); const before = problems(s, R());
     const t = clone(s); if (selected) t.selected = selected;
     const Rt = layoutRules(t, G, { tabletop: TT });
-    if (trialFn(t, Rt) === false) return false;
+    if (trialFn(t, Rt) === false) return 'fit';
     Rt.syncTabletopGrid();
-    for (const k of problems(t, Rt)) if (!before.has(k) || k.endsWith(':' + id)) return false;
-    return !!tryGen(serializeBuild(t)).manifest;
+    for (const k of problems(t, Rt)) if (!before.has(k) || k.endsWith(':' + id)) return k.split(':')[0];
+    return tryGen(serializeBuild(t)).manifest ? null : 'gen';
   }
   const spotCache = new Map();
   const cacheKey = (tag) => tag + '|' + JSON.stringify(store.serialize());
@@ -214,6 +218,32 @@ export function mountBuild(stage, ctx) {
         continue;
       }
       if (judge((t, Rt) => { growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, w, hh)) return false; t.placed.push({ id: t.nextId++, x: x + g.k, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
+    }
+    if (spotCache.size > 40) spotCache.clear(); spotCache.set(key, out); return out;
+  }
+  /* THE REFUSED CELLS (2026-10-20): the cells beside the build where the armed size FITS (canPlace, the cap) but the
+     structural judge says no - Joey's coworker put a 1W over the middle of a 3W and got nothing. Each carries `why`
+     (refusalReason's sentence), `below` (the unit it would rest on, when there is one) and `ends` (the offered spots at
+     that unit's ends, for the chip's "Put it at the left end" action). An empty build has none. Same cache as the "+" list. */
+  function refusedSpots(a = armedSize(), fill = st.unit) {
+    const s = S(); if (!s.placed.length) return [];
+    const key = cacheKey(`no ${a.w}x${a.hh} ${fill}`); if (spotCache.has(key)) return spotCache.get(key);
+    const Rs = R(); const rows = s.gridH * 2; const offered = addSpots(a.w, a.hh, fill); const out = []; const occ = Rs.occupancy();
+    const fromTop = s.mount !== 'tabletop';
+    // only cells that REST on something: the mount surface, or a unit under at least one of the footprint's columns. A
+    // cell floating beside the build (half a row up) is refused too, but nobody asks about it, and its disc would sit
+    // next to a real "+" (the phone's tap-near-a-plus found that)
+    const rests = (x, y) => (fromTop ? y === 0 : y + a.hh === rows) || Array.from({ length: a.w }, (_, i) => occ.has((x + i) + ',' + (fromTop ? y - 1 : y + a.hh))).some(Boolean);
+    for (let y = 0; y <= rows - a.hh; y++) for (let x = -a.w; x <= s.gridW; x++) {
+      if (!rests(x, y) || offered.some((sp) => sp.x === x && sp.y === y) || !touchesBuild({ x, y }, a.w, a.hh, s.placed)) continue;
+      const g = grownFor(x, a.w, s, Rs); if (!g) continue;
+      const why = judgeWhy((t, Rt) => { growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, a.w, a.hh)) return false; t.placed.push({ id: t.nextId++, x: x + g.k, y, w: a.w, hh: a.hh, fill, shelves: 0 }); }, s.nextId);
+      if (why === null || why === 'fit') continue;   // 'fit' is a collision or the cap: no spot there in either view
+      // the unit the footprint would rest on: the row toward the mount under the footprint's first cell
+      const supRow = fromTop ? y - 1 : y + a.hh;
+      const below = s.placed.find((p) => x >= p.x && x < p.x + p.w && supRow >= p.y && supRow < p.y + p.hh) || null;
+      const ends = below ? offered.filter((sp) => sp.y === y && (sp.x === below.x || sp.x + a.w === below.x + below.w)).map((sp) => ({ x: sp.x, y: sp.y, side: sp.x === below.x ? 'left' : 'right' })) : [];
+      out.push({ x, y, kind: 'no', code: why, why: refusalReason(why, { w: a.w, below: below ? below.w : null, hanging: fromTop }), ends });
     }
     if (spotCache.size > 40) spotCache.clear(); spotCache.set(key, out); return out;
   }
@@ -721,7 +751,8 @@ export function mountBuild(stage, ctx) {
     canPlace: (x, y, w, hh, id) => R().canPlace(x, y, w, hh, id), labelOf: (u) => u.label || '',
     // the redesign: the board shows the SAME "+" spots as the 3D view, a drag is judged by the same calculation (past
     // the build's edges within the cap), and the margin either side is the room the cap leaves (3 columns, or the armed width if wider)
-    spots: () => (st.armed ? placementSpots() : []),
+    spots: () => (st.armed ? [...placementSpots(), ...refusedSpots()] : []),   // the refused cells too (kind 'no'): the board draws them muted
+    onRefused: (sp) => { st.chosen = sp; renderChoice(); },   // a tap on one says why (the chip)
     // judged in the moving unit's OWN headroom frame (as the 3D drag is), so a taller unit can go on top of the build;
     // the answer carries where gravity settles it, which is where the board draws the ghost
     canMove: (id, x, y) => { const u = S().placed.find((p) => p.id === id); if (!u) return { ok: false }; const f = dragFrame(u); const c = moveCheck(u, x, y + f.delta, f.sel); return c.g ? { ok: true, y: c.y - f.delta } : { ok: false, why: c.why }; },
@@ -781,9 +812,22 @@ export function mountBuild(stage, ctx) {
   root.appendChild(choice);
   function renderChoice() {
     const sp = st.chosen;
-    if (!sp) { choice.hidden = true; return; }
+    if (!sp) { choice.hidden = true; choice.classList.remove('no'); return; }
     const a = armedSize(); const w = sp.w || a.w, hh = sp.hh || a.hh;
-    choice.hidden = false;
+    choice.hidden = false; choice.classList.toggle('no', sp.kind === 'no');
+    if (sp.kind === 'no') {   // a refused cell: the reason, and the end that IS offered when the rule allows one (2026-10-20)
+      // a mouse merely resting on the cell gets the reason alone (a tooltip: moving to a button would leave the cell and
+      // close it); a click or a tap pins the chip with its action (Sol 01a15b70)
+      const end = (sp.ends || [])[0];
+      choice.replaceChildren(
+        el('span', { text: sp.why }),
+        ...(st.hoverNo ? [] : [
+          ...(end ? [el('button.key.sm.strong', { text: `Put it at the ${end.side} end`, onclick: () => { stage.clearSpotChoice(); st.chosen = null; renderChoice(); placeAt(end.x, end.y); } })] : []),
+          el('button.key.sm', { text: 'OK', onclick: () => { stage.clearSpotChoice(); st.chosen = null; renderChoice(); } }),
+        ]),
+      );
+      return;
+    }
     choice.replaceChildren(
       el('span', { text: sp.kind === 'need' ? `Add the ${w}W·${hh / 2}H support case here?` : `Place the ${w}W·${hh / 2}H here?` }),
       el('button.key.sm.strong', { text: 'Place', onclick: () => stage.confirmSpot() }),
@@ -815,15 +859,25 @@ export function mountBuild(stage, ctx) {
     stage.setFlags(show3d ? [...flaggedIds(issues())] : []);
     stage.setEraser(show3d && st.eraser ? (id) => removeUnit(id) : null);
     if (!show3d || st.eraser) { stage.setSpots(null); stage.setDrag(null); return; }
+    // a reason chip belongs to the spots being replaced: a rebuild closes it (a touch choice is closed by setSpots itself)
+    if (st.chosen && st.chosen.kind === 'no') { st.hoverNo = false; st.chosen = null; renderChoice(); }
     const spots = [];
     for (const sp of neededSpots()) spots.push(sp);
     // the shared "+" list (placementSpots): the 2D board shows exactly these. Every mount: a gap along a wall or table
     // rail comes from moving a unit (drag, ← →, the inspector's Move), and the gap then offers its own spots
     if (st.armed) for (const sp of placementSpots()) spots.push(sp);
+    if (st.armed) for (const sp of refusedSpots()) spots.push(sp);   // the refused cells, muted: a click or tap says why
     const a = armedSize();
     stage.setSpots(spots.length ? { spots, w: a.w, hh: a.hh, rows: s.gridH * 2,
-      onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
-      onChoose: (sp) => { st.chosen = sp; renderChoice(); } } : null);
+      onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'no') { st.hoverNo = false; st.chosen = sp; renderChoice(); return; } if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
+      onChoose: (sp) => { st.chosen = sp; renderChoice(); },
+      // a mouse resting on a refused cell shows its reason without a click; leaving hides it. A pinned chip (clicked or
+      // tapped: st.chosen without st.hoverNo) is left alone by hovering (Sol 01a15b70)
+      onHover: (sp) => {
+        const pinned = st.chosen && !st.hoverNo;
+        if (sp && sp.kind === 'no') { if (pinned) return; st.hoverNo = true; st.chosen = sp; renderChoice(); }
+        else if (st.hoverNo) { st.hoverNo = false; st.chosen = null; renderChoice(); }
+      } } : null);
     const u = st.selId != null ? s.placed.find((p) => p.id === st.selId) : null;
     // any unit can be dragged with a mouse or pen, selected or not, even while a size is armed (picking one up stops
     // placing); a finger drags the selected unit (Joey 2026-10-16). The targets are moveSpots: the shared moveCheck.
@@ -892,7 +946,7 @@ export function mountBuild(stage, ctx) {
   stage.setDims(false);
   renderAll();
   if (st.selId != null) stage.selectUnit(st.selId);
-  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_BUILD__ = { addSpots, placeAt, moveTo, moveCheck, placementSpots };   // the e2e suite reads the spots and places through them
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_BUILD__ = { addSpots, placeAt, moveTo, moveCheck, placementSpots, refusedSpots };   // the e2e suite reads the spots and places through them
 
   return {
     onSelect(sel) {

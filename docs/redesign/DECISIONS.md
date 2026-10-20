@@ -1609,3 +1609,45 @@ Dated calls made while building, with who made them. The brief and the inventory
   `planner-prod-checks-2026-10-18\side-cover-toggle-prod.mjs` on the root kit: the segment reads Off | On with On lit; Off takes
   the four covers off the stage and the bill with the record's `sideCovers` false; On brings the four back with the
   record true; the share-link hash carries the field in both states.
+
+## 2026-10-20 (Build: a refused placement says why)
+
+- **Why.** Joey had a coworker try the planner: "the only thing that confused him, it wasn't clear why he couldn't place
+  the 1w case in the middle above a 3w or 4w case ... maybe we need a small pop-up that explains why you cannot place it
+  there?" The "+" spots are the cells where the armed size passes the structural judge (build.js `judge()`: no new
+  unsupported end, sag risk or Wall Mount 0.5H top, and the generator builds it). A cell that fails simply has no spot,
+  and nothing says so. The middle of a 3W fails the SAG rule (layout.js `sagRisks()`: a case resting on a wider case's
+  interior with no wall under either of its own ends), and the ends pass.
+- **What.** Beside the "+" spots, both views now draw the REFUSED cells next to the build (kind `no`): the cells where
+  the size fits (`canPlace`, the cap) but the judge says no. `refusedSpots()` in build.js walks the same cells as
+  `addSpots()`, skips the offered ones and the ones not touching the build, and asks `judgeWhy()` (the judge, returning
+  the code of the first NEW problem instead of false: `s`, `u`, `w`, `gen`; `fit` for a collision or the cap, which
+  draws nothing). Each carries `why`, the sentence from `refusalReason(code, { w, below })` in js/rules/layout.js (the
+  one place the words live), and `ends`: the offered spots at the ends of the unit it would rest on, for the chip's action.
+- **How it looks.** The stage: a grey disc with a BAR instead of the plus (`SPOT_COLORS.no`, `spotTexture(hex, glyph)`),
+  a fainter ghost, a lighter grey on hover and never the placing green; `confirmSpot()` refuses it, so no path places
+  there. A mouse resting on it opens the planner's chip (`#ws-choice`, class `no`: wrapping, wider) with the reason
+  alone, a tooltip, and leaving the cell or the canvas closes it (`onHover`, a new spec callback). A click or a touch
+  tap PINS the chip: the reason plus, when the rule allows one, "Put it at the left end" (the first offered end) and OK;
+  hovering never overwrites a pinned chip, and a rebuild of the overlays closes either. The board: `.b-spot.no`, a muted
+  disc with a bar and a `<title>` tooltip, its hover ghost the red one, a tap routed to `onRefused` (the pinned chip).
+  Escape closes the chip first and keeps the size armed, as for a Place / Cancel choice.
+- **The words.** Sag, with the unit below known: "A 1W can't sit on the middle of the 3W: a case needs a wall under at
+  least one end. Put it at an end of the 3W, or use a wider case." Unsupported: "Both ends need a case below." Wall Mount
+  top 0.5H: the Issues card's wording. Anything else: "The parts can't be built this way."
+- **Checks.** test/refusal-reason.test.mjs (the words per code, the fallback). An e2e case: a 3W, 1W·1H armed → the
+  middle cell is refused with code `s`, both ends are the way out, the "+" list has the ends and not the middle, the
+  stage drew exactly one refused cell; a mouse resting on it opens the chip without Place, leaving closes it, a click
+  keeps it up and places nothing, Escape closes it with the size still armed; on the board the muted disc, a click
+  opens the reason, "Put it at the left end" places the 1W at x 0. The suite's spot helpers count the "+" discs only.
+  The "+" spots themselves are unchanged: `judge()` is `judgeWhy() === null`.
+- **Review:** Sol `01a15b70`, substantial: four findings, all four taken. (1) the chip is `white-space: nowrap`, so a
+  reason overflowed its own buttons: `.no` wraps. (2) leaving the canvas over a marker left the hover (and the chip) up:
+  `pointerleave` ends the spot hover and says so. (3) hover -> click -> leave -> hover -> leave closed the pinned chip,
+  and a hover could replace a pinned one: the hover chip is now the reason alone and a pinned chip is left alone by
+  hovering; a rebuild closes either (the touch choice was already closed by `setSpots`). (4) on a wall or under-table
+  mount the supporting case is above the cell and the sentence said "sit on ... under": the `hanging` wording. Sol's
+  own discards agreed: no path places on a refused cell; `judge()` keeps its verdict; `ends` holds only offered cells.
+  One e2e run of the new case failed (17 s) while the full suite ran beside it; alone and with its four neighbours it
+  passes every time since, so the hover waits are the usual 15 s / 30 s.
+- **Not deployed** (a feature, not a reported bug): branch `placement-why`, waiting on Joey's go.

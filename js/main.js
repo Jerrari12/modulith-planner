@@ -8310,8 +8310,9 @@ canvas.addEventListener('pointerup', e => {
   if (spotSpec) {
     const g = spotAt(e);
     if (g) {
-      if (e.pointerType === 'touch' && spotChosen !== g) { chooseSpot(g); return; }   // first tap: show the ghost, offer Place / Cancel
-      const sp = g.userData.spot; chooseSpot(null); if (spotSpec.onPick) spotSpec.onPick(sp); return;
+      if (e.pointerType === 'touch' && spotChosen !== g) { chooseSpot(g); return; }   // first tap: show the ghost, offer Place / Cancel (a refused cell: its reason)
+      const sp = g.userData.spot; if (sp.kind === 'no' && spotChosen === g) return;   // a second tap on a refused cell keeps its reason up (2026-10-20)
+      chooseSpot(null); if (spotSpec.onPick) spotSpec.onPick(sp); return;
     }
     if (spotChosen) { chooseSpot(null); return; }   // a tap elsewhere clears a choice
   }
@@ -8348,7 +8349,7 @@ canvas.addEventListener('pointerup', e => {
    reflection never see it (the passes skip userData.ghost like the tabletop ghosts). The workspace decides WHAT is
    valid (the planner's rules); the stage only draws it and reports the pick. */
 const editGroup = new THREE.Group(); editGroup.name = 'edit-overlays'; scene.add(editGroup);
-const SPOT_COLORS = { add: 0xffcf5a, need: 0xff5a5a, hover: 0x5ad67a };
+const SPOT_COLORS = { add: 0xffcf5a, need: 0xff5a5a, hover: 0x5ad67a, no: 0x8a8f98, nohover: 0xb4b8c0 };   // no: a refused cell (2026-10-20), a bar for a plus, never the green
 let spotSpec = null, spotHover = null, flagHelpers = [], carry = null, dragSpec = null, eraser = null, eraseHelper = null, eraseId = null;
 function disposeObj(o) { o.traverse(c => { if (c.geometry) c.geometry.dispose(); if (c.material && !c.isSprite) c.material.dispose(); }); }   // sprite materials share the marker textures
 /* a cell's place in the world comes from a case the scene already holds: 88 mm per column, 28 mm per half row from it.
@@ -8390,30 +8391,33 @@ function plusMark(w, h, d, opacity = 0.85) {
    is drawn through everything (no depth test) so it is never lost behind a drawer; the ghost is the volume. */
 const SPOT_MARK = 26;   // mm, the marker's world size (it always faces the camera)
 const spotTextures = {};
-function spotTexture(hex) {   // a round orange control with a white plus, drawn once per colour
-  if (spotTextures[hex]) return spotTextures[hex];
+function spotTexture(hex, glyph = 'plus') {   // a round control with a white plus (or a bar, for a refused cell), drawn once per colour and glyph
+  const key = hex + ':' + glyph;
+  if (spotTextures[key]) return spotTextures[key];
   const cv = document.createElement('canvas'); cv.width = cv.height = 128; const c = cv.getContext('2d');
   c.beginPath(); c.arc(64, 64, 58, 0, Math.PI * 2); c.fillStyle = '#' + hex.toString(16).padStart(6, '0'); c.fill();
   c.lineWidth = 6; c.strokeStyle = 'rgba(255,255,255,0.95)'; c.stroke();
   c.strokeStyle = '#ffffff'; c.lineWidth = 12; c.lineCap = 'round';
-  c.beginPath(); c.moveTo(64, 34); c.lineTo(64, 94); c.moveTo(34, 64); c.lineTo(94, 64); c.stroke();
+  c.beginPath(); if (glyph === 'plus') { c.moveTo(64, 34); c.lineTo(64, 94); } c.moveTo(34, 64); c.lineTo(94, 64); c.stroke();
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
-  spotTextures[hex] = t; return t;
+  spotTextures[key] = t; return t;
 }
-function spotBox(w, hh, world, color) {
+const spotGlyph = (sp) => (sp && sp.kind === 'no' ? 'bar' : 'plus');
+function spotBox(w, hh, world, color, glyph = 'plus') {
   const d = Math.max(20, world.depth - 6);
   const spot = new THREE.Group();
   spot.position.set(world.x, world.y, world.z);
-  const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: spotTexture(color), transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+  const marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: spotTexture(color, glyph), transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
   marker.scale.set(SPOT_MARK, SPOT_MARK, 1); marker.renderOrder = 998; marker.userData.ghost = true; marker.userData.marker = true;
-  const ghost = new THREE.Mesh(new THREE.BoxGeometry(w * 88 - 6, hh * 28 - 6, d), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, depthWrite: false }));
+  const ghost = new THREE.Mesh(new THREE.BoxGeometry(w * 88 - 6, hh * 28 - 6, d), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: glyph === 'bar' ? 0.18 : 0.3, depthWrite: false }));
   ghost.renderOrder = 997; ghost.userData.ghost = true; ghost.visible = false;
   ghost.add(new THREE.LineSegments(new THREE.EdgesGeometry(ghost.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false })));
   spot.add(marker, ghost);
   spot.userData.marker = marker; spot.userData.ghost = ghost;
   return spot;
 }
-/* spec: { spots: [{ x, y, w?, hh?, kind?: 'add' | 'need' }], w, hh, rows, onPick(spot), onChoose?(spot | null) } | null -
+/* spec: { spots: [{ x, y, w?, hh?, kind?: 'add' | 'need' | 'no' }], w, hh, rows, onPick(spot), onChoose?(spot | null), onHover?(spot | null) } | null -
+   a 'no' spot is a refused cell (2026-10-20): drawn muted with a bar, never placed (confirmSpot refuses it); onPick/onChoose/onHover tell the workspace to say why.
    `rows` is the caller's grid height in half-rows. On touch a first tap CHOOSES a spot (its ghost shows, onChoose fires,
    the workspace offers Place / Cancel), a second tap on the same marker places; on a mouse, hover shows the ghost and
    a click places. */
@@ -8425,7 +8429,7 @@ function setSpots(spec) {
   if (spec) for (const sp of spec.spots) {
     const w = sp.w || spec.w, hh = sp.hh || spec.hh;
     const world = spotWorld(sp, w, hh, spec.rows); if (!world) break;
-    const g = spotBox(w, hh, world, SPOT_COLORS[sp.kind || 'add']);
+    const g = spotBox(w, hh, world, SPOT_COLORS[sp.kind || 'add'], spotGlyph(sp));
     g.userData.spot = sp; editGroup.add(g);
   }
   invalidateFrame();
@@ -8434,8 +8438,9 @@ function spotStyle() {
   for (const g of editGroup.children) {
     if (!g.userData.spot) continue;
     const sp = g.userData.spot, hov = spotHover === g, chosen = spotChosen === g;
-    const col = hov || chosen ? SPOT_COLORS.hover : SPOT_COLORS[sp.kind || 'add'];
-    g.userData.marker.material.map = spotTexture(col);
+    // a refused cell never turns the placing green: its hover is a lighter grey
+    const col = hov || chosen ? (sp.kind === 'no' ? SPOT_COLORS.nohover : SPOT_COLORS.hover) : SPOT_COLORS[sp.kind || 'add'];
+    g.userData.marker.material.map = spotTexture(col, spotGlyph(sp));
     g.userData.ghost.material.color.setHex(col);
     g.userData.ghost.visible = hov || chosen;
     g.userData.marker.visible = !(hov || chosen);
@@ -8447,7 +8452,7 @@ function chooseSpot(g) {
   spotChosen = g; spotStyle();
   if (spotSpec && spotSpec.onChoose) spotSpec.onChoose(g ? g.userData.spot : null);
 }
-function confirmSpot() { const g = spotChosen; if (!g || !spotSpec) return false; const sp = g.userData.spot; chooseSpot(null); if (spotSpec.onPick) spotSpec.onPick(sp); return true; }
+function confirmSpot() { const g = spotChosen; if (!g || !spotSpec) return false; const sp = g.userData.spot; if (sp.kind === 'no') return false; chooseSpot(null); if (spotSpec.onPick) spotSpec.onPick(sp); return true; }
 function castAt(e) {
   const r = canvas.getBoundingClientRect();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
@@ -8600,10 +8605,10 @@ function hoverAt(e) {
 canvas.addEventListener('pointermove', e => {
   if (carry) { dragMove(e); return; }
   if (eraser) { const id = unitAtEvent(e); if (id !== eraseId) eraseBox(id); canvas.style.cursor = id != null ? 'pointer' : ''; return; }
-  if (spotSpec && e.pointerType !== 'touch') { const g = spotAt(e); if (g !== spotHover) { spotHover = g; spotStyle(); canvas.style.cursor = g ? 'pointer' : ''; } }
+  if (spotSpec && e.pointerType !== 'touch') { const g = spotAt(e); if (g !== spotHover) { spotHover = g; spotStyle(); canvas.style.cursor = g ? 'pointer' : ''; if (spotSpec.onHover) spotSpec.onHover(g ? g.userData.spot : null); } }   // onHover: the workspace says why a refused cell is refused (2026-10-20)
   hoverAt(e);
 });
-canvas.addEventListener('pointerleave', () => hoverAt(null));
+canvas.addEventListener('pointerleave', () => { if (spotHover) { spotHover = null; spotStyle(); canvas.style.cursor = ''; if (spotSpec && spotSpec.onHover) spotSpec.onHover(null); } hoverAt(null); });   // a hovered spot ends with the pointer leaving the canvas (Sol 01a15b70)
 canvas.addEventListener('pointercancel', () => endCarry(false));
 canvas.addEventListener('contextmenu', e => {
   // a touch or pen HOLD arrives as a contextmenu (the system's long-press): held still it opens the menu, as on a phone;

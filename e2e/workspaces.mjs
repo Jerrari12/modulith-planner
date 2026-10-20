@@ -134,9 +134,9 @@ test('analytics: only Assemble counts steps, the boot preset is not a pick, and 
 /* THE BOARD REDESIGN (Joey + Astra, 2026-10-16): the 2D board hugs the build and shows the 3D view's "+" spots (one
    calculation for both); past either edge widens the build within the mount's cap; a drag may go past the build; the
    inspector's Move buttons are the alternative to dragging; an empty build has one starting spot. */
-const boardSpots = (page) => page.evaluate(() => [...document.querySelectorAll('#ws-board .b-spot')].map((g) => `${g.dataset.x},${g.dataset.y}`).sort());
+const boardSpots = (page) => page.evaluate(() => [...document.querySelectorAll('#ws-board .b-spot:not(.no)')].map((g) => `${g.dataset.x},${g.dataset.y}`).sort());   // the "+" discs, not the refused cells
 const stageSpots = (page) => page.evaluate(() => (window.__spots || []).slice().sort());
-const watchStageSpots = (page) => page.evaluate(() => { const V = window.__GEN2_VIEWER__; if (V.__watched) return; V.__watched = 1; const o = V.setSpots; V.setSpots = (spec) => { window.__spots = spec ? spec.spots.filter((p) => p.kind !== 'need').map((p) => `${p.x},${p.y}`) : []; return o(spec); }; });
+const watchStageSpots = (page) => page.evaluate(() => { const V = window.__GEN2_VIEWER__; if (V.__watched) return; V.__watched = 1; const o = V.setSpots; V.setSpots = (spec) => { window.__spots = spec ? spec.spots.filter((p) => p.kind !== 'need' && p.kind !== 'no').map((p) => `${p.x},${p.y}`) : []; window.__noSpots = spec ? spec.spots.filter((p) => p.kind === 'no').map((p) => `${p.x},${p.y}`) : []; return o(spec); }; });
 const brief = (page) => page.evaluate(() => { const s = window.__GEN2_STORE__.state; return { gridW: s.gridW, units: s.placed.map((p) => `${p.id}:${p.w}W@${p.x},${p.y}`).sort().join(' ') }; });
 const armSize = async (page, t) => { await page.locator('#ws-lib .size:not(.dis)', { hasText: t }).first().click(); await page.waitForSelector('#ws-lib .size.on', { timeout: 15_000 }); };
 const view = async (page, v) => { await page.locator(`#ws-tools button:has-text("${v}")`).first().click(); await page.waitForTimeout(300); };
@@ -1167,6 +1167,61 @@ test('Build: a spot left of the starter drawer, and placing there shifts the bui
   await page.click('#ws-tools button[aria-label="Undo"]');
   await page.waitForFunction((w) => window.__GEN2_STORE__.state.gridW === w && window.__GEN2_STORE__.state.placed.length === 1, s0.gridW, { timeout: 30_000 });
   assert.deepEqual((await S(page)).placed.map((u) => u.x), [0], 'one undo puts it all back');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* WHY A SPOT IS REFUSED (2026-10-20). Joey's coworker put a 1W over the middle of a 3W and got nothing: the ends were
+   offered, the middle was silent. Now the middle is a muted "no" spot in both views; a click or tap on it opens the chip
+   with the sag rule in a sentence and "Put it at the left end", which places there; on a mouse, resting on it says why
+   without a click; it never places. */
+test('Build: a refused cell says why - a 1W over the middle of a 3W is a muted spot in both views, the chip states the sag rule and offers the end', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 3 }]);
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  const top = y - 2;   // the row on the 3W
+  await armSize(page, '1W·1H');
+  await page.waitForFunction(() => (window.__spots || []).length, null, { timeout: 30_000 }).catch(() => assert.fail('the 3D view drew no spots for 1W·1H within 30 s'));
+  const refused = await page.evaluate(() => window.__GEN2_BUILD__.refusedSpots({ w: 1, h: 1, hh: 2 }, 'decor'));
+  const mid = refused.find((sp) => sp.x === 1 && sp.y === top);
+  assert.ok(mid, `the middle cell on the 3W is refused: ${JSON.stringify(refused.map((sp) => [sp.x, sp.y, sp.code]))}`);
+  assert.equal(mid.code, 's', 'for the sag rule');
+  assert.match(mid.why, /A 1W can't sit on the middle of the 3W/);
+  assert.deepEqual(mid.ends.map((e) => `${e.side}@${e.x}`).sort(), ['left@0', 'right@2'], 'both ends are offered as the way out');
+  const offered = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
+  assert.ok(offered.includes(`0,${top}`) && offered.includes(`2,${top}`) && !offered.includes(`1,${top}`), `the ends are "+" spots, the middle is not: ${offered}`);
+  assert.deepEqual(await page.evaluate(() => (window.__noSpots || []).slice().sort()), [`1,${top}`], 'the 3D view drew exactly that one refused cell');
+  // the 3D view, a mouse: resting on the refused cell says why; a click keeps it up; Escape clears it
+  const sc = await page.evaluate(([x, yy]) => window.__GEN2_VIEWER__.spotScreens().find((p) => p.x === x && p.y === yy), [1, top]);
+  assert.ok(sc, 'the refused cell has a marker on the stage');
+  await page.mouse.move(sc.sx, sc.sy);
+  await page.waitForFunction(() => !document.getElementById('ws-choice').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('resting on the refused cell opened no chip within 15 s'));
+  assert.match(await text(page, '#ws-choice'), /middle of the 3W/, 'the chip says why');
+  assert.equal(await page.locator('#ws-choice button:has-text("Place")').count(), 0, 'and offers no Place');
+  await page.mouse.move(sc.sx, sc.sy + 300);
+  await page.waitForFunction(() => document.getElementById('ws-choice').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('leaving the refused cell did not close the chip'));
+  await page.mouse.move(sc.sx, sc.sy); await page.mouse.down(); await page.mouse.up();
+  await page.waitForFunction(() => !document.getElementById('ws-choice').hidden, null, { timeout: 15_000 });
+  await page.mouse.move(sc.sx, sc.sy + 300); await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => document.getElementById('ws-choice').hidden), false, 'a clicked reason stays up when the mouse leaves');
+  assert.equal(await units(page), 1, 'a click on a refused cell places nothing');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.getElementById('ws-choice').hidden, null, { timeout: 15_000 });
+  assert.ok(await page.evaluate(() => !!document.querySelector('#ws-lib .size.on')), 'the first Escape closed the chip and kept the size armed');
+  // the board: a muted disc at the middle; a click on it opens the reason, "Put it at the left end" places there
+  const in3d = await stageSpots(page);   // read before the switch: the 2D view takes the stage's spots down
+  await view(page, '2D');
+  await page.waitForSelector(`#ws-board .b-spot.no[data-x="1"][data-y="${top}"]`, { timeout: 30_000 }).catch(() => assert.fail('the board drew no refused cell within 30 s'));
+  assert.deepEqual(await boardSpots(page), in3d, 'the board\'s "+" spots are still exactly the 3D ones');
+  assert.ok(in3d.length >= 4 && !in3d.includes(`1,${top}`), `the "+" list: ${in3d}`);
+  await clickSpot(page, 1, top);
+  await page.waitForFunction(() => !document.getElementById('ws-choice').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('a click on the board\'s refused cell opened no chip within 15 s'));
+  assert.match(await text(page, '#ws-choice'), /wall under at least one end/);
+  assert.equal(await units(page), 1, 'nothing placed');
+  await page.locator('#ws-choice button:has-text("Put it at the left end")').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 }).catch(() => assert.fail('"Put it at the left end" placed nothing within 30 s'));
+  assert.match((await brief(page)).units, /100:1W@0,/, 'the 1W sits at the left end of the 3W');
+  assert.equal(await page.evaluate(() => document.getElementById('ws-choice').hidden), true, 'the chip closed');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

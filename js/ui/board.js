@@ -135,12 +135,15 @@ export function board(opts) {
       if (isSel) svgEl('rect', { x: x - 2, y: y - 2, width: w + 4, height: h + 4, rx: 7, class: 'b-sel' }, ug);
       if (flashing.has(u.id)) svgEl('rect', { x: x - 3, y: y - 3, width: w + 6, height: h + 6, rx: 8, class: 'b-pulse' }, ug);
     }
-    // the "+" spots: the 3D view's list, one amber disc at each footprint's centre
+    // the "+" spots: the 3D view's list, one amber disc at each footprint's centre; a refused cell beside the build
+    // (kind "no", 2026-10-20) is a muted disc with a bar, and a tap on it says why (opts.onRefused)
     if (a) for (const sp of spots) {
       const cx = px(sp.x) + a.w * cell / 2, cy = py(sp.y) + a.hh * half() / 2, r = Math.max(coarse() ? 15 : 9, Math.min(cell, a.hh * half()) * 0.26);   // 30 px discs for a finger
-      const g = svgEl('g', { class: 'b-spot', 'data-x': sp.x, 'data-y': sp.y }, svg);
+      const no = sp.kind === 'no';
+      const g = svgEl('g', { class: 'b-spot' + (no ? ' no' : ''), 'data-x': sp.x, 'data-y': sp.y }, svg);
+      if (no && sp.why) svgEl('title', {}, g).textContent = sp.why;
       svgEl('circle', { cx, cy, r }, g);
-      svgEl('path', { d: `M${cx - r * 0.5} ${cy}H${cx + r * 0.5}M${cx} ${cy - r * 0.5}V${cy + r * 0.5}`, class: 'b-spot-plus' }, g);
+      svgEl('path', { d: no ? `M${cx - r * 0.5} ${cy}H${cx + r * 0.5}` : `M${cx - r * 0.5} ${cy}H${cx + r * 0.5}M${cx} ${cy - r * 0.5}V${cy + r * 0.5}`, class: 'b-spot-plus' }, g);
     }
     renderGhost();
   }
@@ -159,7 +162,7 @@ export function board(opts) {
     const a = opts.armed();
     hoverSpot = a && hover && !drag ? spotAt(hover) : null;
     if (!hoverSpot) return;
-    ghost = svgEl('rect', { x: px(hoverSpot.x) + 1.5, y: py(hoverSpot.y) + 1.5, width: a.w * cell - 3, height: a.hh * half() - 3, rx: 5, class: 'b-ghost ok' }, svg);
+    ghost = svgEl('rect', { x: px(hoverSpot.x) + 1.5, y: py(hoverSpot.y) + 1.5, width: a.w * cell - 3, height: a.hh * half() - 3, rx: 5, class: 'b-ghost ' + (hoverSpot.kind === 'no' ? 'no' : 'ok') }, svg);   // a refused cell's ghost is the red one, never the green
     svg.insertBefore(ghost, svg.querySelector('.b-spot'));   // the ghost under the "+" discs
     const on = svg.querySelector(`.b-spot[data-x="${hoverSpot.x}"][data-y="${hoverSpot.y}"]`); if (on) on.classList.add('on');
   }
@@ -193,7 +196,7 @@ export function board(opts) {
       return;
     }
     if (press && press.x === c.x && press.y === c.y) {
-      if (opts.armed()) { const sp = spotAt(c); if (sp) opts.onPlace(sp.x, sp.y); }
+      if (opts.armed()) { const sp = spotAt(c); if (sp && sp.kind === 'no') { if (opts.onRefused) opts.onRefused(sp); } else if (sp) opts.onPlace(sp.x, sp.y); }
       else opts.onSelect(null);
     }
     press = null;
