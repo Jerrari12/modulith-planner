@@ -2224,3 +2224,5 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Sol `01a1603f`: no findings. Luna `01a16050` on this entry: four wording fixes taken (the screenshot's
   build, the cap's number in the message, which builds the board change is for, a 180 mm wall as a 3H cap).
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `d1682ec3`: `grow-down-prod.mjs` (the e2e case's build on the live site, analytics blocked)
+  passes every check. On `39e6a12f`, before the change, it failed the spots below, the growth, the cap and the Undo.
