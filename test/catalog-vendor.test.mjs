@@ -21,8 +21,8 @@ const VENDORED = join(root, 'js', 'catalog', 'data.js');
 const UPSTREAM = process.env.GEN2_PLANNER_ROOT
   ? join(process.env.GEN2_PLANNER_ROOT, 'js', 'data.js')
   : join(root, '..', 'GEN2 Planner', 'gen2-planner-main', 'js', 'data.js');
-const PINNED_SHA256 = '4f3bfdba8722203de09b2e02f3dd3eb12235682d401a56805453874d56772881';
-const SOURCE = 'gen2-planner-main dfec9b9 (2026-10-10)';
+const PINNED_SHA256 = 'da5c8f2f5ba4a3a3044e7bea644262b2225e1b42744b05ad4179bcfdd3bac0d6';
+const SOURCE = 'gen2-planner-main 92c055d (2026-10-21: faceplate, not plate, in two strings)';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 test(`the vendored catalog matches its pin (${SOURCE})`, () => {
