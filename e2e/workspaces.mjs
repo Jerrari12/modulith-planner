@@ -2874,6 +2874,34 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   await ctx.close();
 });
 
+/* SILK LOOKS SILK (Joey, 2026-10-21: "in the color palettes, is it possible to give the silk material squares a gloss effect,
+   like a sheen on half of it or something? To help differentiate it from regular material"). A silk filament's swatch wears
+   a highlight over its upper-left half (.sw.silk::before), in the picker and wherever its colour shows in Colors. */
+test('Colors: silk filaments wear a sheen in the picker and in the rows, plain ones do not', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  const r = await page.evaluate(() => {
+    const sws = [...document.querySelectorAll('#ws-picker .brands .sw')];
+    const isSilk = (e) => (e.getAttribute('aria-label') || '').split(' ').includes('Silk');
+    const sheen = (e) => getComputedStyle(e, '::before').backgroundImage;
+    const silk = sws.filter(isSilk), plain = sws.filter((e) => !isSilk(e));
+    return { silk: silk.length, plain: plain.length,
+      silkOk: silk.filter((e) => !(e.classList.contains('silk') && /linear-gradient/.test(sheen(e)))).map((e) => e.getAttribute('aria-label')),
+      plainOk: plain.filter((e) => e.classList.contains('silk') || sheen(e) !== 'none').map((e) => e.getAttribute('aria-label')) };
+  });
+  assert.ok(r.silk >= 24, `the Silk PLA line is in the picker: ${r.silk}`);
+  assert.deepEqual(r.silkOk, [], 'every silk swatch wears the sheen');
+  assert.ok(r.plain > 50, `plain filaments too: ${r.plain}`);
+  assert.deepEqual(r.plainOk, [], 'no plain swatch wears it');
+  // pick a silk filament: the row chip for that region and the In this build swatch wear the sheen as well
+  await page.locator('#ws-picker .brands .sw[aria-label="Panchroma Silk Gold"]').click();
+  await page.waitForFunction(() => !!document.querySelector('#ws-colors .crow .sw.silk') && !!document.querySelector('#ws-picker .brands .sw.silk[aria-label="Panchroma Silk Gold"][title*="already in this build"]'), null, { timeout: 15_000 })
+    .catch(() => assert.fail('the picked silk does not show its sheen in the row and the In this build swatches'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* AN OPEN DRAWER SAYS ITS INSIDE SIZE (Joey, 2026-10-21: "we no longer get interior dimensions when opening a drawer like we
    did in the old planner"). The stage's drawer focus - the cavity measured by rays, lines on its floor and back wall, the
    W / L / H pills - now follows the planner's own way of opening one (stage.peekUnit: Build's Peek inside, the Colors

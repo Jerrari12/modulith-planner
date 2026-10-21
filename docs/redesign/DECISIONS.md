@@ -1871,3 +1871,21 @@ Dated calls made while building, with who made them. The brief and the inventory
   dimsOn, and the ruler steps were rewritten for it.
 - **Review:** Terra `01a15ee8`: no findings. Luna `01a15eea` on this entry: two wording fixes taken, five discarded.
 - **Deploy:** a fix for a bug Joey reports deploys once its checks pass.
+
+## 2026-10-21 (silk swatches wear a sheen)
+
+- **Joey, asked:** "in the color palettes, is it possible to give the silk material squares a gloss effect, like a sheen
+  on half of it or something? To help differentiate it from regular material".
+- **Now** a silk filament's swatch wears a highlight over its upper-left half, cut at the diagonal, with a faint shade on
+  the lower right so a white or silver silk reads glossy too. It shows in the picker's brand grids and its In this build
+  row, the Filaments I own grid, and the small chips in the Colors rows, the shop rows, Simplify and the part card. A
+  swatch is silk when its filament's name has the word Silk, which every Panchroma Silk PLA colour has and no other does.
+  The sheen is drawn in ::before, so the pick star and the owned tick keep ::after.
+- **Checks.** A new e2e case: all 24 silk swatches in the picker wear the sheen and none of the plain ones do; after
+  picking Panchroma Silk Gold, its row chip and its In this build swatch wear it too. Screenshots in both themes in
+  D:/Claude - Output/silk-swatches-2026-10-21. npm test 584 (579 pass, 0 fail, 5 skipped). The full e2e run: 71, 70
+  pass, 1 fail, "a refused cell says why", a Build case whose mouse rest opened no chip within 15 s; it passed 3 runs of 3
+  alone. This change touches only colors.js, app.css and the e2e file.
+- **Review:** Terra `01a15ef6`: no findings. Luna `01a15f02` on this entry: two fixes taken (the counts, the failure's
+  wording), two discarded (the quote is verbatim; the gradient's hard stop at 50% is the half).
+- **Deploy:** a change Joey asked for; it deploys once its checks pass.

@@ -438,6 +438,12 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-picker .sw { aspect-ratio: 1; border-radius: 7px; border: 1px solid rgba(128,128,128,.35); cursor: pointer; padding: 0; position: relative; }
 #ws-picker .sw.active { outline: 2px solid var(--orange); outline-offset: 2px; }
 #ws-picker .sw.pick::after { content: '★'; position: absolute; right: 1px; bottom: -1px; font-size: 9px; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.8); }
+/* SILK (Joey, 2026-10-21: "a sheen on half of it"): a highlight over the upper-left half of a silk filament's swatch, cut
+   at the diagonal like a reflection, and a faint shade on the lower right, so a white or silver silk reads glossy too.
+   Any .sw (the picker, the owned list, the chips in every Colors row); ::after stays free for the pick star and the tick. */
+.sw.silk { position: relative; }
+.sw.silk::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .6) 0%, rgba(255, 255, 255, .2) 44%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, .16) 100%); }
 #ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
 #ws-picker .foot .buy { font-size: 13px; font-weight: 700; color: var(--ink); text-decoration: none; }
 #ws-picker .foot .disc, #ws-shop .disc { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
