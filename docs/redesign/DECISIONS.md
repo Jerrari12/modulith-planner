@@ -1979,7 +1979,8 @@ Dated calls made while building, with who made them. The brief and the inventory
 ## 2026-10-21 (the cover tiles' edges catch the light)
 
 - **Joey, reported:** in My colors a row of cover tiles read as one solid slab, where on a printed build a seam is just
-  barely visible. He suggested a 0.2 mm chamfer on the covers' top side edges, "so the light hits them differently".
+  barely visible. He suggested a 0.2 mm chamfer on the covers' top side edges, so the light would hit them
+  differently (relayed, not verbatim).
 - **Why there was no seam to draw.** All 24 cover GLBs have square seam edges, and neighbouring tiles meet within
   0.012 mm. The knowledge pack records this: `measurements.md`, "Covers: the seam edge, the thickness, and how the two
   layers stack", vault `23d4991`.

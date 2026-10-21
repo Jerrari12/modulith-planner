@@ -2,8 +2,8 @@
    COVER SEAMS - a shading-only bevel on every cover tile's side edges (2026-10-21)
    =========================================================================
    Joey 2026-10-21: in My colors a row of cover tiles read as one solid slab, where on a printed build the seam is
-   just barely visible. He suggested a 0.2 mm chamfer on the covers' top side edges "so the light hits them
-   differently". The printable models stay as they are: their seam edges are square and neighbouring tiles meet
+   just barely visible. He suggested a 0.2 mm chamfer on the covers' top side edges, so the light would hit
+   them differently. The printable models stay as they are: their seam edges are square and neighbouring tiles meet
    within 0.012 mm (vault measurements.md, "Covers: the seam edge ..."), so the geometry gives the renderer no seam
    at all. This draws the chamfer in the shader instead - and only in the shader.
 
