@@ -1713,7 +1713,7 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Terra `01a15bf2`, routine: no findings. Its own discards: a breakpoint remount unmounts first, so the step is remembered; an incomplete manifest's goTo is forced to its preview either way; the callbacks are optional-chained and the toolbar exists before any goTo; every override clear runs through setCamOverride, which updates before it notifies; the e2e drag stays clear of the step list and the player.
 - **Live 2026-10-21**, stamp `a9609f2e`, together with the idle-gate case below. Its own run (39524907871, `996d51c`) failed on that
   case, a timing gate the runner missed (the stage's rebuild outlasted a fixed 1.5 s window); run 39537588862 for `a9609f2`
-  passed on attempt 1 (41 min). Checked live by `planner-prod-checks-2026-10-18ssemble-start-prod.mjs`: from Build (the
+  passed on attempt 1 (41 min). Checked live by `planner-prod-checks-2026-10-18\assemble-start-prod.mjs`: from Build (the
   stage parked on step 12, the finished one), Assemble opens on the Overview with the list at "0 / 11"; the camera button
   is named "Back to the step’s camera", unlit, lights after a real orbit and goes out when pressed.
 
