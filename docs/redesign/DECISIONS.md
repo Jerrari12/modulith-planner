@@ -2173,12 +2173,21 @@ Dated calls made while building, with who made them. The brief and the inventory
   (test/lib/local-parts.mjs:31). The base commit fd3e5d6 without this change ends the same way (74 of 75, the same seven
   rejections), so this was there before this change. CI runs the e2e against the live host, without that route, and run
   that way here the e2e passes 74 of 74 with no rejections. The commit was then rebased onto main `39e6a12`, which
-  differs from fd3e5d6 only in this file; official-builds and parts-exist pass again there (20 of 20).
+  differs from fd3e5d6 only in this file; official-builds and parts-exist pass again there (20 of 20). The rejections
+  have since been fixed by `b9be960`: the mount-window case's `page.unroute` already passed each held GLB on, so its
+  own fallback handled it twice.
 - **Review:** Luna `01a15fe7`: no findings. Nothing outside the planner reads this text: the site's only match for
   either phrase is a vendored code comment, and the old viewer has the same text in its own generate.js, not read from
   here. Luna `01a15ff4` on this entry: two wording fixes taken (the e2e file's failure stated without a cause, the old
   viewer's copy said plainly), one discarded (the "..." it read as a change was an elision in the evidence).
-- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `55a02fb9` (run 39670501878). This commit's own run (39669304242) was cancelled by the push
+  of `55a02fb`, whose deploy carries it. Read off the live site: the page loads `boot.js?v=55a02fb9`; the stamped
+  generate.js has both new phrases and neither old one; each of the three tabletop kits serves "from behind the
+  faceplate" and not "from behind the plate". In the browser (?debug=1, analytics skipped), the official build
+  185-tabletop-2w2h's Faceplates step says "its grip is part of the faceplate", and the live generateManifest on a copy
+  of that build with Essential faceplates gives the "Faceplates & handles" step with "from behind the faceplate". No
+  console errors were captured on that tab. Luna `01a16054` on these lines: two wording fixes taken, one discarded (the
+  carrying run's head is 55a02fb, which contains this commit).
 
 ## 2026-10-21 (the Parts list's Amazon links are marked paid at the link)
 
