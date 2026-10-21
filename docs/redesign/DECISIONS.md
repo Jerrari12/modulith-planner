@@ -2007,8 +2007,10 @@ Dated calls made while building, with who made them. The brief and the inventory
     first", whose Parts-row wait timed out at 60 s. It passed 3 runs of 3 alone on this branch, and once on origin/main.
   - **Deploy guard:** the stamping step and module-graph guard, replayed on a copy, print "module graph OK". Without the
     new line the guard fails on `./cover-seam.js`.
-  - **Goldens against a fresh baseline from origin/main:** 60 of 60 within the threshold. Only the finished-build shots
-    move (Fast 0.019–0.059 % of pixels, Very High 0.035–0.096 %); the cover and middle steps are 0.000 %.
+  - **Goldens:** origin/main matches the committed goldens exactly. This branch moved only the 20 finished-build shots
+    (at most 0.059 % of pixels on Fast and 0.096 % on Very High, against the 0.1 % threshold); the cover and middle
+    steps stayed at 0.000 %. The change is intended and nearly used up the threshold, so those 20 are re-blessed and
+    the other 40 are left as committed. Afterwards: 60 of 60 at 0.000 %.
   - **On a 7W build, dpr 2, both themes:** all 8 cover meshes carry the attribute with their own half-width, there are
     no page errors, and the program count is 18 with the edge on and off.
 - **Review:** Sol `01a15ee1` on the prototype: 2 fixes taken (a zero-width band, an interpolated outward vector). Sol
