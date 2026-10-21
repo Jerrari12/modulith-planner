@@ -1847,3 +1847,27 @@ Dated calls made while building, with who made them. The brief and the inventory
   a payload file the bridge would not let it read, and is recorded as failed. Before review I found and fixed one defect
   myself: openCells walked a hanging build to its own top while Fill all fills to the grid's top row.
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+
+## 2026-10-21 (an opened drawer shows its inside W / L / H again)
+
+- **Joey, reported:** "i noticed we no longer get interior dimensions when opening a drawer like we did in the old planner".
+- **Why they were gone.** The stage kept the old viewer's drawer focus: the cavity measured by rays, lines on its floor and
+  back wall, and the three W / L / H pills. It ran only when a selection dived into a drawer. The planner selects quietly by
+  design and opens a drawer only through its own buttons (Build's Peek inside, the Colors card's Open the drawer, both
+  stage.peekUnit), which slid the drawer out and nothing else.
+- **Now** peekUnit enters that focus without the camera swing; the planner never takes the camera unasked. The pills show the
+  drawer's inside size while a peek holds it open. Picking another of that drawer's parts (its handle, label or accent) keeps them.
+  Closing it, deselecting, or picking anything else gives the build's pills back as they were before the peek, on or off.
+  The ruler during a peek is the visitor's: it reads their own setting, and a click hands the pills back to the build's
+  sizes with the drawer left open.
+- **On the way:** a pick of another part on the open drawer used to leave it open while the stage forgot it was open.
+  The stage now keeps track of it while the peek holds.
+- **Checks.** A new e2e case covers the pills on Peek inside within the drawer's outer size, the camera unmoved, the sizes
+  kept while a riding part is picked, Close it restoring the build's pills, and the ruler handing them over and hiding them.
+  It also covers a peek with the ruler off closing to no pills. The older Peek inside case still passes. Five mutants each
+  fail the new case: no focus in peekUnit, the quiet pick always leaving it, the exit without the restore, setDims without
+  the hand-off, and dimsOn ignoring the peek. The quiet-pick mutant first survived, because re-selecting the part already
+  selected is a no-op, so the case now picks a part riding the drawer. The first run also showed the ruler's click reads
+  dimsOn, and the ruler steps were rewritten for it.
+- **Review:** Terra `01a15ee8`: no findings. Luna `01a15eea` on this entry: two wording fixes taken, five discarded.
+- **Deploy:** a fix for a bug Joey reports deploys once its checks pass.

@@ -2874,6 +2874,77 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   await ctx.close();
 });
 
+/* AN OPEN DRAWER SAYS ITS INSIDE SIZE (Joey, 2026-10-21: "we no longer get interior dimensions when opening a drawer like we
+   did in the old planner"). The stage's drawer focus - the cavity measured by rays, lines on its floor and back wall, the
+   W / L / H pills - now follows the planner's own way of opening one (stage.peekUnit: Build's Peek inside, the Colors
+   card's Open the drawer), without moving the camera. Picking the drawer’s own parts keeps it; Close it gives the build’s
+   pills back as they were; the ruler during a peek hands the pills back to the build. */
+test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, keeps them while its parts are picked, and Close it gives the build’s pills back', async () => {
+  const { ctx, page, errors } = await open('build');
+  const pill = (id) => page.evaluate((id) => { const e = document.getElementById(id); const n = (e.textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return { shown: !e.classList.contains('hidden'), mm: Number(n) }; }, id);
+  const pills = async () => ({ w: await pill('dim-w'), l: await pill('dim-l'), h: await pill('dim-h') });
+  const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); const owner = v.partInfo(d.id).owner; const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === owner); return { id: d.id, owner, w: u.w, hh: u.hh, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
+  // the build’s own pills, on
+  await page.locator('#ws-tools button.measure').click();
+  await page.waitForFunction(() => !document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 }).catch(() => assert.fail('the ruler did not show the build’s pills'));
+  const build0 = await pills();
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
+  // the camera at rest first (the boot's own camera move may still be landing)
+  const cam = () => page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.probe().camera));
+  let cam0 = await cam();
+  for (let i = 0; i < 40; i++) { await settle(page, 250); const c = await cam(); if (c === cam0) break; cam0 = c; }
+  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  const stop = drawer.collection - 13.5;
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
+  await settle(page, 600);
+  const inside = await pills();
+  assert.ok(inside.w.shown && inside.l.shown && inside.h.shown, `the three pills show: ${JSON.stringify(inside)}`);
+  assert.ok(inside.w.mm > 0 && inside.w.mm < drawer.w * 88, `inside width ${inside.w.mm} under the drawer’s ${drawer.w * 88} mm`);
+  assert.ok(inside.l.mm > 0 && inside.l.mm < drawer.collection, `inside length ${inside.l.mm} under the ${drawer.collection} collection`);
+  assert.ok(inside.h.mm > 0 && inside.h.mm < drawer.hh * 28, `inside height ${inside.h.mm} under the drawer’s ${drawer.hh * 28} mm`);
+  assert.notEqual(inside.w.mm, build0.w.mm, 'the pills say the drawer, not the build');
+  assert.equal(await cam(), cam0, 'the camera stayed where it was');
+  // picking another of the drawer’s own parts (its handle, label or accent: what Colors does next) keeps it open, and its sizes
+  const rider = await page.evaluate((id) => (window.__GEN2_VIEWER__.manifest.instances.find((x) => x.rides === id && !/Faceplate/.test(x.node)) || {}).id || null, drawer.id);
+  assert.ok(rider, 'the drawer carries a part other than its faceplate');
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), rider);
+  await settle(page, 400);
+  assert.deepEqual((await pills()).w, inside.w, 'still the inside width');
+  assert.ok(await page.evaluate(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop]), 'still open');
+  // Close it: the build’s pills come back as they were
+  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 }).catch(() => assert.fail('Close it did not bring the drawer back'));
+  await settle(page, 400);
+  const build1 = await pills();
+  assert.ok(build1.w.shown && build1.w.mm === build0.w.mm && build1.l.mm === build0.l.mm && build1.h.mm === build0.h.mm, `the build’s pills are back: ${JSON.stringify(build1)} vs ${JSON.stringify(build0)}`);
+  // the ruler during a peek: the build’s pills take over, the drawer stays open
+  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction((mm) => { const t = (document.getElementById('dim-w').textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return Number(t) !== mm; }, build0.w.mm, { timeout: 30_000 }).catch(() => assert.fail('the second peek did not show the inside sizes'));
+  // the ruler reads the visitor's own setting during a peek (on), and a click is theirs: off hides every pill, the drawer
+  // stays open; on again shows the build's
+  assert.equal(await page.locator('#ws-tools button.measure').getAttribute('aria-pressed'), 'true', 'the ruler still reads on');
+  await page.locator('#ws-tools button.measure').click();
+  await page.waitForFunction(() => ['dim-w', 'dim-l', 'dim-h'].every((id) => document.getElementById(id).classList.contains('hidden')), null, { timeout: 30_000 }).catch(() => assert.fail('the ruler off did not hide the pills'));
+  await settle(page, 400);
+  assert.ok(await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].every((id) => document.getElementById(id).classList.contains('hidden'))), 'they stay hidden');
+  assert.ok(await page.evaluate(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop]), 'the drawer stays open');
+  await page.locator('#ws-tools button.measure').click();
+  await page.waitForFunction((mm) => { const t = (document.getElementById('dim-w').textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return Number(t) === mm && !document.getElementById('dim-w').classList.contains('hidden'); }, build0.w.mm, { timeout: 30_000 }).catch(() => assert.fail('the ruler on did not show the build pills'));
+  // with the ruler off, a peek and a close leave no pills at all (the stage's old exit turned the build's on)
+  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await page.locator('#ws-tools button.measure').click();
+  await page.waitForFunction(() => document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 });
+  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(() => !document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 }).catch(() => assert.fail('a peek with the ruler off showed no inside sizes'));
+  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 });
+  await settle(page, 400);
+  assert.ok(await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].every((id) => document.getElementById(id).classList.contains('hidden'))), 'closed with the ruler off: no pills');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE BACK COVER AND THE v2609 DRAWER'S TEAR-AWAY FRONT (2026-10-20). The standard Decor drawer now prints with the
    same tear-away front as the Gridfinity one, and its GLB carries it as one mesh with the body. Joey's rule: the
    faceplate goes on with the front left in, the back cover only with it out ("otherwise they would interfere"). The

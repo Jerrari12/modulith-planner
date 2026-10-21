@@ -6454,7 +6454,11 @@ function setSelected(id) {
   // faceplate → isolation focus; the focused plate's handle stays inside the
   // isolation; anything else leaves/never enters either focus
   if (quiet) {
-    exitFaceplateFocus(); exitDrawerFocus();   // a quiet select leaves any earlier focus too
+    exitFaceplateFocus();   // a quiet select leaves any earlier focus too
+    // ...but a drawer the planner opened (peekUnit) stays open with its inside sizes while the pick is one of its own parts
+    // other than the faceplate; any other pick shut it above, and its sizes go with it
+    if (dFocus.peek && prevOpen && prevOpen === dFocus.carrier && carrier === prevOpen && !isFp) openCarrier = prevOpen;
+    else exitDrawerFocus();
   } else if (isFp) {
     exitDrawerFocus(true); // keep the saved pose — the faceplate focus adopts it
     enterFaceplateFocus(inst, seatable);
@@ -6487,7 +6491,7 @@ function setSelected(id) {
 // to where it was and brings the build dims back. Interior sizes are MEASURED
 // live — raycasts from inside the cavity to its walls/floor — so every drawer
 // GLB works without data tables; results are cached per node.
-const dFocus = { carrier: null, saved: null, group: null, lines: null, cache: new Map() };
+const dFocus = { carrier: null, saved: null, group: null, lines: null, cache: new Map(), peek: null };   // peek: { dimsWas } while the planner's peekUnit holds it
 function drawerInterior(carrier) {
   const key = carrier.cfg.node;
   if (dFocus.cache.has(key)) return dFocus.cache.get(key);
@@ -6516,14 +6520,20 @@ function drawerInterior(carrier) {
   dFocus.cache.set(key, it);
   return it;
 }
-function enterDrawerFocus(carrier) {
+/* THE PLANNER'S OPEN DRAWER (2026-10-21, Joey: "we no longer get interior dimensions when opening a drawer like we did in
+   the old planner"): peekUnit - Build's Peek inside, the Colors card's Open the drawer - enters this focus with
+   { swing: false, peek: true }: the inside W / L / H on the open drawer, with no camera swing (the planner never takes the
+   camera unasked), and closing it gives the build's own pills back as they were (dFocus.peek.dimsWas). */
+function enterDrawerFocus(carrier, { swing = true, peek = false } = {}) {
   if (dFocus.carrier === carrier) return;
   exitDrawerFocus(true); // switching drawers: drop the old lines, keep the saved pose
   const it = drawerInterior(carrier);
-  if (!it) return;
+  if (!it) { if (dFocus.peek) endPeekFocus(); return; }
+  const held = dFocus.peek, wasOn = dims.on; dFocus.peek = null;   // so the setDims below is not read as the ruler taking the pills
   dFocus.carrier = carrier;
-  if (!dFocus.saved) dFocus.saved = { pos: camera.position.clone(), target: controls.target.clone() };
+  if (swing && !dFocus.saved) dFocus.saved = { pos: camera.position.clone(), target: controls.target.clone() };
   setDims(false); // the drawer owns the stage — overall dims come back on exit
+  if (peek) dFocus.peek = held || { dimsWas: wasOn };   // a hop from one peeked drawer to the next keeps the first one's
   const mmIn = (mm, axis) => `<b>${axis}</b> ${mm.toFixed(0)} mm<small>${(mm / 25.4).toFixed(1)} in</small>`;
   $('dim-w').innerHTML = mmIn(it.w, 'W');
   $('dim-l').innerHTML = mmIn(it.d, 'L');
@@ -6549,6 +6559,7 @@ function enterDrawerFocus(carrier) {
   dFocus.group = new THREE.Group();
   dFocus.group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: STAGE_THEMES[stageTheme].dim, transparent: true, opacity: 0.9 })));
   carrier.group.add(dFocus.group);
+  if (!swing) return;
   // camera: frame the drawer's OPEN position from front-above (≈50° down) on
   // whichever side the camera is already on — floor + back wall both visible
   const openPos = basePos(carrier, false); openPos.z += drawerStop();
@@ -6591,9 +6602,11 @@ function exitDrawerFocus(keepPose = false) {
       controls.target.lerpVectors(t0, target, k);
     } });
   }
+  if (dFocus.peek) { endPeekFocus(); return; }   // the planner's peek: the build's pills come back as they were
   // overall build dims return (only the final assembly step shows them)
   setDims(!PAGES[cur]?.cover && !PAGES[cur]?.outro && cur - 1 === manifest.steps.length - 1);
 }
+function endPeekFocus() { const on = dFocus.peek.dimsWas; dFocus.peek = null; setDims(on); }
 function updateDrawerDims() { // render-loop: pills track their lines while the drawer slides / camera tweens
   if (!dFocus.lines || !dFocus.carrier) return;
   const r = canvas.getBoundingClientRect();
@@ -9146,10 +9159,12 @@ function peekUnit(unitId) {
   const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
   if (!d) return false;
   if (openCarrier && openCarrier !== d) slideDrawer(openCarrier, false);
-  openCarrier = d; slideDrawer(d, true, drawerStop()); invalidateFrame();   // "Open the drawer": out to the stopper
+  openCarrier = d; slideDrawer(d, true, drawerStop());   // "Open the drawer": out to the stopper
+  enterDrawerFocus(d, { swing: false, peek: true });     // its inside W / L / H on the open drawer, the camera left alone
+  invalidateFrame();
   return true;
 }
-function unpeek() { if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; invalidateFrame(); } }
+function unpeek() { if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; } if (dFocus.peek) exitDrawerFocus(); invalidateFrame(); }
 
 // ---------- measure tool ----------
 // PrusaSlicer-lite: two taps on part surfaces → markers + a line + a floating
@@ -9221,6 +9236,7 @@ function updateMeasure() { // render-loop: constant marker screen-size + label t
 // choice changes; labels re-place only when the camera pose changes.
 const dims = { on: false, group: null, lines: {}, choice: '', hCorner: null, lastKey: null };
 function setDims(on) {
+  if (dFocus.peek) { dFocus.peek = null; exitDrawerFocus(true); }   // the ruler (or a workspace) during a peek: the pills are the build's again; the drawer stays open
   dims.on = on && !assembledBox.isEmpty();
   dims.choice = ''; dims.hCorner = null; dims.lastKey = null; invalidateFrame();
   if (dims.group) { scene.remove(dims.group); dims.group.traverse(o => o.geometry?.dispose()); dims.group = null; }
@@ -10972,7 +10988,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     currentFaceplateStyle, availableFaceplateStyles,
     currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
     applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
-    setMeasure, setDims, get dimsOn() { return dims.on; }, get dims() { return dims; }, resetView() { $('btn-cam').click(); }, get camFree() { return camOverride; },
+    setMeasure, setDims, get dimsOn() { return dFocus.peek ? dFocus.peek.dimsWas : dims.on; }, get dims() { return dims; }, resetView() { $('btn-cam').click(); }, get camFree() { return camOverride; },
     setSafeArea, get safeArea() { return safeArea; },
     // the step player, for the Assemble workspace (phase 1): the page index, the page count, and the viewer's
     // own controls driven through their buttons so their tracking and state stay in one place
