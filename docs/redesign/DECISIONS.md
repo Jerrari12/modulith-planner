@@ -1740,3 +1740,53 @@ Dated calls made while building, with who made them. The brief and the inventory
   it was 64/65: the Label plate's faceplate-switch case, which needs the Label Studio checkout (skipped on the runner),
   timed out on a hidden "Screw and nut drawings" Off button; it fails 2 runs in 4 on main without this change too, so it
   is an older flake, recorded for its own look.
+
+## 2026-10-20 (a change of mount stands the build up; no setup change reloads into a build the stage cannot show)
+
+- **Why.** Joey switched a wall build to Tabletop "and i got this error because there were some unfilled units on the
+  bottom": the page stopped on "Can't show this build yet · A unit is floating (nothing under part of it)", twice, with no
+  way back but a new build. His layout, from his board that evening: 7W x 4H on the brackets, 11 units, the bottom row
+  open under columns 0-1 and 5-6. `setMount` only slides a layout against the new surface. The generator wants EVERY
+  column of every unit to rest on another unit or the table (or, hanging, to hang from one or the bracket course): stricter
+  than the planner's own support rule (both ends) and than its `fixStructure` (gravity, then a case under each open end).
+  Gravity would also have rearranged his design: two units dropped, the top right left open.
+- **The repair.** `js/rules/stand.js`, a new hand-written module (the rule modules beside it are generated from the old
+  planner by tools/port-rules.mjs, which rewrites them whole). `standUp(build, Rs)` keeps the layout as designed, nothing
+  moves, and fills each open column under a unit (tabletop) or above it (hanging) with 1W cases through the rules' own
+  `fillColumn`, in the build's majority drawer type, as Build's red support spots place them; it also lifts a `nextId` that
+  lags the ids. For his build: four 1W·1H Decor cases at the four open cells. `refusalReason` moved here from layout.js too
+  (today's addition; `npm run drift` reported it as 17 lines a port would delete).
+- **The setup sheet.** A change of mount runs `standUp` after `setMount`, and the sheet says so before Apply: "As a
+  Tabletop build it needs 4 support cases under the gaps · Apply adds them." After the reload a toast repeats it
+  ("Tabletop: added 4 support cases under the gaps."). And every scene change (mount, length, a new build) now builds
+  the record Apply would write on a copy first (`applyDraft` on a detached candidate, with the store's own normalising)
+  and runs the generator on it: if it refuses, nothing is committed, the history, the address and the Recent entry stay
+  as they were, the sheet shows the generator's words, and nothing reloads. The same candidate gives the count above
+  Apply. That closes a second dead end: a length that strands a unit (a 2W·3H Classic at 59, say) reloaded into the same
+  error page under a warning that promised the units would "stay on the board flagged". That warning now says "swap them
+  for sizes it has before changing the length".
+- **The boot's safety net.** A record saved or linked before this (Joey's own planner holds his build that way; an old
+  planner's link can carry a unit in mid-air): the stage's boot, when the generator refuses a `#build=` record, asks the
+  shell (`opts.repair` = `standRecord`: the same slide against the mount's edge, then `standUp`) and uses the result only
+  if the generator accepts it; anything else stops on the error page as before. The page then says "As saved, this build
+  couldn't stand as a Tabletop build · added 4 support cases under the gaps.", writes the stood-up record into the address,
+  and, when it came from this browser's own builds rather than a link, into its Recent entry, so a reload opens it as it
+  now is. A link stays out of Recent builds until edited, as before.
+- **Checks.** test/stand.test.mjs (his wall build is fine; switched it was refused twice for floating units; `standUp`
+  adds exactly the four cells and moves nothing, and the generator accepts it; Tabletop to Wall Mount fills a ragged top
+  up to the brackets; a standing build is left alone; the boot's net on his saved record and on a layout floating above
+  the table; no false repair of the e2e suite's damaged link; the majority drawer type; unique ids). Three e2e cases: his
+  wall build through the sheet to Tabletop (the line before Apply, the reload boots, his 11 at the same heights, the four
+  supports, the toast); a length change stranding a unit refused in the sheet with the generator's words, nothing
+  reloaded, the record unchanged, no Redo; his saved record as a link opens stood up with the note and the address
+  carrying it. Mutants, each failing its own case: the sheet without standUp, the sheet without its check, the boot
+  without its safety net; and a repair that fills only the ends fails the unit test's 3W-on-two-1W case.
+  The deploy's stamping lines carry the new imports (setup.js, build.js, app.js, stand.js), replayed locally with the
+  module-graph guard.
+- **Review:** Sol `01a15c9b`, substantial, two rounds. Round 1, one finding, taken: the first version committed the
+  change, ran the generator, and undid it on a refusal, which left the refused record on the Redo stack, one Redo from
+  the dead end; now the candidate is checked before anything is committed. Round 2 on the revision: no findings. Sol's
+  own discards matched mine: standUp terminates and fills every column in both directions; a share link stays out of
+  Recent builds; Labels consumes its part of the address at mount, and the rewrite skips an address that still has it.
+- **Deploying** as a reported-bug fix (Joey's standing rule): npm test 580 (575 passed, 0 failed, 5 skipped) and e2e 68/68
+  on this machine first. The Live line follows the run.

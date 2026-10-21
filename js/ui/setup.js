@@ -5,6 +5,9 @@
 import { el, trapTab } from './dom.js';
 import { icon } from './icons.js';
 import { layoutRules } from '../rules/layout.js';
+import { standUp, standWords } from '../rules/stand.js';
+import { serializeBuild } from '../rules/schema.js';
+import { generateManifest } from '../generate.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog: a classic-script LEXICAL global, not a globalThis property
@@ -52,6 +55,7 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   const draft = { name: ctx.builds ? ctx.builds.name : '', mount: s0.mount || 'tabletop', length: Number(s0.length) || 185, printer: s0.printer || 'any', customBed: { x: s0.customBed?.x || '', y: s0.customBed?.y || '' }, spaceW: s0.spaceW || '', spaceH: s0.spaceH || '' };
   const STEPS = ['mount', 'length', 'printer'];
   let cur = STEPS.includes(step) ? step : 'mount';
+  let refusal = '';   // why the last Apply was refused (the generator's words), shown in the foot until the next one
   const prev = document.getElementById('ws-setup'); if (prev) prev.remove();
   const veil = el('div', { id: 'ws-setup', role: 'dialog', 'aria-modal': 'true', 'aria-label': fresh ? 'Set up your build' : 'Build setup' });
   const box = el('div.glass.setup-box');   // not .sheet: that is the phone's bottom-sheet class (a collapsed peek)
@@ -68,6 +72,41 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   const blocked = (len) => draft.mount === 'tabletop' && !!(G?.lengths || []).find((l) => l.id === len)?.noTabletop;
   const stranded = () => (fresh ? [] : strandedAt(s0, draft.length));
   const changesScene = () => fresh || draft.mount !== s0.mount || draft.length !== Number(s0.length);
+  /* WHAT APPLY WRITES: the sheet's choices on a record `s` with its rules `R`, as one function, so the committed record, the
+     candidate the generator checks first and the count above Apply are the same thing. A CHANGE OF MOUNT STANDS THE BUILD UP
+     (Joey, 2026-10-20: a wall build with gaps along its bottom, switched to Tabletop, stopped the page on "Can't show this
+     build yet · A unit is floating"): setMount only slides the layout against the new surface, and standUp fills what the
+     generator needs under (or above) it, moving nothing (js/rules/stand.js). Returns standUp's answer, or null. */
+  function applyDraft(s, R) {
+    const mountChange = !fresh && draft.mount !== s.mount;
+    s.printer = draft.printer;
+    s.customBed = draft.printer === 'custom' ? { x: Number(draft.customBed.x), y: Number(draft.customBed.y) } : null;
+    const asks = !!mountDef(draft.mount)?.askSpace;
+    s.spaceW = asks && draft.spaceW ? Number(draft.spaceW) : null;
+    s.spaceH = asks && draft.spaceH ? Number(draft.spaceH) : null;
+    s.length = draft.length;
+    if (fresh) { s.placed = [starterUnit({ ...s, mount: draft.mount })]; s.nextId = 2; delete s.labelList; delete s.labelAssign; }
+    if (R.setMount) R.setMount(draft.mount); else s.mount = draft.mount;
+    // the starter sits on its mount's edge. setMount rebases only on a CHANGE of mount, and a fresh Tabletop build from a
+    // Tabletop kit is not one. The stress test, 2026-10-15: the starter stayed at the top, syncTabletopGrid grew the grid
+    // under it, and the page stopped on "A unit is floating", with no way back
+    if (fresh && R.rebaseToMountEdge) R.rebaseToMountEdge();
+    const stood = mountChange ? standUp(s, R) : null;
+    if (R.clampGrid) R.clampGrid();
+    if (R.syncTabletopGrid) R.syncTabletopGrid();
+    return stood;
+  }
+  /* the record Apply would write, built on a copy with the store's own normalising after it (commit() runs
+     enforceMountLength and syncTabletopGrid): nothing in the store or its history changes (Sol 01a15c9b: a refused change
+     that was committed and undone stayed on the Redo stack, one Redo from the dead end) */
+  function candidate() {
+    const t = JSON.parse(JSON.stringify(store.state));
+    const R = layoutRules(t, G, { tabletop: globalThis.GEN2_TABLETOP });
+    const stood = applyDraft(t, R);
+    R.enforceMountLength(); R.syncTabletopGrid();
+    return { record: serializeBuild(t), stood };
+  }
+  const standNeed = () => { try { return candidate().stood?.added || 0; } catch { return 0; } };
 
   function render() {
     box.replaceChildren();
@@ -126,10 +165,13 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     box.appendChild(body);
     const fit = el('p.fit', { text: fitLine(draft.length, draft.printer, draft.customBed) });
     const lost = stranded();
+    const need = !fresh && draft.mount !== s0.mount ? standNeed() : 0;
     const i = STEPS.indexOf(cur);
     box.appendChild(el('div.foot', {}, [
       fit,
-      lost.length ? el('p.warn', { text: `${lost.length} of your units aren’t in the ${draft.length} lineup: they stay on the board flagged until you swap them.` }) : null,
+      lost.length ? el('p.warn', { text: `${lost.length} of your units aren’t in the ${draft.length} lineup · swap them for sizes it has before changing the length.` }) : null,   // the stage can't show them (2026-10-20: the old promise, "they stay on the board flagged", ended on "Can't show this build yet")
+      need ? el('p.warn.stand', { text: `As a ${mountDef(draft.mount)?.label || draft.mount} build it needs ${standWords(draft.mount, need)} · Apply adds ${need === 1 ? 'it' : 'them'}.` }) : null,
+      refusal ? el('p.warn.refused', { role: 'alert', text: refusal }) : null,
       el('div.btns', {}, [
         i > 0 ? el('button.key', { text: 'Back', onclick: () => { cur = STEPS[i - 1]; render(); } }) : null,
         i < STEPS.length - 1 ? el('button.key', { text: 'Next', onclick: () => { cur = STEPS[i + 1]; render(); } }) : null,
@@ -143,24 +185,21 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     const bed = bedOf(draft.printer, draft.customBed);
     if (draft.printer === 'custom' && !bed) { cur = 'printer'; render(); ctx.say('Type both bed sizes, or pick Any printer.'); return; }
     const sceneChange = changesScene();
+    refusal = '';
+    // never reload into a record the stage cannot show (the boot would stop on "Can't show this build yet"): the generator
+    // checks the candidate first, and a refusal leaves the record, its history and the address as they were
+    if (sceneChange) {
+      let g = null; try { g = generateManifest(candidate().record); } catch { g = null; }
+      if (!g || !g.manifest) {
+        refusal = `Can’t apply this: ${(g && g.errors.length ? g.errors : ['the parts can’t be built this way.']).join(' ')}`;
+        render(); return;
+      }
+    }
+    let stood = null;
     store.flush();
-    store.commit((s, R) => {
-      s.printer = draft.printer;
-      s.customBed = draft.printer === 'custom' ? { x: Number(draft.customBed.x), y: Number(draft.customBed.y) } : null;
-      const asks = !!mountDef(draft.mount)?.askSpace;
-      s.spaceW = asks && draft.spaceW ? Number(draft.spaceW) : null;
-      s.spaceH = asks && draft.spaceH ? Number(draft.spaceH) : null;
-      s.length = draft.length;
-      if (fresh) { s.placed = [starterUnit({ ...s, mount: draft.mount })]; s.nextId = 2; delete s.labelList; delete s.labelAssign; }
-      if (R.setMount) R.setMount(draft.mount); else s.mount = draft.mount;
-      // the starter sits on its mount's edge. setMount rebases only on a CHANGE of mount, and a fresh Tabletop build from a
-      // Tabletop kit is not one. The stress test, 2026-10-15: the starter stayed at the top, syncTabletopGrid grew the grid
-      // under it, and the page stopped on "A unit is floating", with no way back
-      if (fresh && R.rebaseToMountEdge) R.rebaseToMountEdge();
-      if (R.clampGrid) R.clampGrid();
-      if (R.syncTabletopGrid) R.syncTabletopGrid();
-    }, 'setup');
+    store.commit((s, R) => { stood = applyDraft(s, R); }, 'setup');
     store.flush();
+    if (stood && stood.added) { try { sessionStorage.setItem('gen2-setup-note', `${mountDef(draft.mount)?.label || draft.mount}: added ${standWords(draft.mount, stood.added)}.`); } catch { /* no storage: no note */ } }
     if (ctx.builds && draft.name.trim()) await ctx.builds.rename(draft.name);
     close();
     if (sceneChange) { ctx.say('Rebuilding the scene…'); setTimeout(() => location.reload(), 200); }

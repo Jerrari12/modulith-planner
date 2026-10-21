@@ -1299,6 +1299,104 @@ test('a build link that cannot be shown: its words stay text, and the planner of
 /* THE TABLETOP DEFAULT (the stress test, 2026-10-15). New build, then Start build with every default (Tabletop, 185, from a
    Tabletop kit), stopped on "A unit is floating" with no way back. setMount rebases only on a change of mount, so the
    starter stayed at the top and syncTabletopGrid grew the grid under it. The Wall Mount case above never saw it */
+/* A CHANGE OF MOUNT STANDS THE BUILD UP (Joey, 2026-10-20: his wall build, with gaps along its bottom, switched to Tabletop
+   and the page stopped on "Can't show this build yet · A unit is floating" twice, with no way back). The sheet now says
+   what the change adds, adds it, and the reload boots on a layout that stands: his 11 units where they were, a support
+   case under each of the 4 open columns, and a toast saying so. JOEY is his board: [id, x, y, w, hh], y and hh in
+   half-rows from the top of a 7W x 4H wall grid. */
+const JOEY = [[1, 0, 0, 4, 4], [2, 4, 0, 1, 2], [3, 5, 0, 1, 2], [4, 6, 0, 1, 2], [5, 4, 2, 1, 2], [6, 5, 2, 2, 4], [7, 0, 4, 2, 2], [8, 2, 4, 2, 2], [9, 4, 4, 1, 2], [10, 2, 6, 2, 2], [11, 4, 6, 1, 2]];
+test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its layout, gains 4 support cases, boots, and says so', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'wall', null, { timeout: 150_000 });
+  await waitBoot(page);
+  await page.evaluate((J) => window.__GEN2_STORE__.commit((s) => { s.placed = J.map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0 })); s.nextId = 12; s.gridW = 7; s.gridH = 4; }, 'edit'), JOEY);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 11 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 }).catch(() => assert.fail('the wall build did not reach the stage'));
+  // the mount chip opens the sheet; Tabletop says what it will add before anything happens
+  await page.locator('#ws-top .chip-btn.mount').click();
+  await page.waitForSelector('#ws-setup .card', { timeout: 30_000 });
+  await page.locator('#ws-setup .card:has-text("Tabletop")').click();
+  assert.match(await text(page, '#ws-setup .warn.stand'), /^As a Tabletop build it needs 4 support cases under the gaps · Apply adds them\.$/);
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Apply and rebuild', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'tabletop', null, { timeout: 150_000 });
+  await waitBoot(page);   // the page boots: before, it stopped on "Can't show this build yet"
+  assert.equal(await page.locator('#loading-text:has-text("Can’t show")').count(), 0, 'the build shows');
+  const s = await S(page);
+  const rows = s.gridH * 2, by = new Map(s.placed.map((p) => [p.id, p]));
+  // his 11 where they were: the same columns and sizes, each at the same height above the table (the tabletop grid adds
+  // headroom on top, so y itself moves with it)
+  for (const [id, x, y, w, hh] of JOEY) { const p = by.get(id); assert.ok(p && p.x === x && p.w === w && p.hh === hh && rows - (p.y + p.hh) === 8 - (y + hh), `unit ${id} kept its place: ${JSON.stringify(p)}`); }
+  const added = s.placed.filter((p) => p.id >= 12).map((p) => `${p.w}x${p.hh}@${p.x},${rows - (p.y + p.hh)}:${p.fill}`).sort();
+  assert.deepEqual(added, ['1x2@0,0:decor', '1x2@1,0:decor', '1x2@5,0:decor', '1x2@6,0:decor'], 'a support case on the table under each open column, in the build\'s drawer type');
+  await page.waitForFunction(() => /Tabletop: added 4 support cases under the gaps\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast saying what was added'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* AND NO SETUP CHANGE RELOADS INTO A BUILD THE STAGE CANNOT SHOW (2026-10-20): a length that strands a unit used to reload
+   into "Can't show this build yet" too, under a warning that promised the units would stay on the board flagged. The sheet
+   now puts the record back and says why, in the generator's words, and nothing reloads. */
+test('the setup sheet: a length its units are not made in is refused in the sheet with the reason, and nothing reloads', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'wall', null, { timeout: 150_000 });
+  await waitBoot(page);
+  // a 2W·3H Classic Drawer: made at 185, not in the 59 lineup (0.5H and 1H only)
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed = [{ id: 1, x: 0, y: 0, w: 2, hh: 6, fill: 'classic', shelves: 0 }]; s.nextId = 2; s.gridW = 2; s.gridH = 3; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 1 && window.__GEN2_VIEWER__.build.placed[0].hh === 6 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+  const before = await page.evaluate(() => JSON.stringify(window.__GEN2_STORE__.serialize()));
+  await page.locator('#ws-top .chip-btn.mount').click();
+  await page.waitForSelector('#ws-setup .card', { timeout: 30_000 });
+  await page.locator('#ws-setup button.seg:has-text("Length")').click();
+  await page.locator('#ws-setup .card.len:has-text("59 mm")').click();
+  assert.match(await text(page, '#ws-setup .foot .warn'), /1 of your units aren’t in the 59 lineup · swap them for sizes it has before changing the length\./);
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Apply and rebuild', '#ws-setup').click();
+  await page.waitForSelector('#ws-setup .warn.refused', { timeout: 15_000 }).catch(() => assert.fail('the sheet said nothing'));
+  assert.match(await text(page, '#ws-setup .warn.refused'), /^Can’t apply this: .*3H cases don't exist in the 59 collection/);
+  await settle(page, 1500);
+  assert.equal(await page.evaluate(() => window.__e2eBeforeReload), 1, 'nothing reloaded');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__GEN2_STORE__.serialize())), before, 'the record is as it was');
+  assert.equal(await page.locator('#ws-setup').count(), 1, 'the sheet stays open on the reason');
+  // the refused change never entered the history: no Redo can bring it back and reload into the dead end (Sol 01a15c9b)
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canRedo), false, 'nothing to redo');
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.redo()), false, 'Redo does nothing');
+  assert.equal(await page.evaluate(() => JSON.stringify(window.__GEN2_STORE__.serialize())), before, 'and the record is still as it was');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A BUILD SAVED THAT WAY STILL OPENS (2026-10-20): Joey's planner already holds his build as the old switch left it, and an
+   old planner's link can carry a unit in mid-air. The boot stands such a record up instead of stopping on "Can't show
+   this build yet", says so, and puts the stood-up record in the address, so a reload opens it as it now is. */
+test('a build link that cannot stand on its mount opens stood up, with a note, and the address carries the result', async () => {
+  const { ctx, page: first } = await open('build');
+  const kit = await first.evaluate(() => window.__GEN2_STORE__.serialize());
+  // the record as the old switch saved it: Tabletop, his layout slid against the table and nothing more
+  const rec = { ...kit, mount: 'tabletop', gridW: 7, gridH: 4, nextId: 12, buildId: 'e2estandup01', labelList: null, labelAssign: null,
+    placed: JOEY.map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0 })) };
+  const hash = encodeURIComponent(Buffer.from(JSON.stringify(rec), 'utf8').toString('base64'));
+  await first.close();
+  const page = await ctx.newPage();   // a fresh document: the same address with a new hash is only a hashchange
+  const errors = []; page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  await page.goto(`${base}/index.html?ws=build&debug=1#build=${hash}`, { waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(page);
+  assert.equal(await page.locator('#loading-text:has-text("Can’t show")').count(), 0, 'the build shows');
+  assert.equal((await S(page)).placed.length, 15, 'his 11 and 4 support cases');
+  await page.waitForFunction(() => /As saved, this build couldn’t stand as a Tabletop build · added 4 support cases under the gaps\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no note saying what changed'));
+  const inAddress = await page.evaluate(() => JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(location.hash.replace(/^#build=/, '')))))).placed.length);
+  assert.equal(inAddress, 15, 'the address carries the stood-up record');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the setup sheet: New build with every default (Tabletop) boots with its starter drawer on the floor', async () => {
   const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });

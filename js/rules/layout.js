@@ -444,20 +444,3 @@ export function layoutRules(build, GEN2, deps = {}) {
   }
   return { GRID_LIMITS, mountDef, fillDef, gridfinityOk, isGridfinity, bedSize, fitsBed, caseFits, lengthFits, mountBlocksLength, enforceMountLength, fillFits, fitProblem, maxRailW, sizeExists, heightsForFill, growGridForHeight, selectable, ensureValidSelection, capW, capH, clampGrid, syncTabletopGrid, setMount, rebaseToMountEdge, DRAWER_FILLS, isDrawerUnit, otherDrawerFill, convertProblem, planConversion, rows, occupancy, canPlace, unitAt, interiorFill, interiorComplete, interiorCellsLeft, placeCompartment, occupiedColumns, topCases, columnRuns, fixStructure, fillColumn, bowRisks, sagRisks, wallTopHalfHeight, fixWallTops, VIEWER_UT_LENGTHS, unsupportedUnits, instructionsBlockReason, tabletopCompletion, selectedUnit, NUDGE, nudgeSelected, interiorDims };
 }
-
-/* WHY A SPOT IS REFUSED (2026-10-20; Joey's coworker could not tell why a 1W would not go in the middle above a 3W). The
-   words for each structural rule the "+" spots are judged by (build.js judge(): unsupported, sag, the Wall Mount 0.5H
-   top, the generator), in one place so the 3D view, the board and the tests say the same thing. `code` is the problem
-   key's prefix: "s" a sag risk, "u" an unsupported end, "w" a wall-top 0.5H, "gen" the generator; `w` the armed width,
-   `below` the width of the unit the cell would rest on (when there is one); `hanging` when the mount holds the build from
-   ABOVE (wall, under-table), where the supporting case is over the cell, not under it (Sol 01a15b70). */
-export function refusalReason(code, { w = 1, below = null, hanging = false } = {}) {
-  const unit = (n) => `${n}W`;
-  const side = hanging ? "above" : "under";
-  if (code === "s") return below
-    ? `A ${unit(w)} can't ${hanging ? "hang from" : "sit on"} the middle of the ${unit(below)}: a case needs a wall ${side} at least one end. Put it at an end of the ${unit(below)}, or use a wider case.`
-    : `A case needs a wall ${side} at least one end: here it would ${hanging ? "hang from" : "rest on"} the middle of the case ${hanging ? "above" : "below"}.`;
-  if (code === "u") return `Both ends need a case ${hanging ? "above" : "below"}.`;
-  if (code === "w") return "Wall Mount top-row cases can't be 0.5H · they're too low-profile for wall-mount holes.";
-  return "The parts can't be built this way.";
-}

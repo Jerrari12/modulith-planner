@@ -31,7 +31,8 @@ import { toolbar } from '../ui/toolbar.js';
 import { board } from '../ui/board.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
-import { layoutRules, refusalReason } from '../rules/layout.js';
+import { layoutRules } from '../rules/layout.js';
+import { refusalReason } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
 

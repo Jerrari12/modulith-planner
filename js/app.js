@@ -13,6 +13,7 @@ import { openBuilds, entryOf, hashOf, fileOf, fileName, parseBuildFile, cleanNam
 import { isPhone, PHONE_MAX } from './ui/phone.js';
 import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
+import { standRecord, standWords } from './rules/stand.js';
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
@@ -87,7 +88,10 @@ export async function boot() {
     const cur = await builds.get(builds.currentId); const rec = cur ? cur.record : builds.readSlot();
     if (rec) { entry = cur; history.replaceState(null, '', location.pathname + location.search + hashOf(rec) + (location.hash ? '&' + location.hash.slice(1) : '')); }
   }
+  let stood = null;   // the boot stood the record up on its mount (saved or linked unable to stand): said once the workspace is up
   const stage = await createStage(document, {
+    repair: (rec) => standRecord(rec, G, { tabletop: globalThis.GEN2_TABLETOP }),
+    onRepaired: (r) => { stood = r; },
     onSelect: (sel) => current?.onSelect?.(sel),
     onPage: (i) => current?.onPage?.(i),
     onCamFree: (on) => current?.onCamFree?.(on),
@@ -230,6 +234,22 @@ export async function boot() {
   ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
   if (labelCopy && current.name !== 'labels') toast(`Opened without its ${labelCopy.n} ${labelCopy.n === 1 ? 'label · Labels can bring it back.' : 'labels · Labels can bring them back.'}`);
   if (SETUP) ctx.openSetup('mount', FRESH);   // New build: the sheet opens over the fresh kit
+  /* WHAT THE PLANNER CHANGED ON ITS OWN before this page (2026-10-20), said once: the setup sheet's support cases across its
+     reload, or the boot standing a saved build up on its mount. A stood-up record goes into the address (a reload opens it
+     as it is now) and, when it came from this browser's own builds rather than a link, into its Recent entry */
+  {
+    let note = null;
+    try { note = sessionStorage.getItem('gen2-setup-note'); if (note) sessionStorage.removeItem('gen2-setup-note'); } catch { /* no storage */ }
+    if (stood) {
+      const m = store.state.mount, label = G?.mounts?.find((x) => x.id === m)?.label || m;
+      note = note || (stood.added ? `As saved, this build couldn’t stand as a ${label} build · added ${standWords(m, stood.added)}.`
+        : `As saved, this build didn’t reach its ${m === 'tabletop' ? 'table' : m === 'wall' ? 'brackets' : 'rails'} · it now does.`);
+      const snap = JSON.stringify(store.serialize());
+      if (!/(^#|&)labels-/.test(location.hash)) { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); } catch { /* a very old browser */ } }
+      if (!LINKED) saveBuild(snap);
+    }
+    if (note) setTimeout(() => toast(note), 600);
+  }
   /* crossing the phone breakpoint re-mounts the workspace in the other chrome (its memo keeps the selection and step) */
   let wasPhone = isPhone(), resizeT = 0;
   addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { const now = isPhone(); document.documentElement.classList.toggle('ws-phone', now); if (now !== wasPhone) { wasPhone = now; ctx.remount(); } }, 150); });

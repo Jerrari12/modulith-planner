@@ -1,5 +1,5 @@
 /* WHY A SPOT IS REFUSED (2026-10-20). Joey's coworker put a 1W over the middle of a 3W and got nothing: the planner
-   offered the ends and said nothing about the middle. refusalReason() in js/rules/layout.js is the one place the words
+   offered the ends and said nothing about the middle. refusalReason() in js/rules/stand.js is the one place the words
    live, keyed by the problem the judge found ('s' sag, 'u' unsupported, 'w' wall-top 0.5H, anything else the generator),
    so the 3D view, the board and this test say the same thing. */
 import { test } from 'node:test';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { refusalReason } = await import(new URL('file://' + join(root, 'js', 'rules', 'layout.js').replace(/\\/g, '/')).href);
+const { refusalReason } = await import(new URL('file://' + join(root, 'js', 'rules', 'stand.js').replace(/\\/g, '/')).href);
 
 test('the sag rule names the sizes, and the two ways out', () => {
   const s = refusalReason('s', { w: 1, below: 3 });

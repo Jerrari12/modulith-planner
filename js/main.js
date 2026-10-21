@@ -2957,6 +2957,17 @@ if (IS_PART) {
       fail = 'build-crash';
     }
   }
+  /* A RECORD THAT CANNOT STAND AS SAVED (2026-10-20: a mount switched before the setup sheet stood builds up, an old
+     planner's link with a unit in mid-air): the shell stands it up on its mount (opts.repair, js/rules/stand.js) and the
+     page opens on that, saying so (opts.onRepaired), instead of on the dead end below. Only a result the generator
+     accepts is used; anything else stops there as before */
+  if (!gen.manifest && fail === 'build-unsupported' && typeof opts !== 'undefined' && opts.repair) {
+    try {
+      const fixed = opts.repair(build);
+      const g2 = fixed ? generateManifest(fixed.record) : null;
+      if (g2 && g2.manifest) { build = fixed.record; originalBuild = structuredClone(build); gen = g2; if (opts.onRepaired) opts.onRepaired(fixed); }
+    } catch { /* the dead end below, as before */ }
+  }
   if (!gen.manifest) {
     track('error:' + fail);
     // in the planner, a way out. The stress test, 2026-10-15: a stored build that cannot be shown reopened on every reload,
