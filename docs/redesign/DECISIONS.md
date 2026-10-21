@@ -1788,5 +1788,9 @@ Dated calls made while building, with who made them. The brief and the inventory
   the dead end; now the candidate is checked before anything is committed. Round 2 on the revision: no findings. Sol's
   own discards matched mine: standUp terminates and fills every column in both directions; a share link stays out of
   Recent builds; Labels consumes its part of the address at mount, and the rewrite skips an address that still has it.
-- **Deploying** as a reported-bug fix (Joey's standing rule): npm test 580 (575 passed, 0 failed, 5 skipped) and e2e 68/68
-  on this machine first. The Live line follows the run.
+- **Live 2026-10-21**, stamp `daf28eea` (run 39542860845 passed on attempt 1, 41 min), after npm test 580 (575 passed, 0
+  failed, 5 skipped) and e2e 68/68 here. Checked live by `planner-prod-checks-2026-10-18\mount-stand-prod.mjs` on a fresh
+  profile: his wall build through the sheet shows "As a Tabletop build it needs 4 support cases under the gaps · Apply adds
+  them.", the reload boots with his 11 at the same heights above the table and four 1W·1H Decor supports on it under
+  columns 0, 1, 5 and 6, and the toast says so; his record as the old switch saved it, opened as a link, boots stood up with
+  15 units and the note, and the address carries the 15. Joey's own saved build opens the same way on his next visit.
