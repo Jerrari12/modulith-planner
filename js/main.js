@@ -6648,14 +6648,48 @@ function syncPeekClass() { document.documentElement.classList.toggle('ws-drawer-
 function updateDrawerDims() { // render-loop: pills track their lines while the drawer slides / camera tweens
   if (!dFocus.lines || !dFocus.carrier) return;
   const r = canvas.getBoundingClientRect();
-  for (const [id, seg] of Object.entries(dFocus.lines)) {
+  /* each pill (centred on its point by translate(-50%, -50%)) stays inside the part of the canvas the workspace's panels
+     leave clear (safeArea), 8 px in, and off the pills already placed (2026-10-21: an opened drawer comes toward the
+     camera, and its W pill sat half under the Build dock) */
+  // every read first (the projections, the pills' sizes), then every write: this runs each frame of a glide
+  const rows = Object.entries(dFocus.lines).map(([id, seg]) => {
     const el = $(id);
     const mid = seg.a.clone().add(seg.c).multiplyScalar(0.5).add(dFocus.carrier.group.position).project(camera);
-    if (mid.z > 1) { el.classList.add('hidden'); continue; }
-    el.style.left = Math.min(Math.max((mid.x + 1) / 2 * r.width, 40), r.width - 40) + 'px';
-    el.style.top = Math.min(Math.max((1 - mid.y) / 2 * r.height, 24), r.height - 24) + 'px';
-    el.classList.remove('hidden');
-  }
+    return { el, mid, w: el.offsetWidth || 120, h: el.offsetHeight || 40, measured: el.offsetWidth > 0 };   // 0 while hidden: larger than any pill (about 70-100 x 34), so one shown on the last frame of a glide cannot overlap (Terra 01a15f9c)
+  });
+  for (const q of rows) if (q.mid.z > 1) q.el.classList.add('hidden');
+  const shown = rows.filter((q) => q.mid.z <= 1);
+  const at = placePills(shown.map((q) => ({ x: (q.mid.x + 1) / 2 * r.width, y: (1 - q.mid.y) / 2 * r.height, w: q.w, h: q.h })),
+    { width: r.width, height: r.height }, safeArea || { left: 0, right: 0, top: 0, bottom: 0 });
+  shown.forEach((q, i) => { q.el.style.left = at[i].x + 'px'; q.el.style.top = at[i].y + 'px'; q.el.classList.remove('hidden'); });
+  // a pill shown this frame was placed at a guessed size: one more frame (three at most, so a pill the page keeps hidden
+  // cannot hold the idle gate open) places it at its real size (Terra 01a15f9c: the guess could stay on the last frame)
+  if (shown.some((q) => !q.measured)) { if ((dFocus.remeasure = (dFocus.remeasure || 0) + 1) <= 3) invalidateFrame(); } else dFocus.remeasure = 0;
+}
+/* WHERE THE DRAWER FOCUS'S PILLS GO (2026-10-21): each pill, w x h and centred on its point (translate(-50%, -50%)),
+   clamped into the canvas less the workspace panels' bands (safeArea), 8 px in - an opened drawer comes toward the camera
+   and its W pill sat half under the Build dock - then, when it would overlap a pill already placed, moved to the nearest
+   height, above or below, that overlaps none of them (Terra 01a15f9c: moving off one pill could land on an earlier one).
+   items: [{ x, y, w, h }] in placing order; box: { width, height }; sa: { left, right, top, bottom }. Returns [{ x, y }].
+   Pure, so test/drawer-pills.test.mjs lifts it. */
+function placePills(items, box, sa) {
+  const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.min(Math.max(v, lo), hi));
+  const placed = [];
+  return items.map(({ x: px, y: py, w, h }) => {
+    const lo = sa.top + h / 2 + 8, hi = box.height - sa.bottom - h / 2 - 8;
+    const x = clamp(px, sa.left + w / 2 + 8, box.width - sa.right - w / 2 - 8);
+    const hits = (y) => placed.some((p) => Math.abs(p.x - x) < (w + p.w) / 2 + 6 && Math.abs(p.y - y) < (h + p.h) / 2 + 6);
+    let y = clamp(py, lo, hi);
+    if (hits(y)) {
+      const step = Math.max(h, ...placed.map((p) => p.h)) + 6;
+      const tries = [];
+      for (let k = 1; k <= 2 * placed.length + 1; k++) tries.push(y - k * step, y + k * step);
+      const free = tries.find((t) => t >= lo && t <= hi && !hits(t));
+      if (free !== undefined) y = free;
+    }
+    placed.push({ x, y, w, h });
+    return { x, y };
+  });
 }
 
 // ---------- faceplate focus: isolate + frame the plate ----------

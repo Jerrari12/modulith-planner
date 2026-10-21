@@ -2026,3 +2026,24 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Deploy:** held until Joey had seen it ("Don't deploy until I've seen it."). Then: "I've seen the bevel and it looks
   right. Merge cover-seams-proto into main and deploy." Rebased onto main `0b896b0`, and the checks above were run on
   the rebased tree.
+
+## 2026-10-21 (an opened drawer's pills stay clear of the panels and of each other)
+
+- **Seen live at `0b896b02`.** With the pills now shown, a screenshot of Build at its default view had the W pill partly
+  under the dock: an opened drawer comes toward the camera, and the pills were clamped only to the canvas edges.
+- **Now** the stage places them with `placePills` (main.js), a pure function. Each pill, centred on its point, is clamped
+  into the canvas less the panels' bands (`safeArea`), 8 px in. When it would overlap a pill already placed, it moves to
+  the nearest free height in whole steps, above first, that overlaps none of them. The render loop reads every projection
+  and size first, then writes. A pill not yet displayed measures 0, so it is placed at a 120 x 40 guess (the pills measure
+  about 69-100 x 34), and the stage asks for another frame, at most three in a row, where it is placed at its measured size.
+- **Checks.** A new unit test, test/drawer-pills.test.mjs, lifts `placePills` from main.js and puts three pills on one
+  point, at each of four points: the top of the clear area, its middle, under the left panel and the dock, and the bottom
+  right. Each lands inside and none overlap. A mutant without the recheck overlaps in the first case. The e2e Peek inside case now
+  checks every pill sits inside the clear area and apart from the others, after a peek with the ruler on and one with it
+  off. With the safe area ignored it fails, the L pill's left edge at 327 px against a 332 px band.
+- **Review:** Terra `01a15f9c`, four rounds. Three findings taken: a single pass could move the third pill off the second
+  and back onto the first; a pill shown at a guessed size could overlap; with no free slot at the guessed size, the
+  colliding place could stay on the last frame. One discarded: a pill held at display:none while another shows cannot
+  happen, since the three pills share one display rule. Luna `01a15fa4` on this entry: five wording fixes taken, one
+  discarded (a summary need not list every minor case).
+- **Deploy:** part of a change Joey asked for; it deploys once its checks pass.

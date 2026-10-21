@@ -3006,6 +3006,15 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   // shown = on the page: not hidden by the stage, and not by the shell's CSS, which shows pills only for the ruler or a peek
   const pill = (id) => page.evaluate((id) => { const e = document.getElementById(id); const n = (e.textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return { shown: !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none', mm: Number(n) }; }, id);
   const pills = async () => ({ w: await pill('dim-w'), l: await pill('dim-l'), h: await pill('dim-h') });
+  // the pills stay inside the stage's clear area (the canvas less the panels' bands, stage.safeArea) and off each other
+  const clearOf = () => page.evaluate(() => {
+    const sa = window.__GEN2_VIEWER__.safeArea || { left: 0, right: 0, top: 0, bottom: 0 };
+    const cv = document.getElementById('stage').getBoundingClientRect();
+    const rs = ['dim-w', 'dim-l', 'dim-h'].map((id) => document.getElementById(id).getBoundingClientRect());
+    const inside = rs.every((q) => q.left >= cv.left + sa.left - 1 && q.right <= cv.right - sa.right + 1 && q.top >= cv.top + sa.top - 1 && q.bottom <= cv.bottom - sa.bottom + 1);
+    const apart = rs.every((a, i) => rs.every((c, j) => j <= i || a.right <= c.left || c.right <= a.left || a.bottom <= c.top || c.bottom <= a.top));
+    return { inside, apart, rs: rs.map((q) => [Math.round(q.left), Math.round(q.top), Math.round(q.width), Math.round(q.height)]), sa };
+  });
   const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); const owner = v.partInfo(d.id).owner; const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === owner); return { id: d.id, owner, w: u.w, hh: u.hh, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
   // the build’s own pills, on
   await page.locator('#ws-tools button.measure').click();
@@ -3027,6 +3036,8 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   assert.ok(inside.l.mm > 0 && inside.l.mm < drawer.collection, `inside length ${inside.l.mm} under the ${drawer.collection} collection`);
   assert.ok(inside.h.mm > 0 && inside.h.mm < drawer.hh * 28, `inside height ${inside.h.mm} under the drawer’s ${drawer.hh * 28} mm`);
   assert.notEqual(inside.w.mm, build0.w.mm, 'the pills say the drawer, not the build');
+  const c1 = await clearOf();
+  assert.ok(c1.inside && c1.apart, `the pills sit clear of the panels and of each other (2026-10-21: the W pill sat under the dock): ${JSON.stringify(c1)}`);
   assert.equal(await cam(), cam0, 'the camera stayed where it was');
   // picking another of the drawer’s own parts (its handle, label or accent: what Colors does next) keeps it open, and its sizes
   const rider = await page.evaluate((id) => (window.__GEN2_VIEWER__.manifest.instances.find((x) => x.rides === id && !/Faceplate/.test(x.node)) || {}).id || null, drawer.id);
@@ -3060,6 +3071,9 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   await page.waitForFunction(() => document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 });
   await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(() => { const e = document.getElementById('dim-w'); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, null, { timeout: 30_000 }).catch(() => assert.fail('a peek with the ruler off showed no inside sizes (live 2026-10-21: the shell CSS hid them)'));
+  await settle(page, 600);
+  const c2 = await clearOf();
+  assert.ok(c2.inside && c2.apart, `with the ruler off too: ${JSON.stringify(c2)}`);
   await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 });
   await settle(page, 400);
