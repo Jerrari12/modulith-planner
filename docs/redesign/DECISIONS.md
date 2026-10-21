@@ -2115,6 +2115,22 @@ Dated calls made while building, with who made them. The brief and the inventory
   five wording fixes taken (who did not report it, the flake's cause as measured, the sweep as a sweep and not a
   proof, and its refused builds, here and in the vault).
 - **Deploy:** a bug fix, found rather than reported. It deploys once its checks pass.
+- **Live:** `1272bce5`, 2026-10-21, about 19:30 UTC. The live main.js carries the two `Object.assign` lines. The held-GLB
+  scenario, run against production (D:/Claude - Output/stage-type-race-2026-10-21/live-check.mjs), held 7 GLBs with
+  29 old instances on the stage. The repaint returned ok, the Parts rows drew inside the window, the new build then
+  mounted with its Back Cover row, and there were no page errors.
+- **The case's hold, corrected the same day.** As first written, the case let its held GLBs go with `page.unroute`,
+  then `route.fallback()` on each. Playwright 1.63 already hands a removed handler's held requests to the next handler,
+  so each was handled twice. With `GEN2_PARTS_LOCAL=1`, the second pass reached the `fulfill` in
+  `test/lib/local-parts.mjs` and rejected "Route is already handled!" after the case ended, which failed the e2e file.
+  Without it, as on CI, the second pass ended in a continue whose error Playwright swallows. The session counting the
+  planner's buy clicks reported it. Now the handler waits on a gate and falls back itself, and the case never unroutes.
+  - **Checks.** The case alone, in both modes: it passes, and the file passes with it. With the old replace put back
+    in main.js, it still fails in both modes ("the Parts list drew no rows", colorLocked). Full e2e on main `b0bb34d`
+    with this change: with `GEN2_PARTS_LOCAL=1`, 74 of 74 and no rejection notices; against the parts host, 73 of 74.
+    The one failure was "a refused cell says why", which timed out at its re-hover chip wait (e2e line 1283) after
+    16.6 s; it passed 4 of 4 alone, about 3.5 s each. This change does not touch that case; it is recorded, not fixed.
+  - **Review:** Terra `01a16024`: no findings.
 
 ## 2026-10-21 (faceplate, not plate, in two catalogue strings)
 

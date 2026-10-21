@@ -3151,22 +3151,27 @@ test('Build: a back cover on a Decor drawer says the tear-away front comes out f
    type map already replaced by the new build's, an old node the new build no longer had found no type, colorLocked threw
    and the list drew no rows - the back-cover case above flaked on it when its GLBs were slow. A palette repaint in the
    same window walks the NEW manifest's parts, so a map swapped in only after the GLBs fails there instead; both are
-   checked. Here the window is held open: every part GLB waits until the case lets it go. */
+   checked. Here the window is held open: every part GLB waits until the case lets it go.
+   ⚠ The hold is a gate the handler itself waits on, then falls back from; never page.unroute. Playwright (1.63)
+   continues a removed handler's held requests to the next handler on its own, so a fallback after the unroute handled
+   each one twice: under GEN2_PARTS_LOCAL=1 the second pass reached local-parts.mjs's fulfill and rejected "Route is
+   already handled!" after the case ended, failing the file (another session's report, 2026-10-21). */
 test('Build: a Parts switch while a layout change still waits on its GLBs throws nothing, and the stage then mounts the new build', async () => {
   const { ctx, page, errors } = await open('build');
-  const held = [];
+  let held = 0, release;
+  const gate = new Promise((ok) => { release = ok; });
   const GLB = /\.lib\.glb(\?|$)/;
-  await page.route(GLB, (route) => { held.push(route); });
+  await page.route(GLB, async (route) => { held++; await gate; await route.fallback(); });
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.backCover = true; s.placed = [{ id: 'g1', x: 0, y: s.gridH * 2 - 6, w: 1, hh: 6, fill: 'decor', shelves: 0 }]; s.nextId = 100; s.gridW = 1; }, 'edit'));
   await page.waitForFunction(() => window.__GEN2_VIEWER__.regenBusy && window.__GEN2_VIEWER__.build.placed.length === 1, null, { timeout: 30_000 });
-  for (let t = 0; !held.length && t < 300; t++) await sleep(100);
+  for (let t = 0; !held && t < 300; t++) await sleep(100);
   // the controls: the mount is waiting on a GLB, the stage still holds an instance whose node the new build has not, and
   // the Parts switch will page (an applyState over those instances)
   const window_ = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__, now = new Set(v.manifest.instances.map((i) => i.node));
     return { busy: v.regenBusy, stale: [...v.instances.values()].filter((i) => !now.has(i.cfg.node)).length, pages: v.cur !== v.manifest.steps.length };
   });
-  assert.ok(held.length > 0 && window_.busy, `the control: the mount waits on held GLBs (${held.length} held)`);
+  assert.ok(held > 0 && window_.busy, `the control: the mount waits on held GLBs (${held} held)`);
   assert.ok(window_.stale > 0, 'the control: an old instance whose node the new build no longer has is still on the stage');
   assert.ok(window_.pages, 'the control: the Parts switch pages the stage');
   // the window's other side: a repaint walks the NEW manifest's parts (the checklist's primaryKey), so their nodes need
@@ -3178,8 +3183,7 @@ test('Build: a Parts switch while a layout change still waits on its GLBs throws
     .catch(() => assert.fail(`the Parts list drew no rows: ${clean(errors).join(' / ') || 'no page error'}`));
   assert.ok(await page.evaluate(() => window.__GEN2_VIEWER__.regenBusy), 'the control: the list drew while the mount still waited');
   assert.deepEqual(clean(errors), [], 'nothing threw in the window');
-  await page.unroute(GLB);
-  for (const r of held.splice(0)) await r.fallback();
+  release();   // every held request, and any later one, falls back to the next handler: the parts host, or local-parts.mjs
   await page.waitForFunction(() => { const v = window.__GEN2_VIEWER__; return !v.regenBusy && v.instances.size === v.manifest.instances.length && v.manifest.instances.every((i) => v.instances.has(i.id)); }, null, { timeout: 60_000 });
   assert.ok(await page.evaluate(() => [...window.__GEN2_VIEWER__.instances.values()].some((i) => /^BackCover_/.test(i.cfg.node))), 'the new build is on the stage, its cover included');
   assert.ok(await page.evaluate(() => [...document.querySelectorAll('#ws-parts .prow')].some((r) => /Back Cover/.test(r.querySelector('.name')?.textContent || ''))), 'the list is the new build');
