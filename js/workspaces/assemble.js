@@ -30,7 +30,7 @@ export function mountAssemble(stage, ctx) {
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
   root.prepend(topbar(stage, { ...ctx, active: 'assemble', say, soon, signal }));
-  const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview) });
+  const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview), camTitle: 'Back to the step\u2019s camera \u00b7 after you orbit or zoom, this returns to the guided view' });
   root.appendChild(tb.el);
 
   /* Part colors by default here, and only here: remember the visitor's own palette switch and put it back on leave */
@@ -113,15 +113,17 @@ export function mountAssemble(stage, ctx) {
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
   setColors(false);
-  // the step a visitor left on comes back after a trip to another workspace (ctx.memo); a fresh arrival on the
-  // cover lands on the exploded overview; a deep link into a step keeps its page
+  // the step a visitor left on comes back after a trip to another workspace (ctx.memo); a first arrival lands on the
+  // exploded overview, from the cover (a ?ws=assemble address) AND from the finished step the other workspaces park
+  // the stage on (Joey, 2026-10-20: Assemble opened "at the end" when reached from Build)
   const back = ctx.memo?.assemblePage;
   if (back != null) { done = !!ctx.memo.assembleDone; stage.goTo(back, { animate: false }); }
-  else if (stage.cur === 0) stage.goTo(pageOf.overview);
+  else if (stage.cur !== pageOf.overview) stage.goTo(pageOf.overview);
   renderList(); renderPlayer(); tb.sync(); safe();
 
   return {
     onPage(i) { if (i !== pageOf.finished) done = false; renderList(); renderPlayer(); tb.sync(); safe(); },   // a remount's goTo lands on the finished page, so a remembered Done survives it
+    onCamFree() { tb.sync(); },   // the camera taken (an orbit) or given back: the toolbar's camera button lights up or not
     unmount() {
       ac.abort();
       if (ctx.memo) { ctx.memo.assemblePage = stage.cur; ctx.memo.assembleDone = done; }

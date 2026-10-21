@@ -573,6 +573,36 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   await ctx.close();
 });
 
+/* ASSEMBLE OPENS AT THE BEGINNING (Joey, 2026-10-20: "it seems to start at the end"). The other workspaces park the stage on
+   the finished step and Assemble only moved to the Overview from the cover, so a visit from Build opened on the last step.
+   Now a first arrival lands on the Overview from either; the step a visitor left on still comes back. And the guided
+   camera (Joey: "how do I get it to snap back to the cinematic camera?"): an orbit lights the toolbar's camera button,
+   named for the step's camera in Assemble; pressing it returns the camera and the light goes out. */
+test('Assemble: reached from Build it opens on the Overview, a left step comes back, an orbit lights the camera button and it returns the guided camera', async () => {
+  const { ctx, page, errors } = await open('build');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.cur), await page.evaluate(() => window.__GEN2_VIEWER__.pageCount - 2), 'Build parks the stage on the finished step');
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'assemble' && window.__GEN2_VIEWER__.cur === 1, null, { timeout: 60_000 }).catch(() => assert.fail('Assemble did not open on the Overview within 60 s'));
+  assert.match(await text(page, '#ws-steps .count'), /^0 \/ /, 'the list reads 0 of n at the Overview');
+  // the step left on comes back after a trip to Parts
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === 2, null, { timeout: 60_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 60_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'assemble' && window.__GEN2_VIEWER__.cur === 2, null, { timeout: 60_000 }).catch(() => assert.fail('the step left on did not come back'));
+  // the camera: an orbit drag on the stage lights the button; pressing it gives the camera back
+  const camBtn = page.locator('#ws-tools button.cam');
+  assert.equal(await camBtn.getAttribute('aria-label'), 'Back to the step\u2019s camera');
+  assert.equal(await camBtn.evaluate((b) => b.classList.contains('on')), false, 'not lit before an orbit');
+  await page.mouse.move(640, 380); await page.mouse.down(); await page.mouse.move(720, 420, { steps: 10 }); await page.mouse.up();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true && document.querySelector('#ws-tools button.cam').classList.contains('on'), null, { timeout: 15_000 }).catch(() => assert.fail('an orbit did not light the camera button'));
+  await camBtn.click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === false && !document.querySelector('#ws-tools button.cam').classList.contains('on'), null, { timeout: 15_000 }).catch(() => assert.fail('the camera button did not return the guided camera'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Parts: the list, tracking counters, and the dock caption', async () => {
   const { ctx, page, errors } = await open('parts');
   await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });

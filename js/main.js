@@ -4737,8 +4737,9 @@ function camPos(preset) {
 // installation can be studied up close from any angle.
 let camOverride = false, interactFrom = null;
 function setCamOverride(on) {
-  camOverride = on;
+  const was = camOverride; camOverride = on;
   document.getElementById('btn-cam').classList.toggle('hidden', !on);
+  if (was !== on && typeof opts !== 'undefined' && opts.onCamFree) opts.onCamFree(on);   // the shell's toolbar lights its camera button (Assemble, 2026-10-20)
 }
 controls.addEventListener('start', () => {
   interactFrom = { p: camera.position.clone(), t: controls.target.clone() };
@@ -10956,7 +10957,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     currentFaceplateStyle, availableFaceplateStyles,
     currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
     applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
-    setMeasure, setDims, get dimsOn() { return dims.on; }, get dims() { return dims; }, resetView() { $('btn-cam').click(); },
+    setMeasure, setDims, get dimsOn() { return dims.on; }, get dims() { return dims; }, resetView() { $('btn-cam').click(); }, get camFree() { return camOverride; },
     setSafeArea, get safeArea() { return safeArea; },
     // the step player, for the Assemble workspace (phase 1): the page index, the page count, and the viewer's
     // own controls driven through their buttons so their tracking and state stay in one place

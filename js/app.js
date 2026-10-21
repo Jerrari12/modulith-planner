@@ -90,6 +90,7 @@ export async function boot() {
   const stage = await createStage(document, {
     onSelect: (sel) => current?.onSelect?.(sel),
     onPage: (i) => current?.onPage?.(i),
+    onCamFree: (on) => current?.onCamFree?.(on),
     onContext: (info) => current?.onContext?.(info),
     onHover: (unitId) => current?.onHover?.(unitId),
     onQuality: (tier) => current?.onQuality?.(tier),

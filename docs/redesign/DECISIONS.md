@@ -1688,3 +1688,27 @@ Dated calls made while building, with who made them. The brief and the inventory
   One e2e run of the new case failed (17 s) while the full suite ran beside it; alone and with its four neighbours it
   passes every time since, so the hover waits are the usual 15 s / 30 s.
 - **Live 2026-10-20.** Deployed with the two other coworker items as the merge `b8e747f` (Joey: "Deploy labels-one-tile + picker-hint-clip together and placement-why"); run 39519702499 passed on attempt 1 (28 min), stamp `b8e747f2`; before the push the merged tree ran npm test 571 (566 passed, 0 failed, 5 skipped) and e2e 64/64 on this machine. Checked live by `planner-prod-checks-2026-10-18\placement-why-prod.mjs` (a 3W through the store, 1W·1H armed): the middle cell is refused with code `s` and the sag sentence, both ends are the way out, the "+" list has the ends and not the middle, the stage drew one refused marker, resting on it opens the chip with the reason and no button, a click pins "Put it at the left end" + OK, and that places the 1W on the 3W's left end (the grid gained its spare top row, so the record reads 1W@0,2 on 3W@0,4). The first version of the check compared the 1W's y to the un-rebased row and failed on that alone.
+
+## 2026-10-20 (Assemble opens at the beginning; the camera button says what it does)
+
+- **Why.** Joey, on a wall build: "in the assembly tab, it seems to start at the end or something, i'd rather it start
+  from the beginning and how do i get it to snap back to the cinematic camera?" Every other workspace parks the stage
+  on the FINISHED step (`skipToEnd()` after an update, `goTo(steps)` at mount), and Assemble's mount only moved to the
+  Overview when the stage was still on the cover (`stage.cur === 0`, a `?ws=assemble` address). So the first visit from
+  Build opened on the last step. The "deep link into a step" the old comment reserved that branch for does not exist.
+- **The start page.** A first arrival (no remembered step in `ctx.memo`) lands on the exploded Overview from the cover
+  AND from the finished step: `else if (stage.cur !== pageOf.overview) stage.goTo(pageOf.overview)`. The step a visitor
+  left on still comes back after a trip to another workspace, and Parts' "Start assembly" still lands on the Overview.
+- **The camera.** The toolbar's "Reset view" button (the frame icon) already did it: `stage.resetView()` presses the
+  viewer's own Resume cam, which drops the orbit override and glides to the step's guided camera. It did not look like
+  the answer. In Assemble it is now named "Back to the step's camera · after you orbit or zoom, this returns to the
+  guided view" (`toolbar({ camTitle })`) and lights orange while the visitor has the camera: the stage reports
+  `get camFree()` and fires `opts.onCamFree(on)` from `setCamOverride` (only on a change), app.js routes it to the
+  workspace, Assemble's `onCamFree` re-syncs the toolbar. Other workspaces keep "Reset view" and never light it.
+- **Checks.** An e2e case: open Build (the stage on the finished step, asserted), switch to Assemble → `cur === 1` and
+  the list reads "0 / n"; Next, a trip to Parts and back → the step comes back; the camera button is named for the
+  step's camera and unlit; a real mouse drag on the stage lights it with `camFree` true; pressing it returns the camera
+  and the light goes out. The old `=== 0` rule put back fails the case at the first wait. The two existing Assemble
+  cases and the boot case pass.
+- **Review:** Terra `01a15bf2`, routine: no findings. Its own discards: a breakpoint remount unmounts first, so the step is remembered; an incomplete manifest's goTo is forced to its preview either way; the callbacks are optional-chained and the toolbar exists before any goTo; every override clear runs through setCamOverride, which updates before it notifies; the e2e drag stays clear of the step list and the player.
+- **Deploying** as a reported-bug fix (Joey's standing rule): branch `assemble-start` fast-forwarded onto main; npm test 571 (566 passed, 0 failed, 5 skipped), e2e 65/65 on this machine first. The Live line follows the run.

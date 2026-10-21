@@ -338,6 +338,7 @@ html[data-ws="parts"] #ws-tools { left: 480px; right: 364px; }
 #ws-choice.no { white-space: normal; flex-wrap: wrap; justify-content: center; text-align: center; max-width: min(520px, calc(100vw - 40px)); }   /* a reason is a sentence or two: it wraps, and its buttons with it (Sol 01a15b70) */
 #ws .armed { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 10px; font-size: 12px; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-border); }
 #ws-tools .erase.on { color: var(--danger); }
+#ws-tools .cam.on { color: var(--orange); }   /* the visitor has the camera (Assemble): press to return to the guided view */
 #ws-tools .icon-btn[disabled] { opacity: .4; cursor: not-allowed; }
 #ws-insp .stepper { display: inline-flex; align-items: center; gap: 6px; }
 #ws-insp .stepper .key { width: 30px; height: 30px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; }

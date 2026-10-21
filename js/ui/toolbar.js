@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 
 const Q_NAME = { veryhigh: 'Very High', high: 'High', balanced: 'Balanced', fast: 'Fast' };
 
-export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode · comes with Assemble (phase 1)', view = null, history = null, eraser = null }) {
+export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode · comes with Assemble (phase 1)', view = null, history = null, eraser = null, camTitle = null }) {
   const tools = el('div', { id: 'ws-tools', role: 'toolbar', 'aria-label': 'View' });
   /* Measure = the W/H/L callouts (the inventory's "Measure | W/H/L in mm + in"). The stage turns them on by itself
      on the finished page; the button reflects the stage's state and toggles it. */
@@ -21,11 +21,14 @@ export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode �
   const undoBtn = history ? el('button.chip.icon-btn', { title: 'Undo · Ctrl+Z', 'aria-label': 'Undo', onclick: () => { history.undo(); sync(); } }, [icon('arrow-counter-clockwise')]) : null;
   const redoBtn = history ? el('button.chip.icon-btn', { title: 'Redo · Ctrl+Y', 'aria-label': 'Redo', onclick: () => { history.redo(); sync(); } }, [icon('arrow-clockwise')]) : null;
   const eraseBtn = eraser ? el('button.chip.icon-btn.erase', { title: 'Remove units · click a unit to remove it · Esc ends', 'aria-label': 'Remove units', 'aria-pressed': 'false', onclick: () => { eraser.set(!eraser.get()); sync(); } }, [icon('trash')]) : null;
+  // the camera button: "Reset view" everywhere; the Assemble workspace names it for the guided camera (camTitle) and it
+  // lights up while the visitor has the camera (an orbit or zoom during a step), as the viewer's own Resume cam did
+  const camBtn = el('button.chip.icon-btn.cam', { title: camTitle || 'Reset view', 'aria-label': camTitle ? 'Back to the step\u2019s camera' : 'Reset view', onclick: () => stage.resetView() }, [icon('cube-focus')]);
   tools.append(...[
     el('div.chip.view', { role: 'group', 'aria-label': 'View' }, [b3, b2]),
     measureBtn,
     el('button.chip.icon-btn', { title: explode ? 'Exploded overview' : explodeTitle, 'aria-label': 'Explode', onclick: explode || soon('Explode', 'Assemble (phase 1)') }, [icon('arrows-out')]),
-    el('button.chip.icon-btn', { title: 'Reset view', 'aria-label': 'Reset view', onclick: () => stage.resetView() }, [icon('cube-focus')]),
+    camBtn,
     undoBtn, redoBtn, eraseBtn,
     qualityBtn,
   ].filter(Boolean));   // append(null) would write the text "null" into the bar (seen in Parts)
@@ -38,6 +41,7 @@ export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode �
     else b3.classList.add('on');
     if (history) { undoBtn.disabled = !history.canUndo; redoBtn.disabled = !history.canRedo; }
     if (eraser) { const on2 = !!eraser.get(); eraseBtn.classList.toggle('on', on2); eraseBtn.setAttribute('aria-pressed', String(on2)); }
+    if (camTitle) camBtn.classList.toggle('on', !!stage.camFree);
   }
   sync();
   return { el: tools, sync };
