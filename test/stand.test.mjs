@@ -19,7 +19,7 @@ const { GEN2, GEN2_TABLETOP } = vm.runInContext(read('js/catalog/data.js') + '\n
 const mod = (...p) => import(pathToFileURL(join(root, ...p)).href);
 const { layoutRules } = await mod('js', 'rules', 'layout.js');
 const { serializeBuild } = await mod('js', 'rules', 'schema.js');
-const { standUp, standRecord, standWords } = await mod('js', 'rules', 'stand.js');
+const { standUp, standRecord, slotWords, openCells } = await mod('js', 'rules', 'stand.js');
 const { generateManifest } = await mod('js', 'generate.js');
 const deps = { tabletop: GEN2_TABLETOP };
 const errorsOf = (b) => generateManifest(serializeBuild(b)).errors;
@@ -76,7 +76,7 @@ test('Tabletop to Wall Mount: a ragged top is filled up to the brackets, and the
   assert.equal(r.added, 2);
   assert.deepEqual(b.placed.filter((p) => r.ids.includes(p.id)).map((p) => `${p.w}x${p.hh}@${p.x},${p.y}`).sort(), ['1x2@1,0', '1x2@2,0']);
   assert.deepEqual(errorsOf(b), []);
-  assert.match(standWords('wall', r.added), /^2 support cases to fill the gaps up to the brackets$/);
+  assert.equal(slotWords('wall', r.added), '2 empty slots up to the brackets');
 });
 
 test('every column, not only the ends: a 3W on two 1W ends has its middle filled (the planner\'s own rule stops at the ends)', () => {
@@ -100,14 +100,13 @@ test('a build that already stands is left alone', () => {
   assert.equal(standRecord({ ...kit, placed: [] }, GEN2, deps), null, 'an empty build is not stood up');
 });
 
-test('the boot\'s safety net: the record Joey saved opens stood up; a layout floating above the table slides onto it', () => {
+test('the boot\'s safety net adds nothing (2026-10-21): Joey\'s saved record opens as it is, with its gaps; a layout floating above the table slides onto it', () => {
   const saved = joeysWall(); flipped(saved, 'tabletop');
   const rec = serializeBuild(saved);
-  assert.equal(generateManifest(rec).manifest, null);
-  const r = standRecord(rec, GEN2, deps);
-  assert.ok(r && r.added === 4, JSON.stringify(r && r.added));
-  assert.deepEqual(generateManifest(r.record).errors, []);
-  assert.equal(rec.placed.length, 11, 'the saved record itself is not changed');
+  assert.equal(generateManifest(rec).manifest, null, 'strict: refused');
+  assert.equal(standRecord(rec, GEN2, deps), null, 'nothing to slide, and nothing is added');
+  const shown = generateManifest(rec, { voids: true }).manifest;
+  assert.ok(shown && shown.incomplete && shown.incomplete.voids === 4, 'the stage shows it as an in-progress build with four empty slots');
   // the whole layout above the grid's bottom (an older link): one slide, nothing added
   const high = serializeBuild(record('tabletop', 2, 3, [[1, 0, 0, 2, 2]]));
   assert.ok(generateManifest(high).errors.some((e) => /floating/.test(e)));
@@ -137,7 +136,67 @@ test('supports take the build\'s majority drawer type, and a record whose nextId
 });
 
 test('the words', () => {
-  assert.equal(standWords('tabletop', 4), '4 support cases under the gaps');
-  assert.equal(standWords('tabletop', 1), '1 support case under the gaps');
-  assert.equal(standWords('under-table', 2), '2 support cases to fill the gaps up to the rails');
+  assert.equal(slotWords('tabletop', 4), '4 empty slots under it');
+  assert.equal(slotWords('tabletop', 1), '1 empty slot under it');
+  assert.equal(slotWords('under-table', 2), '2 empty slots up to the rails');
+});
+
+/* EMPTY SLOTS, NOT ADDED CASES (2026-10-21, Joey: "i don't want switching between mounting types to automatically add
+   units"; the gaps stay slots to fill and the assembly is not legal until they are). openCells lists them; the generator's
+   opts.voids draws them as ghosts and makes the build an in-progress preview, while the default stays strict. */
+test('openCells lists the empty slots: under a tabletop case, above a hanging one, and under a wide case\'s middle', () => {
+  const j = joeysWall(); const Rj = flipped(j, 'tabletop');
+  assert.deepEqual(openCells(j, Rj).map((c) => `${c.x},${c.y}`).sort(), ['0,6', '0,7', '1,6', '1,7', '5,6', '5,7', '6,6', '6,7']);
+  assert.equal(j.placed.length, 11, 'counted, not filled');
+  const w = record('tabletop', 3, 2, [[1, 0, 0, 1, 4], [2, 1, 2, 2, 2]]); const Rw = flipped(w, 'wall');
+  assert.deepEqual(openCells(w, Rw).map((c) => `${c.x},${c.y}`).sort(), ['1,0', '1,1', '2,0', '2,1']);
+  const m = record('tabletop', 3, 2, [[1, 0, 0, 3, 2], [2, 0, 2, 1, 2], [3, 2, 2, 1, 2]]);
+  assert.deepEqual(openCells(m, layoutRules(m, GEN2, deps)).map((c) => `${c.x},${c.y}`).sort(), ['1,2', '1,3']);
+  const kit = { ...JSON.parse(read('builds/185-tabletop-2w2h.json')).build, selected: { w: 1, h: 1 } };
+  assert.deepEqual(openCells(kit, layoutRules(kit, GEN2, deps)), [], 'a standing build has none');
+  const air = record('tabletop', 2, 3, [[1, 0, 0, 2, 2]]);
+  assert.deepEqual(openCells(air, layoutRules(air, GEN2, deps)), [], 'nothing on the table: no slots (the generator refuses it)');
+});
+
+/* THE SLOTS ARE WHAT FILL ALL FILLS (2026-10-21): Build's red slots and its issue count come from openCells, and its Fill
+   all button is standUp, so the two must walk to the same surface - the table, or the grid's top row on a hanging mount
+   (the planner's own unsupportedUnits counts y 0 as the brackets) - or a slot would be shown that Fill all skips, or Fill
+   all would add cases nobody was shown. A hanging layout that reaches no bracket has no slots: it floats as a whole, and
+   Build's old "not supported" issue with Fix structure covers it, as on a table. */
+test('Fill all (standUp) fills exactly the open cells, on a table and on a hanging mount; a hanging layout off its brackets has none', () => {
+  const cellsOf = (ps) => ps.flatMap((p) => Array.from({ length: p.w * p.hh }, (_, i) => `${p.x + (i % p.w)},${p.y + Math.floor(i / p.w)}`)).sort();
+  const j = joeysWall(); const Rj = flipped(j, 'tabletop');
+  const w = record('tabletop', 3, 2, [[1, 0, 0, 1, 4], [2, 1, 2, 2, 2]]); const Rw = flipped(w, 'wall');
+  for (const [name, b, R] of [['tabletop', j, Rj], ['wall', w, Rw]]) {
+    const open = openCells(b, R).map((c) => `${c.x},${c.y}`).sort();
+    assert.ok(open.length, name + ': has slots');
+    const r = standUp(b, R);
+    assert.deepEqual(cellsOf(b.placed.filter((p) => r.ids.includes(p.id))), open, name + ': Fill all fills exactly the slots shown');
+    assert.deepEqual(openCells(b, R), [], name + ': none left');
+  }
+  // a wall layout one row below the brackets, with a gap under part of it: no slots (Fill all would have built up to y 0)
+  const low = record('wall', 3, 3, [[1, 0, 2, 2, 2], [2, 2, 4, 1, 2]]);
+  assert.deepEqual(openCells(low, layoutRules(low, GEN2, deps)), [], 'nothing at the brackets: no slots');
+});
+
+test('the generator\'s voids mode: Joey\'s switched build is an in-progress preview with a ghost in every slot; strict stays strict', () => {
+  const j = joeysWall(); const Rj = flipped(j, 'tabletop');
+  const rec = serializeBuild(j);
+  assert.equal(generateManifest(rec).manifest, null, 'the default refuses it, as the placement judge needs');
+  const m = generateManifest(rec, { voids: true }).manifest;
+  assert.ok(m, 'shown');
+  assert.equal(m.incomplete.voids, 4); assert.equal(m.ghosts.length, 4);
+  assert.equal(m.ghosts.reduce((k, g) => k + g.halfRows, 0), openCells(j, Rj).length, 'the ghosts cover exactly the open cells');
+  assert.equal(m.steps.length, 1); assert.equal(m.steps[0].title, 'Fill the gaps'); assert.ok(m.steps[0].preview, 'no instructions: one preview page');
+  // a ghost's top meets the floating case above it (73.65 mm: the bottom row's 17.65 plus one 1H)
+  const caseBottoms = new Set(m.instances.filter((i) => /_Case$/.test(i.node)).map((i) => i.pos[1].toFixed(2)));
+  for (const g of m.ghosts) assert.ok(caseBottoms.has((g.pos[1] + g.size[1]).toFixed(2)), `ghost top ${g.pos[1] + g.size[1]} meets a case`);
+  // a hanging build with a ragged top: ghosts above, up to the top row
+  const w = record('tabletop', 3, 2, [[1, 0, 0, 1, 4], [2, 1, 2, 2, 2]]); flipped(w, 'wall');
+  const mw = generateManifest(serializeBuild(w), { voids: true }).manifest;
+  assert.ok(mw && mw.incomplete.voids === 2 && mw.ghosts.every((g) => g.pos[1] === 56 && g.size[1] === 56), JSON.stringify(mw && mw.ghosts));
+  // a complete kit is byte-identical either way; a layout with nothing on the table is still refused
+  const kit = JSON.parse(read('builds/185-tabletop-2w2h.json')).build;
+  assert.equal(JSON.stringify(generateManifest(kit, { voids: true })), JSON.stringify(generateManifest(kit)));
+  assert.ok(generateManifest(serializeBuild(record('tabletop', 2, 3, [[1, 0, 0, 2, 2]])), { voids: true }).errors.some((e) => /floating/.test(e)));
 });

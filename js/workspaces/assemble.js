@@ -33,6 +33,35 @@ export function mountAssemble(stage, ctx) {
   const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview), camTitle: 'Back to the step\u2019s camera \u00b7 after you orbit or zoom, this returns to the guided view' });
   root.appendChild(tb.el);
 
+  /* NOT READY TO ASSEMBLE (2026-10-21, Joey: with empty slots "the assembly is not legal until i fill in those gaps"). A
+     build the stage shows as an in-progress preview - empty slots under (or above) a case, or a tabletop top not level
+     yet - has no instructions, so there is nothing to step through: the workspace says why and sends the visitor to
+     Build, where the slots show red and Fill all fills them. The player's frame, without the player. */
+  const inc = stage.manifest?.incomplete;
+  if (inc) {
+    const card = el('div.glass.glass-edge.blocked', { id: 'ws-player', role: 'region', 'aria-label': 'Not ready to assemble' }, [
+      el('div.row1', {}, [
+        el('span.num', { text: '!' }),
+        el('div', {}, [
+          el('div.title', { text: 'Not ready to assemble' }),
+          el('div.text', { text: inc.voids
+            ? 'This build has empty slots, so it has no instructions yet. Fill them in Build: they show red there, and Fill all fills them with 1W cases.'
+            : 'Part of the top isn’t level yet, so this build has no instructions. Fill the outlined space in Build with any drawers that fit.' }),
+        ]),
+      ]),
+      el('div.row2', {}, [el('button.key.next.on', { text: 'Go to Build', onclick: () => ctx.switchTo('build') })]),
+    ]);
+    root.appendChild(card);
+    const safe = () => stage.setSafeArea({ left: 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + card.offsetHeight + 12 });
+    addEventListener('resize', safe, { signal });
+    tb.sync(); safe();
+    return {
+      onPage() { tb.sync(); },
+      onCamFree() { tb.sync(); },
+      unmount() { ac.abort(); stage.setSafeArea(null); root.remove(); },
+    };
+  }
+
   /* Part colors by default here, and only here: remember the visitor's own palette switch and put it back on leave */
   const hadOwnColors = !!stage.useCustom;
   let mine = false;

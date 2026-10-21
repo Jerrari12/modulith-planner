@@ -125,7 +125,8 @@ export function mountLabels(stage, ctx) {
   root.appendChild(bar.el);
 
   /* ---------------- the record, the stage ---------------- */
-  const tryGen = (rec) => { try { return generateManifest(rec); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
+  // the stage's view, as Build's tryShow: a build's empty slots are ghosts, not a refusal (generate.js opts.voids, 2026-10-21)
+  const tryGen = (rec) => { try { return generateManifest(rec, { voids: true }); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
   let lastSig = null, queue = Promise.resolve();
   { const g = tryGen(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }
   /* a record of another mount or length is the setup sheet's reload, not a scene this stage can show (its parts pool and

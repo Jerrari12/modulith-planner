@@ -1794,3 +1794,56 @@ Dated calls made while building, with who made them. The brief and the inventory
   them.", the reload boots with his 11 at the same heights above the table and four 1W·1H Decor supports on it under
   columns 0, 1, 5 and 6, and the toast says so; his record as the old switch saved it, opened as a link, boots stood up with
   15 units and the note, and the address carries the 15. Joey's own saved build opens the same way on his next visit.
+
+## 2026-10-21 (a change of mount adds nothing: the gaps stay empty slots to fill, Fill all fills them, Assemble waits)
+
+- **Joey's call, in words:** "i don't want switching between mounting types to automatically add units." The gaps a switch
+  leaves stay "empty slots I have to fill in", "the assembly is not legal until i fill in those gaps", and "I don't mind
+  having an auto fix button". This reverses the auto-fill of the entry above (daf28ee); its other half stays: no setup
+  change reloads into a build the stage cannot show.
+- **The generator's voids mode** (`generateManifest(build, { voids: true })`). An open column under a tabletop case (down to
+  the table) or above a hanging one (up to the build's top row, the grid's top row once the layout reaches its brackets
+  or rails) is no longer an error: each open run is a ghost box, the same
+  ghost as the 2026-08-23 unfinished-top preview, and the build is an in-progress preview with no instructions. The planner
+  shell asks for it everywhere it shows a build (the boot, its repair, updateBuild, regenerate, Build's and Labels'
+  stages). The plain viewer and the default call stay strict. A tabletop layout with nothing on the table is still refused.
+- **The setup sheet** no longer calls standUp. Before Apply it says "As a Tabletop build it will have 4 empty slots under
+  it · Apply adds nothing: fill them in Build before it can be assembled.", and after the reload the toast says "Tabletop:
+  4 empty slots under it to fill · they show red in Build, where Fill all adds 1W cases."
+  The boot's net (standRecord) now only slides a record onto its surface; it adds nothing.
+- **Build** lists "N empty slots to fill." as a hard issue with a **Fill all** button (standUp: 1W cases in the build's
+  majority drawer type, nothing moved, one Undo). The slots are the red spots on both views and hatched on the board.
+  openCells (js/rules/stand.js) finds them by walking to the same surface Fill all fills to, the table or the grid's top
+  row, so the slots shown are exactly what Fill all fills.
+- **Gravity holds the floating cases a switch left.** It now drops only what an edit made unsupported, so filling one
+  slot by hand leaves the other cases over their slots. Without this, the first case placed dropped every other floating
+  case into its slot.
+- **A new gap is still refused.** The placement judge now asks the generator in voids mode, so a build with slots still
+  offers its spots, and it refuses any placement that would open a slot of its own. That case says "Part of it would
+  have nothing under it: every column of a case needs a case below it or the table." It covers a 3W over two 1Ws with
+  an open middle, which the both-ends and sag rules let through. Before, the strict generator refused it without a
+  reason.
+- **Assemble** shows "Not ready to assemble" with **Go to Build** while the build has empty slots, or an uneven tabletop
+  top, instead of a one-step player that ended on "The whole assembly, finished".
+- **Known limits.** The slot count is the number of 1W cases Fill all adds, and the generator counts open column runs.
+  They agree for 1H-deep gaps. A hanging layout that reaches no bracket has no slots and keeps the "not supported" issue
+  with Fix structure. Only old links reach that state. Cases the previous release already added to a build stay until
+  removed.
+- **Checks.** test/stand.test.mjs covers openCells, Fill all filling exactly the open cells on a table and on a wall,
+  and a wall layout off its brackets having none. It also covers the generator's voids mode (Joey's switched build shows 4
+  ghosts meeting the case bottoms, a wall ghosts its ragged top, a complete kit is byte-identical either way, a floating
+  layout is still refused), and the boot net adding nothing. test/refusal-reason.test.mjs covers the new reason.
+  The e2e cases cover four things. Joey's wall build goes through the sheet to Tabletop: the line, 11 units, 4 ghosts,
+  no instructions, the toast, Assemble's card and Go to Build, the 4 offered spots, one slot filled by hand with unit 6
+  kept, the stage at 3 slots, the issue card's "3 empty slots to fill." and Fill all completing it, then Assemble's
+  steps. His saved record opens as a link with nothing added. A 3W over a gap is refused with the new reason. The length
+  refusal is unchanged. Six mutants each fail their own e2e case: settle without hold, Build's stage and judge without
+  voids, the boot without voids, the sheet calling standUp again, the judge without the open-cell count, and Assemble
+  without the card. Two of them first survived: the sheet mutant never fired as written, and the sheet case never looked
+  at the stage or the offered spots between fills. The mutant was rewritten and the case strengthened. The new Fill all
+  unit test failed on the first openCells, as it should have.
+- **Review:** Sol `01a15eb1`, substantial, inline payload: no findings. Terra `01a15eb3` on this entry: two wording
+  fixes taken (the toast quoted, the hanging top named); five discarded against the code. A first call, `01a15eaf`, pointed the reviewer at
+  a payload file the bridge would not let it read, and is recorded as failed. Before review I found and fixed one defect
+  myself: openCells walked a hanging build to its own top while Fill all fills to the grid's top row.
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.

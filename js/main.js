@@ -2950,21 +2950,22 @@ if (IS_PART) {
   }
   if (!gen) {
     try {
-      gen = generateManifest(build);
+      // in the planner shell a build with empty slots opens as an in-progress preview (ghost slots, no instructions),
+      // never this page's dead end (generate.js opts.voids; Joey, 2026-10-21). The plain viewer stays strict
+      gen = generateManifest(build, { voids: !!document.documentElement.dataset.ws });
       if (!gen.manifest) fail = 'build-unsupported';
     } catch (e) {
       gen = HASH_ERR;
       fail = 'build-crash';
     }
   }
-  /* A RECORD THAT CANNOT STAND AS SAVED (2026-10-20: a mount switched before the setup sheet stood builds up, an old
-     planner's link with a unit in mid-air): the shell stands it up on its mount (opts.repair, js/rules/stand.js) and the
-     page opens on that, saying so (opts.onRepaired), instead of on the dead end below. Only a result the generator
-     accepts is used; anything else stops there as before */
+  /* A RECORD THAT FLOATS AS A WHOLE (an old link whose tabletop layout sits above the table): the shell slides it onto its
+     surface (opts.repair, js/rules/stand.js standRecord; it adds nothing, 2026-10-21) and the page opens on that, saying so
+     (opts.onRepaired), instead of on the dead end below. Only a result the generator accepts is used */
   if (!gen.manifest && fail === 'build-unsupported' && typeof opts !== 'undefined' && opts.repair) {
     try {
       const fixed = opts.repair(build);
-      const g2 = fixed ? generateManifest(fixed.record) : null;
+      const g2 = fixed ? generateManifest(fixed.record, { voids: !!document.documentElement.dataset.ws }) : null;
       if (g2 && g2.manifest) { build = fixed.record; originalBuild = structuredClone(build); gen = g2; if (opts.onRepaired) opts.onRepaired(fixed); }
     } catch { /* the dead end below, as before */ }
   }
@@ -9110,7 +9111,7 @@ async function updateBuild(nb, pre) {
   if (nb && (nb.mount !== build.mount || +nb.length !== +build.length))
     return { ok: false, errors: [`This scene is built for the ${build.length} ${build.mount} collection · a ${nb.length} ${nb.mount} build needs the page reloaded on it.`] };
   let gen = pre;
-  if (!gen) { try { gen = generateManifest(nb); } catch (err) { return { ok: false, errors: [String((err && err.message) || err)] }; } }
+  if (!gen) { try { gen = generateManifest(nb, { voids: !!document.documentElement.dataset.ws }); } catch (err) { return { ok: false, errors: [String((err && err.message) || err)] }; } }
   if (!gen.manifest) return { ok: false, errors: gen.errors && gen.errors.length ? gen.errors : ['This layout can’t be shown.'] };
   while (regenBusy) await new Promise(r => setTimeout(r, 16));
   const plateMoved = (nb.buildPlate || 'powder') !== (build.buildPlate || 'powder');   // the generator never reads the plate
@@ -10236,7 +10237,7 @@ async function mountManifest(m) {
 let regenBusy = false;
 async function regenerate(pre) {
   if (!build || regenBusy) return;
-  const gen = pre || generateManifest(build);
+  const gen = pre || generateManifest(build, { voids: !!document.documentElement.dataset.ws });   // a build with empty slots still takes a Build style toggle (2026-10-21)
   if (!gen.manifest) return; // valid toggles can't make an unbuildable build; ignore defensively
   regenBusy = true;
   setSelected(null);

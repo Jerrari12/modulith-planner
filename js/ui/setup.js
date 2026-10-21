@@ -5,7 +5,7 @@
 import { el, trapTab } from './dom.js';
 import { icon } from './icons.js';
 import { layoutRules } from '../rules/layout.js';
-import { standUp, standWords } from '../rules/stand.js';
+import { standUp, slotWords } from '../rules/stand.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest } from '../generate.js';
 
@@ -73,12 +73,11 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   const stranded = () => (fresh ? [] : strandedAt(s0, draft.length));
   const changesScene = () => fresh || draft.mount !== s0.mount || draft.length !== Number(s0.length);
   /* WHAT APPLY WRITES: the sheet's choices on a record `s` with its rules `R`, as one function, so the committed record, the
-     candidate the generator checks first and the count above Apply are the same thing. A CHANGE OF MOUNT STANDS THE BUILD UP
-     (Joey, 2026-10-20: a wall build with gaps along its bottom, switched to Tabletop, stopped the page on "Can't show this
-     build yet · A unit is floating"): setMount only slides the layout against the new surface, and standUp fills what the
-     generator needs under (or above) it, moving nothing (js/rules/stand.js). Returns standUp's answer, or null. */
+     candidate the generator checks first and the count above Apply are the same thing. A CHANGE OF MOUNT ADDS NOTHING
+     (Joey, 2026-10-21: "i don't want switching between mounting types to automatically add units"): setMount slides the
+     layout against the new surface, and any gap under (or above) part of it stays an empty slot to fill in Build, shown red
+     there and as ghosts on the stage, with no instructions until it is filled (Fill all fills them on request). */
   function applyDraft(s, R) {
-    const mountChange = !fresh && draft.mount !== s.mount;
     s.printer = draft.printer;
     s.customBed = draft.printer === 'custom' ? { x: Number(draft.customBed.x), y: Number(draft.customBed.y) } : null;
     const asks = !!mountDef(draft.mount)?.askSpace;
@@ -91,22 +90,23 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     // Tabletop kit is not one. The stress test, 2026-10-15: the starter stayed at the top, syncTabletopGrid grew the grid
     // under it, and the page stopped on "A unit is floating", with no way back
     if (fresh && R.rebaseToMountEdge) R.rebaseToMountEdge();
-    const stood = mountChange ? standUp(s, R) : null;
     if (R.clampGrid) R.clampGrid();
     if (R.syncTabletopGrid) R.syncTabletopGrid();
-    return stood;
   }
   /* the record Apply would write, built on a copy with the store's own normalising after it (commit() runs
      enforceMountLength and syncTabletopGrid): nothing in the store or its history changes (Sol 01a15c9b: a refused change
      that was committed and undone stayed on the Redo stack, one Redo from the dead end) */
   function candidate() {
     const t = JSON.parse(JSON.stringify(store.state));
-    const R = layoutRules(t, G, { tabletop: globalThis.GEN2_TABLETOP });
-    const stood = applyDraft(t, R);
+    const deps = { tabletop: globalThis.GEN2_TABLETOP };
+    const R = layoutRules(t, G, deps);
+    applyDraft(t, R);
     R.enforceMountLength(); R.syncTabletopGrid();
-    return { record: serializeBuild(t), stood };
+    // the empty slots it would have: the cases Build's "Fill all" would add (standUp on a further copy), counted, not added
+    const u = JSON.parse(JSON.stringify(t));
+    return { record: serializeBuild(t), slots: standUp(u, layoutRules(u, G, deps)).added };
   }
-  const standNeed = () => { try { return candidate().stood?.added || 0; } catch { return 0; } };
+  const slotsAfter = () => { try { return candidate().slots; } catch { return 0; } };
 
   function render() {
     box.replaceChildren();
@@ -165,12 +165,12 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     box.appendChild(body);
     const fit = el('p.fit', { text: fitLine(draft.length, draft.printer, draft.customBed) });
     const lost = stranded();
-    const need = !fresh && draft.mount !== s0.mount ? standNeed() : 0;
+    const slots = !fresh && draft.mount !== s0.mount ? slotsAfter() : 0;
     const i = STEPS.indexOf(cur);
     box.appendChild(el('div.foot', {}, [
       fit,
       lost.length ? el('p.warn', { text: `${lost.length} of your units aren’t in the ${draft.length} lineup · swap them for sizes it has before changing the length.` }) : null,   // the stage can't show them (2026-10-20: the old promise, "they stay on the board flagged", ended on "Can't show this build yet")
-      need ? el('p.warn.stand', { text: `As a ${mountDef(draft.mount)?.label || draft.mount} build it needs ${standWords(draft.mount, need)} · Apply adds ${need === 1 ? 'it' : 'them'}.` }) : null,
+      slots ? el('p.warn.stand', { text: `As a ${mountDef(draft.mount)?.label || draft.mount} build it will have ${slotWords(draft.mount, slots)} · Apply adds nothing: fill ${slots === 1 ? 'it' : 'them'} in Build before it can be assembled.` }) : null,
       refusal ? el('p.warn.refused', { role: 'alert', text: refusal }) : null,
       el('div.btns', {}, [
         i > 0 ? el('button.key', { text: 'Back', onclick: () => { cur = STEPS[i - 1]; render(); } }) : null,
@@ -188,18 +188,20 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     refusal = '';
     // never reload into a record the stage cannot show (the boot would stop on "Can't show this build yet"): the generator
     // checks the candidate first, and a refusal leaves the record, its history and the address as they were
+    // (asked as the stage asks: a build with empty slots is an in-progress preview, not a refusal - generate.js opts.voids)
+    let slots = 0;
     if (sceneChange) {
-      let g = null; try { g = generateManifest(candidate().record); } catch { g = null; }
+      let g = null; try { const c = candidate(); slots = c.slots; g = generateManifest(c.record, { voids: true }); } catch { g = null; }
       if (!g || !g.manifest) {
         refusal = `Can’t apply this: ${(g && g.errors.length ? g.errors : ['the parts can’t be built this way.']).join(' ')}`;
         render(); return;
       }
     }
-    let stood = null;
+    const mountChange = !fresh && draft.mount !== s0.mount;   // read before the commit: s0 is the live record
     store.flush();
-    store.commit((s, R) => { stood = applyDraft(s, R); }, 'setup');
+    store.commit((s, R) => { applyDraft(s, R); }, 'setup');
     store.flush();
-    if (stood && stood.added) { try { sessionStorage.setItem('gen2-setup-note', `${mountDef(draft.mount)?.label || draft.mount}: added ${standWords(draft.mount, stood.added)}.`); } catch { /* no storage: no note */ } }
+    if (mountChange && slots) { try { sessionStorage.setItem('gen2-setup-note', `${mountDef(draft.mount)?.label || draft.mount}: ${slotWords(draft.mount, slots)} to fill · they show red in Build, where Fill all adds 1W cases.`); } catch { /* no storage: no note */ } }
     if (ctx.builds && draft.name.trim()) await ctx.builds.rename(draft.name);
     close();
     if (sceneChange) { ctx.say('Rebuilding the scene…'); setTimeout(() => location.reload(), 200); }

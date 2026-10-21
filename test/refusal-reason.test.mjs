@@ -38,3 +38,8 @@ test('the other codes: unsupported, the Wall Mount 0.5H top, and the generator',
   assert.equal(refusalReason('gen'), "The parts can't be built this way.");
   assert.equal(refusalReason('something-new'), "The parts can't be built this way.", 'an unknown code falls back to the generator wording, never undefined');
 });
+
+test('a new empty slot (2026-10-21): the column rule, under on a table, above on a hanging mount', () => {
+  assert.equal(refusalReason('v'), 'Part of it would have nothing under it: every column of a case needs a case below it or the table.');
+  assert.equal(refusalReason('v', { hanging: true }), 'Part of it would have nothing above it: every column of a case needs a case above it or the top row.');
+});

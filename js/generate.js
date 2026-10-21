@@ -1037,7 +1037,28 @@ export function generateManifest(build, opts = {}) {
      underneath must not also bill a pair — they would fight for one slot. */
   const shelfAbove = (col, level) => units.some(v =>
     v.fill === 'shelf' && v.rowIdx === level && col >= v.col && col < v.col + v.w);
+  /* VOIDS (2026-10-21, Joey: switching mounts must not add units; the gaps stay "empty slots I have to fill in", and the
+     assembly is not legal until they are filled). With `opts.voids` - the planner's view of a build, never its placement
+     judge - an open column under a tabletop case, or above a hanging one up to the top row, is not an error: its cells
+     become ghost boxes like an unfinished run's, and the build is incomplete (one preview page, no instructions). A
+     tabletop layout with nothing on the table stays refused: there is no surface to fill down to. */
+  const occCell = new Set();
+  for (const u of units) for (let c = u.col; c < u.col + u.w; c++) for (let r = u.rowIdx; r < u.topIdx; r++) occCell.add(c + ',' + r);
+  const voidRuns = [];   // { col, r0, r1 }: open half-rows [r0, r1) in this frame (rowIdx counts up from the grid bottom)
+  if (opts.voids && (hangs || units.some(u => u.rowIdx === 0))) {
+    const seen = new Set();
+    for (const u of units) {
+      if (hangs ? u.topIdx >= maxTop : u.rowIdx <= 0) continue;
+      for (let c = u.col; c < u.col + u.w; c++) {
+        const cells = [];
+        for (let r = hangs ? u.topIdx : u.rowIdx - 1; (hangs ? r < maxTop : r >= 0) && !occCell.has(c + ',' + r) && !seen.has(c + ',' + r); r += hangs ? 1 : -1) { cells.push(r); seen.add(c + ',' + r); }
+        if (cells.length) voidRuns.push({ col: c, r0: Math.min(...cells), r1: Math.max(...cells) + 1 });
+      }
+    }
+  }
+  const voids = voidRuns.length > 0;
   for (const u of units) {
+    if (voids) break;   // every open column is a ghost below, not an error
     if (hangs ? u.topIdx === maxTop : u.rowIdx === 0) continue; // top row hangs on brackets/rails / bottom row sits on the surface
     for (let c = u.col; c < u.col + u.w; c++)
       if (hangs ? !bottomAt(c, u.topIdx) : !topAt(c, u.rowIdx)) {
@@ -1061,10 +1082,11 @@ export function generateManifest(build, opts = {}) {
   const colTop = new Map();
   for (const u of units) for (let c = u.col; c < u.col + u.w; c++)
     colTop.set(c, Math.max(colTop.get(c) || 0, u.topIdx));
-  if (hangs && new Set(colTop.values()).size > 1)
+  if (hangs && !voids && new Set(colTop.values()).size > 1)
     errors.push(`${isUT ? 'The rails need a flat top row against the surface' : 'The covers need a flat top'} · every column must stack to the same height. Fix the build in the planner first.`);
   const completion = hangs ? null : TABLETOP.completion(build.placed);
-  const incomplete = !!completion && !completion.complete;
+  const unfinishedTop = !!completion && !completion.complete;
+  const incomplete = unfinishedTop || voids;
   // sanity cap: each unit becomes ~9 parts and its own step — beyond this the
   // instructions stop being instructions
   if (units.length > 80)
@@ -2130,7 +2152,7 @@ export function generateManifest(build, opts = {}) {
   // `planned` - the viewer renders it translucent, because it cannot attach
   // until that column is built up (a tile wholly over level columns stays
   // normal; it is installable today).
-  const shortCols = new Set(incomplete ? completion.columns.map(c => c.x - minCol) : []);
+  const shortCols = new Set(unfinishedTop ? completion.columns.map(c => c.x - minCol) : []);   // voids alone (opts.voids) leave every cover as it is
   const coverRuns = [];
   for (let c = 0, run = null; !hangs && c < totalW; c++) {
     const t = bottomCols.size ? topOf(c) : 0;
@@ -2675,7 +2697,7 @@ export function generateManifest(build, opts = {}) {
          viewer hides every instruction surface in this mode, so this is a
          state carrier, not a page anyone reads as "step 1 of 1". Staged
          subassemblies are un-staged so each part's `pos` is final. */
-    const ghosts = completion.columns.map(c => {
+    const ghosts = (unfinishedTop ? completion.columns : []).map(c => {
       const col = c.x - minCol, n = c.y1 - c.y0;
       return {
         pos: [colCenter(col), row0 + (gridBottom - c.y1) * PITCH_HALF_Y, 0],
@@ -2683,16 +2705,21 @@ export function generateManifest(build, opts = {}) {
         halfRows: n,
       };
     });
+    // the open columns of a build with voids (opts.voids, 2026-10-21): the same box, from the run's lowest open half-row
+    for (const v of voidRuns) ghosts.push({ pos: [colCenter(v.col), row0 + v.r0 * PITCH_HALF_Y, 0], size: [PITCH_X, (v.r1 - v.r0) * PITCH_HALF_Y, depth], halfRows: v.r1 - v.r0 });
     for (const i of inst) delete i.stage;
     // the parts list still bills the intended covers (they are the kit's), but a
     // row with a planned tile says so - the same `note` line the feet rows use
     for (const p of manifest.parts)
       if (inst.some(i => i.node === p.node && i.planned)) p.note = 'Planned · attaches once every column in its run reaches the top';
-    manifest.incomplete = { areas: completion.areas.length, cells: completion.cells.length, columns: completion.columns.length };
+    const areas = (unfinishedTop ? completion.areas.length : 0) + voidRuns.length;
+    manifest.incomplete = { areas, cells: (unfinishedTop ? completion.cells.length : 0) + voidRuns.reduce((k, v) => k + v.r1 - v.r0, 0), columns: ghosts.length, ...(voids ? { voids: voidRuns.length } : {}) };   // an unfinished top alone keeps its 2026-08-23 shape
     manifest.ghosts = ghosts;
     manifest.steps = [{
-      title: 'Finish the top',
-      note: `This layout is still in progress · fill the outlined space in the planner (${completion.areas.length === 1 ? 'one area' : completion.areas.length + ' areas'}) so every column supports the top cover - any drawer combination that fits. The translucent covers attach once their run is level.`,
+      title: voids ? 'Fill the gaps' : 'Finish the top',
+      note: voids
+        ? `This layout is still in progress · fill the outlined ${voidRuns.length === 1 ? 'slot' : voidRuns.length + ' slots'} in the planner so every case ${hangs ? 'hangs from a case above it or the top row' : 'rests on a case below it or the table'} - any case that fits completes it. There are no instructions until then.`
+        : `This layout is still in progress · fill the outlined space in the planner (${completion.areas.length === 1 ? 'one area' : completion.areas.length + ' areas'}) so every column supports the top cover - any drawer combination that fits. The translucent covers attach once their run is level.`,
       camera: { ...cam(0, H_MM * 0.45, totalW, gridBottom, FIT) },
       preview: true,
       phases: [{ enter: inst.map(i => ({ id: i.id, from: [0, 0, 0] })), sync: true }],

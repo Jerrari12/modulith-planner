@@ -32,7 +32,7 @@ import { board } from '../ui/board.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
 import { layoutRules } from '../rules/layout.js';
-import { refusalReason } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
+import { refusalReason, standUp, openCells } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
 
@@ -100,7 +100,11 @@ export function mountBuild(stage, ctx) {
      every regenerate; a snapshot taken before the update lost a toggle made while it ran (Sol 01a14b32) */
   let measureOn = false;
   const tryGen = (rec) => { try { return generateManifest(rec); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
-  { const g = tryGen(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }
+  /* what the STAGE shows (2026-10-21): a build with gaps under part of it is an in-progress preview - ghost slots, no
+     instructions - rather than a refusal (generate.js opts.voids). The placement judge below asks the same, and keeps new
+     placements from opening a gap of their own by counting the open cells (openCells) */
+  const tryShow = (rec) => { try { return generateManifest(rec, { voids: true }); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
+  { const g = tryShow(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }   // the stage's own view of it
   /* every settled change: regenerate the scene when the manifest changed; an unshowable layout keeps the last good
      scene and lands its reasons in the issue card (the board always shows the true state) */
   /* A record of another mount or length is not this stage's to show: the parts pool and the mount scene are fixed when
@@ -114,7 +118,7 @@ export function mountBuild(stage, ctx) {
     queue = queue.then(async () => {
       const rec = store.serialize();
       if (otherScene(rec)) { st.stageErrors = null; renderAll(); return; }   // an earlier layout's reasons are not this record's (Terra 01a1557b)
-      const gen = tryGen(rec);
+      const gen = tryShow(rec);
       if (!gen.manifest) { st.stageErrors = gen.errors || ['This layout can’t be shown.']; renderAll(); return; }
       st.stageErrors = null;
       const sig = sigOf(gen.manifest);
@@ -133,17 +137,19 @@ export function mountBuild(stage, ctx) {
   /* an option the stage applied itself (Build style's toggles regenerate on their own): take its record back
      into the store as one undo step, without a second regenerate */
   async function adopt() {
-    const g = tryGen(stage.build); if (g.manifest) lastSig = sigOf(g.manifest);
+    const g = tryShow(stage.build); if (g.manifest) lastSig = sigOf(g.manifest);
     const keep = st.selId;
     store.load(stage.build, 'adopt'); st.selId = keep; S().selectedUnit = keep;
     renderAll();
   }
-  /* gravity (Joey: drop only): every unsupported unit falls toward the mount surface until something holds it */
-  function settle(s, Rs) {
+  /* gravity (Joey: drop only): every unsupported unit falls toward the mount surface until something holds it - except the
+     ones in `hold`: a case that already stood over an empty slot before this edit and that the edit did not touch. A mount
+     switch's gaps stay slots until they are filled (Joey, 2026-10-21); filling one must not drop its neighbours into theirs */
+  function settle(s, Rs, hold = null) {
     const moved = new Map();   // id -> half-rows travelled
     const dir = s.mount === 'tabletop' ? 1 : -1;
     for (let pass = 0; pass < 24; pass++) {
-      const uns = new Set(Rs.unsupportedUnits().map((u) => u.id)); if (!uns.size) break;
+      const uns = new Set(Rs.unsupportedUnits().map((u) => u.id).filter((id) => !(hold && hold.has(id)))); if (!uns.size) break;
       let any = false;
       for (const u of s.placed.filter((u) => uns.has(u.id)).sort((a, b) => dir === 1 ? b.y - a.y : a.y - b.y)) {
         let ny = u.y; while (Rs.canPlace(u.x, ny + dir, u.w, u.hh, u.id)) ny += dir;
@@ -167,7 +173,13 @@ export function mountBuild(stage, ctx) {
   }
   function edit(fn, why = 'edit', { gravity = true } = {}) {
     let dropped = new Map();
-    const r = store.commit((s, Rs) => { const out = fn(s, Rs); if (gravity) dropped = settle(s, Rs); hug(s); return out; }, why);
+    const r = store.commit((s, Rs) => {
+      const at = (p) => `${p.x},${p.y},${p.w},${p.hh}`;
+      const was = new Map(Rs.unsupportedUnits().map((u) => [u.id, at(u)]));   // already over a gap before this edit
+      const out = fn(s, Rs);
+      if (gravity) dropped = settle(s, Rs, new Set(s.placed.filter((p) => was.get(p.id) === at(p)).map((p) => p.id)));
+      hug(s); return out;
+    }, why);
     if (dropped.size) {
       const s = S();
       const names = [...dropped.keys()].map((id) => { const u = s.placed.find((p) => p.id === id); return `${u ? `${u.w}W·${u.hh / 2}H` : 'unit'} (unit ${s.placed.indexOf(u) + 1})`; });
@@ -182,15 +194,18 @@ export function mountBuild(stage, ctx) {
   function judge(trialFn, id, selected) { return judgeWhy(trialFn, id, selected) === null; }
   /* the same trial, saying WHY it refuses (2026-10-20, the coworker's question): null when the trial passes, else the
      code refusalReason() takes - 'fit' (the trial itself said no), the first new problem's key prefix ('s' sag, 'u'
-     unsupported, 'w' wall-top 0.5H), or 'gen' (the generator could not build it) */
+     unsupported, 'w' wall-top 0.5H), 'v' (it would open an empty slot: a column with nothing under it, which the
+     planner's both-ends rule misses), or 'gen' (the generator could not build it). The generator is asked in the stage's
+     mode (voids are slots, not refusals, 2026-10-21), so a build that already has empty slots still offers its spots */
   function judgeWhy(trialFn, id, selected) {
-    const s = S(); const before = problems(s, R());
+    const s = S(); const before = problems(s, R()); const open = openCells(s, R()).length;
     const t = clone(s); if (selected) t.selected = selected;
     const Rt = layoutRules(t, G, { tabletop: TT });
     if (trialFn(t, Rt) === false) return 'fit';
     Rt.syncTabletopGrid();
     for (const k of problems(t, Rt)) if (!before.has(k) || k.endsWith(':' + id)) return k.split(':')[0];
-    return tryGen(serializeBuild(t)).manifest ? null : 'gen';
+    if (openCells(t, Rt).length > open) return 'v';
+    return tryShow(serializeBuild(t)).manifest ? null : 'gen';
   }
   const spotCache = new Map();
   const cacheKey = (tag) => tag + '|' + JSON.stringify(store.serialize());
@@ -283,10 +298,11 @@ export function mountBuild(stage, ctx) {
     if (!grownFor(x, u.w, s0, layoutRules(s0, G, { tabletop: TT }), u.id)) return { why: `The build is already as wide as this mount allows (${R().capW()}W).` };
     const g = fitAt(x, y, u.w, u.hh, u.id, s0); if (!g) return { why: 'Can’t move there · another unit is in the way.' };
     let rests = true, settledY = y;
+    const hold = new Set(R().unsupportedUnits().map((p) => p.id).filter((id) => id !== u.id));   // the others over a gap stay put, as edit() does
     const ok = judge((t, Rt) => {
       if (sel) Rt.syncTabletopGrid();
       growTo(t, g.k, g.span); const p = t.placed.find((q) => q.id === u.id); p.x = x + g.k; p.y = y;
-      const before = p.y; settle(t, Rt); rests = p.y === before; settledY = p.y;
+      const before = p.y; settle(t, Rt, hold); rests = p.y === before; settledY = p.y;
     }, u.id, sel);
     return ok ? { g, rests, y: settledY } : { why: 'Can’t move there · it would leave a unit without support.' };
   }
@@ -312,9 +328,16 @@ export function mountBuild(stage, ctx) {
     }
     if (spotCache.size > 40) spotCache.clear(); spotCache.set(key, out); return out;
   }
-  /* the cases Fix structure would add, as red spots (the prototype's "needed cells"): one click adds exactly that */
+  /* THE EMPTY SLOTS as red spots (the prototype's "needed cells"; 2026-10-21: the cases "Fill all" would add, standUp, which
+     keeps the layout and fills each open column, rather than the old Fix structure's gravity): one click adds exactly
+     that. A build whose layout floats as a whole has no open cells and keeps the old Fix structure's spots */
   function neededSpots() {
-    const s = S(); if (!R().unsupportedUnits().length) return [];
+    const s = S();
+    if (openCells(s, R()).length) {
+      const t = clone(s); const Rt = layoutRules(t, G, { tabletop: TT }); const r = standUp(t, Rt);
+      return t.placed.filter((p) => r.ids.includes(p.id)).map((p) => ({ x: p.x, y: p.y, w: p.w, hh: p.hh, kind: 'need' }));
+    }
+    if (!R().unsupportedUnits().length) return [];
     const t = clone(s); const Rt = layoutRules(t, G, { tabletop: TT }); Rt.fixStructure();
     return t.placed.filter((p) => p.id >= s.nextId).map((p) => ({ x: p.x, y: p.y, w: p.w, hh: p.hh, kind: 'need' }));
   }
@@ -388,6 +411,12 @@ export function mountBuild(stage, ctx) {
     const r = edit((s, Rs) => Rs.fixStructure(), 'fix', { gravity: false });
     say(`✓ Structure fixed · ${n(r.moved, 'unit')} moved${r.added ? `, ${n(r.added, 'support case')} added` : ''}.`);
   }
+  /* FILL ALL (2026-10-21, Joey: "I don't mind having an auto fix button"): a 1W case in every empty slot, in the build's
+     majority drawer type, nothing moved (standUp); one Undo takes them out */
+  function fillGaps() {
+    const r = edit((s, Rs) => standUp(s, Rs), 'fix', { gravity: false });
+    say(`✓ ${n(r.added, 'empty slot')} filled with 1W cases · Undo takes them out.`);
+  }
   function fixWallTops() {
     const r = edit((s, Rs) => Rs.fixWallTops(), 'fix', { gravity: false });
     say(r ? `✓ Top row fixed · ${n(r.grown, 'case')} grown to 1H${r.moved ? `, ${n(r.moved, 'unit')} shifted down` : ''} · names and drawer contents kept.` : '⚠ Can’t grow the top row · the grid is already at its max height. Remove a row below, then try again.');
@@ -435,7 +464,17 @@ export function mountBuild(stage, ctx) {
     const sizeOf = (p) => `${p.w}W-${p.hh / 2}H ${G.fills.find((f) => f.id === p.fill)?.label || p.fill}`;
     if (!s.placed.length) return out;
     const uns = Rs.unsupportedUnits();
-    if (uns.length) out.push({ kind: 'unsupported', sev: 'hard', ids: uns.map((u) => u.id), title: `${n(uns.length, 'unit')} not supported on both ends.`, text: fromTop ? 'A case QuickLocks to the row above and needs a unit above its left and right edges. Move it to the top row, or fill the gap above the open end.' : 'Tabletop stacks build from the surface, so each case needs a unit below its left and right edges. Move it down, or fill the gap under the open end.', fix: { label: 'Fix structure', run: fixStructure } });
+    /* EMPTY SLOTS (2026-10-21): gaps under a tabletop case (above a hanging one) are slots to fill, shown red here and as
+       ghosts on the stage; the build has no instructions until they are filled. They include every unit the both-ends
+       rule flags, so that issue only remains for a layout that floats as a whole (nothing on its surface) */
+    const open = openCells(s, Rs);
+    if (open.length) {
+      const openSet = new Set(open.map((c) => c.x + ',' + c.y));
+      const over = s.placed.filter((p) => [...Array(p.w).keys()].some((k) => openSet.has((p.x + k) + ',' + (fromTop ? p.y - 1 : p.y + p.hh))));
+      const slots = neededSpots().length;
+      out.push({ kind: 'gaps', sev: 'hard', ids: over.map((p) => p.id), title: `${n(slots, 'empty slot')} to fill.`, text: fromTop ? 'These cases have nothing above part of them, so the build can’t hang or be assembled yet. Fill the red slots with any case that fits, or Fill all with 1W cases.' : 'These cases have nothing under part of them, so the build can’t stand or be assembled yet. Fill the red slots with any case that fits, or Fill all with 1W cases.', fix: { label: 'Fill all', run: fillGaps } });
+    }
+    if (uns.length && !open.length) out.push({ kind: 'unsupported', sev: 'hard', ids: uns.map((u) => u.id), title: `${n(uns.length, 'unit')} not supported on both ends.`, text: fromTop ? 'A case QuickLocks to the row above and needs a unit above its left and right edges. Move it to the top row, or fill the gap above the open end.' : 'Tabletop stacks build from the surface, so each case needs a unit below its left and right edges. Move it down, or fill the gap under the open end.', fix: { label: 'Fix structure', run: fixStructure } });
     const sags = Rs.sagRisks();
     if (sags.size) out.push({ kind: 'sag', sev: 'hard', ids: [...sags], title: `${n(sags.size, 'unit')} would sag.`, text: fromTop ? 'This kit hangs from its rails, so rigidity comes from above, and these sit under an open case or drawer with neither side wall meeting a wall above. Align at least one edge with a wall above, or match widths.' : 'A Table Top kit is rigid from the surface up, and these sit over an open span with neither side wall landing on a wall below. Align at least one edge with a wall below, or match widths.' });
     const misfits = s.placed.filter((p) => !Rs.fillFits(p.w, p.fill));
@@ -748,7 +787,8 @@ export function mountBuild(stage, ctx) {
   root.appendChild(tools);
   const brd = board({
     state: S, colors: () => ({ ...colors }), armed: () => st.armed ? armedSize() : null, selected: () => st.selId,
-    flagged: () => flaggedIds(issues()), deficit: () => S().mount === 'tabletop' ? R().tabletopCompletion().cells : [],
+    // the hatched cells: an unfinished tabletop top, and every empty slot under (or above) a case (2026-10-21)
+    flagged: () => flaggedIds(issues()), deficit: () => [...(S().mount === 'tabletop' ? R().tabletopCompletion().cells : []), ...openCells(S(), R())],
     canPlace: (x, y, w, hh, id) => R().canPlace(x, y, w, hh, id), labelOf: (u) => u.label || '',
     // the redesign: the board shows the SAME "+" spots as the 3D view, a drag is judged by the same calculation (past
     // the build's edges within the cap), and the margin either side is the room the cap leaves (3 columns, or the armed width if wider)

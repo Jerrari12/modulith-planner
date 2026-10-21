@@ -1299,13 +1299,34 @@ test('a build link that cannot be shown: its words stay text, and the planner of
 /* THE TABLETOP DEFAULT (the stress test, 2026-10-15). New build, then Start build with every default (Tabletop, 185, from a
    Tabletop kit), stopped on "A unit is floating" with no way back. setMount rebases only on a change of mount, so the
    starter stayed at the top and syncTabletopGrid grew the grid under it. The Wall Mount case above never saw it */
-/* A CHANGE OF MOUNT STANDS THE BUILD UP (Joey, 2026-10-20: his wall build, with gaps along its bottom, switched to Tabletop
-   and the page stopped on "Can't show this build yet · A unit is floating" twice, with no way back). The sheet now says
-   what the change adds, adds it, and the reload boots on a layout that stands: his 11 units where they were, a support
-   case under each of the 4 open columns, and a toast saying so. JOEY is his board: [id, x, y, w, hh], y and hh in
-   half-rows from the top of a 7W x 4H wall grid. */
+/* A NEW EMPTY SLOT IS STILL REFUSED (2026-10-21). The stage now shows a build with gaps as an in-progress preview rather
+   than refusing it, so the placement judge can no longer lean on the generator to refuse a case that would open a gap of
+   its own: a 3W over two 1Ws with nothing under its middle passes the both-ends rule and the sag rule. It counts the open
+   cells instead, and the cell says why. */
+test('Build: a case that would open an empty slot is refused with the column rule, not offered', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 1 }, { id: 2, x: 2, w: 1 }]);
+  const top = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 4);   // the row on the two 1Ws
+  const refused = await page.evaluate(() => window.__GEN2_BUILD__.refusedSpots({ w: 3, h: 1, hh: 2 }, 'decor'));
+  const over = refused.find((sp) => sp.x === 0 && sp.y === top);
+  assert.ok(over, `the 3W over the gap is refused: ${JSON.stringify(refused.map((sp) => [sp.x, sp.y, sp.code]))}`);
+  assert.equal(over.code, 'v', 'for the new empty slot');
+  assert.equal(over.why, 'Part of it would have nothing under it: every column of a case needs a case below it or the table.');
+  const offered = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 3, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
+  assert.ok(!offered.includes(`0,${top}`), `no "+" spot over the gap: ${offered}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A CHANGE OF MOUNT ADDS NOTHING (Joey, 2026-10-20: his wall build, with gaps along its bottom, switched to Tabletop and the
+   page stopped on "Can't show this build yet · A unit is floating"; 2026-10-21: "i don't want switching between mounting
+   types to automatically add units" - the gaps stay "empty slots I have to fill in", the assembly not legal until they are,
+   and "an auto fix button" is welcome). The sheet says how many empty slots the switch leaves; the reload boots with his 11
+   units only, a ghost in each slot on the stage and no instructions; Build lists the slots with Fill all. Filling one slot
+   by hand leaves the other floating case where it is (gravity drops only what an edit unsupports); Fill all fills the rest
+   and the build is whole. JOEY is his board: [id, x, y, w, hh], y and hh in half-rows from the top of a 7W x 4H wall grid. */
 const JOEY = [[1, 0, 0, 4, 4], [2, 4, 0, 1, 2], [3, 5, 0, 1, 2], [4, 6, 0, 1, 2], [5, 4, 2, 1, 2], [6, 5, 2, 2, 4], [7, 0, 4, 2, 2], [8, 2, 4, 2, 2], [9, 4, 4, 1, 2], [10, 2, 6, 2, 2], [11, 4, 6, 1, 2]];
-test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its layout, gains 4 support cases, boots, and says so', async () => {
+test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as empty slots, adds nothing, and Fill all completes it', async () => {
   const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
   await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
@@ -1315,24 +1336,55 @@ test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its layout,
   await waitBoot(page);
   await page.evaluate((J) => window.__GEN2_STORE__.commit((s) => { s.placed = J.map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0 })); s.nextId = 12; s.gridW = 7; s.gridH = 4; }, 'edit'), JOEY);
   await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 11 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 }).catch(() => assert.fail('the wall build did not reach the stage'));
-  // the mount chip opens the sheet; Tabletop says what it will add before anything happens
+  // the mount chip opens the sheet; Tabletop says what the switch leaves before anything happens
   await page.locator('#ws-top .chip-btn.mount').click();
   await page.waitForSelector('#ws-setup .card', { timeout: 30_000 });
   await page.locator('#ws-setup .card:has-text("Tabletop")').click();
-  assert.match(await text(page, '#ws-setup .warn.stand'), /^As a Tabletop build it needs 4 support cases under the gaps · Apply adds them\.$/);
+  assert.match(await text(page, '#ws-setup .warn.stand'), /^As a Tabletop build it will have 4 empty slots under it · Apply adds nothing: fill them in Build before it can be assembled\.$/);
   await page.evaluate(() => { window.__e2eBeforeReload = 1; });
   await btn(page, 'Apply and rebuild', '#ws-setup').click();
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'tabletop', null, { timeout: 150_000 });
-  await waitBoot(page);   // the page boots: before, it stopped on "Can't show this build yet"
+  await waitBoot(page);   // the page boots: before 2026-10-20 it stopped on "Can't show this build yet"
   assert.equal(await page.locator('#loading-text:has-text("Can’t show")').count(), 0, 'the build shows');
   const s = await S(page);
+  assert.equal(s.placed.length, 11, 'the switch added nothing');
   const rows = s.gridH * 2, by = new Map(s.placed.map((p) => [p.id, p]));
   // his 11 where they were: the same columns and sizes, each at the same height above the table (the tabletop grid adds
   // headroom on top, so y itself moves with it)
   for (const [id, x, y, w, hh] of JOEY) { const p = by.get(id); assert.ok(p && p.x === x && p.w === w && p.hh === hh && rows - (p.y + p.hh) === 8 - (y + hh), `unit ${id} kept its place: ${JSON.stringify(p)}`); }
-  const added = s.placed.filter((p) => p.id >= 12).map((p) => `${p.w}x${p.hh}@${p.x},${rows - (p.y + p.hh)}:${p.fill}`).sort();
-  assert.deepEqual(added, ['1x2@0,0:decor', '1x2@1,0:decor', '1x2@5,0:decor', '1x2@6,0:decor'], 'a support case on the table under each open column, in the build\'s drawer type');
-  await page.waitForFunction(() => /Tabletop: added 4 support cases under the gaps\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast saying what was added'));
+  const shown = () => page.evaluate(() => { const M = window.__GEN2_VIEWER__.manifest; return { incomplete: M.incomplete || null, ghosts: (M.ghosts || []).length, steps: M.steps.length }; });
+  const m0 = await shown();
+  assert.ok(m0.incomplete && m0.incomplete.voids === 4 && m0.ghosts === 4 && m0.steps === 1, `a ghost in each of the 4 slots, no instructions: ${JSON.stringify(m0)}`);
+  await page.waitForFunction(() => /Tabletop: 4 empty slots under it to fill · they show red in Build, where Fill all adds 1W cases\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast naming the empty slots'));
+  // Assemble says it is not ready and sends the visitor back to Build; nothing to step through
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForSelector('#ws-player.blocked', { timeout: 15_000 }).catch(() => assert.fail('Assemble did not say the build is not ready'));
+  assert.match(await text(page, '#ws-player.blocked .title'), /^Not ready to assemble$/);
+  assert.match(await text(page, '#ws-player.blocked .text'), /empty slots/);
+  assert.equal(await page.locator('#ws-steps').count(), 0, 'no step list');
+  await btn(page, 'Go to Build', '#ws-player').click();
+  await page.waitForSelector('#ws-dock', { timeout: 15_000 }).catch(() => assert.fail('Go to Build did not open Build'));
+  // Build offers a "+" in each slot (the placement judge asks the generator as the stage does: slots are not refusals)
+  const offered = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
+  for (const x of [0, 1, 5, 6]) assert.ok(offered.includes(`${x},${rows - 2}`), `a "+" in the slot at column ${x}: ${offered}`);
+  // fill ONE slot by hand (the left gap's left column): the other floating case, unit 6, keeps its height
+  const h6 = rows - (by.get(6).y + by.get(6).hh);
+  await page.evaluate((y) => window.__GEN2_BUILD__.placeAt(0, y, { w: 1, h: 1, hh: 2 }, 'decor'), rows - 2);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 12, null, { timeout: 30_000 }).catch(() => assert.fail('the slot was not filled'));
+  const s1 = await S(page); const u6 = s1.placed.find((p) => p.id === 6);
+  assert.equal(s1.gridH * 2 - (u6.y + u6.hh), h6, 'gravity left the other floating case over its slot');
+  // the stage follows: 3 slots left, still a preview, not "can't be shown"
+  await page.waitForFunction(() => { const M = window.__GEN2_VIEWER__.manifest; return M.incomplete && M.incomplete.voids === 3 && !window.__GEN2_VIEWER__.regenBusy; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`the stage did not show the 3 slots left: ${JSON.stringify(await shown())}`));
+  // the issue card names the slots left and fills them all
+  await page.locator('#ws-dock button.status.issue').click();
+  await page.waitForSelector('#ws-issues button:has-text("Fill all")', { timeout: 15_000 }).catch(() => assert.fail('no Fill all in the issue card'));
+  assert.match(await text(page, '#ws-issues'), /3 empty slots to fill\./);
+  await page.locator('#ws-issues button:has-text("Fill all")').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 15 && !window.__GEN2_VIEWER__.manifest.incomplete && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 }).catch(() => assert.fail('Fill all did not complete the build'));
+  // filled, it assembles: the step list is back
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForSelector('#ws-steps', { timeout: 15_000 }).catch(() => assert.fail('the filled build has no step list'));
+  assert.equal(await page.locator('#ws-player.blocked').count(), 0, 'not blocked once filled');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -1373,10 +1425,10 @@ test('the setup sheet: a length its units are not made in is refused in the shee
   await ctx.close();
 });
 
-/* A BUILD SAVED THAT WAY STILL OPENS (2026-10-20): Joey's planner already holds his build as the old switch left it, and an
-   old planner's link can carry a unit in mid-air. The boot stands such a record up instead of stopping on "Can't show
-   this build yet", says so, and puts the stood-up record in the address, so a reload opens it as it now is. */
-test('a build link that cannot stand on its mount opens stood up, with a note, and the address carries the result', async () => {
+/* A BUILD SAVED THAT WAY STILL OPENS (2026-10-20/21): Joey's planner already holds his build as the old switch left it, and
+   an old planner's link can carry a unit in mid-air. It opens as it is, with its empty slots shown and no instructions,
+   instead of stopping on "Can't show this build yet"; nothing is added and the address is left alone. */
+test('a build link with empty slots opens as it is: ghosts in the slots, nothing added, the address untouched', async () => {
   const { ctx, page: first } = await open('build');
   const kit = await first.evaluate(() => window.__GEN2_STORE__.serialize());
   // the record as the old switch saved it: Tabletop, his layout slid against the table and nothing more
@@ -1389,10 +1441,13 @@ test('a build link that cannot stand on its mount opens stood up, with a note, a
   await page.goto(`${base}/index.html?ws=build&debug=1#build=${hash}`, { waitUntil: 'load', timeout: 90_000 });
   await waitBoot(page);
   assert.equal(await page.locator('#loading-text:has-text("Can’t show")').count(), 0, 'the build shows');
-  assert.equal((await S(page)).placed.length, 15, 'his 11 and 4 support cases');
-  await page.waitForFunction(() => /As saved, this build couldn’t stand as a Tabletop build · added 4 support cases under the gaps\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no note saying what changed'));
+  assert.equal((await S(page)).placed.length, 11, 'his 11, nothing added');
+  const m = await page.evaluate(() => { const M = window.__GEN2_VIEWER__.manifest; return { voids: M.incomplete && M.incomplete.voids, ghosts: (M.ghosts || []).length }; });
+  assert.deepEqual(m, { voids: 4, ghosts: 4 }, 'a ghost in each empty slot');
+  await settle(page, 1500);
+  assert.doesNotMatch(await page.evaluate(() => document.getElementById('ws-toast')?.textContent || ''), /added/, 'no note about cases added');
   const inAddress = await page.evaluate(() => JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(location.hash.replace(/^#build=/, '')))))).placed.length);
-  assert.equal(inAddress, 15, 'the address carries the stood-up record');
+  assert.equal(inAddress, 11, 'the address still carries the record as linked');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
