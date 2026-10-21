@@ -2011,8 +2011,8 @@ Dated calls made while building, with who made them. The brief and the inventory
     `0b896b0` without this change, with the same stack: `mount()` replaces `typeByNode` with the new manifest's parts
     before `await loadTemplates()`, and the stack and the code fit this sequence: a Parts-tab switch inside that await runs
     `applyState` over the old instances, one of whose nodes has no type, so `colorLocked(undefined)` throws and the Parts
-    tab draws nothing. It is not fixed here; it
-    is recorded as a follow-up.
+    tab draws nothing. It is not fixed here; it was recorded as a follow-up, and `1272bce` has since fixed it (a layout
+    change's mount adds to the stage's type maps instead of replacing them).
   - **Deploy guard:** the stamping step and module-graph guard, replayed on a copy, print "module graph OK". Without the
     new line the guard fails on `./cover-seam.js`.
   - **Goldens:** origin/main matches the committed goldens exactly. This branch moved only the 20 finished-build shots
