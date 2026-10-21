@@ -2121,6 +2121,37 @@ Dated calls made while building, with who made them. The brief and the inventory
   either string changed. Luna `01a15fbf`: no findings.
 - **Not done:** js/generate.js still says "plate" for the faceplate in two user-facing step notes, the handle step and the
   Classic step, which also appear in the kit and golden manifests. They are for Joey to schedule as their own change.
+  Done the same day: the next entry.
 - **Review of these lines:** Luna `01a15fc9`: two wording fixes taken, four discarded (dim-w is the W pill; the diff shows
   nothing else changed; "no findings" and the Deploy wording are this file's own).
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+
+## 2026-10-21 (faceplate, not plate, in the two Assemble step notes)
+
+- **The same rule** as the entry above. The two step notes it left in js/generate.js now say faceplate: the handle step
+  ("thread 2× M3×6 button head screws in from behind the faceplate") and the Classic step ("its grip is part of the
+  faceplate"). Nothing else in either note changed.
+- **Manifests:** the ten official-kit goldens re-blessed with
+  `UPDATE_GOLDEN=1 node --test test/official-builds.test.mjs`, one line each (the Classic note; none of the ten has a
+  handle step). The three tabletop static kits (kits/tabletop-165, -185, -185-3w) have no generator: pages.yml only
+  copies kits/, and 01c2125 copied the handle note into them by hand. So the same one-word change was made there by
+  hand. A script over the diff checked all 15 changed lines in 14 files: each is its old line with one "the plate" made
+  "the faceplate".
+- **Left as they are:** the code comments that say plate (generate.js, main.js, catalog/data.js), which are not
+  user-facing.
+- **The old apps, reported, not changed:** the old viewer (gen2-visual-animator, viewer/js/generate.js:2403 and :2415 on
+  origin/main) carries both notes word for word, with its kits and goldens. The old planner (gen2-planner-main) has no
+  Assemble steps, but its back-cover option hint (js/app.js:783) says "Closes the open-front Decor drawer behind the
+  plate". The merged planner's back-cover note already says "behind the faceplate".
+- **Tests:** npm test 591 pass, 0 fail, 5 skipped. The full e2e with `GEN2_PARTS_LOCAL=1`: all 74 cases pass, but the
+  file itself is marked failed (75 counted, 74 pass), with seven "route.fulfill: Route is already handled!" rejections
+  reported after the cases end. The only route.fulfill the e2e runs is the local-parts route's
+  (test/lib/local-parts.mjs:31). The base commit fd3e5d6 without this change ends the same way (74 of 75, the same seven
+  rejections), so this was there before this change. CI runs the e2e against the live host, without that route, and run
+  that way here the e2e passes 74 of 74 with no rejections. The commit was then rebased onto main `39e6a12`, which
+  differs from fd3e5d6 only in this file; official-builds and parts-exist pass again there (20 of 20).
+- **Review:** Luna `01a15fe7`: no findings. Nothing outside the planner reads this text: the site's only match for
+  either phrase is a vendored code comment, and the old viewer has the same text in its own generate.js, not read from
+  here. Luna `01a15ff4` on this entry: two wording fixes taken (the e2e file's failure stated without a cause, the old
+  viewer's copy said plainly), one discarded (the "..." it read as a change was an elision in the evidence).
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.

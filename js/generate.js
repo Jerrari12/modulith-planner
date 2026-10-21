@@ -2610,7 +2610,7 @@ export function generateManifest(build, opts = {}) {
       // the screws are shown going in from behind, so the note says where
       // plastic threads strip easily — say so where the screws go in
       : face.hasHandle
-        ? `hold the ${handleStyle.label} against the front and thread 2× M3×6 button head screws in from behind the plate · go gently and stop as soon as they seat, the screws bite straight into plastic and will strip if you overtighten`
+        ? `hold the ${handleStyle.label} against the front and thread 2× M3×6 button head screws in from behind the faceplate · go gently and stop as soon as they seat, the screws bite straight into plastic and will strip if you overtighten`
         : '';
     // on a bare plate the back cover IS the whole sub-assembly, so it leads.
     // Per drawer since the Gridfinity drawers: their tear-away front does the
@@ -2625,7 +2625,7 @@ export function generateManifest(build, opts = {}) {
       (gridBc ? ' (not on the Gridfinity drawers - leave their tear-away front in instead)' : '') : '';
     const prep = dress || bcClause
       ? `Assemble the faceplate first: ${dress}${bcClause}. `
-      : "The faceplate prints complete - its grip is part of the plate, so there's nothing to bolt on and no hardware to buy. ";
+      : "The faceplate prints complete - its grip is part of the faceplate, so there's nothing to bolt on and no hardware to buy. ";
     postSteps.push({
       title: face.hasHandle ? 'Faceplates & handles' : 'Faceplates',
       // assembly-first (Joey): build the plate unit, THEN slide it onto the
