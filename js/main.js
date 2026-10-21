@@ -10316,8 +10316,17 @@ async function mountManifest(m) {
   // (the bare address until the cutover) uses the same shape, the build then the product, so a search engine reads
   // "MODULITH Planner" there too and not the generator's bare name (2026-10-19)
   if (!document.documentElement.dataset.ws) document.title = tabTitle(m.title);
-  typeByNode = Object.fromEntries(m.parts.map(p => [p.node, p.type]));
-  partInfoByNode = Object.fromEntries(m.parts.map(p => [p.node, p]));
+  /* ⚠ A MOUNT ADDS THE NEW BUILD'S ROWS TO THESE MAPS; IT NEVER REPLACES THEM. Until loadTemplates has the new GLBs the
+     OLD instances are still the stage's, and what runs in that window reads their nodes here: a Parts tab switch is a
+     goTo, so an applyState over them. Replaced by the new build's maps, an old node the new build no longer had found no
+     type, materialFor's colorLocked(zoneKey(undefined)) threw, and the Parts list drew no rows (found 2026-10-21
+     deploying the cover seams; the back-cover e2e case flaked on it). Replacing them AFTER the await breaks the other
+     side: a palette repaint in the same window walks the NEW manifest's parts (renderChecklist's primaryKey), and
+     activeHex threw on their missing types (the e2e case measures both). No node changed type across a sweep of 72,480
+     generated manifests (DECISIONS 2026-10-21), so maps that only grow answer for both builds, and a node in both takes
+     the new build's row. drawThumb already adds its previews' parts to the same maps. */
+  Object.assign(typeByNode, Object.fromEntries(m.parts.map(p => [p.node, p.type])));
+  Object.assign(partInfoByNode, Object.fromEntries(m.parts.map(p => [p.node, p])));
   syncBedFinish();   // before any material is built: the plate decides which program they get
   dropStaleAxisMaterials();   // and a faceplate or handle FAMILY change decides which way their layers run
   ensureMaterials();

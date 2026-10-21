@@ -3135,6 +3135,47 @@ test('Build: a back cover on a Decor drawer says the tear-away front comes out f
   await ctx.close();
 });
 
+/* THE MOUNT WINDOW (2026-10-21). A layout change waits on the GLBs of every part it brings in, and until they land the OLD
+   instances are still the stage's. A Parts tab switch in that window paints them (its goTo is an applyState): with the
+   type map already replaced by the new build's, an old node the new build no longer had found no type, colorLocked threw
+   and the list drew no rows - the back-cover case above flaked on it when its GLBs were slow. A palette repaint in the
+   same window walks the NEW manifest's parts, so a map swapped in only after the GLBs fails there instead; both are
+   checked. Here the window is held open: every part GLB waits until the case lets it go. */
+test('Build: a Parts switch while a layout change still waits on its GLBs throws nothing, and the stage then mounts the new build', async () => {
+  const { ctx, page, errors } = await open('build');
+  const held = [];
+  const GLB = /\.lib\.glb(\?|$)/;
+  await page.route(GLB, (route) => { held.push(route); });
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.backCover = true; s.placed = [{ id: 'g1', x: 0, y: s.gridH * 2 - 6, w: 1, hh: 6, fill: 'decor', shelves: 0 }]; s.nextId = 100; s.gridW = 1; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.regenBusy && window.__GEN2_VIEWER__.build.placed.length === 1, null, { timeout: 30_000 });
+  for (let t = 0; !held.length && t < 300; t++) await sleep(100);
+  // the controls: the mount is waiting on a GLB, the stage still holds an instance whose node the new build has not, and
+  // the Parts switch will page (an applyState over those instances)
+  const window_ = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, now = new Set(v.manifest.instances.map((i) => i.node));
+    return { busy: v.regenBusy, stale: [...v.instances.values()].filter((i) => !now.has(i.cfg.node)).length, pages: v.cur !== v.manifest.steps.length };
+  });
+  assert.ok(held.length > 0 && window_.busy, `the control: the mount waits on held GLBs (${held.length} held)`);
+  assert.ok(window_.stale > 0, 'the control: an old instance whose node the new build no longer has is still on the stage');
+  assert.ok(window_.pages, 'the control: the Parts switch pages the stage');
+  // the window's other side: a repaint walks the NEW manifest's parts (the checklist's primaryKey), so their nodes need
+  // their types in the same window as the old instances' do
+  const repaint = await page.evaluate(() => { try { window.__GEN2_VIEWER__.applyPalette(); return 'ok'; } catch (e) { return String((e && e.stack) || e).split('\n').slice(0, 3).join(' | '); } });
+  assert.equal(repaint, 'ok', 'a palette repaint in the window');
+  await page.click('#ws-tabs .tab:has-text("Parts")');
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 })
+    .catch(() => assert.fail(`the Parts list drew no rows: ${clean(errors).join(' / ') || 'no page error'}`));
+  assert.ok(await page.evaluate(() => window.__GEN2_VIEWER__.regenBusy), 'the control: the list drew while the mount still waited');
+  assert.deepEqual(clean(errors), [], 'nothing threw in the window');
+  await page.unroute(GLB);
+  for (const r of held.splice(0)) await r.fallback();
+  await page.waitForFunction(() => { const v = window.__GEN2_VIEWER__; return !v.regenBusy && v.instances.size === v.manifest.instances.length && v.manifest.instances.every((i) => v.instances.has(i.id)); }, null, { timeout: 60_000 });
+  assert.ok(await page.evaluate(() => [...window.__GEN2_VIEWER__.instances.values()].some((i) => /^BackCover_/.test(i.cfg.node))), 'the new build is on the stage, its cover included');
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('#ws-parts .prow')].some((r) => /Back Cover/.test(r.querySelector('.name')?.textContent || ''))), 'the list is the new build');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* BOTH LABEL FAMILIES IN THE CALLOUT (2026-10-20, Joey: "why not show both edgelabel and classic pro as clickable options?").
    A build whose faceplates take no labels opens Labels to the callout; it offered Switch to EdgeLabel alone, after naming
    both families. Now both are buttons, EdgeLabel first and starred; Classic Pro applies the Classic Pro faceplate. */

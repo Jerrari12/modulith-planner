@@ -2047,3 +2047,51 @@ Dated calls made while building, with who made them. The brief and the inventory
   happen, since the three pills share one display rule. Luna `01a15fa4` on this entry: five wording fixes taken, one
   discarded (a summary need not list every minor case).
 - **Deploy:** part of a change Joey asked for; it deploys once its checks pass.
+
+## 2026-10-21 (a layout change's mount leaves no part of either build without its type)
+
+- **Found, not reported.** It is the older race the cover-edges entry above names: the session deploying the cover
+  edges found it, and Joey did not report it.
+- **What was wrong.** `mountManifest` replaced `typeByNode` and `partInfoByNode` with the new build's maps before
+  `await loadTemplates()`. Until the new GLBs land, the old instances are still the stage's.
+  - A Parts tab switch in that window is a `goTo`, so an `applyState` over the old instances.
+  - An old node that the new build no longer had found no type. `colorLocked(zoneKey(undefined, ''))` threw on
+    `type.split`, and the Parts list drew no rows.
+  - The back-cover e2e case flaked on it: four of five full runs on the cover-edges branch failed at its Parts-row
+    wait. The window lasts as long as the new build's GLBs take to load, so how often a run hits it depends on timing.
+- **Now** the mount adds the new build's rows to both maps (`Object.assign`) instead of replacing them. A node of either
+  build has its type through the window, and a node in both builds takes the new build's row.
+  - **Why the maps are not swapped after the await.** That was tried first, and it moves the throw to the other side. A
+    palette repaint in the same window walks the NEW manifest's parts through `primaryKey`, and `activeHex(undefined)`
+    threw on `key.split`. The new e2e case fails on it. A full e2e run on that attempt also failed "a spot left of the
+    starter drawer…" with the same error.
+  - **Why the maps may only grow.** No node changed type across the builds swept. The sweep asked the generator for
+    128,520 builds: the six lengths, the three mounts, the five faceplate families, the three handle styles and the
+    three fills, widths 1W to 4W and heights 0.5H to 3H, with and without a back cover, plus Gridfinity, magnets and
+    lips, in one-unit and two-unit builds. The generator refused 56,040 of them (sizes it does not make), and the
+    72,480 manifests it made held 625 nodes, none with two types
+    (D:/Claude - Output/stage-type-race-2026-10-21/node-type-fixed.mjs). It is a sweep, not a proof. A node in both
+    builds takes the new build's type anyway, so a build the sweep missed could at worst mis-type an old part inside
+    the window. No code iterates either map. Every read of `partInfoByNode` goes through a live instance's node, so a
+    row whose node has left the build is never read.
+  - `drawThumb` (the Build library's previews) already wrote its parts into the same maps. Under the replace, a mount
+    that started during a preview's GLB await dropped them; now they stay.
+  - `manifest` itself still changes before the await, as it did before.
+- **Checks.**
+  - **A new e2e case holds every part GLB back, so the window stays open.** It commits a one-unit layout with a back
+    cover and checks that the window is open: the mount waiting, an old instance whose node the new build lacks, and
+    the Parts switch paging. Then it repaints the palette, clicks Parts, and checks that rows draw and nothing throws.
+    Finally it lets the GLBs go and checks that the new build mounts.
+  - **It fails on both earlier versions.** On origin/main `0b896b0`: "the Parts list drew no rows: … reading 'split' @
+    main.js:7133" (colorLocked). On the swap-after-the-await attempt: "a palette repaint in the window" (activeHex, from
+    renderChecklist).
+  - **The replay of the back-cover case** (D:/Claude - Output/cover-seams-2026-10-21/harness/debug-backcover.mjs), 6
+    runs: the row shown every time, no page errors. It also passed 6 of 6 on unmodified `0b896b0` on this machine,
+    because the window depends on GLB timing. That is why the held-GLB case is the check that fails on the old code.
+  - **On the tree rebased onto main `b11f493`** (the cover edges and the drawer pills): the replay 6 of 6 again; npm
+    test 596 tests, 591 pass, 0 fail, 5 skipped; smoke test 4 of 4; e2e 74 of 74, the back-cover case and the new case
+    included. The same checks had passed on `93c8e7e` before it.
+- **Review:** Terra `01a15fa2` on the code: no findings. Terra `01a15fae` on this entry and the vault's note of the sweep:
+  five wording fixes taken (who did not report it, the flake's cause as measured, the sweep as a sweep and not a
+  proof, and its refused builds, here and in the vault).
+- **Deploy:** a bug fix, found rather than reported. It deploys once its checks pass.
