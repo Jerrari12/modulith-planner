@@ -2003,9 +2003,14 @@ Dated calls made while building, with who made them. The brief and the inventory
     and the bed finish, and that the tilt lands after the finish's plain restore and before the lights read the normal.
     It also checks Joey's numbers, the switch as one shared uniform with no recompile, the attribute, both material
     sites, and the stamping line.
-  - **`npm test`:** 592 tests, 587 pass, 0 fail, 5 skipped. Smoke test: passes.
-  - **e2e:** 71 tests, 70 pass, 1 fail. The failure is "a back cover on a Decor drawer says the tear-away front comes out
-    first", whose Parts-row wait timed out at 60 s. It passed 3 runs of 3 alone on this branch, and once on origin/main.
+  - **`npm test`** (on the tree rebased onto main `0b896b0`): 592 tests, 587 pass, 0 fail, 5 skipped. Smoke test: passes.
+  - **e2e:** 73 tests, 72 pass, 1 fail. Across the full runs on this branch, one passed 72 of 72 and three failed one
+    case, "a back cover on a Decor drawer says the tear-away front comes out first", at its Parts-row wait (60 s).
+  - **That failure is an older race, and origin/main has it too.** A replay of the case's steps fails the same way on
+    `0b896b0` without this change, with the same stack: `mount()` replaces `typeByNode` with the new manifest's parts
+    before `await loadTemplates()`. A Parts-tab switch inside that await runs `applyState` over the old instances, one of
+    whose nodes has no type, so `colorLocked(undefined)` throws and the Parts tab draws nothing. It is not fixed here; it
+    is recorded as a follow-up.
   - **Deploy guard:** the stamping step and module-graph guard, replayed on a copy, print "module graph OK". Without the
     new line the guard fails on `./cover-seam.js`.
   - **Goldens:** origin/main matches the committed goldens exactly. This branch moved only the 20 finished-build shots
@@ -2016,4 +2021,6 @@ Dated calls made while building, with who made them. The brief and the inventory
     no page errors, and the program count is 18 with the edge on and off.
 - **Review:** Sol `01a15ee1` on the prototype: 2 fixes taken (a zero-width band, an interpolated outward vector). Sol
   `01a15f1b` on this change: no findings.
-- **Deploy:** not yet. Joey: "Don't deploy until I've seen it."
+- **Deploy:** held until Joey had seen it ("Don't deploy until I've seen it."). Then: "I've seen the bevel and it looks
+  right. Merge cover-seams-proto into main and deploy." Rebased onto main `0b896b0`, and the checks above were run on
+  the rebased tree.
