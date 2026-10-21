@@ -276,6 +276,9 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .prow .badge.club { background: transparent; color: var(--club); border: 1px solid var(--club); }
 #ws-parts .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }
 #ws-parts .link.dim { color: var(--ink-3); font-weight: 500; }
+/* a paid link's mark, on its own line under the store name: the link keeps its width and the part's name its room */
+#ws-parts .link .paid { display: block; font-size: 10px; font-weight: 500; color: var(--ink-2); text-align: right; }
+#ws-parts .link .paid .sep { display: none; }
 #ws-parts .progress { display: flex; align-items: center; gap: 8px; flex-basis: 100%; padding-left: 58px; }   /* its own line under the name */
 #ws-parts .counter { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--track); }
 #ws-parts .counter button { width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: var(--key-bg); color: var(--ink); cursor: pointer; font-size: 13px; line-height: 1; }

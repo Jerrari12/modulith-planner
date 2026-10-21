@@ -1974,10 +1974,15 @@ Dated calls made while building, with who made them. The brief and the inventory
   missing filament names. npm test 579 pass, 0 fail; e2e 73/73.
 - **What the dashboard can and cannot say** about these clicks is in a note on Joey's machine
   (D:/Claude - Output/affiliate-clicks-2026-10-21/NOTE.md). Like the stats themselves, it is kept out of the repo.
-- **Open, Joey's call.** The Parts list's Amazon links carry `rel="noopener"` without `sponsored`, and no "· paid link"
-  label next to the link; the list's foot line carries the disclosure. Left as it was: this change does not touch rel.
+- **Was open, Joey's call.** The Parts list's Amazon links carried `rel="noopener"` without `sponsored`, and no "· paid
+  link" label next to the link; the list's foot line carried the disclosure. This change left rel as it was. Joey
+  answered the same day: see "the Parts list's Amazon links are marked paid at the link" below.
 - **Review:** Terra `01a15f5a`: no findings.
 - **Deploy:** a fix for a problem Joey reported; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `0b896b02` (run 39640071883). Checked on the live site with GoatCounter's own `skipgc`
+  opt-out set and its count stubbed, so nothing reached the dashboard. The picker's Buy, a shopping-list row and a Parts
+  filament name each sent `buy:filament:polymaker-panchroma-pla`; the Amazon link sent `buy:hardware:magnet-10x2`; the
+  Printables link sent nothing.
 
 ## 2026-10-21 (the cover tiles' edges catch the light)
 
@@ -2154,4 +2159,23 @@ Dated calls made while building, with who made them. The brief and the inventory
   either phrase is a vendored code comment, and the old viewer has the same text in its own generate.js, not read from
   here. Luna `01a15ff4` on this entry: two wording fixes taken (the e2e file's failure stated without a cause, the old
   viewer's copy said plainly), one discarded (the "..." it read as a change was an elision in the evidence).
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+
+## 2026-10-21 (the Parts list's Amazon links are marked paid at the link)
+
+- **Joey, asked:** "Yes: give the Parts list's Amazon hardware links rel="noopener sponsored" and the "· paid link"
+  label, like the Colors links."
+- **Now** parts.js `storeLink` marks a link on a paid host (`isPaid`, the Colors tab's host list) with
+  `rel="noopener sponsored"` and "· paid link", in the narrow list and the wide table. The download-site links are
+  unchanged, and the foot line keeps Amazon's own sentence.
+- **The mark sits on its own line** under "Amazon ↗" (app.css `.link .paid`; its "·" is hidden and stays in the text).
+  On one line, "Amazon ↗ · paid link" took 55 px from the part's name. Measured headless at 1280×800 and 390×844: the
+  BUY rows' names went from 213 to 158 px on a desktop and from 171 to 116 px on a phone, and "Magnets 10×2mm or
+  6×2mm" and "M3×6mm socket head screw" wrapped. Stacked, the link is 57 px wide, as before, and the names keep 213 and
+  171 px. The gaps are 10 px to the badge and 9 px to the row's edge either way.
+- **Checks.** The buy-link e2e case reads, in both layouts, the Amazon link's rel, its text "Amazon ↗ · paid link" and
+  its mark's block display, and checks that a download link stays plain. With the paid check forced off, it fails at the
+  narrow list's Amazon link. npm test 591 pass, 0 fail; all 74 e2e cases pass (the file's own route.fulfill failure
+  under `GEN2_PARTS_LOCAL=1` is the one the entry above records as older than its change).
+- **Review:** Terra `01a16000`: one finding, discarded (it read this entry's layout measurements as analytics figures).
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.

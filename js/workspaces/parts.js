@@ -309,9 +309,14 @@ export function mountParts(stage, ctx) {
     return row;
   }
   /* a row's link, both layouts: bought hardware's Amazon listing, which reports the stage's buy:hardware:<listing id> (main.js
-     buyEvent), else the part's page on the chosen download site */
+     buyEvent), else the part's page on the chosen download site. A paid host is marked AT the link, rel=sponsored and
+     "· paid link", as the Colors tab marks its own (Joey, 2026-10-21); the foot line keeps Amazon's sentence. The mark
+     sits on its own line under the store name (app.css), so the link keeps its width: on one line it took 55 px from the
+     part's name, and "Magnets 10×2mm or 6×2mm" wrapped on a desktop */
   function storeLink(r, link) {
-    return el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null });
+    const paid = isPaid(link.url);
+    return el('a.link', { href: link.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null },
+      [`${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, paid ? el('span.paid', {}, [el('span.sep', { text: ' · ' }), 'paid link']) : null]);
   }
   /* the wide list's row: one column per quantity, the counters readable, a finished row still editable */
   function renderTableRow(r) {

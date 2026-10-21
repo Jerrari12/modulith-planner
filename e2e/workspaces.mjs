@@ -158,9 +158,20 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   await click(page.locator('#ws-parts .printin a', { hasText: /^Black$/ }).first(), 'the Parts list\'s filament');
   const hw = page.locator('#ws-parts .prow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first();
   await click(hw, 'the Parts list\'s hardware');
+  // the Amazon link is marked at the link, rel=sponsored and "· paid link" (Joey, 2026-10-21), the mark on its own line so
+  // the link keeps its width; a download-site link is not marked
+  const marks = (row) => Promise.all([page.locator(`#ws-parts ${row}`).filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(),
+    page.locator(`#ws-parts ${row}`).filter({ hasNot: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first()].map((l) => l.evaluate((a) => [a.rel, a.textContent, a.querySelector('.paid') ? getComputedStyle(a.querySelector('.paid')).display : null])));
+  const plainLink = (m) => m[0] === 'noopener' && !/paid/.test(m[1]) && m[2] === null;
+  const narrow = await marks('.prow');
+  assert.deepEqual(narrow[0], ['noopener sponsored', 'Amazon ↗ · paid link', 'block'], 'the narrow list\'s Amazon link');
+  assert.ok(plainLink(narrow[1]), `the narrow list's download link stays plain: ${narrow[1]}`);
   await btn(page, 'Track my build', '#ws-parts').click();
   await page.locator('#ws-parts button.expand').click();
   await click(page.locator('#ws-parts .trow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(), 'the wide list\'s hardware');
+  const wide = await marks('.trow');
+  assert.deepEqual(wide[0], ['noopener sponsored', 'Amazon ↗ · paid link', 'block'], 'the wide list\'s Amazon link');
+  assert.ok(plainLink(wide[1]), `the wide list's download link stays plain: ${wide[1]}`);
   // the hardware links are the root kit's magnets: the listing the catalog (HARDWARE_BUY) holds at that address, whose id
   // is the dashboard row (a renamed id would split it, so it is a literal too)
   const ids = await page.evaluate((urls) => urls.map((u) => { for (const list of Object.values(HARDWARE_BUY)) { const b = list.find((x) => x.url === u); if (b) return b.id; } return null; }), hrefs.slice(4));
