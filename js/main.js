@@ -15,6 +15,7 @@ import { partMaterialSpec } from './part-material.js';
 import { applyLayerDetail } from './vendor/layer-detail.js';
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
+import { SEAM_TYPES, SEAM_MODES, createCoverSeamUniforms, setCoverSeam, coverSeamMode, applyCoverSeam, seamAttributes } from './cover-seam.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
@@ -3131,7 +3132,7 @@ const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness:
 const zoneKey = (type, zone) => zone ? `${type}:${zone}` : type;
 function ensureMaterials() { // one shared material per type/zone key (idempotent across re-mounts)
   for (const [key, hex] of Object.entries(manifest.colors))
-    if (!materials[key]) materials[key] = seeIntoPatched(key, newPartMaterial(key));
+    if (!materials[key]) materials[key] = seamPatched(key, seeIntoPatched(key, newPartMaterial(key)));
 }
 /* the see-into experiment's patch on the back cover material, or the material unchanged (see-into.js) */
 /* ---------------------------------------------------------------- supported translucent previews (Astra 2026-09-17)
@@ -3289,8 +3290,21 @@ function seeIntoPatched(key, m) {
 }
 function baseMatFor(type, zone = '') { // shared material per (type, zone) — zones build lazily off the active palette
   const key = zoneKey(type, zone);
-  if (!materials[key]) materials[key] = seeIntoPatched(key, newPartMaterial(key));
+  if (!materials[key]) materials[key] = seamPatched(key, seeIntoPatched(key, newPartMaterial(key)));
   return materials[key];
+}
+/* COVER SEAMS, a prototype (2026-10-21, js/cover-seam.js): ?seams=off|bevel|hair|gap|bevelhair patches the two cover
+   materials and stamps their templates; with no parameter nothing is patched or stamped. Every mode is one program, so
+   the debug hook's seams.set() switches it with a uniform write. */
+const SEAM_PARAMS = new URLSearchParams(location.search);
+const SEAM_PROTO = SEAM_PARAMS.has('seams');
+const seamU = SEAM_PROTO ? createCoverSeamUniforms({
+  mode: SEAM_MODES.includes(SEAM_PARAMS.get('seams')) ? SEAM_PARAMS.get('seams') : 'off',
+  ...Object.fromEntries(['bevelMm', 'bevelMinPx', 'bevelDeg', 'fillet', 'hairMm', 'hairPx', 'hairDark', 'gapMm', 'gapMinPx']
+    .filter((k) => SEAM_PARAMS.has(k)).map((k) => [k, +SEAM_PARAMS.get(k)])),
+}) : null;
+function seamPatched(key, m) {
+  return (seamU && SEAM_TYPES.has(key)) ? applyCoverSeam(m, { uniforms: seamU }) : m;
 }
 
 // ---- build plate (2026-08-10; every eligible part since 2026-09-14) ----------
@@ -3900,7 +3914,24 @@ function adoptTemplate(sceneRoot, type, node) {
      0, so the part simply wears no finish. */
   try { stampBedFaces(sceneRoot, type, node); }
   catch (e) { console.warn(`[bed finish] ${node}: ${(e && e.message) || e} - left plain`); }
+  if (seamU && SEAM_TYPES.has(type)) stampSeams(sceneRoot);
   return sceneRoot;
+}
+/* the cover-seam prototype's aSeam (js/cover-seam.js): x and the part's half-width, mm, in the part frame */
+function stampSeams(root) {
+  root.updateMatrixWorld(true);
+  const meshes = [];
+  root.traverse(o => { if (o.isMesh) meshes.push(o); });
+  const v = new THREE.Vector3();
+  const positions = meshes.map(o => {
+    const pos = o.geometry.attributes.position, out = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      out[3 * i] = v.x; out[3 * i + 1] = v.y; out[3 * i + 2] = v.z;
+    }
+    return out;
+  });
+  seamAttributes(positions).forEach((a, i) => meshes[i].geometry.setAttribute('aSeam', new THREE.BufferAttribute(a, 2)));
 }
 /* The bed-finish attributes for one part template - aBfMm (authored position in mm, shifted so the
    bed plane passes through 0 along the build axis) and aBfUv (the bed-plane coordinates the
@@ -10830,6 +10861,7 @@ function renderLoop(now) {
   // frame was posted — the site must never wait on a suspended first frame)
   if (IS_PART && partView.posted && !partView.visible && !idle.force) return;   // (a canvas read forces its frame: Sol 01a14a28)
   resize();
+  if (seamU) seamU.uSeamViewH.value = canvas.height;   // the cover-seam prototype's gap floor, in device px
   if (orbitBench) orbitBench.tick(now);   // the benchmark's camera, placed before anything this frame reads it
   if (settleBench) settleBench.tick(now);
   qualityTick(now);
@@ -10925,6 +10957,11 @@ for (const m of ['toDataURL', 'toBlob']) {
     // everything else on this object.
     layerHandles,
     bedFinish: bedFinishDebug,   // the build plate's finish, see bedFinishDebug
+    /* the cover-seam prototype (?seams=...): set({ mode, bevelMm, hairPx, gapMm, ... }) redraws at once */
+    seams: seamU && {
+      uniforms: seamU, get mode() { return coverSeamMode(seamU); },
+      set(o) { setCoverSeam(seamU, o); invalidateFrame(); return coverSeamMode(seamU); },
+    },
     wall, surface,   // the mount backdrops, for capture tooling that needs the mounting surface as context
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
