@@ -1975,3 +1975,42 @@ Dated calls made while building, with who made them. The brief and the inventory
   label next to the link; the list's foot line carries the disclosure. Left as it was: this change does not touch rel.
 - **Review:** Terra `01a15f5a`: no findings.
 - **Deploy:** a fix for a problem Joey reported; it deploys once its checks pass.
+
+## 2026-10-21 (the cover tiles' edges catch the light)
+
+- **Joey, reported:** in My colors a row of cover tiles read as one solid slab, where on a printed build a seam is just
+  barely visible. He suggested a 0.2 mm chamfer on the covers' top side edges, "so the light hits them differently".
+- **Why there was no seam to draw.** All 24 cover GLBs have square seam edges, and neighbouring tiles meet within
+  0.012 mm. The knowledge pack records this: `measurements.md`, "Covers: the seam edge, the thickness, and how the two
+  layers stack", vault `23d4991`.
+- **Why it isn't a 0.2 mm chamfer.** At the whole-build view a 621 mm build gets about 2.4 device px per mm at dpr 2, so a
+  true 0.2 mm chamfer is half a pixel. Measured on moving frames it reached about a third of a 1 px edge's contrast and
+  flickered 2.5 to 25 times as much.
+- **What Joey picked.** Three render-only versions were compared: a shading-only bevel, a drawn hairline and a gap.
+  Joey picked the bevel. The comparison, screenshots and numbers are in
+  D:/Claude - Output/cover-seams-2026-10-21/COVER-SEAMS.md.
+- **Now** `js/cover-seam.js` tilts the normal 45° toward the outside of each Cover Lower and Cover Upper tile. It acts in
+  a band at each side edge, max(0.2 mm, 1 device px) wide, with its inner edge anti-aliased over one pixel.
+  - The edge catches or loses the light like a chamfered one, and the row's two outer ends get it too.
+  - It is shading only: the printable models, the bill and the geometry are unchanged.
+  - The tilt goes in after the bed finish, because the Cover Upper prints top-face down and its visible top is its bed
+    face, whose plain normal the finish restores.
+  - `?seams=off` draws the edges square, for comparison. The debug hook has `seams.set(on)`.
+  - The new module has its stamping line in pages.yml.
+- **Checks.**
+  - **`test/cover-seam.test.mjs` (8 tests).** On three r185's real shader sources it checks the chain after the relief
+    and the bed finish, and that the tilt lands after the finish's plain restore and before the lights read the normal.
+    It also checks Joey's numbers, the switch as one shared uniform with no recompile, the attribute, both material
+    sites, and the stamping line.
+  - **`npm test`:** 592 tests, 587 pass, 0 fail, 5 skipped. Smoke test: passes.
+  - **e2e:** 71 tests, 70 pass, 1 fail. The failure is "a back cover on a Decor drawer says the tear-away front comes out
+    first", whose Parts-row wait timed out at 60 s. It passed 3 runs of 3 alone on this branch, and once on origin/main.
+  - **Deploy guard:** the stamping step and module-graph guard, replayed on a copy, print "module graph OK". Without the
+    new line the guard fails on `./cover-seam.js`.
+  - **Goldens against a fresh baseline from origin/main:** 60 of 60 within the threshold. Only the finished-build shots
+    move (Fast 0.019–0.059 % of pixels, Very High 0.035–0.096 %); the cover and middle steps are 0.000 %.
+  - **On a 7W build, dpr 2, both themes:** all 8 cover meshes carry the attribute with their own half-width, there are
+    no page errors, and the program count is 18 with the edge on and off.
+- **Review:** Sol `01a15ee1` on the prototype: 2 fixes taken (a zero-width band, an interpolated outward vector). Sol
+  `01a15f1b` on this change: no findings.
+- **Deploy:** not yet. Joey: "Don't deploy until I've seen it."
