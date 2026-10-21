@@ -10741,7 +10741,7 @@ if (IS_EMBED && build) setTimeout(() => {
    changed without saying so shows within a second. ?idle=off restores drawing every frame (for diagnosis). */
 const IDLE_OFF = new URLSearchParams(location.search).get('idle') === 'off';
 const IDLE_SETTLE_MS = 600, IDLE_KEEPALIVE_MS = 1000;
-const idle = { sig: '', changedAt: 0, drawnAt: 0, inputRev: 0, skipped: 0, drawn: 0 };
+const idle = { sig: '', changedAt: 0, drawnAt: 0, inputRev: 0, skipped: 0, drawn: 0, woken: 0 };   // woken: frames a change drew that the safety net would not have (the e2e's check, 2026-10-20)
 let inRenderLoop = false;   // renderLoop's depth (a canvas read inside a frame goes straight through)
 for (const ev of ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup', 'resize', 'focus'])
   addEventListener(ev, () => { idle.inputRev++; }, { passive: true, capture: true });
@@ -10761,7 +10761,10 @@ function idleFrame(now) {
     + '|' + canvas.width + 'x' + canvas.height + '|' + accRev + '|' + ao.rev + '|' + instances.size + '|' + cur + '|' + quality + '|' + stageTheme + '|' + idle.inputRev;
   if (sig !== idle.sig) { idle.sig = sig; idle.changedAt = now; }
   const busy = tweens.size > 0 || cinema.on || !!orbitBench || !!settleBench || perf.moving || !!plateStage.ringMat || idleSettling();
-  if (idle.force || busy || now - idle.changedAt < IDLE_SETTLE_MS || now - idle.drawnAt >= IDLE_KEEPALIVE_MS) { idle.force = false; idle.drawnAt = now; idle.drawn++; return false; }
+  if (idle.force || busy || now - idle.changedAt < IDLE_SETTLE_MS || now - idle.drawnAt >= IDLE_KEEPALIVE_MS) {
+    if (now - idle.changedAt < IDLE_SETTLE_MS && now - idle.drawnAt < IDLE_KEEPALIVE_MS) idle.woken++;   // drawn because something changed, not by the safety net
+    idle.force = false; idle.drawnAt = now; idle.drawn++; return false;
+  }
   idle.skipped++;
   return true;
 }
@@ -10971,7 +10974,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn }), spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL

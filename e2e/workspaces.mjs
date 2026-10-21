@@ -408,10 +408,17 @@ test('the idle gate: a still view stops drawing, an edit draws again at once, a 
   const drawnIn = (ms) => page.evaluate(async (ms) => { const V = window.__GEN2_VIEWER__; const a = V.idleStats(); await new Promise((r) => setTimeout(r, ms)); const b = V.idleStats(); return { drawn: b.drawn - a.drawn, skipped: b.skipped - a.skipped }; }, ms);
   const still = await drawnIn(3000);
   assert.ok(still.drawn <= 6, `a still view draws about once a second: ${JSON.stringify(still)}`);
-  // an edit (no pointer or key input at all) draws again within the settle window
-  const busy = page.evaluate(async () => { const V = window.__GEN2_VIEWER__; const a = V.idleStats(); await new Promise((r) => setTimeout(r, 1500)); return V.idleStats().drawn - a.drawn; });
+  // an edit (no pointer or key input at all) wakes the gate itself: a frame drawn inside the settle window after the change,
+  // one the once-a-second safety net would not have drawn (idleStats().woken). Counted, not timed: on the CI runner the
+  // rebuild alone outlasted a fixed 1.5 s window (run 39524907871, 2026-10-20, and once on 2026-10-18), and a window of a
+  // few frames can still straddle the 600 ms settle time on a slow runner (Terra 01a15c53). Known limits (Terra's second
+  // round): a working gate would miss this only with drawn frames over 600 ms apart (measured ~300 ms on SwiftShader at a
+  // 4x CPU throttle), and a wake from something unrelated during the wait could pass a broken one (the view was just
+  // measured still for 3 s).
+  const w0 = (await page.evaluate(() => window.__GEN2_VIEWER__.idleStats())).woken;
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; const right = Math.max(...s.placed.map((p) => p.x + p.w)); s.placed.push({ id: s.nextId++, x: right, y, w: 1, hh: 2, fill: 'decor', shelves: 0 }); s.gridW = right + 1; }, 'edit'));
-  assert.ok(await busy >= 3, 'an edit is drawn at once, not after the next safety-net frame');
+  const woke = await page.waitForFunction((w0) => window.__GEN2_VIEWER__.idleStats().woken > w0, w0, { timeout: 60_000, polling: 100 }).then(() => true, () => false);
+  assert.ok(woke, `an edit is drawn at once (the gate wakes for it), not only by the next safety-net frame: ${JSON.stringify(await page.evaluate(() => window.__GEN2_VIEWER__.idleStats()))}`);
   // reading the canvas after a skipped frame returns the picture, not an empty buffer
   await settle(page, 2500);
   const png = await page.evaluate(() => document.querySelector('canvas').toDataURL('image/png').length);

@@ -1712,3 +1712,24 @@ Dated calls made while building, with who made them. The brief and the inventory
   cases and the boot case pass.
 - **Review:** Terra `01a15bf2`, routine: no findings. Its own discards: a breakpoint remount unmounts first, so the step is remembered; an incomplete manifest's goTo is forced to its preview either way; the callbacks are optional-chained and the toolbar exists before any goTo; every override clear runs through setCamOverride, which updates before it notifies; the e2e drag stays clear of the step list and the player.
 - **Deploying** as a reported-bug fix (Joey's standing rule): branch `assemble-start` fast-forwarded onto main; npm test 571 (566 passed, 0 failed, 5 skipped), e2e 65/65 on this machine first. The Live line follows the run.
+
+## 2026-10-20 (the idle-gate e2e case counts the gate waking, not frames in a fixed window)
+
+- **Why.** The deploy of the Assemble fix (`996d51c`, run 39524907871) failed on one e2e case, the idle gate's "an edit is
+  drawn at once": it counted frames drawn in a fixed 1.5 s window from the store commit and wanted 3, and on the runner
+  the stage's rebuild for the edit alone outlasted the window. The same case flaked once on 2026-10-18. The code was not
+  at fault: the case passed locally and the change under deploy did not touch Build's render path.
+- **What.** The stage counts `idle.woken`, frames drawn inside the 600 ms settle window after a change that the
+  once-a-second safety net would not have drawn, and `idleStats()` reports it. The case reads it before the edit and
+  waits (Playwright's own 100 ms poll, 60 s) for it to rise. Counted, not timed, so a slow runner only makes it wait.
+- **Checks.** Passes 4/4 here, two of them on SwiftShader with a 4x CPU throttle. A gate that ignores signature changes
+  fails it (woken stays 0); a gate that draws only its safety net from the first rebuild after boot fails it (no wake
+  after the edit). A gate that only draws the safety net from page load breaks the boot itself, so the case never
+  reaches the assertion: not a usable mutant.
+- **Review:** Terra `01a15c53`, two rounds. Round 1, all three taken: a two-frame window counted from the rebuild could
+  still straddle the settle time on a slow runner; at about 1 fps two safety-net frames would pass a broken gate; an
+  rAF-polled 60 s cap is not a hard cap. Round 2, two known limits, kept and written into the test's comment: a working
+  gate misses only with drawn frames more than 600 ms apart and a safety-net coincidence (measured about 300 ms per
+  drawn frame on SwiftShader at a 4x throttle: 106 ticks in 3 s, 4 of them drawn); an unrelated wake during the wait
+  could pass a broken gate (the view was just measured still for 3 s).
+- **Deploying** with the Assemble fix above, whose run it failed: npm test 571 (566 passed, 0 failed, 5 skipped) here first, the e2e suite with it. The Live line follows the run.
