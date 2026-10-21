@@ -1711,7 +1711,11 @@ Dated calls made while building, with who made them. The brief and the inventory
   and the light goes out. The old `=== 0` rule put back fails the case at the first wait. The two existing Assemble
   cases and the boot case pass.
 - **Review:** Terra `01a15bf2`, routine: no findings. Its own discards: a breakpoint remount unmounts first, so the step is remembered; an incomplete manifest's goTo is forced to its preview either way; the callbacks are optional-chained and the toolbar exists before any goTo; every override clear runs through setCamOverride, which updates before it notifies; the e2e drag stays clear of the step list and the player.
-- **Deploying** as a reported-bug fix (Joey's standing rule): branch `assemble-start` fast-forwarded onto main; npm test 571 (566 passed, 0 failed, 5 skipped), e2e 65/65 on this machine first. The Live line follows the run.
+- **Live 2026-10-21**, stamp `a9609f2e`, together with the idle-gate case below. Its own run (39524907871, `996d51c`) failed on that
+  case, a timing gate the runner missed (the stage's rebuild outlasted a fixed 1.5 s window); run 39537588862 for `a9609f2`
+  passed on attempt 1 (41 min). Checked live by `planner-prod-checks-2026-10-18ssemble-start-prod.mjs`: from Build (the
+  stage parked on step 12, the finished one), Assemble opens on the Overview with the list at "0 / 11"; the camera button
+  is named "Back to the step’s camera", unlit, lights after a real orbit and goes out when pressed.
 
 ## 2026-10-20 (the idle-gate e2e case counts the gate waking, not frames in a fixed window)
 
@@ -1732,4 +1736,7 @@ Dated calls made while building, with who made them. The brief and the inventory
   gate misses only with drawn frames more than 600 ms apart and a safety-net coincidence (measured about 300 ms per
   drawn frame on SwiftShader at a 4x throttle: 106 ticks in 3 s, 4 of them drawn); an unrelated wake during the wait
   could pass a broken gate (the view was just measured still for 3 s).
-- **Deploying** with the Assemble fix above, whose run it failed: npm test 571 (566 passed, 0 failed, 5 skipped) here first, the e2e suite with it. The Live line follows the run.
+- **Live 2026-10-21**, stamp `a9609f2e`: run 39537588862 passed on attempt 1, this case included. Here the full e2e run beside
+  it was 64/65: the Label plate's faceplate-switch case, which needs the Label Studio checkout (skipped on the runner),
+  timed out on a hidden "Screw and nut drawings" Off button; it fails 2 runs in 4 on main without this change too, so it
+  is an older flake, recorded for its own look.
