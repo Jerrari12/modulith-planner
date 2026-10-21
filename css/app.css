@@ -333,6 +333,9 @@ html[data-ws="parts"] #ws-tools { left: 480px; right: 364px; }
 #ws-board .b-spot .b-spot-plus { stroke: #fff; stroke-width: 3; stroke-linecap: round; fill: none; }
 #ws-board .b-spot { pointer-events: none; }
 #ws-board .b-spot.on circle { stroke-width: 3; filter: drop-shadow(0 0 6px rgba(245,184,61,.8)); }
+#ws-board .b-spot.no circle { fill: var(--ink-3); stroke: rgba(255,255,255,.7); }   /* a refused cell: muted, a bar for a plus (2026-10-20) */
+#ws-board .b-spot.no.on circle { filter: drop-shadow(0 0 6px rgba(160,164,172,.8)); }
+#ws-choice.no { white-space: normal; flex-wrap: wrap; justify-content: center; text-align: center; max-width: min(520px, calc(100vw - 40px)); }   /* a reason is a sentence or two: it wraps, and its buttons with it (Sol 01a15b70) */
 #ws .armed { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 10px; font-size: 12px; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-border); }
 #ws-tools .erase.on { color: var(--danger); }
 #ws-tools .icon-btn[disabled] { opacity: .4; cursor: not-allowed; }
