@@ -2026,6 +2026,14 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Deploy:** held until Joey had seen it ("Don't deploy until I've seen it."). Then: "I've seen the bevel and it looks
   right. Merge cover-seams-proto into main and deploy." Rebased onto main `0b896b0`, and the checks above were run on
   the rebased tree.
+- **Live** at stamp `b11f4931`. Main was fast-forwarded to `93c8e7e`; its own run was cancelled by the next push,
+  `b11f493`, whose deploy carries it.
+  - Read off the live site: `main.js` imports `cover-seam.js?v=b11f4931`, and the served module is Joey's numbers (0.2
+    mm, 1 px, 45°).
+  - In headless Chrome (?debug=1, Very High, dpr 2, dark stage, the 7W build), all 8 cover meshes carry the attribute
+    and the patched material, the edge is on, and there are no page errors. The edge on and off differ in 1,726 pixels,
+    all in the cover region: the same count as the local check. Shots in
+    D:/Claude - Output/cover-seams-2026-10-21/live.
 
 ## 2026-10-21 (an opened drawer's pills stay clear of the panels and of each other)
 
