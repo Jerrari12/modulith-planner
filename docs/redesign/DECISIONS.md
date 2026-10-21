@@ -2129,7 +2129,10 @@ Dated calls made while building, with who made them. The brief and the inventory
     in main.js, it still fails in both modes ("the Parts list drew no rows", colorLocked). Full e2e on main `b0bb34d`
     with this change: with `GEN2_PARTS_LOCAL=1`, 74 of 74 and no rejection notices; against the parts host, 73 of 74.
     The one failure was "a refused cell says why", which timed out at its re-hover chip wait (e2e line 1283) after
-    16.6 s; it passed 4 of 4 alone, about 3.5 s each. This change does not touch that case; it is recorded, not fixed.
+    16.6 s. It is not this change's. On main `55a02fb` without this change, the full run failed the same case the same
+    way (73 of 74, 16.6 s), and so did the full run of this change rebased onto it. Run alone it is flaky: 4 of 4
+    passed on one tree, 1 of 2 on the other. The case passed in both full runs on `b11f493`. It is recorded here and
+    left for its own fix.
   - **Review:** Terra `01a16024`: no findings.
 
 ## 2026-10-21 (faceplate, not plate, in two catalogue strings)
