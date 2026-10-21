@@ -1952,3 +1952,26 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Terra `01a15f3e`: no findings. Luna `01a15f3f` on these lines: five wording fixes taken, one discarded (the
   record is Joey's saved one, as the entry says).
 - **Deploy:** a fix for a bug in a change Joey asked for; it deploys once its checks pass.
+
+## 2026-10-21 (the planner's buy links report the viewer's buy: events)
+
+- **Why.** Joey asked what happens on his affiliate links, and his Polymaker dashboard shows only completed purchases.
+  A click is the step before a sale, and the planner's own buy links reported none: the Colors picker's Buy, the
+  shopping list and look-detail rows, the Parts list's filament names and its hardware Amazon link.
+- **Now** each sends the name the viewer already uses for the same click, so both apps' clicks land on one dashboard row.
+  - `buy:filament:<brand-line>` comes from main.js `buyFilamentEvent`, which finds the brand and line by the picked
+    colour's catalogue label.
+  - `buy:hardware:<listing id>` comes from `buyEvent`, using the `HARDWARE_BUY` id.
+  - The stage exposes both beside `track`; colors.js `buyFilament` and parts.js `storeLink` call them.
+  - The Parts list shows "Panchroma Black" as "Black", so its items carry the full label (`full`) for the lookup.
+  - Every link's href, target and rel is unchanged. The download-site links still send nothing.
+- **Checks.** A new e2e case clicks each kind of buy link and checks the event names as literals, with the navigation
+  cancelled after each link's own handler: the picker (Elegoo, then Panchroma), a shopping-list row, a Parts filament
+  name, and the hardware link in both list layouts. With `buyFilament` made a no-op, the case fails, listing the four
+  missing filament names. npm test 579 pass, 0 fail; e2e 73/73.
+- **What the dashboard can and cannot say** about these clicks is in a note on Joey's machine
+  (D:/Claude - Output/affiliate-clicks-2026-10-21/NOTE.md). Like the stats themselves, it is kept out of the repo.
+- **Open, Joey's call.** The Parts list's Amazon links carry `rel="noopener"` without `sponsored`, and no "· paid link"
+  label next to the link; the list's foot line carries the disclosure. Left as it was: this change does not touch rel.
+- **Review:** Terra `01a15f5a`: no findings.
+- **Deploy:** a fix for a problem Joey reported; it deploys once its checks pass.

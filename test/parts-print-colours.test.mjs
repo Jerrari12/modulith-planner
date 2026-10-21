@@ -167,7 +167,8 @@ test('the words: the body first, a zone only when it wears something else, brand
   assert.equal(printText(pal.get('Case')), 'Black');
   assert.equal(printText(pal.get('Faceplate')), 'Black / Teal · face Mystery Orange / Teal');
   assert.equal(printText(pal.get('QuickLock')), 'no filament picked yet');
-  assert.deepEqual(printRegions(pal.get('Case')), [{ zone: '', items: [{ name: 'Black', url: 'https://shop.polymaker.com/black' }] }]);
+  // `full` keeps the catalog label the shortened name came from: the buy link's event resolves the brand and line by it
+  assert.deepEqual(printRegions(pal.get('Case')), [{ zone: '', items: [{ name: 'Black', url: 'https://shop.polymaker.com/black', full: 'Panchroma Black' }] }]);
   // a zone that follows its body is not repeated
   assert.equal(printText([{ key: 'Drawer', zone: '', filaments: [{ name: 'Red', hex: '#f00' }], bare: null }, { key: 'Drawer:FACE', zone: 'FACE', filaments: [{ name: 'Red', hex: '#f00' }], bare: null }]), 'Red');
   // a body with no pick beside a zone with one

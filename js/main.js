@@ -10999,6 +10999,9 @@ for (const m of ['toDataURL', 'toBlob']) {
     applyHandleStyle, HANDLE_STYLES,
     COLOR_STORE_KEY,
     trackLog, track,
+    // the affiliate-click names (buy:hardware:<listing id>, buy:filament:<brand-line>), so the workspaces' buy links report
+    // the same rows as the viewer's own
+    buyEvent, buyFilamentEvent,
     // the Very High accumulation state and the live tier, so a screenshot harness (tools/golden-shots.mjs) can
     // wait for a CONVERGED frame (acc.n reaches ACC_SAMPLES) and prove the tier it asked for is the one drawing
     acc, ACC_SAMPLES, get quality() { return quality; },

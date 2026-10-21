@@ -18,7 +18,7 @@ import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
-import { ZONE_LABEL, isPaid, short } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid buy link
+import { ZONE_LABEL, isPaid, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid buy link, and its click event
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -121,10 +121,11 @@ export function unitRegions(stage, pal, uid, type) {
   });
 }
 /* the regions of a row as words: the body's filament(s), then each zone that wears something else -
-   [{ zone: '' | 'face', items: [{ name, url }] }]; a region with no pick is "no pick yet" */
+   [{ zone: '' | 'face', items: [{ name, url, full }] }]; a region with no pick is "no pick yet". `full` is the catalog label
+   (`name` is shortened), which the buy link's event resolves its brand and line from */
 const NO_PICK = 'no pick yet';
 export function printRegions(regions) {
-  const items = (g) => [...g.filaments.map((f) => ({ name: short(f.name), url: f.url || null })), ...(g.bare ? [{ name: NO_PICK, url: null }] : [])];
+  const items = (g) => [...g.filaments.map((f) => ({ name: short(f.name), url: f.url || null, full: f.name })), ...(g.bare ? [{ name: NO_PICK, url: null }] : [])];
   const body = regions.find((g) => !g.zone) || regions[0];
   const out = [{ zone: '', items: items(body) }];
   const names = (its) => its.map((i) => i.name).join('/');
@@ -233,7 +234,7 @@ export function mountParts(stage, ctx) {
       if (p.zone) kids.push(p.zone + ' ');
       p.items.forEach((it, j) => {
         if (j) kids.push(' / ');
-        kids.push(it.url ? el('a', { href: it.url, target: '_blank', rel: isPaid(it.url) ? 'noopener sponsored' : 'noopener', title: `Buy ${it.name} ↗` + (isPaid(it.url) ? ' · paid link' : ''), text: it.name }) : it.name);
+        kids.push(it.url ? el('a', { href: it.url, target: '_blank', rel: isPaid(it.url) ? 'noopener sponsored' : 'noopener', title: `Buy ${it.name} ↗` + (isPaid(it.url) ? ' · paid link' : ''), text: it.name, onclick: buyFilament(stage, { name: it.full }) }) : it.name);
       });
     });
     return el('div.note.printin', {}, kids);
@@ -303,9 +304,14 @@ export function mountParts(stage, ctx) {
       row.appendChild(el('div.progress', {}, [counter('had', 'had'), counter('made', r.hardware ? 'bought' : 'printed'), el('span.left.mono', { text: left ? `${left} to go` : '✓' })]));
     }
     const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site);
-    if (link) row.appendChild(el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗` }));
+    if (link) row.appendChild(storeLink(r, link));
     else if (r.unreleased) row.appendChild(el('span.link.dim', { text: 'Not released' }));
     return row;
+  }
+  /* a row's link, both layouts: bought hardware's Amazon listing, which reports the stage's buy:hardware:<listing id> (main.js
+     buyEvent), else the part's page on the chosen download site */
+  function storeLink(r, link) {
+    return el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null });
   }
   /* the wide list's row: one column per quantity, the counters readable, a finished row still editable */
   function renderTableRow(r) {
@@ -329,7 +335,7 @@ export function mountParts(stage, ctx) {
     const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site) || r.links?.stores?.find((s) => SHOWN.has(s.id));
     row.append(chip, mid, el('span.mono.need', { text: String(r.qty) }), counter('had', 'Already have'), counter('made', r.hardware ? 'Bought' : 'Printed'),
       el('span.mono.left' + (left ? '' : '.ok'), { text: left ? String(left) : '✓ done' }),
-      link ? el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗` }) : r.unreleased ? el('span.link.dim', { text: 'Not released' }) : el('span'));
+      link ? storeLink(r, link) : r.unreleased ? el('span.link.dim', { text: 'Not released' }) : el('span'));
     return row;
   }
   function bump(r, field, d) {

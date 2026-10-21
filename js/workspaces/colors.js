@@ -52,6 +52,10 @@ const PAID = [/(^|\.)amazon\./, /(^|\.)amzn\.to$/, /(^|\.)shop\.polymaker\.com$/
 export const isPaid = (href) => { try { return PAID.some((re) => re.test(new URL(href).hostname.toLowerCase())); } catch { return false; } };
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 export const short = (name) => String(name).replace('Panchroma ', '');
+/* a filament buy link's click handler: the stage's own `buy:filament:<brand-line>` (main.js buyFilamentEvent), so the
+   planner's affiliate clicks and the viewer's land on one dashboard row. `pick` is { name } with the catalog's full label;
+   none means the generic "Shop filament", which opens FILAMENT_DB[0] and is named for it */
+export const buyFilament = (stage, pick) => () => stage.track(stage.buyFilamentEvent(pick));
 /* the catalog's translucent filaments: a card renders one as a solid tint (STEP2-GATE.md), so the details say so */
 const TRANSLUCENT = new Set(FILAMENT_DB.flatMap((b) => b.colors.filter((c) => c.translucent).map((c) => c.label)));
 const palKey = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]?.name, o[k]?.hex]));
@@ -404,7 +408,7 @@ export function mountColors(stage, ctx) {
      link: `· paid`, rel=sponsored, the Polymaker and Amazon lines) */
   function filamentRows(fc) {
     return [
-      ...fc.filaments.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw' + silk(f.name), { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' + (paid ? ' · paid' : '') }) : null]); }),
+      ...fc.filaments.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw' + silk(f.name), { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' + (paid ? ' · paid' : ''), onclick: buyFilament(stage, f) }) : null]); }),
       // printed, but with no filament chosen: a region left on its instruction colour, a label stripe (the label's own colour)
       ...fc.unpicked.map((u) => el('div.frow.well.bare', {}, [el('span.sw', { style: `background:${u.hex}` }), el('div.col', {}, [el('b', { text: u.stripe ? 'Label stripe' : keyLabel(u.key) }), el('span.meta', { text: u.stripe ? `Printed in the label’s own colour, ${u.hex}` : 'No filament picked yet' })])])),
     ];
@@ -704,7 +708,7 @@ export function mountColors(stage, ctx) {
     renderBrands();
     const buyUrl = w ? w.url : FILAMENT_DB[0].url; const paid = isPaid(buyUrl); const poly = /polymaker/i.test(buyUrl);
     picker.appendChild(el('div.foot', {}, [
-      el('a.buy', { href: buyUrl, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: (w ? `Buy ${short(w.name)} →` : 'Shop filament →') + (paid ? ' · paid link' : '') }),
+      el('a.buy', { href: buyUrl, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: (w ? `Buy ${short(w.name)} →` : 'Shop filament →') + (paid ? ' · paid link' : ''), onclick: buyFilament(stage, w) }),
       el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
       el('div.resets', {}, st.scope === 'unit'
         ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]

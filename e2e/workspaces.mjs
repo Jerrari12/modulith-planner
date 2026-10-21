@@ -131,6 +131,48 @@ test('analytics: only Assemble counts steps, the boot preset is not a pick, and 
   await a.ctx.close();
 });
 
+/* Joey, 2026-10-21: his Polymaker dashboard shows only completed purchases, and the planner's buy links sent no event, so a
+   click on one was invisible. Every affiliate link in the workspaces reports the viewer's own name for it (main.js buyEvent /
+   buyFilamentEvent): the picker's Buy, the shopping list's rows, the Parts list's filament names and its hardware link in
+   both layouts. The names are literals here, so a rename that would split the dashboard's rows fails this case. */
+test('analytics: every buy link in Colors and Parts reports the stage\'s buy: event, and still opens its store', async () => {
+  const { ctx, page, errors } = await open('colors');
+  // the link's own click handler runs first; this one, on the document, then cancels the navigation, so no store tab opens
+  await page.evaluate(() => { window.__opened = []; document.addEventListener('click', (e) => { const a = e.target.closest('a[target="_blank"]'); if (a) { window.__opened.push(a.href); e.preventDefault(); } }); });
+  const buys = () => page.evaluate(() => window.__GEN2_VIEWER__.trackLog.filter((n) => n.startsWith('buy:')));
+  const hrefs = [];
+  const click = async (loc, what) => { loc = loc.first(); await loc.waitFor({ timeout: 30_000 }).catch(() => assert.fail(`no ${what} link`)); hrefs.push(await loc.getAttribute('href')); await loc.click(); };
+  // the picker's Buy: an Amazon filament, then a Panchroma one (the picker names the colour short, the event names its line)
+  await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Case$/ }) }).first().click();
+  await page.locator('#ws-picker .sw[aria-label="Elegoo PLA Black"]').first().click();
+  await click(page.locator('#ws-picker .foot a.buy', { hasText: 'Buy Elegoo PLA Black' }), 'the picker\'s Elegoo');
+  await page.locator('#ws-picker .sw[aria-label="Panchroma Black"]').first().click();
+  await click(page.locator('#ws-picker .foot a.buy', { hasText: /^Buy Black →/ }), 'the picker\'s Panchroma');
+  // the Dock's filament stack: the shopping list, one Buy per filament
+  await page.locator('#ws-picker button[aria-label="Close the picker"]').click();
+  await page.locator('#ws-dock .status.stack').click();
+  await click(page.locator('#ws-shop .frow').filter({ has: page.locator('b', { hasText: /^Panchroma Black$/ }) }).locator('a.link'), 'the shopping list\'s');
+  // the Parts list: the Case row's filament name (shortened to "Black"), then the hardware's Amazon link, in both layouts
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  await click(page.locator('#ws-parts .printin a', { hasText: /^Black$/ }).first(), 'the Parts list\'s filament');
+  const hw = page.locator('#ws-parts .prow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first();
+  await click(hw, 'the Parts list\'s hardware');
+  await btn(page, 'Track my build', '#ws-parts').click();
+  await page.locator('#ws-parts button.expand').click();
+  await click(page.locator('#ws-parts .trow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(), 'the wide list\'s hardware');
+  // the hardware links are the root kit's magnets: the listing the catalog (HARDWARE_BUY) holds at that address, whose id
+  // is the dashboard row (a renamed id would split it, so it is a literal too)
+  const ids = await page.evaluate((urls) => urls.map((u) => { for (const list of Object.values(HARDWARE_BUY)) { const b = list.find((x) => x.url === u); if (b) return b.id; } return null; }), hrefs.slice(4));
+  assert.deepEqual(ids, ['magnet-10x2', 'magnet-10x2'], `the hardware links are the 10×2 magnet listing: ${hrefs.slice(4).join(', ')}`);
+  assert.deepEqual(await buys(), ['buy:filament:elegoo-pla-petg', 'buy:filament:polymaker-panchroma-pla', 'buy:filament:polymaker-panchroma-pla', 'buy:filament:polymaker-panchroma-pla', 'buy:hardware:magnet-10x2', 'buy:hardware:magnet-10x2']);
+  // each click was a real link to its store, the navigation cancelled here and nowhere else
+  assert.deepEqual(await page.evaluate(() => window.__opened), hrefs.map((h) => new URL(h).href));
+  assert.ok(hrefs.every((h) => /^https:\/\//.test(h)), `store addresses: ${hrefs.join(', ')}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE BOARD REDESIGN (Joey + Astra, 2026-10-16): the 2D board hugs the build and shows the 3D view's "+" spots (one
    calculation for both); past either edge widens the build within the mount's cap; a drag may go past the build; the
    inspector's Move buttons are the alternative to dragging; an empty build has one starting spot. */
