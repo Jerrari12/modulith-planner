@@ -1628,7 +1628,7 @@ Dated calls made while building, with who made them. The brief and the inventory
   (141 / 141 / 290 px at the desktop panel, 169 / 169 / 346 on a 375-wide phone) and the sentence's link carries the
   `?from=planner … &return=` query, new tab, noopener.
 - **Review:** Terra `01a15b57`, routine: NO OBJECTION (no TDZ: the hint builds the href at render, after mount).
-- **Not deployed.** Branch `labels-one-tile`, for Joey's go.
+- **Live 2026-10-20.** Deployed with the two other coworker items as the merge `b8e747f` (Joey: "Deploy labels-one-tile + picker-hint-clip together and placement-why"); run 39519702499 passed on attempt 1 (28 min), stamp `b8e747f2`. Checked live by `planner-prod-checks-2026-10-18\labels-one-tile-prod.mjs`: the foot holds three tiles (Type a label, From a file, the Part Picker spanning its row at the full 290 px), no Studio tile, the intro sentence links the Label Studio (`?from=planner`, new tab, noopener), and `img/hints/labels-studio.mp4` is gone (404).
 
 ## 2026-10-20 (the Part Picker's hover clip shows the modal)
 
@@ -1646,7 +1646,7 @@ Dated calls made while building, with who made them. The brief and the inventory
   list; in the browser the bubble on the tile plays it (16.5 s, 486 × 222 as shown). The e2e Labels cases do not touch
   the clips.
 - **Review:** Luna `01a15b5e`, mechanical: NO OBJECTION.
-- **Not deployed.** On branch `picker-hint-clip`, stacked on `labels-one-tile`, for Joey's go.
+- **Live 2026-10-20**, with `labels-one-tile` above (merge `b8e747f`, stamp `b8e747f2`). Checked live by the same script: the Part Picker tile's hint points at `img/hints/labels-picker.mp4`, served at 78,379 bytes (the re-recorded 16.5 s clip; the old one was 30,931).
 ## 2026-10-20 (Build: a refused placement says why)
 
 - **Why.** Joey had a coworker try the planner: "the only thing that confused him, it wasn't clear why he couldn't place
@@ -1687,4 +1687,4 @@ Dated calls made while building, with who made them. The brief and the inventory
   own discards agreed: no path places on a refused cell; `judge()` keeps its verdict; `ends` holds only offered cells.
   One e2e run of the new case failed (17 s) while the full suite ran beside it; alone and with its four neighbours it
   passes every time since, so the hover waits are the usual 15 s / 30 s.
-- **Not deployed** (a feature, not a reported bug): branch `placement-why`, waiting on Joey's go.
+- **Live 2026-10-20.** Deployed with the two other coworker items as the merge `b8e747f` (Joey: "Deploy labels-one-tile + picker-hint-clip together and placement-why"); run 39519702499 passed on attempt 1 (28 min), stamp `b8e747f2`; before the push the merged tree ran npm test 571 (566 passed, 0 failed, 5 skipped) and e2e 64/64 on this machine. Checked live by `planner-prod-checks-2026-10-18\placement-why-prod.mjs` (a 3W through the store, 1W·1H armed): the middle cell is refused with code `s` and the sag sentence, both ends are the way out, the "+" list has the ends and not the middle, the stage drew one refused marker, resting on it opens the chip with the reason and no button, a click pins "Put it at the left end" + OK, and that places the 1W on the 3W's left end (the grid gained its spare top row, so the record reads 1W@0,2 on 3W@0,4). The first version of the check compared the 1W's y to the un-rebased row and failed on that alone.
