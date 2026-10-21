@@ -2132,7 +2132,7 @@ Dated calls made while building, with who made them. The brief and the inventory
     16.6 s. It is not this change's. On main `55a02fb` without this change, the full run failed the same case the same
     way (73 of 74, 16.6 s), and so did the full run of this change rebased onto it. Run alone it is flaky: 4 of 4
     passed on one tree, 1 of 2 on the other. The case passed in both full runs on `b11f493`. It is recorded here and
-    left for its own fix.
+    left for its own fix. Fixed the same day: "the refused-cell case reads its marker once the stage is at rest", below.
   - **Review:** Terra `01a16024`: no findings.
 
 ## 2026-10-21 (faceplate, not plate, in two catalogue strings)
@@ -2235,3 +2235,63 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.
 - **Live 2026-10-21**, stamp `d1682ec3`: `grow-down-prod.mjs` (the e2e case's build on the live site, analytics blocked)
   passes every check. On `39e6a12f`, before the change, it failed the spots below, the growth, the cap and the Undo.
+
+## 2026-10-21 (the refused-cell case reads its marker once the stage is at rest)
+
+- **The failure.** The e2e case "Build: a refused cell says why" timed out at its click wait (line 1283 then) in full
+  runs against the parts host on this machine: 73 of 74 in three runs, on `b0bb34d` with the hold fix and on `55a02fb`
+  with and without it (the mount-race entry above). Run alone it mostly passed. The app is not changed; the case was
+  wrong.
+- **The cause, traced.** `trace.mjs` (in `D:/Claude - Output/refused-cell-flake-2026-10-21/`) replays the case's steps.
+  Every frame it logs the camera and the refused cell's screen point, along with every `setSpots`, the chip's `hidden`
+  and the canvas's pointer events.
+  - The case read the cell's point once, then hovered, left and clicked there.
+  - The Build workspace's boot ends in `stage.goTo(steps)`. Its `tweenCamera` flies the camera in from the cover's pose
+    for 900 ms (camera z about 1910 to about 640), and `waitBoot` returns as the flight starts.
+  - In the seven failing replay runs the case read the point 159-216 ms after the boot wait returned. By the
+    pointerdown, 31-52 ms later, the marker had moved 31-44 px (one run: read at 479,331, the marker at 514,337). The
+    click landed on no spot, and no chip opened.
+- **Why only some runs: the parts host's speed.**
+  - With the host slow, the last of the 3W's GLBs arrived 273-417 ms after the boot wait and 7 of 10 replay runs
+    failed: the boot's flight was in its fast middle when the case read and clicked.
+  - Later the host was quick: the last GLB arrived at 27-109 ms (55 ms or less in 29 of 30 runs). The 3W's mount then
+    landed 46-139 ms after the boot wait, and its `goTo` restarted the flight, so the read and the click fell in the
+    new tween's slow start. All 20 replay runs with the old read passed, 10 on `b11f493` and 10 on `02a30a4`.
+  - The deploy runs of `55a02fb` and `d1682ec` passed the case. That the slower runner reaches the read after the
+    flight is inferred; its timing was not traced.
+- **Not a commit.** The case's text is the same at every commit tested. Alone, 8 runs each: `b11f493` 8 passed,
+  `1272bce` 7, `b0bb34d` 8, `55a02fb` 8, `02a30a4` 7. Both failures timed out on a 15 s chip wait; the bisect did not
+  record which line. The two full-run passes on `b11f493` came from the timing, not the code.
+- **Now** (e2e/workspaces.mjs) the case reads the marker through `cellAtRest`, before the hover and again before the
+  click.
+  - It waits for the stage's mount (`regenBusy` false), then until the cell's rounded screen point is the same in two
+    reads 300 ms apart, and reads it then.
+  - A camera tween eases in and out (cubic) over 900 ms, so in any 300 ms the camera covers at least 14.8% of its
+    path. Two equal rounded reads mean the point moved under 1 px per axis in that window. If the point moves in
+    proportion to the camera (it is a perspective projection, so only roughly), the whole flight left is under 7 px per
+    axis, and about 1 px in the 31-52 ms the replay measured from a read to the click.
+  - The case also holds every part GLB it asks for by 600 ms (`page.route`, then `route.fallback()`, never unrouted),
+    so a slow host is part of every run.
+  - The click wait now fails with a message.
+- **Checks.**
+  - With the hold and the old read, on main `02a30a4`, the case alone failed 7 of 8. It failed one assertion later, at
+    "a clicked reason stays up when the mouse leaves": the 3W's mount landed just after the click, and a rebuild
+    closes a reason chip by design (build.js `renderOverlays`).
+  - With the fix the case alone passed 8 of 8.
+  - The replay with the old read failed 9 of 12 with a 300 or 600 ms hold. With the fixed read and a 600 ms hold it
+    passed 6 of 6.
+  - npm test: 591 pass, 0 fail, 5 skipped. Full e2e against the parts host: 75 of 75, twice. With
+    `GEN2_PARTS_LOCAL=1`: 75 of 75, and no "Route is already handled" line in its output. The case took 3.8-4.1 s in
+    those runs.
+- **Seen, not fixed: a tap during a guided camera move takes the camera from the guide.**
+  - The controls' `end` handler (main.js, `moved > 4` then `setCamOverride(true)`) measures how far the camera moved
+    between press and release, and the tween's own motion counts.
+  - In the three failing replay runs that logged it, the case's click inside the flight set `camFree` true. The camera
+    did not move again when the 3W mounted.
+  - Proposed as its own change.
+- **Review:** Terra `01a1608a` on the case: one finding, discarded wrong. It said a sub-pixel tween could pass the poll
+  and the click then miss; the easing bound above rules that out. Terra `01a1609a` on this entry: three fixes taken (the
+  runner's timing marked as inferred, the bound restated for rounding and the projection, the log line named exactly).
+  Two discarded: the 29 of 30 count holds (one run took 109 ms), and the deploy line is Joey's standing rule, not a
+  blocker.
+- **Deploy:** a test-only fix for a failure the suite reported; it deploys once its checks pass.

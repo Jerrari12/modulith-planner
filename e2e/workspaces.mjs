@@ -1341,6 +1341,9 @@ test('Build: a spot left of the starter drawer, and placing there shifts the bui
    without a click; it never places. */
 test('Build: a refused cell says why - a 1W over the middle of a 3W is a muted spot in both views, the chip states the sag rule and offers the end', async () => {
   const { ctx, page, errors } = await open('build');
+  // a slow parts host on every run: each part GLB asked for from here answers 600 ms late, so the 3W mounts while the
+  // boot's camera is still flying in. A quick host hid the stale point below (the case failed when it answered late)
+  await page.route('**/*.lib.glb', async (route) => { await sleep(600); await route.fallback(); });
   await startBuild(page, [{ id: 1, x: 0, w: 3 }]);
   const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
   const top = y - 2;   // the row on the 3W
@@ -1355,8 +1358,19 @@ test('Build: a refused cell says why - a 1W over the middle of a 3W is a muted s
   const offered = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
   assert.ok(offered.includes(`0,${top}`) && offered.includes(`2,${top}`) && !offered.includes(`1,${top}`), `the ends are "+" spots, the middle is not: ${offered}`);
   assert.deepEqual(await page.evaluate(() => (window.__noSpots || []).slice().sort()), [`1,${top}`], 'the 3D view drew exactly that one refused cell');
-  // the 3D view, a mouse: resting on the refused cell says why; a click keeps it up; Escape clears it
-  const sc = await page.evaluate(([x, yy]) => window.__GEN2_VIEWER__.spotScreens().find((p) => p.x === x && p.y === yy), [1, top]);
+  // the 3D view, a mouse: resting on the refused cell says why; a click keeps it up; Escape clears it.
+  // The marker is read where it stands once the stage is at rest, and read again before the click: the Build boot's
+  // camera flies in from the cover for 900 ms, and the 3W's mount re-frames it. A point read in that flight was 31-44 px
+  // off the marker by the click, which landed on nothing, and the chip wait timed out (2026-10-21, traced on a GPU with
+  // the 3W's GLBs in by 273-417 ms; in by 27-109 ms, the mount restarted the flight and the click fell in its slow start)
+  const cellAtRest = async () => {
+    await page.waitForFunction(() => !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 }).catch(() => assert.fail('the 3W did not mount within 60 s'));
+    await page.evaluate(() => { window.__e2eCell = null; });
+    await page.waitForFunction(([x, yy]) => { const p = window.__GEN2_VIEWER__.spotScreens().find((q) => q.x === x && q.y === yy); const now = p ? `${Math.round(p.sx)},${Math.round(p.sy)}` : null; const same = !!now && window.__e2eCell === now; window.__e2eCell = now; return same; }, [1, top], { polling: 300, timeout: 30_000 })
+      .catch(() => assert.fail('the refused cell\'s marker did not hold still for 300 ms within 30 s'));
+    return page.evaluate(([x, yy]) => window.__GEN2_VIEWER__.spotScreens().find((p) => p.x === x && p.y === yy), [1, top]);
+  };
+  let sc = await cellAtRest();
   assert.ok(sc, 'the refused cell has a marker on the stage');
   await page.mouse.move(sc.sx, sc.sy);
   await page.waitForFunction(() => !document.getElementById('ws-choice').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('resting on the refused cell opened no chip within 15 s'));
@@ -1364,8 +1378,9 @@ test('Build: a refused cell says why - a 1W over the middle of a 3W is a muted s
   assert.equal(await page.locator('#ws-choice button:has-text("Place")').count(), 0, 'and offers no Place');
   await page.mouse.move(sc.sx, sc.sy + 300);
   await page.waitForFunction(() => document.getElementById('ws-choice').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('leaving the refused cell did not close the chip'));
+  sc = await cellAtRest();
   await page.mouse.move(sc.sx, sc.sy); await page.mouse.down(); await page.mouse.up();
-  await page.waitForFunction(() => !document.getElementById('ws-choice').hidden, null, { timeout: 15_000 });
+  await page.waitForFunction(() => !document.getElementById('ws-choice').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('a click on the refused cell opened no chip within 15 s'));
   await page.mouse.move(sc.sx, sc.sy + 300); await page.waitForTimeout(400);
   assert.equal(await page.evaluate(() => document.getElementById('ws-choice').hidden), false, 'a clicked reason stays up when the mouse leaves');
   assert.equal(await units(page), 1, 'a click on a refused cell places nothing');
