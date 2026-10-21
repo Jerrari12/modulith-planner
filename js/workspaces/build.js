@@ -222,18 +222,30 @@ export function mountBuild(stage, ctx) {
     const lo = Math.min(x, ...others.map((p) => p.x)), hi = Math.max(x + w, ...others.map((p) => p.x + p.w));
     return hi - lo <= Rs.capW() ? { k: -lo, span: Math.max(1, hi - lo) } : null;
   };
-  function growTo(t, k, span) { if (k) for (const p of t.placed) p.x += k; t.gridW = span; }
+  /* GROWING DOWN (Joey, 2026-10-21): a hanging build (wall, under the table) hangs from its top row, so a spot may also
+     reach below the bottom row; taking it adds the rows it needs, never past the mount's height cap. The rows go on at the
+     bottom, so no y moves. tallFor returns the grid height the footprint needs, or null past the cap; lastY is the last
+     top row a spot may start on (a hanging build's: the bottom edge). A tabletop grows upward by itself
+     (syncTabletopGrid's headroom), so its height never changes here. */
+  const tallFor = (y, hh, s, Rs) => {
+    const need = Math.ceil((y + hh) / 2);
+    if (s.mount === 'tabletop' || need <= s.gridH) return s.gridH;
+    return need <= Rs.capH() ? need : null;
+  };
+  const lastY = (s, hh) => (s.mount === 'tabletop' ? s.gridH * 2 - hh : s.gridH * 2);
+  function growTo(t, k, span, gh = t.gridH) { if (k) for (const p of t.placed) p.x += k; t.gridW = span; t.gridH = Math.max(t.gridH, gh); }
   function addSpots(w, hh, fill) {
     const key = cacheKey(`add ${w}x${hh} ${fill}`); if (spotCache.has(key)) return spotCache.get(key);
-    const s = S(), Rs = R(); const out = []; const rows = s.gridH * 2;
-    for (let y = 0; y <= rows - hh; y++) for (let x = -w; x <= s.gridW; x++) {
+    const s = S(), Rs = R(); const out = [];
+    for (let y = 0; y <= lastY(s, hh); y++) for (let x = -w; x <= s.gridW; x++) {
       const g = grownFor(x, w, s, Rs); if (!g) continue;
-      if (!g.k && g.span <= s.gridW) {   // inside the grid, as before
+      const gh = tallFor(y, hh, s, Rs); if (gh === null) continue;
+      if (!g.k && g.span <= s.gridW && gh === s.gridH) {   // inside the grid, as before
         if (!Rs.canPlace(x, y, w, hh)) continue;
         if (judge((t) => { t.placed.push({ id: t.nextId++, x, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
         continue;
       }
-      if (judge((t, Rt) => { growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, w, hh)) return false; t.placed.push({ id: t.nextId++, x: x + g.k, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
+      if (judge((t, Rt) => { growTo(t, g.k, g.span, gh); if (!Rt.canPlace(x + g.k, y, w, hh)) return false; t.placed.push({ id: t.nextId++, x: x + g.k, y, w, hh, fill, shelves: 0 }); }, s.nextId)) out.push({ x, y });
     }
     if (spotCache.size > 40) spotCache.clear(); spotCache.set(key, out); return out;
   }
@@ -250,10 +262,11 @@ export function mountBuild(stage, ctx) {
     // cell floating beside the build (half a row up) is refused too, but nobody asks about it, and its disc would sit
     // next to a real "+" (the phone's tap-near-a-plus found that)
     const rests = (x, y) => (fromTop ? y === 0 : y + a.hh === rows) || Array.from({ length: a.w }, (_, i) => occ.has((x + i) + ',' + (fromTop ? y - 1 : y + a.hh))).some(Boolean);
-    for (let y = 0; y <= rows - a.hh; y++) for (let x = -a.w; x <= s.gridW; x++) {
+    for (let y = 0; y <= lastY(s, a.hh); y++) for (let x = -a.w; x <= s.gridW; x++) {
       if (!rests(x, y) || offered.some((sp) => sp.x === x && sp.y === y) || !touchesBuild({ x, y }, a.w, a.hh, s.placed)) continue;
       const g = grownFor(x, a.w, s, Rs); if (!g) continue;
-      const why = judgeWhy((t, Rt) => { growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, a.w, a.hh)) return false; t.placed.push({ id: t.nextId++, x: x + g.k, y, w: a.w, hh: a.hh, fill, shelves: 0 }); }, s.nextId);
+      const gh = tallFor(y, a.hh, s, Rs); if (gh === null) continue;   // past the height cap: no spot there in either view
+      const why = judgeWhy((t, Rt) => { growTo(t, g.k, g.span, gh); if (!Rt.canPlace(x + g.k, y, a.w, a.hh)) return false; t.placed.push({ id: t.nextId++, x: x + g.k, y, w: a.w, hh: a.hh, fill, shelves: 0 }); }, s.nextId);
       if (why === null || why === 'fit') continue;   // 'fit' is a collision or the cap: no spot there in either view
       // the unit the footprint would rest on: the row toward the mount under the footprint's first cell
       const supRow = fromTop ? y - 1 : y + a.hh;
@@ -355,11 +368,13 @@ export function mountBuild(stage, ctx) {
     if (!Rs.selectable(size.w, size.h) && !(size.hh && Rs.sizeExists(size.w, size.hh / 2, fill))) { say('That size is not available here.'); return; }
     const s0 = S(); const g = grownFor(x, size.w, s0, Rs);
     if (!g) { say(`The build is already as wide as this mount allows (${Rs.capW()}W).`); return; }
-    if (!g.k && g.span <= s0.gridW) { if (!Rs.canPlace(x, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
-    else { const t = clone(s0); const Rt = layoutRules(t, G, { tabletop: TT }); growTo(t, g.k, g.span); if (!Rt.canPlace(x + g.k, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
+    const gh = tallFor(y, size.hh, s0, Rs);
+    if (gh === null) { say(`The build is already as tall as this mount allows (${Rs.capH()}H).`); return; }
+    if (!g.k && g.span <= s0.gridW && gh === s0.gridH) { if (!Rs.canPlace(x, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
+    else { const t = clone(s0); const Rt = layoutRules(t, G, { tabletop: TT }); growTo(t, g.k, g.span, gh); if (!Rt.canPlace(x + g.k, y, size.w, size.hh)) { say('That spot is taken.'); return; } }
     let id;
     edit((s) => {
-      growTo(s, g.k, g.span);   // past an edge: the build moves right and the grid widens, in the same undo step
+      growTo(s, g.k, g.span, gh);   // past an edge: the build moves right and the grid widens (or, hanging, grows down), in the same undo step
       id = s.nextId++;
       const u = { id, x: x + g.k, y, w: size.w, hh: size.hh, fill, shelves: 0 };
       if (fill === 'decor' && st.gf === 'gridfinity' && s.fill === 'decor') u.variant = 'gridfinity';
@@ -397,7 +412,8 @@ export function mountBuild(stage, ctx) {
     if (!spots.length) { say('No free supported spot for a copy.'); return; }
     const near = spots.slice().sort((a, b) => (Math.abs(a.x - u.x) + Math.abs(a.y - u.y)) - (Math.abs(b.x - u.x) + Math.abs(b.y - u.y)))[0];
     let nid;
-    edit((s) => { nid = s.nextId++; const c = { ...clone(u), id: nid, x: near.x, y: near.y }; delete c.label; delete c.labelBadge; s.placed.push(c); s.selectedUnit = nid; }, 'duplicate');
+    edit((s, Rs) => { s.gridH = Math.max(s.gridH, tallFor(near.y, u.hh, s, Rs) || 0);   // a spot below a hanging build grows the grid down (hug() takes care of the width)
+      nid = s.nextId++; const c = { ...clone(u), id: nid, x: near.x, y: near.y }; delete c.label; delete c.labelBadge; s.placed.push(c); s.selectedUnit = nid; }, 'duplicate');
     st.selId = nid; ctx.memo.buildSel = nid;
   }
   function nudge(dir) {

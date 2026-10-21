@@ -2198,3 +2198,29 @@ Dated calls made while building, with who made them. The brief and the inventory
   under `GEN2_PARTS_LOCAL=1` is the one the entry above records as older than its change).
 - **Review:** Terra `01a16000`: one finding, discarded (it read this entry's layout measurements as analytics figures).
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+
+## 2026-10-21 (a hanging build grows down from a "+")
+
+- **Joey, asked:** "oh yeah do this", to "+" spots under a hanging build that grow the grid when taken. On 2026-10-20 a
+  2W·2H under a full 4H wall build (Joey's screenshot) got no spot until H+ was pressed, while past either side the
+  grid grew by itself.
+- **Now** on a wall or under-table build the armed size's "+" spots also reach below the bottom row. Taking one adds
+  the rows the unit needs, in the same undo step, and moves nothing else: y counts from the top, so the rows go on at
+  the bottom. build.js `tallFor` gives the grid height a footprint needs, or null past the mount's height cap (`capH`,
+  from the measured wall or table height when there is one, else 12H); `growTo` takes that height, and addSpots,
+  refusedSpots, placeAt and Duplicate use it. A placement past the cap says "The build is already as tall as this mount
+  allows (3H)", with the mount's own cap in the brackets. On those builds the 2D board draws room under the grid for
+  the spots below (`botR`), and its hint adds "below it adds height". The 3D view needed no change: spotWorld places a
+  spot linearly in y.
+- **Unchanged on purpose:** a tabletop build (syncTabletopGrid already keeps the armed height free above it); dragging
+  or moving a unit below the grid (the board's drag and the 3D move spots stay inside it); H+ and H−.
+- **Checks.** A new e2e case on a 3W × 2H wall build, its wall measured 180 mm tall (a 3H cap): the spots under the
+  bottom 2W in both views, the same list on the board, inside its drawing; taking one gives 3H with nothing else moved;
+  at 3H nothing below, in either view; one Undo gives 2H; a 2W·1H refused one column right, under the grid; a 1W·2H offered only where it fits
+  3H; placeAt past the cap says so and places nothing; Duplicate on a 2W-wide wall puts the copy under the unit and
+  grows to 2H. Eight mutants each fail it: no spots below, growTo ignoring the height, no cap, no cap message,
+  Duplicate not growing, refused cells not growing, no room on the board, the old hint. npm test 591 pass, 0 fail; all
+  75 e2e cases pass.
+- **Review:** Sol `01a1603f`: no findings. Luna `01a16050` on this entry: four wording fixes taken (the screenshot's
+  build, the cap's number in the message, which builds the board change is for, a 180 mm wall as a 3H cap).
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.

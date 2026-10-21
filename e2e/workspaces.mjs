@@ -312,6 +312,80 @@ test('the board redesign: a drag past the build leaves a gap that offers spots, 
   await ctx.close();
 });
 
+/* GROWING DOWN (Joey, 2026-10-21: "oh yeah do this", to "+" spots under a hanging build instead of pressing H+): a wall
+   build offers "+" spots under its bottom row as it does past either side, in both views; taking one adds the rows in
+   the same undo step and moves nothing else; the mount's height cap (its Workable area, 180 mm = 3H here) stops them,
+   and a placement past it says why. */
+test('Build: a wall build offers "+" spots under its bottom row, taking one grows the grid down, Undo, the height cap', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'wall', null, { timeout: 150_000 });
+  await waitBoot(page);
+  // a 2W under a 2W, beside a 1W: 3W x 2H hanging from the top row, on a wall 180 mm tall (at most 3H)
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed = [[1, 0, 0, 2], [2, 2, 0, 1], [3, 0, 2, 2]].map(([id, x, y, w]) => ({ id, x, y, w, hh: 2, fill: 'decor', shelves: 0 })); s.nextId = 4; s.gridW = 3; s.gridH = 2; s.spaceH = 180; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 3 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 }).catch(() => assert.fail('the wall build did not reach the stage'));
+  await watchStageSpots(page);
+  await armSize(page, '1W·1H');
+  await page.waitForFunction(() => (window.__spots || []).length, null, { timeout: 30_000 }).catch(() => assert.fail('the 3D view drew no spots for 1W·1H within 30 s'));
+  const in3d = await stageSpots(page);
+  assert.ok(['0,4', '1,4', '2,2'].every((k) => in3d.includes(k)), `under the bottom 2W (growing down) and under the 1W: ${in3d}`);
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-spot[data-y="4"]', { timeout: 30_000 }).catch(() => assert.fail('the board drew no "+" under the build within 30 s'));
+  assert.deepEqual(await boardSpots(page), in3d, 'the board shows exactly the 3D spots');
+  assert.match(await text(page, '#ws-board .bhint'), /below it adds height/);
+  // the board makes room under the grid: the discs there are on the drawing
+  assert.ok(await page.evaluate(() => { const b = document.querySelector('#ws-board svg').getBoundingClientRect(); const cs = [...document.querySelectorAll('#ws-board .b-spot[data-y="4"] circle')]; return cs.length > 0 && cs.every((c) => { const r = c.getBoundingClientRect(); return r.top >= b.top - 1 && r.bottom <= b.bottom + 1; }); }), 'the discs under the build sit inside the board');
+  const before = await S(page);
+  await clickSpot(page, 0, 4);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 4, null, { timeout: 30_000 }).catch(() => assert.fail('the "+" under the build placed nothing within 30 s'));
+  const grown = await S(page);
+  assert.equal(grown.gridH, 3, 'the grid grew down by one row');
+  assert.ok(grown.placed.some((p) => p.id === 4 && p.x === 0 && p.y === 4 && p.w === 1 && p.hh === 2), `the 1W hangs under the 2W: ${JSON.stringify(grown.placed)}`);
+  assert.deepEqual(grown.placed.filter((p) => p.id < 4).map((p) => [p.id, p.x, p.y]), before.placed.map((p) => [p.id, p.x, p.y]), 'nothing else moved');
+  // at the cap (3H) nothing is offered under the new unit, in either view
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
+  const capped = await boardSpots(page);
+  assert.ok(capped.length && capped.every((k) => +k.split(',')[1] + 2 <= 6), `nothing past the 3H cap: ${capped}`);
+  await view(page, '3D');
+  await page.waitForFunction(() => (window.__spots || []).length, null, { timeout: 30_000 });
+  assert.deepEqual(await stageSpots(page), capped, 'the 3D view offers the same');
+  // one Undo takes the unit and the row back
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 30_000 });
+  assert.equal((await S(page)).gridH, 2, 'one Undo restores the height');
+  // a 2W·1H: under the 2W it fits; straddling the 2W and the empty column it is refused, and the refused cell says why there too
+  await view(page, '2D');
+  await armSize(page, '2W·1H');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
+  const wide = await boardSpots(page);
+  const wideNo = await page.evaluate(() => [...document.querySelectorAll('#ws-board .b-spot.no')].map((g) => `${g.dataset.x},${g.dataset.y}`));
+  assert.ok(wide.includes('0,4') && wideNo.includes('1,4'), `a 2W under the 2W, refused one column right: ${wide} / ${wideNo}`);
+  // a 1W·2H: under the 1W it grows the build to 3H, under the 2W it would need 4H
+  await armSize(page, '1W·2H');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
+  const tall = await boardSpots(page);
+  assert.ok(tall.includes('2,2') && !tall.some((k) => k.endsWith(',4')), `under the 1W, not under the 2W: ${tall}`);
+  // a placement past the cap says why and places nothing
+  await page.evaluate(() => window.__GEN2_BUILD__.placeAt(0, 4, { w: 1, h: 2, hh: 4 }, 'decor'));
+  await page.waitForFunction(() => /as tall as this mount allows \(3H\)/.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast naming the height cap'));
+  assert.equal((await S(page)).placed.length, 3, 'nothing placed past the cap');
+  // Duplicate takes the nearest spot, and on a wall as wide as it may be (176 mm = 2W) that is under the unit: it grows too
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.placed = [{ id: 1, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.nextId = 2; s.gridW = 2; s.gridH = 1; s.spaceW = 176; }, 'edit'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 1 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+  const u1 = await page.evaluate(() => { const r = document.querySelector('#ws-board .b-unit[data-id="1"] rect').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+  await page.mouse.move(u1[0], u1[1]); await page.mouse.down(); await page.mouse.up();
+  await btn(page, 'Duplicate', '#ws-insp').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 }).catch(() => assert.fail('Duplicate placed nothing within 30 s'));
+  const dup = await S(page);
+  assert.ok(dup.gridH === 2 && dup.placed.some((p) => p.id === 2 && p.x === 0 && p.y === 2 && p.w === 2), `the copy hangs under the 2W in a 2H grid: ${dup.gridH} ${JSON.stringify(dup.placed)}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE REDESIGN'S FOLLOW-UP CHECKS (Joey + Astra, 2026-10-16): separate sections said in the Dock and on the board; the
    drag ghost shows the settled position; a unit taller than the headroom can be dragged on top; a gap build and an
    older over-wide build survive save, reopen and share; on a phone a "+" takes a finger's tap. */
