@@ -1935,7 +1935,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   D:/Claude - Output/tpu-feet-2026-10-21.
 - **Review:** Sol `01a15f0d`: no findings, on the change and then on the cap note and the counts. Luna `01a15f21` on this
   entry: one fix taken (the Clear rule is the Translucent PLA line's), one discarded (the reset is covered: setColor).
-- **Deploy:** a change Joey asked for; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `0b896b02` (run 39640071883). This commit's own run was cancelled by the push of 5df44d7, and
+  that run by another session's push of `0b896b0`, which run 39640071883 deployed with both. `tpu-feet-prod.mjs` passes all 9 checks there:
+  the feet default, the case picker's seven tagged lines with no TPU, the feet note, the feet picker's two TPU lines, a
+  palette with PLA feet wearing TPU95 Black, Surprise me's cap note, no errors.
 
 ## 2026-10-21 (a peeked drawer's inside sizes show with the ruler off)
 
@@ -1951,7 +1954,7 @@ Dated calls made while building, with who made them. The brief and the inventory
   changed live check fails `rulerOffPills` and passes every other check, which shows the bug.
 - **Review:** Terra `01a15f3e`: no findings. Luna `01a15f3f` on these lines: five wording fixes taken, one discarded (the
   record is Joey's saved one, as the entry says).
-- **Deploy:** a fix for a bug in a change Joey asked for; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `0b896b02` (run 39640071883): `drawer-silk-prod.mjs` passes, `rulerOffPills` included.
 
 ## 2026-10-21 (the planner's buy links report the viewer's buy: events)
 
@@ -2054,7 +2057,9 @@ Dated calls made while building, with who made them. The brief and the inventory
   colliding place could stay on the last frame. One discarded: a pill held at display:none while another shows cannot
   happen, since the three pills share one display rule. Luna `01a15fa4` on this entry: five wording fixes taken, one
   discarded (a summary need not list every minor case).
-- **Deploy:** part of a change Joey asked for; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `b11f4931` (run 39650372249): `drawer-silk-prod.mjs`, now with a `pillsClear` check (which
+  failed on `0b896b02`), passes all 11 checks. At 1440 x 900 the W pill's box now starts at y 740, above the dock's band
+  at 782.
 
 ## 2026-10-21 (a layout change's mount leaves no part of either build without its type)
 
@@ -2103,3 +2108,17 @@ Dated calls made while building, with who made them. The brief and the inventory
   five wording fixes taken (who did not report it, the flake's cause as measured, the sweep as a sweep and not a
   proof, and its refused builds, here and in the vault).
 - **Deploy:** a bug fix, found rather than reported. It deploys once its checks pass.
+
+## 2026-10-21 (faceplate, not plate, in two catalogue strings)
+
+- **The naming rule** (vault naming-and-ids.md, Joey, 2026-10-12): a faceplate is always called a faceplate; plate alone
+  means the build plate. A site session asked for two catalogue strings that broke it: the Classic series blurb
+  ("the grip prints as part of the faceplate") and the M3 button-head note ("driven in from behind the faceplate").
+- **Changed** in the old planner's js/data.js (gen2-planner-main `92c055d`, live there, and re-vendored by the site as
+  MODULITH `ff09192`) and copied byte-identical into js/catalog/data.js here, with the vendor pin bumped. Nothing else in
+  either string changed. Luna `01a15fbf`: no findings.
+- **Not done:** js/generate.js still says "plate" for the faceplate in two user-facing step notes, the handle step and the
+  Classic step, which also appear in the kit and golden manifests. They are for Joey to schedule as their own change.
+- **Review of these lines:** Luna `01a15fc9`: two wording fixes taken, four discarded (dim-w is the W pill; the diff shows
+  nothing else changed; "no findings" and the Deploy wording are this file's own).
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
