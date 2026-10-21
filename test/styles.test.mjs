@@ -7,7 +7,7 @@ import { FILAMENT_DB } from '../js/filament-db.js';
 import { STYLES, styleById } from '../js/colors/styles.js';
 import { catalog } from '../js/colors/surprise.js';
 
-const CAT = catalog().list.filter((c) => !c.translucent);
+const CAT = catalog().list.filter((c) => !c.translucent && !c.tpu);   // the generator's own pool (surprise.js): TPU is the feet's alone
 const names = (p) => CAT.filter(p).map((c) => c.name).sort();
 const HEXES = new Set(FILAMENT_DB.flatMap((b) => b.colors.map((c) => c.hex.toLowerCase())));
 

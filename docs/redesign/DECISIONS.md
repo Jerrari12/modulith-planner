@@ -1889,3 +1889,41 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Terra `01a15ef6`: no findings. Luna `01a15f02` on this entry: two fixes taken (the counts, the failure's
   wording), two discarded (the quote is verbatim; the gradient's hard stop at 50% is the half).
 - **Deploy:** a change Joey asked for; it deploys once its checks pass.
+
+## 2026-10-21 (the feet are TPU: TPU95 Black by default, a TPU-only feet picker; material tags on every filament line)
+
+- **Joey, asked:** "when selecting the feet, i feel like we should only list TPU filaments as an option, not sure if we even
+  have any in the planner at all? But default for feet should always be TPU black". Then: "maybe we need to make PETG and PLA
+  and TPU, like colored tags in the menu to help differentiate the material types more?" On which TPU: "you can use any TPU,
+  so polymakers TPU lineup would be fine to add, and i can grab an affiliate link". He sent the minted links
+  `JERRARI?q=polyflex-tpu95` and `?q=polyflex-tpu90`.
+- **The catalogue** had no TPU. It gains Polymaker PolyFlex TPU95 (Black, White, Blue, Red, Yellow, Orange) and TPU90
+  (Black, White, Grey, Polymaker Teal), with his links. The hexes are the shop's own published swatch values and the ids its
+  1.75 mm variants. TPU90 Clear is left out, following the catalogue's rule for the Translucent PLA line: no
+  semi-transparent colour until a transmission measurement exists. TPU95-HF waits for a link. The catalogue is the old viewer's file by its header; it was copied
+  there (gen2-visual-animator `72545c5`, local, not pushed: that main also carries two other sessions' unpushed commits)
+  and into the Lab with its pin bumped (Filament Material Lab `0b80ffc`).
+- **The stage keeps the feet TPU.** Every preset's feet are PolyFlex TPU95 Black. A palette that names no feet or a
+  non-TPU filament for them, from a saved, linked, uploaded or shown palette or a reset, wears TPU95 Black, and a unit's own
+  non-TPU feet pick is refused (main.js `tpuFeet`, `tpuFeetOver`).
+- **Surprise me** gives the feet a fixed role like the bought hardware: TPU95 Black in every look, never drawn from the
+  colour pool, and outside the look's filament cap, which is about the look's colours. A card's count is still every spool
+  the build prints in (D2), so on a build with printed feet it reads one above the cap, and the panel says why: "The feet
+  print in TPU95 Black in every look, on top of the cap and the filaments you own." Counting the TPU inside the cap would
+  leave a cap of 2 with no look at all on such a build. **Simplify** never merges the feet's filament with another, and
+  its summary gives the feet their own group. The Jerrari on the root kit now prints in 5 filaments, not 4.
+- **The picker** lists only the TPU lines for the feet, under a note, and none of them for any other region. The feet's
+  reset reads "Reset to TPU95 Black". Every line header in the picker and in Filaments I own carries coloured material
+  tags: PLA, PETG, TPU, and both PLA and PETG on the Elegoo line.
+- **Checks.** A new e2e case covers the boot preset's TPU95 Black feet, a case picker's seven lines each tagged with no TPU
+  swatch, and the feet picker's note, two TPU lines and 11 TPU swatches. It then picks TPU95 Orange and resets to TPU95
+  Black, feeds a palette with PLA feet, and reloads a saved palette rewritten to PLA feet: each ends on TPU95 Black. A
+  unit's own PLA feet pick is refused. The catalogue, presets, generator (M16, M17), Simplify (M25) and style tests follow the new rule,
+  and four e2e cases take the new counts: Surprise me's cards within the cap plus the feet, with the note; its owned check
+  skipping the feet; Simplify from 5, its two-merge step at 3; the phone's Simplify ending at 4. Eight mutants each fail
+  their own check: the stage rule a no-op, the picker filter removed, the per-unit guard removed, a saved palette loaded
+  as saved, no tags, TPU back in the generator's pool, Simplify merging the feet, no cap note. Screenshots in
+  D:/Claude - Output/tpu-feet-2026-10-21.
+- **Review:** Sol `01a15f0d`: no findings, on the change and then on the cap note and the counts. Luna `01a15f21` on this
+  entry: one fix taken (the Clear rule is the Translucent PLA line's), one discarded (the reset is covered: setColor).
+- **Deploy:** a change Joey asked for; it deploys once its checks pass.

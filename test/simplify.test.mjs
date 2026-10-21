@@ -67,8 +67,11 @@ test('M25: each step removes the least-visible filament a valid merge exists for
     const c = r.changes[0]; const fils = filamentsOf(w0);
     // the test's own derivation: least area first, the closest valid colour
     let expect = null;
+    // the feet's TPU is never merged and never merged into (Joey, 2026-10-21: feet are TPU only)
+    const onFeet = (x) => x.keys.some((k) => k.split('@').pop().split(':')[0] === 'Foot');
     for (const from of fils) {
-      const others = fils.filter((x) => x.name !== from.name).sort((a, b) => dE(a.hex, from.hex) - dE(b.hex, from.hex));
+      if (onFeet(from)) continue;
+      const others = fils.filter((x) => x.name !== from.name && !onFeet(x)).sort((a, b) => dE(a.hex, from.hex) - dE(b.hex, from.hex));
       for (const to of others) { const w = Object.fromEntries(Object.entries(w0).map(([k, f]) => [k, f.name === from.name ? to : f])); if (!problems(w).length) { expect = { from: from.name, to: to.name }; break; } }
       if (expect) break;
     }

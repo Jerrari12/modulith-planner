@@ -4,7 +4,7 @@
 
    A look is built from ROLES and written out to the 28 keys every preset sets, so the product rules hold by construction
    and are checked again before a look leaves (`checkLook`):
-     shell       Case, CaseExtender, SideCover, ShelfLip, CoverL, CoverU, FootrailL, FootrailU, Foot, Rail, Bracket, BackCover
+     shell       Case, CaseExtender, SideCover, ShelfLip, CoverL, CoverU, FootrailL, FootrailU, Rail, Bracket, BackCover
                  (the extender, the lip and the side-cover core take the case colour; lower and upper parts share one)
      drawer      Drawer
      face        Faceplate, Faceplate:FACE, Faceplate:GRIP, SideCover:FACE   (GRIP = FACE, Joey 2026-10-18; the side-cover
@@ -15,6 +15,8 @@
      label/text  Label, Label:TEXT   (4.5:1 between them, so the text reads)
      small       QuickLock, MagnetClip, Stopper
      deck        ShelfInsert   (≥ 4.5:1 against the shell, from a colour INSIDE the look: Joey 2026-08-30)
+     feet        Foot            (TPU, always PolyFlex TPU95 Black: the feet's material, never a look's colour, and not counted
+                                  against the cap; Joey, 2026-10-21)
      hardware    Magnet, Screw   (bought, never printed, never counted: Panchroma Silk Silver, as the presets have it)
 
    Every candidate carries ONE ACCENT COLOUR from the style's accents, on more or fewer parts: the three candidates of a
@@ -24,7 +26,7 @@
      quiet      the accent colour on the Accent part and the grip accent only; the face a neutral other than the shell
      balanced   the accent colour on the face (the side-cover face and the grip with it); the Accent part another colour
      bold       the accent colour on the face, the handle, the small parts and the drawer body as well
-   THE CAP is the distinct filaments over every role but hardware (the build's own count, decision D2, can only be lower)
+   THE CAP is the distinct filaments over every role but feet and hardware (the build's own count, decision D2, can only be lower)
    and a ceiling: a look fills it when the pool allows and takes fewer colours when it does not. Two filaments in one look
    must read as different colours (CIEDE2000 ≥ 10). Translucent filaments are never picked: a look card renders one as a
    solid tint (STEP2-GATE.md). A LOCK (a role fixed to a filament) wins over the style and over the owned list: it is the
@@ -40,7 +42,7 @@ import { STYLES, styleById } from './styles.js';
 import { colourWord, cap as capWord } from './words.js';
 
 export const ROLE_KEYS = {
-  shell: ['Case', 'CaseExtender', 'SideCover', 'ShelfLip', 'CoverL', 'CoverU', 'FootrailL', 'FootrailU', 'Foot', 'Rail', 'Bracket', 'BackCover'],
+  shell: ['Case', 'CaseExtender', 'SideCover', 'ShelfLip', 'CoverL', 'CoverU', 'FootrailL', 'FootrailU', 'Rail', 'Bracket', 'BackCover'],
   drawer: ['Drawer'],
   face: ['Faceplate', 'Faceplate:FACE', 'Faceplate:GRIP', 'SideCover:FACE'],
   gripAccent: ['Faceplate:GRIP ACCENT'],
@@ -50,6 +52,7 @@ export const ROLE_KEYS = {
   text: ['Label:TEXT'],
   small: ['QuickLock', 'MagnetClip', 'Stopper'],
   deck: ['ShelfInsert'],
+  feet: ['Foot'],
   hardware: ['Magnet', 'Screw'],
 };
 export const PALETTE_KEYS = Object.values(ROLE_KEYS).flat();   // the 28 keys every preset sets
@@ -62,6 +65,7 @@ export const SLOTS = ['quiet', 'balanced', 'bold'];
    interpretations is asserted on these numbers in test/surprise.test.mjs, so a weight that stops separating them fails there */
 export const AREA = { shell: 0.44, face: 0.24, deck: 0.06, drawer: 0.06, handle: 0.05, accent: 0.05, label: 0.05, small: 0.03, gripAccent: 0.02, text: 0, hardware: 0 };
 export const HARDWARE = 'Panchroma Silk Silver';
+export const FEET = 'Polymaker PolyFlex TPU95 Black';   // the stage's FEET_TPU (main.js)
 const MIN_CONTRAST = 4.5;   // the deck against the shell, the label text against the label (test/presets.test.mjs)
 const MIN_DE = 10;          // two filaments of one look must read as two colours
 const ATTEMPTS = 160;       // per interpretation
@@ -79,7 +83,7 @@ export function catalog(db = FILAMENT_DB) {
   const list = [];
   for (const b of db) for (const c of b.colors) {
     const [L, C, h] = lch(c.hex);
-    list.push({ i: list.length, name: c.label, hex: c.hex, url: c.url, L, C, h, lab: hexToLab(c.hex), silk: /Silk/.test(b.line), translucent: !!c.translucent, cls: C < 10 ? 'neutral' : C < 25 ? 'muted' : C < 45 ? 'mid' : 'vivid' });
+    list.push({ i: list.length, name: c.label, hex: c.hex, url: c.url, L, C, h, lab: hexToLab(c.hex), silk: /Silk/.test(b.line), tpu: /TPU/.test(b.line), translucent: !!c.translucent, cls: C < 10 ? 'neutral' : C < 25 ? 'muted' : C < 45 ? 'mid' : 'vivid' });
   }
   const n = list.length, de = new Float32Array(n * n);
   for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) de[a * n + b] = de[b * n + a] = deltaE00(list[a].lab, list[b].lab);
@@ -148,15 +152,15 @@ function rollSlot(cat, style, slot, k, pool, fixed, like, rng) {
   return { r, A };
 }
 const fil = (c) => ({ name: c.name, hex: c.hex, url: c.url });
-function writeOut(r, hardware) {
+function writeOut(r, hardware, feet) {
   const colors = {};
-  for (const [role, keys] of Object.entries(ROLE_KEYS)) for (const k of keys) colors[k] = fil(role === 'hardware' ? hardware : r[role]);
+  for (const [role, keys] of Object.entries(ROLE_KEYS)) for (const k of keys) colors[k] = fil(role === 'hardware' ? hardware : role === 'feet' ? feet : r[role]);
   return colors;
 }
 /* the share of the visible area carrying a colour, by the role weights */
 export const areaOf = (roles, name) => +Object.entries(roles).reduce((s, [role, c]) => s + ((c.name || c) === name ? AREA[role] || 0 : 0), 0).toFixed(3);
 /* a filament's short name (the brand and line dropped, the finish kept): the tooltip and the toast; titles use colour words */
-export const shortName = (name) => String(name).replace(/^(Panchroma|Polymaker PETG|Printed Solid|Elegoo PLA|Elegoo PETG|ERYONE) /, '');
+export const shortName = (name) => String(name).replace(/^(Panchroma|Polymaker PETG|Polymaker|Printed Solid|Elegoo PLA|Elegoo PETG|ERYONE) /, '');
 /* "<the two colours with the most visible area>", as colour words (Astra: "Sand & charcoal"; "derive titles from the prominent
    visible colours - including locked colours"); a quiet look names its touch of accent; a bold one puts the accent first */
 function nameOf(r, A, slot) {
@@ -190,7 +194,8 @@ export function checkLook(colors, { cap = 4, owned = null, locks = {}, db = FILA
   if (contrast(c('ShelfInsert').hex, c('Case').hex) < MIN_CONTRAST) p.push('the deck is under 4.5:1 against the case');
   if (!PALETTE_KEYS.some((k) => k !== 'ShelfInsert' && c(k).name === c('ShelfInsert').name)) p.push('the deck colour is used by no other part');
   if (contrast(c('Label:TEXT').hex, c('Label').hex) < MIN_CONTRAST) p.push('the label text is under 4.5:1 against the label');
-  const printed = new Set(PALETTE_KEYS.filter((k) => !ROLE_KEYS.hardware.includes(k)).map((k) => c(k).name));
+  if (!cat.byName.get(c('Foot').name).tpu) p.push('the feet are not TPU');
+  const printed = new Set(PALETTE_KEYS.filter((k) => !ROLE_KEYS.hardware.includes(k) && !ROLE_KEYS.feet.includes(k)).map((k) => c(k).name));
   if (printed.size > cap) p.push(`${printed.size} filaments, the cap is ${cap}`);
   const lockedNames = new Set(Object.values(locks).map((f) => f.name));
   if (owned) for (const n of printed) if (!owned.has(n) && !lockedNames.has(n)) p.push(`${n} is not owned`);
@@ -213,8 +218,9 @@ export function surprise({ style = 'workshop', cap = 3, owned = null, locks = {}
   const fixed = {};
   for (const [role, f] of Object.entries(locks)) { const c = f && cat.byName.get(f.name); if (c && ROLE_KEYS[role]) fixed[role] = c; }
   const ownedSet = owned ? new Set(owned) : null;
-  const pool = cat.list.filter((c) => !c.translucent && (!ownedSet || ownedSet.has(c.name)));
+  const pool = cat.list.filter((c) => !c.translucent && !c.tpu && (!ownedSet || ownedSet.has(c.name)));   // TPU is the feet's alone
   const hardware = cat.byName.get(HARDWARE) || cat.list[0];
+  const feet = cat.byName.get(FEET) || cat.list[0];
   const looks = []; const seen = new Set();
   let tried = 0, lastShare = -1;
   const slots = like && like.slot ? [like.slot, like.slot, like.slot] : SLOTS.slice(0, count);
@@ -225,7 +231,7 @@ export function surprise({ style = 'workshop', cap = 3, owned = null, locks = {}
       for (let k = cap; k >= 2 && !out; k--) out = rollSlot(cat, st, slot, k, pool, fixed, like, rng);   // the cap is a ceiling
       if (!out) continue;
       const { r, A } = out;
-      const colors = writeOut(r, hardware);
+      const colors = writeOut(r, hardware, feet);
       const sig = Object.values(r).map((c) => c.name).join('|');   // the same combination never twice
       // "more like this": other shells than the candidate's own and than each other's (Sol 01a15101: the source shell came back)
       if (seen.has(sig) || (like && (colors.Case.name === like.notShell || looks.some((l) => l.colors.Case.name === colors.Case.name)))) continue;

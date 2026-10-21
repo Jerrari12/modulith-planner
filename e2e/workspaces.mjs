@@ -2077,7 +2077,10 @@ test('Colors step 5: Surprise me draws three candidates of this build, a hovered
   });
   assert.equal(new Set(first.names).size, 3, `three candidates, named apart: ${first.names.join(' / ')}`);
   assert.ok(first.style === 'workshop' && first.tile === 'Workshop classic' && first.tiles === 15, `five style tiles with three swatches each, Workshop classic on (${first.tile}, ${first.tiles})`);
-  assert.ok(first.counts.every((c) => c >= 1 && c <= first.cap), `every candidate within the cap of ${first.cap} on this build (${first.counts.join(', ')})`);
+  // the feet's TPU is on top of the cap (2026-10-21): a card's count is every spool this build prints in, so one more where it has printed feet
+  const feetX = await page.evaluate(() => (window.__GEN2_VIEWER__.keysInBuild().some((k) => k.key === 'Foot') ? 1 : 0));
+  assert.ok(first.counts.every((c) => c >= 1 && c <= first.cap + feetX), `every candidate within the cap of ${first.cap} (+${feetX} TPU feet) on this build (${first.counts.join(', ')})`);
+  if (feetX) assert.match(await text(page, '#ws-surprise .note.feetcap'), /The feet print in TPU95 Black in every look, on top of the cap/, 'and the panel says so');
   assert.deepEqual(first.stray, [], 'no stray text in the panel');
   assert.ok(first.galleryHidden, 'the panel takes the gallery\'s spot; the gallery is closed');
   assert.equal(first.safe, before.safe, 'opening the panel leaves the safe area alone');
@@ -2104,8 +2107,8 @@ test('Colors step 5: Surprise me draws three candidates of this build, a hovered
   await page.locator('#ws-surprise .cap .seg').nth(0).click();
   const drawnAll = () => page.waitForFunction(() => { const c = document.querySelectorAll('#ws-surprise .cand canvas'); return c.length >= 1 && [...c].every((x) => x.classList.contains('drawn')); }, null, { timeout: 30_000 });
   await drawnAll();
-  const capped = await page.evaluate(() => ({ counts: [...document.querySelectorAll('#ws-surprise .cand .lcount')].map((x) => +x.textContent.split(' ')[0]), whole: window.__GEN2_SURPRISE__.cands.map((c) => new Set(Object.entries(c.colors).filter(([k]) => k !== 'Magnet' && k !== 'Screw').map(([, f]) => f.name)).size), slots: window.__GEN2_SURPRISE__.cands.map((c) => c.slot), note: document.querySelector('#ws-surprise .short')?.textContent || null }));
-  assert.ok(capped.counts.every((c) => c <= 2) && capped.whole.every((w) => w <= 2), `the cap of 2 holds on the build (${capped.counts.join(', ')}) and over the whole look (${capped.whole.join(', ')})`);
+  const capped = await page.evaluate(() => ({ counts: [...document.querySelectorAll('#ws-surprise .cand .lcount')].map((x) => +x.textContent.split(' ')[0]), whole: window.__GEN2_SURPRISE__.cands.map((c) => new Set(Object.entries(c.colors).filter(([k]) => k !== 'Magnet' && k !== 'Screw' && k !== 'Foot').map(([, f]) => f.name)).size), slots: window.__GEN2_SURPRISE__.cands.map((c) => c.slot), note: document.querySelector('#ws-surprise .short')?.textContent || null }));
+  assert.ok(capped.counts.every((c) => c <= 2 + feetX) && capped.whole.every((w) => w <= 2), `the cap of 2 holds on the build (${capped.counts.join(', ')}, +${feetX} TPU feet) and over the whole look, feet aside (${capped.whole.join(', ')})`);
   assert.deepEqual(capped.slots, ['balanced', 'bold'], 'two interpretations at a cap of 2');
   assert.match(capped.note || '', /Only 2 looks fit/, 'and the note says so');
   // a lock on the case: every candidate keeps the case the build wears
@@ -2154,8 +2157,8 @@ test('Colors step 5 on the phone: Surprise me is a sheet of its own; the owned l
   await page.waitForSelector('#ws-surprise .ownedonly:not([disabled])', { timeout: 15_000 });
   await page.locator('#ws-surprise .ownedonly').click();
   await page.waitForFunction(() => { const sp = window.__GEN2_SURPRISE__; return sp.ownedOnly && sp.cands.length && [...document.querySelectorAll('#ws-surprise .cand canvas')].every((c) => c.classList.contains('drawn')); }, null, { timeout: 30_000 });
-  const owned = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || have.has(f.name))), n: sp.cands.length, short: sp.short, note: document.querySelector('#ws-surprise .short')?.textContent || null }; });
-  assert.ok(owned.within, 'every candidate prints only in owned filaments');
+  const owned = await page.evaluate(() => { const sp = window.__GEN2_SURPRISE__; const have = new Set(JSON.parse(localStorage.getItem('gen2-owned')).labels); return { within: sp.cands.every((c) => Object.entries(c.colors).every(([k, f]) => k === 'Magnet' || k === 'Screw' || k === 'Foot' || have.has(f.name))), n: sp.cands.length, short: sp.short, note: document.querySelector('#ws-surprise .short')?.textContent || null }; });
+  assert.ok(owned.within, 'every candidate prints only in owned filaments, the feet’s TPU aside');
   assert.ok(!owned.short || /fit these settings/.test(owned.note), `fewer than three is said, never hidden (${owned.n}: ${owned.note})`);
   // the list shrinks under the switch and the editor is left by its close button, not Back: the candidates are rolled again
   // inside the new list when the panel reopens (Sol 01a150df: Escape and close skipped the re-roll, so Keep could apply a
@@ -2207,43 +2210,43 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
   await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.applyPreset(v.PRESETS[0], { quiet: true }); window.__GEN2_STORE__.commit(() => {}, 'preset'); window.__GEN2_STORE__.flush(); });
   await settle(page, 400);
   const before = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), count: window.__GEN2_VIEWER__.filamentsInBuild().count, canUndo: window.__GEN2_STORE__.canUndo }));
-  assert.equal(before.count, 4, 'the control: The Jerrari prints in four on the root kit');
+  assert.equal(before.count, 5, 'the control: The Jerrari prints in five on the root kit (its four and the feet’s TPU, 2026-10-21)');
   await page.locator('#ws-colors .summary .simplify').click();
   await page.waitForSelector('#ws-simplify .chg', { timeout: 30_000 });
   const opened = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const s = document.querySelector('#ws-simplify'); return { targets: [...s.querySelectorAll('.tgt .seg')].map((b) => b.textContent), on: s.querySelector('.tgt .seg.on').textContent, rows: [...s.querySelectorAll('.chg .what')].map((x) => x.textContent), apply: s.querySelector('.apply').textContent, previewing: v.previewing, gripAccentHex: v.activeHex('Faceplate:GRIP ACCENT'), palette: JSON.stringify(v.palette().colors), cam: JSON.stringify(v.camera.position.toArray()), safe: JSON.stringify(v.safeArea), canUndo: window.__GEN2_STORE__.canUndo, trayHidden: document.querySelector('#ws-tray').hidden, galleryHidden: document.querySelector('#ws-gallery').hidden }; });
-  assert.deepEqual(opened.targets, ['3 filaments', '2 filaments']); assert.equal(opened.on, '3 filaments');
+  assert.deepEqual(opened.targets, ['4 filaments', '3 filaments', '2 filaments']); assert.equal(opened.on, '4 filaments');
   assert.equal(opened.rows.length, 1); assert.match(opened.rows[0], /^Grip accents: Silk Silver → /, 'the least visible filament (the grip accent alone) is the one to go');
   assert.ok(opened.previewing && opened.gripAccentHex.toLowerCase() !== '#cdd2d9', 'the model shows the proposal: the grip accent is no longer silk silver');
   assert.equal(opened.palette, before.palette, 'nothing is chosen'); assert.equal(opened.canUndo, before.canUndo, 'nothing in the history');
   assert.equal(opened.cam, before.cam, 'the camera stays'); assert.equal(opened.safe, before.safe, 'the safe area stays');
   assert.ok(opened.trayHidden && opened.galleryHidden);
-  // down to two: the rows read original → final, one per filament
-  await page.locator('#ws-simplify .tgt .seg', { hasText: '2 filaments' }).click();
+  // down to three (two merges; the feet's TPU merges with nothing): the rows read original → final, one per filament
+  await page.locator('#ws-simplify .tgt .seg', { hasText: '3 filaments' }).click();
   await settle(page, 300);
   const two = await page.evaluate(() => ({ rows: [...document.querySelectorAll('#ws-simplify .chg .what')].map((x) => x.textContent), apply: document.querySelector('#ws-simplify .apply').textContent }));
   assert.equal(two.rows.length, 2, `two rows for two filaments merged (${two.rows.join(' | ')})`);
   assert.ok(two.rows.every((r) => !/→ .*→/.test(r)), 'no chained arrow: each row is original → final');
-  assert.equal(two.apply, 'Apply · 2 filaments');
+  assert.equal(two.apply, 'Apply · 3 filaments');
   // Cancel: nothing kept
   await page.locator('#ws-simplify .cancel').click();
   await settle(page, 300);
   const cancelled = await page.evaluate(() => ({ hidden: document.querySelector('#ws-simplify').hidden, previewing: window.__GEN2_VIEWER__.previewing, palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), canUndo: window.__GEN2_STORE__.canUndo, count: window.__GEN2_VIEWER__.filamentsInBuild().count }));
-  assert.ok(cancelled.hidden && !cancelled.previewing && cancelled.palette === before.palette && cancelled.canUndo === before.canUndo && cancelled.count === 4, JSON.stringify(cancelled));
-  // Apply at the default target: one undo step, the Dock drops to three, the panel reads "The Jerrari · edited"
+  assert.ok(cancelled.hidden && !cancelled.previewing && cancelled.palette === before.palette && cancelled.canUndo === before.canUndo && cancelled.count === 5, JSON.stringify(cancelled));
+  // Apply at the default target: one undo step, the Dock drops to four, the panel reads "The Jerrari · edited"
   await page.locator('#ws-colors .summary .simplify').click();
   await page.waitForSelector('#ws-simplify .apply', { timeout: 30_000 });
   await page.locator('#ws-simplify .apply').click();
   await settle(page, 600);
   const applied = await page.evaluate(() => ({ hidden: document.querySelector('#ws-simplify').hidden, previewing: window.__GEN2_VIEWER__.previewing, count: window.__GEN2_VIEWER__.filamentsInBuild().count, dock: document.querySelector('#ws-dock .status').textContent, lname: document.querySelector('#ws-colors .lname').textContent, summary: document.querySelector('#ws-colors .summary .sline').textContent, cam: JSON.stringify(window.__GEN2_VIEWER__.camera.position.toArray()), safe: JSON.stringify(window.__GEN2_VIEWER__.safeArea), presetEvents: window.__GEN2_VIEWER__.trackLog.filter((n) => /^preset:/.test(n)) }));
   assert.ok(applied.hidden && !applied.previewing, 'the panel closes and the preview ends');
-  assert.equal(applied.count, 3); assert.match(applied.dock, /^3 filaments/); assert.match(applied.summary, /^3 filaments used/);
+  assert.equal(applied.count, 4); assert.match(applied.dock, /^4 filaments/); assert.match(applied.summary, /^4 filaments used/);
   assert.equal(applied.lname, 'The Jerrari · edited');
   assert.equal(applied.cam, before.cam); assert.equal(applied.safe, before.safe);
   assert.deepEqual(applied.presetEvents, [], 'Simplify sends no preset event');
   await page.keyboard.press('Control+Z');
   await settle(page, 500);
   const undone = await page.evaluate(() => ({ palette: JSON.stringify(window.__GEN2_VIEWER__.palette().colors), count: window.__GEN2_VIEWER__.filamentsInBuild().count, lname: document.querySelector('#ws-colors .lname').textContent }));
-  assert.equal(undone.palette, before.palette, 'one Undo restores the look'); assert.equal(undone.count, 4); assert.equal(undone.lname, 'The Jerrari');
+  assert.equal(undone.palette, before.palette, 'one Undo restores the look'); assert.equal(undone.count, 5); assert.equal(undone.lname, 'The Jerrari');
   // Review filaments opens the shopping list with the suitability note; Keep this look opens Save with the name field
   await page.locator('#ws-colors .summary .review').click();
   await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 15_000 });
@@ -2267,7 +2270,7 @@ test('Colors step 6 on the phone: Simplify is a sheet of its own; Apply closes i
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.previewing), true, 'the proposal is shown on the phone too');
   await page.locator('#ws-simplify .apply').click();
   await page.waitForFunction(() => document.querySelector('#ws-simplify').hidden && document.querySelector('#ws-colors').classList.contains('open') && !window.__GEN2_VIEWER__.previewing, null, { timeout: 30_000 });
-  assert.match(await text(page, '#ws-dock .status'), /^3 filaments/);
+  assert.match(await text(page, '#ws-dock .status'), /^4 filaments/);   // five with the feet's TPU (2026-10-21), one merged
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.canUndo), true);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
@@ -2870,6 +2873,55 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 })
     .catch(() => assert.fail('Close it did not bring the drawer back'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE FEET ARE TPU (Joey, 2026-10-21: "when selecting the feet, i feel like we should only list TPU filaments as an option ...
+   default for feet should always be TPU black"; "maybe we need to make PETG and PLA and TPU, like colored tags in the menu").
+   The stage keeps a palette's feet TPU (main.js tpuFeet): the boot preset, a whole palette or a saved one that names PLA
+   feet, a reset; a unit's own PLA pick for its feet is refused. The feet's picker lists only the TPU lines and every other
+   picker none; each line's header carries its material tag. */
+test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and on reset; a TPU-only feet picker; material tags on every line', async () => {
+  const { ctx, page, errors } = await open('colors');
+  const TPU_BLACK = 'Polymaker PolyFlex TPU95 Black';
+  const feet = () => page.evaluate(() => (window.__GEN2_VIEWER__.palette().colors.Foot || {}).name);
+  assert.equal(await feet(), TPU_BLACK, 'the boot preset dresses the feet in TPU95 Black');
+  const heads = () => page.evaluate(() => [...document.querySelectorAll('#ws-picker .bhead.toggle')].map((h) => [h.querySelector('i').textContent.trim().split(' ·')[0], [...h.querySelectorAll('.mat')].map((m) => m.textContent)]));
+  // a case picker: a tag on every line, no TPU anywhere
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  const caseHeads = await heads();
+  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'every line but TPU, each tagged');
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
+  // the feet's picker: the note, the two TPU lines tagged TPU, nothing else
+  await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Foot$/ }) }).first().click();
+  await page.waitForFunction(() => /only TPU is listed/.test(document.getElementById('ws-picker')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('the feet picker did not open with its note'));
+  assert.deepEqual(await heads(), [['PolyFlex™ TPU95', ['TPU']], ['PolyFlex™ TPU90', ['TPU']]]);
+  const sws = await page.evaluate(() => [...document.querySelectorAll('#ws-picker .brands .sw')].map((e) => e.getAttribute('aria-label')));
+  assert.ok(sws.length === 11 && sws.every((n) => / TPU9/.test(n)), `only TPU swatches (In this build + 10): ${sws}`);
+  // TPU95 Orange, then the reset: TPU95 Black
+  await page.locator('#ws-picker .brands .sw[aria-label="Polymaker PolyFlex TPU95 Orange"]').first().click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.palette().colors.Foot.name === 'Polymaker PolyFlex TPU95 Orange', null, { timeout: 15_000 });
+  await page.locator('#ws-picker button:has-text("Reset to TPU95 Black")').click();
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.palette().colors.Foot.name === n, TPU_BLACK, { timeout: 15_000 }).catch(() => assert.fail('the reset did not give TPU95 Black'));
+  // the stage refuses PLA on the feet: a whole palette naming PLA feet, and a unit's own PLA pick
+  const r = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__; const p = v.palette();
+    v.setPalette({ on: true, colors: { ...p.colors, Foot: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, over: {} });
+    const whole = v.palette().colors.Foot.name;
+    v.setOverride(1, 'Foot', { name: 'Panchroma Red', hex: '#d03a2e' });
+    return { whole, over: JSON.stringify(v.palette().over) };
+  });
+  assert.equal(r.whole, TPU_BLACK, 'a palette naming PLA feet wears TPU95 Black');
+  assert.doesNotMatch(r.over, /Panchroma Red/, 'a unit’s own PLA feet pick is refused');
+  // a saved palette naming PLA feet (an old one): the reload wears TPU95 Black
+  const key = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith('gen2-colors:') && /PolyFlex TPU95 Black/.test(localStorage.getItem(k))));
+  assert.ok(key, 'the palette is saved');
+  await page.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k)); s.colors.Foot = { name: 'Elegoo PLA Black', hex: '#1c1d20' }; localStorage.setItem(k, JSON.stringify(s)); }, key);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#ws-colors .crow', { timeout: 120_000 });
+  assert.equal(await feet(), TPU_BLACK, 'the saved PLA feet load as TPU95 Black');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

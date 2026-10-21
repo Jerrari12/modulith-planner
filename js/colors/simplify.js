@@ -23,6 +23,7 @@ const MIN_CONTRAST = 4.5;
 const roleOf = (() => { const m = new Map(); for (const [role, keys] of Object.entries(ROLE_KEYS)) for (const k of keys) m.set(k, role); return (key) => m.get(key) || null; })();
 const HARDWARE = new Set(ROLE_KEYS.hardware);
 const bodyOf = (key) => key.split(':')[0];
+const onFeet = (key) => bodyOf(key.includes('@') ? key.split('@')[1] : key) === 'Foot';   // a worn key, a unit's own included
 const same = (a, b) => !!a && !!b && a.name === b.name;
 
 /* the look as the build wears it: key -> filament for every printed key the build has (a zone with no pick follows its
@@ -78,7 +79,7 @@ export function filamentsOf(w) {
 }
 /* every entry of the palette wearing `from` takes `to`: the WHOLE look, keys the build lacks included, so a part added
    later still matches it (decision D3); the bought hardware's entries alone stay as they are (never printed) */
-const mapTo = (colors, from, to) => Object.fromEntries(Object.entries(colors).map(([k, f]) => [k, f && f.name === from && !HARDWARE.has(k) ? { name: to.name, hex: to.hex, url: to.url } : f]));
+const mapTo = (colors, from, to) => Object.fromEntries(Object.entries(colors).map(([k, f]) => [k, f && f.name === from && !HARDWARE.has(k) && bodyOf(k) !== 'Foot' ? { name: to.name, hex: to.hex, url: to.url } : f]));
 
 export function simplify({ colors = {}, over = {}, keys = [], target = 2 } = {}) {
   let cur = { ...colors }, curOver = Object.fromEntries(Object.entries(over || {}).map(([u, o]) => [u, { ...o }]));
@@ -93,7 +94,8 @@ export function simplify({ colors = {}, over = {}, keys = [], target = 2 } = {})
     const had = new Set(problemsAll(w));
     let step = null;
     for (const from of fils) {   // the least visible first
-      const others = fils.filter((x) => x.name !== from.name).sort((a, b) => dE(a.hex, from.hex) - dE(b.hex, from.hex));   // the closest colour first
+      if (from.keys.some(onFeet)) continue;   // the feet's TPU merges with nothing, and nothing merges into it (Joey, 2026-10-21)
+      const others = fils.filter((x) => x.name !== from.name && !x.keys.some(onFeet)).sort((a, b) => dE(a.hex, from.hex) - dE(b.hex, from.hex));   // the closest colour first
       for (const to of others) {
         const next = mapTo(cur, from.name, to);
         const nextOver = Object.fromEntries(Object.entries(curOver).map(([u, o]) => [u, mapTo(o, from.name, to)]));
@@ -113,10 +115,11 @@ export function simplify({ colors = {}, over = {}, keys = [], target = 2 } = {})
 
 /* the summary groups, in the order the line reads them */
 export const SUMMARY = [
-  ['Case', ['Case', 'CaseExtender', 'SideCover', 'ShelfLip', 'CoverL', 'CoverU', 'FootrailL', 'FootrailU', 'Foot', 'Rail', 'Bracket', 'BackCover']],
+  ['Case', ['Case', 'CaseExtender', 'SideCover', 'ShelfLip', 'CoverL', 'CoverU', 'FootrailL', 'FootrailU', 'Rail', 'Bracket', 'BackCover']],
   // the visible, recognisable surfaces first (Astra, 2026-10-19: fronts, grips, then the faceplate bodies)
   ['drawers', ['Drawer']], ['fronts', ['Faceplate:FACE', 'SideCover:FACE']], ['grips', ['Faceplate:GRIP']], ['grip accents', ['Faceplate:GRIP ACCENT']], ['faceplate bodies', ['Faceplate']],
   ['accents', ['Accent']], ['handles', ['Handle']], ['labels', ['Label']], ['label text', ['Label:TEXT']], ['deck', ['ShelfInsert']], ['small parts', ['QuickLock', 'MagnetClip', 'Stopper']],
+  ['feet', ['Foot']],   // TPU, their own filament always (Joey, 2026-10-21)
 ];
 /* a key's own word, for a group whose keys wear more than one filament (Sol 01a151f0: "Case: Black" hid orange feet) */
 const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side covers', ShelfLip: 'lips', CoverL: 'covers', CoverU: 'covers', FootrailL: 'foot rails', FootrailU: 'foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'brackets', BackCover: 'back covers', 'Faceplate:FACE': 'fronts', Faceplate: 'faceplate bodies', 'SideCover:FACE': 'side-cover faces', QuickLock: 'QuickLocks', MagnetClip: 'magnet clips', Stopper: 'stoppers' };

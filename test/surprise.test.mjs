@@ -10,13 +10,14 @@ import { FILAMENT_DB } from '../js/filament-db.js';
 import { surprise, checkLook, catalog, PALETTE_KEYS, ROLE_KEYS, CAPS, SLOTS, AREA, HARDWARE, areaOf } from '../js/colors/surprise.js';
 import { STYLES } from '../js/colors/styles.js';
 
-const BY_LABEL = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, { ...c, silk: /Silk/.test(b.line) }])));
+const BY_LABEL = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, { ...c, silk: /Silk/.test(b.line), tpu: /TPU/.test(b.line) }])));
 /* the presets test's own contrast formula, copied, not imported: this file must not lean on the module under test */
 const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const contrast = (a, b) => { const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
 const PRESET_KEYS = ['Case', 'Drawer', 'CoverL', 'CoverU', 'Bracket', 'FootrailL', 'FootrailU', 'Foot', 'Rail', 'CaseExtender', 'ShelfInsert', 'ShelfLip', 'SideCover', 'SideCover:FACE', 'Faceplate', 'Faceplate:FACE', 'Faceplate:GRIP', 'Faceplate:GRIP ACCENT', 'Accent', 'Label', 'Label:TEXT', 'BackCover', 'Handle', 'QuickLock', 'MagnetClip', 'Stopper', 'Magnet', 'Screw'];
 const HARDWARE_KEYS = ['Magnet', 'Screw'];
-const printedNames = (look) => new Set(PRESET_KEYS.filter((k) => !HARDWARE_KEYS.includes(k)).map((k) => look.colors[k].name));
+const FEET_KEYS = ['Foot'];   // TPU, the feet's own filament, outside the look and its cap (Joey, 2026-10-21)
+const printedNames = (look) => new Set(PRESET_KEYS.filter((k) => !HARDWARE_KEYS.includes(k) && !FEET_KEYS.includes(k)).map((k) => look.colors[k].name));
 
 /* the rules, as test/presets.test.mjs states them, plus this step's own (the cap, the owned list, no translucent, the
    covers and foot rails in pairs, the label text legible) */
@@ -38,6 +39,7 @@ function problems(look, { cap, owned }) {
   if (c.Accent.name === c['Faceplate:FACE'].name) p.push('accent = face');
   if (c.CoverL.name !== c.CoverU.name) p.push('covers differ');
   if (c.FootrailL.name !== c.FootrailU.name) p.push('foot rails differ');
+  if (!BY_LABEL.get(c.Foot.name).tpu) p.push('the feet are not TPU');
   if (contrast(c.ShelfInsert.hex, c.Case.hex) < 4.5) p.push(`deck ${contrast(c.ShelfInsert.hex, c.Case.hex).toFixed(2)}:1`);
   if (!PRESET_KEYS.some((k) => k !== 'ShelfInsert' && c[k].name === c.ShelfInsert.name)) p.push('deck from outside the look');
   if (contrast(c['Label:TEXT'].hex, c.Label.hex) < 4.5) p.push('label text illegible');
@@ -191,5 +193,6 @@ test('"more like this" keeps the accent colour and the interpretation on other s
 test('the hardware is the presets\' silk silver; a look reports its accent and share', () => {
   const l = surprise({ style: 'retro', cap: 3, seed: 3 }).looks[0];
   assert.equal(l.colors.Magnet.name, HARDWARE); assert.equal(l.colors.Screw.name, HARDWARE);
+  assert.equal(l.colors.Foot.name, 'Polymaker PolyFlex TPU95 Black', 'the feet are TPU95 Black in every look');
   assert.ok(BY_LABEL.has(l.accent) && l.share === areaOf(l.roles, l.accent));
 });

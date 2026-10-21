@@ -145,6 +145,14 @@ const LABELS = new Set(FILAMENT_DB.flatMap((b) => b.colors.map((c) => c.label)))
    help differentiate it from regular material"): a swatch whose filament is a silk one wears `.silk`, drawn in app.css as a
    highlight over its upper-left half. Every silk filament's label carries the word ("Panchroma Silk Gold"). */
 const silk = (name) => (String(name || '').split(' ').includes('Silk') ? '.silk' : '');
+/* MATERIAL TAGS AND THE FEET (Joey, 2026-10-21: "maybe we need to make PETG and PLA and TPU, like colored tags in the menu to
+   help differentiate the material types more"; "when selecting the feet, i feel like we should only list TPU filaments").
+   A line's materials come from its name (the Elegoo line sells PLA and PETG); the TPU lines are the feet's alone, so the
+   feet's picker lists only them and every other picker none of them (the stage keeps the feet TPU: main.js tpuFeet). */
+const materialsOf = (b) => (/TPU/.test(b.line) ? ['TPU'] : [/PLA/.test(b.line) && 'PLA', /PETG/.test(b.line) && 'PETG'].filter(Boolean));
+const matTags = (b) => el('span.mats', {}, materialsOf(b).map((m) => el('span.mat.' + m.toLowerCase(), { text: m, title: m === 'TPU' ? 'TPU: flexible, for the feet' : m })));
+const TPU_LABELS = new Set(FILAMENT_DB.filter((b) => /TPU/.test(b.line)).flatMap((b) => b.colors.map((c) => c.label)));
+const isFeet = (key) => String(key || '').split(':')[0] === 'Foot';
 const storage = () => { try { return localStorage; } catch { return null; } };   // a browser that blocks storage throws on the read itself
 
 export function mountColors(stage, ctx) {
@@ -542,6 +550,9 @@ export function mountColors(stage, ctx) {
         ]),
         el('button.key.sm.edit', { title: 'Tick the filaments you have', onclick: enterOwned }, [icon('pencil-simple', { size: 14 }), 'Edit']),
       ]),
+      // the feet's TPU is every look's, outside the cap and the owned list (surprise.js ROLE_KEYS.feet): a card's count, the
+      // one count (D2), is every spool this build prints in, so it can read one above the cap (Joey, 2026-10-21)
+      ...(have.has('Foot') ? [el('p.note.feetcap', { text: 'The feet print in TPU95 Black in every look, on top of the cap and the filaments you own.' })] : []),
       // locks: the regions that drive a look and that this build has, each holding the filament it wears now
       el('div.locks', {}, [el('span.lbl', { text: 'Keep these colours', title: 'Hold a region at the filament it wears now; every look keeps it' }), el('div.chips', {}, LOCKS.filter(([key]) => have.has(key)).map(([key, role, label]) => {
         const held = sp.locks[role]; const cur = worn(key) || (key.includes(':') ? worn(key.split(':')[0]) : null); const f = held || cur;
@@ -594,7 +605,7 @@ export function mountColors(stage, ctx) {
         if (!colors.length) continue;
         any = true;
         const mine = brand.colors.filter((f) => have.has(f.label)).length;
-        brands.appendChild(el('div.bhead', {}, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${mine ? `${mine} of ${brand.colors.length}` : brand.colors.length}` })])]));
+        brands.appendChild(el('div.bhead', {}, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${mine ? `${mine} of ${brand.colors.length}` : brand.colors.length}` }), matTags(brand)])]));
         brands.appendChild(el('div.swatches', {}, colors.map((f) => { const on = have.has(f.label); return el('button.sw' + (on ? '.own' : '') + silk(f.label), { style: `background:${f.hex}`, title: f.label + (on ? ' · owned' : ''), 'aria-label': f.label, 'aria-pressed': String(on), onclick: () => { const cur = owned(); writeOwned(storage(), on ? cur.filter((x) => x !== f.label) : [...cur, f.label]); sync(); fill(); } }); })));
       }
       if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
@@ -663,6 +674,7 @@ export function mountColors(stage, ctx) {
       ]),
       st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? short(worn(key).name) : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
       el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
+      isFeet(key) ? el('p.note.feet', { text: 'Feet print in TPU, the flexible filament, so only TPU is listed. PolyFlex TPU95 Black is the default.' }) : null,
     ].filter(Boolean));   // append(null) writes the word "null" (it showed under the scope switch, 2026-10-17)
     const brands = el('div.brands');
     picker.appendChild(brands);
@@ -671,19 +683,20 @@ export function mountColors(stage, ctx) {
       const q2 = st.query.trim().toLowerCase();
       const p = pal();
       const seen = new Map(); for (const c of Object.values(p.colors)) if (c && c.name && c.hex && !seen.has(c.name)) seen.set(c.name, c);
-      const inBuild = [...seen.values()].filter((c) => !q2 || c.name.toLowerCase().includes(q2));
+      const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === isFeet(key));
       if (inBuild.length) {
         brands.appendChild(el('div.bhead', { text: 'In this build' }));
         brands.appendChild(el('div.swatches', {}, inBuild.map((c) => el('button.sw' + (w && w.name === c.name ? '.active' : '') + silk(c.name), { style: `background:${c.hex}`, title: `${c.name} · already in this build`, 'aria-label': c.name, onclick: () => pick(key, { label: c.name, hex: c.hex, url: c.url }) }))));
       }
       let any = inBuild.length > 0;
       for (const brand of FILAMENT_DB) {
+        if (/TPU/.test(brand.line) !== isFeet(key)) continue;   // TPU for the feet, and only for the feet
         const colors = q2 ? brand.colors.filter((f) => `${brand.brand} ${brand.line} ${f.label}`.toLowerCase().includes(q2)) : brand.colors;
         if (q2 && !colors.length) continue;
         any = true;
         const id = brand.brand + '|' + brand.line;
         const open = q2 ? true : st.expanded ? st.expanded.has(id) : true;
-        brands.appendChild(el('button.bhead.toggle', { 'aria-expanded': String(open), onclick: () => { if (!st.expanded) st.expanded = new Set(FILAMENT_DB.map((b) => b.brand + '|' + b.line)); st.expanded[st.expanded.has(id) ? 'delete' : 'add'](id); renderBrands(); } }, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${colors.length}` })]), el('span.chev', { text: open ? '▾' : '▸' })]));
+        brands.appendChild(el('button.bhead.toggle', { 'aria-expanded': String(open), onclick: () => { if (!st.expanded) st.expanded = new Set(FILAMENT_DB.map((b) => b.brand + '|' + b.line)); st.expanded[st.expanded.has(id) ? 'delete' : 'add'](id); renderBrands(); } }, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${colors.length}` }), matTags(brand)]), el('span.chev', { text: open ? '▾' : '▸' })]));
         if (open) brands.appendChild(el('div.swatches', {}, colors.map((f) => el('button.sw' + (w && w.name === f.label ? '.active' : '') + (f.pick ? '.pick' : '') + silk(f.label), { style: `background:${f.hex}`, title: f.label + (f.pick ? (f.pickNote || ' · ★ Used by Jerrari') : ''), 'aria-label': f.label, onclick: () => pick(key, f) }))));
       }
       if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
@@ -695,7 +708,7 @@ export function mountColors(stage, ctx) {
       el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
       el('div.resets', {}, st.scope === 'unit'
         ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]
-        : [el('button.key.sm', { text: 'Reset to instruction colour', title: `Every ${typePlural(key).replace(/s$/, '')} ${regionOf(key).toLowerCase()} back to the kit’s colour, own colours included`, disabled: !w && !own, onclick: () => commitColors('color', () => { stage.setColor(key, null); if (own) stage.clearOverrides(null, key); }) })]),
+        : [el('button.key.sm', { text: isFeet(key) ? 'Reset to TPU95 Black' : 'Reset to instruction colour', title: isFeet(key) ? 'Every foot back to PolyFlex TPU95 Black, own colours included' : `Every ${typePlural(key).replace(/s$/, '')} ${regionOf(key).toLowerCase()} back to the kit’s colour, own colours included`, disabled: isFeet(key) ? !!w && w.name === 'Polymaker PolyFlex TPU95 Black' && !own : !w && !own, onclick: () => commitColors('color', () => { stage.setColor(key, null); if (own) stage.clearOverrides(null, key); }) })]),
     ]));
   }
 

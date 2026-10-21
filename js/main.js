@@ -6791,6 +6791,23 @@ function _db(label) {
   console.warn(`[presets] no catalog colour labelled "${label}"`);
   return { name: label, hex: '#888a90', url: FILAMENT_DB[0].url };
 }
+/* FEET ARE TPU (Joey, 2026-10-21: "when selecting the feet, i feel like we should only list TPU filaments as an option ...
+   default for feet should always be TPU black"). The printed foot is the flexible part (the parts catalogue: "Printed in
+   TPU, or bought as adhesive rubber feet"), so whatever a palette says for 'Foot' - a preset, a look, a saved, linked or
+   uploaded palette, a reset - it wears a TPU filament, and PolyFlex TPU95 Black when it names none or another material.
+   A unit's own Foot pick that is not TPU is dropped. Up here, before PRESETS and the saved palette's load, which use it. */
+const FEET_TPU = 'Polymaker PolyFlex TPU95 Black';
+const TPU_LABELS = new Set(FILAMENT_DB.filter((b) => /TPU/.test(b.line)).flatMap((b) => b.colors.map((c) => c.label)));
+function tpuFeet(colors) {
+  if (!colors || typeof colors !== 'object') return colors;
+  if (!colors.Foot || !TPU_LABELS.has(colors.Foot.name)) colors.Foot = { ..._db(FEET_TPU) };
+  return colors;
+}
+function tpuFeetOver(over) {
+  if (!over || typeof over !== 'object') return over;
+  for (const u of Object.keys(over)) { const m = over[u]; if (m && m.Foot && !TPU_LABELS.has(m.Foot.name)) { delete m.Foot; if (!Object.keys(m).length) delete over[u]; } }
+  return over;
+}
 // The Classic faceplate's four zones, as one reusable block — Joey's
 // 2026-07-25 spec: black body, orange face + grip, silk-silver accent rod.
 const CLASSIC_FACE = {
@@ -6817,7 +6834,7 @@ const PRESETS = [
     Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
     CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
     Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
-    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db(FEET_TPU),
     Rail: _db('Elegoo PLA Black'),
     /* SHELF + EXTENDER COLOUR RULE (Joey 2026-08-30), applied to all four:
        - a case extender IS a case without the bottom, so it takes the CASE's
@@ -6848,7 +6865,7 @@ const PRESETS = [
     Case: _db('Panchroma Black'), Drawer: _db('Panchroma Dark Grey'),
     CoverL: _db('Panchroma Black'), CoverU: _db('Panchroma Black'),
     Bracket: _db('Panchroma Black'), FootrailL: _db('Panchroma Black'),
-    FootrailU: _db('Panchroma Black'), Foot: _db('Panchroma Black'),
+    FootrailU: _db('Panchroma Black'), Foot: _db(FEET_TPU),
     Rail: _db('Panchroma Black'), CaseExtender: _db('Panchroma Black'),
     // Silk Silver, not Cold White: Joey wants Stealth to stay stealthy
     // (9.29:1 against its black case - Steel Grey would drop to 2.89:1)
@@ -6869,7 +6886,7 @@ const PRESETS = [
     Case: _db('Panchroma Black'), Drawer: _db('Panchroma Red'),
     CoverL: _db('Panchroma Green'), CoverU: _db('Panchroma Green'),
     FootrailL: _db('Panchroma Blue'), FootrailU: _db('Panchroma Blue'),
-    Foot: _db('Panchroma Purple'), Rail: _db('Panchroma Blue'),
+    Foot: _db(FEET_TPU), Rail: _db('Panchroma Blue'),
     Bracket: _db('Panchroma Steel Grey'), CaseExtender: _db('Panchroma Black'),
     ShelfInsert: _db('Panchroma Yellow'), ShelfLip: _db('Panchroma Black'),
     SideCover: _db('Panchroma Black'), 'SideCover:FACE': _db('Panchroma Yellow'),
@@ -6886,7 +6903,7 @@ const PRESETS = [
     Case: _db('Panchroma Brown'), Drawer: _db('Panchroma Tan'),
     CoverL: _db('Panchroma Cream'), CoverU: _db('Panchroma Cream'),
     Bracket: _db('Panchroma Brown'), FootrailL: _db('Panchroma Brown'),
-    FootrailU: _db('Panchroma Brown'), Foot: _db('Panchroma Brown'),
+    FootrailU: _db('Panchroma Brown'), Foot: _db(FEET_TPU),
     Rail: _db('Panchroma Brown'), CaseExtender: _db('Panchroma Brown'),
     ShelfInsert: _db('Panchroma Cream'), ShelfLip: _db('Panchroma Brown'),
     SideCover: _db('Panchroma Brown'), 'SideCover:FACE': _db('Panchroma Brown'),
@@ -6917,7 +6934,7 @@ const PRESETS = [
     Case: _db('Panchroma Silk Silver'), Drawer: _db('Elegoo PLA Black'),
     CoverL: _db('Panchroma Silk Silver'), CoverU: _db('Panchroma Silk Silver'),
     Bracket: _db('Panchroma Silk Silver'), FootrailL: _db('Panchroma Silk Silver'),
-    FootrailU: _db('Panchroma Silk Silver'), Foot: _db('Panchroma Silk Silver'),
+    FootrailU: _db('Panchroma Silk Silver'), Foot: _db(FEET_TPU),
     Rail: _db('Panchroma Silk Silver'), CaseExtender: _db('Panchroma Silk Silver'),
     ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Panchroma Silk Silver'),
     SideCover: _db('Panchroma Silk Silver'), 'SideCover:FACE': _db('Elegoo PLA Black'),
@@ -6935,7 +6952,7 @@ const PRESETS = [
     Case: _db('Panchroma Grey'), Drawer: _db('Panchroma Grey'),
     CoverL: _db('Panchroma Grey'), CoverU: _db('Panchroma Grey'),
     Bracket: _db('Panchroma Grey'), FootrailL: _db('Panchroma Grey'),
-    FootrailU: _db('Panchroma Grey'), Foot: _db('Panchroma Grey'),
+    FootrailU: _db('Panchroma Grey'), Foot: _db(FEET_TPU),
     Rail: _db('Panchroma Grey'), CaseExtender: _db('Panchroma Grey'),
     ShelfInsert: _db('Panchroma Black'), ShelfLip: _db('Panchroma Grey'),
     SideCover: _db('Panchroma Grey'), 'SideCover:FACE': _db('Panchroma Lemon Yellow'),
@@ -6953,7 +6970,7 @@ const PRESETS = [
     Case: _db('Polymaker PETG Yellow'), Drawer: _db('Elegoo PLA Black'),
     CoverL: _db('Polymaker PETG Yellow'), CoverU: _db('Polymaker PETG Yellow'),
     Bracket: _db('Polymaker PETG Yellow'), FootrailL: _db('Polymaker PETG Yellow'),
-    FootrailU: _db('Polymaker PETG Yellow'), Foot: _db('Polymaker PETG Yellow'),
+    FootrailU: _db('Polymaker PETG Yellow'), Foot: _db(FEET_TPU),
     Rail: _db('Polymaker PETG Yellow'), CaseExtender: _db('Polymaker PETG Yellow'),
     ShelfInsert: _db('Elegoo PLA Black'), ShelfLip: _db('Polymaker PETG Yellow'),
     SideCover: _db('Polymaker PETG Yellow'), 'SideCover:FACE': _db('Elegoo PLA Black'),
@@ -6971,7 +6988,7 @@ const PRESETS = [
     Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
     CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
     Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
-    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db(FEET_TPU),
     Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
     ShelfInsert: _db('Panchroma Cold White'), ShelfLip: _db('Elegoo PLA Black'),
     SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Printed Solid PS Red'),
@@ -6989,7 +7006,7 @@ const PRESETS = [
     Case: _db('Panchroma Cold White'), Drawer: _db('Panchroma Cold White'),
     CoverL: _db('Panchroma Cold White'), CoverU: _db('Panchroma Cold White'),
     Bracket: _db('Panchroma Cold White'), FootrailL: _db('Panchroma Cold White'),
-    FootrailU: _db('Panchroma Cold White'), Foot: _db('Panchroma Cold White'),
+    FootrailU: _db('Panchroma Cold White'), Foot: _db(FEET_TPU),
     Rail: _db('Panchroma Cold White'), CaseExtender: _db('Panchroma Cold White'),
     ShelfInsert: _db('Polymaker PETG Dark Blue'), ShelfLip: _db('Panchroma Cold White'),
     SideCover: _db('Panchroma Cold White'), 'SideCover:FACE': _db('Polymaker PETG Dark Blue'),
@@ -7007,7 +7024,7 @@ const PRESETS = [
     Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
     CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
     Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
-    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db(FEET_TPU),
     Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
     ShelfInsert: _db('Panchroma Silk Brass'), ShelfLip: _db('Elegoo PLA Black'),
     SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Elegoo PLA Black'),
@@ -7025,7 +7042,7 @@ const PRESETS = [
     Case: _db('Polymaker PETG Dark Blue'), Drawer: _db('Polymaker PETG Dark Blue'),
     CoverL: _db('Polymaker PETG Dark Blue'), CoverU: _db('Polymaker PETG Dark Blue'),
     Bracket: _db('Polymaker PETG Dark Blue'), FootrailL: _db('Polymaker PETG Dark Blue'),
-    FootrailU: _db('Polymaker PETG Dark Blue'), Foot: _db('Polymaker PETG Dark Blue'),
+    FootrailU: _db('Polymaker PETG Dark Blue'), Foot: _db(FEET_TPU),
     Rail: _db('Polymaker PETG Dark Blue'), CaseExtender: _db('Polymaker PETG Dark Blue'),
     ShelfInsert: _db('Panchroma Cold White'), ShelfLip: _db('Polymaker PETG Dark Blue'),
     SideCover: _db('Polymaker PETG Dark Blue'), 'SideCover:FACE': _db('Printed Solid Yellow Bird'),
@@ -7047,7 +7064,7 @@ const PRESETS = [
     Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
     CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
     Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
-    FootrailU: _db('Elegoo PLA Black'), Foot: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db(FEET_TPU),
     Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
     // the deck in the neon (12.7:1 against the black case), the lip the case colour, as the shelf rule says
     ShelfInsert: _db('Printed Solid Neon Yellow'), ShelfLip: _db('Elegoo PLA Black'),
@@ -7086,8 +7103,8 @@ let colorsT = 0; // stamp of the last palette save — newest-wins when the plan
 if (!IS_PART) try {
   const saved = JSON.parse(localStorage.getItem(COLOR_STORE_KEY) || 'null');
   if (saved) {
-    customColors = saved.colors || {};
-    overrides = (saved.over && typeof saved.over === 'object') ? saved.over : {};
+    customColors = tpuFeet(saved.colors || {});
+    overrides = tpuFeetOver((saved.over && typeof saved.over === 'object') ? saved.over : {});
     useCustom = !!saved.on;
     // migration: pre-userPalette saves treat the current colors as hand-picked
     userPalette = saved.user || structuredClone(customColors);
@@ -7228,6 +7245,7 @@ function applyPreset(p, opts = {}) {
   previewLook = null;   // a real choice ends any look being shown (previewLook)
   customColors = {};
   for (const [type, f] of Object.entries(p.colors)) customColors[type] = { ...f };
+  tpuFeet(customColors);
   overrides = {};
   useCustom = true;
   saveColors();
@@ -7237,7 +7255,7 @@ function applyPreset(p, opts = {}) {
 function restoreUserPalette() {
   track('preset:my-palette');
   previewLook = null;
-  customColors = structuredClone(userPalette);
+  customColors = tpuFeet(structuredClone(userPalette));
   useCustom = true;
   saveColors();
   applyPalette();
@@ -7292,7 +7310,7 @@ function loadPresetFile(file) {
       const d = JSON.parse(r.result);
       if (d && d.colors && typeof d.colors === 'object') {
         track('colors:load');
-        customColors = d.colors; useCustom = true;
+        customColors = tpuFeet(d.colors); useCustom = true;
         snapshotUserPalette(); // an uploaded file is a hand-authored palette
         saveColors(); applyPalette();
       }
@@ -7521,6 +7539,7 @@ $('identify-swatch').onclick = () => {
 $('fm-close').onclick = () => closeFilamentMenu();
 $('fm-reset').onclick = () => {
   if (fmType) delete customColors[fmType];
+  if (fmType === 'Foot') tpuFeet(customColors);   // the feet's reset is TPU black
   if (!Object.keys(customColors).length) useCustom = false;
   snapshotUserPalette(); // a per-type reset is a hand edit too
   saveColors();
@@ -8991,6 +9010,7 @@ function refreshMaterials() {
 }
 function setOverride(uid, key, f) {   // one unit, one region: a filament, or null for "use the build colour"
   if (uid == null) return;
+  if (key === 'Foot' && f && !TPU_LABELS.has(f.name)) f = null;   // a unit's feet are TPU too (tpuFeet): anything else is the build's
   previewLook = null;
   overrides[uid] = overrides[uid] || {};
   if (f) overrides[uid][key] = { name: f.name, hex: f.hex, url: f.url }; else delete overrides[uid][key];
@@ -9012,6 +9032,7 @@ function setColorStoreKey(key) { if (!key || key === COLOR_STORE_KEY) return; CO
 function setColor(key, f) {   // one region, build-wide: a filament { name, hex, url }, or null for the instruction colour; units' own picks stay
   previewLook = null;
   if (f) customColors[key] = { name: f.name, hex: f.hex, url: f.url }; else delete customColors[key];
+  if (key === 'Foot') tpuFeet(customColors);   // a reset, or a pick that is not TPU, is TPU black
   useCustom = Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0;
   snapshotUserPalette(); saveColors(); applyPalette();
   refreshMaterials();   // a zone that FOLLOWED a unit's Body pick stops following once the build picks that zone (Sol 01a13359)
@@ -9022,8 +9043,8 @@ function setPalette(p) {   // the whole working palette (a scheme, an upload, an
   // #scheme= link and an uploaded file are outside data, and these values reach swatch styles and buy-link hrefs: until
   // 2026-10-17 a crafted link could carry a javascript: "Buy" link or CSS into the Colors workspace
   previewLook = null;
-  customColors = cleanPalette(p && p.colors);
-  overrides = cleanOverrides(p && p.over);   // a scheme replaces the layer; an undo restores it
+  customColors = tpuFeet(cleanPalette(p && p.colors));
+  overrides = tpuFeetOver(cleanOverrides(p && p.over));   // a scheme replaces the layer; an undo restores it
   useCustom = !!(p && p.on) && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0);
   if (p && p.user) userPalette = cleanPalette(p.user);
   saveColors(); applyPalette(); refreshMaterials();
@@ -9033,7 +9054,7 @@ function setUseCustom(on) { previewLook = null; useCustom = !!on && (Object.keys
    history. The workspace that shows one ends it before it commits anything or unmounts; a real palette change ends it
    too. Returns whether a look was being shown. */
 function previewPalette(p) {
-  previewLook = { colors: cleanPalette(p && p.colors), over: cleanOverrides(p && p.over) };
+  previewLook = { colors: tpuFeet(cleanPalette(p && p.colors)), over: tpuFeetOver(cleanOverrides(p && p.over)) };
   applyPalette(); refreshMaterials();
 }
 function endPreview() {
@@ -9979,7 +10000,7 @@ function applyRemoteColors(d) {
   applyingRemoteColors = true;
   try {
     previewLook = null;
-    customColors = cleanPalette(d.colors);
+    customColors = tpuFeet(cleanPalette(d.colors));
     useCustom = !!d.on;
     userPalette = d.user && typeof d.user === 'object' ? cleanPalette(d.user) : structuredClone(customColors);
     colorsT = d.t;
