@@ -6534,6 +6534,7 @@ function enterDrawerFocus(carrier, { swing = true, peek = false } = {}) {
   if (swing && !dFocus.saved) dFocus.saved = { pos: camera.position.clone(), target: controls.target.clone() };
   setDims(false); // the drawer owns the stage — overall dims come back on exit
   if (peek) dFocus.peek = held || { dimsWas: wasOn };   // a hop from one peeked drawer to the next keeps the first one's
+  syncPeekClass();
   const mmIn = (mm, axis) => `<b>${axis}</b> ${mm.toFixed(0)} mm<small>${(mm / 25.4).toFixed(1)} in</small>`;
   $('dim-w').innerHTML = mmIn(it.w, 'W');
   $('dim-l').innerHTML = mmIn(it.d, 'L');
@@ -6588,6 +6589,7 @@ function exitDrawerFocus(keepPose = false) {
   dFocus.lines = null;
   const was = dFocus.carrier;
   dFocus.carrier = null;
+  syncPeekClass();
   if (!was) return;
   for (const id of ['dim-w', 'dim-h', 'dim-l']) $(id).classList.add('hidden');
   if (keepPose) return; // hopping straight to another drawer — no restore yet
@@ -6606,7 +6608,11 @@ function exitDrawerFocus(keepPose = false) {
   // overall build dims return (only the final assembly step shows them)
   setDims(!PAGES[cur]?.cover && !PAGES[cur]?.outro && cur - 1 === manifest.steps.length - 1);
 }
-function endPeekFocus() { const on = dFocus.peek.dimsWas; dFocus.peek = null; setDims(on); }
+function endPeekFocus() { const on = dFocus.peek.dimsWas; dFocus.peek = null; syncPeekClass(); setDims(on); }
+/* the planner shell shows the W / L / H pills only while its ruler is on (app.css: html[data-ws]:not(.ws-measure) .dim-label);
+   a peeked drawer's inside sizes are shown with the ruler off too, so the page says when a peek holds them (live
+   2026-10-21: with the ruler off, its default, the opened drawer showed no pills at all) */
+function syncPeekClass() { document.documentElement.classList.toggle('ws-drawer-dims', !!(dFocus.peek && dFocus.carrier)); }
 function updateDrawerDims() { // render-loop: pills track their lines while the drawer slides / camera tweens
   if (!dFocus.lines || !dFocus.carrier) return;
   const r = canvas.getBoundingClientRect();

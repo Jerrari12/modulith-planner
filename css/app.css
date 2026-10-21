@@ -45,7 +45,7 @@ html[data-ws] #measure-toggle, html[data-ws] #color-toggle, html[data-ws] #point
 html[data-ws] #incomplete-status { display: none !important; }
 html[data-ws] body { font-family: var(--font-ui); color: var(--ink); }
 /* the viewer's W/H/L callouts are clamped to the old layout's edges; they return with the Measure tool until the stage's safe area exists */
-html[data-ws]:not(.ws-measure) .dim-label { display: none !important; }
+html[data-ws]:not(.ws-measure):not(.ws-drawer-dims) .dim-label { display: none !important; }   /* the ruler's, or a peeked drawer's inside sizes (main.js syncPeekClass) */
 html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !important; }
 
 /* ---- primitives ---- */

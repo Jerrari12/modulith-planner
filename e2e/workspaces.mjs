@@ -2961,7 +2961,8 @@ test('Colors: silk filaments wear a sheen in the picker and in the rows, plain o
    pills back as they were; the ruler during a peek hands the pills back to the build. */
 test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, keeps them while its parts are picked, and Close it gives the build’s pills back', async () => {
   const { ctx, page, errors } = await open('build');
-  const pill = (id) => page.evaluate((id) => { const e = document.getElementById(id); const n = (e.textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return { shown: !e.classList.contains('hidden'), mm: Number(n) }; }, id);
+  // shown = on the page: not hidden by the stage, and not by the shell's CSS, which shows pills only for the ruler or a peek
+  const pill = (id) => page.evaluate((id) => { const e = document.getElementById(id); const n = (e.textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return { shown: !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none', mm: Number(n) }; }, id);
   const pills = async () => ({ w: await pill('dim-w'), l: await pill('dim-l'), h: await pill('dim-h') });
   const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); const owner = v.partInfo(d.id).owner; const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === owner); return { id: d.id, owner, w: u.w, hh: u.hh, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
   // the build’s own pills, on
@@ -3016,11 +3017,11 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   await page.locator('#ws-tools button.measure').click();
   await page.waitForFunction(() => document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 });
   await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
-  await page.waitForFunction(() => !document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 }).catch(() => assert.fail('a peek with the ruler off showed no inside sizes'));
+  await page.waitForFunction(() => { const e = document.getElementById('dim-w'); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, null, { timeout: 30_000 }).catch(() => assert.fail('a peek with the ruler off showed no inside sizes (live 2026-10-21: the shell CSS hid them)'));
   await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 });
   await settle(page, 400);
-  assert.ok(await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].every((id) => document.getElementById(id).classList.contains('hidden'))), 'closed with the ruler off: no pills');
+  assert.ok(await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].every((id) => { const e = document.getElementById(id); return e.classList.contains('hidden') || getComputedStyle(e).display === 'none'; })), 'closed with the ruler off: no pills');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

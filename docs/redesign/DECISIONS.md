@@ -1846,7 +1846,12 @@ Dated calls made while building, with who made them. The brief and the inventory
   fixes taken (the toast quoted, the hanging top named); five discarded against the code. A first call, `01a15eaf`, pointed the reviewer at
   a payload file the bridge would not let it read, and is recorded as failed. Before review I found and fixed one defect
   myself: openCells walked a hanging build to its own top while Fill all fills to the grid's top row.
-- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `94efe681`: 213f48c's own push started no workflow run, so an empty commit, 94efe68, went on
+  top and run 39616553471 deployed both. Before it: npm test 579 pass, e2e 69/69. Checked live by
+  `planner-prod-checks-2026-10-18\mount-voids-prod.mjs` on a fresh profile, all 20 checks: the sheet's line, 11 units
+  after the switch, 4 ghosts and no instructions, the toast, Assemble's "Not ready to assemble", "4 empty slots to fill.",
+  Fill all to 15 with 1W·1H supports under columns 0, 1, 5 and 6, then Assemble's steps; his record as a link opening with
+  11 units, 4 ghosts, no added note and the address untouched.
 
 ## 2026-10-21 (an opened drawer shows its inside W / L / H again)
 
@@ -1870,7 +1875,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   selected is a no-op, so the case now picks a part riding the drawer. The first run also showed the ruler's click reads
   dimsOn, and the ruler steps were rewritten for it.
 - **Review:** Terra `01a15ee8`: no findings. Luna `01a15eea` on this entry: two wording fixes taken, five discarded.
-- **Deploy:** a fix for a bug Joey reports deploys once its checks pass.
+- **Live 2026-10-21**, stamp `ef16aa43` (run 39625024867, with the silk sheen). The first live check
+  (`drawer-silk-prod.mjs`) passed, but it judged the pills by the stage's own `hidden` class, as the e2e case did: a
+  screenshot of the live page showed none. The shell's CSS hides `.dim-label` unless the ruler is on, and the ruler is off
+  by default. Fixed the same day, below.
 
 ## 2026-10-21 (silk swatches wear a sheen)
 
@@ -1888,7 +1896,8 @@ Dated calls made while building, with who made them. The brief and the inventory
   alone. This change touches only colors.js, app.css and the e2e file.
 - **Review:** Terra `01a15ef6`: no findings. Luna `01a15f02` on this entry: two fixes taken (the counts, the failure's
   wording), two discarded (the quote is verbatim; the gradient's hard stop at 50% is the half).
-- **Deploy:** a change Joey asked for; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `ef16aa43` (run 39625024867): `drawer-silk-prod.mjs` finds the sheen on all 25 silk swatches in
+  the first region's picker (its brand grids and In this build) and on none of the 93 others.
 
 ## 2026-10-21 (the feet are TPU: TPU95 Black by default, a TPU-only feet picker; material tags on every filament line)
 
@@ -1927,3 +1936,19 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Sol `01a15f0d`: no findings, on the change and then on the cap note and the counts. Luna `01a15f21` on this
   entry: one fix taken (the Clear rule is the Translucent PLA line's), one discarded (the reset is covered: setColor).
 - **Deploy:** a change Joey asked for; it deploys once its checks pass.
+
+## 2026-10-21 (a peeked drawer's inside sizes show with the ruler off)
+
+- **What was wrong.** The drawer's inside W / L / H went live at `ef16aa43` and showed nothing in the planner unless the
+  toolbar's ruler was on. The shell's CSS hides every `.dim-label` without `html.ws-measure`, and the ruler is off by
+  default. The e2e case and the first live check both turned the ruler on first and judged the pills by the stage's own
+  `hidden` class, so both passed.
+- **Now** the stage marks `<html>` with `ws-drawer-dims` while a peek holds the pills, and the CSS exempts that state.
+  main.js `syncPeekClass` sets it after enterDrawerFocus records the peek, after exitDrawerFocus clears the carrier, and in
+  endPeekFocus.
+- **Checks.** The e2e case and `drawer-silk-prod.mjs` now judge a pill by its computed display as well. With the CSS
+  exemption removed, the case fails at "a peek with the ruler off showed no inside sizes". On the live `ef16aa43`, the
+  changed live check fails `rulerOffPills` and passes every other check, which shows the bug.
+- **Review:** Terra `01a15f3e`: no findings. Luna `01a15f3f` on these lines: five wording fixes taken, one discarded (the
+  record is Joey's saved one, as the entry says).
+- **Deploy:** a fix for a bug in a change Joey asked for; it deploys once its checks pass.
