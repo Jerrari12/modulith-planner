@@ -2015,7 +2015,9 @@ Dated calls made while building, with who made them. The brief and the inventory
     before `await loadTemplates()`, and the stack and the code fit this sequence: a Parts-tab switch inside that await runs
     `applyState` over the old instances, one of whose nodes has no type, so `colorLocked(undefined)` throws and the Parts
     tab draws nothing. It is not fixed here; it was recorded as a follow-up, and `1272bce` has since fixed it (a layout
-    change's mount adds to the stage's type maps instead of replacing them).
+    change's mount adds to the stage's type maps instead of replacing them). The replay of the case's steps
+    (`debug-backcover.mjs` in the report's harness folder) passes 6 runs of 6 on main `284b6c6`; on `0b896b0` it failed
+    on the first.
   - **Deploy guard:** the stamping step and module-graph guard, replayed on a copy, print "module graph OK". Without the
     new line the guard fails on `./cover-seam.js`.
   - **Goldens:** origin/main matches the committed goldens exactly. This branch moved only the 20 finished-build shots
@@ -2035,7 +2037,7 @@ Dated calls made while building, with who made them. The brief and the inventory
     mm, 1 px, 45°).
   - In headless Chrome (?debug=1, Very High, dpr 2, dark stage, the 7W build), all 8 cover meshes carry the attribute
     and the patched material, the edge is on, and there are no page errors. The edge on and off differ in 1,726 pixels,
-    all in the cover region: the same count as the local check. Shots in
+    all inside the covers' band of the frame: the same count and bounding box as the local check. Shots in
     D:/Claude - Output/cover-seams-2026-10-21/live.
 
 ## 2026-10-21 (an opened drawer's pills stay clear of the panels and of each other)
