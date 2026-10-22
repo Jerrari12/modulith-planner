@@ -2465,3 +2465,7 @@ Dated calls made while building, with who made them. The brief and the inventory
   later and change what the next page opens, and four 3D pages at once slow the runner's software rendering. Each
   page now closes once its part is done, and the failure message prints the labels on the board. Terra `01a164af` and
   `01a164f3` on the two test changes: no findings.
+- **Live 2026-10-22**, stamp `e7bd056d`: `labels-add-prod.mjs` (fresh profiles, analytics blocked) passes every check: a
+  bare link lands both labels and the address keeps the build without it, a link beside `#build=` adds its label to the
+  build's two, and the plain page shows it. On `aa82df2d` it failed those three. The parity probe now finds 2 labels on
+  a fresh load (0 before).
