@@ -707,6 +707,111 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   await ctx.close();
 });
 
+/* THE STUDIO'S "ADD TO PLANNER BUILD" ON A FRESH PAGE (2026-10-22; the cutover prep's parity check, row E6): the Studio
+   opens the planner as a new page on <return>#labels-add=<list>. Before, the first settled save wrote the address as
+   #build= alone while the label tools were still loading, so the link was gone when they looked for it and nothing was
+   added; only a link set on a page already open (the case above) imported. Both ways a fresh page arrives: a bare
+   labels link, and one beside the build's own #build= (a return address that carried its build). */
+test('Labels: the Studio’s Add to planner build opens a fresh page and its labels land, alone or beside the build’s own #build=', async () => {
+  const link = (id, words) => Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: id, labels: words.map((text) => ({ text })) })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const words = (page) => page.evaluate(() => ((window.__GEN2_STORE__.state.labelList || {}).labels || []).map((l) => String(l.text || '').toLowerCase()));
+  const landed = (page, n, what) => page.waitForFunction((n) => ((window.__GEN2_STORE__.state.labelList || {}).labels || []).length === n, n, { timeout: 30_000 }).catch(() => assert.fail(`${what}: the labels did not land within 30 s`));
+  // a bare labels link, opened as a new page
+  const a = await open('labels', { query: '#labels-add=' + link('freshload0001', ['Fresh one', 'Fresh two']) });
+  await landed(a.page, 2, 'a bare link');
+  assert.deepEqual(await words(a.page), ['fresh one', 'fresh two']);
+  await a.page.waitForTimeout(1500);   // past the store's coalescing: the next save writes the address again
+  assert.ok(await a.page.evaluate(() => /^#build=/.test(location.hash) && !/labels-add/.test(location.hash)), 'the address keeps the build and drops the link once it is in');
+  assert.match(await text(a.page, '#ws-labels'), /fresh one/i, 'the panel lists them');
+  const hash = await a.page.evaluate(() => window.__GEN2_STORE__.hash());
+  const before = await a.page.evaluate(() => window.__GEN2_STORE__.state.placed.map((p) => `${p.id}:${p.w}x${p.hh}@${p.x},${p.y}`).join(' '));
+  assert.deepEqual(clean(a.errors), []);
+  // the same build back in this browser WITHOUT its labels (an older copy, as the old planner's cutover redirect forwards
+  // its own slot as #build=): tab A shows it and offers the two this browser kept; the visitor goes to the Studio, whose
+  // Add to planner build opens tab B on the bare link. Tab B brings the kept two back, then adds the link's. Tab A, still
+  // without labels, then saves over the build; the stored copy outlives that, so the next page offers the two again
+  const pageIn = async (url) => { const p = await a.ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push('pageerror: ' + e.message)); await p.goto(`${base}/index.html?${url}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p); return { p, errs }; };
+  const keptCount = (p) => p.evaluate(() => { try { const o = JSON.parse(localStorage.getItem('gen2-label-copies') || 'null'); return o ? Object.keys(o.copies || {}).length : 0; } catch { return -1; } });
+  const edit = async (p) => { await p.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.buildPlate = s.buildPlate === 'smooth' ? 'powder' : 'smooth'; }, 'edit')); await p.waitForTimeout(1500); };
+  const bare = await a.page.evaluate(() => { const r = window.__GEN2_STORE__.serialize(); delete r.labelList; delete r.labelAssign; return btoa(unescape(encodeURIComponent(JSON.stringify(r)))); });
+  const tabA = await pageIn(`ws=labels&debug=1#build=${bare}`);
+  await tabA.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('tab A did not offer the kept labels'));
+  await edit(tabA.p);   // tab A's save: the build in this browser is now the one without labels
+  // before any restore (the copy kept, not yet marked): a damaged link restores nothing, the offer stays and the status
+  // says the link is damaged; so does a link that decodes but brings no label that can be read (the dry run)
+  const damaged = await pageIn('ws=labels&debug=1#labels-add=AAAA');
+  await damaged.p.waitForFunction(() => /This labels link is damaged/.test(document.getElementById('ws-labels')?.textContent || ''), null, { timeout: 30_000 }).catch(() => assert.fail('no damaged-link status'));
+  assert.deepEqual(await words(damaged.p), [], 'nothing restored for a damaged link');
+  assert.equal(await damaged.p.locator('#ws-labels .banner.copy').count(), 1, 'the offer stays');
+  await damaged.p.close();
+  const unreadableLink = Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: 'freshload0007', labels: [{ notText: 1 }] })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unreadable = await pageIn('ws=labels&debug=1#labels-add=' + unreadableLink);
+  await unreadable.p.waitForTimeout(3000);
+  assert.deepEqual(await words(unreadable.p), [], 'nothing restored for a link that adds nothing');
+  assert.equal(await unreadable.p.locator('#ws-labels .banner.copy').count(), 1, 'the offer stays for it too');
+  await unreadable.p.close();
+  const tabB = await pageIn('ws=labels&debug=1#labels-add=' + link('freshload0005', ['After the kept']));
+  await landed(tabB.p, 3, 'tab B: the kept two, then the link');
+  assert.deepEqual(await words(tabB.p), ['fresh one', 'fresh two', 'after the kept']);
+  assert.match(await text(tabB.p, '#ws-labels'), /Brought back the 2 labels this browser kept for this build\./, 'the status says both');
+  assert.equal(await tabB.p.locator('#ws-labels .banner.copy').count(), 0, 'no offer left over in tab B');
+  assert.equal(await keptCount(tabB.p), 1, 'the stored copy is kept');
+  assert.equal(await tabB.p.evaluate(() => Object.values(JSON.parse(localStorage.getItem('gen2-label-copies')).copies)[0].restored), true, 'and marked as restored once');
+  await edit(tabA.p);   // tab A, still without labels, saves over the build
+  const again = await pageIn('ws=labels&debug=1');
+  await again.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('the kept labels were not offered again after tab A saved over the build'));
+  assert.match(await text(again.p, '#ws-labels .banner.copy span'), /kept 2 labels/);
+  // the next Studio link on that build adds only its own label: a copy restored once is offered, never restored again
+  const second = await pageIn('ws=labels&debug=1#labels-add=' + link('freshload0006', ['Second link']));
+  await landed(second.p, 1, 'a second link');
+  assert.deepEqual(await words(second.p), ['second link']);
+  assert.doesNotMatch(await text(second.p, '#ws-labels'), /Brought back/, 'no second automatic restore');
+  assert.equal(await keptCount(second.p), 1, 'the copy is still kept');
+  for (const t of [tabA, tabB, again, damaged, unreadable, second]) assert.deepEqual(clean(t.errs), []);
+  await a.ctx.close();
+  // beside the build's own #build=: the build opens as it was, and the new label joins its two
+  const b = await open('labels', { query: `#build=${hash}&labels-add=` + link('freshload0002', ['Beside one']) });
+  await landed(b.page, 3, 'a link beside #build=');
+  assert.deepEqual(await words(b.page), ['fresh one', 'fresh two', 'beside one']);
+  assert.equal(await b.page.evaluate(() => window.__GEN2_STORE__.state.placed.map((p) => `${p.id}:${p.w}x${p.hh}@${p.x},${p.y}`).join(' ')), before, 'the same build');
+  assert.deepEqual(clean(b.errors), []);
+  await b.ctx.close();
+  // leaving Labels before its label tools load (held back here): the link waits in the page, never in the address, so an
+  // edit's save, a share link or a reload does not carry it (an adversarial check of the first fix, 2026-10-22); it lands
+  // once Labels opens again, and a reload does not add it twice
+  const cctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(cctx);
+  await cctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  let release = null; const gate = new Promise((r) => { release = r; });
+  await cctx.route('**/vendor/label-list.js*', async (route) => { await gate; await route.continue(); });
+  const c = await open('labels', { context: cctx, query: '#labels-add=' + link('freshload0003', ['Waiting one']) });
+  assert.ok(await c.page.evaluate(() => !/labels-add/.test(location.href)), 'the link left the address at boot');
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await c.page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.buildPlate = s.buildPlate === 'smooth' ? 'powder' : 'smooth'; }, 'edit'));
+  await c.page.waitForTimeout(1500);   // the edit's save has written the address
+  assert.ok(await c.page.evaluate(() => /^#build=/.test(location.hash) && !/labels-add/.test(location.href)), 'a save while on Build writes the build alone');
+  assert.deepEqual(await words(c.page), [], 'nothing imported yet');
+  release();
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('labels'));
+  await landed(c.page, 1, 'back in Labels');
+  assert.deepEqual(await words(c.page), ['waiting one']);
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('labels'));
+  await c.page.waitForTimeout(2000);
+  assert.deepEqual(await words(c.page), ['waiting one'], 'opening Labels again does not add it twice');
+  await c.page.reload({ waitUntil: 'load' }); await waitBoot(c.page);
+  await c.page.waitForTimeout(3000);
+  assert.deepEqual(await words(c.page), ['waiting one'], 'a reload does not add it twice');
+  assert.deepEqual(clean(c.errors), []);
+  await cctx.close();
+  // a link on another workspace's address (the old planner's cutover redirect sends ?ws=build with the whole hash): it
+  // still opens Labels and lands
+  const d = await open('build', { query: '#labels-add=' + link('freshload0004', ['From build']) });
+  await landed(d.page, 1, 'a link on ?ws=build');
+  assert.equal(await d.page.evaluate(() => document.documentElement.dataset.ws), 'labels', 'the page opened on Labels');
+  assert.deepEqual(clean(d.errors), []);
+  await d.ctx.close();
+});
+
 /* ASSEMBLE OPENS AT THE BEGINNING (Joey, 2026-10-20: "it seems to start at the end"). The other workspaces park the stage on
    the finished step and Assemble only moved to the Overview from the cover, so a visit from Build opened on the last step.
    Now a first arrival lands on the Overview from either; the step a visitor left on still comes back. And the guided

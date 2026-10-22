@@ -7,11 +7,12 @@
    link or a file arrives without labels for a build whose Recent entry has them, the entry's labels are copied here first
    (app.js), and the Labels workspace offers them back while the build on the board still has none.
 
-   One localStorage key, `gen2-label-copies` = { v: 1, copies: { <buildId>: { savedAt, list, assign, geom, n } } }. At most
-   COPIES_MAX builds (the oldest copies go first), each at most COPY_MAX_CHARS of JSON, and a copy older than COPY_MAX_AGE is
-   not offered. A copy that cannot be written is dropped: no copy beats a stale one, which could bring back labels removed
-   since. `geom` holds each assigned drawer's cell (x, y, w, hh) so a restore keeps an assignment only where the drawer is still
-   the same drawer (unit ids are build-local; a link from elsewhere can reuse one for another drawer).
+   One localStorage key, `gen2-label-copies` = { v: 1, copies: { <buildId>: { savedAt, list, assign, geom, n, restored? } } }.
+   At most COPIES_MAX builds (the oldest copies go first, marked restored or not), each at most COPY_MAX_CHARS of
+   JSON, and a copy older than COPY_MAX_AGE is not offered. A copy that cannot be written is dropped: no copy beats a
+   stale one, which could bring back labels removed since. `geom` holds each assigned drawer's cell (x, y, w, hh) so a
+   restore keeps an assignment only where the drawer is still the same drawer (unit ids are build-local; a link from
+   elsewhere can reuse one for another drawer). `restored` marks a copy brought back automatically once (markRestored).
    The storage is passed in so the tests run under node; a storage that throws (private mode) makes every call a no-op. */
 export const COPIES_KEY = 'gen2-label-copies';
 export const COPIES_MAX = 5;
@@ -52,6 +53,8 @@ export function remember(storage, buildId, copy) {
   if (size > COPY_MAX_CHARS) { drop(storage, buildId); return false; }
   const o = read(storage);
   o.copies[buildId] = copy;
+  // past the limit the oldest go first; a copy marked restored is ranked by its age like any other (after another tab saves
+  // over its build it is the only place those labels are: skeptic round 6, 2026-10-22)
   const ids = Object.keys(o.copies).sort((a, b) => (Number(o.copies[b].savedAt) || 0) - (Number(o.copies[a].savedAt) || 0));
   for (const k of ids.slice(COPIES_MAX)) delete o.copies[k];
   if (!write(storage, o)) { drop(storage, buildId); return false; }
@@ -73,6 +76,17 @@ export function drop(storage, buildId, savedAt = null) {
   if (!c) return true;
   if (savedAt !== null && c.savedAt !== savedAt) return false;
   delete o.copies[buildId];
+  return write(storage, o);
+}
+
+/* mark a build's copy as restored once, automatically (the Labels workspace, for a Studio link, 2026-10-22). It stays as a
+   safety net: the tab that opened the Studio may still hold the build without labels and save over it, and then the copy is
+   offered as usual. Marked, it is never restored automatically again. With `savedAt`, only that copy, as drop(). */
+export function markRestored(storage, buildId, savedAt = null) {
+  const o = read(storage);
+  const c = o.copies[buildId];
+  if (!c || (savedAt !== null && c.savedAt !== savedAt)) return false;
+  c.restored = true;
   return write(storage, o);
 }
 

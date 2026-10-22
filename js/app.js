@@ -14,7 +14,7 @@ import { isPhone, PHONE_MAX } from './ui/phone.js';
 import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
-import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, safeStorage } from './state/label-copies.js';
+import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog, a classic-script lexical global
@@ -71,6 +71,15 @@ export async function boot() {
   document.documentElement.dataset.mode = initialMode();
   document.documentElement.classList.toggle('ws-phone', isPhone());   // the phone chrome (bottom tabs, sheets) below 1024 px
   let current = null;   // the mounted workspace's handle
+  /* A LABELS LINK IS READ ONCE, HERE (2026-10-22): the Studio's "Add to planner build" opens a new page on #labels-add=,
+     beside the build's own #build= or alone. It leaves the address now and waits in ctx.memo for the Labels workspace,
+     which imports it once its label tools have loaded. Left in the address it was wiped by the first save (the store
+     writes #build= alone), so a fresh page imported nothing; kept there through saves it would ride into share links */
+  const labelsAdd = (() => {
+    const m = /(?:^#|&)labels-add=([^&]+)/.exec(location.hash); if (!m) return null;
+    history.replaceState(null, '', location.href.replace(/[#&]labels-add=[^&]+/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
+    return m[1];
+  })();
   /* THE BUILD STORE (the plan §1.3): Recent builds in IndexedDB, the planner's autosave slot dual-written. With no build in
      the address and no kit asked for, the page reopens the build this browser had open last (the current Recent entry, else
      the planner's slot) by putting its record in the address before the stage boots from it; `?new=1` skips that. */
@@ -168,7 +177,7 @@ export async function boot() {
   setMode(document.documentElement.dataset.mode, stage, { now: true });   // the viewer booted on `dark`; the workspace wants `night` (at once: nothing is painted yet)
   const ctx = {
     setMode,
-    memo: {},   // what a workspace wants back when it is remounted (the Assemble step, for one)
+    memo: { labelsAdd },   // what a workspace wants back when it is remounted (the Assemble step, for one; a labels link not imported yet)
     store, kitId: KIT, get kitTitle() { return kitTitle; },
     /* the palette moves to the build's own key BEFORE the first colour write (and on the first build edit), so a kit
        page's saved palette never takes a project's picks with it (Astra's two-projects-one-kit check) */
@@ -215,6 +224,8 @@ export async function boot() {
       take() { labelCopy = typeof store.state.buildId === 'string' ? heldLabels(copies, store.state.buildId) : null; return labelCopy; },
       done() { if (labelCopy && typeof store.state.buildId === 'string') dropLabels(copies, store.state.buildId, labelCopy.savedAt); labelCopy = null; },   // restored or discarded: this copy only
       later() { labelCopy = null; },   // Not now: this page only; the next load offers again
+      // brought back automatically for a Studio link (2026-10-22): kept as a safety net, never restored automatically again
+      restored() { if (labelCopy && typeof store.state.buildId === 'string') markRestoredLabels(copies, store.state.buildId, labelCopy.savedAt); labelCopy = null; },
     },
     openSetup: (step, fresh = false) => openSetup(stage, { store, builds: ctx.builds, say: toast, remount: () => ctx.remount() }, { step, fresh }),
     remount() { if (current) { const ws = current.name; current.unmount(); current = { name: ws, ...WORKSPACES[ws](stage, ctx) }; } },
@@ -227,9 +238,9 @@ export async function boot() {
       current = { name: ws, ...WORKSPACES[ws](stage, ctx) };
     },
   };
-  /* a labels link (#labels-add=, the Label Studio's "Add to planner build"; #labels-open) lands in the Labels workspace, which
-     imports it; the build's own #build= part stays beside it */
-  const labelsLink = /(^#|&)labels-(add=|open)/.test(location.hash);
+  /* a labels link (#labels-add=, the Label Studio's "Add to planner build", taken from the address at the top of the boot;
+     #labels-open) lands in the Labels workspace, which imports it; the build's own #build= part stays */
+  const labelsLink = !!labelsAdd || /(^#|&)labels-open/.test(location.hash);
   if (/(^#|&)labels-open(&|$)/.test(location.hash)) history.replaceState(null, '', location.href.replace(/[#&]labels-open(?=&|$)/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
   ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
   if (labelCopy && current.name !== 'labels') toast(`Opened without its ${labelCopy.n} ${labelCopy.n === 1 ? 'label · Labels can bring it back.' : 'labels · Labels can bring them back.'}`);

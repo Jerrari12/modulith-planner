@@ -63,3 +63,21 @@ test('a junk entry beside a good one is ignored, and a drop names the copy it sp
   assert.equal(C.held(s, 'b', 3500), null);
 });
 
+
+/* a copy restored automatically for a Studio link (2026-10-22) is marked, not spent: still held and offered, never restored
+   automatically again; a mark names the copy it marks, as a drop does. Past the cap a marked copy is ranked by its age like
+   any other: after another tab saves over its build it is the only place those labels are (skeptic round 6) */
+test('markRestored keeps the copy and marks it; past the cap the oldest go first, marked or not', () => {
+  const s = mem();
+  const copy = (t) => ({ ...C.copyOf(rec([{ id: 'a', text: 'Screws' }]), t) });
+  assert.equal(C.remember(s, 'marked', copy(9000)), true);
+  assert.equal(C.markRestored(s, 'marked', 8999), false, 'another copy than the one read: not marked');
+  assert.equal(C.markRestored(s, 'marked', 9000), true);
+  assert.equal(C.held(s, 'marked', 9500).restored, true, 'still held, and marked');
+  assert.equal(C.markRestored(s, 'none'), false);
+  for (let i = 0; i < C.COPIES_MAX; i++) assert.equal(C.remember(s, 'older' + i, copy(1000 + i)), true);
+  assert.equal(C.held(s, 'marked', 9500).restored, true, 'the newest copy stays, though it is marked');
+  assert.equal(C.held(s, 'older0', 9500), null, 'the oldest went');
+  assert.equal(C.remember(s, 'marked', copy(9900)), true);
+  assert.equal(C.held(s, 'marked', 9950).restored, undefined, 'a copy remembered again is a new copy, unmarked');
+});

@@ -2352,3 +2352,105 @@ Dated calls made while building, with who made them. The brief and the inventory
   discarded wrong (it asked for the Live line before the deploy it records). Terra `01a16421` on the case's rework for
   the runner and its text here: no findings.
 - **Deploy:** a bug fix Joey asked for in words; it deploys once its checks pass.
+
+## 2026-10-22 (the Studio's "Add to planner build" lands on a fresh page)
+
+- **Joey, asked:** "Fix the labels-add bug: the Label Studio's "Add to planner build" link should add its labels when it
+  opens the planner as a fresh page."
+- **What was wrong.** The Studio opens the planner as a new page on `?ws=labels#labels-add=<list>`, sometimes after the
+  build's own `#build=`. Nothing was added. The store writes each settled change to the address as `#build=` alone
+  (app.js `onSave`). A save came while the Labels workspace was still loading its label tools, so when it called
+  `importFromHash()` the `labels-add=` part was gone. A link set on a page already open imported, and that was the only
+  path the suite tested. The cutover prep's parity check found it (row E6), and it was reproduced on the live `aa82df2d`:
+  0 labels after a fresh load, 2 after the same hash set on the open page.
+- **Now** the link is read once, at the top of the boot.
+  - app.js takes the `labels-add=` part out of the address and holds it in `ctx.memo.labelsAdd`. The boot opens Labels
+    for it, as for any labels link.
+  - Once its label tools have loaded, the Labels workspace imports it (`importOpened`) and clears the memo.
+  - If the build came back without labels this browser kept for it, and the link is sound and brings labels, the kept
+    labels come back first (`restoreCopy`, the same as the offer's Restore) and the link's are added to them. One
+    status line reports both: "Brought back the N labels this browser kept for this build." followed by the import's own
+    line. The old planner's cutover redirect sends exactly that: its own slot as `#build=` beside the Studio's link.
+  - The stored copy is kept, marked as restored (`ctx.labelCopy.restored()`, label-copies.js `markRestored`), not
+    spent like the offer's `done()`. The tab that opened the Studio may still hold the build without labels, and its
+    next save would otherwise leave the labels nowhere; kept, they are offered again on the next load. Marked, the copy
+    is never restored automatically again; the banner still offers it on an empty board. Past the cap of five copies
+    it is ranked by its age like any other, as on main.
+  - A link that would add nothing restores nothing, and the offer stays. That covers a damaged link, an empty one, and
+    one whose labels cannot be read: the import is first run as a dry run (`importLabels`).
+  - A link set on a page already open still goes through `importFromHash()`, as before.
+- **How it got here: seven versions, each checked by skeptic workflows.** Each round had three lenses or two, with every
+  claimed break checked by a separate agent trying to refute it.
+  1. The first version kept an unread `labels-add=` part in the address through every save. Terra (`01a163c1`) found
+     nothing. Round 1 then confirmed a leak. A visitor who left Labels before its tools loaded kept the link through
+     every save, Share link and reload, so recipients got the labels added and reloads jumped to Labels.
+  2. The second version held the link in the page instead. Round 2 (7 claims, 4 distinct confirmed, 2 refuted) found
+     that on a build that came back without its kept labels, the link's labels filled the board before the kept-labels
+     offer rendered. The offer never showed, and the kept copy was dropped unoffered once those labels were removed.
+  3. The third version made the link wait for the visitor's choice in that offer. Round 3 (9 claims, 8 confirmed) found
+     the wait raised more than it solved:
+     - Not now imported straight away and lost the kept labels;
+     - on a phone the wait was invisible;
+     - a label added another way stranded the link;
+     - a reload lost it;
+     - two status lines overwrote each other.
+  4. The fourth version restored the kept labels and then added the link, with no waiting state. Round 4 (8 claims, 5
+     confirmed, 3 refuted) found two things to fix. The restore used up the stored copy, so the tab that opened the
+     Studio, saving over the build without labels, left them nowhere, where main kept the copy and offered it again. A
+     damaged link still triggered the restore. Of the other three, two were accepted: a copy put off with Not now is
+     restored without asking by the next Studio link (the status line says so), and a set the Studio sends again
+     duplicates (appendLabels never merged by words). The third is main's own rule: Undo that empties the board drops
+     the copy.
+  5. The fifth version restored only for a sound link and kept the stored copy unmarked. Round 5 (5 claims, all
+     confirmed) found that the kept copy now outlived its use. After the visitor removed some of the restored labels, it
+     came back with the next Studio link without asking (the one medium). The rest were low: it came back after the
+     build was deleted.
+     It took the five copy slots from other builds' unoffered copies. A link whose labels could not be read still
+     restored it. The fifth was the Undo rule again.
+  6. The sixth version marked the copy instead (restored once, never automatically again, evicted first) and ran the
+     import as a dry run before restoring. Round 6 (2 claims, both confirmed, both low) found the marked-first eviction
+     wrong. A marked copy can be the only place its labels are, once the other tab has saved over the build, and
+     evicting it first kept older copies, even expired ones that can never be offered.
+  7. This version keeps the mark and the dry run and goes back to main's eviction, oldest first. A copy can only expire
+     by being older than every live one, so oldest first already takes the expired copies.
+- **Found and left as it was:**
+  - **Not new with this change, recorded as follow-ups:**
+    - The Studio opens the planner in a second tab, and the tab that opened the Studio still holds the build without
+      the labels. Its next save is the newest, so the Recent entry and the autosave slot lose them. Nothing in the
+      planner listens for another tab's writes. Before this fix the labels never arrived at all. Now that they do, a
+      visitor who goes back to the tab they came from and edits loses them, so the stale-tab guard this needs is the
+      first follow-up.
+    - A link set by a hash change on a page already open is still wiped by a save. That happens while the label
+      tools are loading, or while another workspace is open.
+    - If the label tools fail to load, the link is dropped.
+  - **New with this change, and accepted:** a reload in the moment before the label tools load drops the link. It
+    leaves the address at boot, and the memo does not outlive the page. On main a link stayed in the address until
+    the first save, so some older records still imported after such a reload. The visitor presses Add to planner
+    build again.
+- **Checks.** A new e2e case:
+  - A fresh page on a bare link lands both labels, and the address then holds the build without the link.
+  - Two tabs, the old planner's way. Tab A shows the build sent back without its labels and saves it. Tab B opens on a
+    bare Studio link: the kept two come back, then the link's label is added, the status says both, no offer is left,
+    and the stored copy is kept, marked. Tab A then saves over the build, and a new page offers the kept two again. A
+    damaged link on that page restores nothing and leaves the offer, and so does a link whose labels cannot be read. The
+    next Studio link adds only its own label: no second automatic restore, and the copy is still kept.
+  - A link beside a `#build=` adds its label to that build's two, with the units unchanged.
+  - With the label tools held back, leaving for Build and making an edit writes the build alone. Coming back to Labels
+    lands the label. Opening Labels again, or reloading, does not add it twice.
+  - A link on `?ws=build`, the form the old planner's cutover redirect sends, opens on Labels and lands.
+
+  On the unfixed code the case fails at "a bare link: the labels did not land within 30 s". A unit test in
+  test/label-copies.test.mjs: `markRestored` marks only the copy that was read, and a marked copy stays held; past the
+  cap the oldest go first and a newer marked copy stays (round 6's rule, marked first, fails it); a copy remembered
+  again is a new, unmarked one.
+
+  All fourteen mutants are killed: 12 by the e2e case, 2 by the unit test. The first time, two survived: the
+  damaged-link and unreadable-link checks ran after the copy was already marked, and the mark alone blocked the restore.
+  They now run before tab B. npm test 597: 592 pass, 5 skipped, 0 fail. The full e2e suite passed 76 of 76 on version 6.
+  The 9 labels-related cases passed again on version 7, whose one change is the eviction order; no e2e case reaches the
+  five-copy cap.
+- **Review:** Terra `01a163c1` on version 1: no findings. Sol `01a163ed` on version 2 and `01a16405` on version 3: no
+  findings; the skeptic rounds above found what they did not. Sol `01a16415` on version 4, `01a1643e` on version 6 and
+  `01a16459` on version 7's eviction change: no findings. Luna `01a16460` on this entry: five wording fixes taken, one
+  discarded (it was the full e2e suite).
+- **Deploy:** a bug the cutover prep found, fixed on Joey's words; it deploys once its checks pass.
