@@ -2454,3 +2454,9 @@ Dated calls made while building, with who made them. The brief and the inventory
   `01a16459` on version 7's eviction change: no findings. Luna `01a16460` on this entry: five wording fixes taken, one
   discarded (it was the full e2e suite).
 - **Deploy:** a bug the cutover prep found, fixed on Joey's words; it deploys once its checks pass.
+- **The first deploy failed on its own test** (run 39813124698, `40d4b25`). On the CI runner the case stopped at "the kept
+  labels were not offered again after tab A saved over the build": it gave each save a fixed 1.5 s, and the next page
+  opened the build as it was before the save landed. Tab B's restore had passed, so tab A's first save was in time;
+  the second one, or tab B's own, was not. The case now waits for each save to reach the planner's slot (written after
+  the Recent entry), and for the label tools beside the unreadable link, before it goes on. Slowing the CPU here (4x,
+  8x) does not reproduce the runner's failure: the old case passes at 8x too, so the runner's slowness is elsewhere.

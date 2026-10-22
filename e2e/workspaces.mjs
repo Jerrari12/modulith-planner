@@ -732,7 +732,12 @@ test('Labels: the Studio’s Add to planner build opens a fresh page and its lab
   // without labels, then saves over the build; the stored copy outlives that, so the next page offers the two again
   const pageIn = async (url) => { const p = await a.ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push('pageerror: ' + e.message)); await p.goto(`${base}/index.html?${url}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p); return { p, errs }; };
   const keptCount = (p) => p.evaluate(() => { try { const o = JSON.parse(localStorage.getItem('gen2-label-copies') || 'null'); return o ? Object.keys(o.copies || {}).length : 0; } catch { return -1; } });
-  const edit = async (p) => { await p.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.buildPlate = s.buildPlate === 'smooth' ? 'powder' : 'smooth'; }, 'edit')); await p.waitForTimeout(1500); };
+  // an edit has been saved when the slot (written after the Recent entry) holds it: on the CI runner a fixed 1.5 s was not
+  // enough, and the next page then opened the build as it was before the edit
+  const edit = async (p) => {
+    const want = await p.evaluate(() => { const S = window.__GEN2_STORE__; const v = S.state.buildPlate === 'smooth' ? 'powder' : 'smooth'; S.commit((s) => { s.buildPlate = v; }, 'edit'); return v; });
+    await p.waitForFunction((v) => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).buildPlate === v; } catch { return false; } }, want, { timeout: 30_000 }).catch(() => assert.fail('an edit was not saved within 30 s'));
+  };
   const bare = await a.page.evaluate(() => { const r = window.__GEN2_STORE__.serialize(); delete r.labelList; delete r.labelAssign; return btoa(unescape(encodeURIComponent(JSON.stringify(r)))); });
   const tabA = await pageIn(`ws=labels&debug=1#build=${bare}`);
   await tabA.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('tab A did not offer the kept labels'));
@@ -746,7 +751,8 @@ test('Labels: the Studio’s Add to planner build opens a fresh page and its lab
   await damaged.p.close();
   const unreadableLink = Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: 'freshload0007', labels: [{ notText: 1 }] })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const unreadable = await pageIn('ws=labels&debug=1#labels-add=' + unreadableLink);
-  await unreadable.p.waitForTimeout(3000);
+  // the offer renders only once the label tools have loaded, in the same step as the link's import
+  await unreadable.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('the offer did not show beside a link that adds nothing'));
   assert.deepEqual(await words(unreadable.p), [], 'nothing restored for a link that adds nothing');
   assert.equal(await unreadable.p.locator('#ws-labels .banner.copy').count(), 1, 'the offer stays for it too');
   await unreadable.p.close();
@@ -757,6 +763,7 @@ test('Labels: the Studio’s Add to planner build opens a fresh page and its lab
   assert.equal(await tabB.p.locator('#ws-labels .banner.copy').count(), 0, 'no offer left over in tab B');
   assert.equal(await keptCount(tabB.p), 1, 'the stored copy is kept');
   assert.equal(await tabB.p.evaluate(() => Object.values(JSON.parse(localStorage.getItem('gen2-label-copies')).copies)[0].restored), true, 'and marked as restored once');
+  await tabB.p.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).labelList.labels.length === 3; } catch { return false; } }, null, { timeout: 30_000 }).catch(() => assert.fail('tab B was not saved within 30 s'));
   await edit(tabA.p);   // tab A, still without labels, saves over the build
   const again = await pageIn('ws=labels&debug=1');
   await again.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('the kept labels were not offered again after tab A saved over the build'));
