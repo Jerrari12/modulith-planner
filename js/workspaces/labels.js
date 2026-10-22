@@ -315,15 +315,41 @@ export function mountLabels(stage, ctx) {
     if (ok) { st.pick = null; st.selId = null; stage.setSelected(null); renderAll(); if (phone) phone.open(panel); }
     return ok ? 'added' : 'bad';
   }
-  /* a #labels-add= part in the address (the Label Studio's "Add to planner build" link, or a shared labels link): imported once,
-     then dropped from the hash; the build's own #build= part stays */
+  /* a labels link (the Label Studio's "Add to planner build", or a shared labels link): imported once. The one a page opened
+     with waits in ctx.memo.labelsAdd (app.js took it out of the address at boot, 2026-10-22); one set on a page already open
+     is read from the hash and dropped from it; the build's own #build= part stays */
+  const decodeLink = (enc) => { try { return b64urlJson(decodeURIComponent(enc)); } catch { return undefined; } };
+  function importLink(enc, doc = decodeLink(enc)) {
+    if (doc === undefined) { status('This labels link is damaged; nothing was added.', true); renderAll(); return; }
+    importDoc(doc, 'link');
+  }
+  /* the link this page opened with. On a build that came back without labels this browser kept for it (the old planner's
+     cutover redirect sends its own slot as #build= beside the Studio's link), the kept labels come back first and the
+     link's are added to them; a link that would add nothing (damaged, empty, unreadable) restores nothing, and the offer
+     stays. The stored copy is kept but marked (ctx.labelCopy.restored(), not done()): the tab that opened the Studio may
+     still hold the build without labels, and its next save would leave the copy the only place they are; marked, it is
+     only ever offered again, never restored automatically twice. Imported straight onto the empty board, the link's
+     labels hid the offer; a wait for the visitor's choice raised more than it solved (skeptic checks, 2026-10-22) */
+  function importOpened() {
+    const enc = ctx.memo?.labelsAdd; if (!enc || !L) return;
+    ctx.memo.labelsAdd = null;
+    const doc = decodeLink(enc);
+    const got = doc === undefined ? null : R.labelsFromDoc(L, doc);
+    const brings = !!got && !got.problem && R.importLabels(L, S(), got.labels).ok;   // a dry run: it would add at least one
+    let back = 0;
+    const kept = ctx.labelCopy && ctx.labelCopy.copy;
+    if (brings && kept && !kept.restored && !R.labelsOf(S()).length) {
+      const live = ctx.labelCopy.take();
+      if (live && !live.restored && labelCommit(R.restoreCopy(L, S(), live), 'labels-restore')) { ctx.labelCopy.restored(); back = R.labelsOf(S()).length; }
+    }
+    importLink(enc, doc);
+    if (back) { status(`Brought back the ${n(back, 'label')} this browser kept for this build. ${st.status}`.trim(), st.warn); renderAll(); }
+  }
   function importFromHash() {
     const m = /(?:^#|&)labels-add=([^&]+)/.exec(location.hash || '');
     if (!m) return;
-    let doc = null; try { doc = b64urlJson(decodeURIComponent(m[1])); } catch { doc = undefined; }
-    history.replaceState(null, '', location.href.replace(/[#&]labels-add=[^&]+/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
-    if (doc === undefined) { status('This labels link is damaged; nothing was added.', true); renderAll(); return; }
-    importDoc(doc, 'link');
+    history.replaceState(history.state, '', location.href.replace(/[#&]labels-add=[^&]+/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
+    importLink(m[1]);
   }
   /* THE PART PICKER MODAL (docs/redesign/LABELS-INTEGRATION.md, step A): the Studio's Part Picker in a frame over the
      workspace, made once per page and hidden between openings so its choices persist. The planner speaks first: a hello
@@ -437,6 +463,7 @@ export function mountLabels(stage, ctx) {
   // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
   const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
   function openStudio(parts) {
+    ctx.builds?.keepCurrent?.();   // its Add to planner build reopens this browser's current build: this one (app.js)
     try { window.open(studioHref(parts), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
   }
   /* THE LABEL PLATE VIEW (docs/redesign/LABELS-INTEGRATION.md, step B1, read-only): the Label Studio in a frame over the
@@ -706,7 +733,7 @@ export function mountLabels(stage, ctx) {
     // the hint. None under the faceplate callout: it already says so and offers the switch (the stress test, 2026-10-15:
     // on a Classic build the same sentence stood three times and squeezed the list to two rows)
     // the empty list's sentence carries the one link to the full Label Studio (a new tab; the tile went on 2026-10-20)
-    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
+    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => ctx.builds?.keepCurrent?.(), title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
       : !faceOk ? null
       : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
       : sel && R.eligible(s, sel) && ready.length ? (selL ? `Drawer ${R.drawerNumber(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on drawer ${R.drawerNumber(s, sel.id)}. The drawer stays selected afterwards.`)
@@ -1002,11 +1029,15 @@ export function mountLabels(stage, ctx) {
   loadLabelList().then((mod) => {
     if (signal.aborted) return;
     L = mod;
-    /* a build from a link, a file or an older tool: its typed drawers become list labels (one conversion, one history entry) */
+    /* a build from a link, a file or an older tool: its typed drawers become list labels (one conversion, one history entry).
+       Only when reconciling changes something: the commit alone turned the record's null label fields into absent ones, so
+       opening Labels saved a new version of an untouched build, which another tab's stale-tab guard reads as a newer save
+       (the guard's design check, 2026-10-22). serialize() is a copy: the dry run leaves the record as it is */
     let changed = false;
-    store.commit((s) => { changed = R.reconcileLoad(L, s); }, 'label-sync');
+    if (R.reconcileLoad(L, store.serialize())) store.commit((s) => { changed = R.reconcileLoad(L, s); }, 'label-sync');
     if (!changed) store.flush();
     const back = ctx.memo?.labelsSel; if (back != null && unit(back)) { st.selId = back; stage.selectUnit(back); }
+    importOpened();   // the link this page opened with (after the labels this browser kept for the build, when there are any)
     importFromHash();
     renderAll();
     if (R.labelsOf(S()).length) loadLabelFont().then(() => renderAll()).catch(() => {});   // the icon art for the previews

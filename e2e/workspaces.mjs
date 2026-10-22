@@ -744,6 +744,422 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   await ctx.close();
 });
 
+/* THE STUDIO'S "ADD TO PLANNER BUILD" ON A FRESH PAGE (2026-10-22; the cutover prep's parity check, row E6): the Studio
+   opens the planner as a new page on <return>#labels-add=<list>. Before, the first settled save wrote the address as
+   #build= alone while the label tools were still loading, so the link was gone when they looked for it and nothing was
+   added; only a link set on a page already open (the case above) imported. Both ways a fresh page arrives: a bare
+   labels link, and one beside the build's own #build= (a return address that carried its build). */
+test('Labels: the Studio’s Add to planner build opens a fresh page and its labels land, alone or beside the build’s own #build=', async () => {
+  const link = (id, words) => Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: id, labels: words.map((text) => ({ text })) })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const words = (page) => page.evaluate(() => ((window.__GEN2_STORE__.state.labelList || {}).labels || []).map((l) => String(l.text || '').toLowerCase()));
+  const landed = (page, n, what) => page.waitForFunction((n) => ((window.__GEN2_STORE__.state.labelList || {}).labels || []).length === n, n, { timeout: 30_000 }).catch(async () => assert.fail(`${what}: the labels did not land within 30 s (on the board: ${JSON.stringify(await words(page).catch(() => 'unreadable'))})`));
+  // a bare labels link, opened as a new page
+  const a = await open('labels', { query: '#labels-add=' + link('freshload0001', ['Fresh one', 'Fresh two']) });
+  await landed(a.page, 2, 'a bare link');
+  assert.deepEqual(await words(a.page), ['fresh one', 'fresh two']);
+  await a.page.waitForTimeout(1500);   // past the store's coalescing: the next save writes the address again
+  assert.ok(await a.page.evaluate(() => /^#build=/.test(location.hash) && !/labels-add/.test(location.hash)), 'the address keeps the build and drops the link once it is in');
+  assert.match(await text(a.page, '#ws-labels'), /fresh one/i, 'the panel lists them');
+  const hash = await a.page.evaluate(() => window.__GEN2_STORE__.hash());
+  const before = await a.page.evaluate(() => window.__GEN2_STORE__.state.placed.map((p) => `${p.id}:${p.w}x${p.hh}@${p.x},${p.y}`).join(' '));
+  assert.deepEqual(clean(a.errors), []);
+  // the same build back in this browser WITHOUT its labels (an older copy, as the old planner's cutover redirect forwards
+  // its own slot as #build=): tab A shows it and offers the two this browser kept; the visitor goes to the Studio, whose
+  // Add to planner build opens tab B on the bare link. Tab B brings the kept two back, then adds the link's. Tab A, still
+  // without labels, is now behind: the stale-tab guard (2026-10-22) stops it saving over tab B's build. A tab without the
+  // guard (an old planner page left open across the deploy) still can; the stored copy outlives that, so the next page
+  // offers the two again
+  const pageIn = async (url) => { const p = await a.ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push('pageerror: ' + e.message)); await p.goto(`${base}/index.html?${url}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p); return { p, errs }; };
+  const keptCount = (p) => p.evaluate(() => { try { const o = JSON.parse(localStorage.getItem('gen2-label-copies') || 'null'); return o ? Object.keys(o.copies || {}).length : 0; } catch { return -1; } });
+  // an edit has been saved when the slot (written after the Recent entry) holds it: on the CI runner a fixed 1.5 s was not
+  // enough, and the next page then opened the build as it was before the edit
+  const edit = async (p) => {
+    const want = await p.evaluate(() => { const S = window.__GEN2_STORE__; const v = S.state.buildPlate === 'smooth' ? 'powder' : 'smooth'; S.commit((s) => { s.buildPlate = v; }, 'edit'); return v; });
+    await p.waitForFunction((v) => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).buildPlate === v; } catch { return false; } }, want, { timeout: 30_000 }).catch(() => assert.fail('an edit was not saved within 30 s'));
+  };
+  const bare = await a.page.evaluate(() => { const r = window.__GEN2_STORE__.serialize(); delete r.labelList; delete r.labelAssign; return btoa(unescape(encodeURIComponent(JSON.stringify(r)))); });
+  const tabA = await pageIn(`ws=labels&debug=1#build=${bare}`);
+  await tabA.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('tab A did not offer the kept labels'));
+  await edit(tabA.p);   // tab A's save: the build in this browser is now the one without labels
+  // before any restore (the copy kept, not yet marked): a damaged link restores nothing, the offer stays and the status
+  // says the link is damaged; so does a link that decodes but brings no label that can be read (the dry run)
+  const damaged = await pageIn('ws=labels&debug=1#labels-add=AAAA');
+  await damaged.p.waitForFunction(() => /This labels link is damaged/.test(document.getElementById('ws-labels')?.textContent || ''), null, { timeout: 30_000 }).catch(() => assert.fail('no damaged-link status'));
+  assert.deepEqual(await words(damaged.p), [], 'nothing restored for a damaged link');
+  assert.equal(await damaged.p.locator('#ws-labels .banner.copy').count(), 1, 'the offer stays');
+  await damaged.p.close();
+  const unreadableLink = Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: 'freshload0007', labels: [{ notText: 1 }] })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unreadable = await pageIn('ws=labels&debug=1#labels-add=' + unreadableLink);
+  // the offer renders only once the label tools have loaded, in the same step as the link's import
+  await unreadable.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('the offer did not show beside a link that adds nothing'));
+  assert.deepEqual(await words(unreadable.p), [], 'nothing restored for a link that adds nothing');
+  assert.equal(await unreadable.p.locator('#ws-labels .banner.copy').count(), 1, 'the offer stays for it too');
+  await unreadable.p.close();
+  const tabB = await pageIn('ws=labels&debug=1#labels-add=' + link('freshload0005', ['After the kept']));
+  await landed(tabB.p, 3, 'tab B: the kept two, then the link');
+  assert.deepEqual(await words(tabB.p), ['fresh one', 'fresh two', 'after the kept']);
+  assert.match(await text(tabB.p, '#ws-labels'), /Brought back the 2 labels this browser kept for this build\./, 'the status says both');
+  assert.equal(await tabB.p.locator('#ws-labels .banner.copy').count(), 0, 'no offer left over in tab B');
+  assert.equal(await keptCount(tabB.p), 1, 'the stored copy is kept');
+  assert.equal(await tabB.p.evaluate(() => Object.values(JSON.parse(localStorage.getItem('gen2-label-copies')).copies)[0].restored), true, 'and marked as restored once');
+  await tabB.p.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).labelList.labels.length === 3; } catch { return false; } }, null, { timeout: 30_000 }).catch(() => assert.fail('tab B was not saved within 30 s'));
+  // each page closes once its part is done: an open tab can save again later and change what the next page opens, and four
+  // 3D pages at once slow the CI runner's software rendering past the waits (run 39824340436)
+  await tabB.p.close();
+  // tab A heard tab B's save: the notice is up and its edit is not saved
+  const stored = (p) => p.evaluate(async () => { const S = window.__GEN2_STORE__; const B = await import('./js/state/builds.js'); const b = await B.openBuilds(); const e = await b.get(S.state.buildId); return { savedAt: e.savedAt, n: e.record.labelList?.labels?.length || 0, slot: JSON.parse(localStorage.getItem('gen2-last-build')).labelList?.labels?.length || 0 }; });
+  await tabA.p.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('tab A did not go stale after tab B saved the build'));
+  const behind = await stored(tabA.p);
+  assert.deepEqual([behind.n, behind.slot], [3, 3], 'tab B’s build is the stored one');
+  await tabA.p.evaluate(async () => { const S = window.__GEN2_STORE__; S.commit((s) => { s.buildPlate = s.buildPlate === 'smooth' ? 'powder' : 'smooth'; }, 'edit'); await new Promise((r) => setTimeout(r, 1500)); await window.__GEN2_CTX__().builds.settled(); });
+  assert.deepEqual(await stored(tabA.p), behind, 'tab A’s edit wrote nothing');
+  await tabA.p.close();
+  // a tab without the guard saves over it anyway (written here as the old planner did: the Recent entry, the current id, the slot)
+  await a.page.evaluate(async () => {
+    const B = await import('./js/state/builds.js'); const b = await B.openBuilds();
+    const e = await b.get(b.currentId); const record = { ...e.record }; delete record.labelList; delete record.labelAssign;
+    await b.put({ ...e, record, savedAt: e.savedAt + 1 }); b.currentId = e.id; b.writeSlot(record);
+  });
+  const again = await pageIn('ws=labels&debug=1');
+  await again.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('the kept labels were not offered again after tab A saved over the build'));
+  assert.match(await text(again.p, '#ws-labels .banner.copy span'), /kept 2 labels/);
+  await again.p.close();
+  // the next Studio link on that build adds only its own label: a copy restored once is offered, never restored again
+  const second = await pageIn('ws=labels&debug=1#labels-add=' + link('freshload0006', ['Second link']));
+  await landed(second.p, 1, 'a second link');
+  assert.deepEqual(await words(second.p), ['second link']);
+  assert.doesNotMatch(await text(second.p, '#ws-labels'), /Brought back/, 'no second automatic restore');
+  assert.equal(await keptCount(second.p), 1, 'the copy is still kept');
+  for (const t of [tabA, tabB, again, damaged, unreadable, second]) assert.deepEqual(clean(t.errs), []);
+  await a.ctx.close();
+  // beside the build's own #build=: the build opens as it was, and the new label joins its two
+  const b = await open('labels', { query: `#build=${hash}&labels-add=` + link('freshload0002', ['Beside one']) });
+  await landed(b.page, 3, 'a link beside #build=');
+  assert.deepEqual(await words(b.page), ['fresh one', 'fresh two', 'beside one']);
+  assert.equal(await b.page.evaluate(() => window.__GEN2_STORE__.state.placed.map((p) => `${p.id}:${p.w}x${p.hh}@${p.x},${p.y}`).join(' ')), before, 'the same build');
+  assert.deepEqual(clean(b.errors), []);
+  await b.ctx.close();
+  // leaving Labels before its label tools load (held back here): the link waits in the page, never in the address, so an
+  // edit's save, a share link or a reload does not carry it (an adversarial check of the first fix, 2026-10-22); it lands
+  // once Labels opens again, and a reload does not add it twice
+  const cctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(cctx);
+  await cctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  let release = null; const gate = new Promise((r) => { release = r; });
+  await cctx.route('**/vendor/label-list.js*', async (route) => { await gate; await route.continue(); });
+  const c = await open('labels', { context: cctx, query: '#labels-add=' + link('freshload0003', ['Waiting one']) });
+  assert.ok(await c.page.evaluate(() => !/labels-add/.test(location.href)), 'the link left the address at boot');
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await c.page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.buildPlate = s.buildPlate === 'smooth' ? 'powder' : 'smooth'; }, 'edit'));
+  await c.page.waitForTimeout(1500);   // the edit's save has written the address
+  assert.ok(await c.page.evaluate(() => /^#build=/.test(location.hash) && !/labels-add/.test(location.href)), 'a save while on Build writes the build alone');
+  assert.deepEqual(await words(c.page), [], 'nothing imported yet');
+  release();
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('labels'));
+  await landed(c.page, 1, 'back in Labels');
+  assert.deepEqual(await words(c.page), ['waiting one']);
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await c.page.evaluate(() => window.__GEN2_CTX__().switchTo('labels'));
+  await c.page.waitForTimeout(2000);
+  assert.deepEqual(await words(c.page), ['waiting one'], 'opening Labels again does not add it twice');
+  await c.page.reload({ waitUntil: 'load' }); await waitBoot(c.page);
+  await c.page.waitForTimeout(3000);
+  assert.deepEqual(await words(c.page), ['waiting one'], 'a reload does not add it twice');
+  assert.deepEqual(clean(c.errors), []);
+  await cctx.close();
+  // a link on another workspace's address (the old planner's cutover redirect sends ?ws=build with the whole hash): it
+  // still opens Labels and lands
+  const d = await open('build', { query: '#labels-add=' + link('freshload0004', ['From build']) });
+  await landed(d.page, 1, 'a link on ?ws=build');
+  assert.equal(await d.page.evaluate(() => document.documentElement.dataset.ws), 'labels', 'the page opened on Labels');
+  assert.deepEqual(clean(d.errors), []);
+  await d.ctx.close();
+});
+
+/* THE STALE-TAB GUARD (Joey, 2026-10-22: "a planner tab whose build was saved newer by another tab must not overwrite it;
+   show a notice with Reload instead"), in the Studio's own two-tab flow. Make labels opens the Studio in a new tab, and its
+   Add to planner build opens the planner again, in another new tab, on the build this browser has open: tab B lands the
+   labels and saves while tab A is still open on the build without them. Tab A's next edit used to save its older build over
+   the labels. Every write now names the stored version it is based on (js/state/builds.js decide()); tab A's is refused, so
+   it goes stale for good: a notice over everything, nothing of it saved, and Reload opens the saved build */
+test('the stale-tab guard: the Studio’s second planner tab saves its labels, the first goes stale and saves nothing, Reload opens the saved build', async () => {
+  const context = await freshContext();
+  await context.route('https://labels.modulith.systems/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Label Studio stub</title>' }));
+  const A = await open('labels', { context });
+  const guard = (p) => p.evaluate(() => { const b = window.__GEN2_CTX__().builds; return { stale: b.stale, base: b.base }; });
+  const settled = (p) => p.evaluate(async () => { window.__GEN2_STORE__.flush(); await window.__GEN2_CTX__().builds.settled(); });
+  const row = (p, id = null) => p.evaluate(async (id) => { const M = await import('./js/state/builds.js'); const e = await (await M.openBuilds()).get(id || window.__GEN2_STORE__.state.buildId); return e && { savedAt: e.savedAt, name: e.name, plate: e.record.buildPlate, n: e.record.labelList?.labels?.length || 0 }; }, id);
+  const slot = (p) => p.evaluate(() => { const r = JSON.parse(localStorage.getItem('gen2-last-build') || 'null'); return r && { id: r.buildId, plate: r.buildPlate, n: r.labelList?.labels?.length || 0 }; });
+  const flip = (p) => p.evaluate(() => { const S = window.__GEN2_STORE__; const v = S.state.buildPlate === 'smooth' ? 'powder' : 'smooth'; S.commit((s) => { s.buildPlate = v; }, 'edit'); return v; });
+  // an edit has been saved when the slot (written last) holds it
+  const edit = async (p) => { const want = await flip(p); await p.waitForFunction((v) => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).buildPlate === v; } catch { return false; } }, want, { timeout: 30_000 }).catch(() => assert.fail('an edit was not saved within 30 s')); await settled(p); };
+  // a new page has nothing stored to be based on
+  assert.deepEqual(await guard(A.page), { stale: false, base: null });
+  // Make labels on a build never saved (this untouched kit page): its Add to planner build reopens this browser's CURRENT
+  // build, so the build becomes current, and is saved, as the Studio opens (the guard's review: opening Labels used to
+  // save it as a side effect, and no longer does)
+  const id0 = await A.page.evaluate(() => window.__GEN2_STORE__.state.buildId);
+  assert.equal(await row(A.page, id0), null, 'not saved before');
+  const [studio0] = await Promise.all([context.waitForEvent('page'), A.page.locator('#ws-dock button.cta:has-text("Make labels")').click()]);
+  await studio0.close();
+  await settled(A.page);
+  assert.equal(await A.page.evaluate(() => localStorage.getItem('gen2-current-build')), id0, 'the current build is this one');
+  assert.ok(await row(A.page, id0), 'and it is saved');
+  assert.equal((await guard(A.page)).base, (await row(A.page, id0)).savedAt);
+  // a kit page mints a new id on every adopt, and Undo goes back to the earlier one: the base is per build, so neither is stale
+  const ids = [];
+  for (let i = 0; i < 2; i++) {
+    ids.push(await A.page.evaluate(async () => { const S = window.__GEN2_STORE__; S.flush(); const k = JSON.parse(JSON.stringify(window.__GEN2_VIEWER__.build)); delete k.buildId; S.load(k, 'adopt'); S.flush(); await window.__GEN2_CTX__().builds.settled(); return S.state.buildId; }));
+  }
+  assert.notEqual(ids[0], ids[1], 'each adopt is a new build');
+  const firstAdopt = await row(A.page, ids[0]);
+  await A.page.evaluate(async () => { window.__GEN2_STORE__.undo(); await window.__GEN2_CTX__().builds.settled(); });
+  assert.equal(await A.page.evaluate(() => window.__GEN2_STORE__.state.buildId), ids[0]);
+  assert.equal((await guard(A.page)).stale, false, 'Undo back to the first adopt’s build is not stale');
+  assert.ok((await row(A.page, ids[0])).savedAt > firstAdopt.savedAt, 'and its build is saved again');
+  // this tab's own saves move its base along, also two queued back to back (an edit and an Undo at once)
+  for (let i = 0; i < 2; i++) { await edit(A.page); assert.equal((await guard(A.page)).base, (await row(A.page)).savedAt, 'the base follows this tab’s own save'); }
+  await A.page.evaluate(async () => { const S = window.__GEN2_STORE__; S.commit((s) => { s.backCover = !s.backCover; }, 'edit'); S.undo(); await window.__GEN2_CTX__().builds.settled(); });
+  assert.equal((await guard(A.page)).stale, false, 'its own saves in a row never make it stale');
+  // a version is never reused: with the clock standing still (a coarse timer, a clock set back), each save still moves it
+  // (Sol 01a16556: two saves with one savedAt let a tab based on the first pass the check after the second)
+  const frozen = await A.page.evaluate(async () => {
+    const real = Date.now; const t = real(); Date.now = () => t;
+    try {
+      const S = window.__GEN2_STORE__; const out = [];
+      for (let i = 0; i < 2; i++) { S.commit((s) => { s.backCover = !s.backCover; }, 'edit'); S.flush(); await window.__GEN2_CTX__().builds.settled(); out.push(window.__GEN2_CTX__().builds.base); }
+      return out;
+    } finally { Date.now = real; }
+  });
+  assert.ok(frozen[1] > frozen[0], `each save is a new version: ${frozen.join(', ')}`);
+  const rowA = await row(A.page);
+  const id = await A.page.evaluate(() => window.__GEN2_STORE__.state.buildId);
+  // the control for the held palette below: a preset IS saved with the build
+  const palKey = 'gen2-colors:build-' + id;
+  const pal = (p) => p.evaluate((k) => localStorage.getItem(k), palKey);
+  const palBefore = await pal(A.page);
+  await A.page.evaluate(() => { const V = window.__GEN2_VIEWER__; V.applyPreset(V.PRESETS[1]); });
+  assert.notEqual(await pal(A.page), palBefore, 'a preset is saved with the build');
+  // tab A reloads (its own address, its kept base): opening Labels saves nothing, and it is not stale
+  await A.page.reload({ waitUntil: 'load' }); await waitBoot(A.page);
+  await A.page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await A.page.waitForTimeout(1500); await settled(A.page);
+  assert.deepEqual(await row(A.page), rowA, 'opening Labels wrote no new version');
+  assert.equal(await A.page.locator('#ws-stale').count(), 0);
+  assert.deepEqual(await guard(A.page), { stale: false, base: rowA.savedAt });
+  // Make labels: the Studio opens in a new tab, told where its Add to planner build comes back to
+  let release = null; const gate = new Promise((r) => { release = r; });
+  await context.route('**/vendor/label-list.js*', async (route) => { await gate; await route.continue(); });   // tab B imports only once released
+  const [studioTab] = await Promise.all([context.waitForEvent('page'), A.page.locator('#ws-dock button.cta:has-text("Make labels")').click()]);
+  await studioTab.waitForURL(/labels\.modulith\.systems/, { timeout: 30_000 });
+  const ret = new URL(studioTab.url()).searchParams.get('return');
+  assert.equal(ret, `${base}/index.html?ws=labels`);
+  await studioTab.close();
+  // the slot holds another build now (as after a switch elsewhere), so tab B's boot changes it: a storage event tab A ignores
+  // (after the click: Make labels writes the slot itself)
+  await A.page.evaluate(() => { const r = JSON.parse(localStorage.getItem('gen2-last-build')); r.buildId = 'e2eother0001'; localStorage.setItem('gen2-last-build', JSON.stringify(r)); });
+  // the Studio's Add to planner build: tab B, on the same build
+  const linkOf = (batch, words) => Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: batch, labels: words.map((text) => ({ text })) })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const tb = await context.newPage(); const bErrors = [];
+  tb.on('pageerror', (e) => bErrors.push('pageerror: ' + e.message)); tb.on('console', (m) => { if (m.type() === 'error') bErrors.push('console: ' + m.text()); });
+  await tb.goto(`${ret}&debug=1#labels-add=${linkOf('guardtab0001', ['Guard one'])}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(tb);
+  assert.equal(await tb.evaluate(() => window.__GEN2_STORE__.state.buildId), id, 'tab B opened the build tab A has open');
+  assert.equal((await guard(tb)).base, rowA.savedAt);
+  // what must not make tab A stale: the slot tab B's boot wrote, a hint naming tab A's own version, a hint removed
+  await tb.evaluate(({ id, at }) => { localStorage.removeItem('gen2-build-saved'); localStorage.setItem('gen2-build-saved', JSON.stringify({ id, savedAt: at })); localStorage.removeItem('gen2-build-saved'); }, { id, at: rowA.savedAt });
+  await A.page.waitForTimeout(1000); await settled(A.page);
+  assert.equal(await A.page.locator('#ws-stale').count(), 0, 'a hint is a reason to look, not a verdict');
+  assert.equal((await guard(A.page)).stale, false);
+  // tab B lands the label and saves
+  release();
+  await tb.waitForFunction(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length === 1, null, { timeout: 30_000 }).catch(() => assert.fail('tab B: the link’s label did not land'));
+  await tb.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).labelList.labels.length === 1; } catch { return false; } }, null, { timeout: 30_000 }).catch(() => assert.fail('tab B was not saved within 30 s'));
+  await settled(tb);
+  const rowB = await row(tb);
+  assert.notEqual(rowB.savedAt, rowA.savedAt); assert.equal(rowB.n, 1);
+  await tb.evaluate(() => localStorage.setItem('gen2-current-build', 'e2esentinel1'));
+  // tab A goes stale: the notice, the keyboard on Reload
+  await A.page.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('tab A did not go stale after tab B saved the build'));
+  assert.match(await text(A.page, '#ws-stale'), /saved in another tab/);
+  assert.equal(await A.page.getAttribute('#ws-stale', 'role'), 'alertdialog');
+  assert.equal(await A.page.evaluate(() => document.activeElement && document.activeElement.textContent), 'Reload', 'the keyboard is on Reload');
+  assert.equal((await guard(A.page)).stale, true);
+  // no key reaches the page under the notice: Escape, Undo, Delete on Reload change nothing, and a focus moved behind it
+  // comes back (the guard's review)
+  // (on Build, whose keys act on any target but a field: Ctrl+Z undoes, Delete removes the selected unit)
+  await A.page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  // an edit first (not saved: the tab is stale), so Ctrl+Z has something it would undo
+  await A.page.evaluate(() => { const S = window.__GEN2_STORE__; S.commit((s) => { s.feet = s.feet === 'tpu' ? 'adhesive' : 'tpu'; }, 'edit'); S.flush(); });
+  assert.ok(await A.page.evaluate(() => window.__GEN2_STORE__.canUndo), 'there is an edit to undo');
+  const hashNow = await A.page.evaluate(() => window.__GEN2_STORE__.hash());
+  for (const k of ['Escape', 'Control+z', 'Delete', 'ArrowLeft']) await A.page.keyboard.press(k);
+  assert.equal(await A.page.evaluate(() => window.__GEN2_STORE__.hash()), hashNow, 'the keys did nothing under the notice');
+  await A.page.evaluate(() => document.querySelector('#ws-dock button')?.focus());
+  assert.equal(await A.page.evaluate(() => document.activeElement && document.activeElement.textContent), 'Reload', 'focus stays on the notice');
+  await A.page.evaluate(() => window.__GEN2_CTX__().switchTo('labels'));
+  // nothing of tab A is saved any more: the palette, an edit (twice: it stays stale), the slot, the current build
+  const palHeld = await pal(A.page);
+  await A.page.evaluate(() => { const V = window.__GEN2_VIEWER__; V.applyPreset(V.PRESETS[V.PRESETS.length - 1]); });
+  assert.equal(await pal(A.page), palHeld, 'the palette is not written');
+  for (let i = 0; i < 2; i++) {
+    await flip(A.page); await settled(A.page);
+    assert.deepEqual(await row(A.page), rowB, 'tab A’s edit wrote no new version');
+    assert.deepEqual(await slot(A.page), { id, plate: rowB.plate, n: 1 }, 'nor the slot');
+    assert.equal(await A.page.evaluate(() => localStorage.getItem('gen2-current-build')), 'e2esentinel1', 'nor the current build');
+    assert.equal(await A.page.evaluate(() => window.__GEN2_CTX__().builds.capPending), null, 'and it is no cap notice');
+  }
+  assert.ok(await A.page.evaluate(() => JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(7))))).buildPlate === window.__GEN2_STORE__.state.buildPlate), 'the address still follows the edits');
+  // the notice is the page's, not a workspace's: it stays across a switch and the phone breakpoint, and fits a phone
+  await A.page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  assert.ok(await A.page.locator('#ws-stale').isVisible(), 'kept across a workspace switch');
+  await A.page.setViewportSize({ width: 390, height: 844 });
+  await A.page.waitForFunction(() => document.documentElement.classList.contains('ws-phone'), null, { timeout: 15_000 });
+  const fit = await A.page.evaluate(() => { const r = document.querySelector('#ws-stale button').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; });
+  assert.ok(fit && await A.page.locator('#ws-stale').isVisible(), 'Reload on a phone screen');
+  await A.page.setViewportSize({ width: 1280, height: 800 });
+  await A.page.evaluate(() => window.__GEN2_CTX__().switchTo('labels'));
+  // a reload of the stale tab is still stale: its kept base is not the stored version
+  await tb.close();
+  await A.page.reload({ waitUntil: 'load' }); await waitBoot(A.page);
+  await A.page.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('the stale tab reloaded without its notice'));
+  await flip(A.page); await settled(A.page);
+  assert.deepEqual(await row(A.page), rowB, 'nor after its reload');
+  // Reload opens the saved build: the labels, no notice, based on the stored version, and its edits save again
+  await A.page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await A.page.locator('#ws-stale button').click();
+  await A.page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && (window.__GEN2_STORE__.state.labelList?.labels || []).length === 1, null, { timeout: 90_000 }).catch(() => assert.fail('Reload did not open the saved build'));
+  await waitBoot(A.page);
+  assert.equal(await A.page.locator('#ws-stale').count(), 0);
+  assert.deepEqual(await guard(A.page), { stale: false, base: rowB.savedAt });
+  await edit(A.page);
+  const after = await row(A.page);
+  assert.ok(after.savedAt > rowB.savedAt && after.n === 1, 'an edit after Reload is saved, labels and all');
+  // a page opened on a link to the build hears tab A's next save and goes stale; its reload is still stale (its kept base)
+  const tc = await context.newPage(); const cErrors = [];
+  tc.on('pageerror', (e) => cErrors.push('pageerror: ' + e.message));
+  await tc.goto(await A.page.evaluate(() => location.href), { waitUntil: 'load', timeout: 90_000 }); await waitBoot(tc);
+  assert.deepEqual(await guard(tc), { stale: false, base: after.savedAt });
+  await edit(A.page);
+  await tc.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('the link page did not go stale after tab A saved'));
+  await tc.reload({ waitUntil: 'load' }); await waitBoot(tc);
+  await tc.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('the link page reloaded without its notice'));
+  assert.deepEqual(clean(cErrors), []);
+  await tc.close();
+  // Back to an older page of the build: tab A leaves for a new page (a reopen, which saves the build again), then comes
+  // back. That page held the version before, so it is stale, also when it boots again (the review: per tab alone, the
+  // newer base the tab kept made the old page look current, and its next edit saved over the newer version)
+  const leftAt = await row(A.page);
+  await A.page.goto(`${base}/index.html?ws=build&debug=1`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(A.page);
+  await edit(A.page);
+  assert.ok((await row(A.page)).savedAt > leftAt.savedAt);
+  await A.page.goBack({ waitUntil: 'load', timeout: 90_000 }); await waitBoot(A.page);
+  await A.page.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('Back to the older page did not show the notice'));
+  await A.page.reload({ waitUntil: 'load' }); await waitBoot(A.page);
+  await A.page.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('the older page, reloaded, did not show the notice'));
+  // its Reload takes the older page out of the history: Back goes to what came before the planner, not to that page
+  await A.page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await A.page.locator('#ws-stale button').click();
+  await A.page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__, null, { timeout: 90_000 }); await waitBoot(A.page);
+  assert.equal(await A.page.locator('#ws-stale').count(), 0);
+  await A.page.goBack({ timeout: 30_000 }).catch(() => {});
+  assert.ok(!/index\.html/.test(A.page.url()), `Back left the planner (at ${A.page.url().slice(0, 60)})`);
+  await A.page.goForward({ waitUntil: 'load', timeout: 90_000 }); await waitBoot(A.page);
+  assert.equal(await A.page.locator('#ws-stale').count(), 0, 'and Forward comes back to the saved build');
+  // a write that sends no hint (a tab without the guard; the writing tab hears no storage event of its own): caught at the
+  // tab's next save, which is refused
+  await A.page.evaluate(async () => { const M = await import('./js/state/builds.js'); const b = await M.openBuilds(); const e = await b.get(window.__GEN2_STORE__.state.buildId); await b.put({ ...e, savedAt: e.savedAt + 1, name: 'Silent write' }); });
+  assert.equal(await A.page.locator('#ws-stale').count(), 0, 'no hint heard, no notice yet');
+  const slotBefore = await slot(A.page);
+  await flip(A.page); await settled(A.page);
+  assert.equal((await guard(A.page)).stale, true, 'the save found the newer version');
+  await A.page.waitForSelector('#ws-stale', { timeout: 10_000 });
+  assert.equal((await row(A.page)).name, 'Silent write', 'and left it as it was');
+  assert.deepEqual(await slot(A.page), slotBefore, 'the refused save wrote no slot');
+  assert.deepEqual(clean(A.errors), []);
+  assert.deepEqual(clean(bErrors), []);
+  await context.close();
+});
+
+/* the guard's version check on real IndexedDB (test/builds.test.mjs covers the localStorage fallback): the store module on a
+   blank page, no 3D */
+test('the stale-tab guard: the build store’s version check on IndexedDB, and on a build still in the fallback list', async () => {
+  const context = await freshContext();
+  await context.route(`${base}/e2e-blank.html`, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>blank</title>' }));
+  const page = await context.newPage();
+  await page.goto(`${base}/e2e-blank.html`, { waitUntil: 'load' });
+  const got = await page.evaluate(async () => {
+    const M = await import('/js/state/builds.js'); const b = await M.openBuilds();
+    const rec = (id) => ({ mount: 'tabletop', length: 185, placed: [], nextId: 1, buildId: id });
+    const e = (savedAt, id = 'e2eguard0001') => M.entryOf(rec(id), { now: savedAt });
+    const hint = () => localStorage.getItem(M.SAVED_KEY);
+    const o = { durable: b.durable };
+    o.first = (await b.put(e(100), { expect: null })).ok;
+    o.hintFirst = hint();
+    const r150 = await b.put(e(150), { expect: null }); o.r150 = { ok: r150.ok, at: r150.stale && r150.stale.savedAt, drop: 'drop' in r150 };
+    o.hintAfterRefusal = hint();
+    o.r200 = (await b.put(e(200), { expect: 100 })).ok; o.get200 = (await b.get('e2eguard0001')).savedAt;
+    const r300 = await b.put(e(300), { expect: 100 }); o.r300 = { ok: r300.ok, at: r300.stale && r300.stale.savedAt };
+    o.r400 = (await b.put(e(400), { expect: 250 })).ok;
+    o.r500 = (await b.put(e(500), { force: true, expect: 100 })).ok;
+    o.missing = (await b.put(e(600, 'e2eguard0002'), { expect: 123 })).ok;
+    // a build still in the fallback list (saved while IndexedDB was refused): checked against, then moved over
+    const fb = e(250, 'e2eguard0003');
+    localStorage.setItem('gen2-builds', JSON.stringify([fb]));
+    o.fbGet = (await b.get('e2eguard0003')).savedAt;
+    o.fbWrong = (await b.put(e(650, 'e2eguard0003'), { expect: 100 })).ok;
+    o.fb700 = (await b.put(e(700, 'e2eguard0003'), { expect: 250 })).ok;
+    o.fbLeft = (JSON.parse(localStorage.getItem('gen2-builds') || '[]')).some((x) => x.id === 'e2eguard0003');
+    o.fbGet700 = (await b.get('e2eguard0003')).savedAt;
+    o.fb800 = (await b.put(e(800, 'e2eguard0003'), { expect: 700 })).ok;
+    o.hintLast = hint();
+    // a lost connection (WebKit, after a tab sat in the background): its next transaction throws; the store opens IndexedDB
+    // again rather than settle for the list, whose check would not know the row (the guard's review)
+    const orig = IDBDatabase.prototype.transaction; let fails = 0;
+    IDBDatabase.prototype.transaction = function (...a) { if (fails > 0) { fails--; throw new DOMException('The database connection is closing.', 'InvalidStateError'); } return orig.apply(this, a); };
+    fails = 1; o.lostGet = ((await b.get('e2eguard0003')) || {}).savedAt;
+    fails = 1; const lp = await b.put(e(900, 'e2eguard0003'), { expect: 100 }); o.lostPut = { ok: lp.ok, at: lp.stale && lp.stale.savedAt };
+    o.lostList = (JSON.parse(localStorage.getItem('gen2-builds') || '[]')).some((x) => x.id === 'e2eguard0003');
+    IDBDatabase.prototype.transaction = orig;
+    // an IndexedDB that failed to open when the page booted is tried again at the next read (Sol 01a16556), once for two
+    // readers at the same time: here a second open would fail a moment later and must not drop the first's connection
+    // (Terra 01a16560)
+    const realOpen = IDBFactory.prototype.open; let calls = 0;
+    IDBFactory.prototype.open = function (...a) {
+      calls++;
+      if (calls === 1) throw new DOMException('refused', 'UnknownError');
+      if (calls === 3) { const fake = {}; setTimeout(() => fake.onerror && fake.onerror(), 50); return fake; }
+      return realOpen.apply(this, a);
+    };
+    const late = await M.openBuilds();
+    o.lateBefore = late.durable;
+    const both = await Promise.all([late.get('e2eguard0003'), late.get('e2eguard0003')]);
+    o.lateGet = both.map((x) => (x || {}).savedAt);
+    await new Promise((r) => setTimeout(r, 150));
+    o.lateAfter = late.durable; o.opens = calls;
+    IDBFactory.prototype.open = realOpen;
+    return o;
+  });
+  assert.equal(got.durable, true, 'IndexedDB, not the fallback');
+  assert.equal(got.first, true);
+  assert.deepEqual(JSON.parse(got.hintFirst), { id: 'e2eguard0001', savedAt: 100 });
+  assert.deepEqual(got.r150, { ok: false, at: 100, drop: false }, 'never read, yet stored: refused with the stored row');
+  assert.equal(got.hintAfterRefusal, got.hintFirst, 'a refusal hints nothing');
+  assert.equal(got.r200, true); assert.equal(got.get200, 200);
+  assert.deepEqual(got.r300, { ok: false, at: 200 }, 'based on a version since replaced');
+  assert.equal(got.r400, false, 'any other version, not only an older one');
+  assert.equal(got.r500, false, 'force skips the cap, never the check');
+  assert.equal(got.missing, true, 'a missing row is written');
+  assert.equal(got.fbGet, 250);
+  assert.equal(got.fbWrong, false, 'the fallback list’s row is checked too');
+  assert.equal(got.fb700, true); assert.equal(got.fbLeft, false, 'and leaves the fallback list once IndexedDB has it');
+  assert.equal(got.fbGet700, 700); assert.equal(got.fb800, true);
+  assert.deepEqual(JSON.parse(got.hintLast), { id: 'e2eguard0003', savedAt: 800 });
+  assert.equal(got.lostGet, 800, 'a read after a lost connection still finds the row');
+  assert.deepEqual(got.lostPut, { ok: false, at: 800 }, 'and a write based on another version is still refused');
+  assert.equal(got.lostList, false, 'nothing went to the list');
+  assert.deepEqual([got.lateBefore, got.lateGet, got.lateAfter, got.opens], [false, [800, 800], true, 2], 'a failed first open is retried once for both readers, and the stored row found');
+  await context.close();
+});
+
 /* ASSEMBLE OPENS AT THE BEGINNING (Joey, 2026-10-20: "it seems to start at the end"). The other workspaces park the stage on
    the finished step and Assemble only moved to the Overview from the cover, so a visit from Build opened on the last step.
    Now a first arrival lands on the Overview from either; the step a visitor left on still comes back. And the guided
@@ -829,6 +1245,8 @@ test('the build store: an edit autosaves, a bare address reopens the build, Rena
   await p2.fill('#ws-switch input.rename', 'E2E bench');
   await p2.keyboard.press('Enter');
   await p2.waitForFunction(() => document.title === 'E2E bench · MODULITH Planner', null, { timeout: 30_000 });   // the rename lands after an IndexedDB write
+  // a rename is a new version: the first tab, still open on the build, is behind it now (the stale-tab guard)
+  await page.waitForSelector('#ws-stale', { timeout: 30_000 }).catch(() => assert.fail('the first tab did not go stale after the rename in the second'));
   // duplicate (navigates), then delete the original from the copy's menu
   await p2.getByRole('menuitem', { name: 'Duplicate', exact: true }).click();
   await p2.waitForFunction((old) => window.__GEN2_STORE__ && window.__GEN2_STORE__.state.buildId !== old, id, { timeout: 60_000 });
@@ -1438,6 +1856,83 @@ test('Build: a refused cell says why - a 1W over the middle of a 3W is a muted s
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 }).catch(() => assert.fail('"Put it at the left end" placed nothing within 30 s'));
   assert.match((await brief(page)).units, /100:1W@0,/, 'the 1W sits at the left end of the 3W');
   assert.equal(await page.evaluate(() => document.getElementById('ws-choice').hidden), true, 'the chip closed');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A TAP NEVER TAKES THE CAMERA (2026-10-22). The stage counted a press as the visitor taking the camera when the camera
+   moved more than 4 units between press and release, and a guided move moves it by itself: a click during the boot's
+   fly-in or a layout change's re-frame set camFree, and from then on the camera stopped following the build (found
+   tracing the refused-cell case). A tap is a press whose pointer stays within 6 px, the stage's own tap rule; a drag,
+   a pinch or a wheel still takes the camera, mid-flight or not.
+   The camera leaves its guided pose by the wheel, which is not damped, before each wait for it to rest: a drag's damped
+   coast ran on past 30 s on the SwiftShader runner (deploy run 39790130544), so the one drag comes last. */
+test('Build: a tap while the guided camera is moving leaves the camera to the guide; a drag or a wheel takes it', async () => {
+  const { ctx, page, errors } = await open('build');
+  const cam = () => page.evaluate(() => window.__GEN2_VIEWER__.probe().camera);
+  const free = () => page.evaluate(() => window.__GEN2_VIEWER__.camFree);
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  // the camera's position the same in three reads 300 ms apart: on the SwiftShader runner a moving camera is drawn about
+  // every 300 ms, so two reads could fall between two of its frames
+  const still = async (what) => {
+    await page.evaluate(() => { window.__e2eCam = null; window.__e2eSame = 0; });
+    await page.waitForFunction(() => { const c = JSON.stringify(window.__GEN2_VIEWER__.probe().camera); window.__e2eSame = window.__e2eCam === c ? window.__e2eSame + 1 : 0; window.__e2eCam = c; return window.__e2eSame >= 2; }, null, { polling: 300, timeout: 30_000 })
+      .catch(() => assert.fail(`the camera did not come to rest ${what} within 30 s`));
+    return cam();
+  };
+  // a point on the stage with no unit under it (a press on a unit picks the unit up)
+  const empty = () => page.evaluate(() => { const c = document.querySelector('canvas'); for (const [x, y] of [[640, 160], [520, 200], [760, 200], [640, 660], [420, 400], [860, 400]]) if (document.elementFromPoint(x, y) === c && window.__GEN2_VIEWER__.unitAt(x, y) == null) return [x, y]; return null; });
+  const drag = async (p) => { await page.mouse.move(p[0], p[1]); await page.mouse.down(); await page.mouse.move(p[0] + 160, p[1] + 40, { steps: 10 }); await page.mouse.up(); };
+  // the guided flight back is slowed (2.25 s, not 0.9 s) so a press lands inside it on a slow runner too
+  const flyBack = async () => { await page.evaluate(() => { window.__GEN2_VIEWER__.setSlow(true); window.__GEN2_VIEWER__.resetView(); }); assert.equal(await free(), false, 'the camera button gives the camera back'); };
+  // zoomed out at an empty point: a wheel takes the camera
+  const zoomOut = async (what) => {
+    await page.mouse.wheel(0, 800);
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail(`a wheel ${what} did not take the camera`));
+    return still(`after the wheel ${what}`);
+  };
+  // the camera button's flight, once the camera has left its pose by 20 units: past the eased flight's slow start,
+  // where its first 250 ms move the camera about 0.5% of the way
+  const inFlight = async (pose) => {
+    await flyBack();
+    await page.waitForFunction((s) => { const c = window.__GEN2_VIEWER__.probe().camera; return Math.hypot(c[0] - s[0], c[1] - s[1], c[2] - s[2]) > 20; }, pose, { timeout: 15_000 })
+      .catch(() => assert.fail('the camera button did not fly the camera back'));
+  };
+  await still('after the boot');
+  let pt = await empty();
+  assert.ok(pt, 'an empty point on the stage');
+  await page.mouse.move(pt[0], pt[1]);
+  const pose = await zoomOut('at rest');
+  // a tap inside the guided flight: the pointer stays put while the camera moves under it (600 ms: two of the runner's
+  // frames at least)
+  await inFlight(pose);
+  const before = await cam();
+  await page.mouse.down(); await page.waitForTimeout(600); await page.mouse.up();
+  const moved = dist(before, await cam());
+  assert.ok(moved > 4, `the press fell inside the guided flight: the camera moved ${moved.toFixed(1)} during it`);
+  assert.equal(await free(), false, 'a tap during a guided move leaves the camera to the guide');
+  const home = await still('after the flight');
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSlow(false));
+  // so the guide still follows the build: a wider layout re-frames the camera
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = [0, 3].map((x, i) => ({ id: i + 1, x, y, w: 3, hh: 2, fill: 'decor', shelves: 0 })); s.nextId = 100; s.gridW = 6; }, 'edit'));
+  await page.waitForFunction(() => { const V = window.__GEN2_VIEWER__; return V.build.placed.length === 2 && V.build.placed.every((u) => u.w === 3) && !V.regenBusy; }, null, { timeout: 90_000 })
+    .catch(() => assert.fail('the two 3W did not reach the stage within 90 s'));
+  const framed = await still('after the layout change');
+  assert.ok(dist(home, framed) > 4, `a layout change after the tap re-framed the camera (it moved ${dist(home, framed).toFixed(1)})`);
+  // a tap at rest leaves nothing behind: a wheel after it still takes the camera
+  pt = await empty();
+  assert.ok(pt, 'an empty point on the stage around the wider build');
+  await page.mouse.move(pt[0], pt[1]); await page.mouse.down(); await page.mouse.up();
+  assert.equal(await free(), false, 'a tap at rest takes nothing');
+  const out = await zoomOut('after a tap');
+  // and a drag inside a guided flight still takes it (from a point empty at the zoomed-out pose the flight starts from)
+  pt = await empty();
+  assert.ok(pt, 'an empty point on the stage after the wheel');
+  await page.mouse.move(pt[0], pt[1]);
+  await inFlight(out);
+  await drag(pt);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('a drag during a guided move did not take the camera'));
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSlow(false));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

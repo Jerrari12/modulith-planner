@@ -2288,10 +2288,275 @@ Dated calls made while building, with who made them. The brief and the inventory
     between press and release, and the tween's own motion counts.
   - In the three failing replay runs that logged it, the case's click inside the flight set `camFree` true. The camera
     did not move again when the 3W mounted.
-  - Proposed as its own change.
+  - Proposed as its own change. Fixed 2026-10-22: "a tap never takes the camera", below.
 - **Review:** Terra `01a1608a` on the case: one finding, discarded wrong. It said a sub-pixel tween could pass the poll
   and the click then miss; the easing bound above rules that out. Terra `01a1609a` on this entry: three fixes taken (the
   runner's timing marked as inferred, the bound restated for rounding and the projection, the log line named exactly).
   Two discarded: the 29 of 30 count holds (one run took 109 ms), and the deploy line is Joey's standing rule, not a
   blocker.
 - **Deploy:** a test-only fix for a failure the suite reported; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `aa82df2d`: deploy run 39688850430 passed, the case with it.
+
+## 2026-10-22 (a tap never takes the camera)
+
+- **Joey, asked:** "fix the tap-during-a-camera-move takeover here: a tap during a guided tween should not set
+  camOverride. Write a check that fails on the current code first."
+- **The bug.** The stage hands the camera to the visitor (`camOverride`, read as `camFree`) when the camera moved more
+  than 4 units between the controls' `start` and `end`. A guided move (the Build boot's fly-in, a layout change's
+  re-frame, the camera button's return) moves the camera by itself, so a plain click inside one set it, on a "+" or
+  anywhere on the stage. From then on `tweenCamera` returned early, and the camera stopped following the build until
+  the camera button was pressed. Found tracing the refused-cell case (the entry above).
+- **Now** main.js follows each press on the stage: where its pointers went down, and the furthest any of them travels.
+  - A press whose pointers all stayed within `TAP_PX` (6 px) is a tap, and never sets `camOverride`. 6 px is the
+    threshold the canvas pointerup already used to tell a tap from an orbit's release; that line now reads the same
+    constant.
+  - A drag or a pinch travels further, and a wheel has no press (a wheel also clears any press record), so they still
+    take the camera, mid-flight or not.
+  - Down and move are caught in the window's capture phase, before the controls. A released pointer is dropped in the
+    window's bubble phase, after the controls' document listener has sent `end`.
+- **Checks.**
+  - A new e2e case, "Build: a tap while the guided camera is moving leaves the camera to the guide; a drag or a wheel
+    takes it". It zooms out with the wheel (which takes the camera), slows the camera button's flight back to 2.25 s
+    (slow motion), and presses for 600 ms at an empty point once the camera has moved 20 units. It asserts the camera
+    moved more than 4 units during the press, then that `camFree` stays false and that a later layout change (two 3W)
+    re-frames the camera. Then a tap at rest takes nothing, a wheel after it takes the camera, and a drag inside a
+    second flight takes it.
+  - On the old main.js the case fails at "a tap during a guided move leaves the camera to the guide". With that
+    assertion removed, it fails at "a layout change after the tap re-framed the camera (it moved 0.0)".
+  - Two mutants each fail it: every press counted as a tap ("a drag during a guided move did not take the camera"),
+    and no release or wheel reset ("a wheel after a tap did not take the camera").
+  - The case as first pushed (`6f1142a`) moved the camera off its pose with an orbit drag, and failed deploy run
+    39790130544 at "the camera did not come to rest after the drag within 30 s". The drag's damped coast decays per
+    update, not per second, so on the SwiftShader runner it ran past 30 s; the deploy stopped and the site stayed on
+    `aa82df2d`.
+    With `E2E_SOFT=1 E2E_THROTTLE=4` that version failed the same way here. The wheel's zoom is not damped, so the
+    case now uses it, and its one drag comes last with no wait after it. A moving camera is drawn there about every
+    300 ms, so the case also holds its press 600 ms (it was 250) and takes the camera as at rest after three equal
+    reads 300 ms apart (it was two). Soft at a 4x throttle it passed 2 of 2 (32-34 s), at 6x 1 of 1 (33 s), and 3 of 3
+    without (10-11 s).
+  - Before it was first pushed, the case pressed right after the camera button and once failed its own precondition on
+    the fix (3.9 units): the eased flight's first 250 ms move the camera about 0.5% of the way. The press now waits
+    for the camera to leave.
+  - npm test: 591 pass, 0 fail, 5 skipped. Smoke: 4 of 4. Full e2e against the parts host with the case as first
+    pushed: 76 of 76; with `GEN2_PARTS_LOCAL=1`: 75 of 76. With the wheel version of the case (before the 600 ms press
+    and the three reads), against the host: 75 of 76. With the case as committed, against the host: 76 of 76 (the case
+    9.2 s). Both failures were the Label plate's faceplate-switch case, a click timeout on a hidden "Screw and nut
+    drawings" Off button: the older flake recorded in the idle-gate entry's Live line (2026-10-21). It needs the
+    Label Studio checkout, so the deploy runner skips it, and it never presses the stage. Alone with local parts it
+    failed 2 of 3 on the fix and 1 of 4 on the old main.js; against the host it passed 3 of 3. Proposed as its own
+    task.
+  - On the live site before the deploy (stamp `aa82df2d`), `live-tap.mjs` replays the case's tap (in
+    `D:/Claude - Output/refused-cell-flake-2026-10-21/`): the camera moved about 67 units under a 250 ms tap, and the
+    tap took the camera, 2 of 2.
+- **Review:** Terra `01a163c9` on the code and the case: no findings. Terra `01a163dd` on this entry: one finding,
+  discarded wrong (it asked for the Live line before the deploy it records). Terra `01a16421` on the case's rework for
+  the runner and its text here: no findings.
+- **Deploy:** a bug fix Joey asked for in words; it deploys once its checks pass.
+
+## 2026-10-22 (the Studio's "Add to planner build" lands on a fresh page)
+
+- **Joey, asked:** "Fix the labels-add bug: the Label Studio's "Add to planner build" link should add its labels when it
+  opens the planner as a fresh page."
+- **What was wrong.** The Studio opens the planner as a new page on `?ws=labels#labels-add=<list>`, sometimes after the
+  build's own `#build=`. Nothing was added. The store writes each settled change to the address as `#build=` alone
+  (app.js `onSave`). A save came while the Labels workspace was still loading its label tools, so when it called
+  `importFromHash()` the `labels-add=` part was gone. A link set on a page already open imported, and that was the only
+  path the suite tested. The cutover prep's parity check found it (row E6), and it was reproduced on the live `aa82df2d`:
+  0 labels after a fresh load, 2 after the same hash set on the open page.
+- **Now** the link is read once, at the top of the boot.
+  - app.js takes the `labels-add=` part out of the address and holds it in `ctx.memo.labelsAdd`. The boot opens Labels
+    for it, as for any labels link.
+  - Once its label tools have loaded, the Labels workspace imports it (`importOpened`) and clears the memo.
+  - If the build came back without labels this browser kept for it, and the link is sound and brings labels, the kept
+    labels come back first (`restoreCopy`, the same as the offer's Restore) and the link's are added to them. One
+    status line reports both: "Brought back the N labels this browser kept for this build." followed by the import's own
+    line. The old planner's cutover redirect sends exactly that: its own slot as `#build=` beside the Studio's link.
+  - The stored copy is kept, marked as restored (`ctx.labelCopy.restored()`, label-copies.js `markRestored`), not
+    spent like the offer's `done()`. The tab that opened the Studio may still hold the build without labels, and its
+    next save would otherwise leave the labels nowhere; kept, they are offered again on the next load. Marked, the copy
+    is never restored automatically again; the banner still offers it on an empty board. Past the cap of five copies
+    it is ranked by its age like any other, as on main.
+  - A link that would add nothing restores nothing, and the offer stays. That covers a damaged link, an empty one, and
+    one whose labels cannot be read: the import is first run as a dry run (`importLabels`).
+  - A link set on a page already open still goes through `importFromHash()`, as before.
+- **How it got here: seven versions, each checked by skeptic workflows.** Each round had three lenses or two, with every
+  claimed break checked by a separate agent trying to refute it.
+  1. The first version kept an unread `labels-add=` part in the address through every save. Terra (`01a163c1`) found
+     nothing. Round 1 then confirmed a leak. A visitor who left Labels before its tools loaded kept the link through
+     every save, Share link and reload, so recipients got the labels added and reloads jumped to Labels.
+  2. The second version held the link in the page instead. Round 2 (7 claims, 4 distinct confirmed, 2 refuted) found
+     that on a build that came back without its kept labels, the link's labels filled the board before the kept-labels
+     offer rendered. The offer never showed, and the kept copy was dropped unoffered once those labels were removed.
+  3. The third version made the link wait for the visitor's choice in that offer. Round 3 (9 claims, 8 confirmed) found
+     the wait raised more than it solved:
+     - Not now imported straight away and lost the kept labels;
+     - on a phone the wait was invisible;
+     - a label added another way stranded the link;
+     - a reload lost it;
+     - two status lines overwrote each other.
+  4. The fourth version restored the kept labels and then added the link, with no waiting state. Round 4 (8 claims, 5
+     confirmed, 3 refuted) found two things to fix. The restore used up the stored copy, so the tab that opened the
+     Studio, saving over the build without labels, left them nowhere, where main kept the copy and offered it again. A
+     damaged link still triggered the restore. Of the other three, two were accepted: a copy put off with Not now is
+     restored without asking by the next Studio link (the status line says so), and a set the Studio sends again
+     duplicates (appendLabels never merged by words). The third is main's own rule: Undo that empties the board drops
+     the copy.
+  5. The fifth version restored only for a sound link and kept the stored copy unmarked. Round 5 (5 claims, all
+     confirmed) found that the kept copy now outlived its use. After the visitor removed some of the restored labels, it
+     came back with the next Studio link without asking (the one medium). The rest were low: it came back after the
+     build was deleted.
+     It took the five copy slots from other builds' unoffered copies. A link whose labels could not be read still
+     restored it. The fifth was the Undo rule again.
+  6. The sixth version marked the copy instead (restored once, never automatically again, evicted first) and ran the
+     import as a dry run before restoring. Round 6 (2 claims, both confirmed, both low) found the marked-first eviction
+     wrong. A marked copy can be the only place its labels are, once the other tab has saved over the build, and
+     evicting it first kept older copies, even expired ones that can never be offered.
+  7. This version keeps the mark and the dry run and goes back to main's eviction, oldest first. A copy can only expire
+     by being older than every live one, so oldest first already takes the expired copies.
+- **Found and left as it was:**
+  - **Not new with this change, recorded as follow-ups:**
+    - The Studio opens the planner in a second tab, and the tab that opened the Studio still holds the build without
+      the labels. Its next save is the newest, so the Recent entry and the autosave slot lose them. Nothing in the
+      planner listens for another tab's writes. Before this fix the labels never arrived at all. Now that they do, a
+      visitor who goes back to the tab they came from and edits loses them, so the stale-tab guard this needs is the
+      first follow-up.
+    - A link set by a hash change on a page already open is still wiped by a save. That happens while the label
+      tools are loading, or while another workspace is open.
+    - If the label tools fail to load, the link is dropped.
+  - **New with this change, and accepted:** a reload in the moment before the label tools load drops the link. It
+    leaves the address at boot, and the memo does not outlive the page. On main a link stayed in the address until
+    the first save, so some older records still imported after such a reload. The visitor presses Add to planner
+    build again.
+- **Checks.** A new e2e case:
+  - A fresh page on a bare link lands both labels, and the address then holds the build without the link.
+  - Two tabs, the old planner's way. Tab A shows the build sent back without its labels and saves it. Tab B opens on a
+    bare Studio link: the kept two come back, then the link's label is added, the status says both, no offer is left,
+    and the stored copy is kept, marked. Tab A then saves over the build, and a new page offers the kept two again. A
+    damaged link on that page restores nothing and leaves the offer, and so does a link whose labels cannot be read. The
+    next Studio link adds only its own label: no second automatic restore, and the copy is still kept.
+  - A link beside a `#build=` adds its label to that build's two, with the units unchanged.
+  - With the label tools held back, leaving for Build and making an edit writes the build alone. Coming back to Labels
+    lands the label. Opening Labels again, or reloading, does not add it twice.
+  - A link on `?ws=build`, the form the old planner's cutover redirect sends, opens on Labels and lands.
+
+  On the unfixed code the case fails at "a bare link: the labels did not land within 30 s". A unit test in
+  test/label-copies.test.mjs: `markRestored` marks only the copy that was read, and a marked copy stays held; past the
+  cap the oldest go first and a newer marked copy stays (round 6's rule, marked first, fails it); a copy remembered
+  again is a new, unmarked one.
+
+  All fourteen mutants are killed: 12 by the e2e case, 2 by the unit test. The first time, two survived: the
+  damaged-link and unreadable-link checks ran after the copy was already marked, and the mark alone blocked the restore.
+  They now run before tab B. npm test 597: 592 pass, 5 skipped, 0 fail. The full e2e suite passed 76 of 76 on version 6.
+  The 9 labels-related cases passed again on version 7, whose one change is the eviction order; no e2e case reaches the
+  five-copy cap.
+- **Review:** Terra `01a163c1` on version 1: no findings. Sol `01a163ed` on version 2 and `01a16405` on version 3: no
+  findings; the skeptic rounds above found what they did not. Sol `01a16415` on version 4, `01a1643e` on version 6 and
+  `01a16459` on version 7's eviction change: no findings. Luna `01a16460` on this entry: five wording fixes taken, one
+  discarded (it was the full e2e suite).
+- **Deploy:** a bug the cutover prep found, fixed on Joey's words; it deploys once its checks pass.
+- **The first deploy failed on its own test** (run 39813124698, `40d4b25`). On the CI runner the case stopped at "the kept
+  labels were not offered again after tab A saved over the build": it gave each save a fixed 1.5 s, and the next page
+  opened the build as it was before the save landed. Tab B's restore had passed, so tab A's first save was in time;
+  the second one, or tab B's own, was not. The case now waits for each save to reach the planner's slot (written after
+  the Recent entry), and for the label tools beside the unreadable link, before it goes on. Slowing the CPU here (4x,
+  8x) does not reproduce the runner's failure: the old case passes at 8x too, so the runner's slowness is elsewhere.
+- **The second deploy failed one step later** (run 39824340436, `4eaeb53`): "a second link: the labels did not land
+  within 30 s". The waits had fixed the step before. Tabs A and B stayed open to the end: an open tab can save again
+  later and change what the next page opens, and four 3D pages at once slow the runner's software rendering. Each
+  page now closes once its part is done, and the failure message prints the labels on the board. Terra `01a164af` and
+  `01a164f3` on the two test changes: no findings.
+- **Live 2026-10-22**, stamp `e7bd056d`: `labels-add-prod.mjs` (fresh profiles, analytics blocked) passes every check: a
+  bare link lands both labels and the address keeps the build without it, a link beside `#build=` adds its label to the
+  build's two, and the plain page shows it. On `aa82df2d` it failed those three. The parity probe now finds 2 labels on
+  a fresh load (0 before).
+
+## 2026-10-22 (a tab behind another tab's save stops saving: the stale-tab guard)
+
+- **Joey, asked:** "Build the stale-tab guard: a planner tab whose build was saved newer by another tab must not overwrite
+  it; show a notice with Reload instead. Test it with the Studio's two-tab flow, then review and deploy."
+- **What was wrong.** Make labels opens the Label Studio in a new tab. Its Add to planner build opens the planner again,
+  in another new tab, on this browser's current build. That tab (B) lands the labels and saves while the first tab (A)
+  is still open on the build without them. A's next edit then saved its older build over the labels. A production check
+  (`stale-tab-prod.mjs` in the prod-checks folder) reproduces it on the live `04bf17ff`: after A's edit the stored build
+  has 0 labels.
+- **Now** every write names the stored version it is based on.
+  - The version is the entry's `savedAt`. A new one is always above the version it is based on, so two saves in one
+    clock tick, or a clock set back, never share one (Sol `01a16556`).
+  - `builds.js decide()` runs inside the IndexedDB transaction, against the rows `get()` sees (the localStorage list
+    wins). It refuses a write when the stored row exists and is another version; a missing row is written as before;
+    `force` skips the 20-build cap, never the check.
+  - The tab keeps its base per build: in memory, in sessionStorage per tab, and in sessionStorage per history entry
+    (under a key the page keeps in `history.state`). A reload of a stale tab is still stale, and so is Back to an older page of the build.
+  - Every write (the autosave, Rename) runs on one queue and reads its base when it runs.
+  - A refused write makes the tab stale for good. It persists nothing more: not the Recent entry, the current build, the
+    slot or the palette. The address still follows its edits. A notice over everything, an alertdialog at body level,
+    says "This build was saved in another tab" and offers Reload, which opens the saved version and takes the older page
+    out of the history.
+  - After a write that changed the version, the store writes `gen2-build-saved`; other tabs on the same build read the
+    stored version again on that hint, when they come back into view, and from the back/forward cache. A hint alone never
+    makes a tab stale.
+  - A link opened fresh is an explicit open of that version and wins, as before.
+- **Opening Labels no longer saves.** Its label-sync commit saved a new version of an untouched build (null label fields
+  became absent), which would have made every other tab on the build stale for nothing. It now commits only when
+  reconciling changes something. That save was also what made a never-saved build (a kit page, someone's link) this
+  browser's current one, which the Studio's Add to planner build reopens; Make labels and the Studio link now do that
+  themselves (`ctx.builds.keepCurrent()`).
+- **How it got here.** A design-critique workflow listed 51 problems before any code (FINAL.md in the session scratchpad).
+  The code then went through a five-lens adversarial review, each claim verified against the source by a separate
+  agent: 8 findings confirmed, 6 of them distinct, all fixed.
+  1. Keys on the Reload button reached the page under the notice (Build's Ctrl+Z and Delete, Escape closing the Picker).
+  2. A lost IndexedDB connection (WebKit, after a tab sat in the background) fell back to a list-only check, so the
+     OLDER tab won. The store now opens IndexedDB again once before it settles for the list.
+  3. A list write that failed (storage full) reported success, moved the base, then raised a false notice. It now says
+     `unsaved`, and the tab keeps its base.
+  4. Reload pushed a history entry, and Back then F5 booted the stale page as current. Reload now replaces it, and the
+     per-history-entry base covers the other ways back.
+  5. With Labels no longer saving on open, a never-saved build sent the Studio's labels to another build (high: the
+     reviewers' only one). Fixed by `keepCurrent()`.
+  6. A setup-sheet Apply refused in a stale tab closed with "Setup applied." It now just closes.
+  Two were found twice: the keys by the UI and side-effects lenses, the lost connection by the store and cross-tab
+  lenses.
+- **The cloud reviews.** Sol `01a16556` on the fixed code returned 4; 2 taken:
+  - a version could be reused (two saves in one clock tick), now base + 1;
+  - an IndexedDB that failed to open at boot was never tried again, now tried at each read and write.
+  Discarded: the fallback list's read, check and write is not atomic across tabs (it runs only where IndexedDB cannot be
+  opened at all, and the window is one synchronous step; the cap had the same exposure, so it is recorded as a known gap,
+  not fixed); `keepCurrent()`'s first save racing tab B's boot (tab B opens only when a person presses Add to planner
+  build in the Studio, after the one IndexedDB write queued at the click has landed). Terra `01a16560` on those two
+  fixes: two first opens at once could let a late failure drop the other's connection; taken, one open is shared.
+- **Tests.** e2e/workspaces.mjs:
+  - "the stale-tab guard: the Studio's second planner tab…" walks Joey's flow with the real Make labels button and a
+    stubbed Studio: a never-saved build becomes current and is saved at Make labels; kit adopts and an Undo back to the
+    earlier id are not stale; two saves queued back to back and two with the clock frozen are not stale and get new
+    versions; a reload on Labels saves nothing; hints that must not count (the slot changing, a hint naming the tab's own
+    version, a hint removed) do not; tab B lands the label; tab A goes stale (the alertdialog, focus on Reload), keys on
+    Build do nothing under it, its palette is held, its edits leave the row, the slot and the current build alone, the
+    notice stays across a workspace switch and the phone breakpoint, a reload stays stale; Reload opens the saved
+    build; a page opened on a link goes stale and its reload stays stale; Back to an older page of the build, and its
+    F5, are stale; Reload takes that page out of the history; a write with no hint is caught at the next save.
+  - "the stale-tab guard: the build store's version check on IndexedDB…": the rule on real IndexedDB, a row still in
+    the fallback list, a lost connection, a failed first open shared by two readers.
+  - The labels-add case: tab A now goes stale instead of saving over tab B; a write without the guard (an old planner
+    tab open across the deploy) stands in for it, and the kept labels are still offered.
+  - The build-store case: Rename in the second tab makes the first stale.
+  - test/builds.test.mjs: `decide()`, `savedHint()`, the fallback store's refusal (byte for byte, no hint), `unsaved`,
+    the per-tab and per-page bases.
+- **Production check:** `stale-tab-prod.mjs` (prod-checks folder; fresh profile, analytics blocked, the Studio stubbed).
+  On the live `04bf17ff` it fails as the bug does (no notice; tab A's edit leaves the build with 0 labels); on this
+  branch served locally it passes all 12 checks.
+- **Mutants**, each in its own worktree, with the node tests and the four guard-related e2e cases (four rounds, as the
+  code and the tests moved): 40 of 45 killed on the final code, 9 by the node tests and the rest by the e2e cases.
+  - Four survive, as predicted before they ran: `pending` ignored at boot and the setup sheet not waiting for its save (both need a page
+    unloaded in the middle of a write); the app ignoring `unsaved` (no case fills the storage); a refused Apply closing
+    as usual (no case refuses an Apply). The fifth, a rename that keeps its version, is now equivalent: the base + 1
+    rule gives it a new version anyway.
+  - The rounds found three tests that could not fail on the defect they named, now fixed: the keys were pressed with nothing to undo (they now
+    follow an edit, on Build); the slot-change step came before Make labels, which now writes the slot itself;
+    a history-length check cannot tell a push from a replace when the push prunes a forward entry (Back is checked
+    instead).
+- **Not covered by a test:** the recheck when a tab comes back into view and from the back/forward cache (no case
+  hides a page or brings one back from that cache), the keyup guard, and the Reload button re-enabled after the cache.
+  They are in the code, and Sol's review read them.
+- **Suites on the final code:** npm test 603 (598 pass, 5 skipped, 0 fail); the full e2e suite 79 of 79 in software
+  rendering (`E2E_SOFT=1`, the CI runner's mode).
+- **Deploy:** Joey's request ends in "review and deploy"; it deploys once the checks pass.

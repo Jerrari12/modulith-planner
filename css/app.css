@@ -1054,3 +1054,15 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-setup { align-items: flex-start; padding: 64px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
   #ws-setup .sheet, #ws-setup .sheet.open { position: relative; left: auto; right: auto; top: auto; bottom: auto; width: 100%; max-height: 100%; padding: 16px 16px 14px; border-radius: 18px; transform: none; clip-path: none; overflow-y: auto; z-index: auto; transition: none; }
 }
+
+/* THE STALE-TAB NOTICE (Joey, 2026-10-22: a tab whose build another tab saved since stops saving and offers Reload). One
+   card at body level, over every workspace, the setup sheet (z 40 inside #ws) and the Part Picker (z 70): it cannot be
+   dismissed, and it is the same centred card on a phone */
+#ws-stale { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(8, 10, 14, .45); font-family: var(--font-ui); font-size: 13px; color: var(--ink); }
+#ws-stale .box { width: 100%; max-width: 420px; box-sizing: border-box; padding: 20px; border-radius: 16px; display: grid; gap: 12px; background: var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); }
+#ws-stale h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); }
+#ws-stale p { margin: 0; line-height: 1.45; color: var(--ink-2); }
+#ws-stale .btns { display: flex; justify-content: flex-end; gap: 8px; }
+#ws-stale button { font: inherit; height: 40px; padding: 0 18px; border-radius: 10px; font-weight: 600; cursor: pointer; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); }
+#ws-stale button:disabled { opacity: .6; cursor: progress; }
+#ws-stale button:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
