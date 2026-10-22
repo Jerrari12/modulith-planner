@@ -43,7 +43,8 @@ export function topbar(stage, ctx) {
     const fileIn = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
     fileIn.addEventListener('change', async () => { const f = fileIn.files && fileIn.files[0]; fileIn.value = ''; if (!f || !B) return; const problem = await B.loadFile(f); if (problem === 'cap') { await render(); } else if (problem) ctx.say(problem); });
     const when = (ts) => { const d = Date.now() - ts; if (d < 60e3) return 'just now'; if (d < 3600e3) return `${Math.round(d / 60e3)} min ago`; if (d < 86400e3) return `${Math.round(d / 3600e3)} h ago`; return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); };
-    const units = build?.placed?.length ?? 0;
+    // counted when the menu opens: the bar outlives the edits ("185 · 3 units" with 4 in the Dock, the phone check, 2026-10-17)
+    const units = () => { const k = (ctx.store?.state?.placed ?? build?.placed ?? []).length; return `${k} ${k === 1 ? 'unit' : 'units'}`; };
     const item = (text, onclick, title = null) => el('button.item', { role: 'menuitem', title, onclick }, [el('span', { text })]);
     async function render() {
       const had = menu.contains(document.activeElement);   // a keyboard user inside the menu keeps a place after a rebuild
@@ -57,7 +58,7 @@ export function topbar(stage, ctx) {
           const done = async () => { const v = inp.value; renaming = false; if (await B.rename(v)) { nameEl.textContent = buildName(B.name); ctx.say('Renamed.'); } await render(); };
           inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } if (e.key === 'Escape') { e.stopPropagation(); renaming = false; render(); } });
           const row = el('div.renamerow', {}, [inp, el('button.key.sm', { text: 'Save', onclick: done })]); setTimeout(() => { inp.focus(); inp.select(); }, 0); return row; })()
-          : el('button.item.current', { role: 'menuitem', title: 'Rename', onclick: () => { renaming = true; render(); } }, [el('span', { text: buildName(B ? B.name : name) }), el('span.meta', { text: `${length} · ${units} units` })]),
+          : el('button.item.current', { role: 'menuitem', title: 'Rename', onclick: () => { renaming = true; render(); } }, [el('span', { text: buildName(B ? B.name : name) }), el('span.meta', { text: `${length} · ${units()}` })]),
         el('div.divider'),
         el('div.label', { text: 'Recent builds' }),
         cap ? el('div.notice', {}, [el('p', { text: `Recent builds is full (20). “${cap.drop.name}”, opened longest ago, would be dropped to make room for this one.` }),
@@ -83,7 +84,11 @@ export function topbar(stage, ctx) {
     const items = () => [...menu.querySelectorAll('button')].filter((x) => !x.disabled && x.offsetParent !== null);
     const focusItem = (i) => { const all = items(); if (all.length) all[((i % all.length) + all.length) % all.length].focus(); };
     let rendering = Promise.resolve();   // the open menu's render in flight: a key pressed before Recent builds are listed waits for it (Terra 01a136de)
-    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) { rendering = render(); return rendering; } renaming = false; confirmId = null; return rendering; };
+    /* the menu is shown at once with its LAST render's rows while render() awaits the Recent list from IndexedDB, so the
+       current build's count is refreshed synchronously here: a read right after the click saw the previous count for a
+       few ms ("185 · 4 units" with 1 in the store; the phone-check case flaked on it, deploy run 39317757575, 2026-10-19) */
+    const freshCount = () => { const m = menu.querySelector('.item.current .meta'); if (m) m.textContent = `${length} · ${units()}`; };
+    const set = (v) => { open = v; menu.hidden = !v; btn.setAttribute('aria-expanded', String(v)); if (v) { freshCount(); rendering = render(); return rendering; } renaming = false; confirmId = null; return rendering; };
     btn.addEventListener('click', () => set(!open));
     /* keyboard: Down or Enter on the chip opens with the first item focused; arrows walk the items (the delete marks too),
        Home and End jump, Escape closes and returns to the chip; a Tab leaves the menu as it would any popup */

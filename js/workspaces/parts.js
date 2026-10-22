@@ -18,6 +18,7 @@ import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
+import { ZONE_LABEL, isPaid, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid buy link, and its click event
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -25,7 +26,12 @@ const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
 const LINKS = typeof partLinks === 'function' ? partLinks : null;
 // eslint-disable-next-line no-undef
 const BUY = typeof HARDWARE_BUY !== 'undefined' ? HARDWARE_BUY : {};
-const STORES = [['printables', 'Printables'], ['thangs', 'Thangs'], ['makerworld', 'MakerWorld'], ['cults', 'Cults 3D']];
+/* MakerWorld and Cults 3D are hidden for now (Joey, 2026-10-18: "lets just hide makerworld and cults for now until
+   eventually i upload more models there"): few parts have a page on either, and choosing one turned most rows into a
+   site search. The vendored catalog (js/catalog/data.js) still carries both; this list offers and links neither, and a
+   saved choice of either reads as Printables (readStore). */
+const STORES = [['printables', 'Printables'], ['thangs', 'Thangs']];
+const SHOWN = new Set(STORES.map(([id]) => id));
 const STORE_KEY = 'gen2-link-store';   // the planner's own preference key, same ids
 const INSIDE = { 59: 45, 115: 101, 165: 151, 185: 171, 240: 226, 270: 256 };
 const CLUB = { edgelabel: 1, classicpro: 1, chevron: 1 };
@@ -34,6 +40,7 @@ const CLUB = { edgelabel: 1, classicpro: 1, chevron: 1 };
 export function chipFor(name) {
   // the planner's names carry a "GEN2 <length>" prefix, so match anywhere; the order matters (a stopper is not a drawer)
   if (/Stopper/.test(name)) return '#E040A0';
+  if (/Side Cover/.test(name)) return '#c2185b';   // Assemble's own hue for the part (generate.js SIDE_COVER_COLOR)
   if (/QuickLock/.test(name)) return '#14B8A6';
   if (/Magnet Clip/.test(name)) return '#8B5CF6';
   if (/Cover Upper/.test(name)) return '#7CC25A';
@@ -47,8 +54,105 @@ export function chipFor(name) {
   return '#9CA3AF';
 }
 
+/* the stage's part TYPE of a row (main.js typeByNode's names, generate.js's `add` calls), so a row can ask the palette what it
+   prints in. The names are the planner's BOM names (data.js partNames and bom.js's hardware rows); the order matters as in
+   chipFor (a stopper is not a drawer, a back cover is not a faceplate). Bought hardware and a row the stage does not model
+   answer null, and keep the identification chip. */
+export function typeOf(name) {
+  if (/Stopper/.test(name)) return 'Stopper';
+  if (/Side Cover/.test(name)) return 'SideCover';
+  if (/QuickLock/.test(name)) return 'QuickLock';
+  if (/Magnet Clip/.test(name)) return 'MagnetClip';
+  if (/Cover Upper/.test(name)) return 'CoverU';
+  if (/Cover Lower/.test(name)) return 'CoverL';
+  if (/Foot ?rail Upper/i.test(name)) return 'FootrailU';
+  if (/Foot ?rail Lower/i.test(name)) return 'FootrailL';
+  if (/Back Cover/.test(name)) return 'BackCover';
+  if (/Faceplate/.test(name)) return 'Faceplate';
+  if (/Handle/.test(name)) return 'Handle';
+  if (/Drawer/.test(name)) return 'Drawer';
+  if (/Case Extender/.test(name)) return 'CaseExtender';
+  if (/Case/.test(name)) return 'Case';
+  if (/Shelf Insert/.test(name)) return 'ShelfInsert';
+  if (/Shelf Lip/.test(name)) return 'ShelfLip';
+  if (/^GEN2 Foot\b/.test(name)) return 'Foot';
+  if (/Wall Mount/i.test(name)) return 'Bracket';
+  if (/Rail/i.test(name)) return 'Rail';
+  return null;
+}
+/* WHAT A ROW PRINTS IN (Joey, 2026-10-18, on the Parts tab after choosing colours: "the parts have the instructions colors
+   assigned to them, which is kind of confusing after assigning chosen colors to it"). With the visitor's colours on, the
+   list reads the stage's palette API, the Colors tab's one source: keysInBuild for the regions of every type (its body,
+   then its zones), filamentsInBuild for the filament each region wears, a unit's own pick included, and the identification
+   colour where none is picked. Returns Map type -> [{ key, zone, ownColor, filaments: [{ name, hex, url }], bare: hex | null }],
+   or null while the colours are off, when the chip stays the identification colour. `ownColor` marks a zone with a colour
+   of its own (the label text), which does not follow its body unpicked (keysInBuild). */
+export function paletteSnapshot(stage) {
+  let on = false; try { on = !!stage.palette?.().on; } catch { on = false; }
+  if (!on) return null;
+  let keys, fc; try { keys = stage.keysInBuild(); fc = stage.filamentsInBuild(); } catch { return null; }
+  const byType = new Map();
+  for (const k of keys) {
+    if (k.locked) continue;
+    const filaments = fc.filaments.filter((f) => f.keys.includes(k.key));
+    const bare = fc.unpicked.find((u) => u.key === k.key && !u.stripe);
+    if (!byType.has(k.type)) byType.set(k.type, []);
+    byType.get(k.type).push({ key: k.key, zone: k.zone, ownColor: !!k.ownColor, filaments, bare: bare ? bare.hex : null });
+  }
+  return byType;
+}
+/* WHAT ONE UNIT'S PART PRINTS IN (2026-10-19; Astra put "inspector colours" first among what was left: they decide whether
+   the chosen look matches the finished build). The list's snapshot pools every unit's picks under a type; the inspector's
+   "This unit · parts" rows are one unit's, so each region is resolved for THAT unit the way the stage paints it
+   (main.js materialFor / filamentsInBuild): the unit's own pick first (stage.overrideFor: an exact key, else its Body pick
+   for a zone the build has not picked), else the build's pick for the key (a zone follows its body unless it has a colour
+   of its own), else bare in the identification colour. Returns the snapshot's shape for one type, or null (colours off, or
+   a type the stage does not model), so the chip, the words and the swatches are the list's own. */
+export function unitRegions(stage, pal, uid, type) {
+  const regions = pal && type ? pal.get(type) : null;
+  if (!regions || !regions.length) return null;
+  let colors = {}; try { colors = stage.palette().colors || {}; } catch { colors = {}; }
+  const idHex = (key) => { try { return stage.activeHex(key) || '#b9bcc2'; } catch { return '#b9bcc2'; } };
+  return regions.map((g) => {
+    let own = null; try { own = uid != null ? stage.overrideFor(uid, g.key) : null; } catch { own = null; }
+    const pick = own || colors[g.key] || (g.zone && !g.ownColor ? colors[type] : null);
+    if (pick && pick.hex) return { key: g.key, zone: g.zone, ownColor: g.ownColor, filaments: [{ name: pick.name || pick.hex, hex: pick.hex, url: pick.url || null }], bare: null };
+    return { key: g.key, zone: g.zone, ownColor: g.ownColor, filaments: [], bare: g.bare || idHex(g.key) };
+  });
+}
+/* the regions of a row as words: the body's filament(s), then each zone that wears something else -
+   [{ zone: '' | 'face', items: [{ name, url, full }] }]; a region with no pick is "no pick yet". `full` is the catalog label
+   (`name` is shortened), which the buy link's event resolves its brand and line from */
+const NO_PICK = 'no pick yet';
+export function printRegions(regions) {
+  const items = (g) => [...g.filaments.map((f) => ({ name: short(f.name), url: f.url || null, full: f.name })), ...(g.bare ? [{ name: NO_PICK, url: null }] : [])];
+  const body = regions.find((g) => !g.zone) || regions[0];
+  const out = [{ zone: '', items: items(body) }];
+  const names = (its) => its.map((i) => i.name).join('/');
+  for (const g of regions) if (g !== body && names(items(g)) !== names(out[0].items)) out.push({ zone: ZONE_LABEL(g.zone).toLowerCase(), items: items(g) });
+  return out;
+}
+/* "Black · face Mystery Orange" for the exports and titles; "no filament picked yet" when nothing is */
+export function printText(regions) {
+  const parts = printRegions(regions);
+  if (parts.length === 1 && parts[0].items.every((i) => i.name === NO_PICK)) return 'no filament picked yet';
+  return parts.map((p) => (p.zone ? p.zone + ' ' : '') + p.items.map((i) => i.name).join(' / ')).join(' · ');
+}
+/* the distinct colours a row prints in, body first */
+export const swatchesOf = (regions) => [...new Set(regions.flatMap((g) => [...g.filaments.map((f) => f.hex), g.bare].filter(Boolean)))];
+
+/* A ROW'S VARIANT IS PART OF ITS NAME (2026-10-19). The sectional mount parts share one product name across their widths
+   - "GEN2 Under Table Rails - 270" with the variant "3W section", "GEN2 Wall Mount Kit - Lite - 185" with "2W section" -
+   and until now the list showed the name alone: two rows "Under Table Rails - 270", ×3 and ×1, with no way to tell
+   which was which (the old planner wrote "name — variant"). A user's report, 2026-10-19, had the list and the model
+   disagreeing on the sections; the list has to SAY the sections before the two can be compared. The variant goes into
+   the shown name, the copied text and the CSV, and into the progress key, which the two widths used to share (one row's
+   tick counted for the other). A row without a variant keeps the key it had, so stored progress survives; a tick made on
+   a width row BEFORE this change is not carried over (Terra 01a154c7): the old key never said which width it was for,
+   so there is nothing correct to migrate it to, and the tracking is days old. */
+const rowName = (r) => partName(r.name) + (r.variant ? ` · ${r.variant}` : '');
 /* the four numbers of one row, from the stored progress */
-const rowKey = (r) => `${r.section}|${r.name}`;
+const rowKey = (r) => `${r.section}|${r.name}${r.variant ? `|${r.variant}` : ''}`;
 /* SIDE COVERS ARE RELEASED (v2609, 2026-10-10: Printables and Thangs pages live, one per collection; the site ticket
    TICKET-side-covers-2026-10-10.md carries the ids). The planner's catalog, vendored here verbatim and sha-pinned,
    still lists `sideCover` under `unreleased` until the planner's own commit lands and the catalog is re-vendored
@@ -105,8 +209,39 @@ export function mountParts(stage, ctx) {
 
   const panel = el('aside.glass', { id: 'ws-parts', 'aria-label': 'Parts list' });
   root.appendChild(panel);
+  /* the palette, read once per render (paletteSnapshot); null with the visitor's colours off */
+  let pal = null;
+  const printLook = (r) => { if (!pal || r.hardware) return null; const t = typeOf(r.name); const regions = t && pal.get(t); return regions && regions.length ? regions : null; };
+  /* the row's chip: the filament(s) it prints in with the identification colour as a ring (colours on), else the
+     identification colour alone, as the Assemble instructions paint it; bought hardware keeps its dashed outline */
+  function chipEl(r, regions) {
+    if (r.hardware) return el('span.chip.buy', { title: 'Bought, not printed' });
+    const id = chipFor(r.name);
+    if (!regions) { const c = el('span.chip', { title: 'Part color in Assemble' }); c.style.background = id; return c; }
+    const sw = swatchesOf(regions).slice(0, 4);
+    const c = el('span.chip.fil' + (sw.length > 1 ? '.multi' : ''), { title: `Prints in ${printText(regions)} · the ring is its colour in Assemble` });
+    c.style.setProperty('--id', id);
+    if (sw.length > 1) for (const h of sw) c.appendChild(el('i', { style: `background:${h}` })); else c.style.background = sw[0] || hex(regions[0].key, id);
+    return c;
+  }
+  /* "Print in Black · face Mystery Orange" under the name, every filament name the buy link the Colors tab uses for it */
+  function printLine(regions) {
+    const parts = printRegions(regions);
+    if (parts.length === 1 && parts[0].items.every((i) => i.name === NO_PICK)) return el('div.note.printin', { text: 'No filament picked yet' });
+    const kids = ['Print in '];
+    parts.forEach((p, i) => {
+      if (i) kids.push(' · ');
+      if (p.zone) kids.push(p.zone + ' ');
+      p.items.forEach((it, j) => {
+        if (j) kids.push(' / ');
+        kids.push(it.url ? el('a', { href: it.url, target: '_blank', rel: isPaid(it.url) ? 'noopener sponsored' : 'noopener', title: `Buy ${it.name} ↗` + (isPaid(it.url) ? ' · paid link' : ''), text: it.name, onclick: buyFilament(stage, { name: it.full }) }) : it.name);
+      });
+    });
+    return el('div.note.printin', {}, kids);
+  }
   function renderPanel() {
     const { rs, printCount, files, toGo, missing, optMissing } = counts();
+    pal = paletteSnapshot(stage);
     panel.replaceChildren();
     const head = el('div.head');
     head.append(
@@ -115,7 +250,7 @@ export function mountParts(stage, ctx) {
       el('div.row2', {}, [
         missing ? el('span.warn', { text: `⚠ ${missing} required part${missing === 1 ? '' : 's'} not released yet` })
           : el('span.ok', { text: optMissing ? `✓ All required parts are available · ${optMissing} optional in development` : '✓ All required parts are available.' }),
-        el('span.dim', { text: 'Chips = part colors in Assemble · dashed = buy' }),
+        el('span.dim', { text: pal ? 'Chip = the filament it prints in · ring = its colour in Assemble · dashed = buy' : 'Chips = part colors in Assemble · dashed = buy' }),
       ]),
       el('div.row3', {}, [
         el('div.track.sites', { role: 'group', 'aria-label': 'Download site' }, STORES.map(([id, name]) =>
@@ -148,10 +283,10 @@ export function mountParts(stage, ctx) {
     const p = st.progress[rowKey(r)] || { had: 0, made: 0 };
     const left = remaining(r, p);
     const row = el('div.prow.well' + (st.tracking && left === 0 ? '.done' : ''));
-    const chip = el('span.chip' + (r.hardware ? '.buy' : ''), { title: r.hardware ? 'Bought, not printed' : 'Part color in Assemble' });
-    if (!r.hardware) chip.style.background = chipFor(r.name);
-    row.append(chip, el('span.qty.mono', { text: `×${r.qty}` }));
-    const mid = el('div.mid', {}, [el('div.name', { text: partName(r.name) })]);
+    const regions = printLook(r);
+    row.append(chipEl(r, regions), el('span.qty.mono', { text: `×${r.qty}` }));
+    const mid = el('div.mid', {}, [el('div.name', { text: rowName(r) })]);
+    if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     row.appendChild(mid);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
@@ -169,19 +304,30 @@ export function mountParts(stage, ctx) {
       row.appendChild(el('div.progress', {}, [counter('had', 'had'), counter('made', r.hardware ? 'bought' : 'printed'), el('span.left.mono', { text: left ? `${left} to go` : '✓' })]));
     }
     const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site);
-    if (link) row.appendChild(el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗` }));
+    if (link) row.appendChild(storeLink(r, link));
     else if (r.unreleased) row.appendChild(el('span.link.dim', { text: 'Not released' }));
     return row;
+  }
+  /* a row's link, both layouts: bought hardware's Amazon listing, which reports the stage's buy:hardware:<listing id> (main.js
+     buyEvent), else the part's page on the chosen download site. A paid host is marked AT the link, rel=sponsored and
+     "· paid link", as the Colors tab marks its own (Joey, 2026-10-21); the foot line keeps Amazon's sentence. The mark
+     sits on its own line under the store name (app.css), so the link keeps its width: on one line it took 55 px from the
+     part's name, and "Magnets 10×2mm or 6×2mm" wrapped on a desktop */
+  function storeLink(r, link) {
+    const paid = isPaid(link.url);
+    return el('a.link', { href: link.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null },
+      [`${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, paid ? el('span.paid', {}, [el('span.sep', { text: ' · ' }), 'paid link']) : null]);
   }
   /* the wide list's row: one column per quantity, the counters readable, a finished row still editable */
   function renderTableRow(r) {
     const p = st.progress[rowKey(r)] || { had: 0, made: 0 };
     const left = remaining(r, p);
     const row = el('div.prow.trow.well' + (left === 0 ? '.done' : ''));
-    const chip = el('span.chip' + (r.hardware ? '.buy' : ''), { title: r.hardware ? 'Bought, not printed' : 'Part color in Assemble' });
-    if (!r.hardware) chip.style.background = chipFor(r.name);
+    const regions = printLook(r);
+    const chip = chipEl(r, regions);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
-    const mid = el('div.mid', {}, [el('div.name', {}, [partName(r.name), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
+    const mid = el('div.mid', {}, [el('div.name', {}, [rowName(r), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
+    if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
     const counter = (field, label) => {
       const v = p[field] || 0;
@@ -191,10 +337,10 @@ export function mountParts(stage, ctx) {
         el('button', { text: '+', 'aria-label': `${label}: one more`, disabled: (p.had || 0) + (p.made || 0) >= r.qty, onclick: () => bump(r, field, 1) }),
       ]);
     };
-    const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site) || r.links?.stores?.[0];
+    const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site) || r.links?.stores?.find((s) => SHOWN.has(s.id));
     row.append(chip, mid, el('span.mono.need', { text: String(r.qty) }), counter('had', 'Already have'), counter('made', r.hardware ? 'Bought' : 'Printed'),
       el('span.mono.left' + (left ? '' : '.ok'), { text: left ? String(left) : '✓ done' }),
-      link ? el('a.link', { href: link.url, target: '_blank', rel: 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗` }) : r.unreleased ? el('span.link.dim', { text: 'Not released' }) : el('span'));
+      link ? storeLink(r, link) : r.unreleased ? el('span.link.dim', { text: 'Not released' }) : el('span'));
     return row;
   }
   function bump(r, field, d) {
@@ -218,7 +364,9 @@ export function mountParts(stage, ctx) {
     let last = '';
     for (const r of rows()) {
       if (r.section !== last) { txt += `\n[${r.section}]\n`; last = r.section; }
-      txt += `${r.qty}x ${partName(r.name)}${r.optional ? ' (optional)' : ''}${r.unreleased ? ' (coming soon)' : ''}\n`;
+      txt += `${r.qty}x ${rowName(r)}${r.optional ? ' (optional)' : ''}${r.unreleased ? ' (coming soon)' : ''}\n`;
+      const regions = printLook(r);   // the filament it prints in, as the list shows it (a list without it is the same confusion on paper)
+      if (regions) txt += `    Print in:   ${printText(regions)}\n`;
       if (r.links) { txt += `    Printables: ${r.links.printables}\n    Thangs:     ${r.links.thangs}\n`; }
     }
     try { await navigator.clipboard.writeText(txt); say('Parts list copied.'); } catch { say('Could not reach the clipboard.'); }
@@ -226,8 +374,8 @@ export function mountParts(stage, ctx) {
   function downloadCsv() {
     const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const m = meta();
-    const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Printables', 'Thangs'].map(esc).join(',')];
-    for (const r of rows()) lines.push([r.section, r.qty, partName(r.name) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), r.links?.printables || '', r.links?.thangs || ''].map(esc).join(','));
+    const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Print in', 'Printables', 'Thangs'].map(esc).join(',')];
+    for (const r of rows()) { const regions = printLook(r); lines.push([r.section, r.qty, rowName(r) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), regions ? printText(regions) : '', r.links?.printables || '', r.links?.thangs || ''].map(esc).join(',')); }
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `modulith-${length}-parts.csv` });
     document.body.appendChild(a); a.click(); a.remove();
@@ -276,7 +424,15 @@ export function mountParts(stage, ctx) {
     insp.append(
       el('div.head', {}, [el('h2.h2', { text: 'This unit · parts' }), el('span.idx', { text: `Unit ${idx} of ${placed.length}` }), el('button.x', { title: 'Deselect', 'aria-label': 'Deselect', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })])]),
       el('div.ident', {}, [el('div.wellbox.well', {}, [glyphEl(kind, 79, 50, colors)]), el('div.col', {}, [el('h3', { text: fill?.label || unit.fill }), el('div.dims', { text: `${unit.w}W·${unit.hh / 2}H · inside ${unit.w * 88 - wall.wWall} × ${Math.round((unit.hh / 2) * 56 - wall.hWall)} × ${INSIDE[length] ?? length} mm` })])]),
-      el('div.uparts', {}, unitParts(unit).map(([name, qty]) => el('div.uprow.well', {}, [el('span', { text: name }), el('span.mono', { text: `×${qty}` })]))),
+      /* each row as the list draws its own: the chip is the filament THIS unit's part prints in (its own pick first), the
+         identification colour its ring, the filament named under the part with the buy link; colours off, the
+         identification chip alone. The rows are one unit's, so the regions are resolved per unit (unitRegions). */
+      el('div.uparts', {}, unitParts(unit).map(([name, qty]) => {
+        const regions = unitRegions(stage, pal, unit.id, typeOf(name));
+        const mid = el('div.mid', {}, [el('div.name', { text: name })]);
+        if (regions) mid.appendChild(printLine(regions));
+        return el('div.uprow.well', {}, [chipEl({ name, hardware: false }, regions), mid, el('span.mono', { text: `×${qty}` })]);
+      })),
     );
   }
 
@@ -317,10 +473,14 @@ export function mountParts(stage, ctx) {
   if (steps && stage.cur !== steps) stage.goTo(steps, { animate: false });
   stage.setDims(false);
   renderPanel(); renderInspector(); renderDock(); safe();
+  /* a commit while this tab is open is a palette change or an undo of one (the store restores the palette beside the
+     record): the chips and the "Print in" lines follow it, in the list and in the inspector's rows (renderPanel reads the
+     snapshot the inspector's rows resolve against, so it goes first) */
+  const unsub = ctx.store?.subscribe ? ctx.store.subscribe((state, why) => { if (why === 'adopt') return; renderPanel(); renderInspector(); }) : null;
 
   return {
     onSelect(sel) { st.sel = sel; renderInspector(); if (phone) { if (sel) phone.open(insp); else phone.collapse(insp); phone.refresh(); safe(); } },
-    unmount() { ac.abort(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },
+    unmount() { ac.abort(); if (unsub) unsub(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); root.remove(); },
   };
 }
 

@@ -455,3 +455,1843 @@ Dated calls made while building, with who made them. The brief and the inventory
     Terra 01a14b05 (round 2's warnings);
   - the vault entries: Sol 01a14aa0 (7 of 10 held); Terra 01a14aa6, 01a14ac8, 01a14b06 and 01a14b22.
 - **A caveat:** an open tab may still hold the old Picker. Reload it.
+
+## 2026-10-17 (side covers, live on every build)
+
+- **Joey's call (2026-10-17):** "Deploy side covers now, shown on every build". The default-off toggle of the 2026-10-09
+  decision is not built: the merged BOM already bills covers on every build, so the stage now shows them on every
+  build. A real toggle needs a new build field, and BUILD_FIELDS is pinned to the old planner's.
+- **What it is** (branch `side-covers`, `f28de1f` and `48f05b2`, by the side-covers session; Sol, two passes, no
+  findings):
+  - a cover goes on exactly the walls the BOM bills, at the release offsets; a test holds the stage to the BOM on the
+    kits, edge cases and 400 random builds;
+  - it is fitted after the case and before anything stacks on top: in from 30 mm off the wall, 3.8 mm up, a pause,
+    then the slide down, under a close camera;
+  - pink in Part colors (raspberry since 2026-10-18, see that entry); in the presets the core takes the case colour and
+    the face the faceplate face colour;
+  - builds are 5 mm wider, because the covers count in W; the ten kits gain 4 × 1H covers each.
+- **Known limits:** a 4H–6H shelf end has no made cover size, so it stays bare with a warning (MODULITH known-gaps).
+  Reading "face = the accent colour" as the faceplate face makes Sandstone's covers all brown and Signal's faces
+  yellow; that reading is open for Joey.
+- **Deployed, in this order:**
+  1. gen2-parts master fast-forwarded to `d73facf` (the 27 GLBs and 27 thumbnails), served from 23:01:18Z;
+  2. the planner: `side-covers` merged into main as `d8f55bb` (no conflicts), pushed 23:34:50Z, run 39079574241
+     green at 23:49:48Z. The order matters: the side-covers session found that the planner's browser tests fail
+     while the parts host lacks the 27 files (its smoke run fetched SideCover_185-1H from the live host and failed).
+- **Tests on the merge, against the live parts host:** npm test 517 tests, 512 passed, 0 failed, 5 skipped; e2e with
+  E2E_SOFT=1 and the Studio at ls-public `fa87f8df`, 31 of 31.
+- **Checked in production:** the 185 2W-2H kit and a new build each draw 4 `SideCover_185-1H`; the Parts list shows
+  "×4 Side Cover 185 · 1H"; no page errors, and no failed requests apart from GoatCounter's (not checked).
+- **A test-setup gotcha:** STUDIO_DIR must be a Windows path with backslashes. The e2e server refuses any file whose path
+  does not start with that string, so a forward-slash path turns every Studio request into a 403, and the five
+  Studio cases time out.
+
+## 2026-10-17 (label previews drawn from the 3D label; supersedes decision 3b)
+
+- **Joey's report (2026-10-17, with a screenshot):** "the small labels differ from the actual labels". On the model, a part
+  label for an M2 × 6 socket head printed "M2 × 6" over the screw drawing. Joey decided on 2026-10-07
+  that the drawing replaces the head word. The panel's preview showed "M2 × 5 / SHCS", from the label's stored words.
+- **Why they differed:** the previews were "decision 3b" (2026-10-13, the 2026-10-13 Labels entry above): the outline, the
+  icon art and the words, chosen because the separate planner had no label core (about 1.2 MB more to load). The merged app
+  loads that core for the stage anyway, so the reason no longer holds. A label's stored words keep SHCS on purpose: they are
+  what older tools read. So the fix changes how a preview is drawn, never the words.
+- **Now:** js/label-preview.js draws each EdgeLabel preview from the 3D label's own sources:
+  - a part label from the same layout its ink is extruded from (label-text.js partLabelLayout, shared with
+    partLabelGeometry), its even-odd outlines on a canvas;
+  - an ordinary label from the same cached geometry the stage builds (labelGeometry: the wrap, the shrink and the badge),
+    its top faces drawn flat;
+  - a stripe from the Label Studio's band pieces, the face from the vendored EdgeLabel face;
+  - the build's Label and Label:TEXT colours.
+  The drawer rows and the selected drawer's card use that drawer's own look (labelLookOf). A label still waiting to be
+  placed is drawn as a drawer wearing it would draw it (label-look.js labelLookOfLabel).
+- **Unchanged:**
+  - the CSS preview stands in until the font and the part data have loaded;
+  - Classic Pro keeps it, because the stage draws no text on Classic Pro;
+  - an icon-only label still shows its icon in the panel and nothing on the model (it has no words to mirror).
+- **Checks:**
+  - test/label-preview.test.mjs pins the face to the vendored data and the waiting-label look to the drawer's;
+  - the e2e case "the label previews are drawn from the 3D label's own layout and geometry" proves one source: the preview's
+    layout record is the 3D ink's, and an ordinary label's flat ink is the stage geometry's own.
+  - Review: Sol 01a14ca2 (no findings).
+- **Open:** the 3D label and the Label plate can still differ when this browser's print preference (the plate's stripe
+  position or drawings switch) differs from the defaults. The stage always draws the drawings, with the stripe at the
+  label's own position or the bottom.
+
+## 2026-10-18 (side covers: raspberry in Part colors)
+
+- **Joey's call (2026-10-18):** "use raspberry". He had asked whether the light pink suits the instructions; the
+  colour-blind check below answered that it does not for deuteranopes.
+- **The check:** CIEDE2000 under normal vision and under Machado (2009) simulations of protanopia, deuteranopia and
+  tritanopia (severity 1.0), against every colour the identification palette emits (generate.js COLORS, SHELF_COLORS,
+  EXTENDER_COLOR, FootAdhesive, the dark stage's Case) and the stages' surfaces.
+  - The first pink `#ff9ec4`: 19.5 from the nearest part colour (the stopper) for normal vision, but 2.5 from the shelf
+    insert under deuteranopia, the most common type. Against the light stage: 1.7:1 on the background, 1.4:1 on the floor.
+  - Raspberry `#c2185b`: 18.3 from the stopper for normal vision; at least 9 from every part colour under deuteranopia
+    (12.8) and tritanopia (9.4). Against the light stage: 5.1:1 on the background, 4.3:1 on the floor. The dark stage
+    loses some: 3.2:1 and 2.2:1, where the pink had 9.9:1 and 6.7:1.
+  - Its weak spot: under protanopia it comes within 2.0 of the adhesive feet's grey, a colour only builds with stick-on
+    feet emit; the case is 9.0 away.
+  - Set aside: a grid scan (sRGB in steps of 15, keeping colours with at least 3:1 against both stage backgrounds)
+    found only muted colours staying 11 or more apart under every vision type (for example `#876969`), and those would
+    read as plain plastic among the saturated part colours.
+- **Changed:** generate.js `SIDE_COVER_COLOR` and the Parts list's chip (parts.js `chipFor`).
+- **Tests:** the 60 golden screenshots and the ten kit manifests re-blessed. A pixel audit of the 60 old/new pairs:
+  of 405,992 changed pixels, 15,193 were not pink in the old shot, and none changed by more than 50 per channel (edge
+  blends and floor reflections next to the covers). npm test 520 (515 passed, 0 failed, 5 skipped); e2e 34 of 34.
+  Review: Terra 01a14d3e (1 held, fixed).
+- **Live:** `e351252`, run 39097744412 green at 04:52:32Z. Checked in production on both themes: the manifest and the
+  stage give the side cover `#c2185b`, the Parts chip agrees, and no page errors.
+
+## 2026-10-18 (Colors, step 1 of the redesign plan: the foundations)
+
+- **Joey's go (2026-10-18):** "Continue", answering "Start step 1 of the Colors plan with the proposed defaults?". The plan
+  is `D:\Claude - Output\colors-presets-2026-10-17\COLORS-PLAN.md`; it puts Astra's Colors notes, a read-only map of
+  this code and a real-world palette study into six steps. Sol reviewed it (thread 01a14d1f). Step 1 changes nothing a
+  visitor sees except the fixes; each step deploys only on Joey's go.
+- **The defaults it accepted:**
+  - D1: the side-cover face stays the faceplate's FACE colour.
+  - D2: count every colour that must be printed, including label text and stripes, never bought hardware.
+  - D3: applying a look sets the whole look.
+  - D4: an edited look is named "<look> · edited".
+  - D5: saved looks keep per-drawer colours.
+  - Step 1 builds on D2; D3 to D5 shape later steps.
+- **What step 1 adds:**
+  - **A look can be shown without being chosen.** `stage.previewPalette` / `endPreview`: activeHex, activeLabel,
+    altLerp and overrideFor read the shown look, so the model and the product previews wear it. Nothing saves it,
+    relays it or puts it in the history, and `palette()` keeps answering the chosen palette. Every palette setter
+    ends it first, and so does the Colors workspace before a commit or on unmount. No control calls it yet: the
+    gallery, the compare tray and Surprise me (steps 3 to 5) will.
+  - **A whole look is its own undo step.** The store merges any changes made within 350 ms, whatever they were, so a
+    preset, a scheme, ★ My palette or an upload flushes the history on both sides, and so does a plate change.
+  - **One filament count** (`stage.filamentsInBuild(look?)`, D2). It reads part by part the way the stage paints,
+    and the Dock and every Shop list use it.
+    - It fixes two bugs: the Dock counted bought hardware, and a preset's Shop list listed filaments for regions the
+      build does not have.
+    - A region on an identification colour, or a label stripe, is listed as printed with no filament picked.
+    - A colour a picked filament already prints counts once.
+  - **Every preset names its label-text filament** (it was the manifest's #1a1a1a): The Jerrari takes Elegoo PLA
+    Black; Stealth and Signal take Panchroma Black. Sandstone had no black, so it gains Panchroma Black: the same
+    look, and a shopping list that says what printing it needs.
+- **Bugs fixed** (from the code map):
+  - Undoing a plate finish left the stage on the new plate, because the generator never reads the plate. app.js now
+    hands an undone or redone plate back to the stage, and `update()` resets the plate materials when a record
+    swap carries another plate.
+  - ★ My palette did not re-point the materials.
+  - The label-text row said "follows Body" while it renders black.
+- **Also on this branch:** the share-link validation fix (2fc4a90). A crafted `#scheme=` link or an uploaded file can
+  no longer bring in a `javascript:` buy link, CSS or a `__proto__` key.
+- **Tests:**
+  - **Four new e2e cases:** a shown look leaves the palette, the saved palette and the history alone; a preset straight
+    after a pick is its own undo step; plate Undo and Redo move the stage with the store; the Dock and Signal's Shop
+    list count what this build prints.
+  - **Mutation-checked:** with the history flush removed, the undo case fails; with app.js's plate hand-back removed,
+    the plate case fails.
+  - **The axis guard** (layer-detail-seam.test.mjs) now follows `resetPlateMaterials`, and covers the record swap.
+  - **The totals:**
+    - npm test: 520 tests, 515 passed, 0 failed, 5 skipped. The axis guard's file failed before its update and passed
+      12 of 12 after.
+    - e2e: 38 of 39. The miss was the Label plate's stripe case, a click that timed out at 37 s; it passed on a rerun
+      (13 s), with the four new cases.
+- **Review:** Sol 01a14d4f.
+  - Held, and fixed:
+    - a stripe in a colour a picked filament already prints was counted twice;
+    - an unpicked region reported the manifest colour where the dark stage shows its light case.
+  - Set aside: "the Dock should count with instruction colours on". That text is unchanged; with no look chosen there
+    are no filaments to count.
+- **Live (Joey's go, "Continue", 2026-10-18).** Main fast-forwarded to `9132e00`; run 39127134427 green. Checked in
+  production, on the dark stage at the Fast tier:
+  - a shown look leaves the palette, the saved palette and the history alone, and `endPreview` puts the chosen look back;
+  - the bought magnets are not counted, the Dock reads "4 filaments", and Signal's Shop list has the 10 rows the count
+    gives;
+  - a plate change and Undo leave the stage and the store on the old plate together;
+  - a crafted `#scheme=` link loses its `javascript:` link and its `__proto__` key, and the page has no `javascript:`
+    href;
+  - no page errors.
+
+## 2026-10-18 (Colors, step 2 of the redesign plan: the look-card gate passes)
+
+- **What it was:** a measurement the plan's review asked for before step 3's gallery is built on it. Can each card show
+  the visitor's own build in a look, offscreen, without compiling shaders per look and fast enough for a gallery?
+  Joey's "Continue" took the plan on from step 1. The pass marks were written before anything was measured, in
+  `D:\Claude - Output\colors-presets-2026-10-17\STEP2-GATE.md`, which holds the full results.
+- **The probe:** `stage.lookCard(look, opts)`, debug-only, with no control calling it.
+  - It snapshots the finished build into its own scene once per manifest (2 to 3 ms), with the stage's light rig and
+    environment.
+  - Each look gets clones of the live materials (`cloneMaterial`, the same programs), resolved like `materialFor`.
+  - It renders into its own target, with no `invalidateFrame`.
+  - Its clones die with the base materials: `purgeLookCards` sits beside both material purges and in
+    `dropStaleAxisMaterials`.
+- **The result, at 384×288 on the root kit, dark stage:** it passes all four marks with one choice of target.
+  - 0 new shader programs across looks.
+  - About 6 ms per card on the laptop, and 13 to 16 ms with the CPU throttled 4×. That is a card's own time. Whether the
+    live frame plus a card fits a frame is step 3's first check.
+  - Against the real canvas, a median difference of 0 (p95 12 on Fast, 17 on Very High), on the build's interior. One
+    card per tier.
+- **The finding that decides step 3's render target:**
+  - An ordinary render target skips three.js's tone mapping: 28 of 255 off on Very High.
+  - A target flagged `isXRRenderTarget` with sRGB storage encodes twice: 73 off. three.js stores a render target's sRGB
+    colour texture as SRGB8_ALPHA8 even on an XR target (`setupFrameBufferTexture`), so the hardware encodes after the
+    shader has.
+  - XR-flagged with RGBA8 storage matches the screen. Even its first card added no shader program, which fits reusing
+    the screen's programs (same tone mapping and output colour space).
+  - The flag is internal to three.js. The e2e case "Colors step 2: a look card ..." pins the match, with an ordinary
+    target as the control. It was mutation-checked: with RGBA8 storage off, it fails.
+- **What a card still lacks:** Very High's ambient occlusion and settle accumulation, and shadows on the light stage.
+  Translucent filaments show as solid tints. Step 3 also needs a scene revision counter, because labels and style
+  swaps change the build without a new manifest.
+- **The method moved once, after the first results.**
+  - The first fidelity check compared each card with the live scene drawn into the same kind of target. Every
+    variant scored 0, so it could not see an encoding error.
+  - M4 was re-measured against the canvas itself, and the RGBA8 variant added; the marks did not change.
+  - The canvas comparison sizes the drawing buffer without touching the pixel ratio, which the relief's band limit
+    depends on (the layer-detail-seam guard).
+- **Review:** Sol 01a14f22. All 8 points held, and all are fixed:
+  - **in the code:**
+    - an unnamed filament pick no longer lightens alternate tiles;
+    - cards run one at a time;
+    - the live renderer is restored in a `finally`;
+    - label and handle changes re-snapshot;
+  - **in the report:** card latency is not frame pacing; one image does not prove the resolver; the discarded rerun
+    and when the filters were fixed are now recorded; the scope is stated.
+- **Tests on the final code:** npm test, 520 tests (515 passed, 0 failed, 5 skipped); e2e, 40 of 40, the gate case
+  included. The gate itself was rerun on the final code (`gate4`), and every fidelity figure reproduced.
+- **Recorded in the vault:** measurements.md, "Offscreen renders and the screen" (4e2c8bc; Sol 01a14f29). It includes
+  the unmeasured consequence that the Build workspace's product previews (`renderThumb`) get no tone mapping on the
+  tone-mapped tiers.
+- **Not deployed.** The branch is `colors-step2-gate`; a debug hook has no reason to ship before step 3 uses it.
+
+## 2026-10-18 (Presets: the accent differs from the face; Jessie Neon Yellow; the "Neon yellow & black" preset)
+
+- **Joey, on his phone with EdgeLabel faceplates:** "I shouldn't have the accent color the same as the face for those".
+  The EdgeLabel family's accent part sits on the face and vanishes into one of the same colour. The four presets of
+  2026-08 never matched them; four of step 3's seven did (Grey & sunlight yellow, Safety yellow & black, Printer black &
+  red, Flight-team navy & gold) and now take another colour the look already prints; Flight-team's is the navy, since
+  white would fade on its yellow face (Terra 01a15087). `test/presets.test.mjs` pins Accent ≠ Faceplate:FACE.
+- **"Can we add Jessie neon yellow as an available color?"** Printed Solid Neon Yellow joins the catalog (112 colours).
+  Its hex `#E4E202` is the median of the centre third of the maker's swatch photo (no colour code is published). The
+  catalog's source of truth, `gen2-visual-animator/viewer/js/filament-db.js`, and the Filament Material Lab's copy (its
+  pinned hash bumped) were re-vendored the same day. Terra 01a1508a.
+- **"Neon yellow & black"**, the twelfth preset, is Joey's own 3D Printopia build (his photo): Chevron faceplates with
+  every face black, the body in neon yellow, handles in plain black PLA (that build wore a holographic build plate: the
+  plate finish, not a colour). Shell in Neon Yellow; faces, grips, drawers, handles and the deck (13:1) in Elegoo PLA
+  Black; accents and hardware neon. Terra 01a1508e, no findings. The presets test pins 12.
+- **Checks:** presets.test.mjs 12 of 12 and filament-db.test.mjs 5 of 5 on the final code (Terra 01a150b8 caught the
+  earlier "17 of 17", which was both files together); a change Joey decided in words
+  deploys once its checks pass.
+- **Live:** main 03ee0bd (261cc80 accent rule + Neon Yellow, 81ceda9 the preset, 03ee0bd the night grid and setup
+  sheet), run 39161157605 green 16:26, live stamp `03ee0bdb`. Production check (evening-prod.mjs, desktop and
+  375×844): 112 colours with Neon Yellow `#E4E202` and its Printed Solid URL; 12 presets, the last "Neon yellow &
+  black" (Case Printed Solid Neon Yellow, Faceplate:FACE Elegoo PLA Black); accent ≠ face and grip = face hold on
+  every preset.
+
+## 2026-10-18 (the night stage's grid back to the old cyan; the setup sheet on a phone)
+
+- **Joey, comparing the old viewer and the planner on his phone:** "Is it just me or does the new grid feel darker" ...
+  "I like the old more". The shell's `night` stage (2026-10-12: the grid two steps quieter and the floor reflection
+  halved, from Astra's review of the first Build screen) now matches `dark` exactly: grid `0x2b7f9e`, the reflection at
+  the stage's default. The entry stays as the shell's mode name. This reverses the 2026-10-12 choice on Joey's word.
+- **Joey, tapping the mount chip on his phone:** "it just opens a broken menu and expands my keyboard". The Build setup
+  sheet's box carries the class `sheet` inside `#ws`, so the phone's bottom-sheet rules took it: positioned at the Dock,
+  slid to its 44 px peek and clipped (measured at 375×812: top 642, translateY 410 px, clip-path to 44 px), with the name
+  field focused and the keyboard up. A phone rule below the phone block gives the modal its own layout back (top 64,
+  full width, scrolling inside), and on a phone the dialog's focus lands on its close button; the desktop keeps the name
+  field focused (the keyboard e2e case). `matchMedia` guarded for environments without it (Terra 01a15096, held).
+- **Checks:** the keyboard, setup-sheet and every-workspace-boots e2e cases (5 of 5) on the final code; node --check
+  on setup.js. Both changes are Joey's in words, so they deploy once checks pass.
+- **Live:** main 03ee0bd, run 39161157605 green, stamp `03ee0bdb` (see the entry above). Production check: the
+  `night` theme's grid reads `#2b7f9e` on both viewports; the setup sheet at 375×844 sits at top 64 with no transform
+  and no clip-path, focus on `BUTTON.x`; on the desktop it keeps the name field focused.
+
+## 2026-10-18 (Colors, step 4 of the redesign plan: the compare tray)
+
+- **Joey's go:** "Go" to the proposed step 4, the same day step 3 went live. The plan's step 4 as approved
+  (COLORS-PLAN.md): two or three finalists, flipped with the camera held still, flips through the preview API, never
+  touching the safe area; the step's record is `D:\Claude - Output\colors-presets-2026-10-17\STEP4.md`.
+- **Finalists:** up to three, in a list that survives the gallery closing and a remount. They come in from a "+" on
+  every gallery card, from "Add to Compare" in a look's details, and from "Add current look" in the tray; the gallery's
+  head counts them ("Compare (2)") and opens the tray.
+- **The tray** sits over the stage above the Dock (a sheet on the phone). The gallery and the tray never show together
+  (Astra: contextual panels do not pile up over the model): opening one closes the other, and the finalists keep. The
+  part card hides while the tray is open, as under the shopping list.
+- **A flip shows a finalist and nothing more:** `previewPalette`, no re-render of the workspace, so the safe area is
+  never set and the camera stays. "Current" puts the chosen look back. Measured (STEP4.md, marks written first): on this
+  laptop at Balanced, dpr 1, a flip reaches the next drawn frame in a median 10 ms (max 16) over 20 flips; the camera
+  and the safe area are unchanged to the number (M8 and M10 pass; 4× throttled and Very High: STEP4.md).
+- **The safe area's floor lifts once, when the tray opens,** by the tray's height, so an auto-fitted model rises above
+  it; the stage refits only a camera the visitor has not taken. A flip never touches it.
+- **Apply** goes through the gallery look the finalist came from (a preset's own apply and its event; a saved look's
+  per-unit layer), or as a scheme of the finalist's colours when that look is gone; one undo step. The tray stays open.
+  Deleting a saved look in the details also takes it out of the tray.
+- **Tests:** two e2e cases (the desktop flow: enter, Compare (2), the tray replaces the gallery, a flip is shown and
+  not chosen with the palette, the camera, the safe area and the history untouched, the second finalist replaces the
+  first, Current, Apply as one undo step, remove, Escape; the phone sheet), one mutation-checked.
+- **Review:** Sol 01a15017, no findings. **Checks on the final code:** npm test 521 (516 passed, 0 failed, 5 skipped);
+  e2e 46 of 46 (soft rendering, the Studio checkout served); the desktop tray case mutation-checked (a flip that chose
+  the look through `setPalette` fails it at once). Flip latency measured by hand, STEP4.md §4: M8, M9 and M10 pass.
+- **Live (Joey, 2026-10-18: "Deploy").** Main fast-forwarded to `6bf1853`; run 39152794735 green on the first try,
+  live stamp `6bf18532`. Checked in production with `D:\Claude - Output\planner-prod-checks-2026-10-18\step4-prod.mjs`,
+  desktop 1280×800 and a 390×844 phone viewport, both on Very High: two finalists from the gallery's "+", the head reads
+  "Compare (2)", the tray opens in the gallery's place (a sheet titled "Compare · 2 of 3" on the phone), a flip shows
+  Stealth (Case #2b2b2e) with the palette, the camera, the safe area and the history unchanged and the shown card
+  marked, the second finalist replaces it (Drawer #d23a2e), Current ends the preview, no preset event, no page errors
+  on the desktop (the phone run, opened seconds after the desktop one, logged the same single third-party 429 as the
+  step-3 check; a plain re-load does not reproduce it). Nothing was applied in production.
+
+## 2026-10-18 (Colors, step 3 of the redesign plan: the current-look card, Browse looks, look details, the new presets)
+
+- **Joey's go:** "Start Colors step 3" (the "MODULITH planner-2 | 10-18" session). The plan's step 3, as approved
+  (D:\Claude - Output\colors-presets-2026-10-17\COLORS-PLAN.md); the step's own record is STEP3.md beside it.
+- **The panel:** the premade list and "Your schemes" are gone from the sidebar (Astra: more rows pushed "Colors in this
+  build" down). In their place, one card: this build rendered in its current colours, the look's name (D4: the matching
+  preset or saved look, "<that look> · edited" after a hand change, "Custom look" with no source), its filament count and
+  swatches, then Browse looks, Surprise me (disabled until step 5), Save, and Download / Upload / Share behind "⋯".
+  "Colors in this build" sits directly under it.
+- **The gallery** opens over the stage's left (540 px; the view tools step right of it; the camera's safe area is never
+  touched, so the model stays put while looks are tried): Featured (the presets), My looks (★ My palette, the saved
+  looks), All looks; a search; a filament-count filter counted on THIS build. Every card is this build wearing that look,
+  from step 2's `lookCard`, keyed on the scene revision, the look as the build wears it, the tier and the stage theme;
+  drawn one per animation frame; dropped when the build changes or the gallery closes. Hovering or focusing a card shows
+  the look on the model (`previewPalette`: never saved, never in the history, never a preset event).
+- **The details** take the gallery's place: the big render, Apply this look (one undo step; closes the gallery), Delete
+  for a saved look, Shop this look (moved here from the preset rows: the filament rows as this build wears the look,
+  Buy links with the disclosure at the link), a screen-preview note, an appearance-not-suitability note, and a
+  translucent note where a look uses a translucent filament (the card shows it solid).
+- **Saved looks keep per-unit colours** (D5): Save stores `over` beside `colors`; Download and Share stay colours only,
+  for the Studio.
+- **The new presets:** seven from the palette study (Racing silver & teal, Grey & sunlight yellow, Safety yellow & black,
+  Printer black & red, Tri-stripe racing white, Black & gold, Flight-team navy & gold), each with the label text in a
+  dark filament the look already prints. **The grip wears the face colour** (Joey, on the first cards: "with this
+  faceplate i'm not a fan of the grip being a different color from the face"): four of the seven drafts split them and
+  were folded; the presets test pins the rule. Tool-chest red waits for its scoring. The presets test pins 11.
+- **The scene revision** (`stage.sceneRev`): bumped by a new manifest, by the label meshes redrawn in place, and by a
+  handle or faceplate style swapped in place; the look cards snapshot once per revision.
+- **`lookCard` reworked for a gallery:** the draw runs one at a time into a pooled target; each card's readback is
+  awaited on its own, so cards overlap on the GPU. Measured first: the step-2 shape (one card's fence before the next
+  draw) ran 50 to 190 ms a card in the planner's page, 1.2 s for 11 cards at 25 ms a frame.
+- **The first check, frame pacing** (STEP3.md, marks written before measuring): on this laptop in real Chrome, dpr 1,
+  1280×800, Balanced, one card a frame: 11 cards in 128 to 145 ms once warm, frames p95 16.7 ms, max 16.8 ms (M5 and M7
+  pass; the first fill after launch: 356 ms, p95 41.7 ms). Throttled 4× and Very High: STEP3.md §3.
+- **Phone:** the gallery is a third bottom sheet, one open at a time; the panel's card puts the render beside the name
+  so Browse looks stays in the first screen; closing the gallery returns to the Colors sheet. Checked in the desktop
+  app's browser pane at 375×812, not yet on a real phone (the plan's acceptance).
+- **Tests:** presets.test.mjs (11, the names, the grip rule); e2e: the Colors preset case moved to the gallery, the
+  350 ms case and the Shop case follow it, plus the gallery case (cards drawn and keyed, hover shown-not-chosen, cards
+  follow a build change and Undo, no preset event), the loose pacing gate, the phone sheet case.
+- **Reviews:** Sol 01a14f91 (substantial), 3 of 3 held and fixed: a saved look read as "Applied" when only its per-unit
+  colours differed (looks now match on colours AND the per-unit layer, which also names such a look "· edited"); a saved
+  look deleted by a captured index (now by name, read fresh, so another tab's save cannot shift it); the search box
+  rebuilt under the caret (the grid alone follows the search now). The Terra pair 01a14f96 (pair-sol-0335), 3 of 3 held:
+  the first two again, and Apply on the phone leaving every sheet collapsed (it returns to the Colors sheet).
+- **Checks on the final code:** npm test 521 (516 passed, 0 failed, 5 skipped); e2e 44 of 44 (soft rendering, the Studio
+  checkout served); the gallery case mutation-checked (with `mountManifest`'s revision bump removed it fails on "the
+  revision moved with the unit"). Two unit tests that lift the handle and faceplate swaps out of main.js needed
+  `let sceneRev = 0` in their sandboxes.
+- **Live (Joey's go, 2026-10-18: "Deploy Colors step 3").** Main fast-forwarded to `66d91b0`. The first run
+  (39142321766) failed on the new pacing gate itself: the runner's software rasteriser filled the 11 cards in 8.9 s
+  against a 5 s bound, so the gate took the runner's bounds (`a4a49ee`, 30 s and a 2 s frame; Terra 01a14fce). The
+  second (39144483279) fell on the idle-gate case's 1.5 s window, which passes locally and had passed the run before;
+  an empty commit (`3011d62`) re-ran it: green, live stamp `3011d62a`. Checked in production with
+  `D:\Claude - Output\planner-prod-checks-2026-10-18\step3-prod.mjs`, desktop 1280×800 and a 390×844 phone, both on
+  Very High: 11 presets, the grip rule holds in every one, the panel's card names "The Jerrari · 4 filaments" and is
+  drawn, the gallery's 11 cards fill in about 200 ms keyed on the live scene revision, a hovered card shows Stealth on
+  the model (Case #2b2b2e) with the palette unchanged and leaving ends it, the details show Stealth with 4 filament
+  rows and 4 Buy links and Apply, the phone's gallery sheet is titled after the look, no preset event, no page errors
+  (the phone run, opened seconds after the desktop one, logged a single third-party 429 that a plain re-load of both
+  viewports did not reproduce).
+
+## 2026-10-18 (MakerWorld and Cults 3D hidden from the store links)
+
+- **Joey's call (2026-10-18):** "I noticed i don't like how we link to makerworld or cults, if it doesn't exist on their
+  site it instead does a standard search, lets just hide makerworld and cults for now until eventually i upload more
+  models there".
+- **Changed (`b2fb64c`):**
+  - the Parts list's Download site switch offers Printables and Thangs only, and no row links either hidden store;
+  - the viewer's store picker and its part links list neither;
+  - a saved choice of either reads as Printables, the preference itself included;
+  - `?from=` arrivals from either are still tracked.
+- **Not changed:** the vendored catalog (`js/catalog/data.js`) still carries both. To bring one back, use
+  `SHOWN_STORES` in main.js and `STORES` in parts.js, then update the e2e case.
+- **Checks:**
+  - a new e2e case, mutation-checked;
+  - npm test 515 passed, 0 failed, 5 skipped; e2e 40 of 40;
+  - review: Terra 01a14f3d, 1 held (normalise the preference itself), fixed;
+  - vault decisions `40c41f2`.
+- **Live:** run 39133529005 green. Checked in production with saved choices of both hidden stores: the Parts list
+  shows Printables and Thangs with Printables on, and so does the viewer's picker; no link to either store anywhere;
+  no page errors.
+
+## 2026-10-18 (Colors, step 5 of the redesign plan: Surprise me, with constraints)
+
+- **Joey's go:** "continue with colors step 5", the evening the batch of fixes went live. The plan's step 5 as approved
+  (COLORS-PLAN.md §4): lock colours or parts; Subtle, Playful or Wild; a cap of 2, 3 or 4 filaments set by the visitor
+  (the planner cannot know a printer's colour count); optionally only filaments the visitor owns, a new list kept
+  outside the vendored catalog and keyed by label; three candidates with Keep, More like this and Try again; generated
+  looks under the preset rules (the deck at 4.5:1 from inside the look, lower and upper parts sharing a colour, the
+  extender, the lip and the side-cover core in the case colour, the side-cover face as D1 reads it).
+- **The generator is pure and seeded** (`js/colors/surprise.js`): a look is built from roles (shell, drawer, face,
+  grip accent, accent, handle, label and its text, the small parts, the deck, the bought hardware) and written out to
+  the 27 keys every preset sets, so the product rules hold by construction and are checked once more before a look
+  leaves (`checkLook`). `test/surprise.test.mjs` re-states every rule independently of the generator and holds 6,800
+  looks (3 moods × 3 caps × 3 catalogs × 100 seeds) to them: 100 % pass, and the share of settings that return fewer
+  than three is printed, never hidden. The study's colour maths (CIELAB, CIEDE2000 against the 34 Sharma pairs, WCAG
+  contrast) moved into the runtime as `js/colors/colour.js`.
+- **Moods read the catalog in LCh:** neutral under C 10, muted to 25, mid to 45, vivid above. Subtle: a neutral or
+  muted shell, nothing vivid, at most one colour above C 25, hues within 60°. Playful: a neutral shell, the rest neutral
+  or vivid with at least one vivid, in a harmony (hues within 40° or 100–180° apart). Wild: a mid or vivid shell, the
+  rest mid or vivid at least 60° apart or neutral. Two filaments in one look read as two colours (CIEDE2000 ≥ 10); no
+  translucent filament is picked (a card would show it solid). **Two things moved while building:** Wild as first
+  designed ("everything mid or vivid") found nothing for an eight-filament owned list, because a deck or a label text at
+  4.5:1 needs a light or a dark colour and the vivid part of the catalog sits at mid lightness, so Wild admits neutrals;
+  and the cap is a ceiling, not a count, because Subtle at cap 4 found nothing where four neutrals read as three.
+- **Locks** are per role, offered as chips for the regions that drive a look and that the build has (Case, Drawer body,
+  Face, Accent, Handle, Label, Shelf deck); a chip holds the filament the region wears now (a region on an
+  identification colour cannot be locked: there is no filament to keep). A locked colour wins over the mood and over the
+  owned list, and counts toward the cap. A rolled face is never the shell's filament (the face is the look's statement);
+  a locked one may be, as Black & gold's is (Sol 01a150df: the generator refused the pair as "No look fits"), and such a
+  look is named by its accent.
+- **The owned list** is `gen2-owned` in this browser (`js/state/owned.js`: catalog labels only, each once; a label that
+  leaves the catalog drops out on the next read; a storage that throws reads as nothing owned). It is edited in the
+  panel: every catalog colour by brand, ticked or not, with a search. "Only filaments I own" stays off and disabled until
+  the list has two. Every way out of the editor (Back, Escape, the close button) reconciles: the switch drops under two,
+  and the candidates roll again when the list changed under the switch (Sol 01a150df: Escape and close skipped it, so
+  Keep could apply a filament just unticked); the panel also re-rolls on opening when its candidates no longer fit the
+  list.
+- **The panel takes the gallery's spot** and closes the gallery and the tray (contextual panels do not pile up over the
+  model). Candidates draw through the gallery's card pump and `stage.lookCard`, one a frame, and show through
+  `previewPalette`: hovering shows one while none is pinned, a click pins it (a phone has no hover), the same click frees
+  it. Keep applies a candidate as a scheme of its own (one undo step; the current-look card then reads the candidate's
+  name, decision D4). More like this keeps a candidate's shell and face and re-rolls the rest; Try again rolls three
+  more. Fewer than three is said in a note, never hidden. Opening, hovering, rolling and keeping never touch the safe
+  area, so the camera stays (step 4's rule). Names read "<face> on <shell>", with the third colour when the look has one.
+- **No stage change.** No analytics: a candidate never goes through `applyPreset`.
+- **Measured (STEP5.md, marks written first):** 6,800 generated looks, none breaks a rule; the three candidates always
+  differ in shell and face, 23 distinct shells over 50 rolls; a roll of three in a median 0.2 ms under node; the safe
+  area and the camera unchanged to the number across opening the panel and 20 Try agains at Balanced, 4× CPU and Very
+  High; Try again to the third card drawn in a median 43–56 ms at Balanced (max 95), 44 ms at Very High (max 123),
+  289–364 ms at 4× CPU (max 607, one re-render frame of up to 308 ms, reported with no mark).
+- **Checks:** npm test 537 (532 passed, 0 failed, 5 skipped); e2e 48 of 48 (soft rendering, as CI runs it), two new
+  cases, the desktop one mutation-checked (Keep through `previewPalette` fails it at "the build wears the kept look");
+  review Sol 01a150df, two findings, both held and fixed before the commit.
+- **Live (with 5b below):** Joey, "Deploy Colors step 5 + 5b", 2026-10-18. Main fast-forwarded to `3526e5a`; run
+  39172061740 passed the tests and the smoke and failed at the deploy's module-graph guard (the new modules' imports
+  carried no `?v=` stamp), so nothing shipped; `aedb37a` added the stamping lines (replayed locally with the guard;
+  Luna 01a1512b); run 39173205072 green, live stamp `aedb37a3`. Production check `step5-prod.mjs` on the desktop and
+  a 390×844 phone viewport: the panel opens in the gallery's spot with the five tiles (15 swatches), three candidates
+  drawn and named in colour words with the accent share rising (quiet / balanced / bold), a hovered candidate shown and
+  not chosen, Show three more with the camera and the safe area unchanged, Use this look wearing the look as one undo
+  step and the panel named after it, Undo restoring The Jerrari, no preset event, no page errors.
+
+## 2026-10-18 (Colors, step 5b: "Find your next look", Astra's refinement of Surprise me)
+
+- **Astra, relayed by Joey the same evening,** on the step-5 panel: "'Mood' ... describes how adventurous the generator
+  is, but doesn't help someone picture the result"; styles "with a sense of place, rather than literal room categories",
+  five of them, "each as a small palette tile with three swatches"; "make the three results deliberately different
+  interpretations of the chosen style - one mostly neutral, one balanced, one with a stronger accent", counting "the
+  visible area carrying the accent, not simply how many part categories receive it"; "Keep" → "Use this look", "Try
+  again" → "Show three more", keep "More like this"; short names "such as 'Sand & charcoal'" with the filaments in
+  Details; Face and Handle locks kept; "Let Retro pop be a smaller, well-curated collection"; shiny finishes not the
+  default; and "the generator's rules make a look consistent with the planner's constraints; they don't by themselves
+  establish that every material is suitable for every printed part". Joey: implement it before deploying (her "settled
+  enough to implement now", relayed, read as the go to start, not to deploy).
+- **Styles are pools and relationships** (`js/colors/styles.js`): Warm & natural (warm neutrals and whites shell it, the
+  earths accent it, nothing vivid), Clean & calm (whites, greys, silvers; the quiet blues and soft greys), Workshop
+  classic (blacks, charcoals, steel grey, deep blues; reds, oranges, yellows), Retro pop (a named collection: eight
+  shells, cream one of them; thirteen accents), Anything goes (a neutral or chromatic shell, any mid or vivid accent).
+  Each has a least hue distance and a silk weight (a silk survives a pick at 0.25 in the two calm styles, 0.5 in the
+  workshop and retro ones). `test/styles.test.mjs` pins every pool as a label list.
+- **Three interpretations, told apart by visible area** (`AREA` in surprise.js: an estimate of the root kit's silhouette
+  by role; shell 0.44, face 0.24, deck, drawer, handle, accent, label, small, grip accent the rest): quiet puts the
+  accent colour on the Accent part and the grip accent only, balanced on the face, bold on the face, handle, small parts
+  and drawer body too; the share must rise slot to slot or the slot is dropped; nothing is padded. A cap of 2 gives two
+  (a quiet look needs a third colour for its face).
+- **Names are colour words** (`js/colors/words.js`, 36 words over LCh regions with named overrides for the finishes:
+  chrome, gold, brass, bronze, rose gold, titanium, clear, natural), "<Shell> & <accent>" from the two colours carrying
+  the most visible area, locked colours included; the filament names stay in the tooltip, the toast and Details.
+- **Details** is the gallery's own look details for the candidate; Back returns to the panel.
+- **Measured (STEP5B.md, marks written first):** 8,400 generated looks, none breaks a rule; every colour inside its
+  style's pools; the accent's visible share rises slot to slot in 600 of 600 sets (medians 0.07 / 0.27 / 0.40); silk
+  shells 5–8 % in the three calm styles; three candidates in 100 % of calls on the whole catalog at caps 3 and 4, Retro
+  pop included (a cap of 2 gives two, by design); 112 of 112 colours have a word, rolls named apart; Show three more to
+  the third card drawn in a median 38–43 ms at Balanced, 40 ms at Very High, 120–129 ms at 4× CPU (faster than step
+  5, whose mood generator re-rolled whole sets); the camera and the safe area unchanged to the number in every round.
+- **From the review (Sol 01a15101):** "More like this" could hand back the candidate's own shell: held and fixed (the
+  candidate's shell is passed as `notShell`). That the three interpretations may carry different accent colours was
+  read as the design (three interpretations of the style, not one colour three times) and left as is, recorded for
+  Astra and Joey.
+- **Checks:** npm test 546 (541 passed, 0 failed, 5 skipped); the two step-5 e2e cases extended (the tiles, "In use",
+  the cap of 2 giving two with its note) and green; the whole e2e suite under soft rendering 47 of 48, the one failure the
+  Label plate's faceplate-switch case on a visibility wait (37 s), which touches nothing 5b changed and passed on the
+  5b worktree and on main, with and without soft rendering, when run again (four of four): a load flake, recorded, not
+  fixed. Review Sol 01a15101, one finding held and fixed, one discarded as the design.
+- **Live:** with step 5, 2026-10-18 (see the step-5 entry: run 39173205072, stamp `aedb37a3`, the production check).
+
+## 2026-10-18 (the Parts list names the filament each part prints in)
+
+- **Joey (2026-10-18), on the Parts tab after choosing colours:** "the parts have the instructions colors assigned to
+  them, which is kind of confusing after assigning chosen colors to it".
+- **The call:** with the visitor's colours on (`stage.palette().on`), a Parts row's chip is the filament the part prints
+  in, and the identification colour, the one the Assemble instructions use to tell parts apart, stays only as a thin ring
+  around it. With the colours off nothing changes: the chip is the identification colour, as before.
+- **Changed (branch `parts-print-colours`, not deployed):**
+  - `js/workspaces/parts.js`: a row's type comes from its BOM name (`typeOf`, ordered like `chipFor`; bought hardware and
+    anything the stage does not model answer null and keep the identification chip). One read per render of the Colors
+    tab's source, `stage.keysInBuild()` for a type's regions and `stage.filamentsInBuild()` for what each wears
+    (`paletteSnapshot`): a part with zones, or units with their own picks, shows the distinct colours side by side
+    (at most four), body first. Under the name: "Print in Black · face Mystery Orange", every filament name the buy link
+    the Colors tab uses (paid links marked as there); a zone that follows its body is not repeated; a region with no pick
+    reads "no pick yet", a row with none "No filament picked yet". The caption reads "Chip = the filament it prints in ·
+    ring = its colour in Assemble · dashed = buy" while the colours are on. Copy as text gains a "Print in:" line per
+    row and the CSV a "Print in" column (empty with the colours off); Print prints the list as shown. The list subscribes
+    to the store so an Undo of a colour change re-renders it.
+  - `js/workspaces/colors.js` exports `ZONE_LABEL`, `isPaid` and `short`, so both tabs word a zone, a filament and a paid
+    link the same way.
+  - `css/app.css`: `.chip.fil` (the ring), `.chip.multi` (the swatch strip), the dotted link in the line.
+- **Checks:**
+  - `test/parts-print-colours.test.mjs`: every BOM row name across the mounts, feet and faceplate styles maps to a stage
+    type (bought hardware to none); the snapshot, the words and the swatches on a fake stage;
+  - a new e2e case: Stealth applied through the Colors gallery, then Parts: the case row's chip is the case filament's
+    colour with the ring, the line names it with a buy link, the caption, the CSV column; `setUseCustom(false)` puts the
+    identification chip and the old caption back. Mutation-checked: a chip that ignores the palette fails it on the
+    chip's colour;
+  - npm test 525 (520 passed, 0 failed, 5 skipped); the Parts and Colors e2e cases 15 of 15;
+  - review: Terra 01a15119, 1 returned, 0 held (its "adopt commits are cross-tab changes the list misses" is wrong: an
+    adopt is a same-tab load of the stage record by a workspace's own handler, which re-renders itself; the Build, Colors
+    and Labels tabs skip it the same way).
+- **Not done:** the inspector's "This unit · parts" list still shows no colours.
+- **Live:** Joey, "Deploy the Parts-list change", 2026-10-18. Merged into main as `26a4123` (the DECISIONS conflict
+  resolved with both entries kept; the deploy's stamping line added for parts.js's new `./colors.js` import, the
+  module-graph guard replayed locally); on the merge npm test 544 passed, 0 failed, 5 skipped, e2e Parts + Colors + boot
+  18 of 18; run 39177428150 green, live stamp `26a41231`. Production check `parts-colours-prod.mjs` on the desktop and
+  a 390×844 phone viewport, Stealth applied: the case row's chip is Panchroma Black with the identification colour as a
+  ring, "Print in Black" with the Polymaker link, the caption "Chip = the filament it prints in · ring = its colour in
+  Assemble · dashed = buy", four dashed buy chips kept; colours off: the identification colour, no line, the old
+  caption; Undo restores The Jerrari; no page errors.
+
+## 2026-10-18 (Colors, step 6 of the redesign plan: Simplify to fewer filaments, and the confidence summary)
+
+- **Joey's go:** "go, but also what's left after that?", the last step of the Colors plan. The plan's step 6 as
+  approved (COLORS-PLAN.md §4): Simplify previews exactly which parts would change, then asks before applying; the
+  summary reads "3 filaments used · Case: Black · Fronts: Orange · Grips: Silver · Keep this look", with "Review
+  filaments" under it keeping appearance and material suitability apart.
+- **Simplify is a pure merge under the rules** (`js/colors/simplify.js`): one step at a time, the filament carrying the
+  least visible area (the role-area weights of step 5b, over the keys this build has) is mapped, per-unit picks
+  included, onto the closest colour of the look (CIEDE2000) under which every preset rule still holds on the look as
+  worn (a rule applies only when the build has both its keys: no shelf, no deck rule); when no colour can take it, the
+  next-least filament is tried; when no step is possible the result is short and says why ("Two filaments must stay:
+  the deck or the label text needs a colour that reads against its background"). Nothing from outside the look is
+  brought in; a key that wore no merged filament is never touched. `test/simplify.test.mjs` holds 1,476
+  simplifications of 900 generated looks on two builds to the rules re-stated independently, re-derives the
+  least-visible / closest-colour choice for 572 single steps, and checks that per-unit picks move with their filament.
+- **The panel** (`#ws-simplify`, the tray's spot; a sheet on the phone): "Down to" with the counts from one fewer to
+  two, the changed regions as rows reading original → final per filament (a filament merged twice shows once, where it
+  ends up: the first rows listed the generator's steps and read as two changes for one filament), the outcome line,
+  "Apply · N filaments" and Cancel. The proposal is shown on the model through `previewPalette` while the panel is up
+  and never chosen; Apply is one undo step (`commitColors('scheme', ...)`), after which the card reads "<the look> ·
+  edited" (D4). It closes the gallery, the tray and Find your next look and never touches the safe area.
+- **The summary** sits under the current-look card's swatch strip: "<count> filaments used" (the one count, D2) then
+  the regions the build has grouped in a fixed order (Case, drawers, fronts, grips, grip accents, accents, handles,
+  labels, label text, deck, small parts), neighbours sharing a filament joined ("Case, drawers: Black"), filaments by
+  their short names; beside it "Keep this look" (Save, the name field focused), "Review filaments" (the shopping list,
+  which gains "Appearance only: whether a filament suits a part (strength, heat, flex, the printer) is a separate
+  question.") and "Simplify…" at three filaments or more.
+- **Caught while building:** the module's `worn` import shadowed the workspace's own `worn(key)` helper and broke the
+  panel at boot; renamed on import. The deploy's stamping lines for the new module went in with the code (the lesson of
+  step 5's first run).
+- **No stage change. No analytics.**
+- **From the review (Sol 01a151f0, three findings, all held at least in part):** the units' own picks are now worn,
+  counted and validated through each unit's own view of the rules (a merge may not add a rule problem; one the look
+  already had neither blocks it nor is its to fix); the bought hardware's stored entries are left alone by a merge,
+  while the rest of the palette follows it on purpose (D3: a part added later matches the look; that half discarded,
+  recorded); a group worn in two filaments splits by key in the summary ("Case: Black · Feet: Orange") and the line
+  counts the units with their own colours.
+- **Measured (STEP6.md, marks written first):** 1,476 simplifications of 900 generated looks on two builds, none
+  breaks a rule, every target reached on the root kit, 95 short on the fuller build with a reason each; 572 single
+  steps re-derived as least-visible → closest valid colour; the twelve presets' summary lines match the Dock's count
+  with every region once; preview / Cancel / Apply as one undo step with the camera and the safe area unchanged; a
+  simplification in a median 0.05 ms.
+- **Checks:** npm test 554 (549 passed, 0 failed, 5 skipped, run alone: a run beside the e2e suite timed three
+  browser-based cases out at 73 s that pass alone in 9 s); the two step-6 e2e cases three of three under soft rendering
+  after one flake of the case's own making (it asserted the Save row's focus before the tick that sets it; it now
+  waits); the whole e2e suite 49 of 51 under soft rendering, the two failures that flake and the Label plate's
+  faceplate-switch case (the load flake recorded under 5b). Mutation checks: the rule check removed fails the unit test;
+  Apply only previewing fails the e2e case. Review Sol 01a151f0, three findings, all held at least in part.
+- **Live:** Joey, "Deploy Colors step 6", 2026-10-19 morning. Main fast-forwarded to `dddbdaf`, run 39242318988
+  green, live stamp `dddbdaf1`. Production check `step6-prod.mjs` on the desktop and a 390×844 phone viewport: the
+  summary's "4 filaments used" matches the Dock and `filamentsInBuild()`; Simplify opens in the tray's spot (a sheet on
+  the phone) with "3 filaments" and "2 filaments", the row "Grip accents: Silk Silver → Orange", the proposal shown on
+  the model with the palette, the history, the camera and the safe area untouched; Cancel leaves nothing; Apply drops
+  the Dock to 3 as one undo step and the card reads "The Jerrari · edited"; Undo restores The Jerrari; Review filaments
+  opens the shopping list with the suitability note; no preset event; no page errors (the phone run logged a
+  third-party 429, as the earlier checks did). This closes the Colors plan, steps 1 to 6.
+- **A wording nit seen in production, and Astra's answer (2026-10-19):** with the Classic faceplate's body in black and
+  its face in orange, the line read "Fronts: Mystery Orange · Faceplate bodies: Black · Grips: Mystery Orange" (the
+  split kept fronts and grips from joining). Astra: "Fronts → Grips → Faceplate bodies. Keep the visible, recognisable
+  surfaces first." The faceplate body is its own summary group after the grip accents, so The Jerrari reads "Case,
+  drawers: Black · Fronts, grips: Mystery Orange · Grip accents: Silk Silver · Faceplate bodies: Black · Small parts:
+  Orange". And on Simplify's outcome line, her distinction kept: "fewer distinct filaments doesn't necessarily mean
+  fewer printing colour changes or less waste" — the line now says fewer filaments means fewer spools to own and load,
+  and that colour changes within one print depend on which parts print together. Both on branch `colors-polish`
+  (Luna 01a15408), to ride the next deploy rather than a release of their own, as Astra said. **Live** with the
+  previews deploy of 2026-10-19 (main `b32fcca`, stamp `b32fcca0`): the live Colors tab reads "4 filaments used ·
+  Case, drawers: Black · Fronts, grips: Mystery Orange · Grip accents: Silk Silver · Faceplate bodies: Black · Small
+  parts: Orange" and Simplify's line carries the spools sentence.
+
+## 2026-10-18 (Build's product previews match the model on every tier)
+
+- **Why:** the standing requirement above is product-faithful previews. The Colors step-2 gate
+  (`D:\Claude - Output\colors-presets-2026-10-17\STEP2-GATE.md`) found that three.js r185 tone-maps only the screen and
+  render targets flagged `isXRRenderTarget`. Build's previews (`renderThumb`) drew into an ordinary sRGB target, in a
+  scene of their own: the shipped light rig, no environment map, no fill boost.
+- **Measured first**, against marks written before any comparison
+  (`D:\Claude - Output\preview-fidelity-2026-10-18\PREVIEW-FIDELITY.md`).
+  - **The method.** Each preview is compared with the live unit, drawn through the screen's own path from the same
+    camera. The figure is the largest channel difference over the preview's own pixels. The mark is a median of at
+    most 6 and a p95 of at most 32, of 255.
+  - **Off on every tone-mapped tier.** On Balanced, High and Very High (the default) the root kit's previews sat a
+    median of 17 to 31 off the model, with a p95 of 31 to 67: a duller orange, on both stages. Fast matched (median 0).
+- **The fix**, in `drawThumb`, the drawing half of `renderThumb`. That half was split off first, unchanged, and checked
+  byte-identical against main's previews.
+  - The target is flagged `isXRRenderTarget` and its texture is stored as RGBA8, the recipe the gate measured: the
+    screen's tone mapping and colour space, encoded once. The flag is internal to three.js (line 14372 says "TODO Remove
+    this when possible"), which is why the e2e case below pins the match.
+  - The preview's lights take the stage's per-tier strengths, with the workspace's fill boost (`rigFor`, which
+    `applyQuality` now uses too). Its scene takes the studio environment where the tier has one.
+  - The tier is in the preview's cache key, and a draw whose tier changed while its part models loaded is dropped.
+  - A new tier, from the quality pill or the auto-downgrade, reaches the workspace through `opts.onQuality`. Build
+    repaints its preview images in place: no panel rebuild, so focus and open menus stay put.
+  - Two debug-only hooks, behind `?debug=1`: `stage.thumbDraw` and `stage.thumbModel`.
+- **After:** every compared image is inside the mark.
+  - **The root kit:** median 0 and p95 at most 11 on the dark stage; median at most 3 and p95 at most 31 on the light
+    stage.
+  - **149 more, one factor at a time:** a decor, a classic and a shelf unit; the four presets; the five faceplate
+    families; nine handle styles.
+  - **Silhouettes:** the preview and the model agree exactly, 2 px in from their edges.
+  - **The light stage's p95** is the stage's cast shadow on the unit, from the rest of the build and from the unit's own
+    parts (the check cannot separate the two). A preview draws no shadows. With the stage's sun casting none it is at
+    most 4.
+  - **Cost:** per preview, within 2 ms of the shipped code. Boot compiles one shader program fewer, consistent with a
+    preview now taking the screen's program parameters; a count cannot show which programs were used.
+  - **Not compared:** translucent filaments, which sample what is behind them, and a preview has nothing behind the
+    unit.
+- **Tests:**
+  - **The e2e case** "Build: a product preview matches the model on a tone-mapped tier and on Fast ...". It checks the
+    first unit's inspector and tile previews on the dark stage, on Balanced and then on Fast: the colour, the
+    silhouettes, the ordinary target as the control on Balanced, and the tiles repainting after the pill and after
+    `setQuality`.
+  - **Mutation-checked.** It fails:
+    - without the RGBA8 storage (median 52, p95 73);
+    - without the XR flag (11, 59);
+    - with the old lights and no environment (8, 70);
+    - without the repaint.
+  - **The totals:**
+    - npm test: 520 tests, 515 passed, 0 failed, 5 skipped (the same as before the change);
+    - e2e under SwiftShader with the Studio tree: 40 of 40, then 41 of 41 after merging main (`8b1b965`, which brings
+      the store-links case). npm test and the goldens again unchanged on the merge;
+    - the 60 golden screenshots: 0 differ. They are the plain viewer's canvas, which draws no previews, so none was
+      re-blessed.
+- **Review:** Sol `01a14f5a`, two turns. All eight findings held and were acted on:
+  - the colour figure could not see missing pixels, so the silhouette check was added;
+  - the first tables' medians were upper-middle values, so they were re-run as true medians. The shipped figures were
+    re-run on a reconstruction of the shipped drawing, hash-checked against main; every figure came out the same;
+  - the e2e case's coverage was overstated, so the case was widened and is stated exactly here;
+  - the sample was narrow, so the one-factor sweep was added;
+  - the shipped figures and the root kit's silhouettes were still owed, so both were re-run;
+  - two claims went past their evidence (the light stage's shadows, the shared shader programs) and are now worded as
+    above.
+- **Not deployed:** branch `preview-fidelity`, waiting for Joey's go.
+
+## 2026-10-19 (preview-fidelity brought up to current main by hand, and proved again)
+
+- **Why:** the branch (`a0c5dc0`, merged with main `8b1b965` as `9df500a`) had fallen 22 commits behind: the Colors
+  plan's steps 2 to 6, the Parts list's filament chips, the night stage's grid revert, the evening batch. Main put the
+  look cards (`lookCard`, `lookCardDraw`, `lookCardRead`, `lookPool`, `lookRig`, `sceneRev`) directly beside the preview
+  section of `js/main.js` that the branch rewrites. Astra's ordering (2026-10-19) put preview fidelity first among what
+  is left, so the branch was brought up to main `0b9406d` by hand, not fast-forwarded.
+- **What conflicted:** three files, each a "both sides appended at the same spot" case.
+  - `js/main.js`: the branch's `drawThumb` / `thumbPng` / `thumbModel` against main's look-card block, at the same point
+    before the palette API. Both kept, the preview block first. Both behaviours stand: Build's previews take the
+    XR-flagged RGBA8 target, the tier's rig with the fill boost (`rigFor`) and the studio environment, keyed on the tier;
+    the look cards keep their pooled targets, their cloned rig read from the live lights and their revision key. The
+    branch's `rigFor` and `applyQuality` hunks and main's `purgeLookCards()` calls and `sceneRev++` bumps merged
+    themselves; no shared helper was renamed or moved by either side.
+  - `e2e/workspaces.mjs`: the branch's preview case against main's Parts-print-colours case, both appended after the
+    store-links case. Both kept, the preview case first.
+  - `docs/redesign/DECISIONS.md`: entries, main's first (as the previous merge did), then the branch's.
+- **Proved again on the merged tree** (every number of PREVIEW-FIDELITY.md's marks, recorded beside the old ones in its
+  section 6):
+  - P1, P2, P3, P5 the same as the final run to within one integer median: dark inspector 0/4 and 0/6, tile 0/0 and
+    0/11; light tone-mapped inspector 3/31 and 2/8, tile 2/31 (1-2/31 before) and 1/11; Fast at most 0/11; coverage 0%
+    in all 48; the ordinary target 26 to 32; the contrasting-filament control 148 to 190. The first unit's preview PNGs
+    are byte-identical to the 2026-10-18 run's in 15 of 16 cells and differ by one pixel at one level in the 16th.
+  - P4 against main `0b9406d` itself as the shipped code: Fast -0.55, -0.95, -0.9 ms; Very High +2.4, +2.3, -0.5 ms
+    (the mark is +4); no new program from the second preview on; boot one program fewer.
+  - The sweep now covers the 12 presets main has (step 3 added eight; the sweep reads the app's list): 245 images plus
+    6 diagnostic, all pass; the largest p95 is 13 (inspector previews on four of the new presets, median 0; the
+    registered four are unchanged at 9 and 11);
+    Chevron's tile 0/20, the handles 0/5, the light baseline 3/32 and 1/4 without the cast shadow; coverage 0 in all
+    251; the injection fails at 47.8% to 58.7% in all 18.
+  - npm test 554 (549 pass, 0 fail, 5 skipped); e2e 52 of 52 on the GPU and 52 of 52 under SwiftShader, the Colors
+    step-2 look-card gate and the preview case both passing; goldens 60 of 60; the deploy's stamping guard replayed
+    locally on a copy prints `module graph OK` (the branch adds no module import, so no stamping line is needed).
+- **Review:** Sol `01a1542f`, two turns: NO FINDINGS on the merge diff with the neighbouring look-card code; four
+  findings on the report's section 6, all held (claims stated past their evidence), corrected there, with the median
+  shift then settled from the saved images.
+- **Live:** Joey, "Deploy preview-fidelity (e43cb8d) and the Colors polish (cdbe59b) together", 2026-10-19 morning. Main
+  fast-forwarded to `e43cb8d`, the polish merged on top as `b32fcca` (one DECISIONS conflict, both kept); on the merged
+  tree npm test 549 passed, 0 failed, 5 skipped, e2e 51 of 52 under soft rendering (the Label plate's faceplate-switch
+  load flake), the module-graph guard replayed locally; run 39259811585 green, live stamp `b32fcca0`. The preview
+  harness pointed at the live site (`harness/measure-live.mjs`, Balanced and Very High, dark, the root kit's three
+  units): P1 holds on every image, medians 0 of 255, p95 at most 11 against a mark of 6 / 32; no new shader program
+  from the second preview on (programs 5, 5, 5 at Balanced, 16, 16, 16 at Very High); a preview in a median 9.4 ms at
+  Balanced, 5.3 ms at Very High; no page errors. Results in `live/`.
+
+## 2026-10-19 (the planner says what it is to a search engine; the brand on Google)
+
+- **Joey:** "how come modulith doesn't appear to be ranking in google anywhere yet?" Checked that morning:
+  modulith.systems IS indexed (a `site:` query returns the home page crawled 7 days before, About, Story, Catalog,
+  Instructions, Builds, Support, the GEN2 page, Size guide); robots.txt allows all, the sitemap is served, the home page
+  has a canonical, a title and a description. The bare word belongs to Spring Modulith, a Java framework with years of
+  links; Google already suggests "Modulith 3d". So nothing was broken: a contested word and a two-week-old brand.
+- **What changed (the site-seo session, local_0ac401e1, on Joey's "yes" and "Go"):** the planner's `index.html` title
+  reads "MODULITH Planner · plan a 3D-printable modular storage build" with a meta description, and the document title
+  becomes "<build name> · MODULITH Planner" once a build is open (`js/ui/names.js`, `js/main.js`; the display-names
+  test and the boot e2e case pin it); on the site repo, Organization + WebSite JSON-LD on the home page and /about/
+  (name MODULITH, alternateName GEN2, logo, four sameAs links) and `docs/seo/SEARCH-CONSOLE.md`, Joey's checklist
+  (verify the domain property, add planner.modulith.systems, submit the sitemap, request indexing, what to read weekly,
+  the links that carry the brand). Search Console itself is not set up: that is Joey's to verify.
+- **Live:** branch `seo-brand-titles` (fcaebd8) merged as `da764f8`, live stamp `da764f81`, the title and description
+  read on the live page and the build-first title once a build is open; the site's main pushed (efc09cb, acce273) and
+  the JSON-LD parsed from the live pages.
+## 2026-10-19 (the 3D model tiles the under-table rails and wall brackets with the printer's bed limit, as the parts list bills them)
+
+- **The report.** A user of the original GEN2 planner, relayed by Joey, 2026-10-19: "the table rails list on the left are
+  3 270x3w rails + 1 270x2w ... The 3D diagram shows 2 270x4w + 1 270x3w. While technically that works, a Core One L
+  cannot print something 4w."
+- **What was wrong, and where.** The parts list is the planner's own bill (`js/rules/bom.js`, ported by copy from the old
+  planner): `railSections = sectionsFor(railWidths, maxRailW())` caps an under-table rail section at the widest width
+  whose section (W × 88 mm by the build's length) fits the chosen bed either way round, never below 1W; a Core One L
+  (300 × 300) prints a 3W 270 rail (264 mm) and not a 4W (352 mm). The generator (`js/generate.js`) tiled every
+  contiguous top-row run biggest-first with a hard-coded 4W, and its own comment admitted "a bed-limited printer may
+  split differently". The wall brackets had the same shape of gap: the bill caps them at `GEN2.wallMount.maxW(bed)` (2W
+  on an MK4's 250 × 210, since the 3W bracket needs the diagonal trick on a 250 × 220 bed), the generator at a hard-coded
+  3W. The merged planner inherited both, since it carries the same generator and the same bill. The foot rails and the
+  covers were NOT part of it: they exist in 1W and 2W only and both sides tile them with the same brick stagger
+  (`brickTiling` in the catalog, `tilesLower` / `tilesUpper` in the generator), so a bed changes nothing there - the
+  task's brief named them, and the code says otherwise.
+- **A second defect the report exposed.** The merged Parts list dropped a bill row's `variant`: the two width rows of an
+  under-table build both read "Under Table Rails - 270", ×3 and ×1, with nothing saying which was 3W and which 2W (the old
+  planner wrote "name — variant"), and the two rows shared one progress key, so a tick on one counted for the other.
+- **Changed (branch `rail-bed-limit`):**
+  - `generateManifest(build, opts)` takes the catalog in `opts.catalog` (the page's global `GEN2` by default, so no call
+    site changes; null in node tests that pass nothing, which keeps every golden as recorded) and tiles the under-table
+    rails with `bedLimits(build, catalog).rail` and the wall brackets with `.bracket` - the bill's own rules, restated
+    against the catalog. `bedOfBuild` and `bedLimits` are exported for the tests.
+  - the Parts list's row name, copied text, CSV and progress key carry the variant ("Under Table Rails - 270 · 3W
+    section"). A row without a variant keeps its key. A tick made on a width row before this change is not carried over:
+    the old key never said which width it was for (Terra's finding, accepted rather than migrated).
+  - the setup sheet pushes the record into the stage after a non-reload apply when the workspace is not Build or Labels
+    (the two that sync the stage themselves): a printer change now changes the model, and the Parts list reads the
+    stage's record, so from Parts, Assemble or Colors neither would have followed the new printer until the next edit.
+- **Checks:** `test/rail-bed-limit.test.mjs` (the 11W row: 3+3+3+2 on a Core One L, 4+4+3 on any printer, the manifest
+  rows in step with the instances; generator-against-bill parity for every catalog printer and seven row widths on the
+  under-table rails and their screws, four widths on the wall brackets; the foot rails' stagger and bill unchanged on
+  any, Core One L and MK4); an e2e case (Under-Table 270 on a Core One L from the setup sheet, an 11W row through the
+  store, the stage's instances against the Parts rows, then Any printer chosen in the sheet from Parts lifts both to
+  4+4+3), mutation-checked (the generator ignoring the limit fails it and two unit tests); npm test 554 passed, 0 failed,
+  5 skipped; e2e Build + Parts + setup-sheet cases 9 of 9 with the new one. No new module, so no stamping line.
+- **Review:** Terra `01a154c7`, routine: 2 returned, 1 held (the pre-change tick is not migrated - documented, not
+  migrated, since the old key was ambiguous), 1 discarded (a `|` in a section title, name or variant could collide the
+  key - every one of them is a catalog constant and none contains one; the construction predates the change).
+- **Live.** Joey, "Merge rail-bed-limit (57e1b39) into main and deploy." Merged as `2b620c8` (one DECISIONS conflict, both
+  kept); on the merged tree npm test 554 passed, 0 failed, 5 skipped. Run 39280964212 failed on the new e2e case alone:
+  on the runner's software rasteriser the case switched to Parts while the stage was still rebuilding after its three
+  units landed, and Parts' goTo stepped onto instances that did not exist yet. `402cf6f` makes both waits also wait for
+  `regenBusy` to clear (as the Colors cases do) and drops what the page logged before its reload - a throttled software
+  run (`E2E_SOFT=1 E2E_THROTTLE=4`) showed Start build's commit reaching the stage 200 ms before the sheet reloads, the
+  stage asking the 185 pool for 270 parts (404s, a goTo on the half-mounted manifest): pre-existing, outside this change,
+  proposed as a follow-up. Run 39289885703 then failed attempt 1 on the idle-gate case ("an edit is drawn at once": 3
+  frames in 1.5 s on a runner during GitHub's degraded-Actions incident of the afternoon) and passed on attempt 2; live
+  stamp `402cf6fe`, the three changed modules served. Checked by hand in production on 2026-10-19 (stamp `96bbf81d`, the
+  built-in browser): a New build, Under-Table 270 on a Core One L, three 3W drawers beside the 2W starter; the stage holds
+  three `UnderTableRail_270-3W` and one `-2W`, the Parts list "Under Table Rails - 270 · 3W section ×3" and "· 2W section
+  ×1"; Any printer chosen in the setup sheet from Parts turns both into 4W ×2 and 3W ×1.
+
+## 2026-10-19 (the inspector's "This unit · parts" rows name and show the filament each part prints in, per unit)
+
+- **Why.** The Parts list has named the filament each part prints in since 2026-10-18 (the entry above, live as
+  `26a4123`); its own entry left one thing undone: "the inspector's 'This unit · parts' list still shows no colours".
+  Astra put "preview fidelity and inspector colours" first among what was left (2026-10-19): they decide whether the
+  chosen look matches the finished build. The brief placed the list in the Build workspace's inspector; it lives in the
+  PARTS workspace's inspector (`js/workspaces/parts.js` renderInspector; Build's "This unit only" inspector has no parts
+  rows), and that is where the change went.
+- **What a row shows now.** With the visitor's colours on, each row of the selected unit's parts carries the list's own
+  chip (parts.js `chipEl`: the filament, the identification colour as the 2 px ring, several swatches when the part's
+  regions wear more than one) and the list's "Print in <short name>" line under the part name, with the Colors tab's buy
+  link. Colours off: the identification chip alone, no line (the rows had no chip at all before; the list's rows always
+  had one). The chip, the words and the swatches are the list's code, not a copy: both lists are in parts.js, so the
+  helpers are shared by scope, and no new module (no stamping line) was needed.
+- **The resolution is per UNIT, which the list's snapshot cannot give.** `paletteSnapshot` pools every unit's picks under
+  a type (filamentsInBuild's `keys`), so a type worn in two filaments reads "Black / Teal" there, and that is right for a
+  list of the whole build. The inspector's rows are one unit's, so `unitRegions(stage, pal, unitId, type)` resolves each
+  of the type's regions for THAT unit the way the stage paints it (main.js materialFor / filamentsInBuild): the unit's
+  own pick first (`stage.overrideFor`, which already answers a zone with the unit's Body pick when the build has not
+  picked the zone), else the build's pick for the key, else a zone follows its body unless it has a colour of its own
+  (the label text; keysInBuild's `ownColor`, now carried on the snapshot), else bare in the identification colour (the
+  snapshot's `bare`, or `activeHex` when no unit shows that region bare). A store commit (a palette change, an undo of
+  one) re-renders the inspector after the list, since the list's render refreshes the snapshot the rows resolve against.
+- **Checks.** `test/parts-print-colours.test.mjs`: a stage with the build's picks and two units' own (the faceplate body
+  on one, the drawer body on the other), resolved per unit against the pooled list; the own-body-covers-an-unpicked-zone
+  case; the label text keeping its own colour; the bare fallback; colours off, bought hardware, an unmodelled type and a
+  throwing `overrideFor` all answering null or the build's. An e2e case: Stealth applied in Colors, unit 1's case picked
+  "This drawer only" through the real picker (the case instance found through `partInfo().owner`, since case ids are
+  positional), then in Parts the inspector on unit 1 shows its own filament and names it, on unit 2 the build's with
+  the buy link, and colours off the identification colour with no line. Mutation-checked: the resolver ignoring the own
+  pick fails the case on the own-filament assertion ("actual rgb(43, 43, 46), expected rgb(49, 81, 126)"). npm test 560
+  (555 passed, 0 failed, 5 skipped); e2e Build + Parts + Colors cases 24 of 24 with the new one.
+- **Review:** Terra `01a1551d`, routine: NO FINDINGS on the diff, the tests and the e2e case. It ran after a wait: the
+  Plus reserve gate refused the first call (the 5-hour window at 95% from the other sessions' reviews, reset 12:58), the
+  local tier's advisory pass in between returned a bare NO OBJECTION (`local-20261019-123426-495-2104172`, adjudicated
+  no-signal, not taken as approval), and the commit waited for the cloud review at the parent session's direction.
+  Self-review beside it, what was checked: the per-unit resolution against overrideFor's zone fallback and
+  filamentsInBuild's; a shown look (previewLook) cannot be live while the Parts inspector is, since the Colors workspace
+  ends it on unmount; the subscription re-render touches no input or focus; the chip rules are scoped to
+  `#ws-insp .uprow`, which only the Parts inspector has; the row names map through `typeOf` as the list's do.
+- **Live 2026-10-19** (Joey: "Deploy inspector-print-colours (f598504) and phone-journey (176c0a2) together"). Merged as
+  `198d088` (one DECISIONS conflict with the rail entry's Live line, both kept), then phone-journey as `cdd97b1`; on the
+  merged tree npm test 560 (555 passed, 0 failed, 5 skipped), e2e 59 of 59, the deploy's stamping step and module-graph
+  guard replayed locally (no new module in either branch). Run 39306087895 green on attempt 1, stamp `cdd97b1e`. Checked
+  live by `planner-prod-checks-2026-10-18\inspector-prod.mjs` (desktop: unit 1's case row's chip the colour of its own filament, ERYONE Burnt
+  Titanium, its ring the identification colour, its line "Print in ERYONE Burnt Titanium"; unit 2's chip the build's
+  Panchroma Black, its line "Print in Black" with the buy link; colours off the identification chip, no ring, no line; no
+  errors).
+
+## 2026-10-19 (the phone pass: the 10-17 phone fixes on current main, and the complete phone journey)
+
+- **Why now.** Astra (2026-10-19): "Re-test the phone fixes on current main. Checking Simplify at a phone viewport is
+  useful, but the complete phone workflow still needs verification", and her next review is "the complete journey -
+  choose a look, adjust a part, simplify, review filaments, continue to Parts - rather than another round of isolated
+  colour features". Branch `phone-check-fixes` (67ec611, the 10-17 phone acceptance check's eleven fixes) had fallen a
+  long way behind main (the Colors plan's steps 3-6, the filament chips, the previews, the setup-sheet phone fix, the
+  brand title, the bed-limited rails).
+- **Part 1: the merge, and the fixes re-tested.** Branch `phone-journey`, cut from `phone-check-fixes`, main (2b620c8)
+  merged by hand. Two conflicts, both behaviours kept: the Dock's filament stack takes main's one filament count
+  (`filamentsInBuild`, decision D2) and keeps the branch's phone collapse; the e2e file is main's with the four phone-check
+  cases appended. Every phone fix holds on current main at 390×844: the four phone-check cases (Place / Cancel, the issue
+  card and the toast above the sheets; the setup sheet whole; the switcher's items and the shopping list over an open
+  sheet; Measure, the switcher's count, no "null") and the six other phone cases (the Build and Labels sheets, Colors
+  steps 3-6 on the phone) pass, 10 of 10, before any further change.
+- **Part 2: the journey, step by step, as a visitor does it on a phone** (390×844, real touch, dark theme, the Fast tier;
+  the same walk at 1280×800 with a mouse). What was seen, and what changed:
+  1. **Build.** The model is the hero: no sheet open, the Dock reads "Layout valid". Fine.
+  2. **Colors from the tab bar.** The Colors sheet opens on arrival, alone; the Dock turns into "4 filaments", the summary
+     line says "4 filaments used"; no field takes focus. Fine.
+  3. **Browse looks → a look chosen.** The gallery sheet opens alone (the Colors sheet steps down); a card shows its look
+     on the model without choosing it (previewing, nothing in the history); Apply is one undo step, the gallery closes and
+     the Colors sheet comes back, the toast "Applied “Stealth”" shows over the sheets (z 14), the Dock and the summary
+     still agree (4). Fine.
+  4. **A part tapped on the model - BROKEN.** With the Colors sheet up (it is, on arrival), a tap on a drawer's front lit
+     the faceplate and showed nothing else: the part card (`#ws-partcard`, z 12) and the picker's handle (a collapsed
+     sheet at the bottom of the stack) were both under the open sheet (z 13). On the desktop the same tap shows the card
+     and the picker aside. **Changed:** `onSelect` steps the sheets down when a part is selected on a phone, as Build's
+     inspector does, unless the picker itself is the open sheet (a visitor picking colours taps part after part, and the
+     picker follows the tap - checked: with the picker open, a tap on a second unit's front switched its region from Body
+     to Face and the sheet stayed up). After the tap: no sheet open, the card over the collapsed handles (Colors, and
+     "Face · faceplates" above it), both reachable.
+  5. **The picker.** A chip on the card opens the picker sheet alone; its search field does not take focus; a swatch
+     recolours the build's region. The count need not rise: a region that alone wore a filament swaps one for another
+     (Stealth's faceplate bodies, Steel Grey → a new pick, stays at 4; the drawer fronts, shared with the drawers, 4 → 5).
+     The Dock and the summary agree after the pick. Fine.
+  6. **This unit only.** The second segment is offered (the tapped part belongs to a unit); a second swatch becomes that
+     unit's own colour; the summary adds "· 1 unit with its own colours"; the count rises by one; the Dock agrees. Fine.
+     One finding for the checks, not the app: two picks within 350 ms are one undo step (the store coalesces, by design);
+     a visitor's pace separates them, so the e2e case waits 500 ms between them.
+  7. **Undo / Redo.** The toolbar's Undo takes the unit's colour back (the summary's "own" clause goes, the count is the
+     build pick's again); Redo returns it; the picker stays up through both. Fine.
+  8. **The picker's close.** The sheets down, the model and the card. Fine.
+  9. **Simplify.** From the Colors sheet (its handle opens it): Simplify's own sheet, the proposal shown on the model;
+     Apply is one undo step, one filament fewer, the Colors sheet back, the toast "Simplified to N filaments.", the Dock
+     and the summary agree. Fine.
+  10. **Review filaments - BROKEN.** The summary's link set `st.shop` and rendered the list, which on a phone is a floating
+      card over the collapsed handles: with the Colors sheet up, it opened under it, and the tap seemed to do nothing. The
+      Dock's filament stack had the collapse since the phone check; the summary link, added by step 6 on the desktop, did
+      not. **Changed:** one `openShop()` for both (the sheets step down on a phone). After: the list over the handles, one
+      row per filament, the rows the build's filaments in the Dock's order, as many as the Dock says.
+  11. **Get parts list.** The Parts sheet opens on arrival ("Parts · 43 to print"); the rows' "Print in …" lines name the
+      filaments; the distinct names (the zone words and the "A / B" of a unit's own colour parsed out) are exactly the
+      Colors Dock's filaments, no more. Parts' own Dock is structural ("Layout valid"), by design. Fine.
+  12. **Back to the model.** Build from the tab bar: no sheet open; Undo there takes Simplify back (the count rises by
+      one). Fine.
+  Also seen, not changed: the toast sits on the same floor as the floating cards (`--sheet-stack` + 10 px), so for its 2.6 s
+  it can overlap a card's lower row (the part card's "Open the drawer", the shopping list's note); it takes no pointer
+  events and passes. The gallery's search field takes focus on the desktop by design and not on the phone.
+- **Checks.** The journey is an e2e case (`the phone journey: …`, twelve steps with real taps, the Dock against the summary
+  at every count change, the shopping list and the Parts list by name), mutation-checked: with `onSelect`'s collapse
+  removed it fails at "no sheet is open after a tap on the model". `D:\Claude - Output\planner-prod-checks-2026-10-18\
+  journey-prod.mjs` walks the same journey against the live site, desktop and the phone viewport, reporting each step's
+  state as JSON (the sheets open, what is on top, the counts, the names, the focused element, errors), with `--serve DIR`
+  for a checkout under test. Against the live site (stamp `da764f81`): desktop 16 of 16; phone 14 of 16, the two named
+  steps waiting on this branch's deploy (4: the tapped part's card and picker under the open sheet; 10: Review filaments
+  under it) reported and not counted; no page errors. Against this branch served locally: 16 of 16 on both.
+  npm test 554 passed, 0 failed, 5 skipped. e2e 58 of 58 on the GPU; E2E_SOFT=1 57 of 58, the one failure the
+  bed-limited-rails case of the morning (main's own): under soft rendering it recorded the 404s and the `goTo` error the
+  page logs in the 200 ms between Start build's commit and its reload (Build syncs the stage with the 270 record while the
+  stage's pool is still 185) - a pre-existing transient, nothing of this branch's (the case fails the same with main's
+  build.js swapped in, and passes with main's newer e2e file); main fixed the case itself an hour later (402cf6f: it
+  discards what the page logged before the reload and waits for the rebuild), merged in below.
+- **Also seen in the code, not exercised:** with Simplify, Compare or Find your next look up on a phone, a tap on the
+  model steps that sheet down too (its handle brings it back; the proposal or the shown look stays on the model, since
+  the state flags are untouched) - the rule is one rule, a tap on the model answers with the part.
+- **Review:** the Plus reserve refused the Sol review at first (the 5-hour window at 95%, 2026-10-19 afternoon); the
+  local tier's advisory pass was a bare NO OBJECTION (`local-20261019-125423-669-2103960`, adjudicated no-signal: not
+  approval). Once the window reset: Sol `01a15524`, substantial - 2 returned, 2 held, both on `journey-prod.mjs` and
+  neither on the app or the e2e case: the live-only exemption of steps 4 and 10 also applied to a `--serve` run (now live
+  only: run against main's checkout, which lacks the fixes, the script fails both steps and exits 1), and a state
+  snapshot that threw counted as a pass (now a failure). Re-run after the fix: live 14 of 16 with the two steps waiting,
+  the branch 16 of 16.
+- **After main's 402cf6f was merged in:** E2E_SOFT=1 again, 57 of 58 - the bed-limit case passes now; the one failure
+  this time was the Label plate's faceplate-switch case, a 30 s click timeout while two other Chrome runs (the
+  production checks) shared the machine; alone under soft rendering it passes.
+- **Live 2026-10-19**, in the same deploy as the inspector colours above (main `cdd97b1`, run 39306087895, stamp
+  `cdd97b1e`). `journey-prod.mjs` against the live site: desktop 16 of 16, phone 16 of 16, nothing left "waiting on the
+  deploy", 0 errors (`journey-prod.live.json`; the pre-deploy run kept as `journey-prod.live.before.json`).
+
+## 2026-10-19 (Build and Labels no longer push a record of another mount or length into the stage before the setup reload)
+
+- **The glitch.** The stage's parts pool (`PARTS_BASE`, from the first manifest's collection) and its mount scene (the
+  module-level `isWallBuild` / `isUnderTableBuild`: table, grid, wall, backdrop, polar limits) are fixed when the page
+  boots, which is why the setup sheet reloads the page on a mount or length change. Its apply() commits the new record
+  first and reloads 200 ms later, and the store notifies synchronously, so Build's `syncStage` (and Labels') generated a
+  manifest for the new record and asked the stage to rebuild on it: the old pool answered 404 for every part of the new
+  length (`parts/185/UnderTableRail_270-2W.lib.glb` and eight more), `mountManifest` threw, the "can't be shown" veil
+  showed, and `skipToEnd` did a goTo on the half-mounted manifest (TypeError reading 'title'). On a fast GPU the reload
+  usually won the race; a throttled software-rendered run (`E2E_SOFT=1 E2E_THROTTLE=4`, the deploy runner's conditions)
+  showed it every time, on the Wall-115 setup case and the under-table-270 bed-limit case alike. Found while the
+  bed-limit case was hardened for its deploy (above); Joey: "Do this task here".
+- **Changed (branch `setup-reload-sync`):**
+  - `js/workspaces/build.js` and `js/workspaces/labels.js`: `otherScene(rec)` - the record's mount or length differs from
+    `stage.build`'s - makes `syncStage` wait for the reload: no manifest, no `stage.update`, `lastSig` untouched; Build
+    clears a stale issue from an earlier layout and re-renders the board (Terra's finding), Labels also skips its
+    `setLabels` branch (those meshes belong to the old scene).
+  - `js/main.js` `updateBuild`: refuses a record of another mount or length with the reason ("This scene is built for the
+    185 tabletop collection · a 115 wall build needs the page reloaded on it"), the same test `applyRemoteLayout` already
+    reloads on. A second line of defence: with the workspace guard mutated off, the Wall-115 case still runs clean under
+    throttle on this refusal alone (Build shows the reason in the issue card for the 200 ms, no 404s).
+  - e2e: the Wall-115 setup case asserts no console errors over the whole trip; the bed-limit case drops its
+    `errors.length = 0` escape and its comment.
+- **Checks:** with both guards mutated off, both cases fail under `E2E_SOFT=1 E2E_THROTTLE=4` (eight to nine 404s and the
+  TypeError each); with the guards on they pass under throttle and on the GPU, with the Build and Labels cases (5 of 5);
+  the Wall-115 case under throttle went from 76 s to 24 s (no failed rebuild in the window); npm test as recorded in the
+  commit.
+- **Review:** Terra `01a1557b`, routine: 1 returned, 1 held (a stale `stageErrors` from an earlier invalid edit stayed
+  rendered for the 200 ms; cleared in the skip branch).
+- **Live.** Joey, "Merge setup-reload-sync (876eca0) into main and deploy." Merged as `ec4f666` (one DECISIONS conflict:
+  main's "Live" line for the phone journey kept, the branch's stale copy dropped); npm test 555 passed, 0 failed, 5 skipped
+  on the merged tree. Its run 39317757575 failed on the new phone-check case, "one unit is singular": not this change but a
+  race in the build switcher - `set(true)` unhides the menu with its previous rows and only then awaits the Recent list
+  from IndexedDB before rebuilding them, so a read right after the click saw "185 · 4 units" with 1 unit in the store
+  (3 of 5 local runs failed on the merged tree, 0 of 5 on main before the merge; a probe showed store 1, stage 1, the
+  menu's text stale). `590be04` (topbar.js) writes the current build's count synchronously at open; the case passed 6 of 6
+  after. Terra `01a155eb`, routine: 1 returned, discarded (a count that changes while the list loads shows the newer value,
+  the current truth). Then four sibling pushes in a row cancelled each run (Pages concurrency); the last, `3912af4`, failed
+  npm test in `test/move-opt.test.mjs` until its author's `69ca2a2` injected `drawerStop` into the sandbox. Run 39332085367
+  green; live stamp `69ca2a2a`; the guard (`otherScene` in build.js and labels.js, the refusal in main.js) and the
+  switcher's `freshCount` are served. Checked by hand in production on 2026-10-19 (stamp `96bbf81d`): the setup sheet's
+  Under-Table 270 on a Core One L from the root kit, then Any printer from Parts, with the stage and the list following
+  each time; the trip from Start build to the reload is the one the guard covers.
+
+## 2026-10-19 (the "Neon yellow & black" preset becomes Joey's black-shell combo)
+
+- **Joey, on the look's card:** "can we make a new custom color combo, essentially replacing this one. essentially the
+  body is black like The Jerrari, but the face(s) are silk black, the faceplate body is neon yellow, and the side covers
+  are silk black. handles are pla black". The 10-18 preset (his 3D Printopia photo) put the neon on the shell; this one
+  keeps the name and the twelfth slot and swaps the assignment.
+- **What it is now (js/main.js PRESETS):** every body key as The Jerrari's (Elegoo PLA Black: case, drawers, covers,
+  brackets, rails, feet, extender, lip, back cover); faces and grips Panchroma Silk Black; the faceplate BODY, the grip
+  accents, the accent, the label, the deck (12.7:1 against the black case, from a colour the look already prints) and the
+  small parts (QuickLock, magnet clip, stopper) in Printed Solid Neon Yellow; handles Elegoo PLA Black; magnets and
+  screws Silk Silver as before. The side-cover rule (core = case, face = faceplate face) gives a black core with a
+  silk-black face, which is what he asked for, so no rule bends. Card strip: black, neon, silk black.
+- **Checks:** `test/presets.test.mjs` pins the combo (body keys equal The Jerrari's, face and side-cover face Silk Black,
+  faceplate body Neon Yellow, handle PLA Black); presets 13 + filament-db 5 pass, mutation (the face set to PLA Black)
+  fails the suite; e2e Colors cases 16 of 16; in the browser the card reads "3 filaments", applying it gives the summary
+  "Case, drawers: Black · Fronts, grips: Silk Black · Grip accents, faceplate bodies, small parts: Neon Yellow".
+- **Review:** Terra `01a155f4`, routine: NO OBJECTION.
+- **Live 2026-10-19**, stamp `69ca2a2a` (main `5b2a7e7`; its run and the next died in the e2e step, whose two 5 s and 10 s waits timed out on a
+  32-minute step and took the 30 s bound in `e26de9a`, then on the drawer-stop commit's unit step, fixed in `69ca2a2`;
+  run 39332085367 green). Checked live by
+  `planner-prod-checks-2026-10-18\preset-v2-prod.mjs`: the twelfth preset's Case, side-cover core, handle Elegoo PLA
+  Black; face, grip and side-cover face Panchroma Silk Black; faceplate body, grip accent and deck Printed Solid Neon
+  Yellow; the card "Neon yellow & black · 3"; the accent and grip rules hold on all 12; no errors.
+
+## 2026-10-19 (a drawer opens to its stopper)
+
+- **Joey, with a drawer open on the Colors tab:** "i feel like when we open the drawers, they should open all the way,
+  until the inside back wall of the drawer collides with the drawer stopper, so maybe about 95% open-ish".
+- **What stopped it before.** Every pull took a `travel` of collection − 20 ("case depth − rear engagement", an
+  estimate): the body's deep pull and its camera focus went to 90 % of that (148.5 mm on a 185), the Colors card's "Open
+  the drawer" (`peekUnit`) to the 40 mm rider peek, the cinema to 30-95 % of it, and the cavity fill read its openness
+  from it.
+- **The stop, measured in the scene** (world mm, the GLBs as generate.js places them; a 185 Tabletop 2W-2H and a 270 made
+  from the setup sheet, `?debug=1`): the stopper's tab is the only part of it below the drawer's rim (1.72 mm, the
+  vault's figure), and it sits 2 mm behind the case front: its rear face at z 89 against a front at 92.5 (185), 131.5
+  against 135 (270); the part's centre is the 16 mm behind the front the vault records, not the tab. The drawer's inner
+  back face rests 10 mm inside the case back (−82.5 in a −92.5 case; −125 in −135): an 8.1 mm gap and a 2 mm wall. So
+  the wall meets the tab after collection − 13.5 mm on both: 171.5 mm of the 185 drawer's 179.3 mm length (95.6 %),
+  256.5 of the 270's. The old pull left a 185 drawer 23 mm short of its stopper.
+- **What changed (js/main.js):** one `drawerStop()` = collection − 13.5 replaces the four `travel` sites. In the merged
+  app the explicit opens are `peekUnit` (Build's "Peek inside", the Colors card's "Open the drawer"), which went to the
+  40 mm rider peek and now goes the whole way to the stop; the stage's own deep pull on a body selection (the old
+  viewer's identify flow, which the workspaces select quietly) and its focus camera take the stop too; a rider (handle,
+  magnet) keeps its 40 mm peek; the cinema's fractions and the cavity fill's openness now run over the real travel.
+  Checked in the browser on the 185: "Open the drawer" and "Peek inside" both land the drawer at base + 171.5 (its
+  z 5.24 → 176.74); a plain selection in Build or Colors does not pull, before or after.
+- **Checks:** e2e Colors, phone, journey, Parts and Build cases (see the commit); no test pinned the old figures.
+- **Review:** Terra `01a15623`, routine: NO OBJECTION on the stage change, the e2e case and this entry.
+- **Live 2026-10-19**, stamp `69ca2a2a` (main `3912af4`, then `69ca2a2`: the deploy's unit step failed on
+  `test/move-opt.test.mjs`, whose sandbox runs updateCavityFill's text through `new Function` and did not know
+  `drawerStop`; it now injects it. Luna `01a1562b`. The lesson, in memory: run the full `npm test` when main.js gains a
+  helper). Checked live by `planner-prod-checks-2026-10-18\drawer-stop-prod.mjs` on the 185 kit: Peek inside lands the
+  drawer at base + 171.5 and Close it at base; on the Colors tab `peekUnit` (the card's "Open the drawer") lands at
+  base + 171.5 and `unpeek` at base; no errors.
+
+## 2026-10-20 (the back cover on a v2609 Decor drawer: the tear-away front comes out first)
+
+- **Why now.** The v2609 standard Decor drawers (all 94 sizes) print with the same tear-away front as the Gridfinity
+  ones, and the GLBs rebuilt from the release STLs carry it (gen2-parts `decor-drawers-v2609` 1d869e1, published
+  2026-10-20). The planner places the faceplate back cover in the drawer-front gap, so in the model the cover's volume
+  (z 90.57-95.02 on a 185 1W-1H) now holds the whole panel (z 90.59-92.49). Joey's rule (vault rules.md "Drawers,
+  faceplates and handles", 2026-10-19): the faceplate slides on with the front left in; a faceplate WITH its back cover
+  collides with it, so either take the front out or leave the cover off, "either way works".
+- **The rule the planner follows:** the smallest honest one. The back cover stays optional (it is still the user's
+  trade: a stiffer plate on wide drawers against more printing). Wherever a build bills or fits one, it says the
+  drawer's tear-away front comes out first: the back cover row of the generated manifest and of the planner's
+  `computeBom` (one wording, `test/back-cover-tearaway.test.mjs` pins them equal), the Faceplates step ("take the
+  drawer's tear-away front out and clip the back cover in from behind", after the EdgeLabel dressing when there is
+  one), and a hint under Build style's Back cover toggle. The Gridfinity rule is unchanged: no cover billed, the aside
+  "not on the Gridfinity drawers" stays, and a Gridfinity-only build never mentions a front to take out. The old
+  viewer's options panel (`#build-options`, hidden in the merged app) keeps its Gridfinity note only.
+- **What the stage does: nothing new, and why.** The v2609 GLB is one node, one mesh, one primitive
+  (`DecorDrawer_185-1W-1H.lib.glb`): the panel is not a node the stage could hide, so hiding it would mean cutting
+  the drawer's geometry, and the brief said to stop at the note in that case. Checked in the scene with the branch's
+  parts (`GEN2_PARTS_LOCAL=1`): with a cover on, the cover's back face at 90.57 draws clean over the panel's at 90.59
+  (no z-fighting at 0.02 mm, Quality High), so from inside the pulled-out drawer the user sees the cover, as on a
+  print with the front out; from the front the faceplate hides both. Shots in
+  `D:\Claude - Output\decor-back-cover-2026-10-20\`.
+- **The BOM parity gate, told.** `test/parity/bom-parity.test.mjs` boots the OLD planner's own app.js and compares
+  its computeBom with the ported one, notes included; the old planner's back cover note (app.js 5402 at 7beb165) is
+  the old wording, so the new sentence failed 55 of 250 comparisons (main: 250 of 250 match). The old planner is not
+  edited from here (port-rules.mjs: ported by copy, never edited in the old repo), so the gate carries a dated
+  `AHEAD` entry that compares the back cover row as the old planner still writes it; it goes when the old planner
+  carries the sentence or is retired at the cutover. Whether the old planner gets the same one-line note before then
+  is Joey's call. The earlier side-cover gap fix (2026-10-16) already left this repo's bom.js ahead of the old planner
+  without an entry; the random builds the gate draws never have a gap, so it never showed.
+- **Checks:** `test/back-cover-tearaway.test.mjs` (3 tests: the manifest row on every length and family, the step
+  clause bare / dressed / mixed / off / Gridfinity-only, the computeBom row and its parity with the manifest's);
+  the e2e case "a back cover on a Decor drawer says the tear-away front comes out first" (the stage keeps the cover and
+  the whole drawer visible, the manifest row and step, the Build style hint on and gone when off, Gridfinity by the
+  generator's rule on a real 1W-1H and on a kept `variant` on a 1W-3H, the Parts row and its OPTIONAL badge), green
+  against the v2609 parts. Mutation-checked, 7 of 7 caught: the manifest note, the bare and the dressed step clause,
+  the computeBom note, the hint, the hint's Gridfinity rule (the raw `variant` check back: the 3H case times out), the
+  parity entry (off: 55 of 250 differ). Full `npm test` and `npm run e2e` with the v2609 parts: see the commit.
+- **Review:** Terra `01a1594c`, routine: 1 finding, confirmed and fixed (the hint read Gridfinity from the raw
+  `variant` field, where the generator and the BOM use `isGridfinity(L, u)`, so a variant kept on a size with no
+  Gridfinity drawer, which renders the standard drawer and takes a cover, got the "not on the Gridfinity drawers" line
+  and no "front out"); the follow-up with the fix, the parity entry and the e2e extension: NO FINDINGS.
+- **Live 2026-10-20**, stamp `5113693d` (Joey: "Deploy decor-back-cover-note (ed17c41)"). Fast-forwarded onto main as
+  `ed17c41`; on it npm test 564 (559 passed, 0 failed, 5 skipped) and the Build, Parts, Colors and back-cover e2e cases
+  28 of 28; the stamping guard replayed clean (build.js's line already carried `../generate.js`). The two deploy runs before the pin
+  (39429860751, and 39433302069 after an empty re-run commit `c0184c2`) failed in the e2e step on the runner image, see
+  the next entry; run 39439350464 on the pinned image passed on attempt 1. Checked live by
+  `planner-prod-checks-2026-10-18\back-cover-note-prod.mjs`: with the cover switched on, the BackCover row carries
+  "Take the drawer's tear-away front out first", the Faceplates step says to take it out and clip the cover in from
+  behind, the Build style hint reads "Take each drawer's tear-away front out first - left in, it and the cover
+  interfere." with no Gridfinity aside, the drawer's meshes stay visible under the cover; off again, the hint goes.
+
+## 2026-10-20 (the deploy runs on ubuntu-24.04, not ubuntu-latest)
+
+- **What happened.** From the evening of 2026-10-19 most deploy runs failed in the browser e2e step on waits that pass
+  locally in seconds (5 s, 10 s, 30 s and 150 s bounds; the first two were widened to 30 s in `e26de9a` before the cause
+  was known). The job logs, read in Joey's Chrome (the public API carries annotations but not the runner image), show
+  the pattern: the failed runs 39429860751 and 39433302069 ran on "Runner Image: ubuntu-26.04" with the e2e step at 21,
+  34 and 35 minutes; the green runs 39332085367, 39335008933 and 39439350464 on ubuntu-24.04 at 18 minutes; all with
+  the same Chrome for Testing 153.0.8010.12. GitHub's notice on every run: "The ubuntu-latest label will migrate to
+  Ubuntu 26 beginning October 19, 2026" (runner-images issue 14748).
+- **What changed.** `pages.yml` `runs-on: ubuntu-24.04` (`5113693`, Luna `01a159b5`), with the evidence in a comment. The
+  suite's bounds were tuned for the 24.04 software rasteriser (the 2026-10-13 and 10-18 entries); on 26.04 the same
+  cases take about twice as long. When the bounds are retuned for the new image, unpin; until then a timing failure on
+  the pinned image is a real regression, not the runner.
+
+## 2026-10-20 (the Labels callout offers both label families)
+
+- **Joey, on the Labels tab of a Classic build (2026-10-19):** "for the labels column, in this menu, why not show both
+  edgelabel and classic pro as clickable options?" The callout named both families and offered one button, "Switch to
+  EdgeLabel ✦": the brief's wording (the 2026-10-13 entry, "never hidden or greyed out"), not a decision against Classic
+  Pro, which is a full label family (its own faceplate style, Label Studio type and Part Picker type).
+- **What changed (js/workspaces/labels.js, css/app.css):** the callout's buttons come from the stage's
+  `availableFaceplateStyles()` filtered to the label-taking families, EdgeLabel first and starred, Classic Pro beside it
+  in a `.btns` row at the planner's 8 px control gap (wrapping on a narrow panel); each applies its faceplate style the
+  way the EdgeLabel button did (applyFaceplateStyle, setDims off, the store adopting the build, the signature refreshed)
+  and the toast names the family. A family the stage does not offer for the build's collection gets no button.
+- **Checks:** an e2e case opens Labels on the root kit (Classic faceplates), reads both buttons in order, clicks Switch
+  to Classic Pro, and waits for `faceStyle === 'classicpro'` with the callout gone and the toast naming Classic Pro;
+  the Labels cases that click Switch to EdgeLabel are unchanged (the Labels pattern 11 of 11 with the new case);
+  mutation-checked (every button wired to the first style fails the case); test/labels.test.mjs 13 of 13. In the browser the two buttons measure 143 and 132 px wide; on the narrow pane they wrap with an 8 px gap.
+- **Review:** Terra `01a15a57`, routine: NO OBJECTION.
+- **Live 2026-10-20**, stamp `31bec955` (Joey: "Deploy labels-callout-classicpro (4b79e4e)"). Fast-forwarded onto main;
+  npm test 564 (559 passed, 0 failed, 5 skipped), the Labels e2e cases 11 of 11, the stamping guard replayed clean. The
+  first run (39467212905) failed on the phone Place / Cancel e2e case, the fourth time since 2026-10-19: its tap read a
+  "+" position after a fixed 1.5 s settle, stale on a slow run; `31bec95` makes it wait until the positions hold still
+  and tap again if no card follows (Luna `01a15a7f`; 7.5 s plain, 30 s throttled 4x here). Run 39472127020 then passed on
+  attempt 1 (e2e 27 min on the pinned 24.04 image). Checked live by
+  `planner-prod-checks-2026-10-18\labels-callout-prod.mjs`: the callout on the root kit reads the two buttons in order, Switch to
+  Classic Pro sets faceStyle classicpro and the callout goes; at 1280 wide the buttons wrap with 8 px between the rows.
+
+## 2026-10-20 (a label placed after a regenerate shows at once on Very High)
+
+- **Joey:** "i made 3 labels with the part picker, i noticed when i dragged and dropped them though, they didn't show up
+  until i dragged and dropped the next one, making it so that the thrid one i place but it won't show up at all" (his
+  screenshot: a 7-drawer EdgeLabel build, Quality Very High, M3 × 10 and M3 × 12 drawn, M3 × 16 on a 0.5H drawer not).
+- **What was tried and did not reproduce it** (the built-in browser pane, the same code locally and the live site):
+  typed labels by tap and by a real pointer drag; part labels with stripes through store commits, on 1H and 0.5H
+  drawers; three real Part Picker labels dragged one after another on the live site at the default tier and again
+  with `gen2-quality` set to veryhigh. Every label drew at once, store and stage in step. The pane's GPU evidently fails
+  the accumulation probe (`acc.ok`), which is where the difference lives.
+- **The path (Terra `01a15aaa`, its first hypothesis; the code agrees):** a part label with a stripe changes only the BOM,
+  so its placement takes syncStage's regenerate branch with the same instances and step. `attachLabelTexts()` at the
+  end of regenerate placed the meshes synchronously (fonts and part files already loaded) WITHOUT `ao.rev++;
+  markShadowDirty(); invalidateFrame();`, which its loading branch has. The accumulation key
+  (`instances.size|cur|ao.rev|accRev|quality`) and the idle gate's signature were therefore unchanged, and on a tier
+  with the accumulation buffer the image from before the label stayed up until the next placement's `end()` →
+  setLabels → refreshLabelText invalidated a frame: each label one placement late, the last never. Tiers without the
+  accumulation draw the keepalive frame straight, so they never showed it.
+- **What changed:** the synchronous branch does the same three calls (js/main.js). `test/label-attach-invalidate.test.mjs`
+  runs the extracted function against stubs: loaded → placed once and invalidated once, shadow dirty, ao.rev bumped;
+  still loading → nothing synchronous. With the three calls removed the test fails.
+- **Checks:** that test 2 of 2; npm test 566 (561 passed, 0 failed, 5 skipped); not reproducible here, so the fix is by reasoning and the
+  reviewer's reading, and Joey confirms on his machine after the deploy.
+- **Review:** Terra `01a15aad`, routine: NO OBJECTION.
+- **Live 2026-10-20**, stamp `00c4602d` (main `d427d1e`; its first run 39480049390 failed on two 5 s waits with the e2e
+  step at 37 min on the pinned image, so `00c4602` scaled every 5 s and 10 s wait in e2e/workspaces.mjs to 15 s and
+  30 s, the tap helper's 10 s retry kept, Luna `01a15ad7`; run 39486096891 then passed on attempt 1, e2e 34 min). The
+  served main.js carries the branch. Not checked by eye: the pane never showed the bug; Joey's machine is the check.
+
+## 2026-10-20 (Build style: a Side covers On / Off toggle)
+
+- **Joey:** "Let's tackle the unbuilt" (the 2026-10-17 side-covers entry: "The default-off toggle of the 2026-10-09
+  decision is not built ... A real toggle needs a new build field, and BUILD_FIELDS is pinned to the old planner's").
+  Since 2026-10-17 every build wears side covers; this adds the switch, with ON as its default so nothing changes for
+  a build, a share link or a saved file from before the field.
+- **The field.** `sideCovers` joins BUILD_FIELDS (js/rules/schema.js) as the planner's own field, which the old planner
+  never writes; sanitize reads only an explicit `false` as off (`d.sideCovers = d.sideCovers !== false`), so a missing
+  field, a 0 or a string is on. The parity test against the old planner (test/parity/layout-parity.test.mjs) strips the
+  planner's own fields before comparing serialized records: the old planner's state has none, sanitize gives the
+  default, and parity is about the shared fields. No schema bump: an optional field with a default.
+- **What reads it.** The generator already did (`build.sideCovers === false` skips the covers and the too-tall warning,
+  generate.js ~1312 and ~1612, from the side-covers session); the bill now does too (js/rules/bom.js: no side-cover
+  rows when off, so the list and the stage agree either way); the stage gains `setSideCovers(v)` beside `setBackCover`
+  (a regenerate); Build style gains a "Side covers" Off / On segment in a row beside Feet (alone on the other mounts),
+  through the same `adopt()` as the other toggles, so the record carries it and Undo takes it back.
+- **Checks.** test/side-covers.test.mjs: absent reads as on; false empties both the bill and the stage; true equals
+  absent; 0 / '' / null / 'off' / 'false' read as on. Mutation-checked three ways: the bill's gate removed, the schema
+  default removed, the generator's gate removed - each fails the test. An e2e case switches Off in Build style and
+  waits for zero SideCover instances and zero billed, the record saying false, then On and the count as before.
+  npm test 567 (562 passed, 0 failed, 5 skipped) with the parity test and the store test's key list updated for the field.
+- **Review:** Sol `01a15b12`, substantial: one finding, held as a documented limitation rather than a change: a build
+  saved with the covers OFF and re-saved through the OLD planner comes back ON, because the old planner's serializer
+  writes only its own fields; the cutover retires that planner, and until then the merged planner is where side covers
+  are set. Sol's other two questions: the fitting steps follow the generator's instances, which read the same field (no
+  bill-based step count); `!== false` is the right reading of a JSON record (the string "false" is not a switch-off).
+- **Live 2026-10-20**, stamp `a1f085f5` (Joey: "Deploy"). Fast-forwarded onto main as `b1b8994`; the Build e2e cases on
+  it found the back-cover case clicking the library's LAST Off segment, which the new Side covers segment now owns, so
+  `a1f085f` scoped that click to the Back cover section (Luna `01a15b2d`; a test selector, not the toggle); that commit
+  is what deployed. Its run 39499191693 passed on attempt 1 (e2e 37 min on the pinned image, within the 15 s / 30 s
+  waits of `00c4602`). Checked live by
+  `planner-prod-checks-2026-10-18\side-cover-toggle-prod.mjs` on the root kit: the segment reads Off | On with On lit; Off takes
+  the four covers off the stage and the bill with the record's `sideCovers` false; On brings the four back with the
+  record true; the share-link hash carries the field in both states.
+
+## 2026-10-20 (Labels: the Part Picker modal is the one Studio tile; the full Studio is a link)
+
+- **Joey:** "On the label page, we have where you can open the label studio both as a modal or in a new tab, I think
+  I'd prefer we only have it open as a modal for now which would remove a button from the left menu, what do you
+  think?" My read, which he took: drop the new-tab tile, keep the Part Picker modal as the one Studio tile, and keep the
+  full Label Studio (icons, stripes, uploads, the print plate - none of which the modal has) one click away as a plain
+  link in the panel's intro sentence, so nothing is lost but a button.
+- **What changed (js/workspaces/labels.js, css/app.css):** the foot's "ways in" are three tiles - Type a label, From a
+  file…, Part Picker - the Picker tile spanning the second row (`.span2`); the empty list's sentence reads "Make your
+  labels in the Label Studio, …" with "Label Studio" a link to the Studio with the planner's `?from=planner … &return=`
+  query (new tab, noopener; `studioHref()` now serves both the link and the dock's "Make labels" button, which stays);
+  the tile's hint entry, its hover scene, its icon, its clip job in tools/hint-clips.mjs, its README row and
+  img/hints/labels-studio.mp4 are gone. The Studio's own "Add to planner build" hand-off and the #labels-add= link are
+  untouched.
+- **Checks:** the Labels e2e cases 11 of 11 (none clicked the old tile); in the browser the foot reads two tiles over one
+  (141 / 141 / 290 px at the desktop panel, 169 / 169 / 346 on a 375-wide phone) and the sentence's link carries the
+  `?from=planner … &return=` query, new tab, noopener.
+- **Review:** Terra `01a15b57`, routine: NO OBJECTION (no TDZ: the hint builds the href at render, after mount).
+- **Live 2026-10-20.** Deployed with the two other coworker items as the merge `b8e747f` (Joey: "Deploy labels-one-tile + picker-hint-clip together and placement-why"); run 39519702499 passed on attempt 1 (28 min), stamp `b8e747f2`. Checked live by `planner-prod-checks-2026-10-18\labels-one-tile-prod.mjs`: the foot holds three tiles (Type a label, From a file, the Part Picker spanning its row at the full 290 px), no Studio tile, the intro sentence links the Label Studio (`?from=planner`, new tab, noopener), and `img/hints/labels-studio.mp4` is gone (404).
+
+## 2026-10-20 (the Part Picker's hover clip shows the modal)
+
+- **Joey:** "We might also want to replace our animated screen capture pop-up for when hovering over the part picker
+  button as that is now out of date." The clip (img/hints/labels-picker.mp4, 2026-10-13) showed the Label Studio opening
+  in a new tab, from before the Picker became a modal in the page; the README said so and asked for a hand recording.
+- **What changed (tools/hint-clips.mjs, img/hints/):** the recorder can cut a clip between framings - `d.cut(crop)` marks
+  the moment, the frames are split on their timestamps and the segments joined - so the Picker clip follows the gesture
+  from the panel into the modal and back: the tile, the modal with Nuts → Hex nut → M3 picked and Add pressed (no
+  lengths step; the e2e case's path), the label landing in the list. The modal frame is the Label Studio checkout
+  beside the repo on a second loopback server, as the e2e suite serves it: the live Studio's Picker refuses a loopback
+  planner as its parent, so the first recording sat on "hasn't answered yet". The clip is 16.5 s, 77 KB, 480 × 222;
+  HINTS.picker's words were already right ("Choose screws, nuts, washers and inserts …"). The README's note is updated.
+- **Checks:** five frames read from the clip show the panel, the modal with Nuts lit, the sizes, M3 ticked, the label in the
+  list; in the browser the bubble on the tile plays it (16.5 s, 486 × 222 as shown). The e2e Labels cases do not touch
+  the clips.
+- **Review:** Luna `01a15b5e`, mechanical: NO OBJECTION.
+- **Live 2026-10-20**, with `labels-one-tile` above (merge `b8e747f`, stamp `b8e747f2`). Checked live by the same script: the Part Picker tile's hint points at `img/hints/labels-picker.mp4`, served at 78,379 bytes (the re-recorded 16.5 s clip; the old one was 30,931).
+## 2026-10-20 (Build: a refused placement says why)
+
+- **Why.** Joey had a coworker try the planner: "the only thing that confused him, it wasn't clear why he couldn't place
+  the 1w case in the middle above a 3w or 4w case ... maybe we need a small pop-up that explains why you cannot place it
+  there?" The "+" spots are the cells where the armed size passes the structural judge (build.js `judge()`: no new
+  unsupported end, sag risk or Wall Mount 0.5H top, and the generator builds it). A cell that fails simply has no spot,
+  and nothing says so. The middle of a 3W fails the SAG rule (layout.js `sagRisks()`: a case resting on a wider case's
+  interior with no wall under either of its own ends), and the ends pass.
+- **What.** Beside the "+" spots, both views now draw the REFUSED cells next to the build (kind `no`): the cells where
+  the size fits (`canPlace`, the cap) but the judge says no. `refusedSpots()` in build.js walks the same cells as
+  `addSpots()`, skips the offered ones and the ones not touching the build, and asks `judgeWhy()` (the judge, returning
+  the code of the first NEW problem instead of false: `s`, `u`, `w`, `gen`; `fit` for a collision or the cap, which
+  draws nothing). Each carries `why`, the sentence from `refusalReason(code, { w, below })` in js/rules/layout.js (the
+  one place the words live), and `ends`: the offered spots at the ends of the unit it would rest on, for the chip's action.
+- **How it looks.** The stage: a grey disc with a BAR instead of the plus (`SPOT_COLORS.no`, `spotTexture(hex, glyph)`),
+  a fainter ghost, a lighter grey on hover and never the placing green; `confirmSpot()` refuses it, so no path places
+  there. A mouse resting on it opens the planner's chip (`#ws-choice`, class `no`: wrapping, wider) with the reason
+  alone, a tooltip, and leaving the cell or the canvas closes it (`onHover`, a new spec callback). A click or a touch
+  tap PINS the chip: the reason plus, when the rule allows one, "Put it at the left end" (the first offered end) and OK;
+  hovering never overwrites a pinned chip, and a rebuild of the overlays closes either. The board: `.b-spot.no`, a muted
+  disc with a bar and a `<title>` tooltip, its hover ghost the red one, a tap routed to `onRefused` (the pinned chip).
+  Escape closes the chip first and keeps the size armed, as for a Place / Cancel choice.
+- **The words.** Sag, with the unit below known: "A 1W can't sit on the middle of the 3W: a case needs a wall under at
+  least one end. Put it at an end of the 3W, or use a wider case." Unsupported: "Both ends need a case below." Wall Mount
+  top 0.5H: the Issues card's wording. Anything else: "The parts can't be built this way."
+- **Checks.** test/refusal-reason.test.mjs (the words per code, the fallback). An e2e case: a 3W, 1W·1H armed → the
+  middle cell is refused with code `s`, both ends are the way out, the "+" list has the ends and not the middle, the
+  stage drew exactly one refused cell; a mouse resting on it opens the chip without Place, leaving closes it, a click
+  keeps it up and places nothing, Escape closes it with the size still armed; on the board the muted disc, a click
+  opens the reason, "Put it at the left end" places the 1W at x 0. The suite's spot helpers count the "+" discs only.
+  The "+" spots themselves are unchanged: `judge()` is `judgeWhy() === null`.
+- **Review:** Sol `01a15b70`, substantial: four findings, all four taken. (1) the chip is `white-space: nowrap`, so a
+  reason overflowed its own buttons: `.no` wraps. (2) leaving the canvas over a marker left the hover (and the chip) up:
+  `pointerleave` ends the spot hover and says so. (3) hover -> click -> leave -> hover -> leave closed the pinned chip,
+  and a hover could replace a pinned one: the hover chip is now the reason alone and a pinned chip is left alone by
+  hovering; a rebuild closes either (the touch choice was already closed by `setSpots`). (4) on a wall or under-table
+  mount the supporting case is above the cell and the sentence said "sit on ... under": the `hanging` wording. Sol's
+  own discards agreed: no path places on a refused cell; `judge()` keeps its verdict; `ends` holds only offered cells.
+  One e2e run of the new case failed (17 s) while the full suite ran beside it; alone and with its four neighbours it
+  passes every time since, so the hover waits are the usual 15 s / 30 s.
+- **Live 2026-10-20.** Deployed with the two other coworker items as the merge `b8e747f` (Joey: "Deploy labels-one-tile + picker-hint-clip together and placement-why"); run 39519702499 passed on attempt 1 (28 min), stamp `b8e747f2`; before the push the merged tree ran npm test 571 (566 passed, 0 failed, 5 skipped) and e2e 64/64 on this machine. Checked live by `planner-prod-checks-2026-10-18\placement-why-prod.mjs` (a 3W through the store, 1W·1H armed): the middle cell is refused with code `s` and the sag sentence, both ends are the way out, the "+" list has the ends and not the middle, the stage drew one refused marker, resting on it opens the chip with the reason and no button, a click pins "Put it at the left end" + OK, and that places the 1W on the 3W's left end (the grid gained its spare top row, so the record reads 1W@0,2 on 3W@0,4). The first version of the check compared the 1W's y to the un-rebased row and failed on that alone.
+
+## 2026-10-20 (Assemble opens at the beginning; the camera button says what it does)
+
+- **Why.** Joey, on a wall build: "in the assembly tab, it seems to start at the end or something, i'd rather it start
+  from the beginning and how do i get it to snap back to the cinematic camera?" Every other workspace parks the stage
+  on the FINISHED step (`skipToEnd()` after an update, `goTo(steps)` at mount), and Assemble's mount only moved to the
+  Overview when the stage was still on the cover (`stage.cur === 0`, a `?ws=assemble` address). So the first visit from
+  Build opened on the last step. The "deep link into a step" the old comment reserved that branch for does not exist.
+- **The start page.** A first arrival (no remembered step in `ctx.memo`) lands on the exploded Overview from the cover
+  AND from the finished step: `else if (stage.cur !== pageOf.overview) stage.goTo(pageOf.overview)`. The step a visitor
+  left on still comes back after a trip to another workspace, and Parts' "Start assembly" still lands on the Overview.
+- **The camera.** The toolbar's "Reset view" button (the frame icon) already did it: `stage.resetView()` presses the
+  viewer's own Resume cam, which drops the orbit override and glides to the step's guided camera. It did not look like
+  the answer. In Assemble it is now named "Back to the step's camera · after you orbit or zoom, this returns to the
+  guided view" (`toolbar({ camTitle })`) and lights orange while the visitor has the camera: the stage reports
+  `get camFree()` and fires `opts.onCamFree(on)` from `setCamOverride` (only on a change), app.js routes it to the
+  workspace, Assemble's `onCamFree` re-syncs the toolbar. Other workspaces keep "Reset view" and never light it.
+- **Checks.** An e2e case: open Build (the stage on the finished step, asserted), switch to Assemble → `cur === 1` and
+  the list reads "0 / n"; Next, a trip to Parts and back → the step comes back; the camera button is named for the
+  step's camera and unlit; a real mouse drag on the stage lights it with `camFree` true; pressing it returns the camera
+  and the light goes out. The old `=== 0` rule put back fails the case at the first wait. The two existing Assemble
+  cases and the boot case pass.
+- **Review:** Terra `01a15bf2`, routine: no findings. Its own discards: a breakpoint remount unmounts first, so the step is remembered; an incomplete manifest's goTo is forced to its preview either way; the callbacks are optional-chained and the toolbar exists before any goTo; every override clear runs through setCamOverride, which updates before it notifies; the e2e drag stays clear of the step list and the player.
+- **Live 2026-10-21**, stamp `a9609f2e`, together with the idle-gate case below. Its own run (39524907871, `996d51c`) failed on that
+  case, a timing gate the runner missed (the stage's rebuild outlasted a fixed 1.5 s window); run 39537588862 for `a9609f2`
+  passed on attempt 1 (41 min). Checked live by `planner-prod-checks-2026-10-18\assemble-start-prod.mjs`: from Build (the
+  stage parked on step 12, the finished one), Assemble opens on the Overview with the list at "0 / 11"; the camera button
+  is named "Back to the step’s camera", unlit, lights after a real orbit and goes out when pressed.
+
+## 2026-10-20 (the idle-gate e2e case counts the gate waking, not frames in a fixed window)
+
+- **Why.** The deploy of the Assemble fix (`996d51c`, run 39524907871) failed on one e2e case, the idle gate's "an edit is
+  drawn at once": it counted frames drawn in a fixed 1.5 s window from the store commit and wanted 3, and on the runner
+  the stage's rebuild for the edit alone outlasted the window. The same case flaked once on 2026-10-18. The code was not
+  at fault: the case passed locally and the change under deploy did not touch Build's render path.
+- **What.** The stage counts `idle.woken`, frames drawn inside the 600 ms settle window after a change that the
+  once-a-second safety net would not have drawn, and `idleStats()` reports it. The case reads it before the edit and
+  waits (Playwright's own 100 ms poll, 60 s) for it to rise. Counted, not timed, so a slow runner only makes it wait.
+- **Checks.** Passes 4/4 here, two of them on SwiftShader with a 4x CPU throttle. A gate that ignores signature changes
+  fails it (woken stays 0); a gate that draws only its safety net from the first rebuild after boot fails it (no wake
+  after the edit). A gate that only draws the safety net from page load breaks the boot itself, so the case never
+  reaches the assertion: not a usable mutant.
+- **Review:** Terra `01a15c53`, two rounds. Round 1, all three taken: a two-frame window counted from the rebuild could
+  still straddle the settle time on a slow runner; at about 1 fps two safety-net frames would pass a broken gate; an
+  rAF-polled 60 s cap is not a hard cap. Round 2, two known limits, kept and written into the test's comment: a working
+  gate misses only with drawn frames more than 600 ms apart and a safety-net coincidence (measured about 300 ms per
+  drawn frame on SwiftShader at a 4x throttle: 106 ticks in 3 s, 4 of them drawn); an unrelated wake during the wait
+  could pass a broken gate (the view was just measured still for 3 s).
+- **Live 2026-10-21**, stamp `a9609f2e`: run 39537588862 passed on attempt 1, this case included. Here the full e2e run beside
+  it was 64/65: the Label plate's faceplate-switch case, which needs the Label Studio checkout (skipped on the runner),
+  timed out on a hidden "Screw and nut drawings" Off button; it fails 2 runs in 4 on main without this change too, so it
+  is an older flake, recorded for its own look.
+
+## 2026-10-20 (a change of mount stands the build up; no setup change reloads into a build the stage cannot show)
+
+- **Why.** Joey switched a wall build to Tabletop "and i got this error because there were some unfilled units on the
+  bottom": the page stopped on "Can't show this build yet · A unit is floating (nothing under part of it)", twice, with no
+  way back but a new build. His layout, from his board that evening: 7W x 4H on the brackets, 11 units, the bottom row
+  open under columns 0-1 and 5-6. `setMount` only slides a layout against the new surface. The generator wants EVERY
+  column of every unit to rest on another unit or the table (or, hanging, to hang from one or the bracket course): stricter
+  than the planner's own support rule (both ends) and than its `fixStructure` (gravity, then a case under each open end).
+  Gravity would also have rearranged his design: two units dropped, the top right left open.
+- **The repair.** `js/rules/stand.js`, a new hand-written module (the rule modules beside it are generated from the old
+  planner by tools/port-rules.mjs, which rewrites them whole). `standUp(build, Rs)` keeps the layout as designed, nothing
+  moves, and fills each open column under a unit (tabletop) or above it (hanging) with 1W cases through the rules' own
+  `fillColumn`, in the build's majority drawer type, as Build's red support spots place them; it also lifts a `nextId` that
+  lags the ids. For his build: four 1W·1H Decor cases at the four open cells. `refusalReason` moved here from layout.js too
+  (today's addition; `npm run drift` reported it as 17 lines a port would delete).
+- **The setup sheet.** A change of mount runs `standUp` after `setMount`, and the sheet says so before Apply: "As a
+  Tabletop build it needs 4 support cases under the gaps · Apply adds them." After the reload a toast repeats it
+  ("Tabletop: added 4 support cases under the gaps."). And every scene change (mount, length, a new build) now builds
+  the record Apply would write on a copy first (`applyDraft` on a detached candidate, with the store's own normalising)
+  and runs the generator on it: if it refuses, nothing is committed, the history, the address and the Recent entry stay
+  as they were, the sheet shows the generator's words, and nothing reloads. The same candidate gives the count above
+  Apply. That closes a second dead end: a length that strands a unit (a 2W·3H Classic at 59, say) reloaded into the same
+  error page under a warning that promised the units would "stay on the board flagged". That warning now says "swap them
+  for sizes it has before changing the length".
+- **The boot's safety net.** A record saved or linked before this (Joey's own planner holds his build that way; an old
+  planner's link can carry a unit in mid-air): the stage's boot, when the generator refuses a `#build=` record, asks the
+  shell (`opts.repair` = `standRecord`: the same slide against the mount's edge, then `standUp`) and uses the result only
+  if the generator accepts it; anything else stops on the error page as before. The page then says "As saved, this build
+  couldn't stand as a Tabletop build · added 4 support cases under the gaps.", writes the stood-up record into the address,
+  and, when it came from this browser's own builds rather than a link, into its Recent entry, so a reload opens it as it
+  now is. A link stays out of Recent builds until edited, as before.
+- **Checks.** test/stand.test.mjs (his wall build is fine; switched it was refused twice for floating units; `standUp`
+  adds exactly the four cells and moves nothing, and the generator accepts it; Tabletop to Wall Mount fills a ragged top
+  up to the brackets; a standing build is left alone; the boot's net on his saved record and on a layout floating above
+  the table; no false repair of the e2e suite's damaged link; the majority drawer type; unique ids). Three e2e cases: his
+  wall build through the sheet to Tabletop (the line before Apply, the reload boots, his 11 at the same heights, the four
+  supports, the toast); a length change stranding a unit refused in the sheet with the generator's words, nothing
+  reloaded, the record unchanged, no Redo; his saved record as a link opens stood up with the note and the address
+  carrying it. Mutants, each failing its own case: the sheet without standUp, the sheet without its check, the boot
+  without its safety net; and a repair that fills only the ends fails the unit test's 3W-on-two-1W case.
+  The deploy's stamping lines carry the new imports (setup.js, build.js, app.js, stand.js), replayed locally with the
+  module-graph guard.
+- **Review:** Sol `01a15c9b`, substantial, two rounds. Round 1, one finding, taken: the first version committed the
+  change, ran the generator, and undid it on a refusal, which left the refused record on the Redo stack, one Redo from
+  the dead end; now the candidate is checked before anything is committed. Round 2 on the revision: no findings. Sol's
+  own discards matched mine: standUp terminates and fills every column in both directions; a share link stays out of
+  Recent builds; Labels consumes its part of the address at mount, and the rewrite skips an address that still has it.
+- **Live 2026-10-21**, stamp `daf28eea` (run 39542860845 passed on attempt 1, 41 min), after npm test 580 (575 passed, 0
+  failed, 5 skipped) and e2e 68/68 here. Checked live by `planner-prod-checks-2026-10-18\mount-stand-prod.mjs` on a fresh
+  profile: his wall build through the sheet shows "As a Tabletop build it needs 4 support cases under the gaps · Apply adds
+  them.", the reload boots with his 11 at the same heights above the table and four 1W·1H Decor supports on it under
+  columns 0, 1, 5 and 6, and the toast says so; his record as the old switch saved it, opened as a link, boots stood up with
+  15 units and the note, and the address carries the 15. Joey's own saved build opens the same way on his next visit.
+
+## 2026-10-21 (a change of mount adds nothing: the gaps stay empty slots to fill, Fill all fills them, Assemble waits)
+
+- **Joey's call, in words:** "i don't want switching between mounting types to automatically add units." The gaps a switch
+  leaves stay "empty slots I have to fill in", "the assembly is not legal until i fill in those gaps", and "I don't mind
+  having an auto fix button". This reverses the auto-fill of the entry above (daf28ee); its other half stays: no setup
+  change reloads into a build the stage cannot show.
+- **The generator's voids mode** (`generateManifest(build, { voids: true })`). An open column under a tabletop case (down to
+  the table) or above a hanging one (up to the build's top row, the grid's top row once the layout reaches its brackets
+  or rails) is no longer an error: each open run is a ghost box, the same
+  ghost as the 2026-08-23 unfinished-top preview, and the build is an in-progress preview with no instructions. The planner
+  shell asks for it everywhere it shows a build (the boot, its repair, updateBuild, regenerate, Build's and Labels'
+  stages). The plain viewer and the default call stay strict. A tabletop layout with nothing on the table is still refused.
+- **The setup sheet** no longer calls standUp. Before Apply it says "As a Tabletop build it will have 4 empty slots under
+  it · Apply adds nothing: fill them in Build before it can be assembled.", and after the reload the toast says "Tabletop:
+  4 empty slots under it to fill · they show red in Build, where Fill all adds 1W cases."
+  The boot's net (standRecord) now only slides a record onto its surface; it adds nothing.
+- **Build** lists "N empty slots to fill." as a hard issue with a **Fill all** button (standUp: 1W cases in the build's
+  majority drawer type, nothing moved, one Undo). The slots are the red spots on both views and hatched on the board.
+  openCells (js/rules/stand.js) finds them by walking to the same surface Fill all fills to, the table or the grid's top
+  row, so the slots shown are exactly what Fill all fills.
+- **Gravity holds the floating cases a switch left.** It now drops only what an edit made unsupported, so filling one
+  slot by hand leaves the other cases over their slots. Without this, the first case placed dropped every other floating
+  case into its slot.
+- **A new gap is still refused.** The placement judge now asks the generator in voids mode, so a build with slots still
+  offers its spots, and it refuses any placement that would open a slot of its own. That case says "Part of it would
+  have nothing under it: every column of a case needs a case below it or the table." It covers a 3W over two 1Ws with
+  an open middle, which the both-ends and sag rules let through. Before, the strict generator refused it without a
+  reason.
+- **Assemble** shows "Not ready to assemble" with **Go to Build** while the build has empty slots, or an uneven tabletop
+  top, instead of a one-step player that ended on "The whole assembly, finished".
+- **Known limits.** The slot count is the number of 1W cases Fill all adds, and the generator counts open column runs.
+  They agree for 1H-deep gaps. A hanging layout that reaches no bracket has no slots and keeps the "not supported" issue
+  with Fix structure. Only old links reach that state. Cases the previous release already added to a build stay until
+  removed.
+- **Checks.** test/stand.test.mjs covers openCells, Fill all filling exactly the open cells on a table and on a wall,
+  and a wall layout off its brackets having none. It also covers the generator's voids mode (Joey's switched build shows 4
+  ghosts meeting the case bottoms, a wall ghosts its ragged top, a complete kit is byte-identical either way, a floating
+  layout is still refused), and the boot net adding nothing. test/refusal-reason.test.mjs covers the new reason.
+  The e2e cases cover four things. Joey's wall build goes through the sheet to Tabletop: the line, 11 units, 4 ghosts,
+  no instructions, the toast, Assemble's card and Go to Build, the 4 offered spots, one slot filled by hand with unit 6
+  kept, the stage at 3 slots, the issue card's "3 empty slots to fill." and Fill all completing it, then Assemble's
+  steps. His saved record opens as a link with nothing added. A 3W over a gap is refused with the new reason. The length
+  refusal is unchanged. Six mutants each fail their own e2e case: settle without hold, Build's stage and judge without
+  voids, the boot without voids, the sheet calling standUp again, the judge without the open-cell count, and Assemble
+  without the card. Two of them first survived: the sheet mutant never fired as written, and the sheet case never looked
+  at the stage or the offered spots between fills. The mutant was rewritten and the case strengthened. The new Fill all
+  unit test failed on the first openCells, as it should have.
+- **Review:** Sol `01a15eb1`, substantial, inline payload: no findings. Terra `01a15eb3` on this entry: two wording
+  fixes taken (the toast quoted, the hanging top named); five discarded against the code. A first call, `01a15eaf`, pointed the reviewer at
+  a payload file the bridge would not let it read, and is recorded as failed. Before review I found and fixed one defect
+  myself: openCells walked a hanging build to its own top while Fill all fills to the grid's top row.
+- **Live 2026-10-21**, stamp `94efe681`: 213f48c's own push started no workflow run, so an empty commit, 94efe68, went on
+  top and run 39616553471 deployed both. Before it: npm test 579 pass, e2e 69/69. Checked live by
+  `planner-prod-checks-2026-10-18\mount-voids-prod.mjs` on a fresh profile, all 20 checks: the sheet's line, 11 units
+  after the switch, 4 ghosts and no instructions, the toast, Assemble's "Not ready to assemble", "4 empty slots to fill.",
+  Fill all to 15 with 1W·1H supports under columns 0, 1, 5 and 6, then Assemble's steps; his record as a link opening with
+  11 units, 4 ghosts, no added note and the address untouched.
+
+## 2026-10-21 (an opened drawer shows its inside W / L / H again)
+
+- **Joey, reported:** "i noticed we no longer get interior dimensions when opening a drawer like we did in the old planner".
+- **Why they were gone.** The stage kept the old viewer's drawer focus: the cavity measured by rays, lines on its floor and
+  back wall, and the three W / L / H pills. It ran only when a selection dived into a drawer. The planner selects quietly by
+  design and opens a drawer only through its own buttons (Build's Peek inside, the Colors card's Open the drawer, both
+  stage.peekUnit), which slid the drawer out and nothing else.
+- **Now** peekUnit enters that focus without the camera swing; the planner never takes the camera unasked. The pills show the
+  drawer's inside size while a peek holds it open. Picking another of that drawer's parts (its handle, label or accent) keeps them.
+  Closing it, deselecting, or picking anything else gives the build's pills back as they were before the peek, on or off.
+  The ruler during a peek is the visitor's: it reads their own setting, and a click hands the pills back to the build's
+  sizes with the drawer left open.
+- **On the way:** a pick of another part on the open drawer used to leave it open while the stage forgot it was open.
+  The stage now keeps track of it while the peek holds.
+- **Checks.** A new e2e case covers the pills on Peek inside within the drawer's outer size, the camera unmoved, the sizes
+  kept while a riding part is picked, Close it restoring the build's pills, and the ruler handing them over and hiding them.
+  It also covers a peek with the ruler off closing to no pills. The older Peek inside case still passes. Five mutants each
+  fail the new case: no focus in peekUnit, the quiet pick always leaving it, the exit without the restore, setDims without
+  the hand-off, and dimsOn ignoring the peek. The quiet-pick mutant first survived, because re-selecting the part already
+  selected is a no-op, so the case now picks a part riding the drawer. The first run also showed the ruler's click reads
+  dimsOn, and the ruler steps were rewritten for it.
+- **Review:** Terra `01a15ee8`: no findings. Luna `01a15eea` on this entry: two wording fixes taken, five discarded.
+- **Live 2026-10-21**, stamp `ef16aa43` (run 39625024867, with the silk sheen). The first live check
+  (`drawer-silk-prod.mjs`) passed, but it judged the pills by the stage's own `hidden` class, as the e2e case did: a
+  screenshot of the live page showed none. The shell's CSS hides `.dim-label` unless the ruler is on, and the ruler is off
+  by default. Fixed the same day, below.
+
+## 2026-10-21 (silk swatches wear a sheen)
+
+- **Joey, asked:** "in the color palettes, is it possible to give the silk material squares a gloss effect, like a sheen
+  on half of it or something? To help differentiate it from regular material".
+- **Now** a silk filament's swatch wears a highlight over its upper-left half, cut at the diagonal, with a faint shade on
+  the lower right so a white or silver silk reads glossy too. It shows in the picker's brand grids and its In this build
+  row, the Filaments I own grid, and the small chips in the Colors rows, the shop rows, Simplify and the part card. A
+  swatch is silk when its filament's name has the word Silk, which every Panchroma Silk PLA colour has and no other does.
+  The sheen is drawn in ::before, so the pick star and the owned tick keep ::after.
+- **Checks.** A new e2e case: all 24 silk swatches in the picker wear the sheen and none of the plain ones do; after
+  picking Panchroma Silk Gold, its row chip and its In this build swatch wear it too. Screenshots in both themes in
+  D:/Claude - Output/silk-swatches-2026-10-21. npm test 584 (579 pass, 0 fail, 5 skipped). The full e2e run: 71, 70
+  pass, 1 fail, "a refused cell says why", a Build case whose mouse rest opened no chip within 15 s; it passed 3 runs of 3
+  alone. This change touches only colors.js, app.css and the e2e file.
+- **Review:** Terra `01a15ef6`: no findings. Luna `01a15f02` on this entry: two fixes taken (the counts, the failure's
+  wording), two discarded (the quote is verbatim; the gradient's hard stop at 50% is the half).
+- **Live 2026-10-21**, stamp `ef16aa43` (run 39625024867): `drawer-silk-prod.mjs` finds the sheen on all 25 silk swatches in
+  the first region's picker (its brand grids and In this build) and on none of the 93 others.
+
+## 2026-10-21 (the feet are TPU: TPU95 Black by default, a TPU-only feet picker; material tags on every filament line)
+
+- **Joey, asked:** "when selecting the feet, i feel like we should only list TPU filaments as an option, not sure if we even
+  have any in the planner at all? But default for feet should always be TPU black". Then: "maybe we need to make PETG and PLA
+  and TPU, like colored tags in the menu to help differentiate the material types more?" On which TPU: "you can use any TPU,
+  so polymakers TPU lineup would be fine to add, and i can grab an affiliate link". He sent the minted links
+  `JERRARI?q=polyflex-tpu95` and `?q=polyflex-tpu90`.
+- **The catalogue** had no TPU. It gains Polymaker PolyFlex TPU95 (Black, White, Blue, Red, Yellow, Orange) and TPU90
+  (Black, White, Grey, Polymaker Teal), with his links. The hexes are the shop's own published swatch values and the ids its
+  1.75 mm variants. TPU90 Clear is left out, following the catalogue's rule for the Translucent PLA line: no
+  semi-transparent colour until a transmission measurement exists. TPU95-HF waits for a link. The catalogue is the old viewer's file by its header; it was copied
+  there (gen2-visual-animator `72545c5`, local, not pushed: that main also carries two other sessions' unpushed commits)
+  and into the Lab with its pin bumped (Filament Material Lab `0b80ffc`).
+- **The stage keeps the feet TPU.** Every preset's feet are PolyFlex TPU95 Black. A palette that names no feet or a
+  non-TPU filament for them, from a saved, linked, uploaded or shown palette or a reset, wears TPU95 Black, and a unit's own
+  non-TPU feet pick is refused (main.js `tpuFeet`, `tpuFeetOver`).
+- **Surprise me** gives the feet a fixed role like the bought hardware: TPU95 Black in every look, never drawn from the
+  colour pool, and outside the look's filament cap, which is about the look's colours. A card's count is still every spool
+  the build prints in (D2), so on a build with printed feet it reads one above the cap, and the panel says why: "The feet
+  print in TPU95 Black in every look, on top of the cap and the filaments you own." Counting the TPU inside the cap would
+  leave a cap of 2 with no look at all on such a build. **Simplify** never merges the feet's filament with another, and
+  its summary gives the feet their own group. The Jerrari on the root kit now prints in 5 filaments, not 4.
+- **The picker** lists only the TPU lines for the feet, under a note, and none of them for any other region. The feet's
+  reset reads "Reset to TPU95 Black". Every line header in the picker and in Filaments I own carries coloured material
+  tags: PLA, PETG, TPU, and both PLA and PETG on the Elegoo line.
+- **Checks.** A new e2e case covers the boot preset's TPU95 Black feet, a case picker's seven lines each tagged with no TPU
+  swatch, and the feet picker's note, two TPU lines and 11 TPU swatches. It then picks TPU95 Orange and resets to TPU95
+  Black, feeds a palette with PLA feet, and reloads a saved palette rewritten to PLA feet: each ends on TPU95 Black. A
+  unit's own PLA feet pick is refused. The catalogue, presets, generator (M16, M17), Simplify (M25) and style tests follow the new rule,
+  and four e2e cases take the new counts: Surprise me's cards within the cap plus the feet, with the note; its owned check
+  skipping the feet; Simplify from 5, its two-merge step at 3; the phone's Simplify ending at 4. Eight mutants each fail
+  their own check: the stage rule a no-op, the picker filter removed, the per-unit guard removed, a saved palette loaded
+  as saved, no tags, TPU back in the generator's pool, Simplify merging the feet, no cap note. Screenshots in
+  D:/Claude - Output/tpu-feet-2026-10-21.
+- **Review:** Sol `01a15f0d`: no findings, on the change and then on the cap note and the counts. Luna `01a15f21` on this
+  entry: one fix taken (the Clear rule is the Translucent PLA line's), one discarded (the reset is covered: setColor).
+- **Live 2026-10-21**, stamp `0b896b02` (run 39640071883). This commit's own run was cancelled by the push of 5df44d7, and
+  that run by another session's push of `0b896b0`, which run 39640071883 deployed with both. `tpu-feet-prod.mjs` passes all 9 checks there:
+  the feet default, the case picker's seven tagged lines with no TPU, the feet note, the feet picker's two TPU lines, a
+  palette with PLA feet wearing TPU95 Black, Surprise me's cap note, no errors.
+
+## 2026-10-21 (a peeked drawer's inside sizes show with the ruler off)
+
+- **What was wrong.** The drawer's inside W / L / H went live at `ef16aa43` and showed nothing in the planner unless the
+  toolbar's ruler was on. The shell's CSS hides every `.dim-label` without `html.ws-measure`, and the ruler is off by
+  default. The e2e case and the first live check both turned the ruler on first and judged the pills by the stage's own
+  `hidden` class, so both passed.
+- **Now** the stage marks `<html>` with `ws-drawer-dims` while a peek holds the pills, and the CSS exempts that state.
+  main.js `syncPeekClass` sets it after enterDrawerFocus records the peek, after exitDrawerFocus clears the carrier, and in
+  endPeekFocus.
+- **Checks.** The e2e case and `drawer-silk-prod.mjs` now judge a pill by its computed display as well. With the CSS
+  exemption removed, the case fails at "a peek with the ruler off showed no inside sizes". On the live `ef16aa43`, the
+  changed live check fails `rulerOffPills` and passes every other check, which shows the bug.
+- **Review:** Terra `01a15f3e`: no findings. Luna `01a15f3f` on these lines: five wording fixes taken, one discarded (the
+  record is Joey's saved one, as the entry says).
+- **Live 2026-10-21**, stamp `0b896b02` (run 39640071883): `drawer-silk-prod.mjs` passes, `rulerOffPills` included.
+
+## 2026-10-21 (the planner's buy links report the viewer's buy: events)
+
+- **Why.** Joey asked what happens on his affiliate links, and his Polymaker dashboard shows only completed purchases.
+  A click is the step before a sale, and the planner's own buy links reported none: the Colors picker's Buy, the
+  shopping list and look-detail rows, the Parts list's filament names and its hardware Amazon link.
+- **Now** each sends the name the viewer already uses for the same click, so both apps' clicks land on one dashboard row.
+  - `buy:filament:<brand-line>` comes from main.js `buyFilamentEvent`, which finds the brand and line by the picked
+    colour's catalogue label.
+  - `buy:hardware:<listing id>` comes from `buyEvent`, using the `HARDWARE_BUY` id.
+  - The stage exposes both beside `track`; colors.js `buyFilament` and parts.js `storeLink` call them.
+  - The Parts list shows "Panchroma Black" as "Black", so its items carry the full label (`full`) for the lookup.
+  - Every link's href, target and rel is unchanged. The download-site links still send nothing.
+- **Checks.** A new e2e case clicks each kind of buy link and checks the event names as literals, with the navigation
+  cancelled after each link's own handler: the picker (Elegoo, then Panchroma), a shopping-list row, a Parts filament
+  name, and the hardware link in both list layouts. With `buyFilament` made a no-op, the case fails, listing the four
+  missing filament names. npm test 579 pass, 0 fail; e2e 73/73.
+- **What the dashboard can and cannot say** about these clicks is in a note on Joey's machine
+  (D:/Claude - Output/affiliate-clicks-2026-10-21/NOTE.md). Like the stats themselves, it is kept out of the repo.
+- **Was open, Joey's call.** The Parts list's Amazon links carried `rel="noopener"` without `sponsored`, and no "· paid
+  link" label next to the link; the list's foot line carried the disclosure. This change left rel as it was. Joey
+  answered the same day: see "the Parts list's Amazon links are marked paid at the link" below.
+- **Review:** Terra `01a15f5a`: no findings.
+- **Deploy:** a fix for a problem Joey reported; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `0b896b02` (run 39640071883). Checked on the live site with GoatCounter's own `skipgc`
+  opt-out set and its count stubbed, so nothing reached the dashboard. The picker's Buy, a shopping-list row and a Parts
+  filament name each sent `buy:filament:polymaker-panchroma-pla`; the Amazon link sent `buy:hardware:magnet-10x2`; the
+  Printables link sent nothing.
+
+## 2026-10-21 (the cover tiles' edges catch the light)
+
+- **Joey, reported:** in My colors a row of cover tiles read as one solid slab, where on a printed build a seam is just
+  barely visible. He suggested a 0.2 mm chamfer on the covers' top side edges, so the light would hit them
+  differently (relayed, not verbatim).
+- **Why there was no seam to draw.** All 24 cover GLBs have square seam edges, and neighbouring tiles meet within
+  0.012 mm. The knowledge pack records this: `measurements.md`, "Covers: the seam edge, the thickness, and how the two
+  layers stack", vault `23d4991`.
+- **Why it isn't a 0.2 mm chamfer.** At the whole-build view a 621 mm build gets about 2.4 device px per mm at dpr 2, so a
+  true 0.2 mm chamfer is half a pixel. Measured on moving frames it reached about a third of a 1 px edge's contrast and
+  flickered 2.5 to 25 times as much.
+- **What Joey picked.** Three render-only versions were compared: a shading-only bevel, a drawn hairline and a gap.
+  Joey picked the bevel. The comparison, screenshots and numbers are in
+  D:/Claude - Output/cover-seams-2026-10-21/COVER-SEAMS.md.
+- **Now** `js/cover-seam.js` tilts the normal 45° toward the outside of each Cover Lower and Cover Upper tile. It acts in
+  a band at each side edge, max(0.2 mm, 1 device px) wide, with its inner edge anti-aliased over one pixel.
+  - The edge catches or loses the light like a chamfered one, and the row's two outer ends get it too.
+  - It is shading only: the printable models, the bill and the geometry are unchanged.
+  - The tilt goes in after the bed finish, because the Cover Upper prints top-face down and its visible top is its bed
+    face, whose plain normal the finish restores.
+  - `?seams=off` draws the edges square, for comparison. The debug hook has `seams.set(on)`.
+  - The new module has its stamping line in pages.yml.
+- **Checks.**
+  - **`test/cover-seam.test.mjs` (8 tests).** On three r185's real shader sources it checks the chain after the relief
+    and the bed finish, and that the tilt lands after the finish's plain restore and before the lights read the normal.
+    It also checks Joey's numbers, the switch as one shared uniform with no recompile, the attribute, both material
+    sites, and the stamping line.
+  - **`npm test`** (on the tree rebased onto main `0b896b0`): 592 tests, 587 pass, 0 fail, 5 skipped. Smoke test: passes.
+  - **e2e:** 73 tests, 72 pass, 1 fail. Over five full runs on this branch (on three bases), one passed every case and
+    four failed one, "a back cover on a Decor drawer says the tear-away front comes out first", at its Parts-row wait
+    (60 s).
+  - **That failure is an older race, and origin/main has it too.** A replay of the case's steps fails the same way on
+    `0b896b0` without this change, with the same stack: `mount()` replaces `typeByNode` with the new manifest's parts
+    before `await loadTemplates()`, and the stack and the code fit this sequence: a Parts-tab switch inside that await runs
+    `applyState` over the old instances, one of whose nodes has no type, so `colorLocked(undefined)` throws and the Parts
+    tab draws nothing. It is not fixed here; it was recorded as a follow-up, and `1272bce` has since fixed it (a layout
+    change's mount adds to the stage's type maps instead of replacing them). The replay of the case's steps
+    (`debug-backcover.mjs` in the report's harness folder) passes 6 runs of 6 on main `284b6c6`; on `0b896b0` it failed
+    on the first.
+  - **Deploy guard:** the stamping step and module-graph guard, replayed on a copy, print "module graph OK". Without the
+    new line the guard fails on `./cover-seam.js`.
+  - **Goldens:** origin/main matches the committed goldens exactly. This branch moved only the 20 finished-build shots
+    (at most 0.059 % of pixels on Fast and 0.096 % on Very High, against the 0.1 % threshold); the cover and middle
+    steps stayed at 0.000 %. The change is intended and nearly used up the threshold, so those 20 are re-blessed and
+    the other 40 are left as committed. Afterwards: 60 of 60 at 0.000 %.
+  - **On a 7W build, dpr 2, both themes:** all 8 cover meshes carry the attribute with their own half-width, there are
+    no page errors, and the program count is 18 with the edge on and off.
+- **Review:** Sol `01a15ee1` on the prototype: 2 fixes taken (a zero-width band, an interpolated outward vector). Sol
+  `01a15f1b` on this change: no findings.
+- **Deploy:** held until Joey had seen it ("Don't deploy until I've seen it."). Then: "I've seen the bevel and it looks
+  right. Merge cover-seams-proto into main and deploy." Rebased onto main `0b896b0`, and the checks above were run on
+  the rebased tree.
+- **Live** at stamp `b11f4931`. Main was fast-forwarded to `93c8e7e`; its own run was cancelled by the next push,
+  `b11f493`, whose deploy carries it.
+  - Read off the live site: `main.js` imports `cover-seam.js?v=b11f4931`, and the served module is Joey's numbers (0.2
+    mm, 1 px, 45°).
+  - In headless Chrome (?debug=1, Very High, dpr 2, dark stage, the 7W build), all 8 cover meshes carry the attribute
+    and the patched material, the edge is on, and there are no page errors. The edge on and off differ in 1,726 pixels,
+    all inside the covers' band of the frame: the same count and bounding box as the local check. Shots in
+    D:/Claude - Output/cover-seams-2026-10-21/live.
+
+## 2026-10-21 (an opened drawer's pills stay clear of the panels and of each other)
+
+- **Seen live at `0b896b02`.** With the pills now shown, a screenshot of Build at its default view had the W pill partly
+  under the dock: an opened drawer comes toward the camera, and the pills were clamped only to the canvas edges.
+- **Now** the stage places them with `placePills` (main.js), a pure function. Each pill, centred on its point, is clamped
+  into the canvas less the panels' bands (`safeArea`), 8 px in. When it would overlap a pill already placed, it moves to
+  the nearest free height in whole steps, above first, that overlaps none of them. The render loop reads every projection
+  and size first, then writes. A pill not yet displayed measures 0, so it is placed at a 120 x 40 guess (the pills measure
+  about 69-100 x 34), and the stage asks for another frame, at most three in a row, where it is placed at its measured size.
+- **Checks.** A new unit test, test/drawer-pills.test.mjs, lifts `placePills` from main.js and puts three pills on one
+  point, at each of four points: the top of the clear area, its middle, under the left panel and the dock, and the bottom
+  right. Each lands inside and none overlap. A mutant without the recheck overlaps in the first case. The e2e Peek inside case now
+  checks every pill sits inside the clear area and apart from the others, after a peek with the ruler on and one with it
+  off. With the safe area ignored it fails, the L pill's left edge at 327 px against a 332 px band.
+- **Review:** Terra `01a15f9c`, four rounds. Three findings taken: a single pass could move the third pill off the second
+  and back onto the first; a pill shown at a guessed size could overlap; with no free slot at the guessed size, the
+  colliding place could stay on the last frame. One discarded: a pill held at display:none while another shows cannot
+  happen, since the three pills share one display rule. Luna `01a15fa4` on this entry: five wording fixes taken, one
+  discarded (a summary need not list every minor case).
+- **Live 2026-10-21**, stamp `b11f4931` (run 39650372249): `drawer-silk-prod.mjs`, now with a `pillsClear` check (which
+  failed on `0b896b02`), passes all 11 checks. At 1440 x 900 the W pill's box now starts at y 740, above the dock's band
+  at 782.
+
+## 2026-10-21 (a layout change's mount leaves no part of either build without its type)
+
+- **Found, not reported.** It is the older race the cover-edges entry above names: the session deploying the cover
+  edges found it, and Joey did not report it.
+- **What was wrong.** `mountManifest` replaced `typeByNode` and `partInfoByNode` with the new build's maps before
+  `await loadTemplates()`. Until the new GLBs land, the old instances are still the stage's.
+  - A Parts tab switch in that window is a `goTo`, so an `applyState` over the old instances.
+  - An old node that the new build no longer had found no type. `colorLocked(zoneKey(undefined, ''))` threw on
+    `type.split`, and the Parts list drew no rows.
+  - The back-cover e2e case flaked on it: four of five full runs on the cover-edges branch failed at its Parts-row
+    wait. The window lasts as long as the new build's GLBs take to load, so how often a run hits it depends on timing.
+- **Now** the mount adds the new build's rows to both maps (`Object.assign`) instead of replacing them. A node of either
+  build has its type through the window, and a node in both builds takes the new build's row.
+  - **Why the maps are not swapped after the await.** That was tried first, and it moves the throw to the other side. A
+    palette repaint in the same window walks the NEW manifest's parts through `primaryKey`, and `activeHex(undefined)`
+    threw on `key.split`. The new e2e case fails on it. A full e2e run on that attempt also failed "a spot left of the
+    starter drawer…" with the same error.
+  - **Why the maps may only grow.** No node changed type across the builds swept. The sweep asked the generator for
+    128,520 builds: the six lengths, the three mounts, the five faceplate families, the three handle styles and the
+    three fills, widths 1W to 4W and heights 0.5H to 3H, with and without a back cover, plus Gridfinity, magnets and
+    lips, in one-unit and two-unit builds. The generator refused 56,040 of them (sizes it does not make), and the
+    72,480 manifests it made held 625 nodes, none with two types
+    (D:/Claude - Output/stage-type-race-2026-10-21/node-type-fixed.mjs). It is a sweep, not a proof. A node in both
+    builds takes the new build's type anyway, so a build the sweep missed could at worst mis-type an old part inside
+    the window. No code iterates either map. Every read of `partInfoByNode` goes through a live instance's node, so a
+    row whose node has left the build is never read.
+  - `drawThumb` (the Build library's previews) already wrote its parts into the same maps. Under the replace, a mount
+    that started during a preview's GLB await dropped them; now they stay.
+  - `manifest` itself still changes before the await, as it did before.
+- **Checks.**
+  - **A new e2e case holds every part GLB back, so the window stays open.** It commits a one-unit layout with a back
+    cover and checks that the window is open: the mount waiting, an old instance whose node the new build lacks, and
+    the Parts switch paging. Then it repaints the palette, clicks Parts, and checks that rows draw and nothing throws.
+    Finally it lets the GLBs go and checks that the new build mounts.
+  - **It fails on both earlier versions.** On origin/main `0b896b0`: "the Parts list drew no rows: … reading 'split' @
+    main.js:7133" (colorLocked). On the swap-after-the-await attempt: "a palette repaint in the window" (activeHex, from
+    renderChecklist).
+  - **The replay of the back-cover case** (D:/Claude - Output/cover-seams-2026-10-21/harness/debug-backcover.mjs), 6
+    runs: the row shown every time, no page errors. It also passed 6 of 6 on unmodified `0b896b0` on this machine,
+    because the window depends on GLB timing. That is why the held-GLB case is the check that fails on the old code.
+  - **On the tree rebased onto main `b11f493`** (the cover edges and the drawer pills): the replay 6 of 6 again; npm
+    test 596 tests, 591 pass, 0 fail, 5 skipped; smoke test 4 of 4; e2e 74 of 74, the back-cover case and the new case
+    included. The same checks had passed on `93c8e7e` before it.
+- **Review:** Terra `01a15fa2` on the code: no findings. Terra `01a15fae` on this entry and the vault's note of the sweep:
+  five wording fixes taken (who did not report it, the flake's cause as measured, the sweep as a sweep and not a
+  proof, and its refused builds, here and in the vault).
+- **Deploy:** a bug fix, found rather than reported. It deploys once its checks pass.
+- **Live:** `1272bce5`, 2026-10-21, about 19:30 UTC. The live main.js carries the two `Object.assign` lines. The held-GLB
+  scenario, run against production (D:/Claude - Output/stage-type-race-2026-10-21/live-check.mjs), held 7 GLBs with
+  29 old instances on the stage. The repaint returned ok, the Parts rows drew inside the window, the new build then
+  mounted with its Back Cover row, and there were no page errors.
+- **The case's hold, corrected the same day.** As first written, the case let its held GLBs go with `page.unroute`,
+  then `route.fallback()` on each. Playwright 1.63 already hands a removed handler's held requests to the next handler,
+  so each was handled twice. With `GEN2_PARTS_LOCAL=1`, the second pass reached the `fulfill` in
+  `test/lib/local-parts.mjs` and rejected "Route is already handled!" after the case ended, which failed the e2e file.
+  Without it, as on CI, the second pass ended in a continue whose error Playwright swallows. The session counting the
+  planner's buy clicks reported it. Now the handler waits on a gate and falls back itself, and the case never unroutes.
+  - **Checks.** The case alone, in both modes: it passes, and the file passes with it. With the old replace put back
+    in main.js, it still fails in both modes ("the Parts list drew no rows", colorLocked). Full e2e on main `b0bb34d`
+    with this change: with `GEN2_PARTS_LOCAL=1`, 74 of 74 and no rejection notices; against the parts host, 73 of 74.
+    The one failure was "a refused cell says why", which timed out at its re-hover chip wait (e2e line 1283) after
+    16.6 s. It is not this change's. On main `55a02fb` without this change, the full run failed the same case the same
+    way (73 of 74, 16.6 s), and so did the full run of this change rebased onto it. Run alone it is flaky: 4 of 4
+    passed on one tree, 1 of 2 on the other. The case passed in both full runs on `b11f493`. It is recorded here and
+    left for its own fix. Fixed the same day: "the refused-cell case reads its marker once the stage is at rest", below.
+  - **Review:** Terra `01a16024`: no findings.
+
+## 2026-10-21 (faceplate, not plate, in two catalogue strings)
+
+- **The naming rule** (vault naming-and-ids.md, Joey, 2026-10-12): a faceplate is always called a faceplate; plate alone
+  means the build plate. A site session asked for two catalogue strings that broke it: the Classic series blurb
+  ("the grip prints as part of the faceplate") and the M3 button-head note ("driven in from behind the faceplate").
+- **Changed** in the old planner's js/data.js (gen2-planner-main `92c055d`, live there, and re-vendored by the site as
+  MODULITH `ff09192`) and copied byte-identical into js/catalog/data.js here, with the vendor pin bumped. Nothing else in
+  either string changed. Luna `01a15fbf`: no findings.
+- **Not done:** js/generate.js still says "plate" for the faceplate in two user-facing step notes, the handle step and the
+  Classic step, which also appear in the kit and golden manifests. They are for Joey to schedule as their own change.
+  Done the same day: the next entry.
+- **Review of these lines:** Luna `01a15fc9`: two wording fixes taken, four discarded (dim-w is the W pill; the diff shows
+  nothing else changed; "no findings" and the Deploy wording are this file's own).
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+
+## 2026-10-21 (faceplate, not plate, in the two Assemble step notes)
+
+- **The same rule** as the entry above. The two step notes it left in js/generate.js now say faceplate: the handle step
+  ("thread 2× M3×6 button head screws in from behind the faceplate") and the Classic step ("its grip is part of the
+  faceplate"). Nothing else in either note changed.
+- **Manifests:** the ten official-kit goldens re-blessed with
+  `UPDATE_GOLDEN=1 node --test test/official-builds.test.mjs`, one line each (the Classic note; none of the ten has a
+  handle step). The three tabletop static kits (kits/tabletop-165, -185, -185-3w) have no generator: pages.yml only
+  copies kits/, and 01c2125 copied the handle note into them by hand. So the same one-word change was made there by
+  hand. A script over the diff checked all 15 changed lines in 14 files: each is its old line with one "the plate" made
+  "the faceplate".
+- **Left as they are:** the code comments that say plate (generate.js, main.js, catalog/data.js), which are not
+  user-facing.
+- **The old apps, reported, not changed:** the old viewer (gen2-visual-animator, viewer/js/generate.js:2403 and :2415 on
+  origin/main) carries both notes word for word, with its kits and goldens. The old planner (gen2-planner-main) has no
+  Assemble steps, but its back-cover option hint (js/app.js:783) says "Closes the open-front Decor drawer behind the
+  plate". The merged planner's back-cover note already says "behind the faceplate".
+- **Tests:** npm test 591 pass, 0 fail, 5 skipped. The full e2e with `GEN2_PARTS_LOCAL=1`: all 74 cases pass, but the
+  file itself is marked failed (75 counted, 74 pass), with seven "route.fulfill: Route is already handled!" rejections
+  reported after the cases end. The only route.fulfill the e2e runs is the local-parts route's
+  (test/lib/local-parts.mjs:31). The base commit fd3e5d6 without this change ends the same way (74 of 75, the same seven
+  rejections), so this was there before this change. CI runs the e2e against the live host, without that route, and run
+  that way here the e2e passes 74 of 74 with no rejections. The commit was then rebased onto main `39e6a12`, which
+  differs from fd3e5d6 only in this file; official-builds and parts-exist pass again there (20 of 20). The rejections
+  have since been fixed by `b9be960`: the mount-window case's `page.unroute` already passed each held GLB on, so its
+  own fallback handled it twice.
+- **Review:** Luna `01a15fe7`: no findings. Nothing outside the planner reads this text: the site's only match for
+  either phrase is a vendored code comment, and the old viewer has the same text in its own generate.js, not read from
+  here. Luna `01a15ff4` on this entry: two wording fixes taken (the e2e file's failure stated without a cause, the old
+  viewer's copy said plainly), one discarded (the "..." it read as a change was an elision in the evidence).
+- **Live 2026-10-21**, stamp `55a02fb9` (run 39670501878). This commit's own run (39669304242) was cancelled by the push
+  of `55a02fb`, whose deploy carries it. Read off the live site: the page loads `boot.js?v=55a02fb9`; the stamped
+  generate.js has both new phrases and neither old one; each of the three tabletop kits serves "from behind the
+  faceplate" and not "from behind the plate". In the browser (?debug=1, analytics skipped), the official build
+  185-tabletop-2w2h's Faceplates step says "its grip is part of the faceplate", and the live generateManifest on a copy
+  of that build with Essential faceplates gives the "Faceplates & handles" step with "from behind the faceplate". No
+  console errors were captured on that tab. Luna `01a16054` on these lines: two wording fixes taken, one discarded (the
+  carrying run's head is 55a02fb, which contains this commit).
+
+## 2026-10-21 (the Parts list's Amazon links are marked paid at the link)
+
+- **Joey, asked:** "Yes: give the Parts list's Amazon hardware links rel="noopener sponsored" and the "· paid link"
+  label, like the Colors links."
+- **Now** parts.js `storeLink` marks a link on a paid host (`isPaid`, the Colors tab's host list) with
+  `rel="noopener sponsored"` and "· paid link", in the narrow list and the wide table. The download-site links are
+  unchanged, and the foot line keeps Amazon's own sentence.
+- **The mark sits on its own line** under "Amazon ↗" (app.css `.link .paid`; its "·" is hidden and stays in the text).
+  On one line, "Amazon ↗ · paid link" took 55 px from the part's name. Measured headless at 1280×800 and 390×844: the
+  BUY rows' names went from 213 to 158 px on a desktop and from 171 to 116 px on a phone, and "Magnets 10×2mm or
+  6×2mm" and "M3×6mm socket head screw" wrapped. Stacked, the link is 57 px wide, as before, and the names keep 213 and
+  171 px. The gaps are 10 px to the badge and 9 px to the row's edge either way.
+- **Checks.** The buy-link e2e case reads, in both layouts, the Amazon link's rel, its text "Amazon ↗ · paid link" and
+  its mark's block display, and checks that a download link stays plain. With the paid check forced off, it fails at the
+  narrow list's Amazon link. npm test 591 pass, 0 fail; all 74 e2e cases pass (the file's own route.fulfill failure
+  under `GEN2_PARTS_LOCAL=1` is the one the entry above records as older than its change).
+- **Review:** Terra `01a16000`: one finding, discarded (it read this entry's layout measurements as analytics figures).
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+
+## 2026-10-21 (a hanging build grows down from a "+")
+
+- **Joey, asked:** "oh yeah do this", to "+" spots under a hanging build that grow the grid when taken. On 2026-10-20 a
+  2W·2H under a full 4H wall build (Joey's screenshot) got no spot until H+ was pressed, while past either side the
+  grid grew by itself.
+- **Now** on a wall or under-table build the armed size's "+" spots also reach below the bottom row. Taking one adds
+  the rows the unit needs, in the same undo step, and moves nothing else: y counts from the top, so the rows go on at
+  the bottom. build.js `tallFor` gives the grid height a footprint needs, or null past the mount's height cap (`capH`,
+  from the measured wall or table height when there is one, else 12H); `growTo` takes that height, and addSpots,
+  refusedSpots, placeAt and Duplicate use it. A placement past the cap says "The build is already as tall as this mount
+  allows (3H)", with the mount's own cap in the brackets. On those builds the 2D board draws room under the grid for
+  the spots below (`botR`), and its hint adds "below it adds height". The 3D view needed no change: spotWorld places a
+  spot linearly in y.
+- **Unchanged on purpose:** a tabletop build (syncTabletopGrid already keeps the armed height free above it); dragging
+  or moving a unit below the grid (the board's drag and the 3D move spots stay inside it); H+ and H−.
+- **Checks.** A new e2e case on a 3W × 2H wall build, its wall measured 180 mm tall (a 3H cap): the spots under the
+  bottom 2W in both views, the same list on the board, inside its drawing; taking one gives 3H with nothing else moved;
+  at 3H nothing below, in either view; one Undo gives 2H; a 2W·1H refused one column right, under the grid; a 1W·2H offered only where it fits
+  3H; placeAt past the cap says so and places nothing; Duplicate on a 2W-wide wall puts the copy under the unit and
+  grows to 2H. Eight mutants each fail it: no spots below, growTo ignoring the height, no cap, no cap message,
+  Duplicate not growing, refused cells not growing, no room on the board, the old hint. npm test 591 pass, 0 fail; all
+  75 e2e cases pass.
+- **Review:** Sol `01a1603f`: no findings. Luna `01a16050` on this entry: four wording fixes taken (the screenshot's
+  build, the cap's number in the message, which builds the board change is for, a 180 mm wall as a 3H cap).
+- **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `d1682ec3`: `grow-down-prod.mjs` (the e2e case's build on the live site, analytics blocked)
+  passes every check. On `39e6a12f`, before the change, it failed the spots below, the growth, the cap and the Undo.
+
+## 2026-10-21 (the refused-cell case reads its marker once the stage is at rest)
+
+- **The failure.** The e2e case "Build: a refused cell says why" timed out at its click wait (line 1283 then) in full
+  runs against the parts host on this machine: 73 of 74 in three runs, on `b0bb34d` with the hold fix and on `55a02fb`
+  with and without it (the mount-race entry above). Run alone it mostly passed. The app is not changed; the case was
+  wrong.
+- **The cause, traced.** `trace.mjs` (in `D:/Claude - Output/refused-cell-flake-2026-10-21/`) replays the case's steps.
+  Every frame it logs the camera and the refused cell's screen point, along with every `setSpots`, the chip's `hidden`
+  and the canvas's pointer events.
+  - The case read the cell's point once, then hovered, left and clicked there.
+  - The Build workspace's boot ends in `stage.goTo(steps)`. Its `tweenCamera` flies the camera in from the cover's pose
+    for 900 ms (camera z about 1910 to about 640), and `waitBoot` returns as the flight starts.
+  - In the seven failing replay runs the case read the point 159-216 ms after the boot wait returned. By the
+    pointerdown, 31-52 ms later, the marker had moved 31-44 px (one run: read at 479,331, the marker at 514,337). The
+    click landed on no spot, and no chip opened.
+- **Why only some runs: the parts host's speed.**
+  - With the host slow, the last of the 3W's GLBs arrived 273-417 ms after the boot wait and 7 of 10 replay runs
+    failed: the boot's flight was in its fast middle when the case read and clicked.
+  - Later the host was quick: the last GLB arrived at 27-109 ms (55 ms or less in 29 of 30 runs). The 3W's mount then
+    landed 46-139 ms after the boot wait, and its `goTo` restarted the flight, so the read and the click fell in the
+    new tween's slow start. All 20 replay runs with the old read passed, 10 on `b11f493` and 10 on `02a30a4`.
+  - The deploy runs of `55a02fb` and `d1682ec` passed the case. That the slower runner reaches the read after the
+    flight is inferred; its timing was not traced.
+- **Not a commit.** The case's text is the same at every commit tested. Alone, 8 runs each: `b11f493` 8 passed,
+  `1272bce` 7, `b0bb34d` 8, `55a02fb` 8, `02a30a4` 7. Both failures timed out on a 15 s chip wait; the bisect did not
+  record which line. The two full-run passes on `b11f493` came from the timing, not the code.
+- **Now** (e2e/workspaces.mjs) the case reads the marker through `cellAtRest`, before the hover and again before the
+  click.
+  - It waits for the stage's mount (`regenBusy` false), then until the cell's rounded screen point is the same in two
+    reads 300 ms apart, and reads it then.
+  - A camera tween eases in and out (cubic) over 900 ms, so in any 300 ms the camera covers at least 14.8% of its
+    path. Two equal rounded reads mean the point moved under 1 px per axis in that window. If the point moves in
+    proportion to the camera (it is a perspective projection, so only roughly), the whole flight left is under 7 px per
+    axis, and about 1 px in the 31-52 ms the replay measured from a read to the click.
+  - The case also holds every part GLB it asks for by 600 ms (`page.route`, then `route.fallback()`, never unrouted),
+    so a slow host is part of every run.
+  - The click wait now fails with a message.
+- **Checks.**
+  - With the hold and the old read, on main `02a30a4`, the case alone failed 7 of 8. It failed one assertion later, at
+    "a clicked reason stays up when the mouse leaves": the 3W's mount landed just after the click, and a rebuild
+    closes a reason chip by design (build.js `renderOverlays`).
+  - With the fix the case alone passed 8 of 8.
+  - The replay with the old read failed 9 of 12 with a 300 or 600 ms hold. With the fixed read and a 600 ms hold it
+    passed 6 of 6.
+  - npm test: 591 pass, 0 fail, 5 skipped. Full e2e against the parts host: 75 of 75, twice. With
+    `GEN2_PARTS_LOCAL=1`: 75 of 75, and no "Route is already handled" line in its output. The case took 3.8-4.1 s in
+    those runs.
+- **Seen, not fixed: a tap during a guided camera move takes the camera from the guide.**
+  - The controls' `end` handler (main.js, `moved > 4` then `setCamOverride(true)`) measures how far the camera moved
+    between press and release, and the tween's own motion counts.
+  - In the three failing replay runs that logged it, the case's click inside the flight set `camFree` true. The camera
+    did not move again when the 3W mounted.
+  - Proposed as its own change.
+- **Review:** Terra `01a1608a` on the case: one finding, discarded wrong. It said a sub-pixel tween could pass the poll
+  and the click then miss; the easing bound above rules that out. Terra `01a1609a` on this entry: three fixes taken (the
+  runner's timing marked as inferred, the bound restated for rounding and the projection, the log line named exactly).
+  Two discarded: the 29 of 30 count holds (one run took 109 ms), and the deploy line is Joey's standing rule, not a
+  blocker.
+- **Deploy:** a test-only fix for a failure the suite reported; it deploys once its checks pass.

@@ -35,7 +35,10 @@ export function carryLabelData(list, assign) {
 export const ID_MAX = 1e9;
 export const BUILD_FIELDS = ["mount", "length", "printer", "customBed", "spaceW", "spaceH",
   "faceStyle", "doorStyle", "handleStyle", "wallStagger", "backCover", "feet", "buildPlate", "removedStoppers", "gridW", "gridH", "placed", "nextId",
-  "labelStyle", "buildId", "labelList", "labelAssign"];
+  "labelStyle", "buildId", "labelList", "labelAssign",
+  // the planner's own field (2026-10-20), not the old planner's: side covers on (the 2026-10-17 default, every build) or
+  // off; absent in every older record and share link, which read as on
+  "sideCovers"];
 export const BUILD_SCHEMA = 1;
 export const buildTooNew = (d) => !!d && typeof d === "object" && d.schema !== undefined && d.schema !== null
   && !(Number.isInteger(d.schema) && d.schema >= 1 && d.schema <= BUILD_SCHEMA);
@@ -100,6 +103,7 @@ export function sanitizeBuild(d, GEN2) {
   d.handleStyle = idIn(GEN2.handleStyles, d.handleStyle, GEN2.handleStyles[0].id);
   d.wallStagger = !!d.wallStagger;
   d.backCover = !!d.backCover;
+  d.sideCovers = d.sideCovers !== false;   // only an explicit false switches them off; anything else is the default, on
   d.feet = d.feet === "adhesive" ? "adhesive" : "tpu";
   /* ⚠ "powder" for a build with no stored plate, the same default a new build gets - including every
      share link, saved file and session from before the field existed. Joey's call, 2026-09-14:

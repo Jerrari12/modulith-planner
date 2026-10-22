@@ -45,7 +45,7 @@ html[data-ws] #measure-toggle, html[data-ws] #color-toggle, html[data-ws] #point
 html[data-ws] #incomplete-status { display: none !important; }
 html[data-ws] body { font-family: var(--font-ui); color: var(--ink); }
 /* the viewer's W/H/L callouts are clamped to the old layout's edges; they return with the Measure tool until the stage's safe area exists */
-html[data-ws]:not(.ws-measure) .dim-label { display: none !important; }
+html[data-ws]:not(.ws-measure):not(.ws-drawer-dims) .dim-label { display: none !important; }   /* the ruler's, or a peeked drawer's inside sizes (main.js syncPeekClass) */
 html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !important; }
 
 /* ---- primitives ---- */
@@ -259,8 +259,15 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .rows { display: flex; flex-direction: column; gap: 4px; }
 #ws-parts .prow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-height: 44px; padding: 6px 8px; border-radius: 10px; }
 #ws-parts .prow.done { opacity: .55; }
-#ws-parts .chip { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.35); }
-#ws-parts .chip.buy { background: transparent; border: 1.5px dashed var(--ink-3); }
+/* the chip, in the list and in the inspector's "This unit · parts" rows (the same element, parts.js chipEl) */
+#ws-parts .chip, #ws-insp .uprow .chip { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.35); }
+#ws-parts .chip.buy, #ws-insp .uprow .chip.buy { background: transparent; border: 1.5px dashed var(--ink-3); }
+/* with the visitor's colours on, the chip is the filament the part prints in (several side by side when its zones or its
+   units wear more than one) and the ring is its identification colour, the one the Assemble instructions use */
+#ws-parts .chip.fil, #ws-insp .uprow .chip.fil { outline: 2px solid var(--id); outline-offset: 1px; }
+#ws-parts .chip.multi, #ws-insp .uprow .chip.multi { display: inline-flex; gap: 1px; width: auto; padding: 0; background: transparent; border: none; }
+#ws-parts .chip.multi i, #ws-insp .uprow .chip.multi i { display: block; width: 8px; height: 14px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
+#ws-parts .printin a, #ws-insp .uprow .printin a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
 #ws-parts .qty { font-size: 12px; font-weight: 600; width: 34px; flex: none; }
 #ws-parts .mid { flex: 1; min-width: 0; }
 #ws-parts .name { font-size: 13px; font-weight: 600; }
@@ -269,6 +276,9 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .prow .badge.club { background: transparent; color: var(--club); border: 1px solid var(--club); }
 #ws-parts .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }
 #ws-parts .link.dim { color: var(--ink-3); font-weight: 500; }
+/* a paid link's mark, on its own line under the store name: the link keeps its width and the part's name its room */
+#ws-parts .link .paid { display: block; font-size: 10px; font-weight: 500; color: var(--ink-2); text-align: right; }
+#ws-parts .link .paid .sep { display: none; }
 #ws-parts .progress { display: flex; align-items: center; gap: 8px; flex-basis: 100%; padding-left: 58px; }   /* its own line under the name */
 #ws-parts .counter { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--track); }
 #ws-parts .counter button { width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: var(--key-bg); color: var(--ink); cursor: pointer; font-size: 13px; line-height: 1; }
@@ -278,8 +288,13 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .left { font-size: 11px; color: var(--ink-2); min-width: 44px; text-align: right; }
 #ws-parts .foot { margin: 14px 0 0; font-size: 11px; color: var(--ink-3); }
 #ws-insp .uparts { display: flex; flex-direction: column; gap: 4px; }
-#ws-insp .uprow { display: flex; justify-content: space-between; align-items: center; height: 34px; padding: 0 10px; border-radius: 9px; font-size: 12px; }
-#ws-insp .uprow .mono { font-weight: 600; }
+/* a row: the chip (8 px off the words, the planner's control gap), the part with its "Print in" line under it, the count;
+   34 px with no line (as before the chips), taller with one */
+#ws-insp .uprow { display: flex; align-items: center; gap: 8px; min-height: 34px; box-sizing: border-box; padding: 5px 10px; border-radius: 9px; font-size: 12px; }
+#ws-insp .uprow .mid { flex: 1; min-width: 0; }
+#ws-insp .uprow .name { overflow-wrap: anywhere; }
+#ws-insp .uprow .printin { margin-top: 1px; font-size: 11px; color: var(--ink-2); }
+#ws-insp .uprow .mono { font-weight: 600; flex: none; }
 #ws-dock .pbar { display: flex; flex-direction: column; gap: 5px; width: 170px; }
 #ws-dock .pbar .track { display: block; height: 6px; border-radius: 3px; background: var(--seg-track); overflow: hidden; padding: 0; }
 #ws-dock .pbar .fill { display: block; height: 6px; background: var(--orange); }
@@ -321,8 +336,12 @@ html[data-ws="parts"] #ws-tools { left: 480px; right: 364px; }
 #ws-board .b-spot .b-spot-plus { stroke: #fff; stroke-width: 3; stroke-linecap: round; fill: none; }
 #ws-board .b-spot { pointer-events: none; }
 #ws-board .b-spot.on circle { stroke-width: 3; filter: drop-shadow(0 0 6px rgba(245,184,61,.8)); }
+#ws-board .b-spot.no circle { fill: var(--ink-3); stroke: rgba(255,255,255,.7); }   /* a refused cell: muted, a bar for a plus (2026-10-20) */
+#ws-board .b-spot.no.on circle { filter: drop-shadow(0 0 6px rgba(160,164,172,.8)); }
+#ws-choice.no { white-space: normal; flex-wrap: wrap; justify-content: center; text-align: center; max-width: min(520px, calc(100vw - 40px)); }   /* a reason is a sentence or two: it wraps, and its buttons with it (Sol 01a15b70) */
 #ws .armed { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 10px; font-size: 12px; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-border); }
 #ws-tools .erase.on { color: var(--danger); }
+#ws-tools .cam.on { color: var(--orange); }   /* the visitor has the camera (Assemble): press to return to the guided view */
 #ws-tools .icon-btn[disabled] { opacity: .4; cursor: not-allowed; }
 #ws-insp .stepper { display: inline-flex; align-items: center; gap: 6px; }
 #ws-insp .stepper .key { width: 30px; height: 30px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; }
@@ -422,6 +441,20 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-picker .sw { aspect-ratio: 1; border-radius: 7px; border: 1px solid rgba(128,128,128,.35); cursor: pointer; padding: 0; position: relative; }
 #ws-picker .sw.active { outline: 2px solid var(--orange); outline-offset: 2px; }
 #ws-picker .sw.pick::after { content: '★'; position: absolute; right: 1px; bottom: -1px; font-size: 9px; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.8); }
+/* SILK (Joey, 2026-10-21: "a sheen on half of it"): a highlight over the upper-left half of a silk filament's swatch, cut
+   at the diagonal like a reflection, and a faint shade on the lower right, so a white or silver silk reads glossy too.
+   Any .sw (the picker, the owned list, the chips in every Colors row); ::after stays free for the pick star and the tick. */
+/* MATERIAL TAGS (Joey, 2026-10-21: "colored tags in the menu to help differentiate the material types"): beside a line's
+   name in the picker and in Filaments I own. White on a colour dark enough to read at this size in either theme. */
+.mats { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: 1px; }
+.mat { font-size: 9.5px; font-weight: 800; line-height: 1; letter-spacing: .06em; text-transform: uppercase; padding: 3px 6px; border-radius: 999px; color: #fff; }
+.mat.pla { background: #2a64c4; }
+.mat.petg { background: #ad5a0c; }
+.mat.tpu { background: #1b7a50; }
+#ws-picker .note.feet { margin: 0; font-size: 12px; color: var(--ink-2); }
+.sw.silk { position: relative; }
+.sw.silk::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .6) 0%, rgba(255, 255, 255, .2) 44%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, .16) 100%); }
 #ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
 #ws-picker .foot .buy { font-size: 13px; font-weight: 700; color: var(--ink); text-decoration: none; }
 #ws-picker .foot .disc, #ws-shop .disc { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
@@ -452,6 +485,181 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 @media (max-width: 1279px) { #ws-colors, #ws-picker { top: 134px; } }
 
+/* ---- Colors, step 3 (2026-10-18): the current-look card, the Browse looks gallery, a look's details ---- */
+#ws-colors .look { gap: 8px; }
+#ws .lookcard { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 12px; }
+#ws .lookcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws .lookcard canvas.render.drawn { opacity: 1; }
+#ws .lookcard .lmeta { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#ws .lookcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; }
+#ws .lookcard .lname { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws .lookcard .strip { display: inline-flex; gap: 2px; }
+#ws-colors .look .row4 .key { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-colors .look .row4 .more { width: 32px; padding: 0; justify-content: center; font-size: 15px; letter-spacing: .02em; }
+#ws-colors .look .key.sm.strong { background: var(--key-on-bg); border-color: var(--orange); }
+#ws-gallery { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 540px; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 7; }
+#ws-gallery[hidden] { display: none; }
+#ws-gallery .head { display: flex; align-items: center; gap: 10px; }
+#ws-gallery h2 { margin: 0; flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-gallery .head .sub { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+#ws-gallery .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-gallery .gfilter { display: flex; gap: var(--gap-ctl); align-items: center; }
+#ws-gallery .search { flex: 1; min-width: 0; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-gallery .seg4 { grid-template-columns: repeat(4, minmax(0, 1fr)); flex: none; width: 196px; }
+#ws-gallery .seg4 .seg { font-size: 12px; padding: 0 2px; }
+#ws-gallery .lgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); align-content: start; }
+#ws-gallery .lcard { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; text-align: left; font: inherit; }
+#ws-gallery .lcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws-gallery .lcard canvas.render.drawn { opacity: 1; }
+#ws-gallery .lcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px; }
+#ws-gallery .lcard .lname { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-gallery .lcard .lcount { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+#ws-gallery .badge.active, #ws .lookcard .badge.active { font-size: 9px; letter-spacing: .06em; background: var(--orange); color: var(--on-orange); }
+#ws-gallery .lgrid .note { grid-column: 1 / -1; }
+#ws-gallery .back { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+#ws-gallery .lookcard.big { padding: 10px; }
+#ws-gallery .dacts { display: flex; gap: var(--gap-ctl); }
+#ws-gallery .dacts .key { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-gallery .dacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); }
+#ws-gallery .frows { display: flex; flex-direction: column; gap: var(--gap-row); }
+#ws-gallery .frow { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; border-radius: 10px; }
+#ws-gallery .frow .col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#ws-gallery .frow b { font-size: 13px; }
+#ws-gallery .frow .meta, #ws-gallery .disc { font-size: 11px; color: var(--ink-2); }
+#ws-gallery .disc { color: var(--ink-3); line-height: 1.4; }
+#ws-gallery .frow .sw { display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(128,128,128,.35); }
+#ws-gallery .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; }
+#ws-gallery .h2 { margin: 4px 0 0; }
+#ws-gallery .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+/* the primary actions (Browse looks, Apply this look) take the pressed key's colours: an orange-tinted key reads dark in
+   the dark theme otherwise (the first screenshot, 2026-10-18) */
+#ws-colors .look .key.sm.strong, #ws-gallery .dacts .key.strong { color: var(--ink); }
+[data-mode="dark"] #ws-colors .look .key.sm.strong, [data-mode="dark"] #ws-gallery .dacts .key.strong { color: #FFFFFF; }
+/* the card's actions: Browse looks and Save take the row's width, Surprise me and "more" sit beside them */
+#ws-colors .look .row4 { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+#ws-colors .look .row4.morerow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#ws-colors .look .row4.morerow .key { justify-content: center; padding: 0 6px; }
+/* the view tools step right of the open gallery (540 wide from 20) instead of running under it */
+html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
+@media (max-width: 1279px) { #ws-gallery { top: 134px; } }
+
+/* ---- Colors, step 4 (2026-10-18): the compare tray, and the gallery's "+" into it ---- */
+#ws-tray { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 560px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#ws-tray[hidden] { display: none; }
+#ws-tray .ihead { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+#ws-tray .ihead .sub { flex: 1; min-width: 0; font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-tray .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-tray .trow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); }
+#ws-tray .tcard { position: relative; border-radius: 12px; border: 1px solid var(--key-border); background: var(--key-bg); box-shadow: var(--key-shadow); }
+#ws-tray .tcard.on { border-color: var(--orange); box-shadow: var(--key-on-shadow); background: var(--key-on-bg); }
+#ws-tray .tcard .pick { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 6px; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 12px; }
+#ws-tray .tcard canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws-tray .tcard canvas.render.drawn { opacity: 1; }
+#ws-tray .tcard .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px; }
+#ws-tray .tcard .lname { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-tray .tcard .x { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; padding: 0; border: none; border-radius: 7px; background: var(--glass-bg); color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-tray .badge.active, #ws-tray .badge.shown { font-size: 9px; letter-spacing: .06em; }
+#ws-tray .badge.active { background: var(--orange); color: var(--on-orange); }
+#ws-tray .tacts { display: flex; flex-wrap: wrap; gap: var(--gap-ctl); align-items: center; }
+#ws-tray .tacts .key { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-tray .tacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
+[data-mode="dark"] #ws-tray .tacts .key.strong { color: #FFFFFF; }
+#ws-tray .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+/* ---- the confidence summary on the current-look card, and Simplify (the Colors plan's step 6, 2026-10-18) ---- */
+#ws-colors .summary { display: flex; flex-direction: column; gap: 4px; padding: 0 2px; }
+#ws-colors .summary .sline { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-2); }
+#ws-colors .summary .sline b { color: var(--ink); font-weight: 700; }
+#ws-colors .summary .sgl { color: var(--ink-3); }
+#ws-colors .summary .sgf { color: var(--ink); font-weight: 600; }
+#ws-colors .summary .sacts { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+#ws-colors .summary .link { padding: 0; border: none; background: transparent; color: var(--orange); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#ws-simplify { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 480px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
+#ws-simplify[hidden] { display: none; }
+#ws-simplify .ihead { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+#ws-simplify .ihead .sub { flex: 1; min-width: 0; font-size: 11px; color: var(--ink-2); }
+#ws-simplify .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-simplify .srow { display: flex; align-items: center; gap: var(--gap-ctl); }
+#ws-simplify .lbl { flex: none; width: 64px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+#ws-simplify .srow .track { flex: 1; }
+#ws-simplify .changes { display: flex; flex-direction: column; gap: 6px; }
+#ws-simplify .chg { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border-radius: 10px; background: var(--key-bg); border: 1px solid var(--key-border); font-size: 12px; }
+#ws-simplify .chg .sw { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .25); flex: none; }
+#ws-simplify .chg .arrow { color: var(--ink-3); }
+#ws-simplify .chg .what { flex: 1; min-width: 0; }
+#ws-simplify .note { margin: 0 2px; font-size: 12px; color: var(--ink-2); }
+#ws-simplify .tacts { display: flex; gap: var(--gap-ctl); align-items: center; }
+#ws-simplify .tacts .key { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+#ws-simplify .tacts .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
+[data-mode="dark"] #ws-simplify .tacts .key.strong { color: #FFFFFF; }
+#ws-gallery .lwrap { position: relative; }
+#ws-gallery .lwrap .lcard { width: 100%; }
+#ws-gallery .cmp { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; padding: 0; border-radius: 8px; border: 1px solid var(--key-border); background: var(--glass-bg); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-gallery .cmp.on { background: var(--orange); color: var(--on-orange); border-color: var(--orange); }
+#ws-gallery .head .cmp-open { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+#ws-gallery .dacts .key.cmp { gap: 5px; }
+
+/* ---- Surprise me (the Colors plan's step 5, 2026-10-18): the gallery's spot; the settings, the locks, three candidates
+   in a row (the tray's cards), the owned-filaments editor in its place ---- */
+#ws-surprise { position: absolute; top: 90px; left: 20px; bottom: 116px; width: 540px; box-sizing: border-box; padding: 14px 16px 16px; border-radius: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 7; }
+#ws-surprise[hidden] { display: none; }
+#ws-surprise .head { display: flex; align-items: center; gap: 10px; }
+#ws-surprise h2 { margin: 0; flex: 1; min-width: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-surprise .head .sub { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+#ws-surprise .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+#ws-surprise .back { display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+#ws-surprise .srow { display: flex; align-items: center; gap: var(--gap-ctl); }
+#ws-surprise .lbl { flex: none; width: 76px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+#ws-surprise .srow .track { flex: 1; }
+#ws-surprise .stylerow { align-items: flex-start; }
+#ws-surprise .stylerow .lbl { padding-top: 10px; }
+#ws-surprise .styles { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+#ws-surprise .stile { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 7px 4px 6px; border-radius: 10px; border: 1px solid var(--key-border); background: var(--key-bg); box-shadow: var(--key-shadow); color: var(--ink); font: inherit; cursor: pointer; }
+#ws-surprise .stile.on { border-color: var(--orange); background: var(--key-on-bg); box-shadow: var(--key-on-shadow); }
+#ws-surprise .stile .sw3 { display: inline-flex; gap: 3px; }
+#ws-surprise .stile .sw3 i { width: 16px; height: 16px; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .25); }
+#ws-surprise .stile .sname { font-size: 11px; font-weight: 600; line-height: 1.15; text-align: center; }
+#ws-surprise .ownedrow .chk { flex: 1; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+#ws-surprise .ownedrow .chk input { width: 16px; height: 16px; margin: 0; accent-color: var(--orange); }
+#ws-surprise .ownedrow .cnt { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+#ws-surprise .ownedrow .edit { display: inline-flex; align-items: center; gap: 5px; }
+#ws-surprise .locks { display: flex; align-items: flex-start; gap: var(--gap-ctl); }
+#ws-surprise .locks .lbl { padding-top: 7px; }
+#ws-surprise .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-surprise .lchip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--key-border); background: var(--key-bg); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+#ws-surprise .lchip i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .25); }
+#ws-surprise .lchip svg { opacity: .45; }
+#ws-surprise .lchip.on { border-color: var(--orange); background: var(--key-on-bg); box-shadow: var(--key-on-shadow); }
+#ws-surprise .lchip.on svg { opacity: 1; color: var(--orange); }
+#ws-surprise .lchip:disabled { opacity: .5; cursor: default; }
+#ws-surprise .cands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); }
+#ws-surprise .cand { border-radius: 12px; border: 1px solid var(--key-border); background: var(--key-bg); box-shadow: var(--key-shadow); display: flex; flex-direction: column; }
+#ws-surprise .cand.on { border-color: var(--orange); box-shadow: var(--key-on-shadow); background: var(--key-on-bg); }
+#ws-surprise .cand .pick { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 6px; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 12px 12px 0 0; }
+#ws-surprise .cand canvas.render { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 8px; background: var(--track); opacity: 0; transition: opacity var(--d-pop) var(--ease-out); }
+#ws-surprise .cand canvas.render.drawn { opacity: 1; }
+#ws-surprise .cand .lrow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 2px; min-height: 18px; }
+#ws-surprise .cand .lname { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding: 0 2px; font-size: 12px; font-weight: 600; line-height: 1.25; min-height: 30px; }
+#ws-surprise .cand .lcount { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+#ws-surprise .badge.active, #ws-surprise .badge.shown { font-size: 9px; letter-spacing: .06em; }
+#ws-surprise .badge.active { background: var(--orange); color: var(--on-orange); }
+#ws-surprise .cacts { display: flex; flex-direction: column; gap: 6px; padding: 0 6px 6px; }
+#ws-surprise .cacts .key { height: 30px; padding: 0 8px; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; }
+#ws-surprise .key.strong { background: var(--key-on-bg); border-color: var(--orange); color: var(--ink); }
+[data-mode="dark"] #ws-surprise .key.strong { color: #FFFFFF; }
+#ws-surprise .sacts { display: flex; align-items: center; gap: var(--gap-ctl); }
+#ws-surprise .sacts .again { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+#ws-surprise .note { margin: 0; font-size: 12px; color: var(--ink-2); }
+#ws-surprise .search { height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+#ws-surprise .brands { display: flex; flex-direction: column; gap: 8px; }
+#ws-surprise .bhead { font-size: 12px; font-weight: 700; }
+#ws-surprise .bhead i { font-style: normal; font-weight: 500; color: var(--ink-3); }
+#ws-surprise .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-surprise .sw { position: relative; width: 26px; height: 26px; padding: 0; border-radius: 8px; border: 1px solid rgba(0, 0, 0, .25); cursor: pointer; }
+#ws-surprise .sw.own { outline: 2px solid var(--orange); outline-offset: 1px; }
+#ws-surprise .sw.own::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; font-weight: 800; color: #fff; mix-blend-mode: difference; }
+#ws-surprise .ofoot { display: flex; align-items: center; gap: var(--gap-ctl); }
+@media (max-width: 1279px) { #ws-surprise { top: 134px; } }
+
 /* ---- Colors, the per-unit layer ---- */
 #ws-picker .head .region { font-size: 13px; color: var(--orange); }
 #ws-picker .resets { display: flex; gap: 6px; }
@@ -471,6 +679,7 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels .count { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); text-align: right; }
 #ws-labels .head .tools { display: inline-flex; gap: var(--gap-row); align-self: center; }
 #ws-labels .ways { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-ctl); }
+#ws-labels .ways .tile.span2 { grid-column: 1 / -1; }   /* three tiles since 2026-10-20: the Part Picker takes the second row whole */
 #ws-labels .key.tile { display: flex; align-items: center; justify-content: flex-start; gap: 8px; height: 38px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; }
 #ws-labels .key.tile svg { flex: none; color: var(--ink-2); }
 #ws-labels .key.tile.brand svg:first-child { width: 16px; height: 16px; color: var(--orange); }
@@ -501,6 +710,7 @@ html[data-ws="colors"] #ws-tools { left: 344px; right: 364px; }
 #ws-labels .banner.copy .btns { display: flex; gap: 6px; flex-wrap: wrap; }
 #ws-labels .callout { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-fg); font-size: 12px; }
 #ws-labels .callout p { margin: 0; }
+#ws-labels .callout .btns { display: flex; flex-wrap: wrap; gap: 8px; }   /* the two label families side by side, the planner's control gap */
 #ws-labels .callout .dim, #ws-labels .why, #ws-labels .dim, #ws-labeledit .dim { font-size: 11px; color: var(--ink-3); }
 #ws-labels .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
 #ws-labels .scroll { flex: 1; min-height: 60px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin: 0 -6px; padding: 0 6px; }
@@ -583,6 +793,10 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 /* the previews: the real outline (EdgeLabel's slanted edge; Classic Pro's bar), the icon art as a mask, the words */
 .lprev { flex: none; width: 84px; aspect-ratio: 55.6 / 27; position: relative; display: flex; align-items: center; gap: 3px; padding: 3px 4px; box-sizing: border-box; background: #f4f1ec; color: #1b1b1b; clip-path: polygon(0 0, 100% 0, 53.3% 100%, 0 100%); overflow: hidden; }
 .lprev.cp { aspect-ratio: 47 / 18; clip-path: none; border-radius: 3px; }
+/* the drawn preview (js/label-preview.js, 2026-10-17): the 3D label's own face, stripe and ink as an image, in the face's
+   proportions (55.587 x 26.001 mm); the CSS outline and words above stand in only until its data has loaded */
+.lprev.img { display: block; padding: 0; background: none; clip-path: none; aspect-ratio: 55.587 / 26.001; }
+.lprev.img img { display: block; width: 100%; height: 100%; }
 .lprev.big { width: 120px; }
 .lprev .lico { flex: 0 0 auto; width: 34%; height: 78%; background: currentColor; -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
 .lprev .lch { flex: 0 0 auto; width: 30%; font-weight: 800; font-size: 13px; text-align: center; line-height: 1; }
@@ -614,9 +828,11 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 #ws-labeledit .igroup.open .ghead svg { transform: rotate(90deg); }
 #ws-labeledit .cells { display: none; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; padding: 2px 0 6px; }
 #ws-labeledit .igroup.open .cells { display: grid; }
-#ws-labeledit .cell { aspect-ratio: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--hair); background: var(--input-bg); color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* an icon tile shows the icon as it prints: its art carries its own black fill, so the tile is the label's light body, in
+   both themes (Joey 2026-10-17: black on dark grey had "terrible contrast") */
+#ws-labeledit .cell { aspect-ratio: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--hair); background: #f4f1ec; color: #1b1b1b; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 #ws-labeledit .cell svg { width: 100%; height: 100%; }
-#ws-labeledit .cell:hover { background: var(--track); }
+#ws-labeledit .cell:hover { background: #e6e1d8; }
 #ws-labeledit .cell.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); }
 #ws-labeledit .row { display: flex; gap: 6px; }
 /* the dialog: Replace, Fill, Use custom wording, Add a label */
@@ -634,7 +850,9 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 
 /* ---- the setup sheet: mount, length, printer, the name (js/ui/setup.js) ---- */
 #ws-setup { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(0, 0, 0, .4); font-family: var(--font-ui); color: var(--ink); font-size: 13px; }
-#ws-setup .sheet { width: 680px; max-width: 100%; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 18px 20px 16px; border-radius: 20px; display: flex; flex-direction: column; gap: 12px; }
+/* .setup-box, not .sheet: the phone's bottom-sheet rule (#ws .sheet) made a `.sheet` here a collapsed 44 px peek behind the
+   backdrop (the phone check, 2026-10-17: New build on a phone was a dead end) */
+#ws-setup .setup-box { width: 680px; max-width: 100%; max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 18px 20px 16px; border-radius: 20px; display: flex; flex-direction: column; gap: 12px; }
 #ws-setup .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 #ws-setup h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 22px; font-stretch: 108%; }
 #ws-setup .sub { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
@@ -681,7 +899,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 #ws-setup .cta { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 18px; border-radius: 12px; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); font-family: var(--font-display); font-weight: 800; font-size: 15px; font-stretch: 110%; cursor: pointer; box-shadow: var(--cta-shadow); }
 @media (max-width: 1023px) {
   #ws-setup { padding: 0; align-items: flex-end; }
-  #ws-setup .sheet { width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  #ws-setup .setup-box { width: 100%; max-height: 92vh; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
   #ws-setup .cards.mounts { grid-template-columns: 1fr; }
   #ws-setup .cards.mounts .card { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
   #ws-setup .cards.lengths { grid-template-columns: 1fr 1fr; }
@@ -693,8 +911,10 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   /* the bar (Joey's phone, 2026-10-13: at 390-412 px the switcher was a sliver under the wordmark): the wordmark,
      the build name with its caret, mount·length as icon + number, and ONE theme button (the other mode's icon);
      Share lives in the switcher menu, the printer chip waits for the setup sheet, the tabs are the bottom bar */
-  #ws-top { top: 10px; left: 10px; right: 10px; gap: 6px; }
-  #ws-top #ws-tabs, #ws-top .preview, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
+  /* above an open sheet (13): the switcher's menu lives in this layer, and an open sheet covered its items (the phone
+     check, 2026-10-17); an open sheet never reaches up to the bar itself (openHeight leaves 110 px) */
+  #ws-top { top: 10px; left: 10px; right: 10px; gap: var(--gap-ctl); z-index: 14; }
+  #ws-top #ws-tabs, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
   #ws-top #ws-switch { flex: 1; min-width: 0; margin-left: 0; }
   #ws-top #ws-switch > .chip-btn { width: 100%; padding: 0 10px; gap: 6px; }
   #ws-top #ws-switch > .chip-btn > :first-child { display: none; }
@@ -711,10 +931,11 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   /* the tools row: every workspace's desktop offset (left: 320/344/480/860 px) loses to the phone's full row */
   #ws-tools, html[data-ws] #ws-tools, html.ws-parts-wide[data-ws="parts"] #ws-tools { top: 64px; left: 10px; right: 10px; gap: 6px; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   #ws-tools .quality { display: none; }
-  /* the dock: status and the CTA always fit; the units·mm group yields to a progress bar or a filament stack */
+  /* the dock: status and the CTA always fit; the units·mm group yields to a progress bar or a filament stack, and the
+     units count to a gap build's sections count (the phone check, 2026-10-17: with "2 sections" the CTA stuck out) */
   #ws-dock { left: 10px; right: 10px; bottom: 70px; transform: none; padding: 6px 6px 6px 8px; gap: 8px; justify-content: space-between; border-radius: 14px; z-index: 11; min-width: 0; }
   #ws-dock .group { gap: 4px; }
-  #ws-dock .group:nth-of-type(2), #ws-dock:has(.pbar) .group, #ws-dock:has(.status.stack) .group { display: none; }
+  #ws-dock .group:nth-of-type(2), #ws-dock:has(.pbar) .group, #ws-dock:has(.status.stack) .group, #ws-dock:has(.group.sections) .group:not(.sections) { display: none; }
   #ws-dock .big { font-size: 16px; }
   #ws-dock .unit-lbl { font-size: 11px; }
   #ws-dock .status { height: 36px; padding: 0 10px; font-size: 12px; flex: none; }
@@ -738,7 +959,13 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws .sheet .collapse, #ws .sheet.rail .expand, #ws .sheet .railbtn { display: none; }
   #ws-lib.sheet.rail { width: auto; padding: 0 14px 14px; align-items: stretch; }
   #ws-board { top: 110px; left: 10px; right: 10px; bottom: 176px; }
-  #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: 132px; max-height: 44vh; }
+  /* the floating cards sit on the collapsed handles (the sheet manager publishes their top edge as --sheet-stack) and
+     over them; an open sheet (13) still covers them. At a fixed 132 px with z-index 6 they were under the handles: Place /
+     Cancel, the issue card's text and its buttons (the phone check, 2026-10-17) */
+  #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: calc(var(--sheet-stack, 126px) + 6px); max-height: 44vh; z-index: 12; }
+  /* the toast likewise, over everything (it takes no pointer events), at a readable width: left 50% held it to half the
+     screen, and at the desktop's 100 px it sat behind the dock and the handles */
+  #ws #ws-toast { bottom: calc(var(--sheet-stack, 126px) + 10px); z-index: 14; width: max-content; max-width: calc(100vw - 40px); box-sizing: border-box; text-align: center; }   /* #ws: the toast's own rule comes later in this file */
   #ws-menu { width: 180px; }
   /* Parts: the head wraps (the four download sites on a row of their own, Track under them); Expand is a desktop
      control */
@@ -754,7 +981,21 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-parts .body { padding: 0 0 8px; }
   #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
-  #ws-colors .scheme .shop { display: none; }
+  /* Colors: the panel's card keeps its actions in the sheet's first screen (the render beside the name, not above it);
+     the gallery is a sheet like the panel, two cards a row at phone width */
+  #ws-colors .lookcard { flex-direction: row; align-items: center; gap: 12px; }
+  #ws-colors .lookcard canvas.render { width: 128px; flex: none; }
+  #ws-colors .lookcard .lmeta { flex: 1; }
+  #ws-colors .lookcard .lrow { flex-direction: column; align-items: flex-start; gap: 4px; }
+  #ws-gallery .lgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #ws-gallery .gfilter { flex-wrap: wrap; }
+  #ws-gallery .seg4 { width: 100%; }
+  #ws-gallery .head .sub { display: none; }
+  #ws-surprise .head .sub { display: none; }
+  #ws-surprise .lbl { width: 64px; }
+  #ws-surprise .cacts .key { padding: 0 4px; font-size: 11px; }
+  #ws-surprise .styles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #ws-surprise .stile .sname { font-size: 10px; }
   /* Labels: the panel and the editor are sheets; the list scrolls with the sheet, not inside it */
   #ws-labels .scroll { flex: none; overflow: visible; min-height: 0; margin: 0; padding: 0; }
   #ws-labels .key.tile { height: 42px; }
@@ -788,8 +1029,9 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-switch > .chip-btn > span { max-width: clamp(120px, calc(100vw - 1260px), 240px); }
 }
 /* narrow desktop (1024-1279): the workspace tabs keep their names on a row of their own under the bar, and the
-   panels start below it; the chips go icon-only */
-@media (max-width: 1279px) {
+   panels start below it; the chips go icon-only. From 1024 up only: this block comes after the phone's, so without the
+   floor its rules won ties there (the phone check, 2026-10-17: its 14 px Dock gap pushed Get parts list out of the Dock) */
+@media (min-width: 1024px) and (max-width: 1279px) {
   #ws-tools .quality span { display: none; }
   #ws-top .printer span, #ws-top .share span { display: none; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
@@ -802,3 +1044,13 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-dock { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }
+
+/* THE SETUP SHEET ON A PHONE (Joey, 2026-10-18, tapping the mount chip on his phone: "it just opens a broken menu and
+   expands my keyboard"). Its box carries the class `sheet` and sits inside #ws, so at phone width the bottom-sheet rules
+   above took it: positioned at the Dock, slid down to its 44 px peek and clipped - "Build setup" and one line showing
+   behind the Dock. It is a modal, not a bottom sheet: here it takes the modal's own layout back, full width under the
+   top bar, scrolling inside. (Same specificity as `#ws .sheet`, so this must stay below the phone block.) */
+@media (max-width: 1023px) {
+  #ws-setup { align-items: flex-start; padding: 64px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  #ws-setup .sheet, #ws-setup .sheet.open { position: relative; left: auto; right: auto; top: auto; bottom: auto; width: 100%; max-height: 100%; padding: 16px 16px 14px; border-radius: 18px; transform: none; clip-path: none; overflow-y: auto; z-index: auto; transition: none; }
+}

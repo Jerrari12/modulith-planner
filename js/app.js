@@ -16,6 +16,7 @@ import { openBuilds, entryOf, hashOf, fileOf, fileName, parseBuildFile, cleanNam
 import { isPhone, PHONE_MAX } from './ui/phone.js';
 import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
+import { standRecord } from './rules/stand.js';
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
@@ -90,11 +91,16 @@ export async function boot() {
     const cur = await builds.get(builds.currentId); const rec = cur ? cur.record : builds.readSlot();
     if (rec) { entry = cur; history.replaceState(null, '', location.pathname + location.search + hashOf(rec) + (location.hash ? '&' + location.hash.slice(1) : '')); }
   }
+  let stood = null;   // the boot slid a saved layout onto its surface (standRecord adds nothing): said once the workspace is up
   const stage = await createStage(document, {
+    repair: (rec) => standRecord(rec, G, { tabletop: globalThis.GEN2_TABLETOP }),
+    onRepaired: (r) => { stood = r; },
     onSelect: (sel) => current?.onSelect?.(sel),
     onPage: (i) => current?.onPage?.(i),
+    onCamFree: (on) => current?.onCamFree?.(on),
     onContext: (info) => current?.onContext?.(info),
     onHover: (unitId) => current?.onHover?.(unitId),
+    onQuality: (tier) => current?.onQuality?.(tier),
     quietSelect: true, fillBoost: 1.6,
     // the palette is per BUILD: the kit this page opened with keeps its own (the Studio's own key for official kits)
     colorStoreKey: colorKeyAtBoot(),
@@ -107,6 +113,14 @@ export async function boot() {
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
   const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user, over: p.over }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette and the per-unit layer ride along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); stage.setColorStoreKey(buildKey(store.state.buildId)); } catch { /* a very old browser */ } saveBuild(snap); } });
+  /* the plate is the one record field the generator never reads, so no workspace's regenerate puts it back: an Undo or a
+     Redo that moves it hands it to the stage here (the Colors plan's step 1, 2026-10-18; before, the stage kept the newer
+     plate while the store and the address went back) */
+  store.subscribe((state, why) => {
+    if (why !== 'undo' && why !== 'redo') return;
+    const want = state.buildPlate || 'powder';
+    if (stage.build && (stage.build.buildPlate || 'powder') !== want) stage.setBuildPlate(want, { quiet: true });
+  });
   /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
      silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
   let capPending = null;   // { drop: entry } while a new build is held back by the cap
@@ -223,6 +237,22 @@ export async function boot() {
   ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
   if (labelCopy && current.name !== 'labels') toast(`Opened without its ${labelCopy.n} ${labelCopy.n === 1 ? 'label · Labels can bring it back.' : 'labels · Labels can bring them back.'}`);
   if (SETUP) ctx.openSetup('mount', FRESH);   // New build: the sheet opens over the fresh kit
+  /* WHAT THE SETUP SHEET OR THE BOOT SAID BEFORE THIS PAGE (2026-10-20/21), said once: the empty slots a mount change left
+     (across the sheet's reload), or a saved layout the boot slid onto its surface (it adds nothing). A slid record goes into
+     the address (a reload opens it as it is now) and, when it came from this browser's own builds rather than a link, into
+     its Recent entry */
+  {
+    let note = null;
+    try { note = sessionStorage.getItem('gen2-setup-note'); if (note) sessionStorage.removeItem('gen2-setup-note'); } catch { /* no storage */ }
+    if (stood) {
+      const m = store.state.mount;
+      note = note || `As saved, this build didn’t reach its ${m === 'tabletop' ? 'table' : m === 'wall' ? 'brackets' : 'rails'} · it now does.`;
+      const snap = JSON.stringify(store.serialize());
+      if (!/(^#|&)labels-/.test(location.hash)) { try { history.replaceState(null, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); } catch { /* a very old browser */ } }
+      if (!LINKED) saveBuild(snap);
+    }
+    if (note) setTimeout(() => toast(note), 600);
+  }
   /* crossing the phone breakpoint re-mounts the workspace in the other chrome (its memo keeps the selection and step) */
   let wasPhone = isPhone(), resizeT = 0;
   addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { const now = isPhone(); document.documentElement.classList.toggle('ws-phone', now); if (now !== wasPhone) { wasPhone = now; ctx.remount(); } }, 150); });

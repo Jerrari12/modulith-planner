@@ -26,7 +26,8 @@
   "Label": "#eef0f4",
   "Bracket": "#8792a2",
   "Screw": "#d5dae1",
-  "Rail": "#2f7fd6"
+  "Rail": "#2f7fd6",
+  "SideCover": "#c2185b"
  },
  "parts": [
   {
@@ -179,6 +180,21 @@
     "selectedCount": 3
    },
    "required": true
+  },
+  {
+   "node": "SideCover_115-1H",
+   "label": "Side Cover 115-1H",
+   "type": "SideCover",
+   "qty": 4,
+   "links": {
+    "p": "https://www.printables.com/model/1872105-modulith-115-side-covers",
+    "t": "https://than.gs/m/1619981"
+   },
+   "img": "img/parts/SideCover_115-1H.png",
+   "requirement": {
+    "scope": "enhancement",
+    "obligationId": "unit.side_finish"
+   }
   },
   {
    "node": "115-2W-1H_Case",
@@ -439,6 +455,16 @@
    "stage": "c0"
   },
   {
+   "id": "sc0L",
+   "node": "SideCover_115-1H",
+   "pos": [
+    -87.975,
+    18.049999999999997,
+    4
+   ],
+   "owner": 1
+  },
+  {
    "id": "case1",
    "node": "115-1W-1H_Case",
    "pos": [
@@ -491,6 +517,17 @@
    "stage": "c1"
   },
   {
+   "id": "sc1R",
+   "node": "SideCover_115-1H",
+   "pos": [
+    87.975,
+    18.049999999999997,
+    4
+   ],
+   "yaw": 180,
+   "owner": 2
+  },
+  {
    "id": "case2",
    "node": "115-2W-1H_Case",
    "pos": [
@@ -541,6 +578,27 @@
    ],
    "owner": 3,
    "stage": "c2"
+  },
+  {
+   "id": "sc2L",
+   "node": "SideCover_115-1H",
+   "pos": [
+    -87.975,
+    74.05000000000001,
+    4
+   ],
+   "owner": 3
+  },
+  {
+   "id": "sc2R",
+   "node": "SideCover_115-1H",
+   "pos": [
+    87.975,
+    74.05000000000001,
+    4
+   ],
+   "yaw": 180,
+   "owner": 3
   },
   {
    "id": "st0L",
@@ -804,7 +862,7 @@
  "steps": [
   {
    "title": "The Nimble Stack Machine",
-   "note": "Your custom GEN2 build · 3 units, 3 drawers, 2 columns wide. Drag to orbit, tap any part to identify it. 39 prints · quantities on the right. and 6× 10×2 mm disc magnets for the optional magnet closures (hardware store items). ⚠ 115 hardware positions are scaled from the 185 calibration · double-check a printed build and report anything that sits off.",
+   "note": "Your custom GEN2 build · 3 units, 3 drawers, 2 columns wide. Drag to orbit, tap any part to identify it. 43 prints · quantities on the right. and 6× 10×2 mm disc magnets for the optional magnet closures (hardware store items). ⚠ 115 hardware positions are scaled from the 185 calibration · double-check a printed build and report anything that sits off.",
    "camera": {
     "t": 30,
     "p": 58,
@@ -970,7 +1028,7 @@
   },
   {
    "title": "Case 1 · 1W-1H",
-   "note": "QuickLocks go in the outer wall slots: L left, R right. Magnet closure: snap the clip into the back-wall slot (magnet pressed in back-to-front, clip lowered) · unreachable after assembly, so now is the time. Then slide the case on from the back until it clicks.",
+   "note": "QuickLocks go in the outer wall slots: L left, R right. Magnet closure: snap the clip into the back-wall slot (magnet pressed in back-to-front, clip lowered) · unreachable after assembly, so now is the time. Then slide the case on from the back until it clicks. Then the side cover (optional): hold it against the outer wall just above its seat, press it in so the clips enter the slots, then slide it down to lock.",
    "camera": {
     "t": 30,
     "p": 58,
@@ -1070,12 +1128,67 @@
     },
     {
      "settle": "c0"
+    },
+    {
+     "camera": {
+      "t": -55,
+      "p": 66,
+      "fitR": 44.41757112900254,
+      "target": [
+       -102.975,
+       45.849999999999994,
+       30.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc0L",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        -30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc0L",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 787.4,
+      "target": [
+       -44,
+       47.15,
+       0
+      ]
+     }
     }
    ]
   },
   {
    "title": "Case 2 · 1W-1H",
-   "note": "QuickLocks in (L left, R right), then slide the case on from the back until it clicks.",
+   "note": "QuickLocks in (L left, R right), then slide the case on from the back until it clicks. Then the side cover, the same way (optional).",
    "camera": {
     "t": 30,
     "p": 58,
@@ -1131,12 +1244,67 @@
     },
     {
      "settle": "c1"
+    },
+    {
+     "camera": {
+      "t": 55,
+      "p": 66,
+      "fitR": 44.41757112900254,
+      "target": [
+       102.975,
+       45.849999999999994,
+       30.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc1R",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc1R",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 787.4,
+      "target": [
+       44,
+       47.15,
+       0
+      ]
+     }
     }
    ]
   },
   {
    "title": "Case 3 · 2W-1H",
-   "note": "QuickLocks in, slide the case on from the back until it clicks. Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional).",
+   "note": "QuickLocks in, slide the case on from the back until it clicks. Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional). Then both side covers, the same way (optional).",
    "camera": {
     "t": 30,
     "p": 58,
@@ -1262,6 +1430,104 @@
        ]
       }
      ]
+    },
+    {
+     "camera": {
+      "t": -55,
+      "p": 66,
+      "fitR": 44.41757112900254,
+      "target": [
+       -102.975,
+       101.85000000000001,
+       30.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc2L",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        -30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc2L",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 55,
+      "p": 66,
+      "fitR": 44.41757112900254,
+      "target": [
+       102.975,
+       101.85000000000001,
+       30.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc2R",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc2R",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 787.4,
+      "target": [
+       0,
+       103.15,
+       0
+      ]
+     }
     }
    ]
   },
@@ -1533,7 +1799,7 @@
   },
   {
    "title": "Faceplates",
-   "note": "The faceplate prints complete - its grip is part of the plate, so there's nothing to bolt on and no hardware to buy. Pop a drawer out about 40 mm, slide the faceplate DOWN onto the drawer front until it snaps, then push the drawer home. Repeat for every drawer · the build is done. Tap any part to see its name and download links.",
+   "note": "The faceplate prints complete - its grip is part of the faceplate, so there's nothing to bolt on and no hardware to buy. Pop a drawer out about 40 mm, slide the faceplate DOWN onto the drawer front until it snaps, then push the drawer home. Repeat for every drawer · the build is done. Tap any part to see its name and download links.",
    "camera": {
     "t": 15,
     "p": 66,

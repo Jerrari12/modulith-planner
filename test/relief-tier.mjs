@@ -24,6 +24,7 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localParts } from './lib/local-parts.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VIEWER = join(root);
@@ -64,7 +65,7 @@ test('the quality ladder reaches the printed relief', { skip: missing
   const { chromium } = await import('playwright');
   const server = await serve();
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await launch(chromium);
+  const browser = localParts(await launch(chromium), root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from here
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
 
   /** What a Case mesh is actually wearing: whether its PROGRAM carries the layer term. */

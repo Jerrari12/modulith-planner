@@ -5,6 +5,9 @@
 import { el, trapTab } from './dom.js';
 import { icon } from './icons.js';
 import { layoutRules } from '../rules/layout.js';
+import { standUp, slotWords } from '../rules/stand.js';
+import { serializeBuild } from '../rules/schema.js';
+import { generateManifest } from '../generate.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog: a classic-script LEXICAL global, not a globalThis property
@@ -52,9 +55,10 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   const draft = { name: ctx.builds ? ctx.builds.name : '', mount: s0.mount || 'tabletop', length: Number(s0.length) || 185, printer: s0.printer || 'any', customBed: { x: s0.customBed?.x || '', y: s0.customBed?.y || '' }, spaceW: s0.spaceW || '', spaceH: s0.spaceH || '' };
   const STEPS = ['mount', 'length', 'printer'];
   let cur = STEPS.includes(step) ? step : 'mount';
+  let refusal = '';   // why the last Apply was refused (the generator's words), shown in the foot until the next one
   const prev = document.getElementById('ws-setup'); if (prev) prev.remove();
   const veil = el('div', { id: 'ws-setup', role: 'dialog', 'aria-modal': 'true', 'aria-label': fresh ? 'Set up your build' : 'Build setup' });
-  const box = el('div.glass.sheet');
+  const box = el('div.glass.setup-box');   // not .sheet: that is the phone's bottom-sheet class (a collapsed peek)
   veil.appendChild(box);
   (document.getElementById('ws') || document.body).appendChild(veil);   // inside the workspace root: the glass rules are scoped to #ws, and its children take pointer events
   const ret = document.activeElement;   // where focus goes back to when the sheet closes
@@ -68,6 +72,41 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   const blocked = (len) => draft.mount === 'tabletop' && !!(G?.lengths || []).find((l) => l.id === len)?.noTabletop;
   const stranded = () => (fresh ? [] : strandedAt(s0, draft.length));
   const changesScene = () => fresh || draft.mount !== s0.mount || draft.length !== Number(s0.length);
+  /* WHAT APPLY WRITES: the sheet's choices on a record `s` with its rules `R`, as one function, so the committed record, the
+     candidate the generator checks first and the count above Apply are the same thing. A CHANGE OF MOUNT ADDS NOTHING
+     (Joey, 2026-10-21: "i don't want switching between mounting types to automatically add units"): setMount slides the
+     layout against the new surface, and any gap under (or above) part of it stays an empty slot to fill in Build, shown red
+     there and as ghosts on the stage, with no instructions until it is filled (Fill all fills them on request). */
+  function applyDraft(s, R) {
+    s.printer = draft.printer;
+    s.customBed = draft.printer === 'custom' ? { x: Number(draft.customBed.x), y: Number(draft.customBed.y) } : null;
+    const asks = !!mountDef(draft.mount)?.askSpace;
+    s.spaceW = asks && draft.spaceW ? Number(draft.spaceW) : null;
+    s.spaceH = asks && draft.spaceH ? Number(draft.spaceH) : null;
+    s.length = draft.length;
+    if (fresh) { s.placed = [starterUnit({ ...s, mount: draft.mount })]; s.nextId = 2; delete s.labelList; delete s.labelAssign; }
+    if (R.setMount) R.setMount(draft.mount); else s.mount = draft.mount;
+    // the starter sits on its mount's edge. setMount rebases only on a CHANGE of mount, and a fresh Tabletop build from a
+    // Tabletop kit is not one. The stress test, 2026-10-15: the starter stayed at the top, syncTabletopGrid grew the grid
+    // under it, and the page stopped on "A unit is floating", with no way back
+    if (fresh && R.rebaseToMountEdge) R.rebaseToMountEdge();
+    if (R.clampGrid) R.clampGrid();
+    if (R.syncTabletopGrid) R.syncTabletopGrid();
+  }
+  /* the record Apply would write, built on a copy with the store's own normalising after it (commit() runs
+     enforceMountLength and syncTabletopGrid): nothing in the store or its history changes (Sol 01a15c9b: a refused change
+     that was committed and undone stayed on the Redo stack, one Redo from the dead end) */
+  function candidate() {
+    const t = JSON.parse(JSON.stringify(store.state));
+    const deps = { tabletop: globalThis.GEN2_TABLETOP };
+    const R = layoutRules(t, G, deps);
+    applyDraft(t, R);
+    R.enforceMountLength(); R.syncTabletopGrid();
+    // the empty slots it would have: the cases Build's "Fill all" would add (standUp on a further copy), counted, not added
+    const u = JSON.parse(JSON.stringify(t));
+    return { record: serializeBuild(t), slots: standUp(u, layoutRules(u, G, deps)).added };
+  }
+  const slotsAfter = () => { try { return candidate().slots; } catch { return 0; } };
 
   function render() {
     box.replaceChildren();
@@ -126,10 +165,13 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     box.appendChild(body);
     const fit = el('p.fit', { text: fitLine(draft.length, draft.printer, draft.customBed) });
     const lost = stranded();
+    const slots = !fresh && draft.mount !== s0.mount ? slotsAfter() : 0;
     const i = STEPS.indexOf(cur);
     box.appendChild(el('div.foot', {}, [
       fit,
-      lost.length ? el('p.warn', { text: `${lost.length} of your units aren’t in the ${draft.length} lineup: they stay on the board flagged until you swap them.` }) : null,
+      lost.length ? el('p.warn', { text: `${lost.length} of your units aren’t in the ${draft.length} lineup · swap them for sizes it has before changing the length.` }) : null,   // the stage can't show them (2026-10-20: the old promise, "they stay on the board flagged", ended on "Can't show this build yet")
+      slots ? el('p.warn.stand', { text: `As a ${mountDef(draft.mount)?.label || draft.mount} build it will have ${slotWords(draft.mount, slots)} · Apply adds nothing: fill ${slots === 1 ? 'it' : 'them'} in Build before it can be assembled.` }) : null,
+      refusal ? el('p.warn.refused', { role: 'alert', text: refusal }) : null,
       el('div.btns', {}, [
         i > 0 ? el('button.key', { text: 'Back', onclick: () => { cur = STEPS[i - 1]; render(); } }) : null,
         i < STEPS.length - 1 ? el('button.key', { text: 'Next', onclick: () => { cur = STEPS[i + 1]; render(); } }) : null,
@@ -143,30 +185,40 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     const bed = bedOf(draft.printer, draft.customBed);
     if (draft.printer === 'custom' && !bed) { cur = 'printer'; render(); ctx.say('Type both bed sizes, or pick Any printer.'); return; }
     const sceneChange = changesScene();
+    refusal = '';
+    // never reload into a record the stage cannot show (the boot would stop on "Can't show this build yet"): the generator
+    // checks the candidate first, and a refusal leaves the record, its history and the address as they were
+    // (asked as the stage asks: a build with empty slots is an in-progress preview, not a refusal - generate.js opts.voids)
+    let slots = 0;
+    if (sceneChange) {
+      let g = null; try { const c = candidate(); slots = c.slots; g = generateManifest(c.record, { voids: true }); } catch { g = null; }
+      if (!g || !g.manifest) {
+        refusal = `Can’t apply this: ${(g && g.errors.length ? g.errors : ['the parts can’t be built this way.']).join(' ')}`;
+        render(); return;
+      }
+    }
+    const mountChange = !fresh && draft.mount !== s0.mount;   // read before the commit: s0 is the live record
     store.flush();
-    store.commit((s, R) => {
-      s.printer = draft.printer;
-      s.customBed = draft.printer === 'custom' ? { x: Number(draft.customBed.x), y: Number(draft.customBed.y) } : null;
-      const asks = !!mountDef(draft.mount)?.askSpace;
-      s.spaceW = asks && draft.spaceW ? Number(draft.spaceW) : null;
-      s.spaceH = asks && draft.spaceH ? Number(draft.spaceH) : null;
-      s.length = draft.length;
-      if (fresh) { s.placed = [starterUnit({ ...s, mount: draft.mount })]; s.nextId = 2; delete s.labelList; delete s.labelAssign; }
-      if (R.setMount) R.setMount(draft.mount); else s.mount = draft.mount;
-      // the starter sits on its mount's edge. setMount rebases only on a CHANGE of mount, and a fresh Tabletop build from a
-      // Tabletop kit is not one. The stress test, 2026-10-15: the starter stayed at the top, syncTabletopGrid grew the grid
-      // under it, and the page stopped on "A unit is floating", with no way back
-      if (fresh && R.rebaseToMountEdge) R.rebaseToMountEdge();
-      if (R.clampGrid) R.clampGrid();
-      if (R.syncTabletopGrid) R.syncTabletopGrid();
-    }, 'setup');
+    store.commit((s, R) => { applyDraft(s, R); }, 'setup');
     store.flush();
+    if (mountChange && slots) { try { sessionStorage.setItem('gen2-setup-note', `${mountDef(draft.mount)?.label || draft.mount}: ${slotWords(draft.mount, slots)} to fill · they show red in Build, where Fill all adds 1W cases.`); } catch { /* no storage: no note */ } }
     if (ctx.builds && draft.name.trim()) await ctx.builds.rename(draft.name);
     close();
     if (sceneChange) { ctx.say('Rebuilding the scene…'); setTimeout(() => location.reload(), 200); }
-    else { if (ctx.remount) ctx.remount(); ctx.say('Setup applied.'); }   // the top bar's chips are built at mount: a printer or name change shows after a remount
+    else {
+      /* a printer change alters the model too since 2026-10-19 (the under-table rails' and wall brackets' sections follow
+         the bed, generate.js bedLimits). Build and Labels push every settled record change into the stage themselves;
+         from Parts, Assemble or Colors nothing would, and the model would keep the old sections until the next edit */
+      if (!['build', 'labels'].includes(document.documentElement.dataset.ws) && stage && typeof stage.update === 'function') {
+        try { await stage.update(store.serialize()); } catch { /* the stage keeps its last scene */ }
+      }
+      if (ctx.remount) ctx.remount(); ctx.say('Setup applied.');   // the top bar's chips are built at mount: a printer or name change shows after a remount
+    }
   }
   render();
-  setTimeout(() => { try { (box.querySelector('input.name') || box.querySelector('button')).focus(); } catch { /* jsdom */ } }, 0);   // focus moves into the dialog
+  // focus moves into the dialog: the name field on a desktop; on a phone the first button, since a focused field raises the
+  // keyboard over the sheet before anything was asked for (Joey, 2026-10-18, tapping the mount chip on his phone)
+  const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 1023px)').matches;   // (none under jsdom: Terra 01a15096)
+  setTimeout(() => { try { ((phone ? null : box.querySelector('input.name')) || box.querySelector('button')).focus(); } catch { /* jsdom */ } }, 0);
   return { close };
 }

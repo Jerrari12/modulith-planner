@@ -15,15 +15,16 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { generateManifest } from '../generate.js';
 import * as R from '../rules/labels.js';
 import * as P from '../rules/plate.js';
-import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle } from '../label-panel.js';
-import { loadLabelFont, labelIcons } from '../label-text.js';
+import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle, labelUploadFor, isLabelSvg } from '../label-panel.js';
+import { loadLabelFont, loadLabelParts, labelIcons } from '../label-text.js';
+import { labelLookOf, labelLookOfLabel } from '../label-look.js';
+import { labelPreviewUrl, previewNeeds, previewReady } from '../label-preview.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog: a classic-script LEXICAL global, not a globalThis property
 
-/* ---- the brand icons of the two Label Studio tiles (its own tag and the Part Picker's bolt), and the hover scenes ---- */
-const STUDIO_ICON = () => scene('0 0 16 16', '<path fill="currentColor" fill-rule="evenodd" d="M2 2h6l6.3 6.3a1.5 1.5 0 0 1 0 2.1l-3.9 3.9a1.5 1.5 0 0 1-2.1 0L2 8V2zm3.2 1.9a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6z"/>');
+/* ---- the Part Picker tile's brand icon (its bolt), and the hover scenes ---- */
 const PICKER_ICON = () => scene('0 0 16 16', '<path fill="currentColor" d="M4.2 1h7.6l1.7 2.6-1.7 2.6H4.2L2.5 3.6zM6.6 6.2h2.8V15H6.6z"/>');
 /* every scene is 240 x 110 on one 4 s loop; a label strip is the EdgeLabel outline (the slanted right edge) */
 const strip = (x, y, w = 92, h = 34, extra = '') => `<g transform="translate(${x} ${y})" ${extra}><polygon points="0,0 ${w},0 ${w - h * 0.9},${h} 0,${h}" fill="#f4f1ec"/>`;
@@ -44,14 +45,6 @@ const SCENES = {
     <g opacity="0">${appear(0.34)}${strip(112, 18, 100, 28)}<text x="10" y="19" font-family="Archivo, system-ui" font-weight="800" font-size="12" fill="#1b1b1b">M4 × 16</text></g></g>
     <g opacity="0">${appear(0.48)}${strip(112, 52, 100, 28)}<text x="10" y="19" font-family="Archivo, system-ui" font-weight="800" font-size="12" fill="#1b1b1b">HEX KEYS</text></g></g>
     <text x="120" y="100" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a" opacity="0">${appear(0.6)}a label list, a Part Picker file, a Studio set</text>`),
-  studio: () => scene('0 0 240 110', `
-    ${strip(24, 22, 150, 52)}
-      <text x="48" y="31" font-family="Archivo, system-ui" font-weight="800" font-size="17" fill="#1b1b1b">COFFEE</text>
-      <path transform="translate(10 12)" d="M3 6h16v8a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6V6zm16 2h3a3 3 0 0 1 0 6h-3M2 24h18" fill="none" stroke="#1b1b1b" stroke-width="2.2" stroke-linecap="round"/>
-      <rect x="0" y="44" width="150" height="8" fill="#2f6fd6"><animate attributeName="fill" values="#2f6fd6;#2f6fd6;#d6392f;#d6392f;#2e9e63;#2e9e63;#2f6fd6" keyTimes="0;.28;.33;.61;.66;.94;1" dur="4s" repeatCount="indefinite"/></rect>
-    </g>
-    <g transform="translate(190 30)" opacity="0">${appear(0.5)}<rect x="0" y="0" width="30" height="40" rx="3" fill="none" stroke="#9a9a9a" stroke-width="1.5"/><rect x="4" y="5" width="22" height="7" fill="#f4f1ec"/><rect x="4" y="16" width="22" height="7" fill="#f4f1ec"/><rect x="4" y="27" width="22" height="7" fill="#f4f1ec"/></g>
-    <text x="120" y="100" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a">icons · stripes · uploads · the print plate</text>`),
   picker: () => scene('0 0 240 110', `
     ${[0, 1, 2].map((i) => `<g transform="translate(${26 + i * 34} 18)"><rect x="0" y="0" width="16" height="9" rx="2" fill="#8a8f98"/><rect x="4" y="9" width="8" height="${22 + i * 10}" fill="#aab0b8"/></g>`).join('')}
     <rect x="56" y="12" width="28" height="56" rx="6" fill="none" stroke="#FF6A1A" stroke-width="2" opacity="0">${appear(0.34)}</rect>
@@ -73,7 +66,6 @@ const SCENES = {
 const HINTS = {
   type: { title: 'Type a label', text: 'Words for one drawer; the icon is guessed, or pick one after.', scene: SCENES.type, video: `img/hints/labels-type.mp4` },
   file: { title: 'Add from a file', text: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set.', scene: SCENES.file, video: `img/hints/labels-file.mp4` },
-  studio: { title: 'Label Studio', text: 'Make labels with icons, stripes and uploads, and print the plate. Opens in a new tab.', scene: SCENES.studio, video: `img/hints/labels-studio.mp4` },
   picker: { title: 'Part Picker', text: 'Choose screws, nuts, washers and inserts; each becomes a label laid out from its part record.', scene: SCENES.picker, video: `img/hints/labels-picker.mp4` },
   fill: { title: 'Fill empty drawers', text: 'Every waiting label onto an empty drawer, top row first, left to right. One Undo takes it back.', scene: SCENES.fill, video: `img/hints/labels-fill.mp4` },
   several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several, video: `img/hints/labels-several.mp4` },
@@ -133,12 +125,17 @@ export function mountLabels(stage, ctx) {
   root.appendChild(bar.el);
 
   /* ---------------- the record, the stage ---------------- */
-  const tryGen = (rec) => { try { return generateManifest(rec); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
+  // the stage's view, as Build's tryShow: a build's empty slots are ghosts, not a refusal (generate.js opts.voids, 2026-10-21)
+  const tryGen = (rec) => { try { return generateManifest(rec, { voids: true }); } catch (e) { return { manifest: null, errors: [String((e && e.message) || e)] }; } };
   let lastSig = null, queue = Promise.resolve();
   { const g = tryGen(store.serialize()); lastSig = g.manifest ? sigOf(g.manifest) : null; }
+  /* a record of another mount or length is the setup sheet's reload, not a scene this stage can show (its parts pool and
+     mount scene are fixed at boot) - the same wait as Build's syncStage, 2026-10-19 */
+  const otherScene = (rec) => !!stage.build && (rec.mount !== stage.build.mount || +rec.length !== +stage.build.length);
   function syncStage() {
     queue = queue.then(async () => {
       const rec = store.serialize();
+      if (otherScene(rec)) return;
       const gen = tryGen(rec);
       if (!gen.manifest) return;
       const sig = sigOf(gen.manifest);
@@ -436,11 +433,11 @@ export function mountLabels(stage, ctx) {
     if (r && typeof r.focus === 'function' && document.contains(r)) { try { r.focus(); } catch { /* gone */ } }
     else restoreFocus(picker.retKey, true);   // the add re-rendered the opener (the stress test, 2026-10-15: the keyboard stayed on the hidden frame)
   }
+  // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
+  // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
+  const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
   function openStudio(parts) {
-    // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
-    // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
-    const q = '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels');
-    try { window.open(LABEL_STUDIO_URL + q + (parts ? '#parts' : ''), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
+    try { window.open(studioHref(parts), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
   }
   /* THE LABEL PLATE VIEW (docs/redesign/LABELS-INTEGRATION.md, step B1, read-only): the Label Studio in a frame over the
      stage, headerless, showing this build's committed list as it lays it out (its Download print file works there). The
@@ -543,8 +540,62 @@ export function mountLabels(stage, ctx) {
   const iconName = (id) => { const I = labelIcons(); const i = I && I.find ? I.find(id) : null; return (i && i.name) || String(id || '').replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()); };
   const predicted = (words) => { const I = labelIcons(); try { return I && words && effectiveStyle(S()).predictIcons ? I.guessIconId(words) || null : null; } catch { return null; } };
   const maskUrl = (svg) => { try { return `url("data:image/svg+xml,${encodeURIComponent(typeof svg.toWellFormed === 'function' ? svg.toWellFormed() : svg)}")`; } catch { return null; } };
-  function preview(l, big = false) {
+  /* A label's preview is drawn by js/label-preview.js from its 3D label's own geometry (Joey 2026-10-17: "the small labels
+     differ from the actual labels"; supersedes decision 3b). `u` = the drawer that wears it, when there is one: its look is
+     then the drawer's own (label-look.js labelLookOf), exactly what the stage draws; a label still waiting to be placed is
+     drawn as a drawer wearing it would draw it. Until the data has loaded - and on Classic Pro, which the stage draws no
+     text on - the lightweight CSS preview below stands in. */
+  const previewLook = (l, u) => {
+    const s = S();
+    if (s.faceStyle === 'classicpro') return null;
+    const stripeOf = (lk) => (lk && lk.kind === 'stripe' ? { colours: lk.colours, position: lk.position } : null);
+    if (u) {
+      const lk = labelLookOf(s, u);
+      if (lk && lk.kind === 'part') return lk;
+      return { kind: 'words', text: u.label || '', badge: u.labelBadge || null, style: s.labelStyle || null, upload: labelUploadFor(s, u), stripe: stripeOf(lk) };
+    }
+    const lk = labelLookOfLabel(l);
+    if (lk && lk.kind === 'part') return lk;
+    if (R.isPartLabel(l)) return null;   // a part item that does not clean: the stage shows its words, the CSS preview too
+    const b = l.badge && typeof l.badge === 'object' ? l.badge : null;
+    return { kind: 'words', text: R.labelWords(l) || '', badge: b, style: s.labelStyle || null,
+      upload: b && b.type === 'icon' && isLabelSvg(b.svg) ? b.svg : null, stripe: stripeOf(lk) };
+  };
+  const drawnPreview = (look, big, width) => {
+    const url = labelPreviewUrl(look, { width: big ? 120 : width, dpr: Math.min(3, window.devicePixelRatio || 1),
+      body: stage.activeHex('Label'), ink: stage.activeHex('Label:TEXT') });
+    return url ? el('span.lprev.img' + (big ? '.big' : ''), { 'aria-hidden': 'true' }, [el('img', { src: url, alt: '', draggable: 'false' })]) : null;
+  };
+  /* A CSS stand-in shown while its data loads is swapped for the drawn image IN PLACE when the data arrives: nothing
+     re-renders, so no field loses its focus or its half-typed words (the keyboard e2e case, 2026-10-17: a whole renderAll on
+     arrival wiped a word being typed in the label editor). */
+  const pendingPreviews = new Map();   // stand-in element -> { look, big, width }
+  let previewLoading = null, previewFailed = false;
+  function settlePreviews() {
+    let wait = null;
+    for (const [box, p] of [...pendingPreviews]) {
+      if (!box.isConnected) { pendingPreviews.delete(box); continue; }
+      if (!previewReady(p.look)) { wait = wait || p.look; continue; }   // a look that needs more data than has arrived
+      pendingPreviews.delete(box);
+      const img = drawnPreview(p.look, p.big, p.width);
+      if (img) box.replaceWith(img);
+    }
+    if (wait) loadPreviewData(wait);
+  }
+  function loadPreviewData(look) {
+    if (previewLoading || previewFailed || previewReady(look)) return;
+    const n = previewNeeds(look);
+    previewLoading = (n.layout || n.bands ? loadLabelParts({ layout: n.layout, bands: n.bands }) : loadLabelFont())
+      .then(() => { previewLoading = null; settlePreviews(); })
+      .catch((e) => { previewLoading = null; previewFailed = true; pendingPreviews.clear(); console.warn(`[labels] the label previews stay simple: ${(e && e.message) || e}`); });
+  }
+  function preview(l, big = false, u = null, width = 84) {
+    const look = previewLook(l, u);
+    const img = look ? drawnPreview(look, big, width) : null;
+    if (img) return img;
     const box = el('span.lprev' + (S().faceStyle === 'classicpro' ? '.cp' : '') + (big ? '.big' : '') + (caps() ? '' : '.nocaps'), { 'aria-hidden': 'true' });
+    // not drawn yet because its data is still loading (not because nothing prints): it waits to be swapped in place
+    if (look && !previewReady(look) && !previewFailed) { pendingPreviews.set(box, { look, big, width }); loadPreviewData(look); }
     const words = R.labelWords(l);
     const b = L.cleanBadge(l.badge, { svg: true });
     let svg = null, ch = null;
@@ -638,10 +689,15 @@ export function mountLabels(stage, ctx) {
     if (picked) panel.appendChild(el('div.banner', { role: 'status' }, [el('span', { text: `Place ${quote(picked)} · tap a drawer` }), el('button.key.sm', { text: 'Done placing', onclick: () => armPlacing(null) })]));
     // no label faceplate: the callout (the spec: never hidden or greyed out)
     if (!faceOk) {
-      const edge = (stage.availableFaceplateStyles?.() || []).find((x) => x.key === 'edgelabel');
+      // both label families as buttons (Joey 2026-10-19: "why not show both edgelabel and classic pro as clickable
+      // options?"), from the stage's own style list so a family it does not offer for this collection gets no button;
+      // EdgeLabel first and starred, the Studio's default family
+      const LABEL_FAMILIES = ['edgelabel', 'classicpro'];
+      const styles = (stage.availableFaceplateStyles?.() || []).filter((x) => LABEL_FAMILIES.includes(x.key)).sort((a, b) => LABEL_FAMILIES.indexOf(a.key) - LABEL_FAMILIES.indexOf(b.key));
+      const switchTo = (style) => async () => { await stage.applyFaceplateStyle(style); stage.setDims(false); store.load(stage.build, 'adopt'); lastSig = (() => { const g = tryGen(store.serialize()); return g.manifest ? sigOf(g.manifest) : lastSig; })(); renderAll(); say(`${style.label} faceplates · the drawers can take labels now.`); };
       panel.appendChild(el('div.callout', {}, [
         el('p', { text: `${FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] + ' faceplates take' : 'These faceplates take'} no printed labels. EdgeLabel and Classic Pro do; the list below can still be built and exported.` }),
-        edge ? el('button.key.sm', { onclick: async () => { await stage.applyFaceplateStyle(edge); stage.setDims(false); store.load(stage.build, 'adopt'); lastSig = (() => { const g = tryGen(store.serialize()); return g.manifest ? sigOf(g.manifest) : lastSig; })(); renderAll(); say('EdgeLabel faceplates · the drawers can take labels now.'); } }, ['Switch to EdgeLabel ✦']) : null,
+        styles.length ? el('div.btns', {}, styles.map((style) => el('button.key.sm', { onclick: switchTo(style) }, [`Switch to ${style.label}${style.key === 'edgelabel' ? ' ✦' : ''}`]))) : null,
         el('p.dim', { text: 'Paper and label-maker labels are coming later.' }),
       ]));
     }
@@ -649,14 +705,15 @@ export function mountLabels(stage, ctx) {
     if (sel) panel.appendChild(renderDrawer(sel, selL, ready.length));
     // the hint. None under the faceplate callout: it already says so and offers the switch (the stress test, 2026-10-15:
     // on a Classic build the same sentence stood three times and squeezed the list to two rows)
-    const hint = !labels.length ? 'Make your labels in the Label Studio, or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'
+    // the empty list's sentence carries the one link to the full Label Studio (a new tab; the tile went on 2026-10-20)
+    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
       : !faceOk ? null
       : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
       : sel && R.eligible(s, sel) && ready.length ? (selL ? `Drawer ${R.drawerNumber(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on drawer ${R.drawerNumber(s, sel.id)}. The drawer stays selected afterwards.`)
       : !ready.length ? 'Tap a drawer on the model to change or remove its label.'
       : !empties.length ? 'Every drawer has a label. Tap one on the model to replace its label.'
       : 'Tap a drawer on the model to give it a label, or use Place several to label drawers one after another.';
-    if (hint) panel.appendChild(el('p.hint', { text: hint }));
+    if (hint) panel.appendChild(typeof hint === 'string' ? el('p.hint', { text: hint }) : hint);
     // the waiting labels
     const scroll = el('div.scroll');
     scroll.appendChild(el('div.list', {}, waitingAll.map((l) => {
@@ -674,20 +731,22 @@ export function mountLabels(stage, ctx) {
     if (onUnits.length) scroll.appendChild(el('div.placed', {}, [el('h4', { text: `On drawers (${onUnits.length})` }), el('div.rows', {}, onUnits.map((u) => {
       const l = R.labelById(s, carried[u.id]); const isSel = !!sel && sel.id === u.id;
       return el('button.prow' + (isSel ? '.sel' : '') + (st.selLabel === l.id ? '.lsel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on drawer ${R.drawerNumber(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
-        [preview(l), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: 'Drawer ' + R.drawerNumber(s, u.id) })]);
+        [preview(l, false, u, 56), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: 'Drawer ' + R.drawerNumber(s, u.id) })]);
     }))]));
     panel.appendChild(scroll);
     // the foot: ways in, fill, exports, settings, status
     const pairs = R.fillPairs(L, s);
     const foot = el('div.foot');
-    /* the ways in, as four equal tiles (Joey 2026-10-13: a pile of mismatched buttons read as messy); Fill is an action on the
-       build and gets a row of its own; the exports are the two icon buttons in the head; the settings stay last, collapsed */
+    /* the ways in, as equal tiles (Joey 2026-10-13: a pile of mismatched buttons read as messy); Fill is an action on the
+       build and gets a row of its own; the exports are the two icon buttons in the head; the settings stay last, collapsed.
+       Three since 2026-10-20 (Joey: "I'd prefer we only have it open as a modal for now which would remove a button from
+       the left menu"): the new-tab Label Studio tile is gone, the Part Picker modal is the one Studio tile and takes the
+       second row whole; the full Studio stays one click away as the link in the intro sentence above. */
     foot.appendChild(el('div.ways', { role: 'group', 'aria-label': 'Add labels' }, [
       attachHint(el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']), HINTS.type, panel),
       attachHint(el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']), HINTS.file, panel),
-      attachHint(el('button.key.tile.brand', { title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', onclick: () => openStudio(false) }, [STUDIO_ICON(), 'Label Studio', icon('arrow-square-out', { size: 12 })]), HINTS.studio, panel),
-      // the Part Picker opens in the page now (step A), so no new-tab glyph: that one is the Label Studio's
-      attachHint(el('button.key.tile.brand', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker']), HINTS.picker, panel),
+      // the Part Picker opens in the page (step A): no new-tab glyph
+      attachHint(el('button.key.tile.brand.span2', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker']), HINTS.picker, panel),
     ]));
     if (labels.length) foot.appendChild(el('div.fillrow', {}, [
       attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
@@ -706,7 +765,7 @@ export function mountLabels(stage, ctx) {
     // a Decor drawer on a faceplate without labels: the callout above the card explains it and offers the switch
     if (!R.eligible(s, u) && !l) { box.appendChild(el('p.none', { text: u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : 'This faceplate style takes no label.' })); return box; }
     if (!l) { box.appendChild(el('p.none', { text: 'No label yet' + (readyN ? ' · click a label below to put it on this drawer.' : '.') })); return box; }
-    box.appendChild(el('div.dlabel', {}, [preview(l, true), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
+    box.appendChild(el('div.dlabel', {}, [preview(l, true, u), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
     const acts = el('div.acts');
     if (R.isPartLabel(l)) {
       acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker({ open: l.hardware }) }, ['Edit part details']));
@@ -817,6 +876,17 @@ export function mountLabels(stage, ctx) {
     editor.appendChild(el('label.frow', {}, [el('span', { text: 'Words' }), words]));
     const long = R.labelWords(l).length;
     if (long > L.MIRROR_MAX) editor.appendChild(el('p.note', { text: `These words are ${long} characters long. Labels made here hold ${L.MIRROR_MAX}, so a change keeps the first ${L.MIRROR_MAX}.` }));
+    const place = e.unitId == null && !shared.length ? el('div.row', {}, [el('button.key.sm', { onclick: () => { const id = st.edit.id; closeEdit(); chooseLabel(id); } }, [icon('hand-pointing', { size: 16 }), 'Place this label'])]) : null;
+    // a part label prints its part's drawing (the Label Studio's layout), never an icon, so icon controls would do nothing
+    // (Joey 2026-10-17: "it's kind of weird that i can select icons for these part picker labels, it doesnt seem to apply
+    // them"). The look decides it exactly as for the 3D label: a drawer whose words were changed draws words and an icon.
+    const editUnit = e.unitId != null ? R.drawers(S()).find((u) => u.id === e.unitId) : null;
+    const lookNow = editUnit ? labelLookOf(S(), editUnit) : labelLookOfLabel(l);
+    if (lookNow && lookNow.kind === 'part') {
+      editor.appendChild(el('p.note.noicon', { text: 'Icons don’t apply here: the part’s drawing prints in their place. To use an icon instead, choose “Use custom wording” on the drawer.' }));
+      if (place) editor.appendChild(place);
+      return;
+    }
     // the icon
     const b = L.cleanBadge(l.badge, { svg: true });
     const state = !b ? 'auto' : b.type === 'none' ? 'none' : b.type === 'char' ? 'char' : b.svg ? 'upload' : 'icon';
@@ -855,7 +925,6 @@ export function mountLabels(stage, ctx) {
       }
     }
     renderGrid();
-    const place = e.unitId == null && !shared.length ? el('div.row', {}, [el('button.key.sm', { onclick: () => { const id = st.edit.id; closeEdit(); chooseLabel(id); } }, [icon('hand-pointing', { size: 16 }), 'Place this label'])]) : null;
     if (place) editor.appendChild(place);
   }
 

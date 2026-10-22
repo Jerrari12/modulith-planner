@@ -280,11 +280,12 @@ test('updateCavityFill does no per-drawer work while off with nothing to restore
   const list = [{ inst: { group, cfg: { node: 'DecorDrawer_185-1W-1H' } }, caseInst: null, z0: 0, mats: null }];
   const cavity = { clones: false };
   const MOVE_OPT = { cavity: true };
+  // drawerStop: the stage's open travel (collection − 13.5, 2026-10-19), which the openness is read against
   const update = new Function('THREE', 'cavityDrawers', 'cavityFillWanted', 'MOVE_OPT', 'cavity', 'manifest', 'primaryKey', 'activeHex',
-    '_cavA', '_cavB', '_cavC', 'CAVITY', 'cloneMaterial', code + '\nreturn updateCavityFill;')(
+    '_cavA', '_cavB', '_cavC', 'CAVITY', 'cloneMaterial', 'drawerStop', code + '\nreturn updateCavityFill;')(
     THREE, () => list, () => on, MOVE_OPT, cavity, { collection: '185' }, (n) => n, () => { hexCalls++; return '#808080'; },
     new THREE.Color(), new THREE.Color(), new THREE.Color(), { strength: 0.3, caseWeight: 0.75, room: new THREE.Color(0xb9c2d6) },
-    (m) => m.clone());
+    (m) => m.clone(), () => 185 - 13.5);
   const original = mesh.material;
   update(); update();
   assert.equal(hexCalls, 0, 'off with nothing to restore, it still computed colours');

@@ -26,7 +26,11 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    # ubuntu-24.04, not ubuntu-latest: GitHub began moving ubuntu-latest to Ubuntu 26.04 on 2026-10-19 (runner-images
+    # issue 14748), and on the 26.04 image this job's browser e2e step runs about twice as slow (33-35 min against 18 on
+    # 24.04, the same Chrome for Testing 153 build) and dies on its waits: runs 39429860751 and 39433302069 were 26.04 and
+    # failed, 39332085367 and 39335008933 were 24.04 and passed, the code the same. Revisit when the e2e bounds are retuned.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       # The part pools. parts/ and img/parts/ moved to Jerrari12/gen2-parts on
@@ -128,8 +132,9 @@ jobs:
           # index.html loads js/boot.js (phase 0, 2026-10-12), which imports main.js: one stamp per hop
           sed -i "s|css/viewer.css|css/viewer.css?v=$V|; s|js/boot.js|js/boot.js?v=$V|" index.html
           sed -i "s|'./app.js'|'./app.js?v=$V'|" js/boot.js
-          sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|; s|'./workspaces/assemble.js'|'./workspaces/assemble.js?v=$V'|; s|'./workspaces/parts.js'|'./workspaces/parts.js?v=$V'|; s|'./state/store.js'|'./state/store.js?v=$V'|; s|'./workspaces/colors.js'|'./workspaces/colors.js?v=$V'|; s|'./ui/phone.js'|'./ui/phone.js?v=$V'|; s|'./workspaces/labels.js'|'./workspaces/labels.js?v=$V'|; s|'./state/builds.js'|'./state/builds.js?v=$V'|; s|'./ui/setup.js'|'./ui/setup.js?v=$V'|; s|'./state/label-copies.js'|'./state/label-copies.js?v=$V'|" js/app.js
-          sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|" js/ui/setup.js
+          sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|; s|'./workspaces/assemble.js'|'./workspaces/assemble.js?v=$V'|; s|'./workspaces/parts.js'|'./workspaces/parts.js?v=$V'|; s|'./state/store.js'|'./state/store.js?v=$V'|; s|'./workspaces/colors.js'|'./workspaces/colors.js?v=$V'|; s|'./ui/phone.js'|'./ui/phone.js?v=$V'|; s|'./workspaces/labels.js'|'./workspaces/labels.js?v=$V'|; s|'./state/builds.js'|'./state/builds.js?v=$V'|; s|'./ui/setup.js'|'./ui/setup.js?v=$V'|; s|'./state/label-copies.js'|'./state/label-copies.js?v=$V'|; s|'./rules/stand.js'|'./rules/stand.js?v=$V'|" js/app.js
+          sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/stand.js'|'../rules/stand.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|" js/ui/setup.js
+          sed -i "s|'./layout.js'|'./layout.js?v=$V'|" js/rules/stand.js   # the hand-written structure helpers (2026-10-20)
           sed -i "s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/builds.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./topbar.js'|'./topbar.js?v=$V'|" js/ui/phone.js
           sed -i "s|'../ui/phone.js'|'../ui/phone.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js js/workspaces/labels.js
@@ -141,15 +146,24 @@ jobs:
           sed -i "s|'../rules/plate.js'|'../rules/plate.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./labels.js'|'./labels.js?v=$V'|" js/rules/plate.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../filament-db.js'|'../filament-db.js?v=$V'|; s|'../bed-finish.js'|'../bed-finish.js?v=$V'|" js/workspaces/colors.js
+          # the Colors plan's step 5 / 5b (2026-10-18): the look generator, its styles, colour words and maths, the owned list
+          sed -i "s|'../colors/surprise.js'|'../colors/surprise.js?v=$V'|; s|'../colors/styles.js'|'../colors/styles.js?v=$V'|; s|'../state/owned.js'|'../state/owned.js?v=$V'|" js/workspaces/colors.js
+          sed -i "s|'../filament-db.js'|'../filament-db.js?v=$V'|; s|'./colour.js'|'./colour.js?v=$V'|; s|'./styles.js'|'./styles.js?v=$V'|; s|'./words.js'|'./words.js?v=$V'|" js/colors/surprise.js
+          sed -i "s|'./colour.js'|'./colour.js?v=$V'|" js/colors/words.js
+          # step 6 (2026-10-18): Simplify and the summary, imported by the Colors workspace
+          sed -i "s|'../colors/simplify.js'|'../colors/simplify.js?v=$V'|" js/workspaces/colors.js
+          sed -i "s|'./colour.js'|'./colour.js?v=$V'|; s|'./surprise.js'|'./surprise.js?v=$V'|" js/colors/simplify.js
           sed -i "s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/store.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../rules/bom.js'|'../rules/bom.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|" js/workspaces/parts.js
+          # the Parts list names the filament a part prints in (2026-10-18): it reads the Colors tab's words from its module
+          sed -i "s|'./colors.js'|'./colors.js?v=$V'|" js/workspaces/parts.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|" js/workspaces/assemble.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|" js/ui/toolbar.js
-          sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/board.js'|'../ui/board.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|" js/workspaces/build.js
+          sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/board.js'|'../ui/board.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'../rules/stand.js'|'../rules/stand.js?v=$V'|" js/workspaces/build.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|" js/ui/board.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./names.js'|'./names.js?v=$V'|" js/ui/topbar.js
           # the shown names (2026-10-16): imported by app.js, the top bar and the Parts workspace
-          sed -i "s|'./ui/names.js'|'./ui/names.js?v=$V'|" js/app.js
+          sed -i "s|'./ui/names.js'|'./ui/names.js?v=$V'|" js/app.js js/main.js   # main.js imports it too since 2026-10-19 (the viewer's tab title)
           # the front door (cutover, 2026-10-17): app.js asks entry.js which workspace a bare address opens; main.js
           # imports it too (its own line below), one sed target per importer
           sed -i "s|'./entry.js'|'./entry.js?v=$V'|" js/app.js
@@ -187,6 +201,8 @@ jobs:
           sed -i "s|'./filament-profiles.js'|'./filament-profiles.js?v=$V'|" js/part-material.js
           # the build plate's bed-surface finish (2026-09-14) - a main.js import like the rest
           sed -i "s|'./bed-finish.js'|'./bed-finish.js?v=$V'|" js/main.js
+          # the cover tiles' shading-only edge (2026-10-21) - a main.js import too
+          sed -i "s|'./cover-seam.js'|'./cover-seam.js?v=$V'|" js/main.js
           # the dimension labels' cover test (2026-09-14, the moving-frame savings) - a main.js import too
           sed -i "s|'./dim-cover.js'|'./dim-cover.js?v=$V'|" js/main.js
           # the orbit benchmark, ?bench=orbit (2026-09-14) - a main.js import (the version its results report is main.js's
@@ -211,6 +227,10 @@ jobs:
           # which drawer wears a part label or a colour stripe (2026-10-10) - a main.js import, and it imports label-spec.js
           sed -i "s|'./label-look.js'|'./label-look.js?v=$V'|" js/main.js
           sed -i "s|'./label-spec.js'|'./label-spec.js?v=$V'|" js/label-look.js
+          # the panel's drawn label previews (2026-10-17): labels.js imports label-look.js and label-preview.js, and
+          # label-preview.js imports label-text.js - stamped like main.js's, so all three share ONE label-text.js instance
+          sed -i "s|'../label-look.js'|'../label-look.js?v=$V'|; s|'../label-preview.js'|'../label-preview.js?v=$V'|" js/workspaces/labels.js
+          sed -i "s|'./label-text.js'|'./label-text.js?v=$V'|" js/label-preview.js
           # ⚠ The Label Studio's part-label files (js/vendor/label-hardware.js, hardware-layout.js, hardware-data.js,
           # hardware-v5-data.js, hardware-band-data.js) need NO line here: like the core and the icon catalog they are CLASSIC
           # scripts label-text.js loads itself (vendorUrl), by URL relative to its import.meta.url and carrying ITS OWN ?v=

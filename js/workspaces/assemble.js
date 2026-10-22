@@ -30,8 +30,37 @@ export function mountAssemble(stage, ctx) {
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
   root.prepend(topbar(stage, { ...ctx, active: 'assemble', say, soon, signal }));
-  const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview) });
+  const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview), camTitle: 'Back to the step\u2019s camera \u00b7 after you orbit or zoom, this returns to the guided view' });
   root.appendChild(tb.el);
+
+  /* NOT READY TO ASSEMBLE (2026-10-21, Joey: with empty slots "the assembly is not legal until i fill in those gaps"). A
+     build the stage shows as an in-progress preview - empty slots under (or above) a case, or a tabletop top not level
+     yet - has no instructions, so there is nothing to step through: the workspace says why and sends the visitor to
+     Build, where the slots show red and Fill all fills them. The player's frame, without the player. */
+  const inc = stage.manifest?.incomplete;
+  if (inc) {
+    const card = el('div.glass.glass-edge.blocked', { id: 'ws-player', role: 'region', 'aria-label': 'Not ready to assemble' }, [
+      el('div.row1', {}, [
+        el('span.num', { text: '!' }),
+        el('div', {}, [
+          el('div.title', { text: 'Not ready to assemble' }),
+          el('div.text', { text: inc.voids
+            ? 'This build has empty slots, so it has no instructions yet. Fill them in Build: they show red there, and Fill all fills them with 1W cases.'
+            : 'Part of the top isn’t level yet, so this build has no instructions. Fill the outlined space in Build with any drawers that fit.' }),
+        ]),
+      ]),
+      el('div.row2', {}, [el('button.key.next.on', { text: 'Go to Build', onclick: () => ctx.switchTo('build') })]),
+    ]);
+    root.appendChild(card);
+    const safe = () => stage.setSafeArea({ left: 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + card.offsetHeight + 12 });
+    addEventListener('resize', safe, { signal });
+    tb.sync(); safe();
+    return {
+      onPage() { tb.sync(); },
+      onCamFree() { tb.sync(); },
+      unmount() { ac.abort(); stage.setSafeArea(null); root.remove(); },
+    };
+  }
 
   /* Part colors by default here, and only here: remember the visitor's own palette switch and put it back on leave */
   const hadOwnColors = !!stage.useCustom;
@@ -113,15 +142,17 @@ export function mountAssemble(stage, ctx) {
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
   setColors(false);
-  // the step a visitor left on comes back after a trip to another workspace (ctx.memo); a fresh arrival on the
-  // cover lands on the exploded overview; a deep link into a step keeps its page
+  // the step a visitor left on comes back after a trip to another workspace (ctx.memo); a first arrival lands on the
+  // exploded overview, from the cover (a ?ws=assemble address) AND from the finished step the other workspaces park
+  // the stage on (Joey, 2026-10-20: Assemble opened "at the end" when reached from Build)
   const back = ctx.memo?.assemblePage;
   if (back != null) { done = !!ctx.memo.assembleDone; stage.goTo(back, { animate: false }); }
-  else if (stage.cur === 0) stage.goTo(pageOf.overview);
+  else if (stage.cur !== pageOf.overview) stage.goTo(pageOf.overview);
   renderList(); renderPlayer(); tb.sync(); safe();
 
   return {
     onPage(i) { if (i !== pageOf.finished) done = false; renderList(); renderPlayer(); tb.sync(); safe(); },   // a remount's goTo lands on the finished page, so a remembered Done survives it
+    onCamFree() { tb.sync(); },   // the camera taken (an orbit) or given back: the toolbar's camera button lights up or not
     unmount() {
       ac.abort();
       if (ctx.memo) { ctx.memo.assemblePage = stage.cur; ctx.memo.assembleDone = done; }

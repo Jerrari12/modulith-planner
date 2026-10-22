@@ -27,7 +27,7 @@ export function board(opts) {
   const PAD = 18;
   let hover = null, drag = null, press = null, hoverSpot = null;
   // the drawn columns: the build's extent [x0, x1) and the margin [vL, vR) around it, in the grid's x
-  let x0 = 0, x1 = 0, vL = 0, vR = 1, topR = 0;
+  let x0 = 0, x1 = 0, vL = 0, vR = 1, topR = 0, botR = 0;   // botR: half-rows drawn under the grid for the spots that grow a hanging build down
   let curSpots = [];   // the armed size's spots as last rendered (the pointer handlers read these, not a fresh list)
 
   function extent() {
@@ -37,7 +37,8 @@ export function board(opts) {
     const m = opts.margin ? opts.margin() : 0;
     topR = opts.topRoom ? opts.topRoom() : 0;
     vL = x0 - m; vR = x1 + m;
-    for (const sp of spots) { vL = Math.min(vL, sp.x); vR = Math.max(vR, sp.x + a.w); }   // every "+" is on the drawing
+    botR = 0;
+    for (const sp of spots) { vL = Math.min(vL, sp.x); vR = Math.max(vR, sp.x + a.w); botR = Math.max(botR, sp.y + a.hh - st.gridH * 2); }   // every "+" is on the drawing
     if (vR <= vL) vR = vL + 1;
     return { st, a, spots };
   }
@@ -45,8 +46,8 @@ export function board(opts) {
     const st = opts.state(); extent();
     const rows = st.gridH * 2; const cols = vR - vL;
     const availW = host.clientWidth - 2 * PAD, availH = host.clientHeight - head.offsetHeight - 2 * PAD - 8;
-    cell = Math.max(28, Math.min(96, Math.floor(Math.min(availW / cols, availH / ((rows + topR) * 28 / 88)))));
-    const W = cols * cell + 2 * PAD, H = (rows + topR) * half() + 2 * PAD;
+    cell = Math.max(28, Math.min(96, Math.floor(Math.min(availW / cols, availH / ((rows + topR + botR) * 28 / 88)))));
+    const W = cols * cell + 2 * PAD, H = (rows + topR + botR) * half() + 2 * PAD;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
   }
   const px = (x) => PAD + (x - vL) * cell, py = (y) => PAD + (y + topR) * half();
@@ -85,7 +86,7 @@ export function board(opts) {
     const span = st.placed.length ? x1 - x0 : 0;
     head.replaceChildren(...[   // (a tabletop has no height buttons: a null child would print as "null")
       el('span.bttl', { text: span ? `Board · ${span}W × ${st.gridH}H${opts.sections && opts.sections() > 1 ? ` · ${opts.sections()} separate sections` : ''}` : 'Board · empty' }),
-      el('span.bhint', { text: a ? (spots.length ? `${tapWord()} a + to place · past either edge widens the build` : 'No spot for this size · the mount’s width limit, or nothing free beside the build')
+      el('span.bhint', { text: a ? (spots.length ? `${tapWord()} a + to place · past either edge widens the build${st.mount === 'tabletop' ? '' : ', below it adds height'}` : 'No spot for this size · the mount’s limits, or nothing free beside the build')
         : (st.mount === 'tabletop' ? 'Stacks from the surface up · drag a unit to move it, past either edge too' : 'Hangs from the top row · drag a unit to move it, past either edge too') }),
       st.mount === 'tabletop' ? null : el('div.bgrid', {}, [
         el('button.key.sm', { text: 'H−', title: 'Shorter grid', onclick: () => opts.onGrid('h-') }),
@@ -135,12 +136,15 @@ export function board(opts) {
       if (isSel) svgEl('rect', { x: x - 2, y: y - 2, width: w + 4, height: h + 4, rx: 7, class: 'b-sel' }, ug);
       if (flashing.has(u.id)) svgEl('rect', { x: x - 3, y: y - 3, width: w + 6, height: h + 6, rx: 8, class: 'b-pulse' }, ug);
     }
-    // the "+" spots: the 3D view's list, one amber disc at each footprint's centre
+    // the "+" spots: the 3D view's list, one amber disc at each footprint's centre; a refused cell beside the build
+    // (kind "no", 2026-10-20) is a muted disc with a bar, and a tap on it says why (opts.onRefused)
     if (a) for (const sp of spots) {
       const cx = px(sp.x) + a.w * cell / 2, cy = py(sp.y) + a.hh * half() / 2, r = Math.max(coarse() ? 15 : 9, Math.min(cell, a.hh * half()) * 0.26);   // 30 px discs for a finger
-      const g = svgEl('g', { class: 'b-spot', 'data-x': sp.x, 'data-y': sp.y }, svg);
+      const no = sp.kind === 'no';
+      const g = svgEl('g', { class: 'b-spot' + (no ? ' no' : ''), 'data-x': sp.x, 'data-y': sp.y }, svg);
+      if (no && sp.why) svgEl('title', {}, g).textContent = sp.why;
       svgEl('circle', { cx, cy, r }, g);
-      svgEl('path', { d: `M${cx - r * 0.5} ${cy}H${cx + r * 0.5}M${cx} ${cy - r * 0.5}V${cy + r * 0.5}`, class: 'b-spot-plus' }, g);
+      svgEl('path', { d: no ? `M${cx - r * 0.5} ${cy}H${cx + r * 0.5}` : `M${cx - r * 0.5} ${cy}H${cx + r * 0.5}M${cx} ${cy - r * 0.5}V${cy + r * 0.5}`, class: 'b-spot-plus' }, g);
     }
     renderGhost();
   }
@@ -159,7 +163,7 @@ export function board(opts) {
     const a = opts.armed();
     hoverSpot = a && hover && !drag ? spotAt(hover) : null;
     if (!hoverSpot) return;
-    ghost = svgEl('rect', { x: px(hoverSpot.x) + 1.5, y: py(hoverSpot.y) + 1.5, width: a.w * cell - 3, height: a.hh * half() - 3, rx: 5, class: 'b-ghost ok' }, svg);
+    ghost = svgEl('rect', { x: px(hoverSpot.x) + 1.5, y: py(hoverSpot.y) + 1.5, width: a.w * cell - 3, height: a.hh * half() - 3, rx: 5, class: 'b-ghost ' + (hoverSpot.kind === 'no' ? 'no' : 'ok') }, svg);   // a refused cell's ghost is the red one, never the green
     svg.insertBefore(ghost, svg.querySelector('.b-spot'));   // the ghost under the "+" discs
     const on = svg.querySelector(`.b-spot[data-x="${hoverSpot.x}"][data-y="${hoverSpot.y}"]`); if (on) on.classList.add('on');
   }
@@ -193,7 +197,7 @@ export function board(opts) {
       return;
     }
     if (press && press.x === c.x && press.y === c.y) {
-      if (opts.armed()) { const sp = spotAt(c); if (sp) opts.onPlace(sp.x, sp.y); }
+      if (opts.armed()) { const sp = spotAt(c); if (sp && sp.kind === 'no') { if (opts.onRefused) opts.onRefused(sp); } else if (sp) opts.onPlace(sp.x, sp.y); }
       else opts.onSelect(null);
     }
     press = null;

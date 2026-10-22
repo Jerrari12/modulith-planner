@@ -5,12 +5,13 @@
    MP4s under img/hints/ (the names js/workspaces/labels.js looks for; img/hints/README.md). Playwright's own recordVideo is
    not used: its ffmpeg download is unreachable from this machine, and the system ffmpeg is.
 
-     node tools/hint-clips.mjs            -> img/hints/labels-{type,file,studio,picker,fill,several}.mp4
+     node tools/hint-clips.mjs            -> img/hints/labels-{type,file,picker,fill,several}.mp4
      node tools/hint-clips.mjs fill       -> one clip
 
-   The Label Studio and Part Picker clips open the live Studio (labels.modulith.systems) in the tab the tile opens, so they
-   need the network; the other four run against the local repo. */
+   Every clip runs against the local repo; the Part Picker clip also serves the Label Studio checkout beside it (STUDIO_DIR=
+   overrides the path) for the modal, as the e2e suite does. */
 import { mkdir, writeFile, rm, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
@@ -25,11 +26,11 @@ const W = 1040, H = 700;             // the recording (tall enough for the whole
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';
 const only = process.argv[2] || null;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.md': 'text/markdown', '.webp': 'image/webp' };
-function serve() {
+function serve(dir = root) {
   const server = createServer(async (req, res) => {
     try {
       let p = decodeURIComponent(new URL(req.url, 'http://x').pathname); if (p.endsWith('/')) p += 'index.html';
-      const f = join(root, p); const s = await stat(f);
+      const f = join(dir, p); const s = await stat(f);
       res.writeHead(200, { 'content-type': MIME[extname(f)] || 'application/octet-stream' }); res.end(await readFile(s.isDirectory() ? join(f, 'index.html') : f));
     } catch { res.writeHead(404); res.end(); }
   });
@@ -53,12 +54,16 @@ async function driver(page) {
   const centre = async (sel) => { const r = await page.locator(sel).first().boundingBox(); if (!r) throw new Error('no element ' + sel); return [r.x + r.width / 2, r.y + r.height / 2]; };
   const to = async (sel, ms) => { const [x, y] = await centre(sel); await glide(x, y, ms); };
   const type = async (text, ms = 85) => { for (const ch of text) { await page.keyboard.type(ch); await sleep(ms + Math.random() * 40); } };
-  return { glide, click, to, type, put, centre };
+  /* a cut: from this moment the clip is framed by `crop` (a 240:110 window); the frames are split on their timestamps and
+     the segments joined, so one clip can follow a gesture from the panel into a modal and back (the Part Picker, 2026-10-20) */
+  const cuts = [];
+  const cut = (crop) => { cuts.push({ ts: Date.now() / 1000, crop }); };
+  return { glide, click, to, type, put, centre, cut, cuts };
 }
 const tile = (text) => `#ws-labels .key.tile:has-text("${text}")`;
-async function labelsPage(ctx, base) {
+async function labelsPage(ctx, base, query = '') {
   const page = await ctx.newPage();
-  await page.goto(`${base}/index.html?ws=labels&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+  await page.goto(`${base}/index.html?ws=labels&debug=1${query}`, { waitUntil: 'load', timeout: 90_000 });
   await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-labels .foot'), null, { timeout: 90_000 });
   await page.addStyleTag({ content: '#ws-hint { display: none !important; }' });   // the bubble must not appear in its own clip
   // EdgeLabel faceplates, so the drawers take labels: the switch loads parts, so wait for the record to say so
@@ -78,7 +83,7 @@ async function addLabels(page, words) {
 
 /* each clip: { setup?(page), run(page, d), popup?, crop }; the recording starts just before run(). `crop` [x, y, w, h] frames the
    subject at the bubble's 240:110 (the panel with the model beside it; for Fill and Place several the model with the panel's edge) */
-const PANEL = [20, 215, 700, 321], MODEL = [330, 200, 620, 284], BOTH = [20, 180, 760, 348], STUDIO = [0, 40, 700, 321];   // tighter than the frame: the bubble is 248 px wide, so the gesture must read
+const PANEL = [20, 215, 700, 321], MODEL = [330, 200, 620, 284], BOTH = [20, 180, 760, 348], STUDIO = [0, 40, 700, 321], MODAL = [18, 18, 1004, 460];   // MODAL: the Part Picker frame's top (the steps bar, the family and type tiles) inside the modal's 18 px inset   // tighter than the frame: the bubble is 248 px wide, so the gesture must read
 const CLIPS = {
   type: {
     crop: PANEL,
@@ -127,8 +132,32 @@ const CLIPS = {
       await sleep(1500);
     },
   },
-  studio: { popup: true, crop: PANEL, async run(page, d) { await d.to(tile('Label Studio'), 700); await sleep(600); await d.click(); await sleep(400); } },
-  picker: { popup: true, crop: PANEL, async run(page, d) { await d.to(tile('Part Picker'), 700); await sleep(600); await d.click(); await sleep(400); } },
+  /* the Part Picker opens in the page (a modal frame of the Studio, step A), so the clip follows the gesture into the
+     modal and back out: the tile, the modal with a nut picked (Nuts → Hex nut → M3, no lengths step, as the e2e does), Add,
+     the label landing in the list. The Studio is the checkout beside this repo on a second loopback server, as the e2e
+     suite does it: the live Studio's Picker refuses a loopback planner as its parent (the handshake never answers). */
+  picker: {
+    crop: PANEL,
+    query: () => { if (!studio) throw new Error(`no Label Studio checkout at ${STUDIO_DIR} (STUDIO_DIR= overrides)`); return '&new=1&studio=' + encodeURIComponent(studio); },
+    async run(page, d) {
+      await d.to(tile('Part Picker'), 700); await sleep(500); await d.click();
+      await page.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && p.ready && !p.veil.hidden; }, null, { timeout: 60_000 });
+      d.cut(MODAL);
+      const frame = page.frameLocator('#ws-partpicker iframe');
+      await frame.locator('.tile.has-img').first().waitFor({ timeout: 60_000 });
+      await sleep(700);
+      const at = async (loc) => { const r = await loc.boundingBox(); if (!r) throw new Error('no box'); return [r.x + r.width / 2, r.y + r.height / 2]; };
+      for (const loc of [frame.locator('button.tile').filter({ hasText: /^Nuts$/ }).first(), frame.locator('#stage-panel button.tile[title="Hex nut"]'), frame.locator('#stage-panel button.thr[aria-label="M3"]')]) {
+        await loc.waitFor({ timeout: 30_000 }); const [x, y] = await at(loc); await d.glide(x, y, 650); await sleep(300); await d.click(); await sleep(700);
+      }
+      const add = frame.locator('#add-parts', { hasText: /^Add 1 label to the planner/ });
+      await add.waitFor({ timeout: 30_000 }); const [ax, ay] = await at(add); await d.glide(ax, ay, 700); await sleep(400); await d.click();
+      await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
+      d.cut(PANEL);
+      await sleep(500);
+      await d.to('#ws-labels .list .chip-l', 700); await sleep(1800);
+    },
+  },
 };
 
 /* frames through CDP: every repaint as a JPEG with its timestamp, acknowledged so the next one comes */
@@ -166,6 +195,10 @@ const { chromium } = await import('playwright');
 await mkdir(OUT, { recursive: true });
 const server = await serve();
 const base = `http://127.0.0.1:${server.address().port}`;
+/* the Label Studio checkout beside this repo (its published Part Picker under parts/), as e2e/workspaces.mjs serves it */
+const STUDIO_DIR = process.env.STUDIO_DIR || join(root, '..', 'GEN2 label-types', 'GEN2 EdgeLabel Label Generator');
+const studioServer = existsSync(join(STUDIO_DIR, 'parts', 'js', 'embed.js')) ? await serve(STUDIO_DIR) : null;
+const studio = studioServer ? `http://127.0.0.1:${studioServer.address().port}/` : null;
 const browser = await (async () => { for (const o of [{ channel: 'chrome' }, {}]) { try { return await chromium.launch({ ...o, args: ['--enable-unsafe-swiftshader'] }); } catch {} } throw new Error('no Chromium'); })();
 const work = join(tmpdir(), 'modulith-hint-clips');
 await rm(work, { recursive: true, force: true });
@@ -175,7 +208,7 @@ try {
     if (only && key !== only) continue;
     const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
     await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
-    const page = await labelsPage(ctx, base);
+    const page = await labelsPage(ctx, base, clip.query ? clip.query() : '');
     if (clip.setup) await clip.setup(page);
     const d = await driver(page);
     await sleep(400);
@@ -206,9 +239,22 @@ file '${posix(b)}'
       try { await clip.run(page, d); } catch (e) { await page.screenshot({ path: join(work, `${key}-failed.png`) }); console.error(`${key} failed; see ${join(work, `${key}-failed.png`)}`); throw e; }
       frames = await rec.stop();
       await ctx.close();
-      await encodeFrames(frames, join(OUT, `labels-${key}.mp4`), work, key, clip.crop);
+      if (d.cuts.length) {
+        // the clip in segments, each framed by its own crop from its cut's moment, joined in order
+        const bounds = [{ ts: -Infinity, crop: clip.crop }, ...d.cuts];
+        const parts = [];
+        for (let i = 0; i < bounds.length; i++) {
+          const from = bounds[i].ts, to = i + 1 < bounds.length ? bounds[i + 1].ts : Infinity;
+          const seg = frames.filter((f) => f.ts >= from && f.ts < to);
+          if (!seg.length) continue;
+          const out = join(work, `${key}-s${i}.mp4`); await encodeFrames(seg, out, work, `${key}-s${i}`, bounds[i].crop, i + 1 < bounds.length ? 0.001 : 0.6); parts.push(out);
+        }
+        const list = join(work, `${key}-join.txt`); await writeFile(list, parts.map((p) => `file '${posix(p)}'
+`).join(''));
+        ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', join(OUT, `labels-${key}.mp4`)]);
+      } else await encodeFrames(frames, join(OUT, `labels-${key}.mp4`), work, key, clip.crop);
     }
     const out = join(OUT, `labels-${key}.mp4`);
     console.log(`wrote ${out} (${((await stat(out)).size / 1024).toFixed(0)} KB, ${frames.length} frames)`);
   }
-} finally { await browser.close(); server.close(); }
+} finally { await browser.close(); server.close(); if (studioServer) studioServer.close(); }

@@ -25,5 +25,8 @@ export function buildName(name) {
   return String(name ?? '').replace(/^GEN2 /, '').replace(/ · GEN2 /g, ' · ');
 }
 
-/* the browser tab: the build, then the product */
-export const tabTitle = (name) => (name ? `${buildName(name)} · MODULITH` : 'MODULITH Planner');
+/* the browser tab: the build, then the product. The product is named in full, "MODULITH Planner", because the tab title is
+   also what a search engine shows for the page (2026-10-19: "modulith" on Google is a Java framework, and the planner's
+   title has to say which MODULITH this is); with no build open it says what the planner is for, the same words as
+   index.html's static <title>. The plain viewer (main.js, no workspace on <html>) uses the same shape since then. */
+export const tabTitle = (name) => (name ? `${buildName(name)} · MODULITH Planner` : 'MODULITH Planner · plan a 3D-printable modular storage build');
