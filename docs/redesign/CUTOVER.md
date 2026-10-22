@@ -5,7 +5,8 @@ their bases, and this repo has a branch for its front door. Their suites show no
 pass in full, and the old apps keep only the cross-checkout failures their untouched mains have too (below). What is
 left is merging them and retiring the two old apps. Nothing here runs without Joey's go. Refreshed again 2026-10-21 (the
 cutover prep, next section): today's mains merged in, the suites re-run, each step's undo rehearsed, the data paths and
-the old planner's capability list checked.
+the old planner's capability list checked. This repo's branch was refreshed once more on 2026-10-22, for two fixes the
+parity list waited on.
 
 ## Joey's decisions
 
@@ -17,6 +18,27 @@ the old planner's capability list checked.
 3. **The kill date** for the old planner: set once the merged planner is reliable and well tested as "MODULITH planner
    2.0", not before (2026-10-13). Cutover day and the kill date stay undetermined until Joey's own hands-on testing
    (2026-10-14). Until then both apps stay up and the redirects wait.
+
+## Refreshed 2026-10-22 (this repo's branch): still nothing merged, nothing deployed
+
+Joey, 2026-10-22: "refresh the cutover branch once the guard is live". Main had moved eight commits past the 10-21
+refresh, `aa82df2`; two of the fixes among them close rows this file carries.
+
+| repo | branch | head | merged in | checked on the merge |
+|---|---|---|---|---|
+| modulith-planner | `cutover-front-door` | `396dabd` | main `0f32d12` (through `e45eac7`, merge `0483b5f`) | npm test 608: 603 pass, 5 skipped, 0 fail; `E2E_SOFT=1` e2e 80/80 on `0483b5f` (`0f32d12` adds records and one code comment); pages.yml's stamp and module-graph steps on a copy pass |
+
+- **Both merges had no conflicts.** The front door still treats a labels link as a rider: `shellWorkspace()` runs when
+  `js/app.js` loads, before the boot takes `#labels-add=` out of the address.
+- **E6 is fixed** (live 2026-10-22 at `e7bd056d`, planner `40d4b25`) and now on this branch.
+- **The second-tab overwrite is fixed too**, found while fixing E6: the Label Studio's Add to planner build opens the
+  planner in a second tab, and the first tab's next edit saved over the labels. The stale-tab guard, live 2026-10-22 at
+  `e45eac71`, stops it; `studio-live-prod.mjs` walks it with the real Studio (DECISIONS.md 2026-10-22).
+- **The other three repos are as on 2026-10-21**, re-checked: the old planner's and the old viewer's `cutover-redirect`
+  are current with their origin mains (the old viewer's main is still red, and pushing its fix is still Joey's call). The
+  site's `planner-cutover` refresh `21de044` is on this computer only: its origin still holds `c0fac21`, 10 behind its
+  main. A push may build a Cloudflare preview, so it waits for Joey. Its BOM pins this repo's `aa82df2`: re-vendor it
+  from this repo's newest main just before the site merge.
 
 ## Refreshed 2026-10-21, the cutover prep: still nothing merged, nothing deployed
 
@@ -99,7 +121,8 @@ last-build handover and file round-trip. Don't merge or deploy anything." The to
     1. **E6, a defect live today.** The Label Studio's "Add to planner build" link (`?ws=labels#labels-add=…`) adds
        nothing when it opens the planner as a fresh page. The same link set after the page has loaded adds its labels,
        and only that path is tested. Re-checked on stamp `aa82df2d` (`tools/labels-add-probe.mjs`): 0 labels on load, 2
-       after. The old planner's redirect forwards `#labels-add=` into the same path.
+       after. The old planner's redirect forwards `#labels-add=` into the same path. **FIXED**, live 2026-10-22 at
+       `e7bd056d` (planner `40d4b25`), and on this branch since the 2026-10-22 refresh above.
     2. **C6 / D5.** A build with a cabinet, more than 80 units, or a size its length is not made in opens only on "Can't
        show this build yet": it cannot be edited, billed or fixed. The old planner places and bills cabinets, and its
        redirect would forward such a last build to that page.
