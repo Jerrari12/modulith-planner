@@ -3,7 +3,9 @@
 Drafted 2026-10-13, after the setup sheet. Brought up to date 2026-10-17: the three prepared branches are current with
 their bases, and this repo has a branch for its front door. Their suites show nothing new: the site's and this repo's
 pass in full, and the old apps keep only the cross-checkout failures their untouched mains have too (below). What is
-left is merging them and retiring the two old apps. Nothing here runs without Joey's go.
+left is merging them and retiring the two old apps. Nothing here runs without Joey's go. Refreshed again 2026-10-21 (the
+cutover prep, next section): today's mains merged in, the suites re-run, each step's undo rehearsed, the data paths and
+the old planner's capability list checked.
 
 ## Joey's decisions
 
@@ -16,7 +18,103 @@ left is merging them and retiring the two old apps. Nothing here runs without Jo
    2.0", not before (2026-10-13). Cutover day and the kill date stay undetermined until Joey's own hands-on testing
    (2026-10-14). Until then both apps stay up and the redirects wait.
 
-## Ready on branches (2026-10-17): nothing merged, nothing deployed
+## Refreshed 2026-10-21, the cutover prep: still nothing merged, nothing deployed
+
+Joey, 2026-10-21: "Start the cutover prep: refresh the four cutover branches onto today's mains and re-run their suites,
+verify the 69-row parity list against the live new planner, rehearse reverting each routing step, and test the
+last-build handover and file round-trip. Don't merge or deploy anything." The tools, logs and reports are in
+`D:\Claude - Output\cutover-prep-2026-10-21` (no repo).
+
+| repo | branch | head | merged in | checked on the merge |
+|---|---|---|---|---|
+| modulith-planner | `cutover-front-door` | `649f4eb` | main `aa82df2` (124 commits) | npm test 601: 596 pass, 5 skipped; `E2E_SOFT=1` e2e 76/76; pages.yml's stamp and module-graph steps on a copy pass |
+| gen2-planner | `cutover-redirect` | `e47fcb8` | main `92c055d` | npm test 416: 414 pass, 1 skipped, 1 fail (C-pin-2, as on 2026-10-17) |
+| gen2-visual-animator | `cutover-redirect` | `5a96f52` | origin/main `00e5eef` | npm test 463: 452 pass, 7 skipped, 4 fail: the two EdgeLabel-checkout checks, as on 2026-10-17, and filament-db's count, which origin/main fails alone (below) |
+| modulith-site | `planner-cutover` | `21de044` | main `ff09192` | the BOM re-vendored from planner `aa82df2`; npm test exits 0 (runtime 546/0, the validator's self-test 28/28); the built site links neither old host |
+
+- **The planner's two conflicts.** `pages.yml` keeps main's `names.js` stamp (app.js and main.js) and this branch's
+  `entry.js` stamp for app.js. `index.html` takes main's search title and description (2026-10-19), which now also serve
+  the bare address's link preview.
+- **The site's BOM.** In all 10 kits no BOM row was added, removed or changed. Each kit's "Open in the Planner"
+  `#build=` form gained `"sideCovers": true` (the side-cover toggle, 2026-10-20). The merge's two conflicts were both in
+  the vendored set (the planner pin), and the branch's set was kept. Main's `ff09192` re-vendored from the old planner
+  (gen2-planner `92c055d`, its commit message says), and this branch now pins this repo's main `aa82df2`.
+- **The old viewer's main does not deploy.** Its Pages workflow runs npm test first. `a41b905` (2026-10-18, Jessie
+  Neon Yellow, 112 colours) left `test/filament-db.test.mjs` asserting 111. The run for `00e5eef` failed, and
+  `gen2build.jerrari3d.com` still serves `9ee345c4` (2026-10-16). Step 5 below merges into that main, and so would its
+  undo: neither deploys while it is red. The local main of `D:\Code Projects\GEN2 Visual Animator` carries the fix,
+  unpushed: `72545c5` puts the count at 122 with PolyFlex TPU. It comes after `d479d84` and `7c5571b` from the v2609
+  Decor work. Pushing that main would start the old viewer's deploy, which still has to pass its own checks (not run on
+  that head here); the push is Joey's call.
+- **Undoing each step, rehearsed** (`tools/rehearse-revert.sh`). Each branch was tested the same way, in a throwaway
+  worktree at today's main: the day's `git merge --no-ff` applies clean, and `git revert -m 1` of that merge gives back
+  main's tree byte for byte. All four pass. The site's merge shows 3,499 changed lines in `src/pages/instructions.js`:
+  the branch normalized that file to LF, and with line endings ignored, 9 lines change. How long an undo takes to reach a
+  visitor:
+  - all three GitHub Pages hosts send `Cache-Control: max-age=600`, so a browser may keep using a cached page for up to
+    10 minutes after it loaded it;
+  - this planner's deploy runs the e2e suite before it publishes. Its successful runs on 2026-10-21 took 22 to 48
+    minutes end to end, a guide and not a promise;
+  - the old planner has no deploy workflow (its ci.yml only tests), and Pages publishes its main directly;
+  - the old viewer's deploy runs npm test first (above);
+  - the site is on Cloudflare (`max-age=0, must-revalidate`) and rebuilds on a push.
+- **What carries over, tested** (`tools/handover-roundtrip.mjs`, 25 checks, all pass). The test runs the old planner,
+  the old viewer and this planner as loopback copies of the branches above.
+  - The old planner's forward:
+    - a fresh visit and a build with no mount go to Build plain;
+    - a tabletop 185 build made there with Surprise me opens in Build with the same mount, length and units (id, size,
+      position, fill), with `?from=makerworld` counted;
+    - a kit link with the site's ref opens in Build.
+  - The old viewer's forward: a kit from a listing opens in Assemble with `from:thangs` counted, and the part preview and
+    the dock stay on the old viewer.
+  - Build files, both ways, on one random wall 185 build (Surprise me) per run:
+    - a build saved with the old planner's SAVE opens in this planner's Load build file, unit for unit (size,
+      position, fill, variant, shelves);
+    - the same build saved from this planner imports into the old planner, unit for unit;
+    - this planner's `#build=` address opens in the old planner, unit for unit.
+  - For an undo: a build file made here with side covers Off, imported into the old planner, kept every top-level and
+    unit field but `sideCovers`, so it comes back On, as Sol `01a15b12` recorded. Labels were not exercised (the case
+    sets no label list), nor were cabinets or any other configuration.
+- **What does not carry over** (from the old planner's js/app.js at `e47fcb8`). The old planner keeps ONE build per
+  browser, the `gen2-last-build` slot, and the redirect forwards that build. There is no list of older builds in its
+  storage: an older build exists only as a file or a link someone kept. Supported builds of that kind passed the tests
+  above; one with a cabinet, or outside this planner's limits, does not open here today (C6 / D5 below). Four stores
+  stay on the old origin:
+  - `gen2-viewer-colors`: one colour palette per browser, not per build. Neither planner's build file or `#build=` link
+    carries colours, so a visitor's colours from the old planner do not arrive; this planner shows its own palette (its
+    default, unless the visitor already chose colours here; that case was not tested);
+  - `gen2-bom-tracker`: the parts checklist's ticks;
+  - `gen2-link-store`: the store a visitor chose. A listing's `?from=` is counted here (tested above); that it also seeds
+    this planner's store choice is the 2026-10-17 notes' claim, not re-tested;
+  - `gen2-label-copies` and `gen2-label-batches`: copies of label lists and Studio batches. The label list itself
+    travels in the build (`labelList`, `labelAssign`).
+- **The old planner's capability list, checked against the live planner.** The record is `PARITY.md`, with 30
+  Playwright scripts, analytics blocked; Sol `01a16116` checked the verdicts, and 5 of its 6 findings were taken.
+  - The discovery inventory has **59 rows** (A1-J4), not the 69 the cross-check names. Of those:
+    - 34 BUILT, 6 of them living on other sites;
+    - 13 CHANGED;
+    - 10 MISSING. One of them, G3 "send to phone", never existed in the old planner;
+    - 2 CUT on purpose: C1, the docked preview's controls, and C5, "the 3D view cannot edit".
+  - Four matter before the old planner's redirect:
+    1. **E6, a defect live today.** The Label Studio's "Add to planner build" link (`?ws=labels#labels-add=…`) adds
+       nothing when it opens the planner as a fresh page. The same link set after the page has loaded adds its labels,
+       and only that path is tested. Re-checked on stamp `aa82df2d` (`tools/labels-add-probe.mjs`): 0 labels on load, 2
+       after. The old planner's redirect forwards `#labels-add=` into the same path.
+    2. **C6 / D5.** A build with a cabinet, more than 80 units, or a size its length is not made in opens only on "Can't
+       show this build yet": it cannot be edited, billed or fixed. The old planner places and bills cabinets, and its
+       redirect would forward such a last build to that page.
+    3. **I1.** The planner's shell has no Feedback & support. `#btn-feedback` sits in the old viewer's header, which
+       the shell hides.
+    4. **A4 / A5.** There is no layout "Surprise me" and no "Load example", and no cut is recorded for either.
+  - The other CHANGED and MISSING rows are in `PARITY.md` with their evidence:
+    - the build image;
+    - the cover stagger toggle and the Club note;
+    - the written guides and the videos;
+    - the primer;
+    - the parts list's thumbnails, and MakerWorld as a store;
+    - a part tap's download link.
+
+## Ready on branches (2026-10-17): nothing merged, nothing deployed (the heads and checks are the 2026-10-21 section's now)
 
 Each branch is pushed to its own origin and is current with its base: where the base had moved, it was merged in, never
 rebased.
@@ -108,8 +206,8 @@ Worktree `D:/Code Projects/MODULITH-cutover`.
 
 1. **The merge order.** Recommended below.
 2. **The old planner's kill date.** It is the day the old planner's `cutover-redirect` merges: from then its address only
-   forwards. The redirect carries the build that browser had open last; an OLDER build has to be saved as a file in the old
-   planner before that day and loaded here, since this origin cannot read the old one's storage.
+   forwards. The redirect carries the build that browser had open last, the only build the old planner keeps; its colours,
+   parts ticks and store choice stay behind, since this origin cannot read the old one's storage (2026-10-21, above).
 3. **GoatCounter: which counter the merged planner reports to.** It counts to `jerrari-build.goatcounter.com` today, the old
    viewer's counter, inherited with the viewer's index.html (the `data-goatcounter` tag at the bottom of index.html). The
    old planner counts to `jerrari.goatcounter.com`, the site to `jerrari-modulith`. The approved plan (2026-10-12, §1.6)
@@ -165,7 +263,15 @@ Since 2026-10-17 it also checks the front door on `cutover-front-door`.
   check-by: 2026-10-27
   ```
 
-  Re-checked 2026-10-17: it still holds, and everything else the day needs is on the branches above.
+  Re-checked 2026-10-17: it still holds, and everything else the day needs is on the branches above. Re-checked
+  2026-10-21: it still holds; the prep above is done.
+- step 5, the old viewer's redirect (found 2026-10-21):
+
+  ```
+  blocked-on: the old viewer's main fails its own npm test (filament-db's count), so a merge into it does not deploy
+  blocked-since: 2026-10-18
+  check-by: 2026-10-27
+  ```
 
 ## Not in the cutover
 
@@ -173,8 +279,9 @@ Since 2026-10-17 it also checks the front door on `cutover-front-door`.
   golden-hour hero shot first, when Joey and Astra want to direct it.
 - The old planner's storage migration: `PLANNER` is a new domain, so nothing can be read across. The last build travels
   through the redirect (above); the colour stores, the tracker and the link store do not, and the dual-written slot on the
-  new origin is unused until something else shares it. A visitor who wants an OLDER build from the old planner saves a file
-  there and loads it here, which the old planner still offers until its kill date.
+  new origin is unused until something else shares it. The old planner keeps no other builds (2026-10-21): an older one
+  exists only as a file or a link a visitor kept, and opens here when this planner supports what it holds (not a
+  cabinet, 2026-10-21 above).
 - The kit gallery's own words still say GEN2 ("GEN2 starter kits", "GEN2 Planner"), and the share-image tool
   (`builds/banner.html`, for Printables descriptions) prints `gen2build.jerrari3d.com` as the short link, which keeps
   working through the old viewer's redirect. Renaming them is its own pass.
