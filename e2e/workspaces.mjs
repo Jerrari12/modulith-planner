@@ -1409,15 +1409,19 @@ test('Build: a refused cell says why - a 1W over the middle of a 3W is a muted s
    moved more than 4 units between press and release, and a guided move moves it by itself: a click during the boot's
    fly-in or a layout change's re-frame set camFree, and from then on the camera stopped following the build (found
    tracing the refused-cell case). A tap is a press whose pointer stays within 6 px, the stage's own tap rule; a drag,
-   a pinch or a wheel still takes the camera, mid-flight or not. */
+   a pinch or a wheel still takes the camera, mid-flight or not.
+   The camera leaves its guided pose by the wheel, which is not damped, before each wait for it to rest: a drag's damped
+   coast ran on past 30 s on the SwiftShader runner (deploy run 39790130544), so the one drag comes last. */
 test('Build: a tap while the guided camera is moving leaves the camera to the guide; a drag or a wheel takes it', async () => {
   const { ctx, page, errors } = await open('build');
   const cam = () => page.evaluate(() => window.__GEN2_VIEWER__.probe().camera);
   const free = () => page.evaluate(() => window.__GEN2_VIEWER__.camFree);
   const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  const still = async (what) => {   // the camera's position the same in two reads 300 ms apart
-    await page.evaluate(() => { window.__e2eCam = null; });
-    await page.waitForFunction(() => { const c = JSON.stringify(window.__GEN2_VIEWER__.probe().camera); const same = window.__e2eCam === c; window.__e2eCam = c; return same; }, null, { polling: 300, timeout: 30_000 })
+  // the camera's position the same in three reads 300 ms apart: on the SwiftShader runner a moving camera is drawn about
+  // every 300 ms, so two reads could fall between two of its frames
+  const still = async (what) => {
+    await page.evaluate(() => { window.__e2eCam = null; window.__e2eSame = 0; });
+    await page.waitForFunction(() => { const c = JSON.stringify(window.__GEN2_VIEWER__.probe().camera); window.__e2eSame = window.__e2eCam === c ? window.__e2eSame + 1 : 0; window.__e2eCam = c; return window.__e2eSame >= 2; }, null, { polling: 300, timeout: 30_000 })
       .catch(() => assert.fail(`the camera did not come to rest ${what} within 30 s`));
     return cam();
   };
@@ -1426,21 +1430,29 @@ test('Build: a tap while the guided camera is moving leaves the camera to the gu
   const drag = async (p) => { await page.mouse.move(p[0], p[1]); await page.mouse.down(); await page.mouse.move(p[0] + 160, p[1] + 40, { steps: 10 }); await page.mouse.up(); };
   // the guided flight back is slowed (2.25 s, not 0.9 s) so a press lands inside it on a slow runner too
   const flyBack = async () => { await page.evaluate(() => { window.__GEN2_VIEWER__.setSlow(true); window.__GEN2_VIEWER__.resetView(); }); assert.equal(await free(), false, 'the camera button gives the camera back'); };
+  // zoomed out at an empty point: a wheel takes the camera
+  const zoomOut = async (what) => {
+    await page.mouse.wheel(0, 800);
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail(`a wheel ${what} did not take the camera`));
+    return still(`after the wheel ${what}`);
+  };
+  // the camera button's flight, once the camera has left its pose by 20 units: past the eased flight's slow start,
+  // where its first 250 ms move the camera about 0.5% of the way
+  const inFlight = async (pose) => {
+    await flyBack();
+    await page.waitForFunction((s) => { const c = window.__GEN2_VIEWER__.probe().camera; return Math.hypot(c[0] - s[0], c[1] - s[1], c[2] - s[2]) > 20; }, pose, { timeout: 15_000 })
+      .catch(() => assert.fail('the camera button did not fly the camera back'));
+  };
   await still('after the boot');
   let pt = await empty();
   assert.ok(pt, 'an empty point on the stage');
-  await drag(pt);
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('a drag did not take the camera'));
-  await still('after the drag');
-  // a tap inside the guided flight: the pointer stays put while the camera moves under it. The press starts once the
-  // camera has left (20 units), past the eased flight's slow start, where 250 ms moves it about 0.5% of the way
   await page.mouse.move(pt[0], pt[1]);
-  const pose = await cam();
-  await flyBack();
-  await page.waitForFunction((s) => { const c = window.__GEN2_VIEWER__.probe().camera; return Math.hypot(c[0] - s[0], c[1] - s[1], c[2] - s[2]) > 20; }, pose, { timeout: 15_000 })
-    .catch(() => assert.fail('the camera button did not fly the camera back'));
+  const pose = await zoomOut('at rest');
+  // a tap inside the guided flight: the pointer stays put while the camera moves under it (600 ms: two of the runner's
+  // frames at least)
+  await inFlight(pose);
   const before = await cam();
-  await page.mouse.down(); await page.waitForTimeout(250); await page.mouse.up();
+  await page.mouse.down(); await page.waitForTimeout(600); await page.mouse.up();
   const moved = dist(before, await cam());
   assert.ok(moved > 4, `the press fell inside the guided flight: the camera moved ${moved.toFixed(1)} during it`);
   assert.equal(await free(), false, 'a tap during a guided move leaves the camera to the guide');
@@ -1457,13 +1469,12 @@ test('Build: a tap while the guided camera is moving leaves the camera to the gu
   assert.ok(pt, 'an empty point on the stage around the wider build');
   await page.mouse.move(pt[0], pt[1]); await page.mouse.down(); await page.mouse.up();
   assert.equal(await free(), false, 'a tap at rest takes nothing');
-  await page.mouse.wheel(0, -400);
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('a wheel did not take the camera'));
-  await still('after the wheel');
-  // and a drag inside a guided flight still takes it (from a point empty at the zoomed pose the flight starts from)
+  const out = await zoomOut('after a tap');
+  // and a drag inside a guided flight still takes it (from a point empty at the zoomed-out pose the flight starts from)
   pt = await empty();
   assert.ok(pt, 'an empty point on the stage after the wheel');
-  await flyBack();
+  await page.mouse.move(pt[0], pt[1]);
+  await inFlight(out);
   await drag(pt);
   await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('a drag during a guided move did not take the camera'));
   await page.evaluate(() => window.__GEN2_VIEWER__.setSlow(false));

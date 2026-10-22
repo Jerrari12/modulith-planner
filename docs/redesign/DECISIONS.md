@@ -2316,27 +2316,39 @@ Dated calls made while building, with who made them. The brief and the inventory
     window's bubble phase, after the controls' document listener has sent `end`.
 - **Checks.**
   - A new e2e case, "Build: a tap while the guided camera is moving leaves the camera to the guide; a drag or a wheel
-    takes it". It orbits away, slows the camera button's flight back to 2.25 s (slow motion), and presses for 250 ms
-    at an empty point once the camera has moved 20 units. It asserts the camera moved more than 4 units during the
-    press, then that `camFree` stays false and that a later layout change (two 3W) re-frames the camera. Then a tap
-    at rest takes nothing, a wheel after it takes the camera, and a drag inside a second flight takes it.
-  - On the old main.js the case failed 2 of 2 at "a tap during a guided move leaves the camera to the guide". With
-    that assertion removed, it failed at "a layout change after the tap re-framed the camera (it moved 0.0)". On the
-    fix it passed 4 of 4 alone.
-  - Two mutants each fail it: every press counted as a tap ("a drag did not take the camera"), and no release or
-    wheel reset ("a wheel did not take the camera").
-  - The case's first version pressed right after the camera button and once failed its own precondition on the fix
-    (3.9 units): the eased flight's first 250 ms move the camera about 0.5% of the way. The press now waits for the
-    camera to leave.
-  - npm test: 591 pass, 0 fail, 5 skipped. Smoke: 4 of 4. Full e2e against the parts host: 76 of 76. With
-    `GEN2_PARTS_LOCAL=1`: 75 of 76. The one failure was the Label plate's faceplate-switch case, a click timeout on a
-    hidden "Screw and nut drawings" Off button: the older flake recorded in the idle-gate entry's Live line
-    (2026-10-21). It needs the Label Studio checkout, so the deploy runner skips it, and it never presses the stage.
-    Alone with local parts it failed 2 of 3 on the fix and 1 of 4 on the old main.js; against the host it passed 3
-    of 3.
+    takes it". It zooms out with the wheel (which takes the camera), slows the camera button's flight back to 2.25 s
+    (slow motion), and presses for 600 ms at an empty point once the camera has moved 20 units. It asserts the camera
+    moved more than 4 units during the press, then that `camFree` stays false and that a later layout change (two 3W)
+    re-frames the camera. Then a tap at rest takes nothing, a wheel after it takes the camera, and a drag inside a
+    second flight takes it.
+  - On the old main.js the case fails at "a tap during a guided move leaves the camera to the guide". With that
+    assertion removed, it fails at "a layout change after the tap re-framed the camera (it moved 0.0)".
+  - Two mutants each fail it: every press counted as a tap ("a drag during a guided move did not take the camera"),
+    and no release or wheel reset ("a wheel after a tap did not take the camera").
+  - The case as first pushed (`6f1142a`) moved the camera off its pose with an orbit drag, and failed deploy run
+    39790130544 at "the camera did not come to rest after the drag within 30 s". The drag's damped coast decays per
+    update, not per second, so on the SwiftShader runner it ran past 30 s; the deploy stopped and the site stayed on
+    `aa82df2d`.
+    With `E2E_SOFT=1 E2E_THROTTLE=4` that version failed the same way here. The wheel's zoom is not damped, so the
+    case now uses it, and its one drag comes last with no wait after it. A moving camera is drawn there about every
+    300 ms, so the case also holds its press 600 ms (it was 250) and takes the camera as at rest after three equal
+    reads 300 ms apart (it was two). Soft at a 4x throttle it passed 2 of 2 (32-34 s), at 6x 1 of 1 (33 s), and 3 of 3
+    without (10-11 s).
+  - Before it was first pushed, the case pressed right after the camera button and once failed its own precondition on
+    the fix (3.9 units): the eased flight's first 250 ms move the camera about 0.5% of the way. The press now waits
+    for the camera to leave.
+  - npm test: 591 pass, 0 fail, 5 skipped. Smoke: 4 of 4. Full e2e against the parts host with the case as first
+    pushed: 76 of 76; with `GEN2_PARTS_LOCAL=1`: 75 of 76. With the wheel version of the case (before the 600 ms press
+    and the three reads), against the host: 75 of 76. With the case as committed, against the host: 76 of 76 (the case
+    9.2 s). Both failures were the Label plate's faceplate-switch case, a click timeout on a hidden "Screw and nut
+    drawings" Off button: the older flake recorded in the idle-gate entry's Live line (2026-10-21). It needs the
+    Label Studio checkout, so the deploy runner skips it, and it never presses the stage. Alone with local parts it
+    failed 2 of 3 on the fix and 1 of 4 on the old main.js; against the host it passed 3 of 3. Proposed as its own
+    task.
   - On the live site before the deploy (stamp `aa82df2d`), `live-tap.mjs` replays the case's tap (in
     `D:/Claude - Output/refused-cell-flake-2026-10-21/`): the camera moved about 67 units under a 250 ms tap, and the
     tap took the camera, 2 of 2.
 - **Review:** Terra `01a163c9` on the code and the case: no findings. Terra `01a163dd` on this entry: one finding,
-  discarded wrong (it asked for the Live line before the deploy it records).
+  discarded wrong (it asked for the Live line before the deploy it records). Terra `01a16421` on the case's rework for
+  the runner and its text here: no findings.
 - **Deploy:** a bug fix Joey asked for in words; it deploys once its checks pass.
