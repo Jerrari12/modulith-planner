@@ -24,6 +24,8 @@ test('the ported computeBom matches the planner on the official kits and on seed
   let compared = 0, mismatches = [];
   /* Where this repo's rules moved AHEAD of the old planner on purpose, dated: the ported row is compared as the old
      planner still writes it. Remove an entry when the old planner carries the change, or is retired at the cutover.
+     The port's own list, which puts these edits into bom.js, is tools/port-ahead.mjs; this one holds only the ones the
+     draws below reach (the per-run side covers need a gap, the toggle a record the old planner never makes).
      - 2026-10-20: the back cover row says the v2609 drawer's tear-away front comes out first (DECISIONS.md of that
        date; test/back-cover-tearaway.test.mjs pins the words). The old planner's note (app.js 5402 at 7beb165) does not. */
   const AHEAD = [
