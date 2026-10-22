@@ -2288,10 +2288,55 @@ Dated calls made while building, with who made them. The brief and the inventory
     between press and release, and the tween's own motion counts.
   - In the three failing replay runs that logged it, the case's click inside the flight set `camFree` true. The camera
     did not move again when the 3W mounted.
-  - Proposed as its own change.
+  - Proposed as its own change. Fixed 2026-10-22: "a tap never takes the camera", below.
 - **Review:** Terra `01a1608a` on the case: one finding, discarded wrong. It said a sub-pixel tween could pass the poll
   and the click then miss; the easing bound above rules that out. Terra `01a1609a` on this entry: three fixes taken (the
   runner's timing marked as inferred, the bound restated for rounding and the projection, the log line named exactly).
   Two discarded: the 29 of 30 count holds (one run took 109 ms), and the deploy line is Joey's standing rule, not a
   blocker.
 - **Deploy:** a test-only fix for a failure the suite reported; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `aa82df2d`: deploy run 39688850430 passed, the case with it.
+
+## 2026-10-22 (a tap never takes the camera)
+
+- **Joey, asked:** "fix the tap-during-a-camera-move takeover here: a tap during a guided tween should not set
+  camOverride. Write a check that fails on the current code first."
+- **The bug.** The stage hands the camera to the visitor (`camOverride`, read as `camFree`) when the camera moved more
+  than 4 units between the controls' `start` and `end`. A guided move (the Build boot's fly-in, a layout change's
+  re-frame, the camera button's return) moves the camera by itself, so a plain click inside one set it, on a "+" or
+  anywhere on the stage. From then on `tweenCamera` returned early, and the camera stopped following the build until
+  the camera button was pressed. Found tracing the refused-cell case (the entry above).
+- **Now** main.js follows each press on the stage: where its pointers went down, and the furthest any of them travels.
+  - A press whose pointers all stayed within `TAP_PX` (6 px) is a tap, and never sets `camOverride`. 6 px is the
+    threshold the canvas pointerup already used to tell a tap from an orbit's release; that line now reads the same
+    constant.
+  - A drag or a pinch travels further, and a wheel has no press (a wheel also clears any press record), so they still
+    take the camera, mid-flight or not.
+  - Down and move are caught in the window's capture phase, before the controls. A released pointer is dropped in the
+    window's bubble phase, after the controls' document listener has sent `end`.
+- **Checks.**
+  - A new e2e case, "Build: a tap while the guided camera is moving leaves the camera to the guide; a drag or a wheel
+    takes it". It orbits away, slows the camera button's flight back to 2.25 s (slow motion), and presses for 250 ms
+    at an empty point once the camera has moved 20 units. It asserts the camera moved more than 4 units during the
+    press, then that `camFree` stays false and that a later layout change (two 3W) re-frames the camera. Then a tap
+    at rest takes nothing, a wheel after it takes the camera, and a drag inside a second flight takes it.
+  - On the old main.js the case failed 2 of 2 at "a tap during a guided move leaves the camera to the guide". With
+    that assertion removed, it failed at "a layout change after the tap re-framed the camera (it moved 0.0)". On the
+    fix it passed 4 of 4 alone.
+  - Two mutants each fail it: every press counted as a tap ("a drag did not take the camera"), and no release or
+    wheel reset ("a wheel did not take the camera").
+  - The case's first version pressed right after the camera button and once failed its own precondition on the fix
+    (3.9 units): the eased flight's first 250 ms move the camera about 0.5% of the way. The press now waits for the
+    camera to leave.
+  - npm test: 591 pass, 0 fail, 5 skipped. Smoke: 4 of 4. Full e2e against the parts host: 76 of 76. With
+    `GEN2_PARTS_LOCAL=1`: 75 of 76. The one failure was the Label plate's faceplate-switch case, a click timeout on a
+    hidden "Screw and nut drawings" Off button: the older flake recorded in the idle-gate entry's Live line
+    (2026-10-21). It needs the Label Studio checkout, so the deploy runner skips it, and it never presses the stage.
+    Alone with local parts it failed 2 of 3 on the fix and 1 of 4 on the old main.js; against the host it passed 3
+    of 3.
+  - On the live site before the deploy (stamp `aa82df2d`), `live-tap.mjs` replays the case's tap (in
+    `D:/Claude - Output/refused-cell-flake-2026-10-21/`): the camera moved about 67 units under a 250 ms tap, and the
+    tap took the camera, 2 of 2.
+- **Review:** Terra `01a163c9` on the code and the case: no findings. Terra `01a163dd` on this entry: one finding,
+  discarded wrong (it asked for the Live line before the deploy it records).
+- **Deploy:** a bug fix Joey asked for in words; it deploys once its checks pass.

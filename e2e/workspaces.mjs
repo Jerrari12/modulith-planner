@@ -1405,6 +1405,72 @@ test('Build: a refused cell says why - a 1W over the middle of a 3W is a muted s
   await ctx.close();
 });
 
+/* A TAP NEVER TAKES THE CAMERA (2026-10-22). The stage counted a press as the visitor taking the camera when the camera
+   moved more than 4 units between press and release, and a guided move moves it by itself: a click during the boot's
+   fly-in or a layout change's re-frame set camFree, and from then on the camera stopped following the build (found
+   tracing the refused-cell case). A tap is a press whose pointer stays within 6 px, the stage's own tap rule; a drag,
+   a pinch or a wheel still takes the camera, mid-flight or not. */
+test('Build: a tap while the guided camera is moving leaves the camera to the guide; a drag or a wheel takes it', async () => {
+  const { ctx, page, errors } = await open('build');
+  const cam = () => page.evaluate(() => window.__GEN2_VIEWER__.probe().camera);
+  const free = () => page.evaluate(() => window.__GEN2_VIEWER__.camFree);
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const still = async (what) => {   // the camera's position the same in two reads 300 ms apart
+    await page.evaluate(() => { window.__e2eCam = null; });
+    await page.waitForFunction(() => { const c = JSON.stringify(window.__GEN2_VIEWER__.probe().camera); const same = window.__e2eCam === c; window.__e2eCam = c; return same; }, null, { polling: 300, timeout: 30_000 })
+      .catch(() => assert.fail(`the camera did not come to rest ${what} within 30 s`));
+    return cam();
+  };
+  // a point on the stage with no unit under it (a press on a unit picks the unit up)
+  const empty = () => page.evaluate(() => { const c = document.querySelector('canvas'); for (const [x, y] of [[640, 160], [520, 200], [760, 200], [640, 660], [420, 400], [860, 400]]) if (document.elementFromPoint(x, y) === c && window.__GEN2_VIEWER__.unitAt(x, y) == null) return [x, y]; return null; });
+  const drag = async (p) => { await page.mouse.move(p[0], p[1]); await page.mouse.down(); await page.mouse.move(p[0] + 160, p[1] + 40, { steps: 10 }); await page.mouse.up(); };
+  // the guided flight back is slowed (2.25 s, not 0.9 s) so a press lands inside it on a slow runner too
+  const flyBack = async () => { await page.evaluate(() => { window.__GEN2_VIEWER__.setSlow(true); window.__GEN2_VIEWER__.resetView(); }); assert.equal(await free(), false, 'the camera button gives the camera back'); };
+  await still('after the boot');
+  let pt = await empty();
+  assert.ok(pt, 'an empty point on the stage');
+  await drag(pt);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('a drag did not take the camera'));
+  await still('after the drag');
+  // a tap inside the guided flight: the pointer stays put while the camera moves under it. The press starts once the
+  // camera has left (20 units), past the eased flight's slow start, where 250 ms moves it about 0.5% of the way
+  await page.mouse.move(pt[0], pt[1]);
+  const pose = await cam();
+  await flyBack();
+  await page.waitForFunction((s) => { const c = window.__GEN2_VIEWER__.probe().camera; return Math.hypot(c[0] - s[0], c[1] - s[1], c[2] - s[2]) > 20; }, pose, { timeout: 15_000 })
+    .catch(() => assert.fail('the camera button did not fly the camera back'));
+  const before = await cam();
+  await page.mouse.down(); await page.waitForTimeout(250); await page.mouse.up();
+  const moved = dist(before, await cam());
+  assert.ok(moved > 4, `the press fell inside the guided flight: the camera moved ${moved.toFixed(1)} during it`);
+  assert.equal(await free(), false, 'a tap during a guided move leaves the camera to the guide');
+  const home = await still('after the flight');
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSlow(false));
+  // so the guide still follows the build: a wider layout re-frames the camera
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; s.placed = [0, 3].map((x, i) => ({ id: i + 1, x, y, w: 3, hh: 2, fill: 'decor', shelves: 0 })); s.nextId = 100; s.gridW = 6; }, 'edit'));
+  await page.waitForFunction(() => { const V = window.__GEN2_VIEWER__; return V.build.placed.length === 2 && V.build.placed.every((u) => u.w === 3) && !V.regenBusy; }, null, { timeout: 90_000 })
+    .catch(() => assert.fail('the two 3W did not reach the stage within 90 s'));
+  const framed = await still('after the layout change');
+  assert.ok(dist(home, framed) > 4, `a layout change after the tap re-framed the camera (it moved ${dist(home, framed).toFixed(1)})`);
+  // a tap at rest leaves nothing behind: a wheel after it still takes the camera
+  pt = await empty();
+  assert.ok(pt, 'an empty point on the stage around the wider build');
+  await page.mouse.move(pt[0], pt[1]); await page.mouse.down(); await page.mouse.up();
+  assert.equal(await free(), false, 'a tap at rest takes nothing');
+  await page.mouse.wheel(0, -400);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('a wheel did not take the camera'));
+  await still('after the wheel');
+  // and a drag inside a guided flight still takes it (from a point empty at the zoomed pose the flight starts from)
+  pt = await empty();
+  assert.ok(pt, 'an empty point on the stage after the wheel');
+  await flyBack();
+  await drag(pt);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('a drag during a guided move did not take the camera'));
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSlow(false));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* A STUDIO THAT DOES NOT ANSWER (the stress test, 2026-10-15). The message blamed the planner's address and offered nothing.
    Now it says the Studio may be slow or down, and offers Try again, which reloads the frame and waits again */
 test('the Part Picker modal with the Studio unreachable: after 8 s it says so and offers Try again', async () => {

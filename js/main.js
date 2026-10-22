@@ -4785,13 +4785,32 @@ function setCamOverride(on) {
   document.getElementById('btn-cam').classList.toggle('hidden', !on);
   if (was !== on && typeof opts !== 'undefined' && opts.onCamFree) opts.onCamFree(on);   // the shell's toolbar lights its camera button (Assemble, 2026-10-20)
 }
+/* ⚠ A TAP NEVER TAKES THE CAMERA (2026-10-22). `moved` below is the camera's own travel between press and release, and
+   a guided move (the boot's fly-in, a layout change's re-frame, the camera button's return) travels by itself: a click
+   on a "+" inside one handed the camera to the visitor, and from then on the guide stopped following the build (found
+   tracing the refused-cell e2e case; its e2e case measures both). So the press is followed too: one whose pointers all
+   stay within TAP_PX of where they went down is a tap, the 6 px the pointerup below uses to tell a tap from an orbit's
+   release. A drag or a pinch travels further, and a wheel has no press, so they still take it, mid-flight or not.
+   Down and move are caught on the way in, before the controls; a release is dropped on the way out, after the
+   controls' document listener has sent 'end'. */
+const TAP_PX = 6;
+let press = null;   // { at: Map(pointerId -> [x, y]), travel } for the press on the stage in progress
+addEventListener('pointerdown', e => {
+  if (e.target !== canvas) return;
+  if (e.isPrimary || !press) press = { at: new Map(), travel: 0 };
+  press.at.set(e.pointerId, [e.clientX, e.clientY]);
+}, true);
+addEventListener('pointermove', e => { const s = press && press.at.get(e.pointerId); if (s) press.travel = Math.max(press.travel, Math.hypot(e.clientX - s[0], e.clientY - s[1])); }, true);
+for (const type of ['pointerup', 'pointercancel']) addEventListener(type, e => { if (press && press.at.delete(e.pointerId) && !press.at.size) press = null; });
+addEventListener('wheel', () => { press = null; }, true);   // a wheel is never a tap, whatever press came before it
 controls.addEventListener('start', () => {
   interactFrom = { p: camera.position.clone(), t: controls.target.clone() };
 });
 controls.addEventListener('end', () => {
   if (!interactFrom || cinema.on) { interactFrom = null; return; }
   const moved = camera.position.distanceTo(interactFrom.p) + controls.target.distanceTo(interactFrom.t);
-  if (moved > 4) setCamOverride(true); // a real orbit/zoom — an identify tap doesn't move the camera
+  const tap = !!press && press.travel <= TAP_PX;
+  if (moved > 4 && !tap) setCamOverride(true); // a real orbit/zoom — an identify tap doesn't move the camera, and a guided move under one is not the visitor's
   interactFrom = null;
 });
 
@@ -8422,7 +8441,7 @@ canvas.addEventListener('pointerup', e => {
   // a deliberate mode the user switched on (2026-08-20, the site's expanded
   // inspection view)
   if ((PAGES[cur]?.cover || PAGES[cur]?.outro) && !(IS_PART && measure.on)) return;
-  if (!downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 6) return;
+  if (!downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > TAP_PX) return;
   // a TAP, never an orbit's release (Sol 01a132aa): a spot places, the eraser removes - the Build workspace's overlays
   if (spotSpec) {
     const g = spotAt(e);
