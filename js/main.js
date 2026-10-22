@@ -7204,7 +7204,9 @@ if (!IS_PART) try {
 } catch (e) { /* corrupt storage — start fresh */ }
 // persist without re-stamping (remote applies adopt the sender's stamp so the
 // exchange converges); saveColors = a LOCAL edit → new stamp + tell the planner
+let colorsHeld = false;   // the planner's stale-tab guard: another tab saved this build, so this tab's palette is not written (2026-10-22)
 const persistColors = () => {
+  if (colorsHeld) return;
   try { localStorage.setItem(COLOR_STORE_KEY, JSON.stringify({ colors: customColors, on: useCustom, user: userPalette, over: overrides, t: colorsT })); }
   catch (e) { /* storage unavailable (private mode) — the planner relay still works */ }
 };
@@ -11140,7 +11142,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     thumbDraw: (o, x) => drawThumb(thumbSpec(o), x), thumbModel,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
     palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
-    setOverride, clearOverrides, overrideFor, setColorStoreKey,
+    setOverride, clearOverrides, overrideFor, setColorStoreKey, holdColors: (on) => { colorsHeld = !!on; },
     // a look shown and not chosen, and the filament count (the Colors plan's step 1, 2026-10-18)
     previewPalette, endPreview, get previewing() { return !!previewLook; }, filamentsInBuild,
     // the look cards (step 2's probe, now the gallery's renderer; step 3, 2026-10-18) and the scene revision they key on

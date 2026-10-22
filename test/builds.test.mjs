@@ -88,3 +88,92 @@ test('the cap is the write’s own check: a 21st new id is refused with the entr
   await b.remove('newbuild0001');
   assert.equal(storage.getItem(B.SLOT_KEY), null);
 });
+
+/* THE STALE-TAB GUARD (2026-10-22): a write names the stored version it is based on (expect), and is refused with that row
+   when the stored row exists and is another version; a missing row is written (the cap applies); force skips only the cap */
+test('decide(): the version rule and the cap, apart', () => {
+  const rows = [{ id: 'aaaaaaaa0001', savedAt: 100, openedAt: 1 }, { id: 'aaaaaaaa0002', savedAt: 200, openedAt: 2 }];
+  const e = (id, savedAt = 999) => ({ id, savedAt });
+  assert.deepEqual(B.decide(rows, e('aaaaaaaa0001')), { ok: true, drop: null }, 'no expect: no check');
+  assert.deepEqual(B.decide(rows, e('newbuild0001')), { ok: true, drop: null });
+  assert.equal(B.decide(rows, e('aaaaaaaa0001'), { expect: 100 }).ok, true, 'based on the stored version');
+  const newer = B.decide(rows, e('aaaaaaaa0001'), { expect: 50 });
+  assert.equal(newer.ok, false); assert.equal(newer.stale.savedAt, 100); assert.equal('drop' in newer, false, 'not the cap shape');
+  assert.equal(B.decide(rows, e('aaaaaaaa0001'), { expect: 150 }).ok, false, 'an older stored version is another version too');
+  assert.equal(B.decide(rows, e('aaaaaaaa0001'), { expect: null }).stale.id, 'aaaaaaaa0001', 'never read, yet stored: another tab wrote it');
+  assert.equal(B.decide(rows, e('newbuild0001'), { expect: null }).ok, true, 'never read, not stored');
+  assert.equal(B.decide(rows, e('newbuild0001'), { expect: 123 }).ok, true, 'a missing row is written again');
+  assert.equal(B.decide(rows, e('aaaaaaaa0001'), { force: true, expect: 50 }).ok, false, 'force skips the cap, never the check');
+  const full = Array.from({ length: B.RECENT_MAX }, (_, i) => ({ id: 'cccccccc00' + String(i).padStart(2, '0'), savedAt: i, openedAt: i }));
+  const capped = B.decide(full, e('newbuild0001'), { expect: null });
+  assert.equal(capped.ok, false); assert.equal(capped.drop.id, 'cccccccc0000'); assert.equal('stale' in capped, false);
+  const both = B.decide(full, e('cccccccc0005'), { expect: 1 });
+  assert.equal(both.stale.id, 'cccccccc0005', 'a known id with the wrong version is stale'); assert.equal('drop' in both, false);
+  assert.equal(B.decide(full, e('newbuild0001'), { expect: 77 }).drop.id, 'cccccccc0000', 'a missing row still meets the cap');
+});
+
+test('savedHint(): only another tab’s write of SAVED_KEY, and never a throw', () => {
+  assert.deepEqual(B.savedHint({ key: B.SAVED_KEY, newValue: JSON.stringify({ id: 'aaaaaaaa0001', savedAt: 5 }) }), { id: 'aaaaaaaa0001', savedAt: 5 });
+  for (const ev of [{ key: B.SLOT_KEY, newValue: '{}' }, { key: null, newValue: null }, { key: B.SAVED_KEY, newValue: null }, { key: B.SAVED_KEY, newValue: '{broken' }, { key: B.SAVED_KEY, newValue: JSON.stringify({ id: 1, savedAt: 'x' }) }, null]) {
+    assert.equal(B.savedHint(ev), null, JSON.stringify(ev));
+  }
+});
+
+test('the fallback store refuses a write based on another version, leaves it byte for byte, and hints only on a change', async () => {
+  const storage = mem(), session = mem();
+  const b = await B.openBuilds({ storage, session });
+  const first = B.entryOf(rec(), { now: 100 });
+  assert.equal((await b.put(first, { expect: null })).ok, true);
+  assert.deepEqual(JSON.parse(storage.getItem(B.SAVED_KEY)), { id: 'abcdefgh1234', savedAt: 100 });
+  const before = storage.getItem('gen2-builds');
+  storage.removeItem(B.SAVED_KEY);
+  const r = await b.put(B.entryOf(rec(), { now: 150 }), { expect: null });
+  assert.equal(r.ok, false); assert.equal(r.stale.savedAt, 100);
+  assert.equal(storage.getItem('gen2-builds'), before, 'a refusal writes nothing');
+  assert.equal(storage.getItem(B.SAVED_KEY), null, 'and hints nothing');
+  assert.equal((await b.put(B.entryOf(rec(), { now: 200 }), { expect: 100 })).ok, true);
+  assert.equal((await b.get('abcdefgh1234')).savedAt, 200);
+  assert.equal((await b.put(B.entryOf(rec(), { now: 300 }), { expect: 100 })).ok, false, 'the version moved on');
+  storage.removeItem(B.SAVED_KEY);
+  assert.equal((await b.put({ ...(await b.get('abcdefgh1234')), openedAt: 999 }, { force: true, expect: 200 })).ok, true);
+  assert.equal(storage.getItem(B.SAVED_KEY), null, 'the same version written again (an open) is no hint');
+});
+
+test('the tab base: { base, pending } per build in sessionStorage; a blocked storage gives undefined and never throws', async () => {
+  const session = mem();
+  const b = await B.openBuilds({ storage: mem(), session });
+  assert.equal(b.tabBase('abcdefgh1234'), undefined, 'none kept');
+  b.setTabBase('abcdefgh1234', 100, 150);
+  assert.deepEqual(b.tabBase('abcdefgh1234'), { base: 100, pending: 150 });
+  b.setTabBase('abcdefgh1234', null);
+  assert.deepEqual(b.tabBase('abcdefgh1234'), { base: null, pending: null });
+  session.setItem('gen2-tab-base:abcdefgh1234', '{broken');
+  assert.equal(b.tabBase('abcdefgh1234'), undefined);
+  const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() {} };
+  const b2 = await B.openBuilds({ storage: mem(), session: blocked });
+  assert.equal(b2.tabBase('abcdefgh1234'), undefined);
+  assert.doesNotThrow(() => b2.setTabBase('abcdefgh1234', 1));
+});
+
+test('a write that reaches no store (the list full) says so: { unsaved }, no hint, and the stored row stays', async () => {
+  const storage = mem();
+  const b = await B.openBuilds({ storage, session: mem() });
+  assert.equal((await b.put(B.entryOf(rec(), { now: 100 }), { expect: null })).ok, true);
+  storage.removeItem(B.SAVED_KEY);
+  const set = storage.setItem; storage.setItem = (k, v) => { if (k === 'gen2-builds') throw new Error('QuotaExceededError'); return set(k, v); };
+  const r = await b.put(B.entryOf(rec(), { now: 200 }), { expect: 100 });
+  assert.deepEqual(r, { ok: true, drop: null, unsaved: true });
+  assert.equal(storage.getItem(B.SAVED_KEY), null, 'no hint for a write that did not land');
+  storage.setItem = set;
+  assert.equal((await b.get('abcdefgh1234')).savedAt, 100);
+  assert.equal((await b.put(B.entryOf(rec(), { now: 300 }), { expect: 100 })).ok, true, 'the next save, still based on 100, lands');
+});
+
+test('the tab base per page (a key the page keeps in history.state) is apart from the tab’s own', async () => {
+  const b = await B.openBuilds({ storage: mem(), session: mem() });
+  b.setTabBase('abcdefgh1234', 300);
+  b.setTabBase('abcdefgh1234', 100, null, 'pagekey1');
+  assert.deepEqual(b.tabBase('abcdefgh1234'), { base: 300, pending: null });
+  assert.deepEqual(b.tabBase('abcdefgh1234', 'pagekey1'), { base: 100, pending: null });
+  assert.equal(b.tabBase('abcdefgh1234', 'pagekey2'), undefined);
+});

@@ -2469,3 +2469,94 @@ Dated calls made while building, with who made them. The brief and the inventory
   bare link lands both labels and the address keeps the build without it, a link beside `#build=` adds its label to the
   build's two, and the plain page shows it. On `aa82df2d` it failed those three. The parity probe now finds 2 labels on
   a fresh load (0 before).
+
+## 2026-10-22 (a tab behind another tab's save stops saving: the stale-tab guard)
+
+- **Joey, asked:** "Build the stale-tab guard: a planner tab whose build was saved newer by another tab must not overwrite
+  it; show a notice with Reload instead. Test it with the Studio's two-tab flow, then review and deploy."
+- **What was wrong.** Make labels opens the Label Studio in a new tab. Its Add to planner build opens the planner again,
+  in another new tab, on this browser's current build. That tab (B) lands the labels and saves while the first tab (A)
+  is still open on the build without them. A's next edit then saved its older build over the labels. A production check
+  (`stale-tab-prod.mjs` in the prod-checks folder) reproduces it on the live `04bf17ff`: after A's edit the stored build
+  has 0 labels.
+- **Now** every write names the stored version it is based on.
+  - The version is the entry's `savedAt`. A new one is always above the version it is based on, so two saves in one
+    clock tick, or a clock set back, never share one (Sol `01a16556`).
+  - `builds.js decide()` runs inside the IndexedDB transaction, against the rows `get()` sees (the localStorage list
+    wins). It refuses a write when the stored row exists and is another version; a missing row is written as before;
+    `force` skips the 20-build cap, never the check.
+  - The tab keeps its base per build: in memory, in sessionStorage per tab, and in sessionStorage per history entry
+    (under a key the page keeps in `history.state`). A reload of a stale tab is still stale, and so is Back to an older page of the build.
+  - Every write (the autosave, Rename) runs on one queue and reads its base when it runs.
+  - A refused write makes the tab stale for good. It persists nothing more: not the Recent entry, the current build, the
+    slot or the palette. The address still follows its edits. A notice over everything, an alertdialog at body level,
+    says "This build was saved in another tab" and offers Reload, which opens the saved version and takes the older page
+    out of the history.
+  - After a write that changed the version, the store writes `gen2-build-saved`; other tabs on the same build read the
+    stored version again on that hint, when they come back into view, and from the back/forward cache. A hint alone never
+    makes a tab stale.
+  - A link opened fresh is an explicit open of that version and wins, as before.
+- **Opening Labels no longer saves.** Its label-sync commit saved a new version of an untouched build (null label fields
+  became absent), which would have made every other tab on the build stale for nothing. It now commits only when
+  reconciling changes something. That save was also what made a never-saved build (a kit page, someone's link) this
+  browser's current one, which the Studio's Add to planner build reopens; Make labels and the Studio link now do that
+  themselves (`ctx.builds.keepCurrent()`).
+- **How it got here.** A design-critique workflow listed 51 problems before any code (FINAL.md in the session scratchpad).
+  The code then went through a five-lens adversarial review, each claim verified against the source by a separate
+  agent: 8 findings confirmed, 6 of them distinct, all fixed.
+  1. Keys on the Reload button reached the page under the notice (Build's Ctrl+Z and Delete, Escape closing the Picker).
+  2. A lost IndexedDB connection (WebKit, after a tab sat in the background) fell back to a list-only check, so the
+     OLDER tab won. The store now opens IndexedDB again once before it settles for the list.
+  3. A list write that failed (storage full) reported success, moved the base, then raised a false notice. It now says
+     `unsaved`, and the tab keeps its base.
+  4. Reload pushed a history entry, and Back then F5 booted the stale page as current. Reload now replaces it, and the
+     per-history-entry base covers the other ways back.
+  5. With Labels no longer saving on open, a never-saved build sent the Studio's labels to another build (high: the
+     reviewers' only one). Fixed by `keepCurrent()`.
+  6. A setup-sheet Apply refused in a stale tab closed with "Setup applied." It now just closes.
+  Two were found twice: the keys by the UI and side-effects lenses, the lost connection by the store and cross-tab
+  lenses.
+- **The cloud reviews.** Sol `01a16556` on the fixed code returned 4; 2 taken:
+  - a version could be reused (two saves in one clock tick), now base + 1;
+  - an IndexedDB that failed to open at boot was never tried again, now tried at each read and write.
+  Discarded: the fallback list's read, check and write is not atomic across tabs (it runs only where IndexedDB cannot be
+  opened at all, and the window is one synchronous step; the cap had the same exposure, so it is recorded as a known gap,
+  not fixed); `keepCurrent()`'s first save racing tab B's boot (tab B opens only when a person presses Add to planner
+  build in the Studio, after the one IndexedDB write queued at the click has landed). Terra `01a16560` on those two
+  fixes: two first opens at once could let a late failure drop the other's connection; taken, one open is shared.
+- **Tests.** e2e/workspaces.mjs:
+  - "the stale-tab guard: the Studio's second planner tab…" walks Joey's flow with the real Make labels button and a
+    stubbed Studio: a never-saved build becomes current and is saved at Make labels; kit adopts and an Undo back to the
+    earlier id are not stale; two saves queued back to back and two with the clock frozen are not stale and get new
+    versions; a reload on Labels saves nothing; hints that must not count (the slot changing, a hint naming the tab's own
+    version, a hint removed) do not; tab B lands the label; tab A goes stale (the alertdialog, focus on Reload), keys on
+    Build do nothing under it, its palette is held, its edits leave the row, the slot and the current build alone, the
+    notice stays across a workspace switch and the phone breakpoint, a reload stays stale; Reload opens the saved
+    build; a page opened on a link goes stale and its reload stays stale; Back to an older page of the build, and its
+    F5, are stale; Reload takes that page out of the history; a write with no hint is caught at the next save.
+  - "the stale-tab guard: the build store's version check on IndexedDB…": the rule on real IndexedDB, a row still in
+    the fallback list, a lost connection, a failed first open shared by two readers.
+  - The labels-add case: tab A now goes stale instead of saving over tab B; a write without the guard (an old planner
+    tab open across the deploy) stands in for it, and the kept labels are still offered.
+  - The build-store case: Rename in the second tab makes the first stale.
+  - test/builds.test.mjs: `decide()`, `savedHint()`, the fallback store's refusal (byte for byte, no hint), `unsaved`,
+    the per-tab and per-page bases.
+- **Production check:** `stale-tab-prod.mjs` (prod-checks folder; fresh profile, analytics blocked, the Studio stubbed).
+  On the live `04bf17ff` it fails as the bug does (no notice; tab A's edit leaves the build with 0 labels); on this
+  branch served locally it passes all 12 checks.
+- **Mutants**, each in its own worktree, with the node tests and the four guard-related e2e cases (four rounds, as the
+  code and the tests moved): 40 of 45 killed on the final code, 9 by the node tests and the rest by the e2e cases.
+  - Four survive, as predicted before they ran: `pending` ignored at boot and the setup sheet not waiting for its save (both need a page
+    unloaded in the middle of a write); the app ignoring `unsaved` (no case fills the storage); a refused Apply closing
+    as usual (no case refuses an Apply). The fifth, a rename that keeps its version, is now equivalent: the base + 1
+    rule gives it a new version anyway.
+  - The rounds found three tests that could not fail on the defect they named, now fixed: the keys were pressed with nothing to undo (they now
+    follow an edit, on Build); the slot-change step came before Make labels, which now writes the slot itself;
+    a history-length check cannot tell a push from a replace when the push prunes a forward entry (Back is checked
+    instead).
+- **Not covered by a test:** the recheck when a tab comes back into view and from the back/forward cache (no case
+  hides a page or brings one back from that cache), the keyup guard, and the Reload button re-enabled after the cache.
+  They are in the code, and Sol's review read them.
+- **Suites on the final code:** npm test 603 (598 pass, 5 skipped, 0 fail); the full e2e suite 79 of 79 in software
+  rendering (`E2E_SOFT=1`, the CI runner's mode).
+- **Deploy:** Joey's request ends in "review and deploy"; it deploys once the checks pass.

@@ -348,7 +348,7 @@ export function mountLabels(stage, ctx) {
   function importFromHash() {
     const m = /(?:^#|&)labels-add=([^&]+)/.exec(location.hash || '');
     if (!m) return;
-    history.replaceState(null, '', location.href.replace(/[#&]labels-add=[^&]+/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
+    history.replaceState(history.state, '', location.href.replace(/[#&]labels-add=[^&]+/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
     importLink(m[1]);
   }
   /* THE PART PICKER MODAL (docs/redesign/LABELS-INTEGRATION.md, step A): the Studio's Part Picker in a frame over the
@@ -463,6 +463,7 @@ export function mountLabels(stage, ctx) {
   // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
   const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
   function openStudio(parts) {
+    ctx.builds?.keepCurrent?.();   // its Add to planner build reopens this browser's current build: this one (app.js)
     try { window.open(studioHref(parts), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
   }
   /* THE LABEL PLATE VIEW (docs/redesign/LABELS-INTEGRATION.md, step B1, read-only): the Label Studio in a frame over the
@@ -732,7 +733,7 @@ export function mountLabels(stage, ctx) {
     // the hint. None under the faceplate callout: it already says so and offers the switch (the stress test, 2026-10-15:
     // on a Classic build the same sentence stood three times and squeezed the list to two rows)
     // the empty list's sentence carries the one link to the full Label Studio (a new tab; the tile went on 2026-10-20)
-    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
+    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => ctx.builds?.keepCurrent?.(), title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
       : !faceOk ? null
       : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
       : sel && R.eligible(s, sel) && ready.length ? (selL ? `Drawer ${R.drawerNumber(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on drawer ${R.drawerNumber(s, sel.id)}. The drawer stays selected afterwards.`)
@@ -1028,9 +1029,12 @@ export function mountLabels(stage, ctx) {
   loadLabelList().then((mod) => {
     if (signal.aborted) return;
     L = mod;
-    /* a build from a link, a file or an older tool: its typed drawers become list labels (one conversion, one history entry) */
+    /* a build from a link, a file or an older tool: its typed drawers become list labels (one conversion, one history entry).
+       Only when reconciling changes something: the commit alone turned the record's null label fields into absent ones, so
+       opening Labels saved a new version of an untouched build, which another tab's stale-tab guard reads as a newer save
+       (the guard's design check, 2026-10-22). serialize() is a copy: the dry run leaves the record as it is */
     let changed = false;
-    store.commit((s) => { changed = R.reconcileLoad(L, s); }, 'label-sync');
+    if (R.reconcileLoad(L, store.serialize())) store.commit((s) => { changed = R.reconcileLoad(L, s); }, 'label-sync');
     if (!changed) store.flush();
     const back = ctx.memo?.labelsSel; if (back != null && unit(back)) { st.selId = back; stage.selectUnit(back); }
     importOpened();   // the link this page opened with (after the labels this browser kept for the build, when there are any)

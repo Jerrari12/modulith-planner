@@ -203,6 +203,10 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     store.flush();
     if (mountChange && slots) { try { sessionStorage.setItem('gen2-setup-note', `${mountDef(draft.mount)?.label || draft.mount}: ${slotWords(draft.mount, slots)} to fill · they show red in Build, where Fill all adds 1W cases.`); } catch { /* no storage: no note */ } }
     if (ctx.builds && draft.name.trim()) await ctx.builds.rename(draft.name);
+    await ctx.builds?.settled?.();   // the save lands first (the stale-tab guard reads it at the reload)
+    // refused, because another tab saved this build: the stale notice is up, so the sheet just goes, without its focus
+    // return, the remount or "Setup applied." (the guard's review, 2026-10-22)
+    if (ctx.builds?.stale) { veil.remove(); document.removeEventListener('keydown', onKey); return; }
     close();
     if (sceneChange) { ctx.say('Rebuilding the scene…'); setTimeout(() => location.reload(), 200); }
     else {
