@@ -2460,3 +2460,8 @@ Dated calls made while building, with who made them. The brief and the inventory
   the second one, or tab B's own, was not. The case now waits for each save to reach the planner's slot (written after
   the Recent entry), and for the label tools beside the unreadable link, before it goes on. Slowing the CPU here (4x,
   8x) does not reproduce the runner's failure: the old case passes at 8x too, so the runner's slowness is elsewhere.
+- **The second deploy failed one step later** (run 39824340436, `4eaeb53`): "a second link: the labels did not land
+  within 30 s". The waits had fixed the step before. Tabs A and B stayed open to the end: an open tab can save again
+  later and change what the next page opens, and four 3D pages at once slow the runner's software rendering. Each
+  page now closes once its part is done, and the failure message prints the labels on the board. Terra `01a164af` and
+  `01a164f3` on the two test changes: no findings.

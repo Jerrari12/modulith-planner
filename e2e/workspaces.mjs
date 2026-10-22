@@ -715,7 +715,7 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
 test('Labels: the Studio’s Add to planner build opens a fresh page and its labels land, alone or beside the build’s own #build=', async () => {
   const link = (id, words) => Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: id, labels: words.map((text) => ({ text })) })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const words = (page) => page.evaluate(() => ((window.__GEN2_STORE__.state.labelList || {}).labels || []).map((l) => String(l.text || '').toLowerCase()));
-  const landed = (page, n, what) => page.waitForFunction((n) => ((window.__GEN2_STORE__.state.labelList || {}).labels || []).length === n, n, { timeout: 30_000 }).catch(() => assert.fail(`${what}: the labels did not land within 30 s`));
+  const landed = (page, n, what) => page.waitForFunction((n) => ((window.__GEN2_STORE__.state.labelList || {}).labels || []).length === n, n, { timeout: 30_000 }).catch(async () => assert.fail(`${what}: the labels did not land within 30 s (on the board: ${JSON.stringify(await words(page).catch(() => 'unreadable'))})`));
   // a bare labels link, opened as a new page
   const a = await open('labels', { query: '#labels-add=' + link('freshload0001', ['Fresh one', 'Fresh two']) });
   await landed(a.page, 2, 'a bare link');
@@ -764,10 +764,15 @@ test('Labels: the Studio’s Add to planner build opens a fresh page and its lab
   assert.equal(await keptCount(tabB.p), 1, 'the stored copy is kept');
   assert.equal(await tabB.p.evaluate(() => Object.values(JSON.parse(localStorage.getItem('gen2-label-copies')).copies)[0].restored), true, 'and marked as restored once');
   await tabB.p.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).labelList.labels.length === 3; } catch { return false; } }, null, { timeout: 30_000 }).catch(() => assert.fail('tab B was not saved within 30 s'));
+  // each page closes once its part is done: an open tab can save again later and change what the next page opens, and four
+  // 3D pages at once slow the CI runner's software rendering past the waits (run 39824340436)
+  await tabB.p.close();
   await edit(tabA.p);   // tab A, still without labels, saves over the build
+  await tabA.p.close();
   const again = await pageIn('ws=labels&debug=1');
   await again.p.waitForSelector('#ws-labels .banner.copy', { timeout: 30_000 }).catch(() => assert.fail('the kept labels were not offered again after tab A saved over the build'));
   assert.match(await text(again.p, '#ws-labels .banner.copy span'), /kept 2 labels/);
+  await again.p.close();
   // the next Studio link on that build adds only its own label: a copy restored once is offered, never restored again
   const second = await pageIn('ws=labels&debug=1#labels-add=' + link('freshload0006', ['Second link']));
   await landed(second.p, 1, 'a second link');
