@@ -3129,5 +3129,14 @@ keyboard undo or Remove").
   draft; the goldens and suites bullets went back on the same thread once the runs were in, no findings.
 - **Suites:** npm test 618 (613 pass, 0 fail, the 5 environment skips main has; 44 minutes under the shared load,
   layout-parity alone 2666 s against 752 s on a quiet machine); goldens as above.
-- **Deploy:** on Joey's go; the merge to main too.
+- **Live:** main `f6ba8d1`, the no-ff merge of `idle-gate-light-vh` at 4eddce0 (this branch with main 1799b00 merged
+  in) onto 1799b00, pushed 17:38 on Joey's go ("Yes, deploy the idle-gate fix: merge idle-gate-light-vh onto main and
+  push, with a live check of the rest rate."); deploy run 40028267309, success 18:11; stamp `boot.js?v=f6ba8d12` live at
+  18:12. The rest rate on the live site, the same headless probe as the measurement above (SwiftShader, Very High, light
+  theme, Assemble at Done with the page untouched, `idleStats()` per second over 12 s, GoatCounter skipped and blocked):
+  before, on the stamp the site served until then (`928e08a1`), drawn 116–123 a second and skipped 0; after, on
+  `f6ba8d12`, drawn 1 a second and skipped 119–121. The merged tree's suite: npm test 625 (620 pass, 0 fail, 5
+  environment skips). No real-GPU reading: Joey's desktop browser keeps the planner on the dark theme, which has no
+  shadow map, and setting light would rewrite his saved preference. Terra `01a16ad3` on this line: one finding,
+  discarded (it read the evidence's "node --test" as a different command from `npm test`, whose script it is).
 
