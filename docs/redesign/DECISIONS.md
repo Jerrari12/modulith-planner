@@ -2778,3 +2778,29 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Deploy:** each merge's push started that repo's own deploy (the planner's took 73 minutes); nothing else to deploy.
   This entry rides on the records push. Terra `01a169ad`: 5 of 7 findings taken (wording that overstated the order, the
   e2e time and the rehearsals).
+
+## 2026-10-23 (Assemble's toasts show above the player card: Share's "Link copied." was hidden)
+
+- **The defect** (Joey, 2026-10-23: "I notice the share button at the end of the instructions does nothing"). Share did
+  copy the address and raise "Link copied.", but on the desktop the toast sits 100 px from the workspace's bottom
+  (`#ws-toast`), inside the player card's box (126 px tall on a step, 231 on the end page, 22 px from the bottom), and the
+  card is the later sibling, so it painted over the toast: every Assemble toast was invisible on the desktop. On the phone
+  the toast already rode above the sheets (`#ws #ws-toast`, z-index 14). Reproduced live on `6e19ed12` by
+  `assemble-share-prod.mjs` (new, in the prod-checks folder): desktop copied, shown, and hidden (the toast's 760-800 px
+  inside the card's 674-878); phone visible.
+- **The fix:** a ResizeObserver on the card keeps `--player-h` on the root current (every render, the end page's extra
+  row, a window that rewraps the card's text), and `html[data-ws="assemble"] #ws-toast` sits `22px + var(--player-h) +
+  10px` from the bottom at z-index 14 (css/app.css). The phone rule's two ids still win there. The first draft set the
+  variable in `renderPlayer()` only; Terra `01a169dc` caught the resize case (a window under 680 px wide narrows the
+  card and rewraps it without a render), the one finding, taken.
+- **The test:** the Assemble e2e case presses Share on the end page with the clipboard stubbed and asserts the address was
+  copied, the toast says "Link copied." and its box clears the card's top edge. The toast takes no pointer events, so
+  `elementFromPoint` can never name it: the first draft of the assertion used it and failed with the fix in place.
+  Mutants: without the CSS rule the gap is -126 px, without `--player-h` it is -68 px (the 126 px default against the
+  231 px end card); both fail the case.
+- **Review:** Terra `01a169dc`: one finding, taken (above).
+- **Suites:** npm test 616 (610 pass, 5 skipped; M28's timing gate tripped once under load, max 738 ms, and passes alone:
+  median 0.13 ms, max 7.7); e2e soft 82 (81 pass; the "Part Picker opens that part" case timed out while another session
+  republished the Studio checkout the suite serves, and passes alone). The e2e assertion also requires the toast inside the
+  viewport (Terra's follow-up, `01a169dc`).
+- **Deploy:** a reported bug, so it deploys once the suites pass.

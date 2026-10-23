@@ -1022,6 +1022,10 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }
+/* Assemble: the player card is 126 to 231 px tall (the end page adds a row), so a toast at 100 px sat behind it on the
+   desktop and "Link copied." never showed (Joey, 2026-10-23: Share "does nothing"). It rides on the card's own height
+   (assemble.js observes the card's size into --player-h), over it. The phone rule (#ws #ws-toast, above) still wins there */
+html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) + 10px); z-index: 14; }
 
 /* ---- narrow desktop (1024-1279): the panels keep their width, the middle gets tight ---- */
 /* up to 1580 px the bar is one row but tight: the printer and Share chips go icon-only and the build name shortens.

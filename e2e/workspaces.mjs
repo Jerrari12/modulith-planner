@@ -1273,6 +1273,15 @@ test('Assemble: Next steps through, Skip reaches the end, Back returns', async (
   await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });   // the finished step
   await btn(page, 'Next', '#ws-player').click();   // Next on the finished step is the end of the instructions
   await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  // Share on the end page copies the address and says so where it can be seen: the toast sat behind the player card on
+  // the desktop (Joey, 2026-10-23: "the share button at the end of the instructions does nothing")
+  await page.evaluate(() => { window.__copied = null; navigator.clipboard.writeText = async (t) => { window.__copied = String(t); }; });
+  await btn(page, 'Share', '#ws-player').click();
+  await page.waitForFunction(() => document.getElementById('ws-toast')?.classList.contains('show'), null, { timeout: 5_000 });
+  // the toast takes no pointer events, so elementFromPoint never names it: its box must clear the card's top edge instead
+  const shared = await page.evaluate(() => { const t = document.getElementById('ws-toast'); const r = t.getBoundingClientRect(); const pl = document.getElementById('ws-player').getBoundingClientRect();
+    return { copied: window.__copied === location.href, text: t.textContent, above: r.bottom <= pl.top, inView: r.top >= 0 && r.height > 0, gap: Math.round(pl.top - r.bottom) }; });
+  assert.deepEqual({ copied: shared.copied, text: shared.text, above: shared.above, inView: shared.inView }, { copied: true, text: 'Link copied.', above: true, inView: true }, `Share copies the link and its toast shows above the player, inside the viewport: ${JSON.stringify(shared)}`);
   await btn(page, 'Back', '#ws-player').click();
   await settle(page, 800);
   assert.ok(!/End of instructions/.test(await text(page, '#ws-player .title')), 'Back leaves the end');

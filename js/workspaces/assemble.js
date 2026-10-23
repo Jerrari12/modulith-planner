@@ -29,6 +29,9 @@ export function mountAssemble(stage, ctx) {
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
+  /* the toast sits above the player card, whatever that card's height (app.css reads --player-h): the size is observed, so a
+     re-render, the end page's extra row and a window that rewraps the card's text all keep it current */
+  const trackHeight = (card) => new ResizeObserver(() => root.style.setProperty('--player-h', `${card.offsetHeight}px`)).observe(card);
   root.prepend(topbar(stage, { ...ctx, active: 'assemble', say, soon, signal }));
   const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview), camTitle: 'Back to the step\u2019s camera \u00b7 after you orbit or zoom, this returns to the guided view' });
   root.appendChild(tb.el);
@@ -52,6 +55,7 @@ export function mountAssemble(stage, ctx) {
       el('div.row2', {}, [el('button.key.next.on', { text: 'Go to Build', onclick: () => ctx.switchTo('build') })]),
     ]);
     root.appendChild(card);
+    trackHeight(card);
     const safe = () => stage.setSafeArea({ left: 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + card.offsetHeight + 12 });
     addEventListener('resize', safe, { signal });
     tb.sync(); safe();
@@ -102,6 +106,7 @@ export function mountAssemble(stage, ctx) {
   /* ---------------- the step player ---------------- */
   const player = el('div.glass.glass-edge', { id: 'ws-player', role: 'region', 'aria-label': 'Step player' });
   root.appendChild(player);
+  trackHeight(player);
   function renderPlayer() {
     const cur = stage.cur;
     const isDone = done, onCover = cur === 0;
