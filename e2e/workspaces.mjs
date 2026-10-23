@@ -4129,6 +4129,9 @@ test('hover hints: every hinted control shows its clip on hover and hides on lea
       for (const key of step.keys) {
         await page.locator(hinted(key)).first().hover({ timeout: 15_000 });
         await shown(page, key).catch(async () => assert.fail(`${ws}: no bubble with ${key}.mp4 on hover (bubble: ${await page.evaluate(() => document.getElementById('ws-hint')?.outerHTML.slice(0, 300))})`));
+        // a real recording, not a stub: the clip's metadata arrives and it runs 6 s or more (Joey's 10-15 s; the shortest is 9 s)
+        await page.waitForFunction(() => { const v = document.querySelector('#ws-hint .scene video'); return !!v && v.readyState >= 1 && v.duration >= 6; }, null, { timeout: 15_000 })
+          .catch(async () => assert.fail(`${ws}: ${key}.mp4 did not load as a clip of 6 s or more (readyState ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.readyState)}, duration ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.duration)})`));
         // beside the control's panel, never over the control itself (spacing-between-controls: a hint must not cover what it explains)
         const over = await page.evaluate((sel) => { const b = document.getElementById('ws-hint').getBoundingClientRect(), r = document.querySelector(sel).getBoundingClientRect(); return !(b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom); }, hinted(key));
         assert.equal(over, false, `${ws}: the bubble for ${key} covers its control`);

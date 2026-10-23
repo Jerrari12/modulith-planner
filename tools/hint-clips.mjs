@@ -125,14 +125,33 @@ const CLIPS = {
       await d.to('#ws-labels .list .chip-l', 600); await sleep(1800);
     },
   },
+  /* From a file… opens the computer's own file chooser, which no screencast can capture (headless Chrome shows none; a real
+     one is the operating system's window). Joey, 2026-10-23: the clip "looks wrong, instead it should open a desktop folder
+     explorer window". So the clip draws a stand-in: an Open window in the planner's own glass style over the stage, a short
+     file list with modulith-labels.json chosen, the type line, Open and Cancel; the cursor presses Open, the window goes, and
+     the file's labels land in the list. Generic names, not anyone's folders. */
   'labels-file': {
     crop: PANEL,
     async run(page, d) {
-      const fixture = join(tmpdir(), 'modulith-hint-labels.json');
+      const fixture = join(tmpdir(), 'modulith-labels.json');
       await writeFile(fixture, JSON.stringify({ format: 'modulith-labels', version: 1, labels: [{ text: 'M4 × 16 SHCS' }, { text: 'Hex keys' }, { text: 'Coffee filters' }] }));
       const chooser = page.waitForEvent('filechooser');
       await d.to(tile('From a file'), 700); await sleep(500); await d.click();
-      await (await chooser).setFiles(fixture); await sleep(900);
+      const fc = await chooser;
+      await page.evaluate(() => {
+        const row = (name, on) => `<div style="padding:7px 10px;border-radius:8px;${on ? 'background:var(--toggle-on);font-weight:600' : 'color:var(--ink-3)'}">${name}</div>`;
+        const dlg = document.createElement('div'); dlg.id = '__dlg'; dlg.className = 'glass';
+        dlg.style.cssText = 'position:fixed;left:352px;top:236px;width:330px;box-sizing:border-box;border-radius:14px;padding:14px 16px;font-family:var(--font-ui);font-size:13px;z-index:9999;display:flex;flex-direction:column;gap:10px';
+        dlg.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><b style="font-size:15px;flex:1">Open</b><span style="color:var(--ink-2)">Downloads</span></div>'
+          + '<div style="display:flex;flex-direction:column;gap:3px;border-radius:10px;background:rgba(255,255,255,.04);padding:6px">' + row('label-plate.pdf') + row('modulith-labels.json', true) + row('parts-list.csv') + '</div>'
+          + '<div style="display:flex;gap:8px;color:var(--ink-2)"><span style="flex:1">File name: <span style="color:var(--ink)">modulith-labels.json</span></span><span>JSON files</span></div>'
+          + '<div style="display:flex;justify-content:flex-end;gap:8px"><span style="padding:8px 14px;border-radius:10px;border:1px solid var(--glass-border)">Cancel</span><span id="__dlg-open" style="padding:8px 14px;border-radius:10px;background:var(--orange);color:var(--on-orange);font-weight:700">Open</span></div>';
+        document.getElementById('ws').appendChild(dlg);
+      });
+      await sleep(1600);
+      await d.to('#__dlg-open', 700); await sleep(400); await d.click();
+      await page.evaluate(() => document.getElementById('__dlg')?.remove());
+      await fc.setFiles(fixture); await sleep(1000);
       await d.to('#ws-labels .list .chip-l', 600); await sleep(600);
       await d.to('#ws-labels .list .item:nth-child(3) .chip-l', 500); await sleep(1800);
       await rm(fixture, { force: true });
