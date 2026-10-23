@@ -24,6 +24,7 @@ const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
 const SCALE = 1000;        // metres in the GLB -> the stage's millimetres
 const ENTER_MS = 900;      // the camera's move into the shot
+const SUN_MM = 1200;       // the room's sun, this far from the build: inside the shadow camera's 3000 mm far plane (see applyLights)
 let loading = null;        // one load per page: the GLB and its JSON, shared by every entry
 let tracked = false;
 
@@ -88,6 +89,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     sun: { pos: stage.sun.position.clone(), color: stage.sun.color.clone(), intensity: stage.sun.intensity },
     hemi: { color: stage.hemi.color.clone(), ground: stage.hemi.groundColor.clone(), intensity: stage.hemi.intensity },
     fill: { intensity: stage.fill.intensity, color: stage.fill.color.clone() },
+    sunHalfDeg: stage.sunHalfDeg,
     controls: controls.enabled, dims: !!stage.dimsOn };
   let json = null, buildBox = null;
 
@@ -98,11 +100,19 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   function applyLights(tier) {
     const s = json.sun, k = json.sky || {};
-    stage.sun.position.set(s.dir[0], s.dir[1], s.dir[2]).normalize().multiplyScalar(3000);
+    /* SUN_MM, not 3000: the stage's shadow camera (fitShadowCamera, js/main.js) has its far plane at 3000 mm from the
+       light, so a sun 3000 mm out put the desk BEHIND the build outside the shadow frustum - the build's cast shadow
+       was clipped to a sliver at its feet while the props' baked shadows ran back and right (Joey, 2026-10-23; measured
+       2954 mm to the target, far 3000; at 1200 mm the full shadow drew). The studio's own sun sits about 780 mm out. */
+    stage.sun.position.set(s.dir[0], s.dir[1], s.dir[2]).normalize().multiplyScalar(SUN_MM);
     stage.sun.color.set(s.color || '#ffb876'); stage.sun.intensity = s.intensity != null ? s.intensity : 2.6;
     stage.hemi.color.set(k.color || '#e8d9c4'); stage.hemi.groundColor.set(k.ground || '#6b5a48'); stage.hemi.intensity = k.intensity != null ? k.intensity : 0.9;
     stage.fill.intensity = 0.12;
     stage.setSunHome();   // Very High's samples jitter about the sun's HOME and put it back there: re-home it on the room's sun
+    /* ... and over the ROOM'S sun disc, not the studio's. Very High averages the shadow over a cone of ACC_SUN_HALF_DEG
+       (6 for the studio's soft look); the room was baked with a 2 degree disc (room.json sun.halfDeg = 1), and over 6
+       degrees the build's shadow faded to a faint gradient beside the props' crisp baked ones (Joey, 2026-10-23). */
+    if (s.halfDeg != null && stage.setSunHalfDeg) stage.setSunHalfDeg(s.halfDeg);
     // the tier's shadow or the baked disc, never both; applyQuality has just reset the rig's intensities on a tier change
     const shadow = !!(stage.QUALITY[tier || stage.quality] || {}).shadow;
     if (parts.catcher) parts.catcher.visible = shadow;
@@ -200,6 +210,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     for (const m of parts.mats) m.dispose();   // the room's own materials; their textures are the cached GLB's
     parts.mats = [];
     stage.sun.position.copy(was.sun.pos); stage.sun.color.copy(was.sun.color); stage.sun.intensity = was.sun.intensity;
+    if (was.sunHalfDeg != null && stage.setSunHalfDeg) stage.setSunHalfDeg(was.sunHalfDeg);
     stage.setSunHome();
     stage.hemi.color.copy(was.hemi.color); stage.hemi.groundColor.copy(was.hemi.ground); stage.hemi.intensity = was.hemi.intensity;
     stage.fill.intensity = was.fill.intensity; stage.fill.color.copy(was.fill.color);

@@ -1291,7 +1291,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
     await btn(page, 'Next', '#ws-player').click();
     await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
   };
-  const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; let catcher = null, disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) catcher = o.visible; else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } }); return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme }; });
+  const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; let catcher = null, disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) catcher = o.visible; else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } }); return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme, sunHalfDeg: v.sunHalfDeg, sunMM: Math.round(v.sun.position.distanceTo(v.sun.target.position)), shadowFar: v.sun.shadow.camera.far }; });
   // off: nothing of the room
   const off = await open('assemble');
   await toDone(off.page);
@@ -1318,6 +1318,10 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s2.room, true); assert.equal(s2.held, true); assert.notEqual(s2.theme, 'light', 'still the dark stage (named night)'); assert.equal(s2.quality, 'balanced');
   assert.equal(s2.env, true, 'Balanced has an environment'); assert.equal(s2.envIsStudio, false, 'and it is the room\'s, not the studio\'s: the tier change did not put studioEnv back');
   assert.equal(s2.shadow, true, 'the sun shadow is on under the dark theme'); assert.equal(s2.catcher, true, 'the catcher shows'); assert.equal(s2.disc, false, 'the disc hides');
+  // the room's sun, not the studio's (2026-10-23): inside the shadow camera's far plane (3000 mm out, the desk behind the
+  // build was clipped to a sliver), and Very High's soft-shadow cone is the room's sun disc, not the studio's 6 degrees
+  assert.ok(s2.sunMM < s2.shadowFar - 500, `the sun sits inside the shadow frustum (${s2.sunMM} mm of ${s2.shadowFar})`);
+  assert.equal(s2.sunHalfDeg, 1, 'the soft-shadow cone is the room\'s sun disc (room.json sun.halfDeg)');
   // then a theme flip: the room keeps the background off and its shadow
   await page.evaluate(() => { window.__GEN2_VIEWER__.applyStageTheme('light'); });
   await settle(page, 1200);
@@ -1330,6 +1334,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s3.room, false, 'the room is gone'); assert.equal(s3.held, false); assert.equal(s3.done, null);
   assert.equal(s3.bg, 'color', 'the stage background is back'); assert.equal(s3.envIsStudio, true, 'the studio environment is back'); assert.equal(s3.controls, true); assert.equal(s3.grid, true); assert.equal(s3.table, true); assert.equal(s3.dims, true, 'the callouts are back');
   assert.ok(!/End of instructions/.test(await text(page, '#ws-player .title')), 'Back leaves the end');
+  assert.equal(s3.sunHalfDeg, 6, 'Back restores the studio\'s soft-shadow cone');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

@@ -34,7 +34,8 @@
   ],
   "color": "#fff4e8",
   "intensity": 0.62,
-  "elevation": 35.0
+  "elevation": 35.0,
+  "halfDeg": 1.0
  },
  "sky": {
   "color": "#e6e8ea",

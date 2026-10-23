@@ -1050,7 +1050,10 @@ elif args.mode == 'bake':
         # the planner's live sun (the build's own shadow) and hemisphere: golden as tuned on look3 (sun strength 0.5);
         # neutral (bake2) scaled by the sun's strength relative to that and near white for a high sun, so the live build
         # is lit like the baked props beside it rather than by an orange sun in a neutral room
-        sun=dict(dir=sun_stage, color='#fff4e8' if NEUTRAL else '#ffb876', intensity=round(2.6 * args.sun_strength / 0.5, 2), elevation=args.sun_el),
+        # halfDeg: the sun disc's angular RADIUS, for Very High's soft-shadow cone (done.js -> stage.setSunHalfDeg). The
+        # studio sweeps 6 degrees; averaged over that, the build's shadow faded to a gradient beside the props' baked
+        # shadows from a 2 degree disc (Joey, 2026-10-23)
+        sun=dict(dir=sun_stage, color='#fff4e8' if NEUTRAL else '#ffb876', intensity=round(2.6 * args.sun_strength / 0.5, 2), elevation=args.sun_el, halfDeg=args.sun_size / 2),
         sky=dict(color='#e6e8ea' if NEUTRAL else '#e8d9c4', ground='#8a8278' if NEUTRAL else '#6b5a48', intensity=0.9),
         shots={'hero': dict(az=cam['az'], el=cam['el'], fovV=cam['fovV'], fill=cam['fill'], targetLift=cam['targetLift'])},
         props=props,
