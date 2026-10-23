@@ -1066,3 +1066,33 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 #ws-stale button { font: inherit; height: 40px; padding: 0 18px; border-radius: 10px; font-weight: 600; cursor: pointer; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); }
 #ws-stale button:disabled { opacity: .6; cursor: progress; }
 #ws-stale button:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+
+/* PRINT: the Parts list's Print (2026-10-22). Without these rules Print printed the screen as it was: the 3D scene, the
+   bars and the dock, with the list cut off at its own scroll height. On paper only the list shows, whole and in black on
+   white, under a line naming the build (parts.js printHead); its controls, the phone sheet's handle and the counters'
+   buttons stay off the page, and a row never splits across two pages. Only while Parts is open: from any other
+   workspace the browser's own print keeps printing the screen, as before */
+#ws-parts .printhead { display: none; }
+@media print {
+  @page { margin: 14mm 12mm; }
+  html[data-ws="parts"], html[data-ws="parts"] body { background: #fff !important; color: #000 !important; color-scheme: light !important; height: auto !important; overflow: visible !important; }   /* a dark scheme paints the page margins dark */
+  html[data-ws="parts"] body > *:not(#ws) { display: none !important; }
+  html[data-ws="parts"] #ws { position: static !important; color: #000 !important; }
+  html[data-ws="parts"] #ws > *:not(#ws-parts) { display: none !important; }
+  html[data-ws="parts"] #ws-parts, html[data-ws="parts"] #ws-parts.sheet, html[data-ws="parts"] #ws-parts.wide { position: static !important; inset: auto !important; width: auto !important; height: auto !important; max-height: none !important; display: block !important; overflow: visible !important; transform: none !important; clip-path: none !important; background: none !important; border: none !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; border-radius: 0 !important; padding: 0 !important; color: #000 !important; }
+  html[data-ws="parts"] #ws-parts > .sheet-handle, html[data-ws="parts"] #ws-parts > .sheet-peek, html[data-ws="parts"] #ws-parts .row3, html[data-ws="parts"] #ws-parts .row4, html[data-ws="parts"] #ws-parts .expand, html[data-ws="parts"] #ws-parts .counter button { display: none !important; }
+  html[data-ws="parts"] #ws-parts > .head, html[data-ws="parts"] #ws-parts > .body { display: block !important; overflow: visible !important; }
+  html[data-ws="parts"] #ws-parts .head { padding: 0 0 8px !important; border-bottom: 1px solid #888 !important; }
+  html[data-ws="parts"] #ws-parts .printhead { display: block; margin: 0 0 6px; font-size: 11px; color: #444; }
+  html[data-ws="parts"] #ws-parts .body { padding: 0 !important; }
+  html[data-ws="parts"] #ws-parts h2, html[data-ws="parts"] #ws-parts h3, html[data-ws="parts"] #ws-parts .name, html[data-ws="parts"] #ws-parts .qty, html[data-ws="parts"] #ws-parts .link, html[data-ws="parts"] #ws-parts a { color: #000 !important; }
+  html[data-ws="parts"] #ws-parts .mono, html[data-ws="parts"] #ws-parts .note, html[data-ws="parts"] #ws-parts .dim, html[data-ws="parts"] #ws-parts .left, html[data-ws="parts"] #ws-parts .foot, html[data-ws="parts"] #ws-parts .link .paid, html[data-ws="parts"] #ws-parts .counter .lbl { color: #444 !important; }
+  html[data-ws="parts"] #ws-parts .row2 .ok, html[data-ws="parts"] #ws-parts .row2 .warn { color: #000 !important; }
+  html[data-ws="parts"] #ws-parts h3 { break-after: avoid; }
+  html[data-ws="parts"] #ws-parts .prow, html[data-ws="parts"] #ws-parts .well { background: none !important; border: 1px solid #ccc !important; box-shadow: none !important; break-inside: avoid; }
+  html[data-ws="parts"] #ws-parts .prow.done { opacity: 1; }
+  html[data-ws="parts"] #ws-parts .badge { background: none !important; border: 1px solid #888 !important; color: #000 !important; }
+  html[data-ws="parts"] #ws-parts .counter { background: none !important; }
+  html[data-ws="parts"] #ws-parts .chip, html[data-ws="parts"] #ws-parts .chip i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html[data-ws="parts"] #ws-parts a { text-decoration: none !important; }
+}

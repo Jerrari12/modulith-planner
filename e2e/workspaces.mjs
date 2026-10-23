@@ -1168,6 +1168,64 @@ test('Parts: the list, tracking counters, and the dock caption', async () => {
   await ctx.close();
 });
 
+/* PRINT (2026-10-22): the Parts list's Print printed the screen as it was (a live check on 0f32d12e: the 3D scene, the bars
+   and 6 of 25 rows on paper). The print stylesheet puts the list alone and whole on paper, black on white, under a line
+   naming the build, on a desktop and from the phone's bottom sheet */
+test('Parts: Print puts the whole list on paper, alone and black on white, on a desktop and from the phone sheet', async () => {
+  const look = (page) => page.evaluate(() => {
+    const shown = (sel) => [...document.querySelectorAll(sel)].some((e) => { const cs = getComputedStyle(e); const r = e.getBoundingClientRect(); return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0; });
+    const panel = document.getElementById('ws-parts'); const pcs = getComputedStyle(panel);
+    const rows = [...panel.querySelectorAll('.prow')];
+    const head = panel.querySelector('.printhead');
+    return {
+      stage: shown('canvas'), top: shown('#ws-top'), dock: shown('#ws-dock'), tools: shown('#ws-tools'),
+      buttons: shown('#ws-parts .row3 .key') || shown('#ws-parts .row4 .key'), counters: shown('#ws-parts .counter button'), handle: shown('#ws-parts .sheet-handle'),
+      head: head && shown('#ws-parts .printhead') ? head.textContent : null,
+      position: pcs.position, clipped: panel.scrollHeight > panel.clientHeight + 1,
+      rows: rows.length, rowsShown: rows.filter((r) => r.getBoundingClientRect().height > 0).length,
+      ink: getComputedStyle(panel.querySelector('.name')).color, paper: getComputedStyle(document.body).backgroundColor, scheme: getComputedStyle(document.documentElement).colorScheme,
+    };
+  });
+  const { ctx, page, errors } = await open('parts');
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const screen = await look(page);
+  assert.equal(screen.head, null, 'the print line stays off the screen');
+  assert.ok(screen.stage && screen.top && screen.dock, 'the screen is as it was');
+  await page.emulateMedia({ media: 'print' });
+  const paper = await look(page);
+  assert.deepEqual({ stage: paper.stage, top: paper.top, dock: paper.dock, tools: paper.tools, buttons: paper.buttons }, { stage: false, top: false, dock: false, tools: false, buttons: false }, 'only the list on paper');
+  assert.match(paper.head || '', /MODULITH Planner/, 'a line names the build');
+  assert.equal(paper.position, 'static');
+  assert.equal(paper.clipped, false, 'the list is whole, not cut at its own scroll height');
+  assert.ok(paper.rows >= 5 && paper.rowsShown === paper.rows, `every row on paper (${paper.rowsShown} of ${paper.rows})`);
+  assert.deepEqual([paper.ink, paper.paper, paper.scheme], ['rgb(0, 0, 0)', 'rgb(255, 255, 255)', 'light'], 'black on white, the margins too');
+  // tracking: the counts go on paper, their buttons don't
+  await page.emulateMedia({ media: 'screen' });
+  await btn(page, 'Track my build', '#ws-parts').click();
+  await settle(page, 400);
+  await page.emulateMedia({ media: 'print' });
+  const tracked = await look(page);
+  assert.equal(tracked.counters, false, 'no counter buttons on paper');
+  assert.equal(tracked.rowsShown, tracked.rows);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  // the phone: the list is a bottom sheet with a grab handle; on paper it is the same whole list, without the handle
+  const ph = await open('parts', { phone: true });
+  await ph.page.waitForSelector('#ws-parts .prow', { state: 'attached', timeout: 30_000 });
+  await ph.page.emulateMedia({ media: 'print' });
+  const phone = await look(ph.page);
+  assert.deepEqual({ stage: phone.stage, top: phone.top, dock: phone.dock, handle: phone.handle }, { stage: false, top: false, dock: false, handle: false }, 'only the list on paper');
+  assert.equal(phone.clipped, false);
+  assert.ok(phone.rows >= 5 && phone.rowsShown === phone.rows, `every row on paper (${phone.rowsShown} of ${phone.rows})`);
+  assert.deepEqual(clean(ph.errors), []);
+  await ph.ctx.close();
+  // only Parts: the browser's print from another workspace keeps printing the screen, never a blank page
+  const b = await open('build');
+  await b.page.emulateMedia({ media: 'print' });
+  assert.ok(await b.page.evaluate(() => { const c = document.querySelector('canvas'); const r = c && c.getBoundingClientRect(); return !!(r && r.width > 0 && getComputedStyle(c).display !== 'none') && getComputedStyle(document.getElementById('ws-top')).display !== 'none'; }), 'Build prints its screen as before');
+  await b.ctx.close();
+});
+
 test('Assemble: Next steps through, Skip reaches the end, Back returns', async () => {
   const { ctx, page, errors } = await open('assemble');
   const cur = () => page.evaluate(() => window.__GEN2_VIEWER__.cur);

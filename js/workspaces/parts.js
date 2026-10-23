@@ -209,6 +209,11 @@ export function mountParts(stage, ctx) {
 
   const panel = el('aside.glass', { id: 'ws-parts', 'aria-label': 'Parts list' });
   root.appendChild(panel);
+  /* PRINT (2026-10-22): the list's Print printed the screen as it was - the 3D scene, the bars and the list cut off at its
+     own scroll height (a live check on 0f32d12e: 6 of 25 rows on paper). The print stylesheet (css/app.css) now prints the
+     list alone and whole, in black on white, under this line, refreshed as the print starts */
+  const printHead = () => `${ctx.builds?.name || 'MODULITH build'} · MODULITH Planner · ${new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}`;
+  addEventListener('beforeprint', () => { const h = panel.querySelector('.printhead'); if (h) h.textContent = printHead(); }, { signal });
   /* the palette, read once per render (paletteSnapshot); null with the visitor's colours off */
   let pal = null;
   const printLook = (r) => { if (!pal || r.hardware) return null; const t = typeOf(r.name); const regions = t && pal.get(t); return regions && regions.length ? regions : null; };
@@ -245,6 +250,7 @@ export function mountParts(stage, ctx) {
     panel.replaceChildren();
     const head = el('div.head');
     head.append(
+      el('p.printhead', { text: printHead() }),   // on paper only (css/app.css @media print): which build, and when
       el('div.row1', {}, [el('h2', { text: 'Parts list' }), el('span.mono', { text: `${printCount} to print · ${files} files` }),
         el('button.expand', { title: st.wide ? 'Narrow the list' : 'Expand the list · readable columns for tracking', 'aria-pressed': String(st.wide), onclick: () => { st.wide = !st.wide; panel.classList.toggle('wide', st.wide); document.documentElement.classList.toggle('ws-parts-wide', st.wide); renderPanel(); safe(); } }, [icon(st.wide ? 'arrows-in-simple' : 'arrows-out-simple', { size: 18 })])]),
       el('div.row2', {}, [

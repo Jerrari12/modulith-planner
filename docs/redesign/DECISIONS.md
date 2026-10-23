@@ -2587,3 +2587,24 @@ Dated calls made while building, with who made them. The brief and the inventory
   it with `return=https://planner.modulith.systems/?ws=labels`; with a label typed there, its Add to planner build
   opens this planner in a new tab, which lands the label and saves; the first tab shows the notice, its edit writes
   nothing, and the stored build keeps the label. Both scripts are in the prod-checks folder.
+
+## 2026-10-22 (the Parts list prints the list)
+
+- **What was wrong.** The Parts list's Print (`window.print()`) printed the screen as it was: the app had no print
+  stylesheet. On the live `0f32d12e`, Chrome's print to PDF of `?ws=parts&build=185-tabletop-3w2h` gave one dark page with
+  the 3D scene, the top bar and the dock, and the list cut off at its own scroll height: 6 of its 25 rows. The old planner's
+  print hid everything but its list (its css/style.css:1826-1836). Found by the hands-on pass checklist's critic
+  (2026-10-22), checked live with `parts-print-prod.mjs` (prod-checks folder).
+- **Now** `css/app.css` has a print stylesheet, only while Parts is open. On paper the list stands alone, whole and black
+  on white (the page's dark colour scheme had painted the margins dark), under a line naming the build and the date
+  (`parts.js` `printHead`, refreshed on `beforeprint`). The panel's controls, the phone sheet's handle and the tracking
+  counters' buttons stay off the page; the counts stay. A row never splits across two pages. From any other workspace
+  the browser's own print keeps printing the screen, as before (a first draft printed a blank page there).
+- **Checks.** On the branch served locally, the same print to PDF gives the full 25-row list over three pages with white
+  margins. The e2e case "Parts: Print puts the whole list on paper…" checks, under print media: no canvas, bars, dock or
+  buttons; the print line; the panel static and not clipped; every row; black on white with a light scheme; tracking
+  without its buttons; the same on a 390×844 phone from the bottom sheet; and Build still printing its screen. With the
+  print block disabled it fails ("only the list on paper"). The four Parts e2e cases pass, and so do the node tests that
+  load `parts.js`.
+- **Review:** Terra `01a16671`: no findings.
+- **Deploy:** waits for Joey's go (found by the checklist, not reported by him).
