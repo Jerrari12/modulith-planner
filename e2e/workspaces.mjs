@@ -108,6 +108,43 @@ test('every workspace boots on the root kit without errors, desktop and phone', 
   }
 });
 
+test('the front door: the bare address opens Build; a kit link and a part preview keep the old viewer, whose Customize hands the build to Build', async () => {
+  /* cutover, 2026-10-17 (js/entry.js shellWorkspace, test/front-door.test.mjs): planner.modulith.systems/ is the planner */
+  const ctx = await freshContext();
+  const errors = [];
+  const watch = (p) => { p.on('pageerror', (e) => errors.push('pageerror: ' + e.message)); p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); }); return p; };
+  const page = watch(await ctx.newPage());
+  await page.goto(`${base}/index.html?debug=1`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.ws), 'build', 'the bare address mounts Build');
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('ws')), 'build', 'and names it in the address');
+  assert.ok(await page.locator('#ws-top').count(), 'the top bar');
+  // a kit by name, without ?ws=: the old viewer (the smoke test's and the goldens' route)
+  await page.goto(`${base}/index.html?build=185-tabletop-2w2h&debug=1`, { waitUntil: 'load', timeout: 90_000 });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest, null, { timeout: 90_000 });
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.ws || null), null, 'a kit link keeps the old viewer');
+  const units = (rec) => rec.placed.map((p) => `${p.id}:${p.w}W${p.hh}@${p.x},${p.y}:${p.fill}`).sort().join(' ');
+  const want = units(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GEN2_VIEWER__.build))));
+  // its Customize opens this app's Build workspace on the same build (a new tab, as before), never the old planner
+  const [tab] = await Promise.all([ctx.waitForEvent('page'), page.locator('#btn-customize').click()]);
+  watch(tab);
+  await tab.waitForLoadState('load', { timeout: 90_000 });
+  await tab.waitForFunction(() => document.documentElement.dataset.ws === 'build' && document.querySelector('#ws-dock'), null, { timeout: 90_000 });
+  const u = new URL(tab.url());
+  assert.equal(u.origin + u.pathname, `${base}/index.html`, 'the same app: ' + tab.url().slice(0, 120));
+  assert.equal(u.searchParams.get('ws'), 'build');
+  assert.equal(u.searchParams.get('build'), '185-tabletop-2w2h', 'the kit rides along');
+  const m = /^#build=([^&]+)/.exec(u.hash);
+  assert.ok(m, 'the build rides in the hash');
+  assert.equal(units(JSON.parse(Buffer.from(decodeURIComponent(m[1]), 'base64').toString('utf8'))), want, 'the build handed over is the one shown');
+  await tab.close();
+  // the site's part preview keeps the old viewer
+  await page.goto(`${base}/index.html?part=185-case-2w-1h&mode=preview`, { waitUntil: 'load', timeout: 90_000 });
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.ws || null), null, 'the part preview keeps the old viewer');
+  assert.equal(await page.locator('#ws-top').count(), 0, 'with no workspace chrome');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('analytics: only Assemble counts steps, the boot preset is not a pick, and events go out 400 ms apart', async () => {
   // the UI review, 2026-10-16: three 429s from GoatCounter (4 hits a second); every workspace's boot had fired step:11,
   // complete and preset:<first> at once beside the page view

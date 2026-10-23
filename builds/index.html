@@ -376,7 +376,7 @@ html[data-theme="dark"] .filter-chip.on { color: #180d20; }
   <div class="hero-bg" id="hero-bg"></div>
   <div class="hero-shade"></div>
   <div class="hero-bar">
-    <a class="brand" id="brand-home" href="https://gen2planner.jerrari3d.com/">
+    <a class="brand" id="brand-home" href="../?ws=build">
       <img class="brand-logo" src="../img/jerrari-logo.svg" alt="Jerrari Design" width="26" height="44" onerror="this.remove()">
       <span class="brand-word"><span class="brand-mark">GEN2</span><span class="brand-sub">KITS</span></span>
     </a>
@@ -386,7 +386,7 @@ html[data-theme="dark"] .filter-chip.on { color: #180d20; }
         <svg class="tt-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.6 14.2A8.6 8.6 0 0 1 9.8 3.4a8.6 8.6 0 1 0 10.8 10.8z"/></svg>
         <span class="tt-knob"></span>
       </button>
-      <a class="nav-pill planner-link" href="https://gen2planner.jerrari3d.com/">&#8592; GEN2 Planner</a>
+      <a class="nav-pill planner-link" href="../?ws=build">&#8592; GEN2 Planner</a>
       <a class="brand-link" href="https://www.jerrari3d.com/gen2-modular-system" target="_blank" rel="noopener">JERRARI3D.com →</a>
     </span>
   </div>
@@ -403,29 +403,13 @@ html[data-theme="dark"] .filter-chip.on { color: #180d20; }
   GEN2 QuickLock Modular System by <a href="https://www.jerrari3d.com" target="_blank" rel="noopener">JERRARI3D</a>
   · Models on <a href="https://www.printables.com/@Jerrari" target="_blank" rel="noopener">Printables</a>
   and <a href="https://thangs.com/designer/Jerrari" target="_blank" rel="noopener">Thangs</a>
-  · <a class="planner-link" href="https://gen2planner.jerrari3d.com/">GEN2 Planner</a>
+  · <a class="planner-link" href="../?ws=build">GEN2 Planner</a>
 </footer>
 
 <script>
-// Cross-site nav: point every .planner-link at the LOCAL planner when this page
-// is itself served locally, so the two tools can be walked end-to-end before
-// deploying (mirrors IS_LOCAL_DEV / INSTRUCTIONS_VIEWER_URL in planner app.js —
-// keep the port in step with .claude/launch.json's "planner" entry).
-const IS_LOCAL_DEV = location.protocol === 'file:' || ['localhost', '127.0.0.1'].includes(location.hostname);
-const PLANNER_URL = IS_LOCAL_DEV ? 'http://localhost:8124/' : 'https://gen2planner.jerrari3d.com/';
-for (const a of document.querySelectorAll('.planner-link, #brand-home')) a.href = PLANNER_URL;
-document.addEventListener('click', (e) => {
-  const a = e.target && e.target.closest && e.target.closest('.planner-link, #brand-home');
-  if (!a) return;
-  try {
-    const v = localStorage.getItem('gen2-theme');
-    if (v !== 'dark' && v !== 'light') return;          // never chosen — let the far side default
-    const u = new URL(a.href, location.href);
-    u.searchParams.set('theme', v);
-    u.searchParams.set('tt', localStorage.getItem('gen2-theme:t') || '0');
-    a.href = u.href;
-  } catch (err) { /* leave the plain link */ }
-}, true);
+// The planner is this app (cutover, 2026-10-17): the .planner-link and #brand-home links above open its Build workspace
+// on this origin, relative, so they work served locally too; one origin shares the light/dark choice, so the
+// ?theme=&tt= hand-off the separate planner (gen2planner.jerrari3d.com) needed is gone.
 
 // Parallax hero — a straight port of the planner's js/hero.js: the photo starts
 // at its top and drifts only a fraction of the way down across the banner's
@@ -656,7 +640,7 @@ function renderCards(kits, main) {
     actions.className = 'kit-actions';
     const open = document.createElement('a');
     open.className = 'kit-open';
-    open.href = '../?build=' + encodeURIComponent(k.id);
+    open.href = '../?ws=assemble&build=' + encodeURIComponent(k.id);   // the 3D instructions: the planner's Assemble workspace
     open.textContent = 'Open the 3D instructions →';
     actions.appendChild(open);
 

@@ -9,6 +9,7 @@
      tabTitle), set by app.js in the planner and by main.js in the plain viewer, in the same shape. "GEN2 Assembly
      Instructions" was the viewer's name from before the merge and said nothing about MODULITH. -->
 <meta name="description" content="MODULITH Planner: lay out a 3D-printable modular storage build, pick filament colors, make labels, and get the parts list and assembly steps. Free, in the browser. GEN2 parts still work.">
+<!-- the bare address is the planner (cutover, 2026-10-17), so a link preview of it shows the title and description above -->
 <!-- Site icon: the Jerrari J on a dark tile. The mark's core is WHITE, so a
      transparent icon dissolves into a light tab bar — the tile keeps it legible
      in both themes. Root-absolute paths so /builds/ resolves them too. Same
@@ -230,7 +231,7 @@
           <button id="btn-start">Get started <i>&rarr;</i></button>
           <button id="btn-skip-end" title="Jump straight to the completed model - tap parts to recolor or customize">Skip to the finished build &rarr;</button>
           <!-- official kits only: the gentle on-ramp to the planner -->
-          <button id="btn-customize" class="hidden" title="Open this exact build in the GEN2 Planner - resize it, add drawers, make it yours">Customize this build &rarr;</button>
+          <button id="btn-customize" class="hidden" title="Open this exact build in the planner - resize it, add drawers, make it yours">Customize this build &rarr;</button>
           <!-- official kits only: the PINNED link. The bare root means "the
                current recommended starter" and deliberately never rewrites
                itself, so this is how you get a URL that always opens THIS kit. -->
@@ -348,8 +349,11 @@
      and as a STRING, never a function. -->
 <script>window.goatcounter = {};</script>
 <!-- Absolute https (not protocol-relative): a //-URL opened via file://
-     resolves to a Windows network share and hangs the page for minutes. -->
-<script data-goatcounter="https://jerrari-build.goatcounter.com/count"
+     resolves to a Windows network share and hangs the page for minutes.
+     The counter is `jerrari`, the old planner's, since the cutover (CUTOVER.md,
+     Joey's call 3, 2026-10-23): planner 2.0 continues that dashboard, and
+     `jerrari-build` keeps only what still runs on gen2build.jerrari3d.com. -->
+<script data-goatcounter="https://jerrari.goatcounter.com/count"
         async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>
