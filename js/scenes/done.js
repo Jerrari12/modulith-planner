@@ -4,8 +4,10 @@
  * the Home office at golden hour. This first slice is the brief's own Fast fallback and the plan's static hero: ONE room,
  * ONE lighting state baked into the room's textures (tools/done-scene/room.py), a fixed hero camera fitted to the build
  * and the free region of the canvas, props that slide clear of the build, the build's own shadow on a catcher over the
- * desk (a baked contact disc on Fast, which has no shadow map), no bokeh, no camera sequence, no time cycle. Behind
+ * desk (a baked contact disc on Fast, which has no shadow map), no bokeh, no time cycle. Behind
  * `?done=room` (js/workspaces/assemble.js); nothing here loads until a visitor reaches Done with the flag on.
+ * The second slice (2026-10-23) added the camera sequence: three curated shots the camera holds on and drifts between
+ * (see `seq` below and done-fit.js), a grab that pauses it, the still hero under reduced motion and on Fast.
  *
  * The stage keeps every pass it has on the model (relief, AO, Very High accumulation) and lends this module four things
  * through `stage.holdScene` (js/main.js): the background, the environment, the shadow and the camera, held through a
@@ -18,12 +20,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, slideProps, contactFootprint } from './done-fit.js';
+import { shotCamera, slideProps, contactFootprint, SHOTS, SEQUENCE, sequenceAt, driftTooSlow } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
 const SCALE = 1000;        // metres in the GLB -> the stage's millimetres
 const ENTER_MS = 900;      // the camera's move into the shot
+const IDLE_BACK_MS = 6000; // a grabbed camera drifts back into the sequence after this much stillness (the style doc: ~6 s)
 const SUN_MM = 1200;       // the room's sun, this far from the build: inside the shadow camera's 3000 mm far plane (see applyLights)
 let loading = null;        // one load per page: the GLB and its JSON, shared by every entry
 let tracked = false;
@@ -90,8 +93,81 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     hemi: { color: stage.hemi.color.clone(), ground: stage.hemi.groundColor.clone(), intensity: stage.hemi.intensity },
     fill: { intensity: stage.fill.intensity, color: stage.fill.color.clone() },
     sunHalfDeg: stage.sunHalfDeg,
-    controls: controls.enabled, dims: !!stage.dimsOn };
+    controls: controls.enabled, pan: controls.enablePan, dims: !!stage.dimsOn };
   let json = null, buildBox = null;
+  const debug = new URLSearchParams(location.search).has('debug');
+
+  /* THE CAMERA SEQUENCE (the plan's curated shots, 2026-10-23): hold on a shot, drift to the next, over SHOTS.tabletop
+     fitted to this build (done-fit.js: the clock, the shots, the easing). A drift runs on animation frames; a hold runs
+     on ONE timer, so the stage sees a still camera and the idle gate rests (Very High converges in the holds: a camera
+     that never stops never settles, and the gate is the number the branch keeps). Not under reduced motion (the still
+     hero) and not on Fast (the brief: a fixed hero camera there). A hidden tab pauses the clock. A grab (any orbit)
+     pauses it too; IDLE_BACK_MS after the last gesture the camera drifts into the next shot from wherever it was left. */
+  const seq = { on: false, t0: 0, raf: 0, timer: 0, startTimer: 0, idleTimer: 0, pausedAt: null, from: null, movingTo: -1, cams: [], timing: { ...SEQUENCE }, grabbed: false,
+    intervals: [], lastFrame: 0, slow: false };   // the first drift's frame intervals: a device that cannot drift smoothly keeps the hero (driftTooSlow)
+  const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
+  const sequenceWanted = (tier) => !reduced && (tier || stage.quality) !== 'fast';
+  function shotsFor() {
+    const list = SHOTS.tabletop.map((s) => ({ ...s }));
+    if (json.shots && json.shots.hero) list[0] = { ...list[0], ...json.shots.hero, name: 'hero' };   // the bake's own hero shot wins
+    return list;
+  }
+  function fitShots() { seq.cams = shotsFor().map((s) => shotCamera(s, plain(buildBox), view())); }
+  function setCam(c) { camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); }
+  function snapshot() { return { position: camera.position.clone(), target: controls.target.clone(), fov: camera.fov }; }
+  function seqTick() {
+    if (!seq.on || seq.pausedAt != null) return;
+    const now = performance.now();
+    const s = sequenceAt(now - seq.t0, seq.cams.length, seq.timing);
+    if (s.moving) {
+      if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; }   // a drift starts from wherever the camera IS (a grab may have moved it)
+      else if (!seq.slow) { seq.intervals.push(now - seq.lastFrame); seq.lastFrame = now; }
+      const b = seq.cams[s.to];
+      camera.position.lerpVectors(seq.from.position, v3(b.position), s.k); controls.target.lerpVectors(seq.from.target, v3(b.target), s.k);
+      camera.fov = seq.from.fov + (b.fov - seq.from.fov) * s.k; camera.updateProjectionMatrix(); controls.update();
+      seq.raf = requestAnimationFrame(seqTick);
+    } else {
+      if (seq.movingTo !== -1) {   // land exactly on the shot, then be still
+        seq.movingTo = -1; setCam(seq.cams[s.at]);
+        /* the drift that just ended is the device's own measurement: a weak GPU or a phone that drew it as a slideshow
+           (under 20 fps on average) keeps this shot for the rest of the visit rather than drifting again. Decided once;
+           the tier's auto-downgrade is one-way and slower to notice. */
+        if (!seq.slow && driftTooSlow(seq.intervals, seq.timing.maxFrameMs)) { seq.slow = true; seqStop(); seq.on = false; return; }
+      }
+      seq.timer = setTimeout(seqTick, Math.max(16, s.holdLeft));
+    }
+  }
+  function seqStart() {
+    if (seq.on || !on) return;
+    fitShots();
+    seq.on = true; seq.t0 = performance.now(); seq.pausedAt = null; seq.movingTo = -1; seq.grabbed = false;
+    seqTick();
+  }
+  function seqStop() {
+    seq.on = false; seq.pausedAt = null; seq.grabbed = false;
+    cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); clearTimeout(seq.startTimer); clearTimeout(seq.idleTimer);
+  }
+  function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); }
+  function seqResume() { if (!seq.on || seq.pausedAt == null) return; seq.t0 += performance.now() - seq.pausedAt; seq.pausedAt = null; seqTick(); }
+  function onVisibility() { if (document.hidden) seqPause(); else if (!seq.grabbed) seqResume(); }
+  function onGrabStart() { if (!seq.on) return; clearTimeout(seq.idleTimer); seqPause(); seq.grabbed = true; }
+  function onGrabEnd() {
+    if (!seq.on || !seq.grabbed) return;
+    /* the stage's own 'end' listener has just handed the camera to the visitor (camOverride: its return button appears,
+       the toolbar's camera button lights). In the room the sequence is the return, so take it straight back: the stage's
+       button would fly the camera to the step's view, out of the room's shot. */
+    if (stage.setCamFree) stage.setCamFree(false);
+    clearTimeout(seq.idleTimer); seq.idleTimer = setTimeout(driftBack, IDLE_BACK_MS);
+  }
+  function driftBack() {
+    if (!seq.on || !seq.grabbed || document.hidden) return;
+    // the clock restarts at the start of this beat's move, so the next tick drifts into the next shot from the visitor's view
+    const t = seq.timing, beat = t.holdMs + t.moveMs;
+    const s = sequenceAt(seq.pausedAt - seq.t0, seq.cams.length, t);
+    seq.t0 = performance.now() - (s.at * beat + t.holdMs);
+    seq.pausedAt = null; seq.grabbed = false; seq.movingTo = -1;
+    seqTick();
+  }
 
   function view() {
     const el = renderer.domElement, sa = stage.safeArea || { left: 0, right: 0, top: 0, bottom: 0 };
@@ -119,8 +195,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (parts.sprite) parts.sprite.visible = !shadow;
   }
   function placeCamera(animate) {
-    const shot = (json.shots && json.shots.hero) || { az: 30, el: 16, fovV: 37.8, fill: 0.36, targetLift: -0.08 };
-    const c = shotCamera(shot, plain(buildBox), view());
+    const c = shotCamera(shotsFor()[0], plain(buildBox), view());
     const p1 = new THREE.Vector3(c.position.x, c.position.y, c.position.z), t1 = new THREE.Vector3(c.target.x, c.target.y, c.target.z);
     cancelAnimationFrame(parts.raf);
     if (!animate) { camera.position.copy(p1); controls.target.copy(t1); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); stage.invalidateFrame(); return; }
@@ -182,11 +257,17 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (was.dims) stage.setDims(false);   // the brief: no dimension callouts in the room
     stage.holdScene(true, { environment: parts.env });
     applyLights(stage.quality);
-    controls.enabled = false;
+    // the orbit stays available for a grab (the style doc: a gentle orbit, then the drift back); no pan, the shots own the aim
+    controls.enabled = true; controls.enablePan = false;
     on = true;
     document.documentElement.dataset.done = 'room';
     placeCamera(!reduced);
+    if (sequenceWanted(stage.quality)) seq.startTimer = setTimeout(seqStart, reduced ? 0 : ENTER_MS + 50);
     addEventListener('resize', refit);
+    document.addEventListener('visibilitychange', onVisibility);
+    controls.addEventListener('start', onGrabStart); controls.addEventListener('end', onGrabEnd);
+    if (debug) window.__GEN2_DONE__ = { get sequence() { return { on: seq.on, paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing } }; },
+      setTiming(t) { Object.assign(seq.timing, t); if (seq.on) { seqStop(); seqStart(); } } };
     if (!tracked) { tracked = true; stage.track('done:room'); }
     stage.invalidateFrame();
     return handle;
@@ -197,13 +278,22 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     return null;
   });
 
-  function refit() { if (on) placeCamera(false); }
+  function refit() {
+    if (!on) return;
+    if (!seq.on) { placeCamera(false); return; }
+    fitShots();   // the shots follow the free region; a hold re-lands on its shot, a drift lands on the refitted one
+    if (seq.movingTo === -1 && seq.pausedAt == null) setCam(seq.cams[sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at]);
+  }
   function leave() {
     cancelled = true;
     if (!on) return;
     on = false;
+    seqStop();
     cancelAnimationFrame(parts.raf);
     removeEventListener('resize', refit);
+    document.removeEventListener('visibilitychange', onVisibility);
+    controls.removeEventListener('start', onGrabStart); controls.removeEventListener('end', onGrabEnd);
+    if (debug) delete window.__GEN2_DONE__;
     delete document.documentElement.dataset.done;
     for (const k of ['group', 'catcher', 'sprite']) { const o = parts[k]; if (o) { scene.remove(o); if (o.geometry && k !== 'group') o.geometry.dispose(); if (o.material && k !== 'group') o.material.dispose(); parts[k] = null; } }
     if (parts.tex) { parts.tex.dispose(); parts.tex = null; }
@@ -218,10 +308,16 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (was.dims) stage.setDims(true);
     stage.holdScene(false);
     if (parts.env) { parts.env.dispose(); parts.env = null; }
-    controls.enabled = was.controls;
+    controls.enabled = was.controls; controls.enablePan = was.pan;
     stage.resetView();   // the guided camera of the page the stage is on (the finished step, or the one a click chose)
     stage.invalidateFrame();
   }
-  const handle = { leave, onQuality: (tier) => { if (on) applyLights(tier); }, refit, get on() { return on; } };
+  function onQuality(tier) {
+    if (!on) return;
+    applyLights(tier);
+    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); }
+    else if (seq.on) { seqStop(); placeCamera(false); }   // Fast: the fixed hero
+  }
+  const handle = { leave, onQuality, refit, get on() { return on; } };
   return { ready, leave };
 }

@@ -68,6 +68,10 @@ for (const tier of TIERS) for (const flag of [false, true]) {
   await page.waitForTimeout(1600);
   const frames = await page.evaluate(() => { window.__sampling = false; return window.__frames.slice(2); });
   await page.waitForTimeout(2500);   // settle (Very High's accumulation burst included)
+  /* the camera sequence (2026-10-23): the room holds on a shot for 9 s then drifts for 3.5 s, so a 10 s window always
+     holds a drift. The rest window here is a HOLD (the hold made endless through the debug hook), the number the idle
+     gate is judged on; one drift is measured on its own below (driftFrames, driftMs). Very High converges in the hold. */
+  if (flag) { await page.evaluate(() => { if (window.__GEN2_DONE__) window.__GEN2_DONE__.setTiming({ holdMs: 1e7 }); }); await page.waitForTimeout(2500); }
   /* draw calls PER FRAME, every pass included: renderer.info resets on each render() call, so at High it would report the
      AO composite's one call; left accumulating over the rest window and divided by the frames the idle gate drew, it is
      the whole frame's cost */
@@ -76,16 +80,26 @@ for (const tier of TIERS) for (const flag of [false, true]) {
   const s1 = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, r = v.renderer; const out = { ...v.idleStats(), callsTotal: r.info.render.calls, trisTotal: r.info.render.triangles }; r.info.autoReset = true; return out; });
   const drawn = Math.max(1, s1.drawn - s0.drawn);
   s1.calls = Math.round(s1.callsTotal / drawn); s1.tris = Math.round(s1.trisTotal / drawn);
+  // one drift of the sequence: frames the gate drew over its 3.5 s, and the mean rAF interval while it ran
+  let driftFrames = '', driftMs = '';
+  if (flag && await page.evaluate(() => !!(window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence.on))) {
+    await page.evaluate(() => { window.__frames = []; let last = performance.now(); const tick = (t) => { window.__frames.push(t - last); last = t; if (window.__sampling) requestAnimationFrame(tick); }; window.__sampling = true; requestAnimationFrame(tick); window.__GEN2_DONE__.setTiming({ holdMs: 1, moveMs: 3500 }); });
+    const d0 = await page.evaluate(() => ({ ...window.__GEN2_VIEWER__.idleStats() }));
+    await page.waitForTimeout(3500);
+    const d1 = await page.evaluate(() => { window.__sampling = false; const v = window.__GEN2_VIEWER__; return { ...v.idleStats(), frames: window.__frames.slice(2) }; });
+    driftFrames = d1.drawn - d0.drawn;
+    driftMs = (d1.frames.reduce((a, b) => a + b, 0) / Math.max(1, d1.frames.length)).toFixed(1);
+  }
   const bytes = await page.evaluate(() => performance.getEntriesByType('resource').filter((e) => /scenes\/|done(-fit)?\.js/.test(e.name)).reduce((a, e) => a + (e.transferSize || e.encodedBodySize || 0), 0));
   const sorted = frames.slice().sort((a, b) => a - b);
   const mean = frames.reduce((a, b) => a + b, 0) / Math.max(1, frames.length);
   const p95 = sorted[Math.floor(sorted.length * 0.95)] || 0, worst = sorted[sorted.length - 1] || 0;
-  rows.push({ tier: quality, room: flag ? 'on' : 'off', bytes: flag ? kb(bytes) : '0', loadMs: flag ? loadMs : '', calls: s1.calls, tris: s1.tris, restFrames: s1.drawn - s0.drawn, enterMean: mean.toFixed(1), enterP95: p95.toFixed(1), enterWorst: worst.toFixed(1), n: frames.length, errors: errors.length ? errors.join(' | ') : '' });
+  rows.push({ tier: quality, room: flag ? 'on' : 'off', bytes: flag ? kb(bytes) : '0', loadMs: flag ? loadMs : '', calls: s1.calls, tris: s1.tris, restFrames: s1.drawn - s0.drawn, driftFrames, driftMs, enterMean: mean.toFixed(1), enterP95: p95.toFixed(1), enterWorst: worst.toFixed(1), n: frames.length, errors: errors.length ? errors.join(' | ') : '' });
   await ctx.close();
 }
 await browser.close(); server.close();
-const cols = ['tier', 'room', 'bytes', 'loadMs', 'calls', 'tris', 'restFrames', 'enterMean', 'enterP95', 'enterWorst', 'n', 'errors'];
-console.log(`\n${SOFT ? 'SwiftShader (the CI runner\'s class)' : 'this machine\'s GPU'}, 1280x800, dark theme, kit ${KIT}; rest window 10 s; enter = Next to Done + 1.6 s, rAF intervals in ms\n`);
+const cols = ['tier', 'room', 'bytes', 'loadMs', 'calls', 'tris', 'restFrames', 'driftFrames', 'driftMs', 'enterMean', 'enterP95', 'enterWorst', 'n', 'errors'];
+console.log(`\n${SOFT ? 'SwiftShader (the CI runner\'s class)' : 'this machine\'s GPU'}, 1280x800, dark theme, kit ${KIT}; rest window 10 s (the room: in a hold of the camera sequence); drift = one 3.5 s drift of the sequence; enter = Next to Done + 1.6 s, rAF intervals in ms\n`);
 console.log('| ' + cols.join(' | ') + ' |');
 console.log('|' + cols.map(() => '---').join('|') + '|');
 for (const r of rows) console.log('| ' + cols.map((c) => r[c]).join(' | ') + ' |');

@@ -1307,7 +1307,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   await settle(page, 1500);
   const s1 = await state(page);
   assert.equal(s1.room, true, 'the room is in the scene'); assert.equal(s1.held, true, 'the stage is held');
-  assert.equal(s1.bg, null, 'no stage background behind the room'); assert.equal(s1.controls, false, 'no orbit in the room');
+  assert.equal(s1.bg, null, 'no stage background behind the room'); assert.equal(s1.controls, true, 'the orbit stays for a grab (the sequence drifts back after it)');
   assert.equal(s1.grid, false, 'the grid is hidden'); assert.equal(s1.table, false, 'the table is hidden'); assert.equal(s1.dims, false, 'no callouts in the room');
   assert.equal(s1.quality, 'fast', 'the suite pins Fast'); assert.equal(s1.shadow, false, 'Fast has no shadow map'); assert.equal(s1.disc, true, 'Fast shows the baked contact disc'); assert.equal(s1.catcher, false);
   assert.match(await text(page, '#ws-player .text'), /golden hour/, 'the player says where the build is');
@@ -1337,6 +1337,80 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s3.sunHalfDeg, 6, 'Back restores the studio\'s soft-shadow cone');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* THE CAMERA SEQUENCE (the Done scene's second slice, 2026-10-23): above Fast the camera holds on a shot and drifts to the
+   next; between drifts it is STILL (the idle gate's condition); under reduced motion it never leaves the hero; Fast keeps
+   the fixed hero. The timing is shortened through the debug hook so the case takes seconds, not minutes. */
+test('Assemble: the Done scene\'s camera drifts between shots and holds still between drifts; reduced motion and Fast keep the hero', async () => {
+  const cam = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(2)); });
+  const seqOf = (page) => page.evaluate(() => (window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence) || null);
+  const toDone = async (page) => {
+    await btn(page, 'Skip to the finished build', '#ws-steps').click();
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
+  };
+  // Fast (the suite's pin): the fixed hero, no sequence
+  const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
+  await toDone(page);
+  await settle(page, 1500);
+  assert.equal((await seqOf(page)).on, false, 'Fast: no sequence');
+  // Balanced: the sequence runs - a short clock: hold 1.5 s, drift 0.8 s; the slow-drift guard off for the clock's own
+  // checks (a software renderer draws a short drift as a handful of frames, which is no verdict: it gets its own check below)
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await settle(page, 300);
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1500, moveMs: 800, maxFrameMs: 1e9 }));
+  await settle(page, 200);
+  const s = await seqOf(page);
+  assert.equal(s.on, true, 'Balanced: the sequence is on'); assert.equal(s.shots, 3, 'three shots'); assert.equal(s.paused, false);
+  const c0 = await cam(page);                        // on the hero, in its hold (0.2 s in)
+  await settle(page, 400);
+  assert.deepEqual(await cam(page), c0, 'still during the hold');
+  await settle(page, 2100);                          // 2.7 s in: past the first drift (1.5 + 0.8), in the second hold
+  const c1 = await cam(page);
+  assert.notDeepEqual(c1, c0, 'the camera drifted to the second shot');
+  await settle(page, 400);
+  assert.deepEqual(await cam(page), c1, 'still again in the second hold');
+  await settle(page, 2000);                          // 5.1 s: through the second drift (3.8 - 4.6) and into the third hold
+  const c2 = await cam(page);
+  assert.notDeepEqual(c2, c1, 'then to the third');
+  assert.ok((await seqOf(page)).movingTo === -1, 'holding between drifts');
+  // a hidden tab pauses the clock; the camera does not move while hidden
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
+  await settle(page, 100);
+  const cH = await cam(page);
+  assert.equal((await seqOf(page)).paused, true, 'hidden: paused');
+  await settle(page, 2200);
+  assert.deepEqual(await cam(page), cH, 'no drift while hidden');
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+  await settle(page, 2400);
+  assert.notDeepEqual(await cam(page), cH, 'visible again: the drift resumed');
+  // the slow-drift guard: one long drift with the guard on is the device's verdict. A real GPU drifts smoothly and the
+  // sequence goes on; the CI runner's SwiftShader draws it under 20 fps and the sequence ends on the shot it reached
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 200, moveMs: 2000, maxFrameMs: 50 }));
+  await settle(page, 2800);
+  const g = await seqOf(page);
+  if (process.env.E2E_SOFT) assert.equal(g.slow, true, 'SwiftShader: the drift was too slow');
+  assert.equal(g.on, !g.slow, 'a slow drift ends the sequence; a smooth one does not');
+  // Back stops it
+  await btn(page, 'Back', '#ws-player').click();
+  await settle(page, 1200);
+  assert.equal(await seqOf(page), null, 'Back removes the sequence');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  // reduced motion: the still hero, on a tier that would otherwise drift
+  const rm = await open('assemble', { query: '&done=room' });
+  await rm.page.emulateMedia({ reducedMotion: 'reduce' });
+  await rm.page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await toDone(rm.page);
+  await settle(rm.page, 1500);
+  assert.equal((await seqOf(rm.page)).on, false, 'reduced motion: no sequence');
+  const r0 = await cam(rm.page);
+  await settle(rm.page, 2500);
+  assert.deepEqual(await cam(rm.page), r0, 'the hero holds');
+  assert.deepEqual(clean(rm.errors), []);
+  await rm.ctx.close();
 });
 
 test('the build store: an edit autosaves, a bare address reopens the build, Rename, Duplicate, Delete', async () => {

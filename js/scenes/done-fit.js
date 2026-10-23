@@ -29,7 +29,9 @@ export function shotCamera(shot, box, view) {
   const fov = shot.fovV || 36;
   const d = fitDistance({ radius, fovDeg: fov, width: view.width, height: view.height, free: view.free, fill: shot.fill || 0.42 });
   const az = ((shot.az || 0) * Math.PI) / 180, el = ((shot.el || 0) * Math.PI) / 180;
-  const target = { x: centre.x, y: centre.y + radius * (shot.targetLift || 0), z: centre.z };
+  // targetShift: the aim moved by fractions of the box's width and depth (the detail shot looks at a drawer front, not the centre)
+  const sh = shot.targetShift || {};
+  const target = { x: centre.x + size.x * (sh.x || 0), y: centre.y + radius * (shot.targetLift || 0), z: centre.z + size.z * (sh.z || 0) };
   const position = { x: target.x + d * Math.sin(az) * Math.cos(el), y: target.y + d * Math.sin(el), z: target.z + d * Math.cos(az) * Math.cos(el) };
   return { position, target, fov, distance: d, radius };
 }
@@ -52,6 +54,42 @@ export function slideProps(props, build) {
     out[g] = out[g] === undefined ? delta : (delta > 0 ? Math.max(out[g], delta) : Math.min(out[g], delta));
   }
   return out;
+}
+
+/* THE CAMERA SEQUENCE (the plan's curated product shots, 2026-10-23; the style doc's reference is Unigine Superposition:
+ * slow dolly and push-in moves, the eye guided rather than spun). Three parametric shots per mount, each fitted to the
+ * build by shotCamera: the hero 3/4 (room.json's own shot overrides this one), a straight-on low angle, and a detail
+ * close-up aimed at the front-left drawer. The camera HOLDS on a shot, then drifts to the next: a hold is where Very
+ * High converges and the idle gate rests (a camera that never stops never settles), the drift is one eased move. */
+export const SHOTS = {
+  tabletop: [
+    { name: 'hero', az: 28, el: 20, fovV: 29.9, fill: 0.5, targetLift: -0.08 },
+    { name: 'low', az: -26, el: 5, fovV: 29.9, fill: 0.62, targetLift: 0.04 },
+    { name: 'detail', az: 30, el: 10, fovV: 29.9, fill: 1.4, targetLift: -0.3, targetShift: { x: -0.18, z: 0.3 } },
+  ],
+};
+export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50 };   // the style doc: shots of 8-12 s, eased drifts between them; a drift slower than 20 fps on average ends the sequence (a weak device holds the hero)
+
+/* A drift's verdict from the frame intervals it drew: too slow when their mean is over `maxFrameMs` (a potato or a phone:
+ * the still hero is better than a slideshow). Fewer than 4 intervals is no evidence. */
+export function driftTooSlow(intervals, maxFrameMs = SEQUENCE.maxFrameMs) {
+  if (!intervals || intervals.length < 4) return false;
+  return intervals.reduce((a, b) => a + b, 0) / intervals.length > maxFrameMs;
+}
+
+export const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+
+/* Where a sequence of n shots is at time t (ms since the first hold began): { at, to, moving, k }. Each beat is a hold on
+ * shot `at` (holdMs) then a move to `to` (moveMs, k the EASED progress 0..1); after the last shot it wraps to the first.
+ * Pure, so the clock is testable without a frame. */
+export function sequenceAt(t, n, { moveMs = SEQUENCE.moveMs, holdMs = SEQUENCE.holdMs } = {}) {
+  const beat = holdMs + moveMs, count = Math.max(1, n | 0);
+  const tt = Math.max(0, t) % (beat * count);
+  const i = Math.floor(tt / beat), phase = tt - i * beat;
+  const at = i % count, to = (i + 1) % count;
+  if (phase < holdMs || count === 1) return { at, to, moving: false, k: 0, holdLeft: Math.max(0, holdMs - phase) };
+  const raw = Math.min(1, (phase - holdMs) / moveMs);
+  return { at, to, moving: true, k: easeInOut(raw), raw };
 }
 
 /* The baked contact shadow's footprint for the Fast tier: a disc-ish plane under the build, a little wider than it. */
