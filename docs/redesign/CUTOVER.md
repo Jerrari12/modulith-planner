@@ -6,7 +6,37 @@ pass in full, and the old apps keep only the cross-checkout failures their untou
 left is merging them and retiring the two old apps. Nothing here runs without Joey's go. Refreshed again 2026-10-21 (the
 cutover prep, next section): today's mains merged in, the suites re-run, each step's undo rehearsed, the data paths and
 the old planner's capability list checked. This repo's branch was refreshed once more on 2026-10-22, for two fixes the
-parity list waited on.
+parity list waited on. **The cutover ran on 2026-10-23: the section right below.**
+
+## Cutover day: 2026-10-23, LIVE
+
+Joey, 11:16 local, after his five checks: "All five checks pass. Go ahead with the cutover as soon as everything is
+staged." The site's, the old viewer's and the old planner's merges were each staged by an agent in a fresh worktree (the
+merge, the repo's suite, the deploy workflow's steps where they run locally, and a revert rehearsal whose tree equalled
+that main's); this repo's was merged in the main checkout once its branch's suites had passed (its undo is the 10-21
+rehearsal's `git revert -m 1`, not re-rehearsed on this head). All four were pushed within half an hour of each other:
+the planner first, as recommended, then the two redirects, and the site last because its merge had to be re-staged on
+another session's push. None waited for the previous deploy to finish: the redirects' targets, the `?ws=` addresses,
+already worked.
+
+| step | repo | merge | pushed | live | checked live |
+|---|---|---|---|---|---|
+| 3 | modulith-planner | `6e19ed1` (this branch at `c9f4f02`) | 11:34 | 12:47 (run 39979481404, 73 min; the e2e step alone at least 60) | `front-door-prod.mjs 6e19ed1`: the bare address opens Build; the counter is `jerrari`; `?part=…&mode=preview` draws with no shell; the kit gallery links only this host (10 Assemble, 3 Build); a bare `?build=<kit>` keeps the Studio cover, and its Customize opens `/?ws=build&build=<kit>#build=…` (checked by hand: the button calls `window.open`) |
+| 5 | gen2-visual-animator | `251656b` | 11:34 | 11:37 (`?v=251656bf`) | `redirects-prod.mjs`: `/?build=<kit>` → Assemble with the kit; `/` → Assemble; `/?part=…` stays and draws |
+| 6 | gen2-planner (the kill date) | `4a33c23` | 11:35 | 11:36 (Pages publishes main) | `redirects-prod.mjs`: `/` → Build; `/?build=<kit>&from=thangs` → Build with both carried; the saved slot forwards once per browser |
+| 4 | modulith-site | `1a315dc` (on `f62aaa2`, another session's Featured Build push at 11:20) | 12:00 | about 12:02 (Cloudflare) | `redirects-prod.mjs`: the home page, a kit page and a part page link only planner.modulith.systems; the stage's link check: 716 built pages, 0 old-host mentions |
+
+Also checked: the site's part previews on this host, 13 of 13 variants within the site's 10 s expiry
+(`cutover-prep-2026-10-21\parity\out\13-part-previews.md`). Joey re-requested indexing in Search Console (A8). The two
+check scripts are new, in `D:\Claude - Output\planner-prod-checks-2026-10-18\`, and were run against the pre-cutover
+state first, where they failed as they should.
+
+The undo of any step is `git revert -m 1 <that merge>` on that repo's main (rehearsed today on the three staged merges, on 10-21 for this repo's). The counter moved with
+step 3; `jerrari-build` now counts only the old viewer's remaining pages and can stop (Joey's call when). Keep the old
+planner's redirect for a year, as planned (step 6).
+
+**After the day, not done:** step 8 (retire the relay and the `?embed=1` path); the site's old BOM path and its env
+switch; the GEN2 wording on the kit gallery and the share-image tool; stopping `jerrari-build`.
 
 ## Joey's decisions
 

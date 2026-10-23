@@ -2760,3 +2760,21 @@ Dated calls made while building, with who made them. The brief and the inventory
   in another tab is read at this tab's next mount, as before.
 - **Deploy:** with the cutover (this branch).
 
+## 2026-10-23 (the cutover: the merged planner replaces gen2planner and gen2build)
+
+- **Joey's go** (11:16 local): "All five checks pass. Go ahead with the cutover as soon as everything is staged." The gate
+  was his five checks (the buy links, the model download links, his printers in the setup sheet, Very High on his screen,
+  one phone pass), not the 89-item pass; his words that morning: "why can't we just migrate the new planner in place of
+  the old one, it seems to be working great as is".
+- **What merged**, then pushed: this repo's `cutover-front-door` as main `6e19ed1` (merged in the main checkout after its
+  branch's suites; live 12:47, `?v=6e19ed12`); and, each staged by an agent in a fresh worktree with its suite and a
+  revert rehearsal, the old viewer's `cutover-redirect` as `251656b`
+  (live 11:37); the old planner's as `4a33c23` (the kill date; live 11:36); the site's `planner-cutover` as `1a315dc`
+  (built about 12:02). CUTOVER.md's "Cutover day" section has the table, the times and the checks.
+- **Live checks:** `front-door-prod.mjs` (new) eight of eight by script, its Customize step first confirmed by hand (the
+  cover's button calls `window.open` on this host); `redirects-prod.mjs` (new)
+  eight of eight; the site's part previews thirteen of thirteen on this host. Both scripts failed as they should on the
+  pre-cutover state.
+- **Deploy:** each merge's push started that repo's own deploy (the planner's took 73 minutes); nothing else to deploy.
+  This entry rides on the records push. Terra `01a169ad`: 5 of 7 findings taken (wording that overstated the order, the
+  e2e time and the rehearsals).
