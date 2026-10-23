@@ -2946,7 +2946,11 @@ keyboard undo or Remove").
   built once; no redraw after the Labels update; the badge counting `stage.build`.
 - **Review:** Terra `01a16a49`: one finding, taken (above).
 - **Deploy:** on Joey's go above, once the suites pass and main is green again (the top-bar case failed on the runner in
-  the run before this one).
+  the run before this one). Merged as `eb33cb1` + `ae0d501` (main 56faf84 merged in). **Live 2026-10-23 at `f6ba8d12`**
+  (run 40028267309, the deploy that also carried the material chips, the hover clips and the idle-gate fix; live 18:11).
+  `quality-badges-prod.mjs f6ba8d1` passes 6 of 6: a pick is saved as the user's and survives a reload, and the Parts badge
+  grows with a placement on the 2D board (43 to 51) without a workspace switch. The same script failed both halves on
+  `928e08a1` that afternoon.
 
 ## 2026-10-23 (the filament picker filters by material: All · PLA · PETG chips above the list)
 
