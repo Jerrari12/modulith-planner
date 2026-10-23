@@ -4131,3 +4131,60 @@ test('Feedback & support: the top bar button and the build menu open the shared 
   assert.deepEqual(errs(P.errors), []);
   await P.ctx.close();
 });
+
+/* THE GPU PASS'S FINDINGS (2026-10-23, Joey's laptop and desktop browsers): the Quality pill's pick did not survive a reload
+   (the shell's pill drew the tier without saving it), and the Parts badge and the size line went stale after an undo made
+   from Labels (the bar and the dock were drawn on the store change, before the regenerate, and never after it). */
+test('the Quality pill keeps a visitor\'s pick across a reload, and marks it as the user\'s', async () => {
+  // without the harness's Fast init script, which would reset the pick on every load: Fast is seeded once instead
+  const c = await browser.newContext({ viewport: { width: 1366, height: 768 } }); contexts.add(c);
+  const seed = await c.newPage(); await seed.goto(`${base}/css/app.css`);
+  await seed.evaluate(() => { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); });
+  await seed.close();
+  const { ctx, page, errors } = await open('build', { context: c });
+  const q = () => page.evaluate(() => ({ pill: document.querySelector('#ws-tools .quality span')?.textContent, tier: window.__GEN2_VIEWER__.quality, saved: localStorage.getItem('gen2-quality'), set: localStorage.getItem('gen2-quality:set') }));
+  assert.equal((await q()).tier, 'fast', 'the seeded tier');
+  await page.click('#ws-tools .quality');   // the next tier in the cycle
+  await settle(page, 800);
+  const picked = await q();
+  assert.ok(picked.tier !== 'fast' && picked.saved === picked.tier && picked.set === '1', `the pick is saved as the user's: ${JSON.stringify(picked)}`);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#ws-tools .quality', { timeout: 120_000 }); await settle(page, 1500);
+  const back = await q();
+  assert.equal(back.tier, picked.tier, `the pick survives the reload: ${JSON.stringify(back)}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the Parts badge and the size line follow an undo made from Labels: the badge at once, the dock once the stage has rebuilt', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }]);
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await armSize(page, '1W·1H');
+  await page.waitForFunction(() => (window.__spots || []).length, null, { timeout: 30_000 });
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
+  const badge = () => page.evaluate(() => [...document.querySelectorAll('#ws-tabs .tab')].find((b) => /Parts/.test(b.textContent))?.querySelector('.badge')?.textContent || null);
+  const b2 = await badge();   // two units
+  await clickSpot(page, 3, y);   // a third, on the right
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 15_000 });
+  await settle(page, 2500);
+  const b3 = await badge();
+  assert.ok(b2 && b3 && +b3 > +b2, `the badge grew with the unit: ${b2} -> ${b3}`);
+  // to Labels, where the undo of that placement regenerates the build
+  await page.evaluate(() => [...document.querySelectorAll('#ws-tabs .tab')].find((b) => /Labels/.test(b.textContent)).click());
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 }); await settle(page, 1500);
+  const dims = () => page.evaluate(() => [...document.querySelectorAll('#ws-dock .big')].map((e) => e.textContent).find((s) => /×/.test(s)) || null);
+  const d3 = await dims();
+  assert.equal(await badge(), b3, 'the Labels bar shows the same count');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 15_000 });
+  assert.equal(await badge(), b2, 'the badge follows the record at once, before the stage has rebuilt');
+  await page.waitForFunction(() => !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 30_000 }).catch(() => {});
+  await settle(page, 2500);
+  const d2 = await dims();
+  assert.ok(d2 && d3 && d2 !== d3, `the size line follows the rebuilt build: ${d3} -> ${d2}`);
+  assert.equal(await badge(), b2, 'and the badge still');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
