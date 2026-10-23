@@ -151,8 +151,10 @@ export function topbar(stage, ctx) {
     /* the workspaces read keys on the document (Escape deselects, the arrows nudge, Delete removes the selected unit, Ctrl+Z
        undoes) and the stage on the window (the arrows turn the steps), and none of that may happen behind the dialog: held
        at the window's capture phase while it is open. The dialog's own keys are default actions (Escape's close, Tab, Enter
-       on a button), which stopPropagation leaves alone */
+       on a button), which stopPropagation leaves alone. The hold reads `open` on every key: close() clears it at once but only
+       queues the close event that removes the hold, and a key in between (the second of two quick Escapes; the deploy
+       runner, 2026-10-23) must already reach the build */
     const d = document.querySelector('dialog.mfb-dialog');
-    if (d?.open) { const hold = (e) => e.stopPropagation(); addEventListener('keydown', hold, true); d.addEventListener('close', () => removeEventListener('keydown', hold, true), { once: true }); }
+    if (d?.open) { const hold = (e) => { if (d.open) e.stopPropagation(); }; addEventListener('keydown', hold, true); d.addEventListener('close', () => removeEventListener('keydown', hold, true), { once: true }); }
   }
 }

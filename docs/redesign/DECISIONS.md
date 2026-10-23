@@ -2664,7 +2664,14 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Suites on the final code, each run alone:** npm test 604 (599 pass, 5 skipped, 0 fail; layout-parity passes in 212
   s, where an earlier run beside the e2e suite timed out at 905 s); the full e2e suite 80 of 80 in software rendering
   (`E2E_SOFT=1`, the CI runner's mode).
-- **Deploy:** a new feature, so it waits for Joey's go. Branch `feedback-support`.
+- **Deploy:** a new feature, so it waited for Joey's go. Branch `feedback-support`. **Joey's go, 2026-10-23 (in the 10-18
+  session):** "Yes: deploy feedback-support (35b89db) and port-side-cover-toggle (8bd564e) together: merge them onto
+  today's main, run the full suite on a quiet machine, push once, and check them live." Merged as main `fe0a410`
+  (npm test 606: 601 pass, 5 skipped; e2e soft 81/81 here). **Its deploy run 39959731798 FAILED** on this case, step
+  "the hold ends with the dialog": the runner's Escape, pressed after `open` read false, was swallowed. The cause and the
+  fix are the 2026-10-23 entry below. **Live 2026-10-23 at `545f3ed5`** (with that fix; run 39973401947, 30 min):
+  `feedback-prod.mjs 545f3ed` passes on the desktop (the bar's button opens the dialog centred, Escape closes it onto the
+  button) and on the phone (no bar button, the build menu's item, ✕ closes it).
 
 ## 2026-10-22 (a re-port keeps the side-cover toggle: the edits ahead of the old planner live in the port)
 
@@ -2705,6 +2712,72 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review:** Terra `01a165bb`, routine: 2 findings, both confirmed and fixed (a stray entry was refused only after the
   modules were written; the port's module list was not checked against the modules it wrote).
 - **Deploy:** none needed: the served files are byte-identical.
+
+## 2026-10-23 (the Feedback dialog's key hold ends when `open` does, not when the close event lands)
+
+- **The defect.** `close()` on a `<dialog>` clears `open` at once but only queues the `close` event (the HTML spec's
+  user-interaction task source), and the hold that keeps keys from the build behind the dialog was removed on that event.
+  A key landing between the two moments met the hold: on the deploy runner (SwiftShader, slow) the e2e case's second
+  Escape did, and the unit stayed selected (run 39959731798, 2026-10-23 13:16-13:59Z, the e2e step; locally the race was
+  never lost: 81/81 before the push). A visitor pressing Escape twice quickly loses the second press the same way.
+- **The fix** (`js/ui/topbar.js` feedback()): the hold reads `d.open` on every key and stops propagation only while it is
+  true; the removal on `close` stays. A reopen cannot land in the gap: it needs a later user task, and the queued close
+  event runs first.
+- **The test** (the Feedback case): a probe that forces the race in one task, `d.close()` then a synthetic Escape on the
+  document before the queued event can fire, then asserts the unit deselected. With the old line it fails (`1 !== null`);
+  with the fix it passes. Build's Escape handler checks no isTrusted, so the synthetic key takes the real path through
+  the window-capture hold.
+- **Review:** Terra `01a16929`: no findings.
+- **Deploy:** finishes the deploy Joey approved above (the fix is to the feature's own test and code, nothing new).
+  **Live 2026-10-23 at `545f3ed5`** (run 39973401947 green on attempt 1, pushed 10:52, live 11:22 local; the `fe0a410`
+  run it replaced had failed on this case). `feedback-prod.mjs` and `parts-print-prod.mjs` pass on that stamp.
+
+## 2026-10-23 (a listing's ?from= seeds the Parts list's store)
+
+- **The defect.** A visitor from a Thangs listing arrives with `?from=thangs`. The vendored viewer seeds its store preference
+  from that address (`js/main.js:5071` `STORE_STORE_KEY = 'gen2-store'`; `storePref`, lines 5095-5101), and the Parts list
+  read only its own key (`js/workspaces/parts.js:35` `STORE_KEY = 'gen2-link-store'`; `readStore`, line 187), so the
+  visitor got Printables links. CUTOVER.md said `?from=` "seeds the store choice"; it seeded the viewer's, not the list's.
+  Found reading the code, not reported; no e2e case arrives with `?from=`.
+- **The fix** (`readStore`, now a module-level export, the one function changed). The planner's own choice always wins, a
+  hidden store included (it reads as Printables, as before). With none saved, the viewer's `gen2-store` counts, then the
+  address's `?from=` (shown stores only, lower-cased, as main.js reads it). That is main.js `storePref`'s own order: a
+  saved choice, else the entry, else Printables. The switch above the list still writes `gen2-link-store` only.
+  - Why the address is read too, and not only the viewer's key: main.js keeps the `?from=` seed in memory and writes
+    `gen2-store` only on a pick (`setStorePref`) or a relay (`applyRemoteStore`); this planner sends no store relay and
+    hides the viewer's picker, so on arrival the key is never written, and the fallback to `gen2-store` alone would have
+    left a first visit from Thangs on Printables. The shell keeps `?from=` through every `?ws=` rewrite (app.js, the
+    workspace switch), so the rider is still in the address when Parts mounts. The referrer half of main.js
+    `storeFromEntry` (a bare thangs.com referrer) is not read here.
+- **Test:** `test/parts-store-seed.test.mjs`. The viewer's key alone gives Thangs; the planner's key wins over it and over
+  the address; a hidden store under either key reads as Printables; with nothing saved the address names the store, else
+  Printables; private mode reads Printables; and the id returned is the id a row's `links.stores` carry, so every row
+  links to thangs.com / than.gs or to printables.com. Mutants: the original read fails 3 of its 5 cases, the viewer-key
+  fallback alone fails 2; the shipped code passes 5.
+- **Review:** Terra (routine), thread `01a16945-33a1-7200-8577-1f195aa5aae7`, on the full diff with the main.js store code
+  as context: no findings. Walked by hand as well: the holders of this state are the Parts switch (`gen2-link-store`),
+  the viewer on a pick or a relay (`gen2-store`) and the address rider, which Share copied before this change too; a pick
+  in another tab is read at this tab's next mount, as before.
+- **Deploy:** with the cutover (this branch).
+
+## 2026-10-23 (the cutover: the merged planner replaces gen2planner and gen2build)
+
+- **Joey's go** (11:16 local): "All five checks pass. Go ahead with the cutover as soon as everything is staged." The gate
+  was his five checks (the buy links, the model download links, his printers in the setup sheet, Very High on his screen,
+  one phone pass), not the 89-item pass; his words that morning: "why can't we just migrate the new planner in place of
+  the old one, it seems to be working great as is".
+- **What merged**, then pushed: this repo's `cutover-front-door` as main `6e19ed1` (merged in the main checkout after its
+  branch's suites; live 12:47, `?v=6e19ed12`); and, each staged by an agent in a fresh worktree with its suite and a
+  revert rehearsal, the old viewer's `cutover-redirect` as `251656b`
+  (live 11:37); the old planner's as `4a33c23` (the kill date; live 11:36); the site's `planner-cutover` as `1a315dc`
+  (built about 12:02). CUTOVER.md's "Cutover day" section has the table, the times and the checks.
+- **Live checks:** `front-door-prod.mjs` (new) eight of eight by script, its Customize step first confirmed by hand (the
+  cover's button calls `window.open` on this host); `redirects-prod.mjs` (new)
+  eight of eight; the site's part previews thirteen of thirteen on this host. Both scripts failed as they should on the
+  pre-cutover state.
+- **Deploy:** each merge's push started that repo's own deploy (the planner's took 73 minutes); nothing else to deploy.
+  This entry rides on the records push. Terra `01a169ad`: 5 of 7 findings taken (wording that overstated the order, the
+  e2e time and the rehearsals).
 
 ## 2026-10-23 (the top bar fits at 1280-1365, and nothing in it leaves the screen)
 
@@ -2782,3 +2855,6 @@ Dated calls made while building, with who made them. The brief and the inventory
   - Terra `01a16900` on the follow-up: one finding, confirmed. The 44 px check read `width < 43.5`, so a control squeezed
     by under half a pixel would have passed. An unsqueezed icon chip measures exactly 44.0 px (Chrome lays out in
     1/64 px), so the check is now `width < 44`.
+- **Live:** not yet. To be written when the merge's stamp is live: main's merge sha, the deploy run, the `boot.js?v=`
+  stamp, and the check on the live site at 1280 and 1366 px (the Feedback & support button visible from 1366, nothing in
+  the top bar overlapping or past its edge).
