@@ -2946,7 +2946,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   at the Simplify card; Track my build's `attachHint` dropped fails Parts' wait for its hint; a separate `aria-modal` guard
   removed SURVIVED (every modal is a veil the overlap rule catches, so the guard was narrowed to the sheet rule); the sheet
   rule removed fails at the narrow-window check. The full e2e suite on this branch, `E2E_SOFT=1` with the ls-public
-  Studio: 83 of 83 in 27.6 min.
+  Studio: 83 of 83 in 27.6 min. After main (`eeceaeb`: the top bar at 1280-1365, Assemble's toasts) was merged in as
+  `9cedaef`: npm test 616 (611 passed, 0 failed, 5 skipped), the hover case again, and the full suite 83 of 84 in 41 min,
+  the one failure a 30 s click timeout on the Label plate's "Screw and nut drawings" Off segment in that slow run; alone
+  it passes in 24 s, and the six Labels and plate cases pass together.
 - **Review:** Sol `01a16a18`, substantial (a multi-file feature; the brief said Terra, the class table says Sol): two
   findings. The `focus` listener on the Side covers track never firing (focus does not bubble): taken, `focusin`, with the
   keyboard check above. A bubble already up staying visible when a modal opens under a still pointer: discarded, the e2e
