@@ -459,8 +459,8 @@ export function mountLabels(stage, ctx) {
     if (r && typeof r.focus === 'function' && document.contains(r)) { try { r.focus(); } catch { /* gone */ } }
     else restoreFocus(picker.retKey, true);   // the add re-rendered the opener (the stress test, 2026-10-15: the keyboard stayed on the hidden frame)
   }
-  // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it once it
-  // allows this origin (DECISIONS.md 2026-10-13: the dated blocker), and ignores it until then
+  // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it for this
+  // app's exact address (its PLANNER_RETURNS, live since 2026-10-13; DECISIONS.md 2026-10-13)
   const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
   function openStudio(parts) {
     ctx.builds?.keepCurrent?.();   // its Add to planner build reopens this browser's current build: this one (app.js)

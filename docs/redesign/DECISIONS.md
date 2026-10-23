@@ -101,6 +101,14 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **A label is edited in a card beside the model**: words (cut to the mirror's 40), Auto / No icon / Letter / the catalog's icons by group with search, and a scope when the label is shared ("This drawer only" clones it). A part label offers Edit part details (the Studio) and Use custom wording (asks first). Set-wide label settings (the generator's six inputs) sit collapsed under the list.
 - **The ways in and out.** + Add label (typed); Add from a file (a MODULITH label list, a Part Picker label-items file, or a Label Studio set file, whose predicted badges stay predictions); a `#labels-add=` link, imported once and dropped from the address with the build's own `#build=` kept; Download list (the format, with the style, without assignments) and Copy as text. Make labels and Part Picker open the Label Studio in a new tab. The CTA is Print labels: the Studio's one-way `#labels=` link with the drawers' words.
 - **The two-way Studio session is not ported, and the reason is outside this repo.** The Studio allows only `https://gen2planner.jerrari3d.com` as a planner origin (`label-link.js` PLANNER_ORIGINS) and its "Add to planner build" opens the OLD planner's address by name; from the merged app's origin the job protocol is refused and a named-window return would navigate the tab away. `blocked-on: the Label Studio accepting the merged app's origin and return address (an allowlist entry plus a ?return= or the embedded ?embed=planner mode) · blocked-since: 2026-10-13 · check-by: 2026-10-27 (with the cutover plan)`. Until then labels travel as files and links.
+  **Cleared 2026-10-22: both conditions hold on the live Studio** (labels.modulith.systems, public main `fa87f8df`;
+  the Studio change went out on 2026-10-13 as `d53b9dfe`, under "towards cutover" below). Its `PLANNER_RETURNS` includes
+  `https://planner.modulith.systems/`, so a Studio opened by this app's Make labels sends Add to planner build back
+  here, and `label-link.js` `PLANNER_ORIGINS` includes `https://planner.modulith.systems`. What is left is this repo's
+  choice, not a blocker: the two-way job protocol (the old planner's `label-return.js`) is still not ported, and labels
+  come back as `#labels-add=` links and files. A Studio opened without `?return=` still names the old planner, which
+  CUTOVER.md lists for cutover day. The round trip was walked live on 2026-10-22 (`studio-live-prod.mjs`, the stale-tab guard's
+  Live line).
 - **Never hidden or greyed out** (the brief): a build whose faceplate takes no labels opens the tab to a callout with "Switch to EdgeLabel ✦"; the list can still be built and exported, and nothing can be placed until a label family is chosen. A faceplate change keeps existing assignments (the label-place rule, kept over Sol's drop-them rule, so a style toggle never loses placements).
 - **Deferred:** the print plate inside the app (the Studio's engine; the spec's integration path step 2), drag-and-drop from the list onto the model, a hover preview on the drawer while placing, uploaded icons from the editor, and the label-copy recovery (it guards a shared session slot the merged app does not have yet; it returns with the build store).
 - **The Labels panel's foot is four equal tiles, Fill on its own row, exports as icons in the head** (Joey, on his phone the same day: the seven buttons "thrown together like this look messy and overwhelming"). The two Label Studio tiles carry the Studio's own tag and the Part Picker's bolt in orange, so the way to the Studio reads at a glance.
@@ -127,7 +135,8 @@ Dated calls made while building, with who made them. The brief and the inventory
 
 - **The cutover checklist is `docs/redesign/CUTOVER.md`**: the decisions only Joey can make (the domain, the parts host's domain, the old planner's kill date), what changes in each repo, the order on the day, and the dated blockers. Nothing in it runs without his go.
 - **The site's BOM artifact is now a parity gate for the ported computeBom** (`test/parity/site-boms.test.mjs`): the MODULITH site's committed `official-build-boms.json`, made by the old planner at 7beb165, equals this repo's `computeBom` on every official kit. At cutover the site's vendoring tool switches its source to this repo on that evidence.
-- **The Label Studio's return address.** The merged app passes `?return=<its address>` when it opens the Studio; a Studio change on branch `planner-return` (not deployed) honours it for the planners' exact paths, so "Add to planner build" comes back here. The two-way job protocol keeps waiting for the domain: an origin allowlist cannot name a path, and a GitHub Pages origin is a whole account (Terra 01a135bc).
+- **The Label Studio's return address.** The merged app passes `?return=<its address>` when it opens the Studio; a Studio change on branch `planner-return` (not deployed when this was written; deployed that day as public main
+  `d53b9dfe`, described in the next line) honours it for the planners' exact paths, so "Add to planner build" comes back here. The two-way job protocol keeps waiting for the domain: an origin allowlist cannot name a path, and a GitHub Pages origin is a whole account (Terra 01a135bc).
 - **Joey's cutover decisions (2026-10-13):** the domain is `planner.modulith.systems`; the parts host stays on its Pages address; the old planner's kill date waits for a reliable, well-tested 2.0. He asked for the Label Studio deploy while away: done the same day (public repo main `d53b9dfe`), with `planner.modulith.systems` on both of the Studio's planner lists, so the two-way label session unblocks the moment the domain resolves.
 
 ## 2026-10-13 (reliability: the end-to-end suite)
@@ -2149,6 +2158,10 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Review of these lines:** Luna `01a15fc9`: two wording fixes taken, four discarded (dim-w is the W pill; the diff shows
   nothing else changed; "no findings" and the Deploy wording are this file's own).
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+- **Live 2026-10-21**, first at stamp `39e6a12f` (run 39662428999; the two runs before it that carried `2492ebb` were
+  cancelled by newer pushes). Checked 2026-10-22 on the live `04bf17ff`: the served `js/catalog/data.js` reads "part of
+  the faceplate" and "behind the faceplate" once each. The one "part of the plate" left in it is a code comment
+  (data.js:121), never shown.
 
 ## 2026-10-21 (faceplate, not plate, in the two Assemble step notes)
 
@@ -2207,6 +2220,11 @@ Dated calls made while building, with who made them. The brief and the inventory
   under `GEN2_PARTS_LOCAL=1` is the one the entry above records as older than its change).
 - **Review:** Terra `01a16000`: one finding, discarded (it read this entry's layout measurements as analytics figures).
 - **Deploy:** a change Joey decided in words; it deploys once its checks pass.
+- **Live 2026-10-21**, stamp `55a02fb9` (run 39670501878). Checked 2026-10-22 on the live `04bf17ff` with
+  `paid-links-prod.mjs` (prod-checks folder; fresh profiles, analytics blocked), in the wide table at 1280×800 and the
+  narrow list at 390×844: 4 Amazon links, each `rel="noopener sponsored"`, reading "Amazon ↗ · paid link", the mark on
+  its own line. Every other sponsored link on the list is on amzn.to or the Polymaker shop; the Printables and
+  PrintedSolid links stay plain.
 
 ## 2026-10-21 (a hanging build grows down from a "+")
 
@@ -2352,6 +2370,9 @@ Dated calls made while building, with who made them. The brief and the inventory
   discarded wrong (it asked for the Live line before the deploy it records). Terra `01a16421` on the case's rework for
   the runner and its text here: no findings.
 - **Deploy:** a bug fix Joey asked for in words; it deploys once its checks pass.
+- **Live 2026-10-22**, first at stamp `c5eab6e5` (run 39802082505; the run for `6f1142a` alone failed). On the live
+  `04bf17ff`, `live-tap.mjs` passes 2 of 2: the camera moved 67 and 64.8 units under the tap, and the tap did not take it
+  (on `aa82df2d` it took it 2 of 2).
 
 ## 2026-10-22 (the Studio's "Add to planner build" lands on a fresh page)
 
@@ -2560,6 +2581,12 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Suites on the final code:** npm test 603 (598 pass, 5 skipped, 0 fail); the full e2e suite 79 of 79 in software
   rendering (`E2E_SOFT=1`, the CI runner's mode).
 - **Deploy:** Joey's request ends in "review and deploy"; it deploys once the checks pass.
+- **Live 2026-10-22**, stamp `e45eac71` (run 39856918773, 58 minutes with the two new cases). On it, with fresh
+  profiles and analytics blocked: `stale-tab-prod.mjs` passes all 12 checks (on `04bf17ff` it had failed six, the
+  build left with 0 labels), and `studio-live-prod.mjs` walks the flow with the REAL Label Studio: Make labels opens
+  it with `return=https://planner.modulith.systems/?ws=labels`; with a label typed there, its Add to planner build
+  opens this planner in a new tab, which lands the label and saves; the first tab shows the notice, its edit writes
+  nothing, and the stored build keeps the label. Both scripts are in the prod-checks folder.
 
 ## 2026-10-22 (Feedback & support in the workspace shell)
 
