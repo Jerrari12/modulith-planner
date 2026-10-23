@@ -3073,7 +3073,23 @@ keyboard undo or Remove").
   keyboard check above. A bubble already up staying visible when a modal opens under a still pointer: discarded, the e2e
   drove exactly that with no extra code and the bubble went (the veil under the pointer fires mouseleave; a keyboard-shown
   bubble goes with the focus the modal takes); a line in the vault's reviewer-lessons (`3b105e1`).
-- **Deploy:** not yet, a feature (Joey's go). Branch `hover-hints`.
+- **The From a file clip, redone the same day** (Joey, a reported bug: the clip "looks wrong, instead it should open a
+  desktop folder explorer window"). The control opens the computer's own file chooser, which no screencast can capture, so
+  the recorder draws a stand-in: an Open window in the planner's glass style over the stage, `modulith-labels.json`
+  chosen among generic names, "JSON files", Cancel and Open; the cursor presses Open, the window goes, and "Added 3
+  labels" lands in the list (`19e6708`; 15.9 s, 65 KB). The hover case now also waits for every clip's metadata and a
+  duration of 6 s or more: a 1 s stub in place of a clip fails it at "readyState 4, duration 1.08". Terra `01a16a90`,
+  routine: NO FINDINGS.
+- **Live 2026-10-23** (Joey's go through the session that asked: "Yes, deploy the hover clips: merge hover-hints onto
+  main and push, with the live check"). Main moved three times before the merge (`56faf84`, `ae0d501`, `d37efae`), each
+  merged into the branch with the hover case and the unit suite re-run (the last tree, `b220f54`: 623 tests, 618 passed,
+  5 skipped; the hover case 104 s); hover-hints merged onto main as `1799b00` at 21:13 UTC, and the idle-gate fix landed on
+  top of it as `f6ba8d1`, whose run 40028267309 passed (22:11 UTC) and is the stamp `f6ba8d12` that carries the clips.
+  Checked live by `planner-prod-checks-2026-10-18\hover-hints-prod.mjs f6ba8d12`: on each workspace every hinted control
+  carries its `data-hint`, hovering it plays its clip, no bubble overlaps its control (the eleven hints, the Labels three
+  included); the eight new clips are served at their committed byte sizes and the redone `labels-file.mp4` at 66,648
+  bytes; no console errors. The same script failed as it should on the pre-deploy site (stamp `928e08a1`, every hint
+  absent, the clips 404).
 
 ## 2026-10-23 (Very High on the light theme never let the idle gate rest: the accumulator's last sample left the shadow map flagged)
 
