@@ -1776,29 +1776,51 @@ test('the top bar fits at every desktop width in its widest case, in every works
     return { edge: r(top).right, last: r(items[items.length - 1]).right, inner: innerWidth, tabs: [tabs.left, tabs.right], tabsRow: getComputedStyle(document.getElementById('ws-tabs')).position === 'absolute',
       gaps: items.slice(1).map((k, i) => Math.round(r(k).left - r(items[i]).right)), name: r(document.querySelector('#ws-switch > .chip-btn > span')).width,
       squeezed: items.filter((k) => k.id !== 'ws-logo' && !k.closest('#ws-switch') && r(k).width < 44).map((k) => `${k.id || k.className} ${Math.round(r(k).width)}`),
-      word: r(document.querySelector('#ws-top .mount .lbl')).width > 1, printer: document.querySelector('#ws-top .printer').textContent };
+      word: r(document.querySelector('#ws-top .mount .lbl')).width > 1, printer: document.querySelector('#ws-top .printer').textContent,
+      // every control but the tabs (the badges widen them) and the name: the same width, to the 1/64 px Chrome lays out in,
+      // with and without the widest badges (rounded, a squeeze under half a pixel would pass: Terra 01a16a58)
+      others: items.filter((k) => k.id !== 'ws-tabs' && !k.closest('#ws-switch')).map((k) => `${k.id || k.className} ${r(k).width}`) };
   });
+  /* two passes per workspace. First the build's own tabs (this fresh build shows its Parts count): every guarantee, the
+     name's floors among them. Then the widest badges written into the tabs: the hard guarantees, and that the name is the ONLY
+     control that gives way - every other control keeps the width it had without the badges, and the name never grows. How
+     far it gives way there depends on how wide the text draws: the deploy runner (Ubuntu, the same IBM Plex web fonts)
+     draws the bar's text wider than Windows does, and run 40004575512 failed a 118 px floor in that pass at 1280 with the
+     name at 74.6 px while every other guarantee held (DECISIONS 2026-10-23, "the top bar fits", the runner's figures) */
+  const badges = (big) => page.evaluate((big) => { const tabs = [...document.querySelectorAll('#ws-tabs .tab')];
+    for (const [l, n] of [['Labels', '99/99'], ['Parts', '999']]) { const t = tabs.find((b) => b.textContent.startsWith(l)); let b = t.querySelector('.badge');
+      if (big) { if (!b) { b = t.appendChild(Object.assign(document.createElement('span'), { className: 'badge' })); b.dataset.e2e = '1'; } if (b.dataset.was === undefined) b.dataset.was = b.textContent; b.textContent = n; }
+      else if (b) { if (b.dataset.e2e) b.remove(); else if (b.dataset.was !== undefined) { b.textContent = b.dataset.was; delete b.dataset.was; } } } }, big);   // the build's own badge gets its text back
+  const WIDTHS = [1024, 1279, 1280, 1300, 1320, 1340, 1350, 1365, 1366, 1400, 1440, 1500, 1501, 1540, 1580, 1581, 1640, 1920];
   for (const [ws, label] of [['build', 'Build'], ['colors', 'Colors'], ['labels', 'Labels'], ['parts', 'Parts'], ['assemble', 'Assemble']]) {
     await page.setViewportSize({ width: 1280, height: 800 });
     if (ws !== 'build') {
       await page.click(`#ws-tabs .tab:has-text("${label}")`);
       await page.waitForFunction(([w, l]) => document.documentElement.dataset.ws === w && document.querySelector('#ws-tabs .tab.on')?.textContent.startsWith(l), [ws, label], { timeout: 60_000 });
     }
-    await page.evaluate(() => { const tabs = [...document.querySelectorAll('#ws-tabs .tab')];
-      for (const [l, n] of [['Labels', '99/99'], ['Parts', '999']]) { const t = tabs.find((b) => b.textContent.startsWith(l)); const b = t.querySelector('.badge') || t.appendChild(Object.assign(document.createElement('span'), { className: 'badge' })); b.textContent = n; } });
     assert.equal((await bar()).printer, 'Prusa CORE One L', `${ws}: the widest printer name`);
     assert.equal(await page.getByRole('button', { name: 'Under-Table · 185' }).count(), 1, `${ws}: the mount chip's accessible name keeps its word at 1280`);
-    for (const w of [1024, 1279, 1280, 1300, 1320, 1340, 1350, 1365, 1366, 1440, 1500, 1501, 1540, 1580, 1581, 1640, 1920]) {
-      await page.setViewportSize({ width: w, height: 800 });
-      const m = await bar(), at = `${ws} at ${w}: ${JSON.stringify(m)}`;
-      assert.ok(m.last <= m.edge + 0.5 && m.edge <= m.inner, `nothing past the bar's right edge - ${at}`);
-      assert.ok(m.gaps.every((g) => g >= 10), `10 px between controls - ${at}`);
-      assert.deepEqual(m.squeezed, [], `no control narrower than 44 px - ${at}`);
-      assert.equal(m.tabsRow, w < 1280, `the tabs have a row of their own below 1280 only - ${at}`);
-      if (m.tabsRow) assert.ok(m.tabs[0] >= 0 && m.tabs[1] <= m.inner, `the tabs' row is on the screen - ${at}`);
-      const tier = w >= 1280 && w <= 1365;
-      assert.equal(m.word, !tier, `the mount chip shows its word outside 1280-1365 only - ${at}`);
-      assert.ok(m.name >= (tier ? 118 : 60), `the build name keeps ${tier ? 'its 120 px floor' : 'some room'} - ${at}`);
+    const plain = {};
+    for (const big of [false, true]) {
+      await badges(big);
+      for (const w of WIDTHS) {
+        await page.setViewportSize({ width: w, height: 800 });
+        const m = await bar(), at = `${ws}${big ? ' with the widest badges' : ''} at ${w}: ${JSON.stringify(m)}`;
+        assert.ok(m.last <= m.edge + 0.5 && m.edge <= m.inner, `nothing past the bar's right edge - ${at}`);
+        assert.ok(m.gaps.every((g) => g >= 10), `10 px between controls - ${at}`);
+        assert.deepEqual(m.squeezed, [], `no control narrower than 44 px - ${at}`);
+        assert.equal(m.tabsRow, w < 1280, `the tabs have a row of their own below 1280 only - ${at}`);
+        if (m.tabsRow) assert.ok(m.tabs[0] >= 0 && m.tabs[1] <= m.inner, `the tabs' row is on the screen - ${at}`);
+        const tier = w >= 1280 && w <= 1365;
+        assert.equal(m.word, !tier, `the mount chip shows its word outside 1280-1365 only - ${at}`);
+        if (!big) { plain[w] = m; assert.ok(m.name >= (tier ? 118 : 60), `the build name keeps ${tier ? 'its 120 px floor' : 'some room'} - ${at}`); }
+        else {
+          // the badges must be there and count, or this pass measures the plain bar again (Terra 01a16a58): 57 px wider here, 61 on the runner
+          assert.ok(m.tabs[1] - m.tabs[0] >= plain[w].tabs[1] - plain[w].tabs[0] + 40, `the widest badges widen the tabs by 40 px or more - ${at}`);
+          assert.deepEqual(m.others, plain[w].others, `only the build name gives way: every other control keeps its width - ${at}`);
+          assert.ok(m.name <= plain[w].name + 0.5, `the build name gives way, it never grows - ${at}`);
+        }
+      }
     }
   }
   assert.deepEqual(clean(errors), []);
