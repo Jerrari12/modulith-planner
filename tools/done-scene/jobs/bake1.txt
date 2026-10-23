@@ -1,0 +1,3 @@
+# the first real bake: the home office lit as look3 (sun disc at half strength, exposure 0.11258 from look3's subject rule),
+# every room mesh its own lightmap (walls, floor, desk 1024; props 512 and under), 192 samples, exported as room.glb (WebP)
+--mode bake --name room --exposure 0.11258 --bake-samples 192 --res 64x64

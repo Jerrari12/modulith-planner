@@ -2,3 +2,7 @@ node_modules/
 # the part GLBs live in Jerrari12/gen2-parts; for the tests, parts/ is a junction or clone of that repo's parts/ folder
 parts/
 img/parts/
+
+# the Done scene tooling: decoded kit copies for Blender and fetched renders are generated, never committed
+tools/done-scene/kit/
+tools/done-scene/renders/

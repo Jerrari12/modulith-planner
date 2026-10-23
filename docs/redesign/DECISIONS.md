@@ -2778,3 +2778,74 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Deploy:** each merge's push started that repo's own deploy (the planner's took 73 minutes); nothing else to deploy.
   This entry rides on the records push. Terra `01a169ad`: 5 of 7 findings taken (wording that overstated the order, the
   e2e time and the rehearsals).
+
+## 2026-10-23 (the Done scene, 5b's first slice: the build in the Home office at golden hour, behind `?done=room`)
+
+- **The design** is `D:\Claude - Output\done-scene-2026-10-23\DESIGN.md` (the record quoted, three ways with costs,
+  Sol `01a169e0` nine findings all taken, the look checks, what was built). **Joey's choice (this day):** B, the brief's
+  real-time lightmapped room, over the plate the design recommended; the look check first; renders on node0; the Home
+  office desk first. The first slice is the brief's own Fast fallback and the plan's static hero: one room, one lighting
+  state baked into its textures, a fixed hero camera fitted to the build and the free region, props that slide clear
+  of the build, the build's shadow on a catcher over the desk (a baked disc on Fast), no bokeh, no camera sequence, no
+  time cycle. "Done means End of instructions" (2026-10-13) stands: the room is a backdrop behind the finished step's
+  own page; the outro cinema stays retired.
+- **Off by default, nothing fetched until Done with the flag.** `js/workspaces/assemble.js` reads `?done=room`, imports
+  `js/scenes/done.js` on demand at finish (or a remembered Done), leaves it on Back, Skip, any step or unmount, and
+  shows "My colors" while the room is on ("your build in real life"). The room is `scenes/home-office/room.glb`
+  (286 KB, 32 meshes with 32 WebP lightmaps, metres, scaled ×1000) and `room.json` (anchors, desk extent, measured sun,
+  hero shot, prop slots, exposure), made by `tools/done-scene/room.py` in Blender on node0 (`node0_render.py`, the
+  FaderBox pattern on MODULITH's runner; `decode-glb.mjs` first, because Blender cannot read the parts' meshopt
+  compression). `js/scenes/done-fit.js` is the arithmetic, pure and node-tested: the fit against the free region's
+  size (the stage's view inset does the centring), the prop slide by group, the contact disc's footprint.
+- **The stage lends four things through `sceneHold`** (`js/main.js`, `var` like shadowWatch, read by applyStageTheme at
+  module evaluation): the background (none: the room is the backdrop), the environment (the room itself, seen from the
+  build, PMREM'd at enter; the tier's `env` flag still decides whether one is used), the shadow (on whatever the theme:
+  `shadowsWanted`), the mirror (off: `reflectionWanted`, `contactMapWanted`), and the camera (the resize re-fit and the
+  safe-area re-fit leave it). `applyQuality` and `stopCinema` take `sceneEnv()`. `holdScene(on, { environment })`,
+  `sun`, `hemi`, `fill`, `sceneHeld` and `assembledBox` join the stage interface. The lights are re-aimed from room.json
+  and put back on leave; `applyQuality`'s rig reset on a tier change is answered through `onQuality`.
+- **The room's materials.** Blender exports an Emission shader as a PBR material with a black base and the bake as its
+  EMISSIVE texture (not KHR_materials_unlit); `done.js` takes the emissive map as the picture and the emissive factor
+  as its tint. Taking `map` alone painted the room white (the first headless shot).
+- **Blender facts, measured.** Nishita's sun direction is (cos el · sin rot, cos el · cos rot, sin el), clockwise from
+  +Y; the Cycles source's `geographical_to_direction(el, rot + 90°)` reading had x mirrored. `room.py` finds the disc
+  in four 128 px probes and room.json carries that direction, so the live shadow agrees with the baked ones. The
+  exposure rule is set on the subject: the 95th percentile of the build's brightest channel at 1.0 (a median rule, on
+  the desk or the patch, put sunlit orange at 1.5–3.0 linear, past Neutral's knee, and it read salmon: look1, look2);
+  the sun disc at half strength (look3) is what the bake carries. The same Neutral curve as three's is applied in numpy
+  for the look renders, so they show what the tone tiers show.
+- **A finding on main, fixed here, worth its own cherry-pick: Very High on the light theme never rested.** Every
+  accumulated sample ends with `accSetSun(0)`, which puts the sun home and flags the shadow map; after the last sample
+  the converged mean is blitted without a scene render, so the flag is never consumed and `idleSettling()` kept the
+  gate open: about 120 frames a second at rest, measured headless on main's own code with no room (the dark theme has
+  no shadow map, which hid it; the room forces shadows on, which found it). One condition in `idleSettling` ignores the
+  pending flag while a converged accumulator is blitting; the flag is honoured by the next plain render. Measured
+  after: one keepalive frame a second, room on and off.
+- **Measured** (`tools/done-scene/measure.mjs`; the tables are DESIGN.md §9). The room is 23 draw calls and 3.4 k
+  triangles a frame on every tier and 299 KB once per page; at rest the idle gate holds at its one keepalive frame a
+  second on every tier, room on or off, on this machine's GPU and on SwiftShader. The cost is the entry: one frame of
+  180–260 ms on the GPU (the GLB's parse, the environment's PMREM, the shader compiles) and the 900 ms camera move; at
+  Very High the entry also restarts the 24-sample accumulation. Fast on SwiftShader: 84 ms more per frame while the
+  camera moves, nothing at rest. Numbers from a quiet machine; the rAF sampler is bound by the display's refresh.
+- **Tests.** `test/done-fit.test.mjs` (the fit, the shot, the slide, the footprint, by hand); `test/idle-settling.test.mjs`
+  (the gate's three branches, lifted from the source; its mutant, the condition reverted, fails the converged case);
+  the e2e case "the Done scene is off without its flag; with ?done=room the room comes on at Done, survives a theme flip
+  and a tier change, and Back restores the stage" (Fast, dark theme, the suite's pins; the tier change comes BEFORE the
+  theme flip so the hold's shadow term is what makes the shadow; the dark stage reads as `night`, so the case asserts
+  "not light"). **Mutants, 6 of 6 killed** by that case alone, re-run after that assertion was corrected: the hold
+  dropped; the shadow term dropped; Back without leave; the callouts left on; the environment not held through a tier
+  change; the flag never read. `test/swap-shadows.test.mjs` lifts `shadowsWanted` into a Function with a fixed name
+  list: `sceneHold` joined it.
+- **Suites.** `npm test` on the branch, alone: 622 tests, 615 pass, 5 skipped, 2 fail, both `test/shadow-at-rest.test.mjs`
+  lifting `shadowsWanted` into the same fixed name list as swap-shadows (`sceneHold is not defined`); that list given
+  the name too, the six lifted-source and new files pass 31 of 31. e2e: the Done case alone, three runs, pass; beside
+  the unit suite, the idle-gate case, both Assemble cases and the boot case pass with it (the Done case's one failure
+  there was my assertion, the dark stage reads `night`, corrected). `npm run goldens`: 60 shots, 0 differ (the stage
+  with the flag off draws the same pixels; the gate fix changes when a frame is drawn, never what). Measured, mutated
+  and reviewed on this machine's GPU and on SwiftShader; nothing ran on the CI runner yet.
+- **Review:** the design, Sol `01a169e0` (substantial, nine findings, all taken, DESIGN.md §10); the code, Terra
+  `01a16a22-8d4a-7473-b37d-f6cf74753e54` (routine, two findings, both confirmed and fixed: the accumulator's sun home,
+  the room's materials' disposal). Adjudicated in the ledger.
+- **Deploy:** none. The flag is off; the room is a prototype on `done-scene` for Joey to open (`?ws=assemble&build=
+  185-tabletop-2w2h&done=room` on the branch's checkout, any kit, any build). Joey's direction on the look (DESIGN.md §7)
+  comes first; the gate fix is worth cherry-picking to main on its own.

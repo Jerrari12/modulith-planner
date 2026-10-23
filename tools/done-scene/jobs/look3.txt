@@ -1,0 +1,2 @@
+# the third look check: the sun disc at half strength (a hazier evening), exposure on the subject's bright end
+--mode look --name look3 --kit kit/manifest.json --parts kit/parts --res 2048x1365 --samples 160

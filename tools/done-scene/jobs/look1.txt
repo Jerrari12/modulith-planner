@@ -1,0 +1,2 @@
+# the first look check: the 185 tabletop 2W2H kit on the home-office desk at golden hour, 2048 x 1365, 160 samples
+--mode look --name look1 --kit kit/manifest.json --parts kit/parts --res 2048x1365 --samples 160

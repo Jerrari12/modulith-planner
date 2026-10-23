@@ -1,0 +1,159 @@
+{
+ "name": "home-office",
+ "version": 1,
+ "units": "metres in the GLB, millimetres below",
+ "exposure": 0.11258,
+ "anchors": {
+  "tabletop": [
+   -220.0,
+   740.0,
+   -755.0
+  ],
+  "wall": [
+   -220.0,
+   1290.0,
+   -799.0
+  ],
+  "under-table": [
+   -220.0,
+   715.0,
+   -755.0
+  ]
+ },
+ "desk": {
+  "x0": -680.0,
+  "x1": 1120.0,
+  "zFront": 725.0,
+  "zBack": -25.0
+ },
+ "sun": {
+  "dir": [
+   -874.949,
+   157.217,
+   457.981
+  ],
+  "color": "#ffb876",
+  "intensity": 2.6,
+  "elevation": 9.0
+ },
+ "sky": {
+  "color": "#e8d9c4",
+  "ground": "#6b5a48",
+  "intensity": 0.9
+ },
+ "shots": {
+  "hero": {
+   "az": 30.0,
+   "el": 16.0,
+   "fovV": 37.84928883210247,
+   "fill": 0.36,
+   "targetLift": -0.08
+  }
+ },
+ "props": [
+  {
+   "name": "monitor_base",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  },
+  {
+   "name": "monitor_neck",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  },
+  {
+   "name": "monitor_body",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  },
+  {
+   "name": "monitor_screen",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  },
+  {
+   "name": "keyboard",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  },
+  {
+   "name": "mouse",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  },
+  {
+   "name": "mug",
+   "slot": "x+",
+   "gap": 0.07,
+   "group": "mug"
+  },
+  {
+   "name": "mug_handle",
+   "slot": "x+",
+   "gap": 0.07,
+   "group": "mug"
+  },
+  {
+   "name": "pot",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "soil",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_0",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_1",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_2",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_3",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_4",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "notebook",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  },
+  {
+   "name": "pen",
+   "slot": "x+",
+   "gap": 0.08,
+   "group": "monitor"
+  }
+ ],
+ "glb": "room.glb",
+ "glbBytes": 286156
+}

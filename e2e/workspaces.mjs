@@ -1280,6 +1280,60 @@ test('Assemble: Next steps through, Skip reaches the end, Back returns', async (
   await ctx.close();
 });
 
+/* THE DONE SCENE (5b's first slice, 2026-10-23, behind ?done=room): the end of the instructions puts the build in the Home
+   office. Flag off, Done is what it was. Flag on: the room loads, the stage's holds are on (no background, the room's
+   environment, controls off, the callouts off, grid and table hidden), a theme flip and a tier change leave the room in
+   place (the shadow catcher on a tier with shadows, the baked disc on Fast), Back puts everything back. */
+test('Assemble: the Done scene is off without its flag; with ?done=room the room comes on at Done, survives a theme flip and a tier change, and Back restores the stage', async () => {
+  const toDone = async (page) => {
+    await btn(page, 'Skip to the finished build', '#ws-steps').click();
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  };
+  const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; let catcher = null, disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) catcher = o.visible; else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } }); return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme }; });
+  // off: nothing of the room
+  const off = await open('assemble');
+  await toDone(off.page);
+  await settle(off.page, 1500);
+  const s0 = await state(off.page);
+  assert.equal(s0.room, false, 'no room without the flag'); assert.equal(s0.held, false); assert.equal(s0.done, null); assert.equal(s0.controls, true);
+  assert.deepEqual(clean(off.errors), []);
+  await off.ctx.close();
+  // on: the room, and the holds
+  const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
+  await toDone(page);
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
+  await settle(page, 1500);
+  const s1 = await state(page);
+  assert.equal(s1.room, true, 'the room is in the scene'); assert.equal(s1.held, true, 'the stage is held');
+  assert.equal(s1.bg, null, 'no stage background behind the room'); assert.equal(s1.controls, false, 'no orbit in the room');
+  assert.equal(s1.grid, false, 'the grid is hidden'); assert.equal(s1.table, false, 'the table is hidden'); assert.equal(s1.dims, false, 'no callouts in the room');
+  assert.equal(s1.quality, 'fast', 'the suite pins Fast'); assert.equal(s1.shadow, false, 'Fast has no shadow map'); assert.equal(s1.disc, true, 'Fast shows the baked contact disc'); assert.equal(s1.catcher, false);
+  assert.match(await text(page, '#ws-player .text'), /golden hour/, 'the player says where the build is');
+  // a tier with shadows, still on the DARK theme (which has no shadow map of its own): the room's sun casts, the catcher shows
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await settle(page, 1500);
+  const s2 = await state(page);
+  assert.equal(s2.room, true); assert.equal(s2.held, true); assert.notEqual(s2.theme, 'light', 'still the dark stage (named night)'); assert.equal(s2.quality, 'balanced');
+  assert.equal(s2.env, true, 'Balanced has an environment'); assert.equal(s2.envIsStudio, false, 'and it is the room\'s, not the studio\'s: the tier change did not put studioEnv back');
+  assert.equal(s2.shadow, true, 'the sun shadow is on under the dark theme'); assert.equal(s2.catcher, true, 'the catcher shows'); assert.equal(s2.disc, false, 'the disc hides');
+  // then a theme flip: the room keeps the background off and its shadow
+  await page.evaluate(() => { window.__GEN2_VIEWER__.applyStageTheme('light'); });
+  await settle(page, 1200);
+  const s2b = await state(page);
+  assert.equal(s2b.theme, 'light'); assert.equal(s2b.bg, null, 'the theme flip left the background off'); assert.equal(s2b.held, true); assert.equal(s2b.shadow, true);
+  // Back: the stage whole again
+  await btn(page, 'Back', '#ws-player').click();
+  await settle(page, 1500);
+  const s3 = await state(page);
+  assert.equal(s3.room, false, 'the room is gone'); assert.equal(s3.held, false); assert.equal(s3.done, null);
+  assert.equal(s3.bg, 'color', 'the stage background is back'); assert.equal(s3.envIsStudio, true, 'the studio environment is back'); assert.equal(s3.controls, true); assert.equal(s3.grid, true); assert.equal(s3.table, true); assert.equal(s3.dims, true, 'the callouts are back');
+  assert.ok(!/End of instructions/.test(await text(page, '#ws-player .title')), 'Back leaves the end');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the build store: an edit autosaves, a bare address reopens the build, Rename, Duplicate, Delete', async () => {
   const { ctx, page, errors } = await open('build', { query: '&new=1' });
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.feet = s.feet === 'adhesive' ? 'tpu' : 'adhesive'; }, 'edit'));

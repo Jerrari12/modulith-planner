@@ -1,0 +1,2 @@
+# the second look check: the grip zones in the face colour, exposure aimed at 0.42, the monitor further right, dimmer screen
+--mode look --name look2 --kit kit/manifest.json --parts kit/parts --res 2048x1365 --samples 160

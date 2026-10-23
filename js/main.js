@@ -497,6 +497,23 @@ try { if (localStorage.getItem('gen2-theme') === 'light') stageTheme = 'light'; 
 // furniture), but 'dark' would substitute DARK_STAGE_PALETTE's light Case
 // color into the product palette and turn the light-stage-only shadow gates on.
 if (IS_PART) stageTheme = 'light';
+/* A WORKSPACE SCENE HOLDS THE STAGE (2026-10-23, the Done room, js/scenes/done.js). While `on`, the background is the
+   scene's (none: the room is the backdrop), the environment is the one it gave, the shadow draws whatever the theme,
+   the floor mirror stays off, and the camera is the scene's own: the theme flip, the tier change, the resize re-fit and
+   the safe-area re-fit leave those alone, as they leave the cinema's alone (Sol 01a169e0: an auto-downgrade must not
+   put studioEnv back under the room). `var`, like shadowWatch: applyStageTheme runs at module evaluation and reads it. */
+var sceneHold = { on: false, env: null, bg: null };
+function sceneEnv() { const q = QUALITY[quality]; if (!q.env) return null; return sceneHold.on ? sceneHold.env : studioEnv(); }
+function holdScene(on, { environment = null } = {}) {
+  if (!!on === sceneHold.on) { if (on) { sceneHold.env = environment; if (!cinema.on) scene.environment = sceneEnv(); } return; }
+  sceneHold.on = !!on; sceneHold.env = on ? environment : null;
+  if (on) { sceneHold.bg = scene.background; scene.background = null; }
+  else { scene.background = sceneHold.bg && sceneHold.bg.isColor ? sceneHold.bg : new THREE.Color(0xffffff); sceneHold.bg = null; applyStageTheme(stageTheme); }
+  if (!cinema.on) scene.environment = sceneEnv();
+  applyShadowQuality();
+  guardFx('reflection', applyReflectionQuality);
+  invalidateFrame();
+}
 function applyStageTheme(name) {
   perfGrace();   // a theme flip recompiles programs (the shadow map toggles); the stalls are not a frame rate
   stageTheme = STAGE_THEMES[name] ? name : 'light';
@@ -506,7 +523,7 @@ function applyStageTheme(name) {
   // background. Applied here (not at module eval): `party` clones the boot
   // Color at init, and this runs first inside mountManifest, safely after that.
   if (IS_PART) scene.background = null;
-  else scene.background.set(wallish ? t.bgWall : t.bg);
+  else if (!sceneHold.on) scene.background.set(wallish ? t.bgWall : t.bg);   // a held scene (the Done room) owns the background
   table.material.color.set(t.table);
   wall.material.color.set(t.wall);
   surface.material.color.set(t.surface);
@@ -515,7 +532,7 @@ function applyStageTheme(name) {
   grid.material.needsUpdate = true;
   // the outro cinema restores "day" from these clones — keep them honest so
   // leaving the outro lands back on the CURRENT stage, not the boot one
-  if (typeof party !== 'undefined' && scene.background) { party.bgDay.set(scene.background); party.tableDay.set(t.table); }
+  if (typeof party !== 'undefined' && scene.background && scene.background.isColor) { party.bgDay.set(scene.background); party.tableDay.set(t.table); }
   // dim callouts + drawer interior dims rebuild often, but retint any that
   // are alive right now so a theme flip never strands gray-on-navy lines
   for (const g of [typeof dims !== 'undefined' && dims.group, typeof dFocus !== 'undefined' && dFocus.group]) {
@@ -721,8 +738,8 @@ function applyQuality(name) {
   sun.intensity = rig.sun;
   fill.intensity = rig.fill;
 
-  // The outro owns scene.environment while it runs — don't stomp the party room.
-  if (!cinema.on) scene.environment = q.env ? studioEnv() : null;
+  // The outro owns scene.environment while it runs — don't stomp the party room. A held scene's environment stays too.
+  if (!cinema.on) scene.environment = sceneEnv();
 
   qualityReady = true;
   /* ⚠ AFTER the tier is assigned and BEFORE the frame that follows it. syncRelief reads `quality`,
@@ -756,7 +773,8 @@ function setQuality(name, { user = false } = {}) {
 // sampled.
 function shadowsWanted() {
   // part-preview floats the part on a transparent stage — no floor, no catcher
-  return QUALITY[quality].shadow && stageTheme === 'light' && !cinema.on && !isWallBuild && !isUnderTableBuild && !IS_PART;
+  // a held scene (the Done room) is lit by its own sun, whatever the stage theme
+  return QUALITY[quality].shadow && (stageTheme === 'light' || sceneHold.on) && !cinema.on && !isWallBuild && !isUnderTableBuild && !IS_PART;
 }
 function applyShadowQuality() {
   const on = shadowsWanted();
@@ -926,7 +944,7 @@ const ground = {
    black overlay is DRAWN (`QUALITY[...].grounding`, off on every shipping tier):
    the reflection-attenuation experiment needs the points and not the overlay. */
 function contactMapWanted() {
-  return stageTheme === 'dark' && !cinema.on
+  return stageTheme === 'dark' && !cinema.on && !sceneHold.on
     && !isWallBuild && !isUnderTableBuild && !IS_PART && !fxDead.grounding
     && typeof assembledBox !== 'undefined' && !assembledBox.isEmpty();
 }
@@ -944,6 +962,7 @@ const reflOpacity = () => (STAGE_THEMES[stageTheme] && STAGE_THEMES[stageTheme].
 function reflectionWanted() {
   if (fxDead.reflection || !QUALITY[quality].reflect) return false;
   if (IS_PART) return false; // no floor to reflect in on the preview's clean float
+  if (sceneHold.on) return false;   // the Done room's desk is baked: no mirror plane over it
   // Both hanging mounts are excluded for the same reason: there is no floor
   // beneath the build to reflect in. A wall build hangs on a backdrop, and an
   // under-table build hangs BELOW its slab — a mirror plane at the build's
@@ -1987,6 +2006,10 @@ function accSetSun(i) {
   sun.updateMatrixWorld();
   renderer.shadowMap.needsUpdate = true;
 }
+/* The sun's HOME is where the samples jitter about and where accSetSun(0) puts it back after each one. ensureAcc copies
+   it once, when the accumulator is built, so a scene that re-aims the sun afterwards (the Done room, js/scenes/done.js)
+   must re-home it, or Very High lights its shadow from the studio's sun and undoes the aim every sample (Terra 01a16a22). */
+function setSunHome() { acc.sunHome.copy(sun.position); acc.blocked = true; }
 /**
  * One frame of Very High. Returns true when it has drawn the canvas itself, in
  * which case the caller must NOT render the scene again.
@@ -2739,7 +2762,7 @@ function resize() {
     // re-fit a whole-build shot to the new aspect (skip during the cinema, which
     // drives the camera itself, and during drawer/faceplate focus, which park
     // the camera on the part)
-    if ((curCamPreset?.fit || curCamPreset?.coverBox) && !cinema.on && !tweens.size && !camOverride && !dFocus.carrier && !fpFocus.id) {
+    if ((curCamPreset?.fit || curCamPreset?.coverBox) && !cinema.on && !sceneHold.on && !tweens.size && !camOverride && !dFocus.carrier && !fpFocus.id) {
       const { pos, target } = camPos(curCamPreset);
       camera.position.copy(pos); controls.target.copy(target); controls.update();
     }
@@ -2764,8 +2787,8 @@ function setSafeArea(rect) {
   const same = (!next && !safeArea) || (next && safeArea && ['left', 'right', 'top', 'bottom'].every(k => next[k] === safeArea[k]));
   safeArea = next;
   if (same) return;
-  // re-fit the guided camera to the new free region; a user who has taken the camera keeps it
-  if (!camOverride && curCamPreset) tweenCamera(curCamPreset, 500, true);
+  // re-fit the guided camera to the new free region; a user who has taken the camera keeps it, and so does a held scene
+  if (!camOverride && curCamPreset && !sceneHold.on) tweenCamera(curCamPreset, 500, true);
 }
 const viewInset = { x: 0, y: 0 }; // APPLIED projection pan in px (lerped toward target each frame)
 const _viCorner = new THREE.Vector3(); // scratch — updateViewInset runs every frame
@@ -9740,7 +9763,7 @@ function stopCinema() {
   // ⚠ restore the QUALITY TIER's environment, not null — otherwise leaving the
   // outro drops the studio lighting and the build goes flat until something else
   // re-applies it (same class of bug as the theme clones this function restores).
-  scene.environment = QUALITY[quality].env ? studioEnv() : null;
+  scene.environment = sceneEnv();
   scene.environmentIntensity = 1;
   hemi.intensity = baseHemi;
   applyShadowQuality(); applyReflectionQuality();
@@ -10892,7 +10915,13 @@ for (const ev of ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown',
 function idleSettling() {
   if (typeof aoWanted === 'function' && aoWanted() && (ao.blocked || ao.passes < (ao.accumMax || 0))) return true;
   if (typeof accWanted === 'function' && accWanted() && acc.ok && acc.n < ACC_SAMPLES) return true;
-  if (renderer.shadowMap.enabled && renderer.shadowMap.needsUpdate) return true;
+  /* a shadow render still owed - but NOT while a converged Very High blits its mean: every accumulated sample ends by
+     putting the sun home and flagging the map (accSetSun(0)), and after the last sample no scene render follows to
+     consume the flag, so the gate stayed open and Very High on the light stage drew ~120 frames a second at rest
+     (measured 2026-10-23, main and the Done room alike; the dark stage has no shadow map, which hid it). The flag is
+     honoured by the next plain render, which is the first frame after anything changes. */
+  if (renderer.shadowMap.enabled && renderer.shadowMap.needsUpdate
+    && !(typeof accWanted === 'function' && accWanted() && acc.ok && acc.n >= ACC_SAMPLES)) return true;
   return false;
 }
 function idleFrame(now) {
@@ -11018,6 +11047,8 @@ for (const m of ['toDataURL', 'toBlob']) {
       set(on) { seamU.uSeamOn.value = on ? 1 : 0; invalidateFrame(); return !!on; },
     },
     wall, surface,   // the mount backdrops, for capture tooling that needs the mounting surface as context
+    // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
+    sun, hemi, fill, holdScene, setSunHome, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
     // reflector, so a rendering question can be answered by reading state instead

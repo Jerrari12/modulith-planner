@@ -5,14 +5,19 @@
  *
  * The stage keeps all the behaviour: pages are the viewer's PAGES (0 the cover, 1 the exploded overview, then
  * the numbered steps, last the outro), and this workspace drives `goTo` / `next` / `prev` / `replay` /
- * `setPaused` / `setSlow` and listens to `onPage`. The Done scene (rooms, cameras, lightmaps) is 5b; today the
- * outro page shows the viewer's existing finale with the scene chips marked as coming.
+ * `setPaused` / `setSlow` and listens to `onPage`. The Done scene (rooms, cameras, lightmaps) is 5b; its first slice,
+ * the build in the Home office at golden hour (js/scenes/done.js), is behind `?done=room` and loads only at Done.
  */
 import { el, makeToast } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
+
+/* THE DONE SCENE (5b's first slice, 2026-10-23, DESIGN.md in D:/Claude - Output/done-scene-2026-10-23): with
+   `?done=room` the end of the instructions puts the finished build on a desk at golden hour. Off by default; a feature
+   ships only on Joey's go, and the module is not even fetched until a visitor with the flag reaches Done. */
+const DONE_SCENE = new URLSearchParams(location.search).get('done');
 
 
 export function mountAssemble(stage, ctx) {
@@ -67,6 +72,29 @@ export function mountAssemble(stage, ctx) {
   let mine = false;
   const setColors = (own) => { mine = own; if (stage.useCustom !== own) { stage.useCustom = own; stage.applyPalette(); } renderPlayer(); };
 
+  /* the room: entered when the instructions end (finish, or a remembered Done), left on Back, Skip, any step, or unmount.
+     "Your build in real life" shows the visitor's own colours, so the Part colors switch is set aside while the room is
+     on and put back on leave. The handle arrives once the room has loaded; a leave before that cancels the load. */
+  let room = null;   // { leaveFn, handle, mineWas } while the room is on or loading
+  function enterRoom() {
+    if (DONE_SCENE !== 'room' || room) return;
+    const h = { leaveFn: null, handle: null, mineWas: mine };
+    room = h;
+    setColors(true);
+    import('../scenes/done.js').then(({ enterDoneScene }) => {
+      if (room !== h) return;
+      const r = enterDoneScene(stage, { say });
+      h.leaveFn = r.leave;
+      r.ready.then((handle) => { if (room === h) { h.handle = handle; renderPlayer(); } });
+    }).catch((e) => { console.warn('[done scene] the module did not load', e); if (room === h) { room = null; setColors(h.mineWas); } });
+  }
+  function leaveRoom() {
+    if (!room) return;
+    const h = room; room = null;
+    if (h.leaveFn) h.leaveFn();
+    setColors(h.mineWas);
+  }
+
   /* ---------------- the step list ---------------- */
   const list = el('aside.glass', { id: 'ws-steps', 'aria-label': 'Assembly steps' });
   root.appendChild(list);
@@ -90,13 +118,14 @@ export function mountAssemble(stage, ctx) {
       list.appendChild(el('button.step' + (isCur ? '.cur' : past ? '.past' : ''), { 'aria-current': isCur ? 'step' : null, title: r.title, onclick: () => (r.page === 'done' ? finish() : stage.goTo(r.page)) },
         [el('span.mark', { text: r.mark }), r.name]));
     }
-    list.appendChild(el('button.skip.key', { text: 'Skip to the finished build', onclick: () => { done = false; stage.skipToEnd(); } }));
+    list.appendChild(el('button.skip.key', { text: 'Skip to the finished build', onclick: () => { done = false; leaveRoom(); stage.skipToEnd(); } }));
   }
-  /* the end of the instructions: the finished step's fitted view, with the player saying so */
+  /* the end of the instructions: the finished step's fitted view, with the player saying so (and, behind the flag, the room) */
   function finish() {
     done = true;
     if (stage.cur !== pageOf.finished) stage.goTo(pageOf.finished, { animate: false });
     else { renderList(); renderPlayer(); safe(); }
+    enterRoom();
   }
 
   /* ---------------- the step player ---------------- */
@@ -108,7 +137,7 @@ export function mountAssemble(stage, ctx) {
     const step = cur >= 1 && cur <= pageOf.finished ? steps[cur - 1] : null;
     const num = isDone ? '■' : cur >= pageOf.first && cur <= pageOf.finished ? String(cur - 1) : 'i';
     const title = isDone ? 'End of instructions' : onCover ? (stage.manifest?.title || 'Your build') : (step?.title || '');
-    const text = isDone ? 'The whole assembly, finished. Share the link, or go back to any step.' : onCover ? 'Press Next to begin the step-by-step, or skip to the finished build.' : (step?.note || '');
+    const text = isDone ? (room && room.handle ? 'Your build on a desk at golden hour. Share the link, or go back to any step.' : 'The whole assembly, finished. Share the link, or go back to any step.') : onCover ? 'Press Next to begin the step-by-step, or skip to the finished build.' : (step?.note || '');
     player.replaceChildren(
       el('div.row1', {}, [
         el('span.num', { text: num }),
@@ -119,7 +148,7 @@ export function mountAssemble(stage, ctx) {
         ]),
       ]),
       el('div.row2', {}, [
-        el('button.key', { text: '← Back', disabled: cur <= 1 && !isDone, onclick: () => { if (isDone) { done = false; renderList(); renderPlayer(); } else stage.prev(); } }),
+        el('button.key', { text: '← Back', disabled: cur <= 1 && !isDone, onclick: () => { if (isDone) { done = false; leaveRoom(); renderList(); renderPlayer(); } else stage.prev(); } }),
         el('div.pips', {}, rows().map((r) => el('span.pip' + ((r.page === 'done' ? isDone : !isDone && cur === r.page) ? '.cur' : (r.page !== 'done' && (isDone || cur > r.page)) ? '.done' : '')))),
         el('button.key.sq', { 'aria-label': stage.paused ? 'Play' : 'Pause', title: stage.paused ? 'Play' : 'Pause', disabled: isDone, onclick: () => { stage.setPaused(!stage.paused); renderPlayer(); } }, [icon(stage.paused ? 'play' : 'pause', { fill: true })]),
         el('button.key' + (stage.slowmo ? '.on' : ''), { text: 'Slow-mo', 'aria-pressed': String(!!stage.slowmo), title: 'Slow motion · watch each step at study speed', onclick: () => { stage.setSlow(!stage.slowmo); renderPlayer(); } }),
@@ -137,7 +166,8 @@ export function mountAssemble(stage, ctx) {
 
   /* ---------------- stage ---------------- */
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'assemble', soon }, { panels: [{ el: list, title: () => `Step ${Math.max(0, stage.cur)} of ${stage.pageCount - 2}`, open: false }], dock: () => player.offsetHeight }) : null;
-  const safe = () => { if (phone) { phone.refresh(); stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 280 + 20 + 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + player.offsetHeight + 12 }); };
+  const safeArea = () => { if (phone) { phone.refresh(); stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 280 + 20 + 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + player.offsetHeight + 12 }); };
+  const safe = () => { safeArea(); if (room && room.handle) room.handle.refit(); };   // the room's camera is fitted to the free region too
   if (phone) phone.onLayout(safe);
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });
@@ -146,14 +176,16 @@ export function mountAssemble(stage, ctx) {
   // exploded overview, from the cover (a ?ws=assemble address) AND from the finished step the other workspaces park
   // the stage on (Joey, 2026-10-20: Assemble opened "at the end" when reached from Build)
   const back = ctx.memo?.assemblePage;
-  if (back != null) { done = !!ctx.memo.assembleDone; stage.goTo(back, { animate: false }); }
+  if (back != null) { done = !!ctx.memo.assembleDone; stage.goTo(back, { animate: false }); if (done) enterRoom(); }
   else if (stage.cur !== pageOf.overview) stage.goTo(pageOf.overview);
   renderList(); renderPlayer(); tb.sync(); safe();
 
   return {
-    onPage(i) { if (i !== pageOf.finished) done = false; renderList(); renderPlayer(); tb.sync(); safe(); },   // a remount's goTo lands on the finished page, so a remembered Done survives it
+    onPage(i) { if (i !== pageOf.finished) { done = false; leaveRoom(); } renderList(); renderPlayer(); tb.sync(); safe(); },   // a remount's goTo lands on the finished page, so a remembered Done survives it
     onCamFree() { tb.sync(); },   // the camera taken (an orbit) or given back: the toolbar's camera button lights up or not
+    onQuality(tier) { if (room && room.handle) room.handle.onQuality(tier); },   // the room re-aims its lights after the tier's rig reset
     unmount() {
+      leaveRoom();
       ac.abort();
       if (ctx.memo) { ctx.memo.assemblePage = stage.cur; ctx.memo.assembleDone = done; }
       stage.setPaused(false);

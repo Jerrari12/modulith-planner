@@ -158,6 +158,10 @@ jobs:
           # the Parts list names the filament a part prints in (2026-10-18): it reads the Colors tab's words from its module
           sed -i "s|'./colors.js'|'./colors.js?v=$V'|" js/workspaces/parts.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|" js/workspaces/assemble.js
+          # the Done scene (2026-10-23): assemble.js imports it on demand, so its import() is stamped like a static one; the
+          # module's own helper and the room assets it fetches (scenes/) are stamped inside it
+          sed -i "s|'../scenes/done.js'|'../scenes/done.js?v=$V'|" js/workspaces/assemble.js
+          sed -i "s|'./done-fit.js'|'./done-fit.js?v=$V'|; s|'scenes/home-office/room.glb'|'scenes/home-office/room.glb?v=$V'|; s|'scenes/home-office/room.json'|'scenes/home-office/room.json?v=$V'|" js/scenes/done.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|" js/ui/toolbar.js
           sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/board.js'|'../ui/board.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'../rules/stand.js'|'../rules/stand.js?v=$V'|" js/workspaces/build.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|" js/ui/board.js
@@ -292,7 +296,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir _site
-          cp -r index.html css js img icons fonts kits builds stats vendor favicon.ico favicon.svg apple-touch-icon.png part-preview-support.json _site/
+          cp -r index.html css js img icons fonts kits builds scenes stats vendor favicon.ico favicon.svg apple-touch-icon.png part-preview-support.json _site/
           rm -f _site/img/parts
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

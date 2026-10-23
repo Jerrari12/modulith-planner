@@ -71,10 +71,11 @@ function qualityScenario(helpers, code) {
   for (const inst of instances.values()) scene.add(inst.group);
   const table = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshStandardMaterial());
   let stage = 'light';
-  const env = new Function('THREE', 'QUALITY', 'quality', 'getStage', 'cinema', 'isWallBuild', 'isUnderTableBuild', 'IS_PART', 'renderer',
+  // sceneHold: the Done room's hold (2026-10-23), a name shadowsWanted reads beside the stage theme; off here
+  const env = new Function('THREE', 'QUALITY', 'quality', 'getStage', 'cinema', 'sceneHold', 'isWallBuild', 'isUnderTableBuild', 'IS_PART', 'renderer',
     'sun', 'instances', 'table', 'fitShadowCamera', 'scene',
     `${helpers}\n${code.replace("stageTheme === 'light'", "getStage() === 'light'")}\nreturn { applyShadowQuality };`)(
-    THREE, { high: { shadow: true } }, 'high', () => stage, { on: false }, false, false, false, renderer, sun, instances, table, () => {}, scene);
+    THREE, { high: { shadow: true } }, 'high', () => stage, { on: false }, { on: false }, false, false, false, renderer, sun, instances, table, () => {}, scene);
   env.applyShadowQuality();
   for (const inst of instances.values()) for (const m of meshesOf(inst.group)) if (!m.castShadow || !m.receiveShadow) failures.push(`light stage: ${inst.cfg.node} mesh left unflagged`);
   stage = 'dark';
