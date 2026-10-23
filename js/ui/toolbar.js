@@ -15,7 +15,9 @@ export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode �
      on the finished page; the button reflects the stage's state and toggles it. */
   const measureBtn = el('button.chip.icon-btn.measure', { title: 'Measure · W/H/L', 'aria-label': 'Measure', 'aria-pressed': 'false', onclick: () => { stage.setDims(!stage.dimsOn); sync(); } }, [icon('ruler')]);
   const qualityBtn = el('button.chip.quality', { title: 'Render quality · click to cycle' }, [icon('gauge', { size: 16 }), el('span')]);
-  qualityBtn.addEventListener('click', () => { const keys = Object.keys(stage.QUALITY); const i = keys.indexOf(stage.quality); stage.applyQuality(keys[(i + 1) % keys.length], true); sync(); });
+  /* a visitor's pick is kept across reloads and stops the auto-downgrade (setQuality with user: true, as the viewer's own pill
+     does); applyQuality alone drew the tier for this page only, and a reload re-probed it (the GPU pass, 2026-10-23) */
+  qualityBtn.addEventListener('click', () => { const keys = Object.keys(stage.QUALITY); const next = keys[(keys.indexOf(stage.quality) + 1) % keys.length]; if (stage.setQuality) stage.setQuality(next, { user: true }); else stage.applyQuality(next); sync(); });
   const b3 = el('button', { text: '3D', 'aria-pressed': 'true', onclick: view ? () => { view.set('3d'); sync(); } : null });
   const b2 = el('button', { text: '2D', 'aria-pressed': 'false', disabled: !view, title: view ? 'The 2D board · the same build as a grid' : 'The 2D board comes with the Build rules (phase 3)', onclick: view ? () => { view.set('2d'); sync(); } : null });
   const undoBtn = history ? el('button.chip.icon-btn', { title: 'Undo · Ctrl+Z', 'aria-label': 'Undo', onclick: () => { history.undo(); sync(); } }, [icon('arrow-counter-clockwise')]) : null;

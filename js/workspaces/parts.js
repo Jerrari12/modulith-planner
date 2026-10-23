@@ -13,6 +13,7 @@ import { el, makeToast } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { attachHint, hideHint } from '../ui/hint.js';
 import { glyphEl, FACEK, DEFAULT_COLORS } from '../ui/glyph.js';
 import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
@@ -32,6 +33,9 @@ const BUY = typeof HARDWARE_BUY !== 'undefined' ? HARDWARE_BUY : {};
    saved choice of either reads as Printables (readStore). */
 const STORES = [['printables', 'Printables'], ['thangs', 'Thangs']];
 const SHOWN = new Set(STORES.map(([id]) => id));
+/* the hover hint on Track my build (js/ui/hint.js): a bubble beside the panel with a clip of the counters in use,
+   img/hints/parts-track.mp4 from tools/hint-clips.mjs (Joey 2026-10-23). The button's own title is the touch screen's answer. */
+const TRACK_HINT = { title: 'Track my build', text: 'Had and Printed counters on every row and a progress bar in the dock. The counts stay with this build in this browser.', video: 'img/hints/parts-track.mp4' };
 const STORE_KEY = 'gen2-link-store';   // the planner's own preference key, same ids
 const VIEWER_STORE_KEY = 'gen2-store';   // the viewer's own key (main.js STORE_STORE_KEY), same ids; a listing's ?from= seeds it
 const INSIDE = { 59: 45, 115: 101, 165: 151, 185: 171, 240: 226, 270: 256 };
@@ -263,6 +267,7 @@ export function mountParts(stage, ctx) {
   function renderPanel() {
     const { rs, printCount, files, toGo, missing, optMissing } = counts();
     pal = paletteSnapshot(stage);
+    hideHint();   // a control under a bubble is about to be rebuilt; a removed button never fires mouseleave
     panel.replaceChildren();
     const head = el('div.head');
     head.append(
@@ -277,7 +282,7 @@ export function mountParts(stage, ctx) {
       el('div.row3', {}, [
         el('div.track.sites', { role: 'group', 'aria-label': 'Download site' }, STORES.map(([id, name]) =>
           el('button.seg' + (st.site === id ? '.on' : ''), { text: name, 'aria-pressed': String(st.site === id), onclick: () => { st.site = id; try { localStorage.setItem(STORE_KEY, id); } catch {} renderPanel(); } }))),
-        el('button.key' + (st.tracking ? '.on' : ''), { 'aria-pressed': String(st.tracking), text: st.tracking ? '☑ Tracking' : '☐ Track my build', title: 'Count what you already had and what you have printed or bought toward this build', onclick: () => { st.tracking = !st.tracking; saveProgress(); renderPanel(); renderDock(); } }),
+        attachHint(el('button.key' + (st.tracking ? '.on' : ''), { 'aria-pressed': String(st.tracking), text: st.tracking ? '☑ Tracking' : '☐ Track my build', title: 'Adds Had and Printed counters to every row and a progress bar to the dock: what you already had, and what you have printed or bought toward this build', onclick: () => { st.tracking = !st.tracking; saveProgress(); renderPanel(); renderDock(); } }), TRACK_HINT, panel),
       ]),
       el('div.row4', {}, [
         el('button.key', { text: 'Copy as text', onclick: copyText }),

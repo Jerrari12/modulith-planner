@@ -2815,6 +2815,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   - It only acts in the widest case with the big badges. The name keeps its 120 px floor in 1280-1365. Above that it
     gives way: to 67 px at 1366, 101 px at 1400, 141 px at 1440 and 201 px at 1500; then to 112 px at 1581 and 171 px
     at 1640. Without the big badges it never acts.
+    Those are Windows' figures. The deploy runner lays the same text out wider (the bullet below), and there the name
+    gives way in the tier as well: 75 px at 1280, 95 at 1300, 115 at 1320 and 120 from 1340; above it 9 px at 1366,
+    43 at 1400, 83 at 1440, 143 at 1500, 38 at 1581 and 97 at 1640. Without the big badges the runner's name is 120 in
+    the tier, 70 at 1366, 104 at 1400 and 99 at 1581.
 - **Why not the tabs on their own row up to 1365** (the other candidate). That tier moves every panel 44 px down (top 134
   instead of 90), and 1280-1365 includes the shortest laptop screens (1280×720, 1360×768). It is also not CSS alone: the
   1280 line is coded in six places across five workspace files (`innerWidth < 1280` for safe areas and narrow layouts in
@@ -2822,14 +2826,18 @@ Dated calls made while building, with who made them. The brief and the inventory
   mount chip's word was the cheapest room in the bar: 92 px in the widest case. Making the Day/Night pair one button would
   have saved about 42, which does not cover the big badges.
 - **Checks.** A new e2e case, "the top bar fits at every desktop width in its widest case, in every workspace…":
-  - It sets that build up through the setup sheet and writes the widest badges into the tabs. Then, in all five
-    workspaces, at 17 widths from 1024 to 1920 (each tier's edges among them), it asserts:
+  - It sets that build up through the setup sheet. Then, in all five workspaces, at 18 widths from 1024 to 1920 (each
+    tier's edges among them), twice over: with the build's own tabs, then with the widest badges written into them. It
+    asserts:
     - nothing past the bar's right edge;
     - 10 px between the controls (the switcher's chip is measured, not its wrapper);
     - no control narrower than 44 px, the wordmark and the switcher aside;
     - the tabs on a row of their own below 1280 only, and on the screen;
     - the mount word shown only outside 1280-1365, with the accessible name kept at 1280;
-    - the build name at least 118 px in 1280-1365, and at least 60 px elsewhere.
+    - the build name at least 118 px in 1280-1365, and at least 60 px elsewhere, with the build's own tabs; with the
+      widest badges, that the tabs are at least 40 px wider (57 px here, 61 on the runner: the badges are there and
+      count) and that the name is the only control that gives way: every other control keeps the width it had without
+      them, to the 1/64 px Chrome lays out in, and the name never grows.
   - It fails on main's CSS (`fe0a410`: 85 px past at 1280). It also fails on each of 10 mutants of the fix:
     - the chip rule removed, or the words hidden with `display: none`;
     - either bound of the tier moved;
@@ -2855,6 +2863,24 @@ Dated calls made while building, with who made them. The brief and the inventory
   - Terra `01a16900` on the follow-up: one finding, confirmed. The 44 px check read `width < 43.5`, so a control squeezed
     by under half a pixel would have passed. An unsqueezed icon chip measures exactly 44.0 px (Chrome lays out in
     1/64 px), so the check is now `width < 44`.
+- **The deploy runner lays the bar's text out wider, and the case's first version did not allow for it.** The deploy of
+  this merge (`aca5f1c`, with the Assemble toast fix on top as `eeceaeb`; run 40004575512) failed at this case on
+  2026-10-23 at 19:34Z: at 1280 in Build, with the widest badges written in, the name measured 74.6 px against the
+  118 px floor, with everything else as it should be (`edge` 1260, `last` 1260, gaps 16/20/20/10/10/10, nothing squeezed,
+  the word clipped). A throwaway diagnostic workflow on the runner's image (run 40013974563, branch `diag-topbar-runner`,
+  deleted after) measured the same bar: the same IBM Plex web fonts load there, and a canvas measures a 67-character
+  string in IBM Plex Sans 400 at 13 px as 390.3 px on both machines; but the laid-out tabs are 554 px there against 508
+  here with the build's own tabs (615 against 565 with the widest badges), about 46 px less room in the bar, and the
+  Build tab alone 91 against 83. Every hard guarantee held there at all 18 widths in both passes. So the case now asserts
+  the name's floors with the build's own tabs only, and with the widest badges that nothing but the name gives way.
+  Alone, in software rendering, it passes here in 118 s. On four mutants of the fix it fails as it should: the switcher
+  rules removed (Share 29 px past the edge at 1366 with the widest badges), the mount word's clip removed (the word shown
+  at 1280), the name's floor lowered to 80 px (the 120 px floor at 1280, with the build's own tabs) and the chip's
+  `max-width` removed (the chip 33 px over the tabs at 1366). Terra `01a16a58` on this follow-up: two findings, both
+  confirmed and fixed (the widest pass did not prove the badges had widened the tabs, so a badge hidden by CSS would have
+  passed it on the plain bar; the other controls' widths were compared rounded, so a squeeze under half a pixel would
+  have passed). Not changed here, and Joey's call: where text lays out as on the runner, the widest case leaves the name
+  9 px at 1366 and 38 px at 1581, an ellipsis and little else.
 - **Live:** not yet. To be written when the merge's stamp is live: main's merge sha, the deploy run, the `boot.js?v=`
   stamp, and the check on the live site at 1280 and 1366 px (the Feedback & support button visible from 1366, nothing in
   the top bar overlapping or past its edge).
@@ -2884,6 +2910,153 @@ Dated calls made while building, with who made them. The brief and the inventory
   republished the Studio checkout the suite serves, and passes alone). The e2e assertion also requires the toast inside the
   viewport (Terra's follow-up, `01a169dc`).
 - **Deploy:** a reported bug, so it deploys once the suites pass.
+
+## 2026-10-23 (the Quality pill keeps a visitor's pick, and the tab badges follow the record)
+
+Two findings of the hands-on GPU pass on Joey's laptop browser (an RTX A5000, Brave; Joey's go to fix them: "Yes, fix the
+found bugs: the Quality pill not saving its pick across a reload, and the stale Parts/Labels badges and size line after
+keyboard undo or Remove").
+
+- **The pill.** The shell's Quality pill (`js/ui/toolbar.js`) called `stage.applyQuality(name, true)`: a function of one
+  argument that draws the tier for this page only. The viewer's own pill called `setQuality(name, { user: true })`, which
+  stores the pick (`gen2-quality`, `gen2-quality:set`) and locks out the auto-downgrade; the boot reads those. So a visitor
+  who picked Fast was back on Very High after a reload (the parity list's C4 had claimed the pick was stored; it was not).
+  Now the pill calls `stage.setQuality(next, { user: true })` where the stage offers it.
+- **The badges.** `topbar()` built its tab badges once per mount (`tabs()` read `ctx.badges()` at build time), so the
+  Parts count stood still through placements, undos and removes until the next workspace switch ("Parts 77" at five
+  units in the pass). The nav now redraws its badges on every store change for the mount's lifetime (a subscription
+  dropped on the workspace's abort signal), and the Parts count reads the RECORD (`store.serialize()`), not the stage's
+  last build, so it is right at the store change rather than after the regenerate.
+- **The size line in Labels.** `labels.js`'s stage sync never redrew after `stage.update`: the dock's size line and the
+  bar were drawn on the store change, before the rebuild, and never again. The dock and the View toolbar are drawn again
+  after a completed update: only those, because a whole `renderAll()` there would rebuild an open label editor from the
+  stored label and wipe a word typed while the stage rebuilt (Terra `01a16a49`'s one finding, taken; the 2026-10-18 lesson).
+- **The tests:** two e2e cases. The pill case seeds Fast without the harness's init script (which would reset the pick on
+  every load), clicks the pill, reloads, and expects the picked tier back with `gen2-quality:set` = 1. The badge case
+  places a third unit on the board, switches to Labels, undoes it there, and expects the badge back at once and the dock's
+  size line changed once the stage has rebuilt. Mutants, each failing its case: the pill on `applyQuality`; the badges
+  built once; no redraw after the Labels update; the badge counting `stage.build`.
+- **Review:** Terra `01a16a49`: one finding, taken (above).
+- **Deploy:** on Joey's go above, once the suites pass and main is green again (the top-bar case failed on the runner in
+  the run before this one).
+
+## 2026-10-23 (the filament picker filters by material: All · PLA · PETG chips above the list)
+
+- **Joey, asked:** "in the color/filament selection on the right side of the screen, should we also have a way to filter by
+  material type when applicable?"
+- **What a material is here.** The catalogue (`js/filament-db.js`, vendored byte-for-byte, so it gains no field) has no
+  material of its own; the 2026-10-21 tags on every line header derive from the line's NAME (a TPU line is TPU; otherwise PLA
+  and/or PETG, both on the Elegoo "PLA / PETG" line). Silk and Translucent are finishes of PLA and stay tagged PLA, so the
+  chips are the tags' three materials and nothing finer: a case's picker offers **All · PLA · PETG**, and the feet's, which
+  lists the TPU lines alone, shows no row at all ("when applicable": a row needs two materials to choose between). The rule
+  now lives in one place, `js/colors/materials.js` (pure, no imports): `lineMaterials` for the tags and the chips alike,
+  `colorMaterial` for a colour on a two-material line (its own name says: "PETG Black" / "PLA Grey"), `materialsIn` for
+  the chips a region's lines offer, `filterByMaterial` for the narrowing, `labelMaterials` for the "In this build" row, and
+  `wordMaterial` for a palette name the catalogue lacks (a shared or uploaded palette can name anything: "petg Blue" answers
+  the PETG chip by its own whole word, any case; "Sunset Orange" says nothing and shows under All only).
+- **The row** (`#ws-picker .mrow`, role group "Material", `button.mchip[aria-pressed]` with a dot in the tag's colour) sits
+  between the search box and the list, All first and pressed. A chip narrows the brand groups (a group's header count follows;
+  a group with no colour of that material hides) and the "In this build" row, and combines with the search both ways: the
+  search alone re-renders the list, never the box, and a chip does the same, so the typed words survive a chip and the chip
+  survives typing. The chips are built once per picker render and their pressed state is set in place: the first draft
+  rebuilt the row on a click, and a Space on a focused chip then dropped the keyboard's focus to the document (Terra, below).
+  A pick's re-render keeps the chip (`st.mat`, like `st.query`); opening a picker for a region starts both afresh at All,
+  so a PETG chip left on the case never follows into the feet's TPU-only list. 8 px between the chips (`--gap-ctl`, the
+  planner's floor); on the phone the row is nowrap and scrolls sideways (3 px of padding keep a chip's focus ring inside the
+  scroll box), so the sheet's list keeps its height.
+- **Checks.** `test/materials.test.mjs` (7 tests) states the rule against the real catalogue: a line's materials from its
+  name, the Elegoo line's by colour, PLA + PETG for a case and TPU alone for the feet, PETG keeping the Polymaker PETG line and
+  Elegoo's one colour, PLA dropping the Polymaker PETG line in order, a full pass over the chips accounting for every colour
+  once, the label map, and the whole-word any-case name rule. The TPU-feet Colors e2e case gained the chips: All · PLA · PETG
+  on a case with All pressed and 8 px gaps; PETG pressing, releasing All, leaving the two lines that sell it with every swatch
+  PETG (In this build included) and Elegoo down to its PETG Black; "black" under PETG the PETG blacks alone, All with the
+  words kept every black, the search box never rebuilt; Space on a focused PLA chip pressing it with the focus kept; an
+  uploaded "PETG Blue (custom)" in the palette answering PETG and not PLA after the picker is opened again at All; the feet
+  with no row and their 11 TPU swatches with a PETG chip left pressed on the case. Passes alone in 38 s (soft). Mutants, each
+  failing its own check: no row, no narrowing, In this build ignoring the chip, no reset on open, a row for one material,
+  4 px gaps, the pressed state not synced, the row rebuilt on a click (focus lost), an uncatalogued name never answering, and
+  in the unit: the first material taken on a two-material line, empty groups kept, TPU never said, a substring match
+  (PLATINUM as PLA): 13 of 13 killed.
+- **Review:** Terra `01a16a51` (routine): two findings, both held and fixed (the rebuilt row losing keyboard focus; an
+  uncatalogued palette name hidden under every chip); its follow-up on the fixes: one more, held and fixed (the word match
+  was case-sensitive). Screenshots in `D:\Claude - Output\material-filter-2026-10-23` (desktop and phone, All and PETG).
+- **Suites:** npm test 623 (617 pass, 5 skipped; M28's timing gate tripped once while the e2e subset rendered in software
+  beside it, median 0.3 ms, max 650.6 ms, and passes alone: the Simplify file 5 of 5 in 88 ms); the e2e cases named Colors,
+  the phone check, the phone journey, analytics and the boot case: 23 of 23 (11.6 min, soft). The full e2e suite runs on the
+  deploy.
+- **Deploy:** a feature, so on Joey's go; the branch is `material-filter`, not merged.
+
+## 2026-10-23 (hover-hint clips on every workspace)
+
+- **Joey:** "can we do more video animations for when hovering over certain buttons to illustrate how they work?" The
+  Labels tiles have had them since 2026-10-13 (js/ui/hint.js: a glass bubble beside the panel after a short dwell, a muted
+  looping clip from img/hints/, recorded from the app by tools/hint-clips.mjs). A shortlist of eleven went to him through
+  the session that asked for this; his answer: "Record all eight recommended hover clips." Labels already had all five of
+  its own, so the new ones are on Build, Colors, Parts and Assemble.
+- **The eight.** Build's size tiles (`build-place`: a size, the amber spots, the top one clicked, the drawer landing, Esc;
+  the "+" spots are stage markers, not buttons, so the clip sits on the tiles, where a visitor is before the spots
+  exist); Fill all on the issue card (`build-fill`: a red slot, Fill all, the 1W case, the toast); Build style's Side
+  covers (`build-sidecovers`, the hint on the track so the bubble stays while the mouse crosses from Off to On); Colors'
+  Browse looks (`colors-browse`: two cards previewed on the model, one opened, Apply), Surprise me (`colors-surprise`: a
+  look previewed, More like this, Use this look) and Simplify… (`colors-simplify`: Down to 3 filaments, the change list,
+  Apply); Parts' Track my build (`parts-track`: the counters on every row, two rows ticked, the dock's progress bar);
+  Assemble's camera chip (`assemble-camera`: a drag orbits the overview and lights the chip, pressing it glides back; the
+  bubble sits UNDER the toolbar, since beside the chip it would cover the next ones). Each control's own title is the
+  touch screen's answer, as on Labels.
+
+  | clip | s | KB | | clip | s | KB |
+  |---|---|---|---|---|---|---|
+  | build-place | 9.4 | 50 | | colors-surprise | 14.1 | 76 |
+  | build-fill | 12.6 | 59 | | colors-simplify | 12.6 | 59 |
+  | build-sidecovers | 9.4 | 57 | | parts-track | 11.7 | 56 |
+  | colors-browse | 16.7 | 87 | | assemble-camera | 9.8 | 144 |
+
+  All at 480 × 222, H.264, loaded only on the first hover of that control. The Assemble clip is the heaviest (the whole
+  frame moves while the camera orbits and returns), at crf 30 and the fast render tier; the rest at the Labels clips'
+  crf 27. Together 588 KB in the repo, nothing until someone looks.
+- **hint.js** (js/ui/hint.js): no bubble while a phone sheet is open (a narrow window with a mouse gets the sheets too);
+  never over an open `role=dialog` the control is not inside (Colors' Simplify card opens under the pointer that pressed
+  Simplify…, and the bubble beside the panel would cover it; the Fill all hint is INSIDE its issue card and shows); never
+  over the dock (centred on a button low in the issue card, the Fill all bubble reached Get parts list; it sits above the
+  dock instead); `spec.below` for a toolbar chip; `spec.scene` optional, with one fallback scene (a cursor pressing a
+  button) so a new hint needs no hand-drawn art; every hinted control carries `data-hint=<clip name>` for the harness;
+  `focusin`/`focusout` instead of `focus`/`blur`, so a hint on a group arms when the keyboard reaches a segment inside it
+  and stays while it moves between the group's own segments. A modal dialog needs no rule of its own: every one here is a
+  full veil, which the overlap rule refuses. Each workspace calls `hideHint()` before rebuilding a panel that holds a hinted
+  control (a removed button never fires mouseleave, Terra 01a13529's rule from Labels). `pages.yml` stamps
+  `../ui/hint.js` in the four workspaces; the clips are assets, loaded by URL, and need no stamp.
+- **The recorder** (tools/hint-clips.mjs, dev only): opens any workspace, keys clips `<workspace>-<key>`, takes a per-clip
+  viewport size, render tier and crf, a `drag` for an orbit, `scrollTo` for a control low in a scrolling panel; the eight
+  new clips are recorded at 1280 × 800 (the one-row desktop layout) and framed two ways, a 700 × 321 window at the Labels
+  clips' scale or a 960 × 440 window at half scale where a panel and the whole model must both read. The side covers print
+  in the case's black, and a black panel leaving a black wall cannot be seen at the bubble's size, so the clip gives them
+  an orange of their own (`setColor` on `SideCover` and `SideCover:FACE`, then `setUseCustom(true)`: Build shows the
+  instruction colours until Colors is opened) and turns the model a little first. The README under img/hints/ says so. One
+  recording of the place clip ran 32 s (the page was slow that run; the frames carry their real timestamps) and was redone
+  at 9.4 s: the recorder's timing is the page's, so read a clip's length back after recording.
+- **Checks.** npm test 616 (611 passed, 0 failed, 5 skipped). A new e2e case, "hover hints: every hinted control shows its
+  clip on hover and hides on leave; none shows over the setup sheet or an open card": on each workspace, for each state
+  that offers hints (Build's Add units, Build style, a gap build with the issue card open), every expected `data-hint`
+  control is present, hovering it shows the bubble with that clip's `<video>` (a missing file errors and fails it), the
+  bubble does not overlap the control, leaving hides it; the keyboard on a segment inside the Side covers group shows it;
+  a bubble up when the setup sheet opens goes down; a hover and a focus fired at a control under the sheet show nothing;
+  Simplify's open card gets no bubble over it; and at a 1000 px window with a mouse the camera chip hints under its
+  toolbar, nothing hints while a sheet is open, and it hints again once the sheet closes. Mutation-checked six ways: an
+  extra document `focusin` listener removed SURVIVED (the browser's boundary events and `focusout` already do that job, so
+  the listener is not in the code); `focus` for `focusin` fails at the keyboard-on-group check; the overlap rule off fails
+  at the Simplify card; Track my build's `attachHint` dropped fails Parts' wait for its hint; a separate `aria-modal` guard
+  removed SURVIVED (every modal is a veil the overlap rule catches, so the guard was narrowed to the sheet rule); the sheet
+  rule removed fails at the narrow-window check. The full e2e suite on this branch, `E2E_SOFT=1` with the ls-public
+  Studio: 83 of 83 in 27.6 min. After main (`eeceaeb`: the top bar at 1280-1365, Assemble's toasts) was merged in as
+  `9cedaef`: npm test 616 (611 passed, 0 failed, 5 skipped), the hover case again, and the full suite 83 of 84 in 41 min,
+  the one failure a 30 s click timeout on the Label plate's "Screw and nut drawings" Off segment in that slow run; alone
+  it passes in 24 s, and the six Labels and plate cases pass together.
+- **Review:** Sol `01a16a18`, substantial (a multi-file feature; the brief said Terra, the class table says Sol): two
+  findings. The `focus` listener on the Side covers track never firing (focus does not bubble): taken, `focusin`, with the
+  keyboard check above. A bubble already up staying visible when a modal opens under a still pointer: discarded, the e2e
+  drove exactly that with no extra code and the bubble went (the veil under the pointer fires mouseleave; a keyboard-shown
+  bubble goes with the focus the modal takes); a line in the vault's reviewer-lessons (`3b105e1`).
+- **Deploy:** not yet, a feature (Joey's go). Branch `hover-hints`.
 
 ## 2026-10-23 (Very High on the light theme never let the idle gate rest: the accumulator's last sample left the shadow map flagged)
 

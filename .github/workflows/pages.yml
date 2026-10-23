@@ -138,6 +138,9 @@ jobs:
           sed -i "s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/builds.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./topbar.js'|'./topbar.js?v=$V'|" js/ui/phone.js
           sed -i "s|'../ui/phone.js'|'../ui/phone.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js js/workspaces/labels.js
+          # the hover hints on every workspace (2026-10-23): hint.js was labels.js's alone (its line below); the clips under
+          # img/hints/ are plain assets, loaded by URL, and need no stamp
+          sed -i "s|'../ui/hint.js'|'../ui/hint.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js
           # the Labels workspace (phase 5) and its rules module
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'../rules/labels.js'|'../rules/labels.js?v=$V'|; s|'../label-panel.js'|'../label-panel.js?v=$V'|; s|'../label-text.js'|'../label-text.js?v=$V'|; s|'../ui/hint.js'|'../ui/hint.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|" js/ui/hint.js
@@ -153,6 +156,8 @@ jobs:
           # step 6 (2026-10-18): Simplify and the summary, imported by the Colors workspace
           sed -i "s|'../colors/simplify.js'|'../colors/simplify.js?v=$V'|" js/workspaces/colors.js
           sed -i "s|'./colour.js'|'./colour.js?v=$V'|; s|'./surprise.js'|'./surprise.js?v=$V'|" js/colors/simplify.js
+          # the material chips (2026-10-23): the picker's material filter, imported by the Colors workspace (it imports nothing itself)
+          sed -i "s|'../colors/materials.js'|'../colors/materials.js?v=$V'|" js/workspaces/colors.js
           sed -i "s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/store.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../rules/bom.js'|'../rules/bom.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|" js/workspaces/parts.js
           # the Parts list names the filament a part prints in (2026-10-18): it reads the Colors tab's words from its module

@@ -31,6 +31,7 @@ import { icon } from '../ui/icons.js';
 import { el, makeToast } from '../ui/dom.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { attachHint, hideHint } from '../ui/hint.js';
 import { FILAMENT_DB } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
@@ -38,8 +39,16 @@ import { surprise, LOCKS, CAPS, shortName } from '../colors/surprise.js';
 import { STYLES } from '../colors/styles.js';
 import { readOwned, writeOwned } from '../state/owned.js';
 import { simplify, worn as wornLook, summarize, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
+import { lineMaterials, materialsIn, filterByMaterial, labelMaterials, wordMaterial } from '../colors/materials.js';
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
+/* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/colors-*.mp4 from
+   tools/hint-clips.mjs (Joey 2026-10-23). The control's own title is the touch screen's answer. */
+const HINTS = {
+  browse: { title: 'Browse looks', text: 'Every look drawn on this build. Resting on a card shows it on the model; a click opens it, and Apply dresses the build.', video: 'img/hints/colors-browse.mp4' },
+  surprise: { title: 'Surprise me', text: 'Three colour combinations made for this build under your rules: a style, a filament cap, the filaments you own. Try them on the model first.', video: 'img/hints/colors-surprise.mp4' },
+  simplify: { title: 'Simplify', text: 'The same look in fewer filaments: which regions would share one, shown before anything changes. Apply is one undo step.', video: 'img/hints/colors-simplify.mp4' },
+};
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 /* ZONE_LABEL, isPaid and short are exported: the Parts list words a row's zones, filament names and buy links as this tab does */
 export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : z.charAt(0) + z.slice(1).toLowerCase();
@@ -151,10 +160,13 @@ const LABELS = new Set(FILAMENT_DB.flatMap((b) => b.colors.map((c) => c.label)))
 const silk = (name) => (String(name || '').split(' ').includes('Silk') ? '.silk' : '');
 /* MATERIAL TAGS AND THE FEET (Joey, 2026-10-21: "maybe we need to make PETG and PLA and TPU, like colored tags in the menu to
    help differentiate the material types more"; "when selecting the feet, i feel like we should only list TPU filaments").
-   A line's materials come from its name (the Elegoo line sells PLA and PETG); the TPU lines are the feet's alone, so the
-   feet's picker lists only them and every other picker none of them (the stage keeps the feet TPU: main.js tpuFeet). */
-const materialsOf = (b) => (/TPU/.test(b.line) ? ['TPU'] : [/PLA/.test(b.line) && 'PLA', /PETG/.test(b.line) && 'PETG'].filter(Boolean));
+   A line's materials come from its name (the Elegoo line sells PLA and PETG; colors/materials.js, which the picker's
+   material chips share, 2026-10-23); the TPU lines are the feet's alone, so the feet's picker lists only them and every
+   other picker none of them (the stage keeps the feet TPU: main.js tpuFeet). */
+const materialsOf = (b) => lineMaterials(b.line);
 const matTags = (b) => el('span.mats', {}, materialsOf(b).map((m) => el('span.mat.' + m.toLowerCase(), { text: m, title: m === 'TPU' ? 'TPU: flexible, for the feet' : m })));
+const MAT_OF = labelMaterials(FILAMENT_DB);   // label -> material: the picker's "In this build" row follows the material chip by it
+const materialOfName = (name) => (MAT_OF.has(name) ? MAT_OF.get(name) : wordMaterial(name));   // a palette can name a filament the catalogue lacks: its own words place it (Terra 01a16a51)
 const TPU_LABELS = new Set(FILAMENT_DB.filter((b) => /TPU/.test(b.line)).flatMap((b) => b.colors.map((c) => c.label)));
 const isFeet = (key) => String(key || '').split(':')[0] === 'Foot';
 const storage = () => { try { return localStorage; } catch { return null; } };   // a browser that blocks storage throws on the read itself
@@ -167,7 +179,7 @@ export function mountColors(stage, ctx) {
   // tray: the compare tray is open; flip: the index of the finalist shown on the model (null = the chosen look)
   // surprise: the Surprise me panel is open; owning: its owned-filaments editor is up (oq its search); sshow: the index of
   // the candidate pinned on the model (null = none)
-  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null };   // simp: the Simplify panel is open, simpTarget its filament count
+  const st = { key: null, sel: null, expanded: null, query: '', mat: 'all', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null };   // simp: the Simplify panel is open, simpTarget its filament count
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
@@ -231,6 +243,7 @@ export function mountColors(stage, ctx) {
   const strip = (fc) => el('span.strip', {}, [...new Set([...fc.filaments, ...fc.unpicked].map((f) => f.hex))].slice(0, 8).map((h) => el('i', { style: `background:${h}` })));
   function renderPanel() {
     const p = pal();
+    hideHint();   // a control under a bubble is about to be rebuilt; a removed button never fires mouseleave
     panel.replaceChildren();
     panel.appendChild(el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]));
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
@@ -257,13 +270,13 @@ export function mountColors(stage, ctx) {
         el('div.sacts', {}, [
           el('button.link.keeplook', { text: 'Keep this look', title: 'Save these colours as a look of your own', onclick: () => { st.saving = true; renderPanel(); } }),
           el('button.link.review', { text: 'Review filaments', title: 'Every filament this build prints in, with where to buy it', onclick: openShop }),
-          fc.count >= 3 ? el('button.link.simplify', { text: 'Simplify…', title: 'Print this look in fewer filaments: see what would change first', onclick: openSimplify }) : null,
+          fc.count >= 3 ? attachHint(el('button.link.simplify', { text: 'Simplify…', title: 'Print this look in fewer filaments: see what would change first', onclick: openSimplify }), HINTS.simplify, panel) : null,
         ]),
       ]));
     }
     look.appendChild(el('div.row4', {}, [
-      el('button.key.sm.strong.browse', { title: 'Every look, shown on this build', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']),
-      el('button.key.sm.surprise', { title: 'Three new looks for this build, under your rules', onclick: openSurprise }, [icon('sparkle', { size: 14 }), 'Surprise me']),
+      attachHint(el('button.key.sm.strong.browse', { title: 'Opens the gallery: every look drawn on this build; rest on one to try it on the model', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']), HINTS.browse, panel),
+      attachHint(el('button.key.sm.surprise', { title: 'Three colour combinations made for this build under your rules; rest on one to try it on the model', onclick: openSurprise }, [icon('sparkle', { size: 14 }), 'Surprise me']), HINTS.surprise, panel),
       el('button.key.sm.save', { text: 'Save', title: 'Keep these colours as a look of your own, to reuse on another build', disabled: !p.on || !Object.keys(p.colors).length, onclick: () => { st.saving = !st.saving; renderPanel(); } }),
       el('button.key.sm.more', { text: '⋯', title: 'Download, Upload, Share', 'aria-label': 'More', 'aria-expanded': String(st.more), onclick: () => { st.more = !st.more; renderPanel(); } }),
     ]));
@@ -658,7 +671,7 @@ export function mountColors(stage, ctx) {
   /* ---------------- the picker (replaces the inspector) ---------------- */
   const picker = el('aside.glass.glass-edge', { id: 'ws-picker', 'aria-label': 'Filament picker', hidden: true });
   root.appendChild(picker);
-  function openPicker(key) { st.key = key; st.query = ''; renderAll(); if (phone) phone.open(picker); }
+  function openPicker(key) { st.key = key; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
   function closePicker() { st.key = null; renderAll(); if (phone) phone.collapse(picker); }
   function renderPicker() {
     picker.replaceChildren();
@@ -670,6 +683,17 @@ export function mountColors(stage, ctx) {
     const unitPick = uid != null ? (pal().on && pal().over[uid] && pal().over[uid][key]) || null : null;
     const w = st.scope === 'unit' ? (unitPick || null) : worn(key);   // what the chosen scope is wearing
     const scopeText = st.scope === 'unit' ? `This ${unitWord()} only${unitNo()}` : `All ${typePlural(key)} · ${count}`;
+    /* THE MATERIAL CHIPS (Joey, 2026-10-23: "should we also have a way to filter by material type when applicable?"): one
+       chip per material the region's lines offer, All first and pressed; no row when they offer one material only (the
+       feet's TPU). A chip narrows the brand groups and the In this build row, combines with the search, holds through a
+       pick's re-render and starts at All when a picker opens (openPicker). Buttons with aria-pressed: the keyboard reaches
+       them; app.css .mrow puts 8 px between them and scrolls the row sideways on the phone */
+    const offered = FILAMENT_DB.filter((b) => /TPU/.test(b.line) === isFeet(key));   // TPU for the feet, and only for the feet
+    const mats = materialsIn(offered);
+    const matRow = mats.length >= 2 ? el('div.mrow', { role: 'group', 'aria-label': 'Material' }, ['all', ...mats].map((m) => el('button.mchip', { 'data-mat': m, title: m === 'all' ? 'Every material' : m === 'TPU' ? 'TPU only: the flexible filament' : `${m} only`, onclick: () => { if (st.mat === m) return; st.mat = m; syncMats(); renderBrands(); } }, [m === 'all' ? null : el('i.mat-dot.' + m.toLowerCase()), m === 'all' ? 'All' : m]))) : null;
+    // the pressed state is set on the chips in place, never by rebuilding them: a rebuilt row drops the keyboard's focus to the document (Terra 01a16a51)
+    const syncMats = () => { if (matRow) for (const b of matRow.children) { const on = b.dataset.mat === st.mat; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } };
+    syncMats();
     picker.append(...[
       el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: regionOf(key) }), ` · ${scopeText}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
       el('div.track.seg2', { role: 'group', 'aria-label': 'Apply to' }, [
@@ -678,6 +702,7 @@ export function mountColors(stage, ctx) {
       ]),
       st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? short(worn(key).name) : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
       el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
+      matRow,
       isFeet(key) ? el('p.note.feet', { text: 'Feet print in TPU, the flexible filament, so only TPU is listed. PolyFlex TPU95 Black is the default.' }) : null,
     ].filter(Boolean));   // append(null) writes the word "null" (it showed under the scope switch, 2026-10-17)
     const brands = el('div.brands');
@@ -687,14 +712,13 @@ export function mountColors(stage, ctx) {
       const q2 = st.query.trim().toLowerCase();
       const p = pal();
       const seen = new Map(); for (const c of Object.values(p.colors)) if (c && c.name && c.hex && !seen.has(c.name)) seen.set(c.name, c);
-      const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === isFeet(key));
+      const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === isFeet(key) && (st.mat === 'all' || materialOfName(c.name) === st.mat));
       if (inBuild.length) {
         brands.appendChild(el('div.bhead', { text: 'In this build' }));
         brands.appendChild(el('div.swatches', {}, inBuild.map((c) => el('button.sw' + (w && w.name === c.name ? '.active' : '') + silk(c.name), { style: `background:${c.hex}`, title: `${c.name} · already in this build`, 'aria-label': c.name, onclick: () => pick(key, { label: c.name, hex: c.hex, url: c.url }) }))));
       }
       let any = inBuild.length > 0;
-      for (const brand of FILAMENT_DB) {
-        if (/TPU/.test(brand.line) !== isFeet(key)) continue;   // TPU for the feet, and only for the feet
+      for (const brand of filterByMaterial(offered, st.mat)) {   // the region's lines (TPU for the feet alone), narrowed to the chip's material
         const colors = q2 ? brand.colors.filter((f) => `${brand.brand} ${brand.line} ${f.label}`.toLowerCase().includes(q2)) : brand.colors;
         if (q2 && !colors.length) continue;
         any = true;

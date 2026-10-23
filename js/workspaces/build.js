@@ -28,6 +28,7 @@ import { icon } from '../ui/icons.js';
 import { el, makeToast } from '../ui/dom.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { attachHint, hideHint } from '../ui/hint.js';
 import { board } from '../ui/board.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
@@ -48,6 +49,15 @@ const VIEWER_UT_LENGTHS = [59, 115, 165, 185, 240, 270];
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 const sigOf = (m) => { const s = JSON.stringify(m); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + s.length; };
+/* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/build-*.mp4 from
+   tools/hint-clips.mjs (Joey 2026-10-23: "more video animations for when hovering over certain buttons to illustrate how
+   they work"). The "+" spots are stage markers, not buttons, so placing is explained on the size tiles, where a visitor
+   is before the spots exist. The control's own title is the touch screen's answer. */
+const HINTS = {
+  place: { title: 'Place a unit', text: 'Click a size, then an amber spot on the model puts one there. Stop placing or Esc ends it.', video: 'img/hints/build-place.mp4' },
+  fill: { title: 'Fill all', text: 'A 1W case in every red slot at once, so the build can stand or hang. One Undo takes them out again.', video: 'img/hints/build-fill.mp4' },
+  sidecovers: { title: 'Side covers', text: 'The panels on the build’s outer walls. Off leaves the case sides open and takes them off the parts list; On brings them back.', video: 'img/hints/build-sidecovers.mp4' },
+};
 
 export function mountBuild(stage, ctx) {
   const ac = new AbortController();   // every window/document listener the workspace adds, dropped on unmount
@@ -516,6 +526,7 @@ export function mountBuild(stage, ctx) {
   const lib = el('aside.glass', { id: 'ws-lib', 'aria-label': 'Library' });
   root.appendChild(lib);
   function renderLib() {
+    hideHint();   // a control under a bubble is about to be rebuilt; a removed button never fires mouseleave
     lib.replaceChildren();
     lib.classList.toggle('rail', st.collapsed);
     if (st.collapsed) {
@@ -583,10 +594,11 @@ export function mountBuild(stage, ctx) {
       // lit only while it is being PLACED: the remembered size lit on entry read as "placing already" with no spots on the
       // model (Joey 2026-10-16: "no '+' are shown unless i select a different size")
       const why = sizeWhy(w, h); const id = `${w}x${h}`; const dis = !!why, on = st.armed && st.addSize === id;
-      sizes.appendChild(el('button.size.key' + (dis ? '.dis' : on ? '.on' : ''), {
-        title: why || `${w * 88} × ${h * 56} mm · click to place`, 'aria-disabled': dis ? 'true' : null, 'aria-pressed': String(on),
+      const tile = el('button.size.key' + (dis ? '.dis' : on ? '.on' : ''), {
+        title: why || `${w * 88} × ${h * 56} mm · click it, then an amber spot on the model to place one there`, 'aria-disabled': dis ? 'true' : null, 'aria-pressed': String(on),
         onclick: dis ? null : () => { setPalette(st.unit, id); st.armed = true; st.eraser = false; renderAll(); if (phone) phone.collapse(lib); },
-      }, [el('div.holder', {}, [sizeGlyph(kindOf(st.unit), w, h, colors)]), el('span.cap', { text: `${w}W·${h}H` })]));
+      }, [el('div.holder', {}, [sizeGlyph(kindOf(st.unit), w, h, colors)]), el('span.cap', { text: `${w}W·${h}H` })]);
+      sizes.appendChild(dis ? tile : attachHint(tile, HINTS.place, lib));   // a greyed size says why in its title instead
     }
     sz.appendChild(sizes);
     const { w: aw, h: ah } = armedSize(); const wall = G?.interior || { wWall: 17, hWall: 8 };
@@ -680,10 +692,11 @@ export function mountBuild(stage, ctx) {
     // switched off here. Beside Feet on a tabletop, alone on the other mounts.
     const sc = el('section');
     sc.appendChild(el('h2.h2', { text: 'Side covers' }));
-    sc.appendChild(el('div.track.seg2', { role: 'group' }, [
+    // the hint on the track, so the bubble stays while the mouse crosses from Off to On
+    sc.appendChild(attachHint(el('div.track.seg2', { role: 'group', 'aria-label': 'Side covers', title: 'The panels on the build’s outer walls · Off leaves the case sides open and takes them off the parts list' }, [
       el('button.seg.sm' + (s.sideCovers === false ? '.on' : ''), { text: 'Off', onclick: async () => { await stage.setSideCovers(false); await adopt(); } }),
       el('button.seg.sm' + (s.sideCovers !== false ? '.on' : ''), { text: 'On', onclick: async () => { await stage.setSideCovers(true); await adopt(); } }),
-    ]));
+    ]), HINTS.sidecovers, lib));
     const two2 = el('div.two');
     two2.appendChild(sc);
     if (s.mount === 'tabletop') {
@@ -853,14 +866,17 @@ export function mountBuild(stage, ctx) {
   let showIdx = 0;
   function renderIssues() {
     const list = issues();
+    hideHint();   // its Fill all may be under the bubble and is about to be rebuilt
     if (!st.issuesOpen || !list.length) { card.hidden = true; st.issuesOpen = st.issuesOpen && list.length > 0; return; }
     card.hidden = false;
     const hard = list.filter((i) => i.sev !== 'guide').length;
+    // Fill all (the empty slots) takes the hover hint; the other fixes keep their one-line text
+    const fixBtn = (i) => i.kind === 'gaps' ? attachHint(el('button.key.sm.strong', { text: i.fix.label, title: 'A 1W case in every red slot at once · one Undo takes them out again', onclick: i.fix.run }), HINTS.fill, card) : el('button.key.sm.strong', { text: i.fix.label, onclick: i.fix.run });
     card.replaceChildren(
       el('div.ihead', {}, [el('b', { text: hard ? `${n(hard, 'issue')} to fix before printing` : list[0].title }), el('button.x', { 'aria-label': 'Close', onclick: () => { st.issuesOpen = false; renderIssues(); renderDock(); } }, [icon('x', { size: 16 })])]),
       ...list.map((i) => el('div.issue.' + i.sev, {}, [el('div.itext', {}, [el('b', { text: i.title + ' ' }), i.text]), el('div.iact', {}, [
         i.ids.length ? el('button.key.sm', { text: 'Show me', onclick: () => { const id = i.ids[showIdx++ % i.ids.length]; select(id); } }) : null,
-        i.fix ? el('button.key.sm.strong', { text: i.fix.label, onclick: i.fix.run }) : null,
+        i.fix ? fixBtn(i) : null,
       ])])),
     );
   }

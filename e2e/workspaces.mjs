@@ -1776,29 +1776,51 @@ test('the top bar fits at every desktop width in its widest case, in every works
     return { edge: r(top).right, last: r(items[items.length - 1]).right, inner: innerWidth, tabs: [tabs.left, tabs.right], tabsRow: getComputedStyle(document.getElementById('ws-tabs')).position === 'absolute',
       gaps: items.slice(1).map((k, i) => Math.round(r(k).left - r(items[i]).right)), name: r(document.querySelector('#ws-switch > .chip-btn > span')).width,
       squeezed: items.filter((k) => k.id !== 'ws-logo' && !k.closest('#ws-switch') && r(k).width < 44).map((k) => `${k.id || k.className} ${Math.round(r(k).width)}`),
-      word: r(document.querySelector('#ws-top .mount .lbl')).width > 1, printer: document.querySelector('#ws-top .printer').textContent };
+      word: r(document.querySelector('#ws-top .mount .lbl')).width > 1, printer: document.querySelector('#ws-top .printer').textContent,
+      // every control but the tabs (the badges widen them) and the name: the same width, to the 1/64 px Chrome lays out in,
+      // with and without the widest badges (rounded, a squeeze under half a pixel would pass: Terra 01a16a58)
+      others: items.filter((k) => k.id !== 'ws-tabs' && !k.closest('#ws-switch')).map((k) => `${k.id || k.className} ${r(k).width}`) };
   });
+  /* two passes per workspace. First the build's own tabs (this fresh build shows its Parts count): every guarantee, the
+     name's floors among them. Then the widest badges written into the tabs: the hard guarantees, and that the name is the ONLY
+     control that gives way - every other control keeps the width it had without the badges, and the name never grows. How
+     far it gives way there depends on how wide the text draws: the deploy runner (Ubuntu, the same IBM Plex web fonts)
+     draws the bar's text wider than Windows does, and run 40004575512 failed a 118 px floor in that pass at 1280 with the
+     name at 74.6 px while every other guarantee held (DECISIONS 2026-10-23, "the top bar fits", the runner's figures) */
+  const badges = (big) => page.evaluate((big) => { const tabs = [...document.querySelectorAll('#ws-tabs .tab')];
+    for (const [l, n] of [['Labels', '99/99'], ['Parts', '999']]) { const t = tabs.find((b) => b.textContent.startsWith(l)); let b = t.querySelector('.badge');
+      if (big) { if (!b) { b = t.appendChild(Object.assign(document.createElement('span'), { className: 'badge' })); b.dataset.e2e = '1'; } if (b.dataset.was === undefined) b.dataset.was = b.textContent; b.textContent = n; }
+      else if (b) { if (b.dataset.e2e) b.remove(); else if (b.dataset.was !== undefined) { b.textContent = b.dataset.was; delete b.dataset.was; } } } }, big);   // the build's own badge gets its text back
+  const WIDTHS = [1024, 1279, 1280, 1300, 1320, 1340, 1350, 1365, 1366, 1400, 1440, 1500, 1501, 1540, 1580, 1581, 1640, 1920];
   for (const [ws, label] of [['build', 'Build'], ['colors', 'Colors'], ['labels', 'Labels'], ['parts', 'Parts'], ['assemble', 'Assemble']]) {
     await page.setViewportSize({ width: 1280, height: 800 });
     if (ws !== 'build') {
       await page.click(`#ws-tabs .tab:has-text("${label}")`);
       await page.waitForFunction(([w, l]) => document.documentElement.dataset.ws === w && document.querySelector('#ws-tabs .tab.on')?.textContent.startsWith(l), [ws, label], { timeout: 60_000 });
     }
-    await page.evaluate(() => { const tabs = [...document.querySelectorAll('#ws-tabs .tab')];
-      for (const [l, n] of [['Labels', '99/99'], ['Parts', '999']]) { const t = tabs.find((b) => b.textContent.startsWith(l)); const b = t.querySelector('.badge') || t.appendChild(Object.assign(document.createElement('span'), { className: 'badge' })); b.textContent = n; } });
     assert.equal((await bar()).printer, 'Prusa CORE One L', `${ws}: the widest printer name`);
     assert.equal(await page.getByRole('button', { name: 'Under-Table · 185' }).count(), 1, `${ws}: the mount chip's accessible name keeps its word at 1280`);
-    for (const w of [1024, 1279, 1280, 1300, 1320, 1340, 1350, 1365, 1366, 1440, 1500, 1501, 1540, 1580, 1581, 1640, 1920]) {
-      await page.setViewportSize({ width: w, height: 800 });
-      const m = await bar(), at = `${ws} at ${w}: ${JSON.stringify(m)}`;
-      assert.ok(m.last <= m.edge + 0.5 && m.edge <= m.inner, `nothing past the bar's right edge - ${at}`);
-      assert.ok(m.gaps.every((g) => g >= 10), `10 px between controls - ${at}`);
-      assert.deepEqual(m.squeezed, [], `no control narrower than 44 px - ${at}`);
-      assert.equal(m.tabsRow, w < 1280, `the tabs have a row of their own below 1280 only - ${at}`);
-      if (m.tabsRow) assert.ok(m.tabs[0] >= 0 && m.tabs[1] <= m.inner, `the tabs' row is on the screen - ${at}`);
-      const tier = w >= 1280 && w <= 1365;
-      assert.equal(m.word, !tier, `the mount chip shows its word outside 1280-1365 only - ${at}`);
-      assert.ok(m.name >= (tier ? 118 : 60), `the build name keeps ${tier ? 'its 120 px floor' : 'some room'} - ${at}`);
+    const plain = {};
+    for (const big of [false, true]) {
+      await badges(big);
+      for (const w of WIDTHS) {
+        await page.setViewportSize({ width: w, height: 800 });
+        const m = await bar(), at = `${ws}${big ? ' with the widest badges' : ''} at ${w}: ${JSON.stringify(m)}`;
+        assert.ok(m.last <= m.edge + 0.5 && m.edge <= m.inner, `nothing past the bar's right edge - ${at}`);
+        assert.ok(m.gaps.every((g) => g >= 10), `10 px between controls - ${at}`);
+        assert.deepEqual(m.squeezed, [], `no control narrower than 44 px - ${at}`);
+        assert.equal(m.tabsRow, w < 1280, `the tabs have a row of their own below 1280 only - ${at}`);
+        if (m.tabsRow) assert.ok(m.tabs[0] >= 0 && m.tabs[1] <= m.inner, `the tabs' row is on the screen - ${at}`);
+        const tier = w >= 1280 && w <= 1365;
+        assert.equal(m.word, !tier, `the mount chip shows its word outside 1280-1365 only - ${at}`);
+        if (!big) { plain[w] = m; assert.ok(m.name >= (tier ? 118 : 60), `the build name keeps ${tier ? 'its 120 px floor' : 'some room'} - ${at}`); }
+        else {
+          // the badges must be there and count, or this pass measures the plain bar again (Terra 01a16a58): 57 px wider here, 61 on the runner
+          assert.ok(m.tabs[1] - m.tabs[0] >= plain[w].tabs[1] - plain[w].tabs[0] + 40, `the widest badges widen the tabs by 40 px or more - ${at}`);
+          assert.deepEqual(m.others, plain[w].others, `only the build name gives way: every other control keeps its width - ${at}`);
+          assert.ok(m.name <= plain[w].name + 0.5, `the build name gives way, it never grows - ${at}`);
+        }
+      }
     }
   }
   assert.deepEqual(clean(errors), []);
@@ -3682,7 +3704,7 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
    The stage keeps a palette's feet TPU (main.js tpuFeet): the boot preset, a whole palette or a saved one that names PLA
    feet, a reset; a unit's own PLA pick for its feet is refused. The feet's picker lists only the TPU lines and every other
    picker none; each line's header carries its material tag. */
-test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and on reset; a TPU-only feet picker; material tags on every line', async () => {
+test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and on reset; a TPU-only feet picker; material tags on every line; the picker’s material chips', async () => {
   const { ctx, page, errors } = await open('colors');
   const TPU_BLACK = 'Polymaker PolyFlex TPU95 Black';
   const feet = () => page.evaluate(() => (window.__GEN2_VIEWER__.palette().colors.Foot || {}).name);
@@ -3694,10 +3716,54 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   const caseHeads = await heads();
   assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'every line but TPU, each tagged');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
-  // the feet's picker: the note, the two TPU lines tagged TPU, nothing else
+  // THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a case's lines sell PLA and
+  // PETG, so a row of All · PLA · PETG stands above the list, All pressed, 8 px between the chips (the planner's floor)
+  const chips = () => page.evaluate(() => [...document.querySelectorAll('#ws-picker .mrow .mchip')].map((b) => [b.textContent.trim(), b.getAttribute('aria-pressed')]));
+  const swLabels = () => page.evaluate(() => [...document.querySelectorAll('#ws-picker .brands .sw')].map((e) => e.getAttribute('aria-label')));
+  assert.deepEqual(await chips(), [['All', 'true'], ['PLA', 'false'], ['PETG', 'false']], 'a case: a chip per material offered, All pressed');
+  const gaps = await page.evaluate(() => { const r = [...document.querySelectorAll('#ws-picker .mrow .mchip')].map((b) => b.getBoundingClientRect()); return r.slice(1).map((b, i) => +(b.left - r[i].right).toFixed(1)); });
+  assert.ok(gaps.length === 2 && gaps.every((g) => g >= 8), `8 px between the chips (${gaps.join(', ')})`);
+  const allCount = (await swLabels()).length;
+  // PETG narrows the list: the two lines that sell it (Elegoo down to its PETG colour), In this build down to its PETG, the chip pressed
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();
+  assert.deepEqual(await chips(), [['All', 'false'], ['PLA', 'false'], ['PETG', 'true']], 'PETG pressed, All released');
+  assert.deepEqual(await heads(), [['PETG', ['PETG']], ['PLA / PETG', ['PLA', 'PETG']]], 'PETG: the two lines that sell it, the others gone');
+  const petg = await swLabels();
+  assert.ok(petg.length > 0 && petg.length < allCount && petg.every((l) => /PETG/.test(l)), `every swatch left is PETG, In this build included (${petg.length} of ${allCount}): ${petg}`);
+  const elegoo = petg.filter((l) => /^Elegoo/.test(l));
+  assert.ok(elegoo.length && elegoo.every((l) => l === 'Elegoo PETG Black'), `Elegoo narrowed to its PETG colour (${elegoo})`);
+  // the search combines with the chip: "black" under PETG finds the PETG blacks alone; All with the words kept finds every black
+  await page.locator('#ws-picker .search').fill('black');
+  const petgBlack = await swLabels();
+  assert.ok(petgBlack.length > 0 && petgBlack.every((l) => /PETG/.test(l) && /black/i.test(l)), `PETG + "black": the PETG blacks alone (${petgBlack})`);
+  assert.deepEqual(await chips(), [['All', 'false'], ['PLA', 'false'], ['PETG', 'true']], 'typing keeps the chip');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^All$/ }).click();
+  const allBlack = await swLabels();
+  assert.ok(allBlack.length > petgBlack.length && allBlack.every((l) => /black/i.test(l)) && allBlack.some((l) => !/PETG/.test(l)), `All + "black": every black, the PLA ones back (${allBlack})`);
+  assert.equal(await page.inputValue('#ws-picker .search'), 'black', 'the chip never rebuilt the search box');
+  await page.locator('#ws-picker .search').fill('');
+  assert.equal((await swLabels()).length, allCount, 'All with the search cleared: the whole list again');
+  // the keyboard: Space on a focused chip presses it and the focus stays on it (a rebuilt row dropped it to the document, Terra 01a16a51)
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).focus();
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => [document.activeElement.textContent.trim(), document.activeElement.getAttribute('aria-pressed')]), ['PLA', 'true'], 'Space presses the focused chip and keeps the focus on it');
+  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one');
+  // a shared or uploaded palette can name a filament the catalogue does not know: its own words place it under a chip (Terra 01a16a51)
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const p = v.palette(); v.setPalette({ on: true, colors: { ...p.colors, Accent: { name: 'PETG Blue (custom)', hex: '#2f66b8' } }, over: p.over || {} }); });
+  await page.locator('#ws-colors .crow').first().click();   // the case picker opened again: it reads the palette afresh and starts at All
+  await page.waitForFunction(() => document.querySelector('#ws-picker .sw[aria-label="PETG Blue (custom)"]'), null, { timeout: 15_000 }).catch(() => assert.fail('the custom colour did not reach In this build'));
+  assert.deepEqual(await chips(), [['All', 'true'], ['PLA', 'false'], ['PETG', 'false']], 'a picker opened again starts at All');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();
+  assert.ok((await swLabels()).includes('PETG Blue (custom)'), 'an uncatalogued PETG in the build answers the PETG chip by its name');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).click();
+  assert.ok(!(await swLabels()).includes('PETG Blue (custom)'), 'and not the PLA chip');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();   // left pressed: the feet's picker must open at All
+  // the feet's picker: the note, the two TPU lines tagged TPU, nothing else; no material row (TPU alone), and the case's
+  // PETG chip did not follow (a sticky chip would narrow the TPU lines to nothing: the 11 swatches prove the reset)
   await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Foot$/ }) }).first().click();
   await page.waitForFunction(() => /only TPU is listed/.test(document.getElementById('ws-picker')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('the feet picker did not open with its note'));
   assert.deepEqual(await heads(), [['PolyFlex™ TPU95', ['TPU']], ['PolyFlex™ TPU90', ['TPU']]]);
+  assert.equal(await page.locator('#ws-picker .mrow').count(), 0, 'the feet offer TPU alone: no material row');
   const sws = await page.evaluate(() => [...document.querySelectorAll('#ws-picker .brands .sw')].map((e) => e.getAttribute('aria-label')));
   assert.ok(sws.length === 11 && sws.every((n) => / TPU9/.test(n)), `only TPU swatches (In this build + 10): ${sws}`);
   // TPU95 Orange, then the reset: TPU95 Black
@@ -4064,4 +4130,173 @@ test('Feedback & support: the top bar button and the build menu open the shared 
   }
   assert.deepEqual(errs(P.errors), []);
   await P.ctx.close();
+});
+
+/* THE GPU PASS'S FINDINGS (2026-10-23, Joey's laptop and desktop browsers): the Quality pill's pick did not survive a reload
+   (the shell's pill drew the tier without saving it), and the Parts badge and the size line went stale after an undo made
+   from Labels (the bar and the dock were drawn on the store change, before the regenerate, and never after it). */
+test('the Quality pill keeps a visitor\'s pick across a reload, and marks it as the user\'s', async () => {
+  // without the harness's Fast init script, which would reset the pick on every load: Fast is seeded once instead
+  const c = await browser.newContext({ viewport: { width: 1366, height: 768 } }); contexts.add(c);
+  const seed = await c.newPage(); await seed.goto(`${base}/css/app.css`);
+  await seed.evaluate(() => { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); });
+  await seed.close();
+  const { ctx, page, errors } = await open('build', { context: c });
+  const q = () => page.evaluate(() => ({ pill: document.querySelector('#ws-tools .quality span')?.textContent, tier: window.__GEN2_VIEWER__.quality, saved: localStorage.getItem('gen2-quality'), set: localStorage.getItem('gen2-quality:set') }));
+  assert.equal((await q()).tier, 'fast', 'the seeded tier');
+  await page.click('#ws-tools .quality');   // the next tier in the cycle
+  await settle(page, 800);
+  const picked = await q();
+  assert.ok(picked.tier !== 'fast' && picked.saved === picked.tier && picked.set === '1', `the pick is saved as the user's: ${JSON.stringify(picked)}`);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#ws-tools .quality', { timeout: 120_000 }); await settle(page, 1500);
+  const back = await q();
+  assert.equal(back.tier, picked.tier, `the pick survives the reload: ${JSON.stringify(back)}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the Parts badge and the size line follow an undo made from Labels: the badge at once, the dock once the stage has rebuilt', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }]);
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await armSize(page, '1W·1H');
+  await page.waitForFunction(() => (window.__spots || []).length, null, { timeout: 30_000 });
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
+  const badge = () => page.evaluate(() => [...document.querySelectorAll('#ws-tabs .tab')].find((b) => /Parts/.test(b.textContent))?.querySelector('.badge')?.textContent || null);
+  const b2 = await badge();   // two units
+  await clickSpot(page, 3, y);   // a third, on the right
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 15_000 });
+  await settle(page, 2500);
+  const b3 = await badge();
+  assert.ok(b2 && b3 && +b3 > +b2, `the badge grew with the unit: ${b2} -> ${b3}`);
+  // to Labels, where the undo of that placement regenerates the build
+  await page.evaluate(() => [...document.querySelectorAll('#ws-tabs .tab')].find((b) => /Labels/.test(b.textContent)).click());
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 }); await settle(page, 1500);
+  const dims = () => page.evaluate(() => [...document.querySelectorAll('#ws-dock .big')].map((e) => e.textContent).find((s) => /×/.test(s)) || null);
+  const d3 = await dims();
+  assert.equal(await badge(), b3, 'the Labels bar shows the same count');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 15_000 });
+  assert.equal(await badge(), b2, 'the badge follows the record at once, before the stage has rebuilt');
+  await page.waitForFunction(() => !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 30_000 }).catch(() => {});
+  await settle(page, 2500);
+  const d2 = await dims();
+  assert.ok(d2 && d3 && d2 !== d3, `the size line follows the rebuilt build: ${d3} -> ${d2}`);
+  assert.equal(await badge(), b2, 'and the badge still');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* HOVER HINTS ON EVERY WORKSPACE (2026-10-23, Joey: "can we do more video animations for when hovering over certain buttons
+   to illustrate how they work?"). A hinted control carries data-hint = its clip's name (js/ui/hint.js attachHint); resting
+   the mouse on it shows the bubble beside its panel with that clip after the dwell, leaving hides it, and while a modal
+   dialog is up (the setup sheet here) nothing shows, not even for a harness that fires the hover and the focus straight at
+   the control under the veil; the sheet closing brings the hints back. HINTED lists, per workspace, the way into each
+   state that offers hints and the clips there: a lost attachHint or a renamed clip fails the first assertion, a clip
+   missing from img/hints/ the second (the <video> errors and the SVG scene takes its place). */
+const HINTED = {   // per workspace: the panel the hints wait for (Labels renders after its list module loads), then the steps
+  build: { ready: '#ws-lib .size', steps: [
+    { keys: ['build-place'] },
+    { go: async (page) => { await page.locator('#ws-lib [role=tab]:has-text("Build style")').click(); await page.waitForSelector('[data-hint="build-sidecovers"]', { timeout: 15_000 }); }, keys: ['build-sidecovers'], focus: '[data-hint="build-sidecovers"] .seg' },   // the hint is on the track; the keyboard reaches its segments
+    // a 2W over a 1W leaves a red slot under it; the issue card, opened from the dock's status, offers Fill all
+    { go: async (page) => {
+      await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.gridH = 2; s.gridW = 2; s.placed = [{ id: 1, x: 0, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.nextId = 3; }, 'edit'));
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 2, null, { timeout: 90_000 });
+      await page.click('#ws-dock .status'); await page.waitForSelector('#ws-issues:not([hidden])', { timeout: 15_000 });
+    }, keys: ['build-fill'] },
+  ] },
+  colors: { ready: '#ws-colors .row4', steps: [{ keys: ['colors-browse', 'colors-surprise', 'colors-simplify'] }] },   // Simplify: the root kit's look has five filaments
+  labels: { ready: '#ws-labels .foot', steps: [{ keys: ['labels-type', 'labels-file', 'labels-picker'] }] },
+  parts: { ready: '#ws-parts .prow', steps: [{ keys: ['parts-track'] }] },
+  assemble: { ready: '#ws-tools .cam', steps: [{ keys: ['assemble-camera'] }] },
+};
+test('hover hints: every hinted control shows its clip on hover and hides on leave; none shows over the setup sheet or an open card', async () => {
+  const shown = (page, key) => page.waitForFunction((k) => { const b = document.getElementById('ws-hint'); return !!b && !b.hidden && b.classList.contains('show') && (b.querySelector('.scene video')?.getAttribute('src') || '').endsWith(`/${k}.mp4`); }, key, { timeout: 15_000 });
+  const isHidden = () => { const b = document.getElementById('ws-hint'); return !b || b.hidden; };
+  const hidden = (page) => page.waitForFunction(isHidden, null, { timeout: 15_000 });
+  const hinted = (key) => `#ws [data-hint="${key}"]`;
+  // a hover and a focus fired straight at the control, as a harness or the keyboard can under a veil
+  const poke = (page, key) => page.evaluate((sel) => { const b = document.querySelector(sel); b.dispatchEvent(new MouseEvent('mouseenter')); b.dispatchEvent(new FocusEvent('focusin', { bubbles: true })); }, hinted(key));
+  for (const [ws, { ready, steps }] of Object.entries(HINTED)) {
+    const { ctx, page, errors } = await open(ws);
+    await page.waitForSelector(ready, { timeout: 30_000 });
+    let last = null;
+    for (const step of steps) {
+      if (step.go) await step.go(page);
+      const present = await page.evaluate(() => [...new Set([...document.querySelectorAll('#ws [data-hint]')].map((e) => e.dataset.hint))]);
+      for (const key of step.keys) assert.ok(present.includes(key), `${ws}: no control carries the ${key} hint (present: ${present.join(', ') || 'none'})`);
+      for (const key of step.keys) {
+        await page.locator(hinted(key)).first().hover({ timeout: 15_000 });
+        await shown(page, key).catch(async () => assert.fail(`${ws}: no bubble with ${key}.mp4 on hover (bubble: ${await page.evaluate(() => document.getElementById('ws-hint')?.outerHTML.slice(0, 300))})`));
+        // a real recording, not a stub: the clip's metadata arrives and it runs 6 s or more (Joey's 10-15 s; the shortest is 9 s)
+        await page.waitForFunction(() => { const v = document.querySelector('#ws-hint .scene video'); return !!v && v.readyState >= 1 && v.duration >= 6; }, null, { timeout: 15_000 })
+          .catch(async () => assert.fail(`${ws}: ${key}.mp4 did not load as a clip of 6 s or more (readyState ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.readyState)}, duration ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.duration)})`));
+        // beside the control's panel, never over the control itself (spacing-between-controls: a hint must not cover what it explains)
+        const over = await page.evaluate((sel) => { const b = document.getElementById('ws-hint').getBoundingClientRect(), r = document.querySelector(sel).getBoundingClientRect(); return !(b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom); }, hinted(key));
+        assert.equal(over, false, `${ws}: the bubble for ${key} covers its control`);
+        await page.mouse.move(640, 430);   // onto the stage
+        await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${key} stayed after the mouse left`));
+        last = key;
+      }
+      // the keyboard: focus on the control (or, for a hint on a group, on a segment inside it) shows the hint too; focus
+      // leaving it hides it (Sol 01a16a18: a `focus` listener on the group never fired, the event does not bubble)
+      if (step.focus) {
+        await page.focus(step.focus);
+        await shown(page, last).catch(() => assert.fail(`${ws}: no bubble for ${last} on keyboard focus inside its group`));
+        await page.evaluate(() => document.activeElement.blur());
+        await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${last} stayed after focus left`));
+      }
+    }
+    if (ws === 'colors') {
+      // an open card the control is not part of: Simplify's card opens under the pointer that pressed Simplify…, and a
+      // bubble beside the panel would cover it, so none shows while it is up (the hint on Fill all, INSIDE its issue card, shows above)
+      await page.click(hinted('colors-simplify'));
+      await page.waitForSelector('#ws-simplify:not([hidden])', { timeout: 15_000 });
+      await poke(page, 'colors-simplify'); await settle(page, 1000);
+      assert.equal(await page.evaluate(isHidden), true, 'colors: a hint showed over the Simplify card');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.getElementById('ws-simplify').hidden, null, { timeout: 15_000 });
+    }
+    // a bubble already up when a modal dialog opens (the setup sheet) goes down with it: the veil under the pointer fires the
+    // control's mouseleave, and a keyboard-shown bubble goes with the focus the sheet takes (Sol 01a16a18 said it would
+    // stay; it does not, and no extra listener is needed)...
+    await page.locator(hinted(last)).first().hover({ timeout: 15_000 });
+    await shown(page, last);
+    await page.evaluate(() => { window.__GEN2_CTX__().openSetup('mount'); });
+    await page.waitForSelector('#ws-setup', { timeout: 15_000 });
+    await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${last} stayed up over the setup sheet`));
+    // ...and while it is up a hover and a focus fired at a hinted control show nothing
+    await poke(page, last); await settle(page, 1000);   // past the dwell
+    assert.equal(await page.evaluate(isHidden), true, `${ws}: a hint showed over the setup sheet`);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.getElementById('ws-setup'), null, { timeout: 15_000 });
+    // ...and once it is closed the same control hints again
+    await page.locator(hinted(last)).first().hover({ timeout: 15_000 });
+    await shown(page, last).catch(() => assert.fail(`${ws}: no bubble for ${last} after the sheet closed`));
+    await page.mouse.move(640, 430);
+    await hidden(page);
+    assert.deepEqual(clean(errors), [], ws);
+    await ctx.close();
+  }
+  // a narrow window with a mouse (1000 px: the phone chrome's sheets, hover still on): the toolbar chip hints under its bar;
+  // while a sheet is open nothing hints, not even a control outside the sheet; the sheet closed, it hints again
+  const narrow = await browser.newContext({ viewport: { width: 1000, height: 700 } }); contexts.add(narrow); await narrow.addInitScript(FAST);
+  const N = await open('assemble', { context: narrow });
+  await N.page.waitForSelector('#ws-steps .sheet-handle', { timeout: 30_000 });
+  await N.page.locator(hinted('assemble-camera')).hover({ timeout: 15_000 });
+  await shown(N.page, 'assemble-camera').catch(() => assert.fail('narrow: no bubble on the camera chip'));
+  assert.ok(await N.page.evaluate(() => document.getElementById('ws-hint').getBoundingClientRect().top >= document.getElementById('ws-tools').getBoundingClientRect().bottom), 'narrow: the bubble sits under the toolbar');
+  await N.page.mouse.move(500, 400); await hidden(N.page);
+  await N.page.locator('#ws-steps .sheet-handle').click();
+  await N.page.waitForSelector('#ws-steps.sheet.open', { timeout: 15_000 });
+  await poke(N.page, 'assemble-camera'); await settle(N.page, 1000);
+  assert.equal(await N.page.evaluate(isHidden), true, 'narrow: a hint showed while a sheet was open');
+  await N.page.locator('#ws-steps .sheet-handle').click();
+  await N.page.waitForFunction(() => !document.querySelector('#ws .sheet.open'), null, { timeout: 15_000 });
+  await N.page.locator(hinted('assemble-camera')).hover({ timeout: 15_000 });
+  await shown(N.page, 'assemble-camera').catch(() => assert.fail('narrow: no bubble once the sheet closed'));
+  assert.deepEqual(clean(N.errors), [], 'narrow');
+  await narrow.close();
 });
