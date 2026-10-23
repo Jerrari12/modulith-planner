@@ -2665,3 +2665,43 @@ Dated calls made while building, with who made them. The brief and the inventory
   s, where an earlier run beside the e2e suite timed out at 905 s); the full e2e suite 80 of 80 in software rendering
   (`E2E_SOFT=1`, the CI runner's mode).
 - **Deploy:** a new feature, so it waits for Joey's go. Branch `feedback-support`.
+
+## 2026-10-22 (a re-port keeps the side-cover toggle: the edits ahead of the old planner live in the port)
+
+- **Why.** `npm run drift` (2026-10-21) found hand edits in two generated modules: js/rules/bom.js (5 lines added, 11
+  removed against a fresh port) and js/rules/schema.js (1 added, 5 removed). tools/port-rules.mjs rewrites both whole,
+  so the next port from the old planner would have dropped them, the live Side covers toggle (`a1f085f5`) among them.
+- **Four edits, not one.** (1) the toggle's gate in the bill, `if (build.sideCovers !== false)` (2026-10-20); (2) its
+  record field, `sideCovers` in BUILD_FIELDS and sanitize's `d.sideCovers !== false` (2026-10-20); (3) side covers on the
+  outer sides of each column run, so a gap build bills 4, not 2 (2026-10-16); (4) the back cover row's tear-away sentence
+  (v2609, 2026-10-20). None is in the old planner on main, origin/main or cutover-redirect.
+- **Where they live now.** tools/port-ahead.mjs: a dated list of exact `[from, to]` edits that port-rules.mjs applies to
+  each generated module before it writes or compares it. A planner-only change to bom.js, layout.js or schema.js goes
+  there from now on, never into the module by hand. Not taken: moving the toggle out of the ported files (a wrapper
+  that filters the bill, a hand-written field list), because it changes the served files, and the per-run rule sits
+  inside the side-cover loop, where a wrapper would have to count the covers again.
+- **Upstream, Joey's call** (the old planner is not edited from here): (3) is a bug the old planner has too (its gap
+  builds under-bill side covers the same way); (2) there would close Sol's documented limit of 2026-10-20 (an old-planner
+  re-save turns the covers back on). (1) is planner-only (the old planner has no toggle), and (4) was already his call
+  (the 2026-10-20 back cover entry). An entry goes when the old planner carries its change or retires at the cutover.
+- **How it fails.** An edit whose text is gone, is found twice, or is already there (the old planner carries it) stops
+  the port in write mode, naming the entry, and is DRIFT under `--check` (exit 1). An entry for a module the port does
+  not write is refused before anything is written; a module in the port's list that is never written fails the run.
+- **Byte-identical.** `npm run drift`: no drift on the three modules. A fresh port (`--out DIR`, new) is identical byte
+  for byte to the committed bom.js, schema.js and layout.js and to the copies fetched from planner.modulith.systems
+  before the change; an in-place port leaves js/rules unchanged. The modules' headers still list the mechanical edits
+  only: a line naming the AHEAD edits would change the served files.
+- **Checks.** test/port-ahead.test.mjs (2 tests) ports fresh into a temp directory and runs what it wrote: the field
+  in BUILD_FIELDS, sanitize's reading (absent, 0, '', null, 'false' on; false off), serializeBuild carrying it; off
+  bills no side covers and changes no other row; the gap build bills 4; the tear-away sentence; and the apply rules
+  (gone, already there, found twice, an insert-only edit already there). Mutation-checked, 8 of 8 caught: each entry
+  dropped, the field's two edits dropped one at a time, a broken `from`, the per-run rule's second edit dropped. It
+  skips without the old planner checkout (CI), like the parity gate.
+- **Suites.** npm test 605: 599 pass, 5 skipped, 1 fail, M28's timing gate in test/simplify.test.mjs (Colors code this
+  does not touch) while another session's suite shared the machine; alone it passes (median 0.19 ms). e2e with
+  `E2E_SOFT=1`: 77 of 79, also beside another session's e2e run; the two failures, the stale-tab guard's Studio case
+  (a 15 s wait) and the build store case's "the first tab did not go stale", pass when re-run alone (3 of 3 with the
+  guard's other case). No served file changed, so the page under test was main's.
+- **Review:** Terra `01a165bb`, routine: 2 findings, both confirmed and fixed (a stray entry was refused only after the
+  modules were written; the port's module list was not checked against the modules it wrote).
+- **Deploy:** none needed: the served files are byte-identical.
