@@ -1,15 +1,18 @@
 /* THE HOVER-HINT CLIPS, recorded from the app itself (Joey, 2026-10-13: a 10-15 s recording of the planner in use, as the
-   3D Printopia clip was; the SVG scenes are the placeholders until these exist). Headless Chrome drives the Labels workspace
-   with a drawn cursor the way a visitor would while Chrome's screencast (CDP Page.startScreencast: a JPEG per repaint, with
-   its timestamp) records it; ffmpeg assembles the frames at their real timing, scales to the bubble's size and writes H.264
-   MP4s under img/hints/ (the names js/workspaces/labels.js looks for; img/hints/README.md). Playwright's own recordVideo is
-   not used: its ffmpeg download is unreachable from this machine, and the system ffmpeg is.
+   3D Printopia clip was; the SVG scenes are the placeholders until these exist). Headless Chrome drives a workspace with a
+   drawn cursor the way a visitor would while Chrome's screencast (CDP Page.startScreencast: a JPEG per repaint, with its
+   timestamp) records it; ffmpeg assembles the frames at their real timing, scales to the bubble's size and writes H.264
+   MP4s under img/hints/ (the names the workspaces' HINTS tables look for; img/hints/README.md). Playwright's own recordVideo
+   is not used: its ffmpeg download is unreachable from this machine, and the system ffmpeg is.
 
-     node tools/hint-clips.mjs            -> img/hints/labels-{type,file,picker,fill,several}.mp4
-     node tools/hint-clips.mjs fill       -> one clip
+     node tools/hint-clips.mjs                -> every clip, img/hints/<workspace>-<key>.mp4
+     node tools/hint-clips.mjs labels-fill    -> one clip
+     node tools/hint-clips.mjs build          -> one workspace's clips
 
-   Every clip runs against the local repo; the Part Picker clip also serves the Label Studio checkout beside it (STUDIO_DIR=
-   overrides the path) for the modal, as the e2e suite does. */
+   A clip's key names its workspace (`labels-type` opens ?ws=labels); since 2026-10-23 (Joey: "more video animations for
+   when hovering over certain buttons") the other workspaces record here too. Every clip runs against the local repo; the
+   Part Picker clip also serves the Label Studio checkout beside it (STUDIO_DIR= overrides the path) for the modal, as the
+   e2e suite does. */
 import { mkdir, writeFile, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -41,8 +44,8 @@ const posix = (p) => p.replace(/\\/g, '/');
 
 /* a drawn cursor: Playwright's mouse is invisible, so the page gets one that follows it */
 const CURSOR = `window.__cur = (x, y, down) => { let c = document.getElementById('__cur'); if (!c) { c = document.createElement('div'); c.id = '__cur'; c.style.cssText = 'position:fixed;z-index:999999;pointer-events:none;width:24px;height:32px;margin:-2px 0 0 -3px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));transition:transform .08s'; c.innerHTML = '<svg viewBox="0 0 22 30"><path d="M2 2l0 22 6-5 4 9 4-2-4-9 8-1z" fill="#111" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>'; document.body.appendChild(c); } c.style.left = x + 'px'; c.style.top = y + 'px'; c.style.transform = down ? 'scale(.85)' : 'none'; };`;
-async function driver(page) {
-  let cx = W * 0.6, cy = H * 0.7;
+async function driver(page, [w, h] = [W, H]) {
+  let cx = w * 0.6, cy = h * 0.7;
   await page.evaluate(CURSOR);
   const put = async (x, y, down = false) => { cx = x; cy = y; await page.mouse.move(x, y); await page.evaluate(([a, b, d]) => window.__cur(a, b, d), [x, y, down]); };
   await put(cx, cy);
@@ -54,21 +57,40 @@ async function driver(page) {
   const centre = async (sel) => { const r = await page.locator(sel).first().boundingBox(); if (!r) throw new Error('no element ' + sel); return [r.x + r.width / 2, r.y + r.height / 2]; };
   const to = async (sel, ms) => { const [x, y] = await centre(sel); await glide(x, y, ms); };
   const type = async (text, ms = 85) => { for (const ch of text) { await page.keyboard.type(ch); await sleep(ms + Math.random() * 40); } };
+  /* a drag with the button down (an orbit on the stage), the cursor drawn pressed */
+  const drag = async (x0, y0, x1, y1, ms = 800) => {
+    await glide(x0, y0, 500); await put(x0, y0, true); await page.mouse.down();
+    const n = Math.max(8, Math.round(ms / 25));
+    for (let i = 1; i <= n; i++) { const t = i / n; await put(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, true); await sleep(ms / n); }
+    await page.mouse.up(); await put(x1, y1, false);
+  };
   /* a cut: from this moment the clip is framed by `crop` (a 240:110 window); the frames are split on their timestamps and
      the segments joined, so one clip can follow a gesture from the panel into a modal and back (the Part Picker, 2026-10-20) */
   const cuts = [];
   const cut = (crop) => { cuts.push({ ts: Date.now() / 1000, crop }); };
-  return { glide, click, to, type, put, centre, cut, cuts };
+  return { glide, click, to, type, put, centre, cut, cuts, drag };
 }
 const tile = (text) => `#ws-labels .key.tile:has-text("${text}")`;
-async function labelsPage(ctx, base, query = '') {
+/* a control scrolled into its panel's view (as far as the panel scrolls), and where it landed */
+async function scrollTo(page, sel) {
+  await page.evaluate((s) => document.querySelector(s).scrollIntoView({ block: 'center' }), sel);
+  await sleep(200);
+  const r = await page.locator(sel).first().boundingBox(); if (!r) throw new Error('no element ' + sel);
+  return r;
+}
+/* a workspace, booted (the stage has its manifest, the workspace its dock or player, as the e2e suite waits), the bubble
+   kept out of its own clip. Labels gets EdgeLabel faceplates, so the drawers take labels */
+async function openPage(ctx, base, ws, query = '') {
   const page = await ctx.newPage();
-  await page.goto(`${base}/index.html?ws=labels&debug=1${query}`, { waitUntil: 'load', timeout: 90_000 });
-  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-labels .foot'), null, { timeout: 90_000 });
+  await page.goto(`${base}/index.html?ws=${ws}&debug=1${query}`, { waitUntil: 'load', timeout: 90_000 });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && window.__GEN2_STORE__ && document.querySelector('#ws-dock, #ws-player'), null, { timeout: 90_000 });
   await page.addStyleTag({ content: '#ws-hint { display: none !important; }' });   // the bubble must not appear in its own clip
-  // EdgeLabel faceplates, so the drawers take labels: the switch loads parts, so wait for the record to say so
-  await page.evaluate(() => { const btn = [...document.querySelectorAll('#ws-labels button')].find((b) => b.textContent.trim().startsWith('Switch to EdgeLabel')); if (btn) btn.click(); });
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  if (ws === 'labels') {
+    await page.waitForSelector('#ws-labels .foot', { timeout: 90_000 });
+    // EdgeLabel faceplates, so the drawers take labels: the switch loads parts, so wait for the record to say so
+    await page.evaluate(() => { const btn = [...document.querySelectorAll('#ws-labels button')].find((b) => b.textContent.trim().startsWith('Switch to EdgeLabel')); if (btn) btn.click(); });
+    await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  }
   await page.waitForTimeout(1200);
   return page;
 }
@@ -81,11 +103,20 @@ async function addLabels(page, words) {
   await page.waitForTimeout(400);
 }
 
-/* each clip: { setup?(page), run(page, d), popup?, crop }; the recording starts just before run(). `crop` [x, y, w, h] frames the
-   subject at the bubble's 240:110 (the panel with the model beside it; for Fill and Place several the model with the panel's edge) */
+/* each clip, keyed `<workspace>-<name>` (the file's name; the workspace it opens): { query?, setup?(page), run(page, d), popup?,
+   crop }; the recording starts just before run(). `crop` [x, y, w, h] frames the subject at the bubble's 240:110 (the panel
+   with the model beside it; for Fill and Place several the model with the panel's edge) */
 const PANEL = [20, 215, 700, 321], MODEL = [330, 200, 620, 284], BOTH = [20, 180, 760, 348], STUDIO = [0, 40, 700, 321], MODAL = [18, 18, 1004, 460];   // MODAL: the Part Picker frame's top (the steps bar, the family and type tiles) inside the modal's 18 px inset   // tighter than the frame: the bubble is 248 px wide, so the gesture must read
+/* the 1280 x 800 framings (the 2026-10-23 clips): the library's size tiles with the spots above the model; the library's
+   lower part; the model alone; the issue card with the red slot above it; a panel and the whole model at half scale (the
+   gallery, Surprise me, the parts list), the same lower down (the candidates' buttons; the parts list with the dock); the
+   Simplify card with the model above it; the toolbar with the overview under it */
+const DESK = [1280, 800];
+const LIB_TOP = [20, 170, 700, 321], MODEL_D = [230, 180, 700, 321], GAP = [290, 380, 700, 321];
+const LIST = [20, 150, 700, 321], ROWS = [20, 290, 700, 321];
+const WIDE = [20, 150, 960, 440], WIDE_LOW = [20, 250, 960, 440], WIDE_DOCK = [20, 360, 960, 440], SIMP = [160, 260, 960, 440], TOOLS = [460, 60, 700, 321];
 const CLIPS = {
-  type: {
+  'labels-type': {
     crop: PANEL,
     async run(page, d) {
       await d.to(tile('Type a label'), 700); await sleep(500); await d.click(); await sleep(500);
@@ -94,7 +125,7 @@ const CLIPS = {
       await d.to('#ws-labels .list .chip-l', 600); await sleep(1800);
     },
   },
-  file: {
+  'labels-file': {
     crop: PANEL,
     async run(page, d) {
       const fixture = join(tmpdir(), 'modulith-hint-labels.json');
@@ -107,7 +138,7 @@ const CLIPS = {
       await rm(fixture, { force: true });
     },
   },
-  fill: {
+  'labels-fill': {
     crop: MODEL,
     async setup(page) { await addLabels(page, ['M3 screws', 'Hex keys', 'Solder']); },
     async run(page, d) {
@@ -118,7 +149,7 @@ const CLIPS = {
       await sleep(2600);
     },
   },
-  several: {
+  'labels-several': {
     crop: BOTH,
     async setup(page) { await addLabels(page, ['M3 screws', 'Hex keys', 'Solder']); },
     async run(page, d) {
@@ -136,7 +167,7 @@ const CLIPS = {
      modal and back out: the tile, the modal with a nut picked (Nuts → Hex nut → M3, no lengths step, as the e2e does), Add,
      the label landing in the list. The Studio is the checkout beside this repo on a second loopback server, as the e2e
      suite does it: the live Studio's Picker refuses a loopback planner as its parent (the handshake never answers). */
-  picker: {
+  'labels-picker': {
     crop: PANEL,
     query: () => { if (!studio) throw new Error(`no Label Studio checkout at ${STUDIO_DIR} (STUDIO_DIR= overrides)`); return '&new=1&studio=' + encodeURIComponent(studio); },
     async run(page, d) {
@@ -158,10 +189,130 @@ const CLIPS = {
       await d.to('#ws-labels .list .chip-l', 700); await sleep(1800);
     },
   },
+
+  /* THE OTHER WORKSPACES' CLIPS (2026-10-23, Joey's eight), at 1280 x 800 so the desktop layout keeps its one toolbar row and
+     every panel is whole. Two framings: a 700 x 321 window at the Labels clips' scale for a panel and the model's near side,
+     and a 960 x 440 window (the Picker modal's half scale) where a panel and the whole model must both read. */
+  'build-place': {   // a size tile, the amber spots, a click on the top one, the drawer landing; Esc ends placing
+    size: DESK, crop: LIB_TOP,
+    async run(page, d) {
+      const before = await page.evaluate(() => window.__GEN2_VIEWER__.build.placed.length);
+      await d.to('#ws-lib .size:not(.dis):has-text("2W·1H")', 800); await sleep(500); await d.click();
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.spotScreens().length, null, { timeout: 30_000 }); await sleep(1000);
+      // the "+" on the top row nearest the model's middle (x 2 on the root kit)
+      const top = await page.evaluate(() => window.__GEN2_VIEWER__.spotScreens().filter((m) => m.y === 0).sort((a, b) => Math.abs(a.sx - 640) - Math.abs(b.sx - 640))[0]);
+      if (!top) throw new Error('no spot on the top row');
+      await d.glide(top.sx, top.sy, 900);
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.spotScreens().some((m) => m.hovered), null, { timeout: 15_000 }); await sleep(400);
+      await d.click();
+      await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n + 1 && !window.__GEN2_VIEWER__.regenBusy, before, { timeout: 90_000 });
+      await sleep(1800);
+      await page.keyboard.press('Escape'); await sleep(1000);
+    },
+  },
+  'build-fill': {   // a 2W over a 1W leaves a red slot; the issue card is open: Fill all puts a 1W case in it
+    size: DESK, crop: GAP,
+    async setup(page) {
+      await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.gridH = 2; s.gridW = 2; s.placed = [{ id: 1, x: 0, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.nextId = 3; }, 'edit'));
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 2 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+      await page.click('#ws-dock .status'); await page.waitForSelector('#ws-issues:not([hidden])', { timeout: 15_000 });
+      await sleep(800);
+    },
+    async run(page, d) {
+      await sleep(1400);
+      await d.to('[data-hint="build-fill"]', 900); await sleep(600); await d.click();
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 3 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+      await sleep(2600);
+    },
+  },
+  'build-sidecovers': {   // Build style's Side covers: Off takes the panels off the model, On brings them back; cut to the model each time
+    size: DESK,
+    /* the covers wear an orange of their own for the clip: in the kit's look they print in the case's black, and a black
+       panel coming off a black wall cannot be seen at the bubble's size (the visitor's colours are switched on for it;
+       Build shows the instruction colours until Colors is opened). The library scrolls as far as it can to the track,
+       which sits low, so the panel framing is read from where the track lands (`this.lib`). */
+    async setup(page) {
+      await page.evaluate(() => { const v = window.__GEN2_VIEWER__, f = { name: 'Mystery Orange', hex: '#FF6A1A' }; v.setColor('SideCover', f); v.setColor('SideCover:FACE', f); v.setUseCustom(true); });
+      // a short orbit, so the build's right side faces the camera: at the kit's own framing it is a sliver
+      await page.mouse.move(860, 420); await page.mouse.down(); for (let i = 1; i <= 12; i++) { await page.mouse.move(860 - i * 9, 420 + i); await sleep(30); } await page.mouse.up();
+      await sleep(900);
+      await page.locator('#ws-lib [role=tab]:has-text("Build style")').click();
+      await page.waitForSelector('[data-hint="build-sidecovers"]', { timeout: 15_000 });
+      const track = await scrollTo(page, '[data-hint="build-sidecovers"]');
+      this.lib = [20, Math.round(track.y + track.height / 2) - 240, 700, 321]; this.crop = this.lib;
+      await sleep(600);
+    },
+    async run(page, d) {
+      await d.to('[data-hint="build-sidecovers"] .seg:has-text("Off")', 800); await sleep(500); await d.click();
+      d.cut(MODEL_D);
+      await page.waitForFunction(() => window.__GEN2_STORE__.state.sideCovers === false && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+      await sleep(2200);
+      await scrollTo(page, '[data-hint="build-sidecovers"]');   // the rebuilt library starts at its top
+      await sleep(300);
+      d.cut(this.lib);
+      await d.to('[data-hint="build-sidecovers"] .seg:has-text("On")', 700); await sleep(500); await d.click();
+      d.cut(MODEL_D);
+      await page.waitForFunction(() => window.__GEN2_STORE__.state.sideCovers !== false && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+      await sleep(2200);
+    },
+  },
+  'colors-browse': {   // the gallery: resting on a card shows the look on the model, a click opens it, Apply dresses the build
+    size: DESK, crop: WIDE,
+    async run(page, d) {
+      await d.to('[data-hint="colors-browse"]', 800); await sleep(500); await d.click();
+      await page.waitForSelector('#ws-gallery .lcard', { timeout: 30_000 }); await sleep(1200);
+      await d.to('#ws-gallery .lcard >> nth=1', 700); await sleep(1300);
+      await d.to('#ws-gallery .lcard >> nth=2', 600); await sleep(1300);
+      await d.click(); await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 }); await sleep(900);
+      await d.to('#ws-gallery .apply', 600); await sleep(400); await d.click(); await sleep(2000);
+    },
+  },
+  'colors-surprise': {   // three looks under the rules; resting on one shows it, More like this rolls three more, Use this look keeps one
+    size: DESK, crop: WIDE_LOW,
+    async run(page, d) {
+      await d.to('[data-hint="colors-surprise"]', 800); await sleep(500); await d.click();
+      await page.waitForSelector('#ws-surprise .cand', { timeout: 30_000 }); await sleep(1200);
+      await d.to('#ws-surprise .cand >> nth=1 >> .pick', 700); await sleep(1300);
+      await d.to('#ws-surprise .cand >> nth=1 >> .like', 500); await sleep(300); await d.click(); await sleep(1500);
+      await d.to('#ws-surprise .cand >> nth=0 >> .pick', 600); await sleep(1100);
+      await d.to('#ws-surprise .cand >> nth=0 >> .keep', 500); await sleep(300); await d.click(); await sleep(1600);
+    },
+  },
+  'colors-simplify': {   // Simplify: Down to 3 filaments, the list of what would change, Apply
+    size: DESK, crop: SIMP,
+    async run(page, d) {
+      await d.to('[data-hint="colors-simplify"]', 800); await sleep(500); await d.click();
+      await page.waitForSelector('#ws-simplify:not([hidden])', { timeout: 15_000 }); await sleep(1600);
+      await d.to('#ws-simplify .tgt .seg:has-text("3 filaments")', 700); await sleep(400); await d.click(); await sleep(2000);
+      await d.to('#ws-simplify .apply', 700); await sleep(400); await d.click(); await sleep(2400);
+    },
+  },
+  'parts-track': {   // Track my build: the counters appear on every row, two rows ticked, then the dock's progress bar at half scale
+    size: DESK, crop: LIST,
+    async run(page, d) {
+      await d.to('[data-hint="parts-track"]', 800); await sleep(500); await d.click();
+      await page.waitForSelector('#ws-parts .counter', { timeout: 15_000 }); await sleep(1400);
+      d.cut(ROWS);
+      const plus = (row, field) => `#ws-parts .prow >> nth=${row} >> button[aria-label="${field}: one more"]`;
+      await d.to(plus(0, 'printed'), 800); await sleep(300); await d.click(); await sleep(800); await d.click(); await sleep(1000);
+      await d.to(plus(1, 'had'), 700); await sleep(300); await d.click(); await sleep(1200);
+      d.cut(WIDE_DOCK);
+      await sleep(2000);
+    },
+  },
+  'assemble-camera': {   // a drag orbits the overview and lights the camera button; pressing it glides back to the guided view.
+    size: DESK, crop: TOOLS, quality: 'fast', crf: 30,   // the fast tier (no shadows), so the orbit keeps up with the cursor; the whole frame moves, so a harder crf
+    async run(page, d) {
+      await sleep(400);
+      await d.drag(900, 300, 770, 350, 350); await sleep(900);
+      await page.waitForFunction(() => document.querySelector('#ws-tools .cam').classList.contains('on'), null, { timeout: 15_000 });
+      await d.to('#ws-tools .cam', 800); await sleep(500); await d.click(); await sleep(2600);
+    },
+  },
 };
 
 /* frames through CDP: every repaint as a JPEG with its timestamp, acknowledged so the next one comes */
-async function record(page, dir, name) {
+async function record(page, dir, name, [w, h] = [W, H]) {
   const cdp = await page.context().newCDPSession(page);
   const frames = [];
   let n = 0;
@@ -172,7 +323,7 @@ async function record(page, dir, name) {
     cdp.send('Page.screencastFrameAck', { sessionId: e.sessionId }).catch(() => {});
   };
   cdp.on('Page.screencastFrame', onFrame);
-  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 86, maxWidth: W, maxHeight: H, everyNthFrame: 1 });
+  await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 86, maxWidth: w, maxHeight: h, everyNthFrame: 1 });
   return { async stop() { await cdp.send('Page.stopScreencast').catch(() => {}); await sleep(150); cdp.off('Page.screencastFrame', onFrame); await cdp.detach().catch(() => {}); return frames; } };
 }
 function ffmpeg(args) {
@@ -180,7 +331,7 @@ function ffmpeg(args) {
   if (r.status !== 0) throw new Error('ffmpeg failed: ' + args.join(' '));
 }
 /* the frames at their real timing (the concat demuxer's per-frame duration), then one H.264 at the bubble's size */
-async function encodeFrames(frames, out, dir, name, crop = null, tail = 0.6) {
+async function encodeFrames(frames, out, dir, name, crop = null, tail = 0.6, crf = 27) {
   if (!frames.length) throw new Error('no frames for ' + name);
   const list = join(dir, `${name}.txt`);
   let txt = '';
@@ -188,7 +339,7 @@ async function encodeFrames(frames, out, dir, name, crop = null, tail = 0.6) {
   for (let i = 0; i < frames.length; i++) { const d = i + 1 < frames.length ? Math.max(0.001, frames[i + 1].ts - frames[i].ts) : tail; txt += `file '${posix(frames[i].f)}'\nduration ${d.toFixed(3)}\n`; }
   txt += `file '${posix(frames[frames.length - 1].f)}'\n`;
   await writeFile(list, txt);
-  ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-an', '-vf', (crop ? `crop=${crop[2]}:${crop[3]}:${crop[0]}:${crop[1]},` : '') + 'scale=480:222,fps=25', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '27', '-movflags', '+faststart', out]);
+  ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-an', '-vf', (crop ? `crop=${crop[2]}:${crop[3]}:${crop[0]}:${crop[1]},` : '') + 'scale=480:222,fps=25', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', String(crf), '-movflags', '+faststart', out]);
 }
 
 const { chromium } = await import('playwright');
@@ -204,15 +355,17 @@ const work = join(tmpdir(), 'modulith-hint-clips');
 await rm(work, { recursive: true, force: true });
 await mkdir(work, { recursive: true });
 try {
+  if (only && !Object.keys(CLIPS).some((k) => k === only || k.startsWith(only + '-'))) throw new Error(`no clip ${only}; the keys are ${Object.keys(CLIPS).join(', ')}`);
   for (const [key, clip] of Object.entries(CLIPS)) {
-    if (only && key !== only) continue;
-    const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
-    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'balanced'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
-    const page = await labelsPage(ctx, base, clip.query ? clip.query() : '');
+    if (only && key !== only && !key.startsWith(only + '-')) continue;
+    const size = clip.size || [W, H];   // the Labels clips keep the 1040 x 700 they were framed at; the 2026-10-23 clips use the one-row desktop layout at 1280 x 800
+    const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, deviceScaleFactor: 1 });
+    await ctx.addInitScript((q) => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', q); localStorage.setItem('gen2-quality:set', '1'); } catch {} }, clip.quality || 'balanced');
+    const page = await openPage(ctx, base, key.split('-')[0], clip.query ? clip.query() : '');
     if (clip.setup) await clip.setup(page);
-    const d = await driver(page);
+    const d = await driver(page, size);
     await sleep(400);
-    const rec = await record(page, work, key);
+    const rec = await record(page, work, key, size);
     await sleep(300);
     let frames;
     if (clip.popup) {
@@ -233,7 +386,7 @@ try {
       await writeFile(list, `file '${posix(a)}'
 file '${posix(b)}'
 `);
-      ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', join(OUT, `labels-${key}.mp4`)]);
+      ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', join(OUT, `${key}.mp4`)]);
       frames = frames.concat(more);
     } else {
       try { await clip.run(page, d); } catch (e) { await page.screenshot({ path: join(work, `${key}-failed.png`) }); console.error(`${key} failed; see ${join(work, `${key}-failed.png`)}`); throw e; }
@@ -247,14 +400,14 @@ file '${posix(b)}'
           const from = bounds[i].ts, to = i + 1 < bounds.length ? bounds[i + 1].ts : Infinity;
           const seg = frames.filter((f) => f.ts >= from && f.ts < to);
           if (!seg.length) continue;
-          const out = join(work, `${key}-s${i}.mp4`); await encodeFrames(seg, out, work, `${key}-s${i}`, bounds[i].crop, i + 1 < bounds.length ? 0.001 : 0.6); parts.push(out);
+          const out = join(work, `${key}-s${i}.mp4`); await encodeFrames(seg, out, work, `${key}-s${i}`, bounds[i].crop, i + 1 < bounds.length ? 0.001 : 0.6, clip.crf); parts.push(out);
         }
         const list = join(work, `${key}-join.txt`); await writeFile(list, parts.map((p) => `file '${posix(p)}'
 `).join(''));
-        ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', join(OUT, `labels-${key}.mp4`)]);
-      } else await encodeFrames(frames, join(OUT, `labels-${key}.mp4`), work, key, clip.crop);
+        ffmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', join(OUT, `${key}.mp4`)]);
+      } else await encodeFrames(frames, join(OUT, `${key}.mp4`), work, key, clip.crop, 0.6, clip.crf);
     }
-    const out = join(OUT, `labels-${key}.mp4`);
+    const out = join(OUT, `${key}.mp4`);
     console.log(`wrote ${out} (${((await stat(out)).size / 1024).toFixed(0)} KB, ${frames.length} frames)`);
   }
 } finally { await browser.close(); server.close(); if (studioServer) studioServer.close(); }

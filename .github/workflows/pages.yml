@@ -138,6 +138,9 @@ jobs:
           sed -i "s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/builds.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./topbar.js'|'./topbar.js?v=$V'|" js/ui/phone.js
           sed -i "s|'../ui/phone.js'|'../ui/phone.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js js/workspaces/labels.js
+          # the hover hints on every workspace (2026-10-23): hint.js was labels.js's alone (its line below); the clips under
+          # img/hints/ are plain assets, loaded by URL, and need no stamp
+          sed -i "s|'../ui/hint.js'|'../ui/hint.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js
           # the Labels workspace (phase 5) and its rules module
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'../rules/labels.js'|'../rules/labels.js?v=$V'|; s|'../label-panel.js'|'../label-panel.js?v=$V'|; s|'../label-text.js'|'../label-text.js?v=$V'|; s|'../ui/hint.js'|'../ui/hint.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|" js/ui/hint.js

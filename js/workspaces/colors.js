@@ -31,6 +31,7 @@ import { icon } from '../ui/icons.js';
 import { el, makeToast } from '../ui/dom.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { attachHint, hideHint } from '../ui/hint.js';
 import { FILAMENT_DB } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
@@ -40,6 +41,13 @@ import { readOwned, writeOwned } from '../state/owned.js';
 import { simplify, worn as wornLook, summarize, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
+/* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/colors-*.mp4 from
+   tools/hint-clips.mjs (Joey 2026-10-23). The control's own title is the touch screen's answer. */
+const HINTS = {
+  browse: { title: 'Browse looks', text: 'Every look drawn on this build. Resting on a card shows it on the model; a click opens it, and Apply dresses the build.', video: 'img/hints/colors-browse.mp4' },
+  surprise: { title: 'Surprise me', text: 'Three colour combinations made for this build under your rules: a style, a filament cap, the filaments you own. Try them on the model first.', video: 'img/hints/colors-surprise.mp4' },
+  simplify: { title: 'Simplify', text: 'The same look in fewer filaments: which regions would share one, shown before anything changes. Apply is one undo step.', video: 'img/hints/colors-simplify.mp4' },
+};
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 /* ZONE_LABEL, isPaid and short are exported: the Parts list words a row's zones, filament names and buy links as this tab does */
 export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : z.charAt(0) + z.slice(1).toLowerCase();
@@ -231,6 +239,7 @@ export function mountColors(stage, ctx) {
   const strip = (fc) => el('span.strip', {}, [...new Set([...fc.filaments, ...fc.unpicked].map((f) => f.hex))].slice(0, 8).map((h) => el('i', { style: `background:${h}` })));
   function renderPanel() {
     const p = pal();
+    hideHint();   // a control under a bubble is about to be rebuilt; a removed button never fires mouseleave
     panel.replaceChildren();
     panel.appendChild(el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]));
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
@@ -257,13 +266,13 @@ export function mountColors(stage, ctx) {
         el('div.sacts', {}, [
           el('button.link.keeplook', { text: 'Keep this look', title: 'Save these colours as a look of your own', onclick: () => { st.saving = true; renderPanel(); } }),
           el('button.link.review', { text: 'Review filaments', title: 'Every filament this build prints in, with where to buy it', onclick: openShop }),
-          fc.count >= 3 ? el('button.link.simplify', { text: 'Simplify…', title: 'Print this look in fewer filaments: see what would change first', onclick: openSimplify }) : null,
+          fc.count >= 3 ? attachHint(el('button.link.simplify', { text: 'Simplify…', title: 'Print this look in fewer filaments: see what would change first', onclick: openSimplify }), HINTS.simplify, panel) : null,
         ]),
       ]));
     }
     look.appendChild(el('div.row4', {}, [
-      el('button.key.sm.strong.browse', { title: 'Every look, shown on this build', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']),
-      el('button.key.sm.surprise', { title: 'Three new looks for this build, under your rules', onclick: openSurprise }, [icon('sparkle', { size: 14 }), 'Surprise me']),
+      attachHint(el('button.key.sm.strong.browse', { title: 'Opens the gallery: every look drawn on this build; rest on one to try it on the model', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']), HINTS.browse, panel),
+      attachHint(el('button.key.sm.surprise', { title: 'Three colour combinations made for this build under your rules; rest on one to try it on the model', onclick: openSurprise }, [icon('sparkle', { size: 14 }), 'Surprise me']), HINTS.surprise, panel),
       el('button.key.sm.save', { text: 'Save', title: 'Keep these colours as a look of your own, to reuse on another build', disabled: !p.on || !Object.keys(p.colors).length, onclick: () => { st.saving = !st.saving; renderPanel(); } }),
       el('button.key.sm.more', { text: '⋯', title: 'Download, Upload, Share', 'aria-label': 'More', 'aria-expanded': String(st.more), onclick: () => { st.more = !st.more; renderPanel(); } }),
     ]));

@@ -2778,3 +2778,72 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Deploy:** each merge's push started that repo's own deploy (the planner's took 73 minutes); nothing else to deploy.
   This entry rides on the records push. Terra `01a169ad`: 5 of 7 findings taken (wording that overstated the order, the
   e2e time and the rehearsals).
+
+## 2026-10-23 (hover-hint clips on every workspace)
+
+- **Joey:** "can we do more video animations for when hovering over certain buttons to illustrate how they work?" The
+  Labels tiles have had them since 2026-10-13 (js/ui/hint.js: a glass bubble beside the panel after a short dwell, a muted
+  looping clip from img/hints/, recorded from the app by tools/hint-clips.mjs). A shortlist of eleven went to him through
+  the session that asked for this; his answer: "Record all eight recommended hover clips." Labels already had all five of
+  its own, so the new ones are on Build, Colors, Parts and Assemble.
+- **The eight.** Build's size tiles (`build-place`: a size, the amber spots, the top one clicked, the drawer landing, Esc;
+  the "+" spots are stage markers, not buttons, so the clip sits on the tiles, where a visitor is before the spots
+  exist); Fill all on the issue card (`build-fill`: a red slot, Fill all, the 1W case, the toast); Build style's Side
+  covers (`build-sidecovers`, the hint on the track so the bubble stays while the mouse crosses from Off to On); Colors'
+  Browse looks (`colors-browse`: two cards previewed on the model, one opened, Apply), Surprise me (`colors-surprise`: a
+  look previewed, More like this, Use this look) and Simplify… (`colors-simplify`: Down to 3 filaments, the change list,
+  Apply); Parts' Track my build (`parts-track`: the counters on every row, two rows ticked, the dock's progress bar);
+  Assemble's camera chip (`assemble-camera`: a drag orbits the overview and lights the chip, pressing it glides back; the
+  bubble sits UNDER the toolbar, since beside the chip it would cover the next ones). Each control's own title is the
+  touch screen's answer, as on Labels.
+
+  | clip | s | KB | | clip | s | KB |
+  |---|---|---|---|---|---|---|
+  | build-place | 9.4 | 50 | | colors-surprise | 14.1 | 76 |
+  | build-fill | 12.6 | 59 | | colors-simplify | 12.6 | 59 |
+  | build-sidecovers | 9.4 | 57 | | parts-track | 11.7 | 56 |
+  | colors-browse | 16.7 | 87 | | assemble-camera | 9.8 | 144 |
+
+  All at 480 × 222, H.264, loaded only on the first hover of that control. The Assemble clip is the heaviest (the whole
+  frame moves while the camera orbits and returns), at crf 30 and the fast render tier; the rest at the Labels clips'
+  crf 27. Together 588 KB in the repo, nothing until someone looks.
+- **hint.js** (js/ui/hint.js): no bubble while a phone sheet is open (a narrow window with a mouse gets the sheets too);
+  never over an open `role=dialog` the control is not inside (Colors' Simplify card opens under the pointer that pressed
+  Simplify…, and the bubble beside the panel would cover it; the Fill all hint is INSIDE its issue card and shows); never
+  over the dock (centred on a button low in the issue card, the Fill all bubble reached Get parts list; it sits above the
+  dock instead); `spec.below` for a toolbar chip; `spec.scene` optional, with one fallback scene (a cursor pressing a
+  button) so a new hint needs no hand-drawn art; every hinted control carries `data-hint=<clip name>` for the harness;
+  `focusin`/`focusout` instead of `focus`/`blur`, so a hint on a group arms when the keyboard reaches a segment inside it
+  and stays while it moves between the group's own segments. A modal dialog needs no rule of its own: every one here is a
+  full veil, which the overlap rule refuses. Each workspace calls `hideHint()` before rebuilding a panel that holds a hinted
+  control (a removed button never fires mouseleave, Terra 01a13529's rule from Labels). `pages.yml` stamps
+  `../ui/hint.js` in the four workspaces; the clips are assets, loaded by URL, and need no stamp.
+- **The recorder** (tools/hint-clips.mjs, dev only): opens any workspace, keys clips `<workspace>-<key>`, takes a per-clip
+  viewport size, render tier and crf, a `drag` for an orbit, `scrollTo` for a control low in a scrolling panel; the eight
+  new clips are recorded at 1280 × 800 (the one-row desktop layout) and framed two ways, a 700 × 321 window at the Labels
+  clips' scale or a 960 × 440 window at half scale where a panel and the whole model must both read. The side covers print
+  in the case's black, and a black panel leaving a black wall cannot be seen at the bubble's size, so the clip gives them
+  an orange of their own (`setColor` on `SideCover` and `SideCover:FACE`, then `setUseCustom(true)`: Build shows the
+  instruction colours until Colors is opened) and turns the model a little first. The README under img/hints/ says so. One
+  recording of the place clip ran 32 s (the page was slow that run; the frames carry their real timestamps) and was redone
+  at 9.4 s: the recorder's timing is the page's, so read a clip's length back after recording.
+- **Checks.** npm test 616 (611 passed, 0 failed, 5 skipped). A new e2e case, "hover hints: every hinted control shows its
+  clip on hover and hides on leave; none shows over the setup sheet or an open card": on each workspace, for each state
+  that offers hints (Build's Add units, Build style, a gap build with the issue card open), every expected `data-hint`
+  control is present, hovering it shows the bubble with that clip's `<video>` (a missing file errors and fails it), the
+  bubble does not overlap the control, leaving hides it; the keyboard on a segment inside the Side covers group shows it;
+  a bubble up when the setup sheet opens goes down; a hover and a focus fired at a control under the sheet show nothing;
+  Simplify's open card gets no bubble over it; and at a 1000 px window with a mouse the camera chip hints under its
+  toolbar, nothing hints while a sheet is open, and it hints again once the sheet closes. Mutation-checked six ways: an
+  extra document `focusin` listener removed SURVIVED (the browser's boundary events and `focusout` already do that job, so
+  the listener is not in the code); `focus` for `focusin` fails at the keyboard-on-group check; the overlap rule off fails
+  at the Simplify card; Track my build's `attachHint` dropped fails Parts' wait for its hint; a separate `aria-modal` guard
+  removed SURVIVED (every modal is a veil the overlap rule catches, so the guard was narrowed to the sheet rule); the sheet
+  rule removed fails at the narrow-window check. The full e2e suite on this branch, `E2E_SOFT=1` with the ls-public
+  Studio: 83 of 83 in 27.6 min.
+- **Review:** Sol `01a16a18`, substantial (a multi-file feature; the brief said Terra, the class table says Sol): two
+  findings. The `focus` listener on the Side covers track never firing (focus does not bubble): taken, `focusin`, with the
+  keyboard check above. A bubble already up staying visible when a modal opens under a still pointer: discarded, the e2e
+  drove exactly that with no extra code and the bubble went (the veil under the pointer fires mouseleave; a keyboard-shown
+  bubble goes with the focus the modal takes); a line in the vault's reviewer-lessons (`3b105e1`).
+- **Deploy:** not yet, a feature (Joey's go). Branch `hover-hints`.
