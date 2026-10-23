@@ -106,8 +106,12 @@ last-build handover and file round-trip. Don't merge or deploy anything." The to
     carries colours, so a visitor's colours from the old planner do not arrive; this planner shows its own palette (its
     default, unless the visitor already chose colours here; that case was not tested);
   - `gen2-bom-tracker`: the parts checklist's ticks;
-  - `gen2-link-store`: the store a visitor chose. A listing's `?from=` is counted here (tested above); that it also seeds
-    this planner's store choice is the 2026-10-17 notes' claim, not re-tested;
+  - `gen2-link-store`: the store a visitor chose. A listing's `?from=` is counted here (tested above). It did not seed this
+    planner's store choice, whatever the 2026-10-17 notes said: the viewer seeds its own `gen2-store` from it, in memory,
+    and the Parts list read only `gen2-link-store`, so a visitor from Thangs got Printables links. Since 2026-10-23
+    (DECISIONS) the Parts list with no choice of its own falls back to the viewer's `gen2-store`, which a pick or a relay
+    writes, and then to the address's `?from=` itself, so a listing's visitor gets that store's links
+    (test/parts-store-seed.test.mjs);
   - `gen2-label-copies` and `gen2-label-batches`: copies of label lists and Studio batches. The label list itself
     travels in the build (`labelList`, `labelAssign`).
 - **The old planner's capability list, checked against the live planner.** The record is `PARITY.md`, with 30
@@ -173,7 +177,9 @@ Worktree `D:/Code Projects/GEN2 cutover/gen2-planner-main`.
 
 - **The forward.** A script at the top of index.html, only on `gen2planner.jerrari3d.com`, sends everything to
   `PLANNER/?ws=build`. It carries `?build=`, `?ref=` and `?from=`, and the whole hash (`#build=`, `#labels-add=`,
-  `#labels-open`). `?from=` is a store listing's attribution: the merged planner counts it, and seeds the store choice from it.
+  `#labels-open`). `?from=` is a store listing's attribution: the merged planner counts it, and its Parts list reads it for
+  the store to link to when the visitor has not chosen one (through the viewer's `gen2-store`, then the address itself;
+  2026-10-23, DECISIONS).
 - **The last build.** An address with no build gets the build that browser had open last: the `gen2-last-build` slot, as
   `#build=`. Only a slot that holds a build goes: units placed, on a chosen mount and length.
   - The old planner writes the slot from its first page load. A fresh visit leaves an empty slot (`mount: null`, nothing

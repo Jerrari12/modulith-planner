@@ -2587,3 +2587,31 @@ Dated calls made while building, with who made them. The brief and the inventory
   it with `return=https://planner.modulith.systems/?ws=labels`; with a label typed there, its Add to planner build
   opens this planner in a new tab, which lands the label and saves; the first tab shows the notice, its edit writes
   nothing, and the stored build keeps the label. Both scripts are in the prod-checks folder.
+
+## 2026-10-23 (a listing's ?from= seeds the Parts list's store)
+
+- **The defect.** A visitor from a Thangs listing arrives with `?from=thangs`. The vendored viewer seeds its store preference
+  from that address (`js/main.js:5071` `STORE_STORE_KEY = 'gen2-store'`; `storePref`, lines 5095-5101), and the Parts list
+  read only its own key (`js/workspaces/parts.js:35` `STORE_KEY = 'gen2-link-store'`; `readStore`, line 187), so the
+  visitor got Printables links. CUTOVER.md said `?from=` "seeds the store choice"; it seeded the viewer's, not the list's.
+  Found reading the code, not reported; no e2e case arrives with `?from=`.
+- **The fix** (`readStore`, now a module-level export, the one function changed). The planner's own choice always wins, a
+  hidden store included (it reads as Printables, as before). With none saved, the viewer's `gen2-store` counts, then the
+  address's `?from=` (shown stores only, lower-cased, as main.js reads it). That is main.js `storePref`'s own order: a
+  saved choice, else the entry, else Printables. The switch above the list still writes `gen2-link-store` only.
+  - Why the address is read too, and not only the viewer's key: main.js keeps the `?from=` seed in memory and writes
+    `gen2-store` only on a pick (`setStorePref`) or a relay (`applyRemoteStore`); this planner sends no store relay and
+    hides the viewer's picker, so on arrival the key is never written, and the fallback to `gen2-store` alone would have
+    left a first visit from Thangs on Printables. The shell keeps `?from=` through every `?ws=` rewrite (app.js, the
+    workspace switch), so the rider is still in the address when Parts mounts. The referrer half of main.js
+    `storeFromEntry` (a bare thangs.com referrer) is not read here.
+- **Test:** `test/parts-store-seed.test.mjs`. The viewer's key alone gives Thangs; the planner's key wins over it and over
+  the address; a hidden store under either key reads as Printables; with nothing saved the address names the store, else
+  Printables; private mode reads Printables; and the id returned is the id a row's `links.stores` carry, so every row
+  links to thangs.com / than.gs or to printables.com. Mutants: the original read fails 3 of its 5 cases, the viewer-key
+  fallback alone fails 2; the shipped code passes 5.
+- **Review:** Terra (routine), thread `01a16945-33a1-7200-8577-1f195aa5aae7`, on the full diff with the main.js store code
+  as context: no findings. Walked by hand as well: the holders of this state are the Parts switch (`gen2-link-store`),
+  the viewer on a pick or a relay (`gen2-store`) and the address rider, which Share copied before this change too; a pick
+  in another tab is read at this tab's next mount, as before.
+- **Deploy:** with the cutover (this branch).

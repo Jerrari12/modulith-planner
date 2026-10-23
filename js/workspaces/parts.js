@@ -33,8 +33,25 @@ const BUY = typeof HARDWARE_BUY !== 'undefined' ? HARDWARE_BUY : {};
 const STORES = [['printables', 'Printables'], ['thangs', 'Thangs']];
 const SHOWN = new Set(STORES.map(([id]) => id));
 const STORE_KEY = 'gen2-link-store';   // the planner's own preference key, same ids
+const VIEWER_STORE_KEY = 'gen2-store';   // the viewer's own key (main.js STORE_STORE_KEY), same ids; a listing's ?from= seeds it
 const INSIDE = { 59: 45, 115: 101, 165: 151, 185: 171, 240: 226, 270: 256 };
 const CLUB = { edgelabel: 1, classicpro: 1, chevron: 1 };
+
+/* the store the list links to, in the viewer's own order (main.js storePref): a saved choice, else the listing the visitor
+   came from, else Printables. The planner's own choice (the switch above the list writes STORE_KEY) always wins, a hidden
+   store included, which reads as Printables. With none saved, the viewer's `gen2-store` counts, then the address's `?from=`:
+   main.js seeds its preference from `?from=` in memory only and writes `gen2-store` on a pick or a relay, neither of which
+   happens on arrival, so without reading the address here a visitor from Thangs got Printables links. */
+export function readStore() {
+  try {
+    const own = localStorage.getItem(STORE_KEY);
+    if (own !== null) return SHOWN.has(own) ? own : 'printables';
+    const viewer = localStorage.getItem(VIEWER_STORE_KEY);
+    if (SHOWN.has(viewer)) return viewer;
+    const from = (new URLSearchParams(location.search).get('from') || '').toLowerCase();
+    return SHOWN.has(from) ? from : 'printables';
+  } catch { return 'printables'; }
+}
 
 /* the Assemble part colours, by name (the artboard's chipFor; the regex order matters) */
 export function chipFor(name) {
@@ -184,7 +201,6 @@ export function mountParts(stage, ctx) {
   const PROGRESS_KEY = `gen2-parts-progress:${buildId}`;
   const st = { site: readStore(), tracking: false, progress: readProgress(), sel: null, wide: false };
 
-  function readStore() { try { const v = localStorage.getItem(STORE_KEY); return STORES.some(([id]) => id === v) ? v : 'printables'; } catch { return 'printables'; } }
   function readProgress() { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}').rows || {}; } catch { return {}; } }
   function saveProgress() { try { localStorage.setItem(PROGRESS_KEY, JSON.stringify({ tracking: st.tracking, rows: st.progress })); } catch { /* private mode */ } }
   try { const v = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); st.tracking = !!v.tracking; } catch {}
