@@ -20,7 +20,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, slideProps, contactFootprint, SHOTS, SEQUENCE, sequenceAt, driftTooSlow } from './done-fit.js';
+import { shotCamera, slideProps, contactFootprint, SHOTS, SEQUENCE, sequenceAt, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -107,12 +107,35 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     intervals: [], lastFrame: 0, slow: false };   // the first drift's frame intervals: a device that cannot drift smoothly keeps the hero (driftTooSlow)
   const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
   const sequenceWanted = (tier) => !reduced && (tier || stage.quality) !== 'fast';
+  /* THE DRAWER MOMENT (done-fit.js DRAWER): in the detail shot's hold, the unit the shot looks at slides its drawer out
+     by a fraction of its travel and back before the drift. The unit is chosen once per entry (a labelled unit with a
+     drawer, else any with one, nearest the front-left); the detail shot aims at it. Closed early by a grab, a hidden
+     tab, a tier change, a drift or leave(). */
+  const drawer = { unit: null, openTimer: 0, closeTimer: 0, open: false };
+  function pickDrawer() {
+    const units = (stage.build && stage.build.placed || []).map((u) => { const b = stage.unitBox(u.id); return { id: u.id, label: u.label, drawer: !!stage.unitHasDrawer && stage.unitHasDrawer(u.id), box: b.isEmpty() ? null : plain(b) }; });
+    drawer.unit = pickDrawerUnit(units, plain(buildBox));
+  }
   function shotsFor() {
     const list = SHOTS.tabletop.map((s) => ({ ...s }));
     if (json.shots && json.shots.hero) list[0] = { ...list[0], ...json.shots.hero, name: 'hero' };   // the bake's own hero shot wins
+    if (drawer.unit) { const i = list.findIndex((s) => s.name === 'detail'); if (i >= 0) list[i] = { ...list[i], targetShift: aimAt(plain(buildBox), drawer.unit.box) }; }
     return list;
   }
   function fitShots() { seq.cams = shotsFor().map((s) => shotCamera(s, plain(buildBox), view())); }
+  function drawerSet(open) {
+    if (!drawer.unit || drawer.open === open || !stage.slideUnitDrawer) return;
+    drawer.open = open;
+    stage.slideUnitDrawer(drawer.unit.id, open, DRAWER.fraction);
+  }
+  function drawerCancel() { clearTimeout(drawer.openTimer); clearTimeout(drawer.closeTimer); drawer.openTimer = drawer.closeTimer = 0; drawerSet(false); }
+  function drawerSchedule(holdMs) {
+    drawerCancel();
+    const beat = drawer.unit && drawerBeat(holdMs);
+    if (!beat) return;
+    drawer.openTimer = setTimeout(() => drawerSet(true), beat.openAt);
+    drawer.closeTimer = setTimeout(() => drawerSet(false), beat.closeAt);
+  }
   function setCam(c) { camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); }
   function snapshot() { return { position: camera.position.clone(), target: controls.target.clone(), fov: camera.fov }; }
   function seqTick() {
@@ -120,7 +143,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const now = performance.now();
     const s = sequenceAt(now - seq.t0, seq.cams.length, seq.timing);
     if (s.moving) {
-      if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; }   // a drift starts from wherever the camera IS (a grab may have moved it)
+      if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; drawerCancel(); }   // a drift starts from wherever the camera IS (a grab may have moved it); a drawer still out goes back
       else if (!seq.slow) { seq.intervals.push(now - seq.lastFrame); seq.lastFrame = now; }
       const b = seq.cams[s.to];
       camera.position.lerpVectors(seq.from.position, v3(b.position), s.k); controls.target.lerpVectors(seq.from.target, v3(b.target), s.k);
@@ -133,12 +156,14 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
            (under 20 fps on average) keeps this shot for the rest of the visit rather than drifting again. Decided once;
            the tier's auto-downgrade is one-way and slower to notice. */
         if (!seq.slow && driftTooSlow(seq.intervals, seq.timing.maxFrameMs)) { seq.slow = true; seqStop(); seq.on = false; return; }
+        if (shotsFor()[s.at].name === 'detail') drawerSchedule(seq.timing.holdMs);   // the drawer moment, in this hold
       }
       seq.timer = setTimeout(seqTick, Math.max(16, s.holdLeft));
     }
   }
   function seqStart() {
     if (seq.on || !on) return;
+    if (!drawer.unit) pickDrawer();
     fitShots();
     seq.on = true; seq.t0 = performance.now(); seq.pausedAt = null; seq.movingTo = -1; seq.grabbed = false;
     seqTick();
@@ -146,8 +171,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function seqStop() {
     seq.on = false; seq.pausedAt = null; seq.grabbed = false;
     cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); clearTimeout(seq.startTimer); clearTimeout(seq.idleTimer);
+    drawerCancel();
   }
-  function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); }
+  function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); }
   function seqResume() { if (!seq.on || seq.pausedAt == null) return; seq.t0 += performance.now() - seq.pausedAt; seq.pausedAt = null; seqTick(); }
   function onVisibility() { if (document.hidden) seqPause(); else if (!seq.grabbed) seqResume(); }
   function onGrabStart() { if (!seq.on) return; clearTimeout(seq.idleTimer); seqPause(); seq.grabbed = true; }
@@ -266,8 +292,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     addEventListener('resize', refit);
     document.addEventListener('visibilitychange', onVisibility);
     controls.addEventListener('start', onGrabStart); controls.addEventListener('end', onGrabEnd);
-    if (debug) window.__GEN2_DONE__ = { get sequence() { return { on: seq.on, paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing } }; },
-      setTiming(t) { Object.assign(seq.timing, t); if (seq.on) { seqStop(); seqStart(); } } };
+    if (debug) window.__GEN2_DONE__ = { get sequence() { return { on: seq.on, paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
+      setTiming(t) { Object.assign(seq.timing, t); if (seq.on) { seqStop(); seqStart(); } },
+      jump(i) { if (!seq.on) return; cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); seq.t0 = performance.now() - i * (seq.timing.holdMs + seq.timing.moveMs); seq.pausedAt = null; seq.movingTo = -2; seqTick(); } };   // to the start of shot i's hold (-2: "land on it")
     if (!tracked) { tracked = true; stage.track('done:room'); }
     stage.invalidateFrame();
     return handle;

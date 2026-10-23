@@ -9293,6 +9293,16 @@ function peekUnit(unitId) {
   return true;
 }
 function unpeek() { if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; } if (dFocus.peek) exitDrawerFocus(); invalidateFrame(); }
+/* The Done room's drawer moment (js/scenes/done.js, 2026-10-23): a unit's drawer slides out a FRACTION of its travel and
+   back again - no focus, no dims, no selection (the room shows no callouts). unitHasDrawer says whether a unit has one. */
+function unitHasDrawer(unitId) { return unitInstances(unitId).some(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible); }
+function slideUnitDrawer(unitId, open, fraction = 0.4) {
+  const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
+  if (!d) return false;
+  slideDrawer(d, open, drawerStop() * fraction);
+  invalidateFrame();
+  return true;
+}
 
 // ---------- measure tool ----------
 // PrusaSlicer-lite: two taps on part surfaces → markers + a line + a floating
@@ -11156,7 +11166,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL

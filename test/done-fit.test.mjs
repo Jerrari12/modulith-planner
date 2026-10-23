@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, slideProps, contactFootprint, SHOTS, SEQUENCE, sequenceAt, easeInOut, driftTooSlow } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, slideProps, contactFootprint, SHOTS, SEQUENCE, sequenceAt, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -89,4 +89,26 @@ test('driftTooSlow: a drift drawn under 20 fps on average ends the sequence; a s
   assert.equal(driftTooSlow([16, 16, 16, 400]), true, 'one long stall drags the mean over the line');
   assert.equal(driftTooSlow(null), false);
   assert.equal(SEQUENCE.maxFrameMs, 50);
+});
+
+test('the drawer moment: out, open, back inside the detail hold; none in a hold too short; the unit is a labelled drawer nearest the front-left; the shot aims at it', () => {
+  const b = drawerBeat(SEQUENCE.holdMs);
+  assert.ok(b, 'the default hold has room for it');
+  assert.equal(b.openAt, DRAWER.outMs);
+  assert.equal(b.closeAt, DRAWER.outMs + DRAWER.slideOutMs + DRAWER.openMs);
+  assert.ok(b.closeAt + DRAWER.slideBackMs < SEQUENCE.holdMs, 'back before the drift');
+  assert.equal(drawerBeat(1500), null, 'the suite\'s short clock has no drawer moment');
+  const build = { min: { x: -176, y: 0, z: -86 }, max: { x: 176, y: 134, z: 107 } };
+  const units = [
+    { id: 1, label: '', drawer: true, box: { min: { x: -176, y: 0, z: -86 }, max: { x: 0, y: 67, z: 107 } } },          // front-left, unlabelled
+    { id: 2, label: 'Screws', drawer: true, box: { min: { x: 0, y: 0, z: -86 }, max: { x: 176, y: 67, z: 107 } } },     // labelled: wins
+    { id: 3, label: 'Shelf', drawer: false, box: { min: { x: -176, y: 67, z: -86 }, max: { x: 176, y: 134, z: 107 } } }, // no drawer
+  ];
+  assert.equal(pickDrawerUnit(units, build).id, 2, 'a labelled unit with a drawer');
+  assert.equal(pickDrawerUnit(units.filter((u) => u.id !== 2), build).id, 1, 'else any with a drawer');
+  assert.equal(pickDrawerUnit([units[2]], build), null, 'none without a drawer');
+  const aim = aimAt(build, units[2 - 1].box);
+  close(aim.x, 0.25, 1e-9, 'the right unit\'s centre is a quarter of the width right of the build\'s'); close(aim.z, 0, 1e-9, 'same depth');
+  const c = shotCamera({ ...SHOTS.tabletop[2], targetShift: aim }, build, { width: 1280, height: 800, free: { w: 972, h: 560 } });
+  close(c.target.x, 88, 1e-9, 'the detail shot looks at that unit');
 });

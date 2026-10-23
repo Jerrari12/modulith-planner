@@ -1386,6 +1386,18 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
   await settle(page, 2400);
   assert.notDeepEqual(await cam(page), cH, 'visible again: the drift resumed');
+  // the drawer moment: in the detail shot's hold the unit the shot looks at slides its drawer out and back (a hold long
+  // enough for the beat; the suite jumps to that hold). The unit's box grows toward the front by the slide, then shrinks.
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 6000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });
+  await settle(page, 200);
+  const dz0 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { unit: d.unit, open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
+  assert.ok(dz0.unit != null, 'a unit with a drawer was picked'); assert.equal(dz0.open, false, 'closed at the start of the hold');
+  await settle(page, 1500);                          // 1.7 s in: out (700 ms) and slid (380 ms)
+  const dz1 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
+  assert.equal(dz1.open, true, 'the drawer is out'); assert.ok(dz1.z - dz0.z > 40, `the unit's front moved out by the slide (${(dz1.z - dz0.z).toFixed(0)} mm)`);
+  await settle(page, 3500);                          // 5.2 s in: closed at 4.28 s, slid back by 4.6 s
+  const dz2 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
+  assert.equal(dz2.open, false, 'and back before the drift'); assert.ok(Math.abs(dz2.z - dz0.z) < 2, 'the unit is where it was');
   // the slow-drift guard: one long drift with the guard on is the device's verdict. A real GPU drifts smoothly and the
   // sequence goes on; the CI runner's SwiftShader draws it under 20 fps and the sequence ends on the shot it reached
   await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 200, moveMs: 2000, maxFrameMs: 50 }));

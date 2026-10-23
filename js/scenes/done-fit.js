@@ -79,6 +79,40 @@ export function driftTooSlow(intervals, maxFrameMs = SEQUENCE.maxFrameMs) {
 
 export const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
+/* THE DRAWER MOMENT (the style doc: "every ~15-20 s one labeled drawer slides out ~40 %, holds, and closes, timed with
+ * the detail shot"). In the detail shot's hold: out at `outMs`, open for `openMs`, back before the drift. The stage's
+ * slide tweens take 380 ms out and 320 ms back (slideDrawer, js/main.js); a hold too short for the whole beat has none. */
+export const DRAWER = { outMs: 700, openMs: 3200, fraction: 0.4, slideOutMs: 380, slideBackMs: 320 };
+export function drawerBeat(holdMs, d = DRAWER) {
+  const openAt = d.outMs, closeAt = openAt + d.slideOutMs + d.openMs;
+  return closeAt + d.slideBackMs + 400 <= holdMs ? { openAt, closeAt } : null;
+}
+
+/* The aim for a close-up on one unit: its box centre as targetShift fractions of the build's box (what shotCamera takes). */
+export function aimAt(build, unit) {
+  const size = { x: Math.max(1e-6, build.max.x - build.min.x), z: Math.max(1e-6, build.max.z - build.min.z) };
+  const cb = { x: (build.min.x + build.max.x) / 2, z: (build.min.z + build.max.z) / 2 };
+  const cu = { x: (unit.min.x + unit.max.x) / 2, z: (unit.min.z + unit.max.z) / 2 };
+  return { x: (cu.x - cb.x) / size.x, z: (cu.z - cb.z) / size.z };
+}
+
+/* Which unit the detail shot looks at and the drawer moment opens: a labelled unit with a drawer, else any unit with a
+ * drawer, nearest the build's front-left (the detail shot's side) when several. `units` = [{ id, label, box, drawer }]. */
+export function pickDrawerUnit(units, build) {
+  const withDrawer = units.filter((u) => u.drawer && u.box);
+  if (!withDrawer.length) return null;
+  const labelled = withDrawer.filter((u) => u.label && String(u.label).trim());
+  const pool = labelled.length ? labelled : withDrawer;
+  const fl = { x: build.min.x, z: build.max.z };
+  let best = null, bestD = Infinity;
+  for (const u of pool) {
+    const cx = (u.box.min.x + u.box.max.x) / 2, cz = (u.box.min.z + u.box.max.z) / 2;
+    const d = Math.hypot(cx - fl.x, cz - fl.z);
+    if (d < bestD) { bestD = d; best = u; }
+  }
+  return best;
+}
+
 /* Where a sequence of n shots is at time t (ms since the first hold began): { at, to, moving, k }. Each beat is a hold on
  * shot `at` (holdMs) then a move to `to` (moveMs, k the EASED progress 0..1); after the last shot it wraps to the first.
  * Pure, so the clock is testable without a frame. */
