@@ -1,0 +1,3 @@
+# look14 (desktop, 2026-10-23), Joey on look13: "a light normal-map bump on the desk". The veneer's own normal map
+# (silver_oak_veneer_01_nor_gl_2k.jpg) box-projected with the diffuse, strength 0.3. Otherwise look13.
+--mode look --name look14 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look14 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3

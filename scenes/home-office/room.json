@@ -2,7 +2,7 @@
  "name": "home-office",
  "version": 1,
  "units": "metres in the GLB, millimetres below",
- "exposure": 0.11258,
+ "exposure": 0.15657,
  "anchors": {
   "tabletop": [
    -220.0,
@@ -23,30 +23,30 @@
  "desk": {
   "x0": -680.0,
   "x1": 1120.0,
-  "zFront": 725.0,
+  "zFront": 381.4,
   "zBack": -25.0
  },
  "sun": {
   "dir": [
-   -874.949,
-   157.217,
-   457.981
+   -718.308,
+   578.014,
+   387.213
   ],
-  "color": "#ffb876",
-  "intensity": 2.6,
-  "elevation": 9.0
+  "color": "#fff4e8",
+  "intensity": 0.62,
+  "elevation": 35.0
  },
  "sky": {
-  "color": "#e8d9c4",
-  "ground": "#6b5a48",
+  "color": "#e6e8ea",
+  "ground": "#8a8278",
   "intensity": 0.9
  },
  "shots": {
   "hero": {
-   "az": 30.0,
-   "el": 16.0,
-   "fovV": 37.84928883210247,
-   "fill": 0.36,
+   "az": 28.0,
+   "el": 20.0,
+   "fovV": 29.862834356275105,
+   "fill": 0.5,
    "targetLift": -0.08
   }
  },
@@ -89,6 +89,12 @@
   },
   {
    "name": "mug",
+   "slot": "x+",
+   "gap": 0.07,
+   "group": "mug"
+  },
+  {
+   "name": "coffee",
    "slot": "x+",
    "gap": 0.07,
    "group": "mug"
@@ -142,6 +148,30 @@
    "group": "plant"
   },
   {
+   "name": "leaf_5",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_6",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_7",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
+   "name": "leaf_8",
+   "slot": "x-",
+   "gap": 0.07,
+   "group": "plant"
+  },
+  {
    "name": "notebook",
    "slot": "x+",
    "gap": 0.08,
@@ -155,5 +185,5 @@
   }
  ],
  "glb": "room.glb",
- "glbBytes": 286156
+ "glbBytes": 536796
 }

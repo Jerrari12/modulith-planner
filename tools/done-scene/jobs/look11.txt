@@ -1,0 +1,5 @@
+# look11 (desktop, 2026-10-23), Joey on look10: "a wood texture with slight bump and sheen on the desk". room.py: wood()
+# puts a procedural oak on the desk material: bands along X distorted by noise plus a fine pore noise, a ramp between
+# two muted oak tones (neutral palette: #cdb996 / #a48a66), the grain as a 0.12 bump and as roughness 0.32..0.5 (the
+# sheen; look renders only, the bake carries colour and bump in the lightmap). Flags as look7-10.
+--mode look --name look11 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look11 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5

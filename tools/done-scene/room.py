@@ -27,6 +27,7 @@ import argparse
 import json
 import math
 import os
+import random
 import struct
 import sys
 import zlib
@@ -61,6 +62,15 @@ ap.add_argument('--lm-scale', type=float, default=1.0, help='multiplies every li
 ap.add_argument('--blend', help='save the scene here (check mode saves by default beside the output)')
 ap.add_argument('--preview', action='store_true', help='check mode: a small Workbench preview (no Cycles)')
 ap.add_argument('--sky-test', action='store_true', help='check mode: 8-sample sky-only Cycles probe to confirm the sun side')
+# look6 (2026-10-23, Joey's direction via ChatGPT): the product stage in a believable room rather than a golden-hour
+# vignette. Neutral soft light, the build at half the frame, placeholders out, the desk and wall muted.
+ap.add_argument('--props', choices=['full', 'minimal'], default='full', help='minimal: no plant, mug, notebook or pen (the monitor stays, peripheral)')
+ap.add_argument('--palette', choices=['golden', 'neutral'], default='golden', help='neutral: cool off-white wall, muted light-oak desk, a subdued screen, a clearer sky')
+ap.add_argument('--soft-light', type=float, default=0.0, help='watts of a broad area light outside the window (0 = none); the fill that keeps dark parts readable')
+ap.add_argument('--sun-size', type=float, default=0.545, help='the sun disc\'s angular diameter, degrees (0.545 physical; larger = softer shadows)')
+ap.add_argument('--desk-wood', action='store_true', help='look12: the photographed silver oak veneer on the desk (tools/done-scene/textures/), else the plain colour')
+ap.add_argument('--desk-contrast', type=float, default=0.6, help='how much of the veneer photo shows over its own mean colour (1 = as shot)')
+ap.add_argument('--desk-bump', type=float, default=0.0, help='the veneer normal map strength (0 = off: establish the colour grain first)')
 args = ap.parse_args(argv)
 W, H = (int(v) for v in args.res.lower().split('x'))
 os.makedirs(args.out_dir, exist_ok=True)
@@ -93,6 +103,79 @@ def mat(name, hex_or_rgb, rough=0.45, metal=0.0, spec=0.5, emit=None, emit_stren
         e = to_linear(srgb_hex(emit))
         bsdf.inputs['Emission Color'].default_value = (*e, 1.0)
         bsdf.inputs['Emission Strength'].default_value = emit_strength
+    return m
+
+def ribbed(m, scale=180.0, strength=0.3, distance=0.002):
+    """Fine horizontal ribs as a bump on a material (a Wave texture along Z in object space): the pot's repeating
+    texture (look9). Shading only, so the bake carries it in the lightmap and the glTF needs no extra map."""
+    nt = m.node_tree
+    bsdf = nt.nodes['Principled BSDF']
+    tc = nt.nodes.new('ShaderNodeTexCoord')
+    wave = nt.nodes.new('ShaderNodeTexWave')
+    wave.wave_type = 'BANDS'; wave.bands_direction = 'Z'; wave.wave_profile = 'SIN'
+    wave.inputs['Scale'].default_value = scale
+    wave.inputs['Distortion'].default_value = 0.0
+    bump = nt.nodes.new('ShaderNodeBump')
+    bump.inputs['Strength'].default_value = strength
+    bump.inputs['Distance'].default_value = distance
+    nt.links.new(tc.outputs['Object'], wave.inputs['Vector'])
+    nt.links.new(wave.outputs['Fac'], bump.inputs['Height'])
+    nt.links.new(bump.outputs['Normal'], bsdf.inputs['Normal'])
+    return m
+
+TEX_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'textures')
+
+def wood_photo(m, folder, stem, size_m, contrast=0.6, tint=None, rough=0.5, bump=0.0, rotate_deg=90.0):
+    """A photographed veneer on a material (look12, Astra: a photographed light oak at its documented physical scale,
+    low contrast, bump off first). The diffuse is box-projected in object space (metres) at `size_m` per repeat, so the
+    desk's top and front edge share one grain; `contrast` mixes it towards its own mean colour (1 = as shot); `tint`
+    (hex) multiplies for a finish. Roughness is a constant: matte, no sheen baked into the colour. `bump` > 0 adds the
+    normal map at that strength (a later round). The look11 wave-band shader this replaces read as corduroy."""
+    import numpy as np
+    nt = m.node_tree
+    bsdf = nt.nodes['Principled BSDF']
+    bsdf.inputs['Roughness'].default_value = rough
+    img = bpy.data.images.load(os.path.join(TEX_DIR, folder, '%s_diff_2k.jpg' % stem))
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image = img
+    tex.projection = 'BOX'
+    tex.projection_blend = 0.25
+    tex.interpolation = 'Cubic'
+    tc = nt.nodes.new('ShaderNodeTexCoord')
+    mp = nt.nodes.new('ShaderNodeMapping')
+    mp.inputs['Scale'].default_value = (1.0 / size_m, 1.0 / size_m, 1.0 / size_m)
+    mp.inputs['Rotation'].default_value = (0.0, 0.0, math.radians(rotate_deg))   # look13 (Joey): the grain lengthwise, along the desk's X
+    nt.links.new(tc.outputs['Object'], mp.inputs['Vector'])
+    nt.links.new(mp.outputs['Vector'], tex.inputs['Vector'])
+    # the mean colour, for the contrast mix (a 64 px thumbnail of the diffuse; sRGB to linear)
+    w, h = img.size
+    buf = np.empty(w * h * img.channels, dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    mean = buf.reshape(h, w, img.channels)[::max(1, h // 64), ::max(1, w // 64), :3].reshape(-1, 3).mean(axis=0)
+    mix = nt.nodes.new('ShaderNodeMix')
+    mix.data_type = 'RGBA'; mix.blend_type = 'MIX'
+    mix.inputs['Factor'].default_value = contrast
+    mix.inputs[6].default_value = (float(mean[0]), float(mean[1]), float(mean[2]), 1.0)   # A: the mean
+    nt.links.new(tex.outputs['Color'], mix.inputs[7])                                      # B: the photo
+    colour_out = mix.outputs[2]
+    if tint:
+        tn = nt.nodes.new('ShaderNodeMix')
+        tn.data_type = 'RGBA'; tn.blend_type = 'MULTIPLY'
+        tn.inputs['Factor'].default_value = 1.0
+        tn.inputs[7].default_value = (*to_linear(srgb_hex(tint)), 1.0)
+        nt.links.new(colour_out, tn.inputs[6])
+        colour_out = tn.outputs[2]
+    nt.links.new(colour_out, bsdf.inputs['Base Color'])
+    if bump > 0:
+        nimg = bpy.data.images.load(os.path.join(TEX_DIR, folder, '%s_nor_gl_2k.jpg' % stem))
+        nimg.colorspace_settings.name = 'Non-Color'
+        ntex = nt.nodes.new('ShaderNodeTexImage')
+        ntex.image = nimg; ntex.projection = 'BOX'; ntex.projection_blend = 0.25
+        nt.links.new(mp.outputs['Vector'], ntex.inputs['Vector'])
+        nm = nt.nodes.new('ShaderNodeNormalMap')
+        nm.inputs['Strength'].default_value = bump
+        nt.links.new(ntex.outputs['Color'], nm.inputs['Color'])
+        nt.links.new(nm.outputs['Normal'], bsdf.inputs['Normal'])
     return m
 
 def box(name, size, loc, material, collection, rot=(0, 0, 0), extras=None):
@@ -132,6 +215,144 @@ def sphere(name, r, loc, material, collection, scale=(1, 1, 1), extras=None):
         o[k] = v
     return o
 
+def snake_leaf(name, base, phi, h, wmax, bow, twist, extras=None, nt=18, ns=5, thick=0.0035):
+    """One snake-plant leaf: a lanceolate strip, channelled towards the plant's centre, leaning out by `bow` and
+    twisting by `twist` along its length, solidified to `thick`. base = where it leaves the soil; phi = its azimuth."""
+    import bmesh
+    R = Vector((math.cos(phi), math.sin(phi), 0))        # radial, out from the pot's centre
+    T = Vector((-math.sin(phi), math.cos(phi), 0))       # tangential
+    Z = Vector((0, 0, 1))
+    bm = bmesh.new()
+    rows = []
+    for j in range(nt):
+        t = j / nt * 0.96                                 # the last row stops short of the tip; the tip is one vertex
+        w = wmax * min(1.0, 0.4 + 2.4 * t) * (1 - t) ** 0.7
+        tw = twist * t
+        cross = T * math.cos(tw) + R * math.sin(tw)
+        inward = -(R * math.cos(tw) - T * math.sin(tw))
+        spine = Vector(base) + R * (0.01 + bow * t ** 1.6) + Z * (h * t)
+        row = []
+        for k in range(ns):
+            s = -1 + 2 * k / (ns - 1)
+            p = spine + cross * (s * w / 2) + inward * (0.18 * w * (1 - s * s))
+            row.append(bm.verts.new(p))
+        rows.append(row)
+    tip = bm.verts.new(Vector(base) + R * (0.01 + bow) + Z * h)
+    edge_faces = []
+    for j in range(nt - 1):
+        for k in range(ns - 1):
+            f = bm.faces.new((rows[j][k], rows[j][k + 1], rows[j + 1][k + 1], rows[j + 1][k]))
+            if k in (0, ns - 2):
+                edge_faces.append(f)
+    for k in range(ns - 1):
+        f = bm.faces.new((rows[-1][k], rows[-1][k + 1], tip))
+        if k in (0, ns - 2):
+            edge_faces.append(f)
+    for f in edge_faces:
+        f.material_index = 1
+    bmesh.ops.solidify(bm, geom=bm.faces[:] + bm.edges[:] + bm.verts[:], thickness=thick)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    me.materials.append(M_LEAF)
+    me.materials.append(M_LEAF_EDGE)
+    o = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(o)
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(40))
+    move_to(o, collection=ROOM)
+    for k, v in (extras or {}).items():
+        o[k] = v
+    return o
+
+def chamfer(o, width, segments=3, angle=30.0):
+    """Bevel every sharp edge (face angle over `angle` degrees) of a mesh by `width` metres, as geometry (look10, Joey:
+    "chamfer a few edges so the light hits them a little more realistically"). Smooth by angle after, so the bevel
+    rounds and the flats stay flat; the bake and the glTF see the same mesh as the look render."""
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    lim = math.radians(angle)
+    edges = [e for e in bm.edges if len(e.link_faces) == 2 and e.calc_face_angle(0.0) > lim]
+    if edges:
+        bmesh.ops.bevel(bm, geom=edges, offset=width, offset_type='OFFSET', segments=segments, profile=0.5,
+                        affect='EDGES', clamp_overlap=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    bm.to_mesh(o.data)
+    bm.free()
+    o.data.update()
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(angle))
+    return o
+
+def hollow_top(o, wall, depth):
+    """Inset the top face of a closed mesh by `wall` and push the inner face down by `depth`: a cup."""
+    import bmesh
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    top = max(bm.faces, key=lambda f: f.calc_center_median().z)
+    res = bmesh.ops.inset_individual(bm, faces=[top], thickness=wall, depth=0.0)
+    ext = bmesh.ops.extrude_face_region(bm, geom=[top])
+    verts = [g for g in ext['geom'] if isinstance(g, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, verts=verts, vec=(0, 0, -depth))
+    bmesh.ops.delete(bm, geom=[top], context='FACES_ONLY')   # bmesh's extrude keeps the source face: the cup stayed closed (look8)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    bm.to_mesh(o.data)
+    bm.free()
+    o.data.update()
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30))   # the rim and the cavity's floor stay crisp
+
+def steam(loc):
+    """A wisp of steam for the look renders: an ellipsoid with a Principled Volume whose density is noise faded by a
+    spherical gradient (no hard edge). Lives in the rig collection: never baked, never exported."""
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, segments=24, ring_count=12, location=loc)
+    o = bpy.context.active_object
+    o.name = 'steam'
+    o.scale = (0.03, 0.03, 0.075)
+    o.rotation_euler = (math.radians(6), math.radians(-8), 0)
+    bpy.ops.object.shade_smooth()
+    m = bpy.data.materials.new('steam')
+    m.use_nodes = True
+    nt = m.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    out = nt.nodes.new('ShaderNodeOutputMaterial')
+    vol = nt.nodes.new('ShaderNodeVolumePrincipled')
+    vol.inputs['Color'].default_value = (1, 1, 1, 1)
+    vol.inputs['Anisotropy'].default_value = 0.35
+    tc = nt.nodes.new('ShaderNodeTexCoord')
+    noise = nt.nodes.new('ShaderNodeTexNoise')
+    noise.inputs['Scale'].default_value = 2.6
+    noise.inputs['Detail'].default_value = 4.0
+    noise.inputs['Roughness'].default_value = 0.6
+    ramp = nt.nodes.new('ShaderNodeValToRGB')
+    ramp.color_ramp.elements[0].position = 0.42
+    ramp.color_ramp.elements[1].position = 0.75
+    grad = nt.nodes.new('ShaderNodeTexGradient')
+    grad.gradient_type = 'SPHERICAL'
+    mul = nt.nodes.new('ShaderNodeMath'); mul.operation = 'MULTIPLY'
+    mul2 = nt.nodes.new('ShaderNodeMath'); mul2.operation = 'MULTIPLY'; mul2.inputs[1].default_value = 45.0   # density (9 was invisible at look8's exposure)
+    nt.links.new(tc.outputs['Object'], noise.inputs['Vector'])
+    nt.links.new(tc.outputs['Object'], grad.inputs['Vector'])
+    nt.links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
+    nt.links.new(ramp.outputs['Color'], mul.inputs[0])
+    nt.links.new(grad.outputs['Fac'], mul.inputs[1])
+    nt.links.new(mul.outputs['Value'], mul2.inputs[0])
+    nt.links.new(mul2.outputs['Value'], vol.inputs['Density'])
+    nt.links.new(vol.outputs['Volume'], out.inputs['Volume'])
+    o.data.materials.append(m)
+    o.visible_shadow = False
+    move_to(o, RIG)
+    return o
+
 def move_to(o, collection):
     for c in list(o.users_collection):
         c.objects.unlink(o)
@@ -157,7 +378,7 @@ def new_collection(name):
 # across the desk from the left-front and models the build's faces. Everything the camera sees sits inside ~3 m.
 # ---------------------------------------------------------------------------------------------------------------------
 DESK_TOP_Z = 0.74          # the desk top's upper surface = the planner's y = 0
-DESK = dict(w=1.80, d=0.75, t=0.025)
+DESK = dict(w=1.80, d=0.4064, t=0.025)   # look5 (Joey): "much shallower, like maybe 16 inches deep" (was 0.75)
 WALL_BACK_Y = 0.80         # the back wall's face (the desk's back edge sits 0.02 in front of it)
 WALL_LEFT_X = -1.60
 GAP_TO_WALL = 0.045        # the build's back face to the wall
@@ -173,17 +394,23 @@ ROOM = new_collection('room')
 KIT = new_collection('kit')
 RIG = new_collection('rig')
 
-M_WALL = mat('wall paint', '#e9e2d6', rough=0.85, spec=0.3)
-M_FLOOR = mat('oak floor', '#a67c52', rough=0.5, spec=0.4)
-M_DESK = mat('desk oak', '#b98a5a', rough=0.38, spec=0.45)
+NEUTRAL = args.palette == 'neutral'
+M_WALL = mat('wall paint', '#e2e4e1' if NEUTRAL else '#e9e2d6', rough=0.85, spec=0.3)
+M_FLOOR = mat('oak floor', '#9a8a74' if NEUTRAL else '#a67c52', rough=0.5, spec=0.4)
+M_DESK = mat('desk oak', '#c4b08e' if NEUTRAL else '#b98a5a', rough=0.45 if NEUTRAL else 0.38, spec=0.4)
+if args.desk_wood:   # look12: the photographed silver oak veneer (tools/done-scene/textures/silver_oak_veneer_01/SOURCE.md), 1 m per repeat
+    M_DESK = wood_photo(M_DESK, 'silver_oak_veneer_01', 'silver_oak_veneer_01', 1.0, contrast=args.desk_contrast,
+                        tint=None if NEUTRAL else '#d9b98c', rough=0.5, bump=args.desk_bump)
 M_DESK_LEG = mat('desk steel', '#2b2d31', rough=0.5, metal=0.3)
 M_DARK = mat('matte black plastic', '#1d1e21', rough=0.6)
-M_SCREEN = mat('screen', '#0d1220', rough=0.15, emit='#1a2a4a', emit_strength=2.5)
+M_SCREEN = mat('screen', '#0d1220', rough=0.15, emit='#1a2a4a', emit_strength=0.6 if NEUTRAL else 2.5)
 M_WHITE = mat('ceramic white', '#f2f0ea', rough=0.12, spec=0.6)
-M_TERRA = mat('terracotta', '#b5674a', rough=0.8)
+M_TERRA = ribbed(mat('terracotta', '#b5674a', rough=0.8))
 M_SOIL = mat('soil', '#2a2119', rough=1.0)
-M_LEAF = mat('leaf', '#3f7a3a', rough=0.55)
+M_LEAF = mat('leaf', '#2f5a30', rough=0.5)
+M_LEAF_EDGE = mat('leaf edge', '#c9c04e', rough=0.5)   # the snake plant's yellow margin (Sansevieria 'Laurentii')
 M_PAPER = mat('paper', '#f4f1e8', rough=0.9)
+M_COFFEE = mat('coffee', '#2a180e', rough=0.08, spec=0.6)
 M_PEN = mat('pen', '#1b1c1f', rough=0.3)
 M_FRAME = mat('picture frame', '#2a2724', rough=0.6)
 M_PRINT = mat('print', '#c8c3b8', rough=0.9)
@@ -211,7 +438,7 @@ def build_room():
         box(nm, size, loc, M_WINDOW_FRAME, ROOM, extras={'lm': 256})
     # the desk: a plain top on two steel slab legs, no apron (the brief's under-table anchor needs a thin, open top)
     desk_cy = WALL_BACK_Y - 0.02 - DESK['d'] / 2
-    box('desk_top', (DESK['w'], DESK['d'], DESK['t']), (0, desk_cy, DESK_TOP_Z - DESK['t'] / 2), M_DESK, ROOM, extras={'lm': 1024})
+    chamfer(box('desk_top', (DESK['w'], DESK['d'], DESK['t']), (0, desk_cy, DESK_TOP_Z - DESK['t'] / 2), M_DESK, ROOM, extras={'lm': 1024}), 0.003)
     for sx in (-1, 1):
         box('desk_leg_%s' % ('l' if sx < 0 else 'r'), (0.03, DESK['d'] - 0.12, DESK_TOP_Z - DESK['t']),
             (sx * (DESK['w'] / 2 - 0.08), desk_cy, (DESK_TOP_Z - DESK['t']) / 2), M_DESK_LEG, ROOM, extras={'lm': 256})
@@ -221,23 +448,45 @@ def build_room():
     box('monitor_neck', (0.05, 0.03, 0.14), (mx, my + 0.05, DESK_TOP_Z + 0.08), M_DARK, ROOM, extras={'lm': 128, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
     box('monitor_body', (0.62, 0.045, 0.37), (mx, my + 0.05, DESK_TOP_Z + 0.14 + 0.185), M_DARK, ROOM, extras={'lm': 512, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
     box('monitor_screen', (0.605, 0.004, 0.355), (mx, my + 0.05 - 0.0245, DESK_TOP_Z + 0.14 + 0.185), M_SCREEN, ROOM, extras={'lm': 512, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
-    # keyboard and mouse in front of the monitor (same slot group)
-    box('keyboard', (0.44, 0.14, 0.018), (mx, my - 0.33, DESK_TOP_Z + 0.009), M_DARK, ROOM, extras={'lm': 256, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
-    sphere('mouse', 0.035, (mx + 0.30, my - 0.33, DESK_TOP_Z + 0.018), M_DARK, ROOM, scale=(0.9, 1.6, 0.55), extras={'lm': 128, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
-    # a mug near the front, right of the build (slot x+, on its own)
-    cyl('mug', 0.041, 0.096, (0.30, WALL_BACK_Y - 0.02 - 0.56, DESK_TOP_Z + 0.048), M_WHITE, ROOM, extras={'lm': 256, 'slot': 'x+', 'gap': 0.07, 'group': 'mug'})
-    bpy.ops.mesh.primitive_torus_add(major_radius=0.03, minor_radius=0.006, location=(0.30 + 0.048, WALL_BACK_Y - 0.02 - 0.56, DESK_TOP_Z + 0.05), rotation=(math.radians(90), 0, 0))
-    hnd = bpy.context.active_object; hnd.name = 'mug_handle'; hnd.data.materials.append(M_WHITE); bpy.ops.object.shade_smooth(); move_to(hnd, ROOM)
-    hnd['lm'] = 128; hnd['slot'] = 'x+'; hnd['gap'] = 0.07; hnd['group'] = 'mug'
-    # a plant at the far left, against the wall (slot x-)
-    px, py = -0.70, WALL_BACK_Y - 0.02 - 0.16
-    cyl('pot', 0.075, 0.14, (px, py, DESK_TOP_Z + 0.07), M_TERRA, ROOM, extras={'lm': 256, 'slot': 'x-', 'gap': 0.07, 'group': 'plant'})
-    cyl('soil', 0.068, 0.01, (px, py, DESK_TOP_Z + 0.136), M_SOIL, ROOM, extras={'lm': 64, 'slot': 'x-', 'gap': 0.07, 'group': 'plant'})
-    for i, (dx, dy, dz, s) in enumerate(((0, 0, 0.26, 1.0), (0.09, 0.04, 0.21, 0.8), (-0.08, -0.05, 0.23, 0.85), (0.03, -0.09, 0.19, 0.7), (-0.04, 0.08, 0.20, 0.75))):
-        sphere('leaf_%d' % i, 0.085 * s, (px + dx, py + dy, DESK_TOP_Z + dz), M_LEAF, ROOM, scale=(1.0, 0.9, 0.7), extras={'lm': 128, 'slot': 'x-', 'gap': 0.07, 'group': 'plant'})
-    # a notebook and a pen at the front right, beside the keyboard
-    box('notebook', (0.15, 0.21, 0.012), (mx + 0.50, my - 0.30, DESK_TOP_Z + 0.006), M_PAPER, ROOM, rot=(0, 0, math.radians(-8)), extras={'lm': 256, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
-    cyl('pen', 0.005, 0.14, (mx + 0.47, my - 0.34, DESK_TOP_Z + 0.017), M_PEN, ROOM, verts=16, extras={'lm': 64, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
+    # keyboard and mouse in front of the monitor (same slot group), measured from the desk's FRONT edge (look5: the
+    # desk is 0.41 deep, so the front row of props sits 0.07 - 0.10 in from the edge rather than 0.33 from the monitor)
+    desk_front = desk_cy - DESK['d'] / 2
+    box('keyboard', (0.44, 0.14, 0.018), (mx, desk_front + 0.10, DESK_TOP_Z + 0.009), M_DARK, ROOM, extras={'lm': 256, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
+    sphere('mouse', 0.035, (mx + 0.30, desk_front + 0.10, DESK_TOP_Z + 0.018), M_DARK, ROOM, scale=(0.9, 1.6, 0.55), extras={'lm': 128, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
+    if args.props == 'full':
+        # a mug near the front, right of the build (slot x+, on its own)
+        mug_x, mug_y = 0.19, desk_front + 0.07   # look7: at 0.30 the mug sat inside the keyboard (x 0.33..0.77) once the keyboard came forward
+        # look8 (Joey): the mug hollowed, coffee in it, steam off the coffee in the look renders only (a Cycles volume:
+        # neither bakeable nor exportable, so bake mode never makes it)
+        mug_h = 0.096
+        mug = cyl('mug', 0.041, mug_h, (mug_x, mug_y, DESK_TOP_Z + mug_h / 2), M_WHITE, ROOM, extras={'lm': 256, 'slot': 'x+', 'gap': 0.07, 'group': 'mug'})
+        hollow_top(mug, wall=0.004, depth=mug_h - 0.006)
+        chamfer(mug, 0.0015, segments=2)
+        cyl('coffee', 0.0365, 0.004, (mug_x, mug_y, DESK_TOP_Z + mug_h - 0.014), M_COFFEE, ROOM, extras={'lm': 64, 'slot': 'x+', 'gap': 0.07, 'group': 'mug'})
+        if args.mode == 'look':
+            steam((mug_x, mug_y, DESK_TOP_Z + mug_h + 0.06))
+        bpy.ops.mesh.primitive_torus_add(major_radius=0.03, minor_radius=0.006, location=(mug_x + 0.048, mug_y, DESK_TOP_Z + 0.05), rotation=(math.radians(90), 0, 0))
+        hnd = bpy.context.active_object; hnd.name = 'mug_handle'; hnd.data.materials.append(M_WHITE); bpy.ops.object.shade_smooth(); move_to(hnd, ROOM)
+        hnd['lm'] = 128; hnd['slot'] = 'x+'; hnd['gap'] = 0.07; hnd['group'] = 'mug'
+        # a snake plant at the far left, against the wall (slot x-): look5 (Joey) replaced the five-sphere placeholder.
+        # Upright sword leaves, each a closed thin mesh (bmesh solidify), the outer columns in the yellow margin material.
+        px, py = -0.70, WALL_BACK_Y - 0.02 - 0.16
+        # look9 (Joey): the pot hollowed, the soil 24 mm below the rim, fine ribs on the terracotta
+        pot_h, soil_down = 0.14, 0.024
+        pot = cyl('pot', 0.075, pot_h, (px, py, DESK_TOP_Z + pot_h / 2), M_TERRA, ROOM, extras={'lm': 256, 'slot': 'x-', 'gap': 0.07, 'group': 'plant'})
+        hollow_top(pot, wall=0.005, depth=soil_down + 0.01)
+        chamfer(pot, 0.002, segments=2)
+        soil_top = DESK_TOP_Z + pot_h - soil_down
+        cyl('soil', 0.0695, 0.006, (px, py, soil_top - 0.003), M_SOIL, ROOM, extras={'lm': 64, 'slot': 'x-', 'gap': 0.07, 'group': 'plant'})
+        rng = random.Random(5)
+        for i in range(9):
+            phi = math.radians(i * 40 + rng.uniform(-12, 12))
+            snake_leaf('leaf_%d' % i, (px + rng.uniform(-0.025, 0.025), py + rng.uniform(-0.025, 0.025), soil_top - 0.004),
+                       phi, h=rng.uniform(0.30, 0.50), wmax=rng.uniform(0.045, 0.065), bow=rng.uniform(0.02, 0.07),
+                       twist=math.radians(rng.uniform(-35, 35)), extras={'lm': 128, 'slot': 'x-', 'gap': 0.07, 'group': 'plant'})
+        # a notebook and a pen at the front right, beside the keyboard
+        box('notebook', (0.15, 0.21, 0.012), (mx + 0.50, desk_front + 0.13, DESK_TOP_Z + 0.006), M_PAPER, ROOM, rot=(0, 0, math.radians(-8)), extras={'lm': 256, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
+        cyl('pen', 0.005, 0.14, (mx + 0.47, desk_front + 0.09, DESK_TOP_Z + 0.017), M_PEN, ROOM, verts=16, extras={'lm': 64, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
     # a framed print on the back wall, above and right of the monitor
     box('frame', (0.42, 0.02, 0.32), (0.95, WALL_BACK_Y - 0.01, 1.62), M_FRAME, ROOM, extras={'lm': 256})
     box('frame_print', (0.36, 0.004, 0.26), (0.95, WALL_BACK_Y - 0.022, 1.62), M_PRINT, ROOM, extras={'lm': 256})
@@ -260,18 +509,30 @@ def build_world():
     sky = nt.nodes.new('ShaderNodeTexSky')
     sky.sky_type = 'NISHITA'
     sky.sun_disc = True
-    sky.sun_size = math.radians(0.545)
+    sky.sun_size = math.radians(args.sun_size)
     sky.sun_intensity = args.sun_strength
     sky.sun_elevation = math.radians(args.sun_el)
     sky.sun_rotation = math.radians(args.sun_rot)
     sky.altitude = 0
     sky.air_density = 1.0
-    sky.dust_density = 2.2       # a hazier, warmer evening
+    sky.dust_density = 0.8 if NEUTRAL else 2.2       # golden: a hazier, warmer evening; neutral: a clear sky
     sky.ozone_density = 1.0
     bg = nt.nodes.new('ShaderNodeBackground')
     out = nt.nodes.new('ShaderNodeOutputWorld')
     nt.links.new(sky.outputs['Color'], bg.inputs['Color'])
     nt.links.new(bg.outputs['Background'], out.inputs['Surface'])
+    if args.soft_light > 0:
+        # a broad neutral panel just outside the window opening (1.0 x 1.4, centre y 0.15 z 1.65), facing into the room:
+        # the soft key/fill of look6. It is a light, not a mesh, so the bake folds it into the lightmaps and the glTF
+        # carries nothing extra.
+        ld = bpy.data.lights.new('window_soft', 'AREA')
+        ld.shape = 'RECTANGLE'; ld.size = 1.8; ld.size_y = 2.2
+        ld.energy = args.soft_light
+        ld.color = (1.0, 0.98, 0.95)
+        lo = bpy.data.objects.new('window_soft', ld)
+        RIG.objects.link(lo)
+        lo.location = (WALL_LEFT_X - 0.35, 0.15, 1.65)
+        lo.rotation_euler = (0, math.radians(90), 0)   # -Z -> +X, into the room
     return sky
 
 def sun_direction():
@@ -517,7 +778,7 @@ def render_exr(path):
     scene.render.image_settings.color_depth = '16'
     scene.render.image_settings.exr_codec = 'ZIP'
     scene.render.image_settings.color_mode = 'RGB'
-    scene.render.filepath = path
+    scene.render.filepath = os.path.abspath(path)   # relative: Blender resolves it against the (unsaved) blend, i.e. the drive root (C:\renders\... on 2026-10-23)
     bpy.ops.render.render(write_still=True)
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -525,7 +786,7 @@ def render_exr(path):
 # ---------------------------------------------------------------------------------------------------------------------
 def load_exr(path):
     import numpy as np
-    img = bpy.data.images.load(path)
+    img = bpy.data.images.load(os.path.abspath(path))   # relative paths resolve against the blend, not the cwd (see render_exr)
     w, h = img.size
     buf = np.empty(w * h * img.channels, dtype=np.float32)
     img.pixels.foreach_get(buf)
@@ -786,12 +1047,15 @@ elif args.mode == 'bake':
         # the desk top in stage mm, relative to the tabletop anchor: the shadow catcher's extent
         desk=dict(x0=round((desk['x0'] - room['anchor'][0]) * 1000, 1), x1=round((desk['x1'] - room['anchor'][0]) * 1000, 1),
                   zFront=round(-(desk['y0'] - room['anchor'][1]) * 1000, 1), zBack=round(-(desk['y1'] - room['anchor'][1]) * 1000, 1)),
-        sun=dict(dir=sun_stage, color='#ffb876', intensity=2.6, elevation=args.sun_el),
-        sky=dict(color='#e8d9c4', ground='#6b5a48', intensity=0.9),
+        # the planner's live sun (the build's own shadow) and hemisphere: golden as tuned on look3 (sun strength 0.5);
+        # neutral (bake2) scaled by the sun's strength relative to that and near white for a high sun, so the live build
+        # is lit like the baked props beside it rather than by an orange sun in a neutral room
+        sun=dict(dir=sun_stage, color='#fff4e8' if NEUTRAL else '#ffb876', intensity=round(2.6 * args.sun_strength / 0.5, 2), elevation=args.sun_el),
+        sky=dict(color='#e6e8ea' if NEUTRAL else '#e8d9c4', ground='#8a8278' if NEUTRAL else '#6b5a48', intensity=0.9),
         shots={'hero': dict(az=cam['az'], el=cam['el'], fovV=cam['fovV'], fill=cam['fill'], targetLift=cam['targetLift'])},
         props=props,
         glb=os.path.basename(glb), glbBytes=os.path.getsize(glb),
     )
-    json.dump(room_json, open(stem + '.json', 'w'), indent=1)
+    json.dump(room_json, open(stem + '.json', 'w', newline='\n'), indent=1)   # LF on Windows too (the repo's line ending)
     bpy.ops.wm.save_as_mainfile(filepath=stem + '.blend')
     print('[bake] wrote %s (%d bytes) and %s.json' % (glb, os.path.getsize(glb), stem))

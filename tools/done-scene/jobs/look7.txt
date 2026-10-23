@@ -1,0 +1,4 @@
+# look7 (desktop, 2026-10-23), Joey on look6: "i like this lighting more, but lets bring the assets back in to see what
+# that looks like" and the mug was clipping the keyboard in look5 (the mug moved from x 0.30 to 0.19 in room.py).
+# look6's flags with --props full (the snake plant, mug, notebook and pen back; the monitor stays).
+--mode look --name look7 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look7 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5

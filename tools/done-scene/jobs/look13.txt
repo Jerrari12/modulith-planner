@@ -1,0 +1,4 @@
+# look13 (desktop, 2026-10-23), Joey on look12: "rotate the pattern 90 degrees so that the grain goes lengthwise".
+# room.py: wood_photo() rotates the object-space mapping 90 degrees about Z (rotate_deg, default 90). Otherwise look12:
+# silver oak veneer at 1 m, contrast 0.6, bump off. The procedural-from-the-photo idea was discussed and not taken.
+--mode look --name look13 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look13 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0

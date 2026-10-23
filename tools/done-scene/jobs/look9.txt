@@ -1,0 +1,5 @@
+# look9 (desktop, 2026-10-23), Joey on look8's plant: "can the dirt be set in about 24mm below the rim of the pot, and
+# maybe a small repeating or something texture on the pot?". room.py: the pot hollowed (hollow_top), the soil disc
+# 24 mm below the rim, the leaves rooted at the soil, and ribbed(): fine horizontal ribs as a bump on the terracotta.
+# Flags as look7/look8.
+--mode look --name look9 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look9 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5

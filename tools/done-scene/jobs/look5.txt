@@ -1,0 +1,6 @@
+# look5 (desktop, 2026-10-23), Joey's first direction round on look4: "make the desk much shallower, like maybe 16 inches
+# deep" and "can we make the plant a snake plant?". Both are edits to room.py, not flags: DESK d 0.75 -> 0.4064; the
+# keyboard, mouse, mug, notebook and pen now sit off the desk's FRONT edge; the five-sphere plant replaced by nine
+# procedural snake-plant leaves (snake_leaf(): lanceolate, channelled, bowed, twisted, yellow margins; random.Random(5)).
+# Sun and camera at the defaults (sun-el 9, sun-rot 242, sun-strength 0.5, cam-az 30, cam-el 16, lens 35, fill 0.36).
+--mode look --name look5 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look5 --res 2048x1365 --samples 160

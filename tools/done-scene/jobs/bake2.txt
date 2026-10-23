@@ -1,0 +1,5 @@
+# bake2 (desktop, 2026-10-23): the bake of look14 (Joey: "ok lets bake it then and see how that works"). look14's flags
+# with --mode bake and look14's exposure (0.15657). Known and accepted for this bake: the props' shadows are baked in
+# place (a wide build that slides a prop leaves its shadow behind); the fix (props hidden from the desk and wall bake,
+# the planner's live sun casting their shadows) is a later bake. room.json's live sun is scaled to the palette.
+--mode bake --name room --out-dir renders/bake2 --exposure 0.15657 --bake-samples 192 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3

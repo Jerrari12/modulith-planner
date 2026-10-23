@@ -1,0 +1,7 @@
+# look12 (desktop, 2026-10-23), Astra on look11: the wave-band wood "still reads as rippled plastic or corduroy";
+# replace it with a photographed light oak at its documented physical scale, low contrast, bump OFF first, the top and
+# front edge as one desktop, no conspicuous highlights baked into the colour. room.py: wood_photo() with Poly Haven's
+# silver_oak_veneer_01 (CC0, 1000 x 1000 mm; tools/done-scene/textures/silver_oak_veneer_01/SOURCE.md), box-projected
+# in object space at 1 m per repeat, 60 % of the photo over its mean colour, roughness a constant 0.5, no normal map.
+# New flags: --desk-wood, --desk-contrast, --desk-bump. Light and camera as look6-11.
+--mode look --name look12 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look12 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0

@@ -1,0 +1,4 @@
+# look10 (desktop, 2026-10-23), Joey on look9: "chamfer a few edges so the light hits them a little more realistically,
+# like the edges of the desk, the mug, the plant pot". room.py: chamfer() bevels every sharp edge as geometry (bmesh),
+# desk top 3 mm x 3 segments, mug 1.5 mm x 2, pot 2 mm x 2, smooth by angle after. Flags as look7-9.
+--mode look --name look10 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look10 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5

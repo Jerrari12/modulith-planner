@@ -1,0 +1,5 @@
+# look8 (desktop, 2026-10-23), Joey on look7: "have the mug shaped to have coffee in it, and have steam coming off the
+# hot coffee" - steam in the cinematic (look) renders only. room.py: the mug is hollowed (hollow_top), a coffee disc
+# sits 14 mm below the rim, and a Principled Volume wisp (steam()) is added in look mode only, in the rig collection,
+# so the bake and the glTF never see it. Flags as look7.
+--mode look --name look8 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look8 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5

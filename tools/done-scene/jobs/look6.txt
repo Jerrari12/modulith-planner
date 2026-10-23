@@ -1,0 +1,7 @@
+# look6 (desktop, 2026-10-23), Joey's second direction round, the ChatGPT brief: "the planner's product stage, placed in a
+# believable room". The build at half the frame height from a gentle three-quarter view slightly above the fronts; soft,
+# broad, mostly neutral light with a gentle fill; a muted light-oak desk and a cool off-white wall; the placeholder
+# plant and the mug out, the monitor peripheral and subdued; the filament colours preserved (no amber wash).
+# New flags in room.py: --props minimal, --palette neutral, --soft-light <W> (an area panel outside the window),
+# --sun-size <deg>. The sun is kept (the planner's shadow needs a measured direction) but high, weak and wide.
+--mode look --name look6 --kit test/golden/185-tabletop-2w2h.manifest.json --parts tools/done-scene/kit/parts --out-dir renders/look6 --res 2048x1365 --samples 160 --props minimal --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5
