@@ -3057,3 +3057,44 @@ keyboard undo or Remove").
   drove exactly that with no extra code and the bubble went (the veil under the pointer fires mouseleave; a keyboard-shown
   bubble goes with the focus the modal takes); a line in the vault's reviewer-lessons (`3b105e1`).
 - **Deploy:** not yet, a feature (Joey's go). Branch `hover-hints`.
+
+## 2026-10-23 (Very High on the light theme never let the idle gate rest: the accumulator's last sample left the shadow map flagged)
+
+- **The defect** (found by the Done-scene session on main's own code with no room, 2026-10-23; branch `done-scene` 80b0cca
+  carries the same fix among the room work, not merged). The idle gate (2026-10-17) stops drawing a still view and draws
+  one keepalive frame a second. On Very High every accumulated sample ends with `accSetSun(0)`, which puts the sun home
+  and sets `renderer.shadowMap.needsUpdate` (the stage keeps `shadowMap.autoUpdate` off and flags the map itself); after
+  the 24th sample the converged mean is blitted to the canvas with no scene render, so nothing consumed the flag, and
+  `idleSettling()`'s third branch ("a shadow render still owed") kept the gate open: about 120 frames a second at rest.
+  Only the light theme has a shadow map (`shadowsWanted`), so the dark theme never showed it.
+- **The fix** (`js/main.js` `idleSettling`, one condition, from `done-scene` 80b0cca on its own: no `sceneHold`, no
+  scenes/, no assemble.js change): the owed-shadow branch is ignored while a converged accumulator is blitting its mean
+  (`accWanted() && acc.ok && acc.n >= ACC_SAMPLES`). The flag is honoured by the next plain render, which is the first
+  frame after anything changes, and a restarted accumulation's samples set and consume it themselves. Nothing drawn
+  changes: a converged accumulator blits the same mean on every frame, so the fix changes when a frame draws, never what.
+- **The test:** `test/idle-settling.test.mjs` lifts `idleSettling` from the source text (the swap-shadows pattern, because
+  main.js builds a renderer at import) and drives its three branches with the names it reads as knobs. The mutant with
+  the condition reverted fails the converged case (checked on a scratch copy of main.js).
+- **Measured** (headless Playwright on SwiftShader, 1280 × 800, the 2W2H tabletop kit, Very High, light theme, at the Done
+  page after Skip to the finished build, `idleStats().drawn` sampled once a second for 12 s; the same script on main
+  eeceaeb and on the fix): before, 119–124 frames a second, every second; after, 1 a second (one 2), `skipped` climbing,
+  and `shadowMap.needsUpdate` still true at rest in both, as the fix predicts.
+- **Goldens: 60 of 60 run alone; under load 58 of 60, and the two that differ differ on main too, in the same run.** A
+  fifth full run on this branch alone (CPU 11–28 %) read 60 shots, 0 differ. Before it, four full runs on the fix
+  while other sessions' suites and SwiftShader browsers loaded the machine: 5, 1, 5 and 2 shots differ, every one an
+  `--end--` shot at 0.10–0.17 % of pixels, and in each the build is pixel-identical and only the height ruler stands on
+  the other side. The fourth run was paired with pristine main eeceaeb at the same time: main's 60 differ in the same
+  two (115-2w2h and 115-3w2h, end, Very High) at the same fractions (0.141 %, 0.112 %). The clause cannot reach a
+  golden: the goldens run on the dark stage, where `shadowMap.enabled` is false on every tier, so the changed line
+  short-circuits before the new clause on all 60. The flip is main's: the plain viewer's end page opens the checklist
+  panel, and `updateDims` scores the ruler's corner against the panel's rect each frame with a 15 % hysteresis, so the
+  corner kept depends on which frames ran while the panel came in (the tool's own header records a 0.12 % side flip
+  from panel state); eight single-kit runs, four per tree, never flipped. Not instrumented beyond that. The same clause
+  on `done-scene` read 60/60 at 15:40 the same day, run alone (the Done-scene session). The ruler flake is main's
+  follow-up, not this fix's.
+- **Review:** Terra `01a16a58` (routine): no findings on the diff, the test, the accumulator excerpts and this entry's
+  draft; the goldens and suites bullets went back on the same thread once the runs were in, no findings.
+- **Suites:** npm test 618 (613 pass, 0 fail, the 5 environment skips main has; 44 minutes under the shared load,
+  layout-parity alone 2666 s against 752 s on a quiet machine); goldens as above.
+- **Deploy:** on Joey's go; the merge to main too.
+
