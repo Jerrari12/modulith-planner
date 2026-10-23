@@ -105,7 +105,8 @@ the labels kept aside for a build that comes back without them, `js/state/label-
 
 - `node tools/shell-shots.mjs` writes checkpoint screenshots of every workspace in both modes, desktop and 390 px
   phone, to `docs/redesign/checkpoints/`.
-- `node tools/hint-clips.mjs` records the Labels workspace's hover-hint clips (`img/hints/`) from the app itself.
+- `node tools/hint-clips.mjs` records the workspaces' hover-hint clips (`img/hints/`) from the app itself; a clip's
+  name or a workspace's as the argument records only those.
 - `node tools/perf-probe.mjs` reports the heap and the renderer's resource counts after 1 and after 50 regenerates, and
   the frame intervals while the model is dragged with the Build chrome open, at the default tier and at Fast.
 - `node tools/make-icons.mjs` rebuilds the Phosphor sprite; `node tools/fetch-fonts.mjs` the self-hosted fonts.

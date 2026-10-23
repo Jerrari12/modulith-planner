@@ -12,8 +12,13 @@ import { el, makeToast } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { attachHint } from '../ui/hint.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 
+/* the camera button's hover hint (js/ui/hint.js; the clip img/hints/assemble-camera.mp4 from tools/hint-clips.mjs). Joey's own
+   question of 2026-10-20 ("how do i get it to snap back to the cinematic camera?") is what the clip answers; it sits under
+   the toolbar, since beside the chip it would cover the next ones (2026-10-23) */
+const CAM_HINT = { title: 'Back to the step’s camera', text: 'After you orbit or zoom, this returns to the guided view. It lights orange while the camera is yours.', video: 'img/hints/assemble-camera.mp4', below: true };
 
 export function mountAssemble(stage, ctx) {
   const ac = new AbortController();
@@ -35,6 +40,7 @@ export function mountAssemble(stage, ctx) {
   root.prepend(topbar(stage, { ...ctx, active: 'assemble', say, soon, signal }));
   const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview), camTitle: 'Back to the step\u2019s camera \u00b7 after you orbit or zoom, this returns to the guided view' });
   root.appendChild(tb.el);
+  attachHint(tb.el.querySelector('.cam'), CAM_HINT, tb.el);
 
   /* NOT READY TO ASSEMBLE (2026-10-21, Joey: with empty slots "the assembly is not legal until i fill in those gaps"). A
      build the stage shows as an in-progress preview - empty slots under (or above) a case, or a tabletop top not level

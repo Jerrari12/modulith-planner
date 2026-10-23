@@ -4188,3 +4188,115 @@ test('the Parts badge and the size line follow an undo made from Labels: the bad
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* HOVER HINTS ON EVERY WORKSPACE (2026-10-23, Joey: "can we do more video animations for when hovering over certain buttons
+   to illustrate how they work?"). A hinted control carries data-hint = its clip's name (js/ui/hint.js attachHint); resting
+   the mouse on it shows the bubble beside its panel with that clip after the dwell, leaving hides it, and while a modal
+   dialog is up (the setup sheet here) nothing shows, not even for a harness that fires the hover and the focus straight at
+   the control under the veil; the sheet closing brings the hints back. HINTED lists, per workspace, the way into each
+   state that offers hints and the clips there: a lost attachHint or a renamed clip fails the first assertion, a clip
+   missing from img/hints/ the second (the <video> errors and the SVG scene takes its place). */
+const HINTED = {   // per workspace: the panel the hints wait for (Labels renders after its list module loads), then the steps
+  build: { ready: '#ws-lib .size', steps: [
+    { keys: ['build-place'] },
+    { go: async (page) => { await page.locator('#ws-lib [role=tab]:has-text("Build style")').click(); await page.waitForSelector('[data-hint="build-sidecovers"]', { timeout: 15_000 }); }, keys: ['build-sidecovers'], focus: '[data-hint="build-sidecovers"] .seg' },   // the hint is on the track; the keyboard reaches its segments
+    // a 2W over a 1W leaves a red slot under it; the issue card, opened from the dock's status, offers Fill all
+    { go: async (page) => {
+      await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.gridH = 2; s.gridW = 2; s.placed = [{ id: 1, x: 0, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.nextId = 3; }, 'edit'));
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 2, null, { timeout: 90_000 });
+      await page.click('#ws-dock .status'); await page.waitForSelector('#ws-issues:not([hidden])', { timeout: 15_000 });
+    }, keys: ['build-fill'] },
+  ] },
+  colors: { ready: '#ws-colors .row4', steps: [{ keys: ['colors-browse', 'colors-surprise', 'colors-simplify'] }] },   // Simplify: the root kit's look has five filaments
+  labels: { ready: '#ws-labels .foot', steps: [{ keys: ['labels-type', 'labels-file', 'labels-picker'] }] },
+  parts: { ready: '#ws-parts .prow', steps: [{ keys: ['parts-track'] }] },
+  assemble: { ready: '#ws-tools .cam', steps: [{ keys: ['assemble-camera'] }] },
+};
+test('hover hints: every hinted control shows its clip on hover and hides on leave; none shows over the setup sheet or an open card', async () => {
+  const shown = (page, key) => page.waitForFunction((k) => { const b = document.getElementById('ws-hint'); return !!b && !b.hidden && b.classList.contains('show') && (b.querySelector('.scene video')?.getAttribute('src') || '').endsWith(`/${k}.mp4`); }, key, { timeout: 15_000 });
+  const isHidden = () => { const b = document.getElementById('ws-hint'); return !b || b.hidden; };
+  const hidden = (page) => page.waitForFunction(isHidden, null, { timeout: 15_000 });
+  const hinted = (key) => `#ws [data-hint="${key}"]`;
+  // a hover and a focus fired straight at the control, as a harness or the keyboard can under a veil
+  const poke = (page, key) => page.evaluate((sel) => { const b = document.querySelector(sel); b.dispatchEvent(new MouseEvent('mouseenter')); b.dispatchEvent(new FocusEvent('focusin', { bubbles: true })); }, hinted(key));
+  for (const [ws, { ready, steps }] of Object.entries(HINTED)) {
+    const { ctx, page, errors } = await open(ws);
+    await page.waitForSelector(ready, { timeout: 30_000 });
+    let last = null;
+    for (const step of steps) {
+      if (step.go) await step.go(page);
+      const present = await page.evaluate(() => [...new Set([...document.querySelectorAll('#ws [data-hint]')].map((e) => e.dataset.hint))]);
+      for (const key of step.keys) assert.ok(present.includes(key), `${ws}: no control carries the ${key} hint (present: ${present.join(', ') || 'none'})`);
+      for (const key of step.keys) {
+        await page.locator(hinted(key)).first().hover({ timeout: 15_000 });
+        await shown(page, key).catch(async () => assert.fail(`${ws}: no bubble with ${key}.mp4 on hover (bubble: ${await page.evaluate(() => document.getElementById('ws-hint')?.outerHTML.slice(0, 300))})`));
+        // a real recording, not a stub: the clip's metadata arrives and it runs 6 s or more (Joey's 10-15 s; the shortest is 9 s)
+        await page.waitForFunction(() => { const v = document.querySelector('#ws-hint .scene video'); return !!v && v.readyState >= 1 && v.duration >= 6; }, null, { timeout: 15_000 })
+          .catch(async () => assert.fail(`${ws}: ${key}.mp4 did not load as a clip of 6 s or more (readyState ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.readyState)}, duration ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.duration)})`));
+        // beside the control's panel, never over the control itself (spacing-between-controls: a hint must not cover what it explains)
+        const over = await page.evaluate((sel) => { const b = document.getElementById('ws-hint').getBoundingClientRect(), r = document.querySelector(sel).getBoundingClientRect(); return !(b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom); }, hinted(key));
+        assert.equal(over, false, `${ws}: the bubble for ${key} covers its control`);
+        await page.mouse.move(640, 430);   // onto the stage
+        await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${key} stayed after the mouse left`));
+        last = key;
+      }
+      // the keyboard: focus on the control (or, for a hint on a group, on a segment inside it) shows the hint too; focus
+      // leaving it hides it (Sol 01a16a18: a `focus` listener on the group never fired, the event does not bubble)
+      if (step.focus) {
+        await page.focus(step.focus);
+        await shown(page, last).catch(() => assert.fail(`${ws}: no bubble for ${last} on keyboard focus inside its group`));
+        await page.evaluate(() => document.activeElement.blur());
+        await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${last} stayed after focus left`));
+      }
+    }
+    if (ws === 'colors') {
+      // an open card the control is not part of: Simplify's card opens under the pointer that pressed Simplify…, and a
+      // bubble beside the panel would cover it, so none shows while it is up (the hint on Fill all, INSIDE its issue card, shows above)
+      await page.click(hinted('colors-simplify'));
+      await page.waitForSelector('#ws-simplify:not([hidden])', { timeout: 15_000 });
+      await poke(page, 'colors-simplify'); await settle(page, 1000);
+      assert.equal(await page.evaluate(isHidden), true, 'colors: a hint showed over the Simplify card');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.getElementById('ws-simplify').hidden, null, { timeout: 15_000 });
+    }
+    // a bubble already up when a modal dialog opens (the setup sheet) goes down with it: the veil under the pointer fires the
+    // control's mouseleave, and a keyboard-shown bubble goes with the focus the sheet takes (Sol 01a16a18 said it would
+    // stay; it does not, and no extra listener is needed)...
+    await page.locator(hinted(last)).first().hover({ timeout: 15_000 });
+    await shown(page, last);
+    await page.evaluate(() => { window.__GEN2_CTX__().openSetup('mount'); });
+    await page.waitForSelector('#ws-setup', { timeout: 15_000 });
+    await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${last} stayed up over the setup sheet`));
+    // ...and while it is up a hover and a focus fired at a hinted control show nothing
+    await poke(page, last); await settle(page, 1000);   // past the dwell
+    assert.equal(await page.evaluate(isHidden), true, `${ws}: a hint showed over the setup sheet`);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.getElementById('ws-setup'), null, { timeout: 15_000 });
+    // ...and once it is closed the same control hints again
+    await page.locator(hinted(last)).first().hover({ timeout: 15_000 });
+    await shown(page, last).catch(() => assert.fail(`${ws}: no bubble for ${last} after the sheet closed`));
+    await page.mouse.move(640, 430);
+    await hidden(page);
+    assert.deepEqual(clean(errors), [], ws);
+    await ctx.close();
+  }
+  // a narrow window with a mouse (1000 px: the phone chrome's sheets, hover still on): the toolbar chip hints under its bar;
+  // while a sheet is open nothing hints, not even a control outside the sheet; the sheet closed, it hints again
+  const narrow = await browser.newContext({ viewport: { width: 1000, height: 700 } }); contexts.add(narrow); await narrow.addInitScript(FAST);
+  const N = await open('assemble', { context: narrow });
+  await N.page.waitForSelector('#ws-steps .sheet-handle', { timeout: 30_000 });
+  await N.page.locator(hinted('assemble-camera')).hover({ timeout: 15_000 });
+  await shown(N.page, 'assemble-camera').catch(() => assert.fail('narrow: no bubble on the camera chip'));
+  assert.ok(await N.page.evaluate(() => document.getElementById('ws-hint').getBoundingClientRect().top >= document.getElementById('ws-tools').getBoundingClientRect().bottom), 'narrow: the bubble sits under the toolbar');
+  await N.page.mouse.move(500, 400); await hidden(N.page);
+  await N.page.locator('#ws-steps .sheet-handle').click();
+  await N.page.waitForSelector('#ws-steps.sheet.open', { timeout: 15_000 });
+  await poke(N.page, 'assemble-camera'); await settle(N.page, 1000);
+  assert.equal(await N.page.evaluate(isHidden), true, 'narrow: a hint showed while a sheet was open');
+  await N.page.locator('#ws-steps .sheet-handle').click();
+  await N.page.waitForFunction(() => !document.querySelector('#ws .sheet.open'), null, { timeout: 15_000 });
+  await N.page.locator(hinted('assemble-camera')).hover({ timeout: 15_000 });
+  await shown(N.page, 'assemble-camera').catch(() => assert.fail('narrow: no bubble once the sheet closed'));
+  assert.deepEqual(clean(N.errors), [], 'narrow');
+  await narrow.close();
+});
