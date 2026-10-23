@@ -3682,7 +3682,7 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
    The stage keeps a palette's feet TPU (main.js tpuFeet): the boot preset, a whole palette or a saved one that names PLA
    feet, a reset; a unit's own PLA pick for its feet is refused. The feet's picker lists only the TPU lines and every other
    picker none; each line's header carries its material tag. */
-test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and on reset; a TPU-only feet picker; material tags on every line', async () => {
+test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and on reset; a TPU-only feet picker; material tags on every line; the picker’s material chips', async () => {
   const { ctx, page, errors } = await open('colors');
   const TPU_BLACK = 'Polymaker PolyFlex TPU95 Black';
   const feet = () => page.evaluate(() => (window.__GEN2_VIEWER__.palette().colors.Foot || {}).name);
@@ -3694,10 +3694,54 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   const caseHeads = await heads();
   assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'every line but TPU, each tagged');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
-  // the feet's picker: the note, the two TPU lines tagged TPU, nothing else
+  // THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a case's lines sell PLA and
+  // PETG, so a row of All · PLA · PETG stands above the list, All pressed, 8 px between the chips (the planner's floor)
+  const chips = () => page.evaluate(() => [...document.querySelectorAll('#ws-picker .mrow .mchip')].map((b) => [b.textContent.trim(), b.getAttribute('aria-pressed')]));
+  const swLabels = () => page.evaluate(() => [...document.querySelectorAll('#ws-picker .brands .sw')].map((e) => e.getAttribute('aria-label')));
+  assert.deepEqual(await chips(), [['All', 'true'], ['PLA', 'false'], ['PETG', 'false']], 'a case: a chip per material offered, All pressed');
+  const gaps = await page.evaluate(() => { const r = [...document.querySelectorAll('#ws-picker .mrow .mchip')].map((b) => b.getBoundingClientRect()); return r.slice(1).map((b, i) => +(b.left - r[i].right).toFixed(1)); });
+  assert.ok(gaps.length === 2 && gaps.every((g) => g >= 8), `8 px between the chips (${gaps.join(', ')})`);
+  const allCount = (await swLabels()).length;
+  // PETG narrows the list: the two lines that sell it (Elegoo down to its PETG colour), In this build down to its PETG, the chip pressed
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();
+  assert.deepEqual(await chips(), [['All', 'false'], ['PLA', 'false'], ['PETG', 'true']], 'PETG pressed, All released');
+  assert.deepEqual(await heads(), [['PETG', ['PETG']], ['PLA / PETG', ['PLA', 'PETG']]], 'PETG: the two lines that sell it, the others gone');
+  const petg = await swLabels();
+  assert.ok(petg.length > 0 && petg.length < allCount && petg.every((l) => /PETG/.test(l)), `every swatch left is PETG, In this build included (${petg.length} of ${allCount}): ${petg}`);
+  const elegoo = petg.filter((l) => /^Elegoo/.test(l));
+  assert.ok(elegoo.length && elegoo.every((l) => l === 'Elegoo PETG Black'), `Elegoo narrowed to its PETG colour (${elegoo})`);
+  // the search combines with the chip: "black" under PETG finds the PETG blacks alone; All with the words kept finds every black
+  await page.locator('#ws-picker .search').fill('black');
+  const petgBlack = await swLabels();
+  assert.ok(petgBlack.length > 0 && petgBlack.every((l) => /PETG/.test(l) && /black/i.test(l)), `PETG + "black": the PETG blacks alone (${petgBlack})`);
+  assert.deepEqual(await chips(), [['All', 'false'], ['PLA', 'false'], ['PETG', 'true']], 'typing keeps the chip');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^All$/ }).click();
+  const allBlack = await swLabels();
+  assert.ok(allBlack.length > petgBlack.length && allBlack.every((l) => /black/i.test(l)) && allBlack.some((l) => !/PETG/.test(l)), `All + "black": every black, the PLA ones back (${allBlack})`);
+  assert.equal(await page.inputValue('#ws-picker .search'), 'black', 'the chip never rebuilt the search box');
+  await page.locator('#ws-picker .search').fill('');
+  assert.equal((await swLabels()).length, allCount, 'All with the search cleared: the whole list again');
+  // the keyboard: Space on a focused chip presses it and the focus stays on it (a rebuilt row dropped it to the document, Terra 01a16a51)
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).focus();
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => [document.activeElement.textContent.trim(), document.activeElement.getAttribute('aria-pressed')]), ['PLA', 'true'], 'Space presses the focused chip and keeps the focus on it');
+  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one');
+  // a shared or uploaded palette can name a filament the catalogue does not know: its own words place it under a chip (Terra 01a16a51)
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const p = v.palette(); v.setPalette({ on: true, colors: { ...p.colors, Accent: { name: 'PETG Blue (custom)', hex: '#2f66b8' } }, over: p.over || {} }); });
+  await page.locator('#ws-colors .crow').first().click();   // the case picker opened again: it reads the palette afresh and starts at All
+  await page.waitForFunction(() => document.querySelector('#ws-picker .sw[aria-label="PETG Blue (custom)"]'), null, { timeout: 15_000 }).catch(() => assert.fail('the custom colour did not reach In this build'));
+  assert.deepEqual(await chips(), [['All', 'true'], ['PLA', 'false'], ['PETG', 'false']], 'a picker opened again starts at All');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();
+  assert.ok((await swLabels()).includes('PETG Blue (custom)'), 'an uncatalogued PETG in the build answers the PETG chip by its name');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).click();
+  assert.ok(!(await swLabels()).includes('PETG Blue (custom)'), 'and not the PLA chip');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();   // left pressed: the feet's picker must open at All
+  // the feet's picker: the note, the two TPU lines tagged TPU, nothing else; no material row (TPU alone), and the case's
+  // PETG chip did not follow (a sticky chip would narrow the TPU lines to nothing: the 11 swatches prove the reset)
   await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Foot$/ }) }).first().click();
   await page.waitForFunction(() => /only TPU is listed/.test(document.getElementById('ws-picker')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('the feet picker did not open with its note'));
   assert.deepEqual(await heads(), [['PolyFlex™ TPU95', ['TPU']], ['PolyFlex™ TPU90', ['TPU']]]);
+  assert.equal(await page.locator('#ws-picker .mrow').count(), 0, 'the feet offer TPU alone: no material row');
   const sws = await page.evaluate(() => [...document.querySelectorAll('#ws-picker .brands .sw')].map((e) => e.getAttribute('aria-label')));
   assert.ok(sws.length === 11 && sws.every((n) => / TPU9/.test(n)), `only TPU swatches (In this build + 10): ${sws}`);
   // TPU95 Orange, then the reset: TPU95 Black

@@ -2885,3 +2885,49 @@ Dated calls made while building, with who made them. The brief and the inventory
   viewport (Terra's follow-up, `01a169dc`).
 - **Deploy:** a reported bug, so it deploys once the suites pass.
 
+## 2026-10-23 (the filament picker filters by material: All · PLA · PETG chips above the list)
+
+- **Joey, asked:** "in the color/filament selection on the right side of the screen, should we also have a way to filter by
+  material type when applicable?"
+- **What a material is here.** The catalogue (`js/filament-db.js`, vendored byte-for-byte, so it gains no field) has no
+  material of its own; the 2026-10-21 tags on every line header derive from the line's NAME (a TPU line is TPU; otherwise PLA
+  and/or PETG, both on the Elegoo "PLA / PETG" line). Silk and Translucent are finishes of PLA and stay tagged PLA, so the
+  chips are the tags' three materials and nothing finer: a case's picker offers **All · PLA · PETG**, and the feet's, which
+  lists the TPU lines alone, shows no row at all ("when applicable": a row needs two materials to choose between). The rule
+  now lives in one place, `js/colors/materials.js` (pure, no imports): `lineMaterials` for the tags and the chips alike,
+  `colorMaterial` for a colour on a two-material line (its own name says: "PETG Black" / "PLA Grey"), `materialsIn` for
+  the chips a region's lines offer, `filterByMaterial` for the narrowing, `labelMaterials` for the "In this build" row, and
+  `wordMaterial` for a palette name the catalogue lacks (a shared or uploaded palette can name anything: "petg Blue" answers
+  the PETG chip by its own whole word, any case; "Sunset Orange" says nothing and shows under All only).
+- **The row** (`#ws-picker .mrow`, role group "Material", `button.mchip[aria-pressed]` with a dot in the tag's colour) sits
+  between the search box and the list, All first and pressed. A chip narrows the brand groups (a group's header count follows;
+  a group with no colour of that material hides) and the "In this build" row, and combines with the search both ways: the
+  search alone re-renders the list, never the box, and a chip does the same, so the typed words survive a chip and the chip
+  survives typing. The chips are built once per picker render and their pressed state is set in place: the first draft
+  rebuilt the row on a click, and a Space on a focused chip then dropped the keyboard's focus to the document (Terra, below).
+  A pick's re-render keeps the chip (`st.mat`, like `st.query`); opening a picker for a region starts both afresh at All,
+  so a PETG chip left on the case never follows into the feet's TPU-only list. 8 px between the chips (`--gap-ctl`, the
+  planner's floor); on the phone the row is nowrap and scrolls sideways (3 px of padding keep a chip's focus ring inside the
+  scroll box), so the sheet's list keeps its height.
+- **Checks.** `test/materials.test.mjs` (7 tests) states the rule against the real catalogue: a line's materials from its
+  name, the Elegoo line's by colour, PLA + PETG for a case and TPU alone for the feet, PETG keeping the Polymaker PETG line and
+  Elegoo's one colour, PLA dropping the Polymaker PETG line in order, a full pass over the chips accounting for every colour
+  once, the label map, and the whole-word any-case name rule. The TPU-feet Colors e2e case gained the chips: All · PLA · PETG
+  on a case with All pressed and 8 px gaps; PETG pressing, releasing All, leaving the two lines that sell it with every swatch
+  PETG (In this build included) and Elegoo down to its PETG Black; "black" under PETG the PETG blacks alone, All with the
+  words kept every black, the search box never rebuilt; Space on a focused PLA chip pressing it with the focus kept; an
+  uploaded "PETG Blue (custom)" in the palette answering PETG and not PLA after the picker is opened again at All; the feet
+  with no row and their 11 TPU swatches with a PETG chip left pressed on the case. Passes alone in 38 s (soft). Mutants, each
+  failing its own check: no row, no narrowing, In this build ignoring the chip, no reset on open, a row for one material,
+  4 px gaps, the pressed state not synced, the row rebuilt on a click (focus lost), an uncatalogued name never answering, and
+  in the unit: the first material taken on a two-material line, empty groups kept, TPU never said, a substring match
+  (PLATINUM as PLA): 13 of 13 killed.
+- **Review:** Terra `01a16a51` (routine): two findings, both held and fixed (the rebuilt row losing keyboard focus; an
+  uncatalogued palette name hidden under every chip); its follow-up on the fixes: one more, held and fixed (the word match
+  was case-sensitive). Screenshots in `D:\Claude - Output\material-filter-2026-10-23` (desktop and phone, All and PETG).
+- **Suites:** npm test 623 (617 pass, 5 skipped; M28's timing gate tripped once while the e2e subset rendered in software
+  beside it, median 0.3 ms, max 650.6 ms, and passes alone: the Simplify file 5 of 5 in 88 ms); the e2e cases named Colors,
+  the phone check, the phone journey, analytics and the boot case: 23 of 23 (11.6 min, soft). The full e2e suite runs on the
+  deploy.
+- **Deploy:** a feature, so on Joey's go; the branch is `material-filter`, not merged.
+
