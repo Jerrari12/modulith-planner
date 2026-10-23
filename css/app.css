@@ -1033,10 +1033,14 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
   #ws-switch > .chip-btn > span { max-width: clamp(120px, calc(100vw - 1260px), 240px); }
 }
-/* 1280-1365: the bar was already full before the Feedback & support button (at 1280 Share sat 11 px past the bar's edge,
-   33 px with an Under-Table build), so the button stays in the build menu there */
+/* 1280-1365: the bar is one row again, and full. At 1280 Share sat 11 px past the bar's edge on the root kit and 85 px
+   with an Under-Table build and the widest tab badges (2026-10-23, DECISIONS). So the mount chip shows its icon and
+   length, as on the phone; the words stay for a screen reader and in the setup sheet. The tabs keep their row: a second
+   row here would move every panel 44 px down on the shortest laptop screens. Even so, 6 px is left at 1280 in that case,
+   so the Feedback & support button stays in the build menu here */
 @media (min-width: 1280px) and (max-width: 1365px) {
   #ws-top .feedback { display: none; }
+  #ws-top .chip-btn.mount .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 /* narrow desktop (1024-1279): the workspace tabs keep their names on a row of their own under the bar, and the
    panels start below it; the chips go icon-only. From 1024 up only: this block comes after the phone's, so without the
@@ -1053,16 +1057,12 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-lib, #ws-insp, #ws-tools, #ws-steps { top: 134px; }
   #ws-dock { gap: 14px; }
 }
-/* 1280-1365: the bar is one row again, and full. At 1280 Share sat 11 px past the bar's edge on the root kit and 85 px
-   with an Under-Table build and the widest tab badges (2026-10-23, DECISIONS). So the mount chip shows its icon and
-   length, as on the phone; the words stay for a screen reader and in the setup sheet. The tabs keep their row: a second
-   row here would move every panel 44 px down on the shortest laptop screens. 1366 fits that case, under 1 px to spare */
-@media (min-width: 1280px) and (max-width: 1365px) {
-  #ws-top .chip-btn.mount .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-}
-/* the last resort at any width: a bar that is still too full shortens the build name below its floor rather than push
-   Share off the screen (above 1500 the printer's name and Share's word come back, 64 px over in that case at 1501) */
-#ws-switch { min-width: 0; }
+/* the last resort at any width: a bar that is still too full shortens the build name below its floor, and nothing else
+   gives way. That case is the widest tab badges with Under-Table and the longest printer name. Before (2026-10-23), the
+   Feedback & support button took the squeeze first (its 44 px is a width, so the bar shrank it to 20) and Share was
+   still 29 px past the bar's edge at 1366, and 21 px at 1581, where the printer's name and Share's word come back */
+#ws-top > * { flex-shrink: 0; }
+#ws-switch { flex-shrink: 1; min-width: 0; }
 #ws-switch > .chip-btn { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }
 

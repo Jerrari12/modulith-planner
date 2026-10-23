@@ -2718,19 +2718,30 @@ Dated calls made while building, with who made them. The brief and the inventory
     printer chip (167 px; Voron Switchwire 162, a 300×300 custom bed 162).
   - The tab badges count too. With the widest badges a big build could show (Labels 99/99, Parts 999), the tabs are
     57 px wider. That case was 85.2 px over at 1280 and still 0.2 px over at 1365.
-  - The same cases overflowed above 1500, where the printer's name and Share's word come back: 6.3 px at 1501 (63.8 px
-    with those badges, still 4.8 px at 1650; it fitted again from 1655).
+  - On `7b68f9e` the same cases overflowed above 1500, where the printer's name and Share's word come back: 6.3 px at
+    1501 (63.8 px with those badges, still 4.8 px at 1650; it fitted again from 1655).
+  - **Then main took the Feedback & support button** (`fe0a410`, merged into this branch as `78f4490`). The button is
+    44 px, shown from 1366 up and hidden at 1280-1365. The printer and Share chips stay icon-only up to 1580, and the
+    name's width term above that is 1424.
+  - With the button, the widest case with those badges was still over. The bar squeezed the button from 44 to 20 px
+    (its 44 px is a `width`, and a flex item shrinks by default). Share was still past the edge: 29.2 px at 1366,
+    15.2 px at 1400-1500, 20.8 px at 1581-1640 and 4.8 px at 1680. It fitted from 1700.
+  - Those figures come from the merge with the switcher rules below taken out; the mount chip's rule acts only below
+    1366. Without the big badges the bar fitted everywhere: 4.3 px to spare at 1366, 12.7 px at 1581.
   - For scale, a 12W×5H build of 48 drawers on the root kit shows Parts 60 and no Labels badge (its faceplates take no
     label). 999 is a generous bound.
-- **Now** (`css/app.css`, two rules):
+- **Now** (`css/app.css`):
   - **At 1280-1365 the mount chip shows only its icon and length,** as it does on the phone: 79 px for every mount. Its
     words are clipped, not removed, so the button's accessible name is still "Under-Table · 185". The setup sheet the chip
     opens names the mount, and so does the chip from 1366 up.
-  - **At every width, the build switcher may shrink below its name's floor** (`min-width: 0` on `#ws-switch`, and
-    `max-width: 100%` on its chip). If the bar is still too full, the build name gets shorter instead of Share leaving
-    the screen. It only acts in the extreme cases. In 1280-1365 the name keeps its 120 px floor everywhere (6.4 px to
-    spare at 1280 in the widest case). Above 1500 it gives way: to 86 px at 1501 in the widest case, 144 px without the
-    big badges.
+  - This rule shares its 1280-1365 block with the Feedback & support button's hide. The hide is still needed: 6.4 px is
+    left at 1280 in the widest case, and the button takes 54.
+  - **Only the build name gives way.** The rules are `#ws-top > * { flex-shrink: 0 }`,
+    `#ws-switch { flex-shrink: 1; min-width: 0 }` and `max-width: 100%` on the switcher's chip. If the bar is still too
+    full, the build name gets shorter; no other control is squeezed, and Share stays on the screen.
+  - It only acts in the widest case with the big badges. The name keeps its 120 px floor in 1280-1365. Above that it
+    gives way: to 67 px at 1366, 101 px at 1400, 141 px at 1440 and 201 px at 1500; then to 112 px at 1581 and 171 px
+    at 1640. Without the big badges it never acts.
 - **Why not the tabs on their own row up to 1365** (the other candidate). That tier moves every panel 44 px down (top 134
   instead of 90), and 1280-1365 includes the shortest laptop screens (1280×720, 1360×768). It is also not CSS alone: the
   1280 line is coded in six places across five workspace files (`innerWidth < 1280` for safe areas and narrow layouts in
@@ -2739,18 +2750,35 @@ Dated calls made while building, with who made them. The brief and the inventory
   have saved about 42, which does not cover the big badges.
 - **Checks.** A new e2e case, "the top bar fits at every desktop width in its widest case, in every workspace…":
   - It sets that build up through the setup sheet and writes the widest badges into the tabs. Then, in all five
-    workspaces, at 15 widths from 1024 to 1920, it asserts:
+    workspaces, at 17 widths from 1024 to 1920 (each tier's edges among them), it asserts:
     - nothing past the bar's right edge;
     - 10 px between the controls (the switcher's chip is measured, not its wrapper);
+    - no control narrower than 44 px, the wordmark and the switcher aside;
     - the tabs on a row of their own below 1280 only, and on the screen;
     - the mount word shown only outside 1280-1365, with the accessible name kept at 1280;
     - the build name at least 118 px in 1280-1365, and at least 60 px elsewhere.
-  - It fails on the CSS of `7b68f9e` (85 px past at 1280). It also fails on each of 7 mutants of the fix: either half
-    removed, either half of the switcher rule removed, either bound of the tier moved, the word removed with
-    `display: none`.
-  - The first version let one mutant through: without the chip's `max-width`, the wrapper shrank, and the chip ran 44 px
-    over the tabs. The case now measures the chip.
-  - npm test: 603 tests, 598 pass, 5 skipped, 0 fail.
-- **Review:** Terra `01a168e4`: no findings. It was asked about the phone, the 1024-1279 tier and the switcher's menu; the
-  clipped label's layout and accessible name; a vacuous or flaky pass on the CI runner; and any width or combination left
-  uncovered.
+  - It fails on main's CSS (`fe0a410`: 85 px past at 1280). It also fails on each of 10 mutants of the fix:
+    - the chip rule removed, or the words hidden with `display: none`;
+    - either bound of the tier moved;
+    - the switcher rules removed;
+    - any one of `min-width: 0`, the chip's `max-width`, the switcher's `flex-shrink: 1` or the others'
+      `flex-shrink: 0` removed.
+  - Its first version let one mutant through: without the chip's `max-width`, the wrapper shrank, and the chip ran 44 px
+    over the tabs. The case now measures the chip. It had also checked gaps and edges, not widths, so it missed the
+    squeezed Feedback & support button until the 44 px check.
+  - The fix alone on `7b68f9e` (`181a338`): npm test 603 tests, 598 pass, 5 skipped, 0 fail.
+  - On the merged branch: npm test 606 tests, 601 pass, 5 skipped, 0 fail.
+  - The full e2e suite in software rendering (`E2E_SOFT=1`): 81 of 82. The one failure is main's Feedback & support
+    case, at "Escape after the dialog closed did not deselect".
+    - That case is flaky under software rendering on main's CSS too: run alone, it failed 1 of 8 times there and 4 of 9
+      here, the full run included.
+    - At that step (1366×768, root kit), all 55 visible boxes in the bar are the same with either CSS.
+    - A likely cause, not changed here: Escape closes the dialog at once, but its `close` event comes as a later task,
+      and that event is what ends the key hold.
+- **Review:**
+  - Terra `01a168e4` on the fix alone: no findings. It was asked about the phone, the 1024-1279 tier and the switcher's
+    menu; the clipped label's layout and accessible name; a vacuous or flaky pass on the CI runner; and any width or
+    combination left uncovered.
+  - Terra `01a16900` on the follow-up: one finding, confirmed. The 44 px check read `width < 43.5`, so a control squeezed
+    by under half a pixel would have passed. An unsqueezed icon chip measures exactly 44.0 px (Chrome lays out in
+    1/64 px), so the check is now `width < 44`.
