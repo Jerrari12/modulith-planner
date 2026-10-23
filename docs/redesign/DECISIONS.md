@@ -2560,3 +2560,55 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Suites on the final code:** npm test 603 (598 pass, 5 skipped, 0 fail); the full e2e suite 79 of 79 in software
   rendering (`E2E_SOFT=1`, the CI runner's mode).
 - **Deploy:** Joey's request ends in "review and deploy"; it deploys once the checks pass.
+
+## 2026-10-22 (Feedback & support in the workspace shell)
+
+- **Asked** (the cutover work, parity gap I1 of the 2026-10-21 check): the old planner offers "Feedback & support" in
+  its nav and its phone menu; the new planner had no way in, though the target (inventory §10) keeps it in the app
+  chrome.
+- **Now** the shared dialog (`js/vendor/modulith-feedback.js`, the old planner's file byte for byte, already loaded for
+  the standalone viewer's button) opens from two places in `js/ui/topbar.js`:
+  - the top bar: a 44 px icon button (Phosphor `chat-circle-dots`, already in the sprite) between the Day/Night toggle
+    and Share, titled and labelled "Feedback & support";
+  - the build switcher menu: a last item under a divider, on every layout. On the phone (below 1024 px) the bar hides
+    the button, so this is the way in there, as it is for Share.
+  - It sends `tool: 'Planner'` and the deploy stamp as the version (the `?v=` on topbar.js's own URL; none locally). It
+    offers the link to this build (the address, which Share copies) unticked, and only with units placed. Its events go
+    through the stage's `track`: `feedback:open`, `feedback:<kind>`, `feedback:email`, `feedback:copy`, the old planner's
+    names.
+- **Keys stay in the dialog.** The workspaces read keys on the document: on Build, Delete removes the selected unit, the
+  arrows move it and Escape deselects it; Ctrl+Z undoes in every workspace. The stage reads the arrows on the window to
+  turn steps. While the dialog is open, a window capture listener stops those keys from propagating. Escape, Tab and
+  Enter are the dialog's default actions, so they still work. The listener goes when the dialog closes.
+- **Focus comes back** to the button, or from the menu to the build chip (the item is gone with the menu). The opener
+  takes focus before the dialog opens, because Safari does not focus a clicked button.
+- **The dialog is centred again.** viewer.css's `* { margin: 0 }` reset zeroed the browser's `margin: auto` for a modal
+  `<dialog>`, so the dialog opened in the top-left corner, here and on the standalone viewer's own Feedback button.
+  `dialog.mfb-dialog { margin: auto; }` restores it.
+- **The bar's room**, measured headless in all five workspaces, with the kit and with a worst case (a long build name,
+  Under-Table, the printer "Prusa CORE One L"):
+  - Before this change the bar already overflowed its inset at 1280 (Share 11 px past it; 33 px in the worst case, 13 px
+    of it off the screen) and at 1501 in the worst case (12 px).
+  - With the button at the old breakpoints, the worst case put Share 22 px off the screen at 1501 and 3 px at 1600.
+  - So the icon-only tier (the printer and Share chips without words) now runs to 1580 instead of 1500, and the build
+    name's wide term is 1424 instead of 1370. Above 1580 the worst case keeps the 8 px it had above 1500 before; at
+    1440 and 1500 it keeps 12 px. The narrow term stays 1260, so the kit's name is not cut at 1440.
+  - From 1280 to 1365 the button is hidden (the bar there was already full); the menu has it.
+  - No overflow at 1024, 1279, 1366, 1440, 1500, 1501, 1536, 1580, 1581, 1600 or 1920, in either case. At 1280 the bar is
+    as before. On a phone (360, 390, 412) nothing changes: the button is hidden and the gaps stay 8 px.
+- **Not changed:** the overflow at 1280-1365 that was already there (a follow-up of its own).
+- **Tests.** e2e "Feedback & support: …": on a 1366 desktop the bar's button opens the dialog centred, with a unit selected
+  behind it. Delete, Backspace and the arrows change nothing and say nothing. Report a problem shows the planner's
+  subject and the build link, unticked. Escape closes the dialog onto the button, with the unit still selected and both
+  events logged, and a second Escape then deselects (the hold is gone). At 1280 the button is hidden and the menu's item
+  opens the dialog, focus coming back to the build chip. On a 390 phone there is no button, the bar fits with its 8 px
+  gaps, and the menu's item opens the dialog centred, closed by Escape and by ✕. GoatCounter is blocked in the case. The
+  keyboard case's End now lands on the new last item. test/modulith-feedback-vendor.test.mjs pins the shell's wiring.
+- **Mutants**, each run against the case, all killed: no key hold (Delete removed the unit), no focus before opening
+  (focus fell to `<body>` on the menu path), the phone not hiding the button, no 1280-1365 rule, a hold that outlives
+  the dialog, no menu item, no centring rule.
+- **Review:** Terra `01a165dd`: no findings.
+- **Suites on the final code, each run alone:** npm test 604 (599 pass, 5 skipped, 0 fail; layout-parity passes in 212
+  s, where an earlier run beside the e2e suite timed out at 905 s); the full e2e suite 80 of 80 in software rendering
+  (`E2E_SOFT=1`, the CI runner's mode).
+- **Deploy:** a new feature, so it waits for Joey's go. Branch `feedback-support`.

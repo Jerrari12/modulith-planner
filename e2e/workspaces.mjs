@@ -1281,7 +1281,7 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
   const second = await page.evaluate(() => document.activeElement.textContent.trim().slice(0, 20));
   assert.notEqual(second, first, 'ArrowDown moved to the next item');
   await page.keyboard.press('End');
-  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /New build/, 'End reaches the last item');
+  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Feedback & support/, 'End reaches the last item');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelector('#ws-switch .menu').hidden && document.activeElement === document.querySelector('#ws-switch .chip-btn'), null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => document.querySelector('#ws-switch .chip-btn').getAttribute('aria-expanded')), 'false');
@@ -3815,4 +3815,79 @@ test('Build style: Side covers Off removes every side cover from the stage and t
   assert.deepEqual(await covers(), { ...before, rec: true }, 'on: as before, the record saying on');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* FEEDBACK & SUPPORT (the cutover parity check's I1, 2026-10-22): the old planner offers the shared MODULITH dialog in its
+   nav and its phone menu; the new one had no way in. The top bar has a button where it has room (not 1280-1365, where the
+   bar was already full), and the build menu has the entry on every layout - the phone's only one. The desktop is 1366x768,
+   about the suite's 1280x800 in pixels, because the bar hides the button at 1280. GoatCounter is blocked outright. */
+test('Feedback & support: the top bar button and the build menu open the shared dialog, desktop and phone; Escape closes it, focus comes back, and no key reaches the build behind it', async () => {
+  const fresh = async (phone) => { const c = await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1366, height: 768 } }); contexts.add(c); await c.addInitScript(FAST); await c.route(/goatcounter|gc\.zgo/, (r) => r.abort()); return c; };
+  const shown = (page) => page.waitForFunction(() => document.querySelector('dialog.mfb-dialog')?.open && document.activeElement?.classList.contains('mfb-kind'), null, { timeout: 15_000 });
+  const shut = (page, back) => page.waitForFunction((s) => !document.querySelector('dialog.mfb-dialog').open && document.activeElement === document.querySelector(s), back, { timeout: 15_000 })
+    .catch(async () => assert.fail(`the dialog did not close back to ${back}: open ${await page.evaluate(() => document.querySelector('dialog.mfb-dialog').open)}, focus on ${await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80))}`));
+  const errs = (errors) => clean(errors).filter((e) => !/Failed to load resource: net::ERR_FAILED/.test(e));   // the aborted GoatCounter script
+  // the viewer's `* { margin: 0 }` reset pinned the dialog to the top-left corner (css/viewer.css restores margin: auto)
+  const centred = async (page) => { const off = await page.evaluate(() => { const r = document.querySelector('dialog.mfb-dialog').getBoundingClientRect(); return [Math.round(r.left + r.width / 2 - innerWidth / 2), Math.round(r.top + r.height / 2 - innerHeight / 2)]; });
+    assert.ok(off.every((v) => Math.abs(v) <= 1), `the dialog is centred: off by ${off} px`); };
+
+  // desktop: the bar's button, with a unit selected behind the dialog
+  const { ctx, page, errors } = await open('build', { context: await fresh(false) });
+  const id = await page.evaluate(() => window.__GEN2_STORE__.state.placed[0].id);
+  await page.evaluate((i) => window.__GEN2_VIEWER__.selectUnit(i), id);
+  await page.waitForFunction((i) => window.__GEN2_STORE__.state.selectedUnit === i, id, { timeout: 15_000 });
+  const placed0 = JSON.stringify((await S(page)).placed);
+  await page.click('#ws-top .feedback');
+  await shown(page);
+  assert.equal(await text(page, '#mfb-title'), 'Feedback & support');
+  await centred(page);
+  // keys in the dialog stay there: behind it Delete would remove the selected unit (first: a refused move deselects it),
+  // the arrows move it or say why not, Escape deselects it
+  for (const k of ['Delete', 'Backspace', 'ArrowRight', 'ArrowDown']) await page.keyboard.press(k);
+  assert.equal(await page.evaluate(() => { const t = document.getElementById('ws-toast'); return t && t.classList.contains('show') ? t.textContent : null; }), null, 'nothing behind the dialog spoke');
+  await page.locator('dialog.mfb-dialog .mfb-kind[data-kind="problem"]').click();
+  const draft = await page.evaluate(() => ({ href: document.querySelector('dialog.mfb-dialog a.mfb-btn').getAttribute('href'), offered: !document.querySelector('dialog.mfb-dialog .mfb-check').hidden, ticked: document.getElementById('mfb-build').checked }));
+  assert.ok(draft.href.startsWith('mailto:support@jerrari3d.com?subject=' + encodeURIComponent('[MODULITH Planner] Problem')), `the planner's own subject: ${draft.href.slice(0, 90)}`);
+  assert.deepEqual([draft.offered, draft.ticked], [true, false], 'a link to this build is offered, unticked');
+  await page.keyboard.press('Escape');
+  await shut(page, '#ws-top .feedback');
+  const after = await S(page);
+  assert.equal(JSON.stringify(after.placed), placed0, 'no unit moved or went');
+  assert.equal(after.selectedUnit, id, 'the unit is still selected');
+  const log = await page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice());
+  assert.ok(['feedback:open', 'feedback:problem'].every((n) => log.includes(n)), `the dialog's events: ${log.join(', ')}`);
+  // the hold ends with the dialog: Escape on the page deselects again
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.selectedUnit == null, null, { timeout: 15_000 })
+    .catch(() => assert.fail('Escape after the dialog closed did not deselect: the key hold outlived the dialog'));
+  // at 1280 the bar has no room: no button there, and the build menu opens the dialog with the focus coming back to its chip
+  await page.setViewportSize({ width: 1280, height: 800 });
+  assert.equal(await page.locator('#ws-top .feedback').isVisible(), false, 'no bar button at 1280');
+  await page.click('#ws-switch .chip-btn');
+  await page.getByRole('menuitem', { name: 'Feedback & support' }).click({ timeout: 15_000 });
+  await shown(page);
+  assert.equal(await page.locator('#ws-switch .menu').isHidden(), true, 'the menu closed behind the dialog');
+  await page.keyboard.press('Escape');
+  await shut(page, '#ws-switch .chip-btn');
+  assert.deepEqual(errs(errors), []);
+  await ctx.close();
+
+  // the phone: no bar button, the bar inside 390 px with its 8 px gaps; the build menu's entry, closed by Escape and by ✕
+  const P = await open('build', { phone: true, context: await fresh(true) });
+  const bar = await P.page.evaluate(() => { const b = [...document.getElementById('ws-top').children].filter((k) => k.checkVisibility() && getComputedStyle(k).position !== 'absolute').map((k) => k.getBoundingClientRect());
+    return { button: document.querySelector('#ws-top .feedback').checkVisibility(), right: Math.round(b[b.length - 1].right), gaps: b.slice(1).map((r, i) => Math.round(r.left - b[i].right)) }; });
+  assert.equal(bar.button, false, 'no bar button on the phone');
+  assert.ok(bar.right <= 380 && bar.gaps.every((g) => g >= 8), `the phone bar fits with its gaps: ${JSON.stringify(bar)}`);
+  for (const close of ['Escape', '✕']) {
+    await P.page.locator('#ws-switch .chip-btn').tap();
+    await P.page.getByRole('menuitem', { name: 'Feedback & support' }).tap({ timeout: 15_000 });
+    await shown(P.page);
+    const box = await P.page.evaluate(() => { const r = document.querySelector('dialog.mfb-dialog').getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right)]; });
+    assert.ok(box[0] >= 0 && box[1] <= 390, `the dialog fits the phone: ${box}`);
+    await centred(P.page);
+    if (close === 'Escape') await P.page.keyboard.press('Escape'); else await P.page.locator('dialog.mfb-dialog .mfb-x').tap();
+    await shut(P.page, '#ws-switch .chip-btn');
+  }
+  assert.deepEqual(errs(P.errors), []);
+  await P.ctx.close();
 });

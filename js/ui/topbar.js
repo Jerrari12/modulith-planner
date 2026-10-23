@@ -1,6 +1,6 @@
 /* The top bar every workspace shares (the brief §2): the real MODULITH wordmark, the build switcher, the five
-   unnumbered workspace tabs, the mount·length and printer chips, the Day/Night toggle, Share. The active tab
-   is the mounted workspace; a tab whose workspace exists switches in place through ctx.switchTo, the others
+   unnumbered workspace tabs, the mount·length and printer chips, the Day/Night toggle, Feedback & support, Share. The
+   active tab is the mounted workspace; a tab whose workspace exists switches in place through ctx.switchTo, the others
    say which phase brings them. */
 import { el } from './dom.js';
 import { icon } from './icons.js';
@@ -11,6 +11,8 @@ const MOUNT_ICON = { 'under-table': 'desk', tabletop: 'table', wall: 'wall' };
 export const TABS = [['build', 'Build', 'cube'], ['colors', 'Colors', 'palette'], ['labels', 'Labels', 'tag'], ['parts', 'Parts', 'list-checks'], ['assemble', 'Assemble', 'wrench']];
 const printerName = (s) => { const id = s?.printer || 'any'; if (id === 'any') return 'Any printer'; if (id === 'custom') return s.customBed?.x ? `Custom ${s.customBed.x}×${s.customBed.y}` : 'Custom bed'; const p = ((typeof GEN2 !== 'undefined' ? GEN2 : null)?.printers || []).find((q) => q.id === id); return p ? p.label.split(' / ')[0] : 'Printer'; };
 const PHASE = { colors: 'phase 4', labels: 'phase 5', parts: 'phase 2', assemble: 'phase 1', build: 'phase 0' };   // what a missing workspace says it waits for
+const FEEDBACK = 'Feedback & support';
+const STAMP = new URL(import.meta.url).searchParams.get('v');   // the deploy's ?v=<sha> (pages.yml), named in a feedback email; none in local dev
 
 /* ctx: { active, setMode, switchTo(ws), has(ws), say, soon, signal } */
 export function topbar(stage, ctx) {
@@ -29,6 +31,7 @@ export function topbar(stage, ctx) {
     ]),
     el('button.chip.chip-btn.printer', { title: 'Printer · optional; only greys out sizes that will not fit', onclick: ctx.openSetup ? () => ctx.openSetup('printer') : ctx.soon('The printer picker', 'the setup sheet') }, [icon('printer-3d'), el('span', { text: printerName(ctx.store?.state) })]),
     themeToggle(),
+    el('button.chip.icon-btn.feedback', { title: FEEDBACK, 'aria-label': FEEDBACK, 'aria-haspopup': 'dialog', onclick: (e) => feedback(e.currentTarget) }, [icon('chat-circle-dots')]),
     el('button.chip.chip-btn.share', { onclick: share, title: 'Share' }, [icon('share-network'), el('span', { text: 'Share' })]),
   );
   return top;
@@ -78,6 +81,9 @@ export function topbar(stage, ctx) {
         item('Save build file', () => { set(false); B && B.saveFile(); }, 'A .json file of this build; Load build file opens it anywhere'),
         item('Load build file…', () => fileIn.click(), 'A build saved from this planner or the old one, or an official kit file'),
         item('New build', () => { set(false); B && B.newBuild(); }, 'A fresh copy of this kit; this build stays in Recent builds (the setup sheet for mount, length and printer comes later)'),
+        el('div.divider'),
+        // the phone's only way in (its bar has no room), and a second one on a desktop whose bar hides the button
+        el('button.item', { role: 'menuitem', 'aria-haspopup': 'dialog', onclick: () => { set(false); feedback(btn); } }, [el('span', { text: FEEDBACK }), icon('chat-circle-dots', { size: 16 })]),
       ].filter(Boolean));   // replaceChildren would print a null as the word
       if (had && !renaming) focusItem(0);
     }
@@ -128,5 +134,25 @@ export function topbar(stage, ctx) {
   async function share() {
     try { await navigator.clipboard.writeText(location.href); ctx.say('Link copied.'); }
     catch { ctx.say('Copy the address bar to share this build.'); }
+  }
+  /* Feedback & support (the cutover parity check's I1, 2026-10-22): the shared MODULITH dialog, js/vendor/modulith-feedback.js
+     (a classic script, the old planner's file byte for byte). A link to this build is offered UNCHECKED, and only with units
+     placed: the address holds the whole build (the store writes #build= at every save, what Share copies), labels included.
+     `back` takes the focus first, so the dialog's close returns it there: Safari does not focus a clicked button, and the
+     menu's item is gone with the menu. */
+  function feedback(back) {
+    const F = window.MODULITHFeedback;
+    if (!F) { location.href = 'mailto:support@jerrari3d.com?subject=' + encodeURIComponent('[MODULITH Planner]'); return; }
+    back.focus();
+    const placed = (ctx.store?.state?.placed ?? build?.placed ?? []).length;
+    F.open({ tool: 'Planner', version: STAMP, buildLink: placed ? () => location.href : null,
+      attachHint: 'Your build is too big to put in an email link. Use Save build file in the build menu and attach that file to your email.',
+      track: (n) => stage.track?.(n) });
+    /* the workspaces read keys on the document (Escape deselects, the arrows nudge, Delete removes the selected unit, Ctrl+Z
+       undoes) and the stage on the window (the arrows turn the steps), and none of that may happen behind the dialog: held
+       at the window's capture phase while it is open. The dialog's own keys are default actions (Escape's close, Tab, Enter
+       on a button), which stopPropagation leaves alone */
+    const d = document.querySelector('dialog.mfb-dialog');
+    if (d?.open) { const hold = (e) => e.stopPropagation(); addEventListener('keydown', hold, true); d.addEventListener('close', () => removeEventListener('keydown', hold, true), { once: true }); }
   }
 }
