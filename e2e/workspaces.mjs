@@ -3918,6 +3918,17 @@ test('Feedback & support: the top bar button and the build menu open the shared 
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.__GEN2_STORE__.state.selectedUnit == null, null, { timeout: 15_000 })
     .catch(() => assert.fail('Escape after the dialog closed did not deselect: the key hold outlived the dialog'));
+  // the race the runner lost (deploy run 39959731798, 2026-10-23): close() clears `open` at once but only QUEUES the close
+  // event, and the hold used to end on that event, so a key landing in between was swallowed. Forced here: close and press
+  // in one task, before the event can fire
+  await page.evaluate((i) => window.__GEN2_VIEWER__.selectUnit(i), id);
+  await page.waitForFunction((i) => window.__GEN2_STORE__.state.selectedUnit === i, id, { timeout: 15_000 });
+  await page.click('#ws-top .feedback');
+  await shown(page);
+  const raced = await page.evaluate(() => { const d = document.querySelector('dialog.mfb-dialog'); d.close();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return window.__GEN2_STORE__.state.selectedUnit; });
+  assert.equal(raced, null, 'an Escape between close() and its queued close event still reaches the build');
+  await shut(page, '#ws-top .feedback');
   // at 1280 the bar has no room: no button there, and the build menu opens the dialog with the focus coming back to its chip
   await page.setViewportSize({ width: 1280, height: 800 });
   assert.equal(await page.locator('#ws-top .feedback').isVisible(), false, 'no bar button at 1280');

@@ -2664,7 +2664,29 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Suites on the final code, each run alone:** npm test 604 (599 pass, 5 skipped, 0 fail; layout-parity passes in 212
   s, where an earlier run beside the e2e suite timed out at 905 s); the full e2e suite 80 of 80 in software rendering
   (`E2E_SOFT=1`, the CI runner's mode).
-- **Deploy:** a new feature, so it waits for Joey's go. Branch `feedback-support`.
+- **Deploy:** a new feature, so it waited for Joey's go. Branch `feedback-support`. **Joey's go, 2026-10-23 (in the 10-18
+  session):** "Yes: deploy feedback-support (35b89db) and port-side-cover-toggle (8bd564e) together: merge them onto
+  today's main, run the full suite on a quiet machine, push once, and check them live." Merged as main `fe0a410`
+  (npm test 606: 601 pass, 5 skipped; e2e soft 81/81 here). **Its deploy run 39959731798 FAILED** on this case, step
+  "the hold ends with the dialog": the runner's Escape, pressed after `open` read false, was swallowed. The cause and the
+  fix are the entry below; the Live line goes there.
+
+## 2026-10-23 (the Feedback dialog's key hold ends when `open` does, not when the close event lands)
+
+- **The defect.** `close()` on a `<dialog>` clears `open` at once but only queues the `close` event (the HTML spec's
+  user-interaction task source), and the hold that keeps keys from the build behind the dialog was removed on that event.
+  A key landing between the two moments met the hold: on the deploy runner (SwiftShader, slow) the e2e case's second
+  Escape did, and the unit stayed selected (run 39959731798, 2026-10-23 13:16-13:59Z, the e2e step; locally the race was
+  never lost: 81/81 before the push). A visitor pressing Escape twice quickly loses the second press the same way.
+- **The fix** (`js/ui/topbar.js` feedback()): the hold reads `d.open` on every key and stops propagation only while it is
+  true; the removal on `close` stays. A reopen cannot land in the gap: it needs a later user task, and the queued close
+  event runs first.
+- **The test** (the Feedback case): a probe that forces the race in one task, `d.close()` then a synthetic Escape on the
+  document before the queued event can fire, then asserts the unit deselected. With the old line it fails (`1 !== null`);
+  with the fix it passes. Build's Escape handler checks no isTrusted, so the synthetic key takes the real path through
+  the window-capture hold.
+- **Review:** Terra `01a16929`: no findings.
+- **Deploy:** finishes the deploy Joey approved above (the fix is to the feature's own test and code, nothing new).
 
 ## 2026-10-22 (a re-port keeps the side-cover toggle: the edits ahead of the old planner live in the port)
 
