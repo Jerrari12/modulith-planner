@@ -2607,4 +2607,9 @@ Dated calls made while building, with who made them. The brief and the inventory
   print block disabled it fails ("only the list on paper"). The four Parts e2e cases pass, and so do the node tests that
   load `parts.js`.
 - **Review:** Terra `01a16671`: no findings.
-- **Deploy:** waits for Joey's go (found by the checklist, not reported by him).
+- **Deploy:** Joey's go, 2026-10-22: "Deploy the Parts Print fix (parts-print c80febf): run the full suite on a quiet
+  machine, merge to main, and check it live." On a quiet machine: npm test 603 (598 pass, 5 skipped, 0 fail); the full
+  e2e suite in software rendering 80 of 80.
+- **Live 2026-10-22**, stamp `c80febfa` (run for `c80febf`). `parts-print-prod.mjs` on it: in print, no canvas, top bar,
+  toolbar or dock; the panel lays out whole (2055 px, none of it hidden); Chrome's print to PDF is three pages holding
+  all 25 rows. On `0f32d12e` the same check had printed one page with 6 of them.
