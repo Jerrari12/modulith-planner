@@ -2911,6 +2911,35 @@ Dated calls made while building, with who made them. The brief and the inventory
   viewport (Terra's follow-up, `01a169dc`).
 - **Deploy:** a reported bug, so it deploys once the suites pass.
 
+## 2026-10-23 (the Quality pill keeps a visitor's pick, and the tab badges follow the record)
+
+Two findings of the hands-on GPU pass on Joey's laptop browser (an RTX A5000, Brave; Joey's go to fix them: "Yes, fix the
+found bugs: the Quality pill not saving its pick across a reload, and the stale Parts/Labels badges and size line after
+keyboard undo or Remove").
+
+- **The pill.** The shell's Quality pill (`js/ui/toolbar.js`) called `stage.applyQuality(name, true)`: a function of one
+  argument that draws the tier for this page only. The viewer's own pill called `setQuality(name, { user: true })`, which
+  stores the pick (`gen2-quality`, `gen2-quality:set`) and locks out the auto-downgrade; the boot reads those. So a visitor
+  who picked Fast was back on Very High after a reload (the parity list's C4 had claimed the pick was stored; it was not).
+  Now the pill calls `stage.setQuality(next, { user: true })` where the stage offers it.
+- **The badges.** `topbar()` built its tab badges once per mount (`tabs()` read `ctx.badges()` at build time), so the
+  Parts count stood still through placements, undos and removes until the next workspace switch ("Parts 77" at five
+  units in the pass). The nav now redraws its badges on every store change for the mount's lifetime (a subscription
+  dropped on the workspace's abort signal), and the Parts count reads the RECORD (`store.serialize()`), not the stage's
+  last build, so it is right at the store change rather than after the regenerate.
+- **The size line in Labels.** `labels.js`'s stage sync never redrew after `stage.update`: the dock's size line and the
+  bar were drawn on the store change, before the rebuild, and never again. The dock and the View toolbar are drawn again
+  after a completed update: only those, because a whole `renderAll()` there would rebuild an open label editor from the
+  stored label and wipe a word typed while the stage rebuilt (Terra `01a16a49`'s one finding, taken; the 2026-10-18 lesson).
+- **The tests:** two e2e cases. The pill case seeds Fast without the harness's init script (which would reset the pick on
+  every load), clicks the pill, reloads, and expects the picked tier back with `gen2-quality:set` = 1. The badge case
+  places a third unit on the board, switches to Labels, undoes it there, and expects the badge back at once and the dock's
+  size line changed once the stage has rebuilt. Mutants, each failing its case: the pill on `applyQuality`; the badges
+  built once; no redraw after the Labels update; the badge counting `stage.build`.
+- **Review:** Terra `01a16a49`: one finding, taken (above).
+- **Deploy:** on Joey's go above, once the suites pass and main is green again (the top-bar case failed on the runner in
+  the run before this one).
+
 ## 2026-10-23 (hover-hint clips on every workspace)
 
 - **Joey:** "can we do more video animations for when hovering over certain buttons to illustrate how they work?" The

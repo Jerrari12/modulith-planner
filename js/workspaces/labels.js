@@ -139,7 +139,13 @@ export function mountLabels(stage, ctx) {
       const gen = tryGen(rec);
       if (!gen.manifest) return;
       const sig = sigOf(gen.manifest);
-      if (sig !== lastSig) { lastSig = sig; const r = await stage.update(rec, gen); if (r.ok) { stage.skipToEnd(); stage.setDims(false); } }
+      if (sig !== lastSig) {
+        lastSig = sig; const r = await stage.update(rec, gen); if (r.ok) { stage.skipToEnd(); stage.setDims(false); }
+        /* the dock's size line and the View toolbar read the stage: drawn again now that it has rebuilt (an undo from here
+           left them stale, the GPU pass 2026-10-23). Only those: a whole renderAll() here would rebuild an open label editor
+           from the stored label and wipe a word being typed while the stage rebuilt (Terra 01a16a49, and the 2026-10-18 lesson) */
+        renderDock(); bar.sync();
+      }
       else stage.setLabels(rec);
       if (st.selId != null && !S().placed.some((u) => u.id === st.selId)) { st.selId = null; st.sel = null; }
     }).catch((e) => console.error(e));
