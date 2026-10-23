@@ -2881,9 +2881,17 @@ Dated calls made while building, with who made them. The brief and the inventory
   passed it on the plain bar; the other controls' widths were compared rounded, so a squeeze under half a pixel would
   have passed). Not changed here, and Joey's call: where text lays out as on the runner, the widest case leaves the name
   9 px at 1366 and 38 px at 1581, an ellipsis and little else.
-- **Live:** not yet. To be written when the merge's stamp is live: main's merge sha, the deploy run, the `boot.js?v=`
-  stamp, and the check on the live site at 1280 and 1366 px (the Feedback & support button visible from 1366, nothing in
-  the top bar overlapping or past its edge).
+- **Live:** 2026-10-23 at 22:11Z, stamp `f6ba8d12`. The branch went into main as `aca5f1c` (its merge with main `928e08a`
+  is `cbe0a2a`); that merge's deploy, run 40004575512 (as `eeceaeb`), failed on this entry's e2e case; the runner
+  follow-up above went in as `56faf84` (`5df7184`); and the day's later merges (`ae0d501`, `d37efae`, `1799b00`, `f6ba8d1`)
+  each cancelled the run before them, so the main that carried all of it is `f6ba8d1`, stamp `f6ba8d12`: run 40028267309
+  green, 21:38 to 22:11Z. `topbar-prod.mjs f6ba8d12` on the live site, a fresh profile with analytics blocked: 28 of 28
+  rows clean, all five workspaces at 1280 and 1366, Build at 1024 to 1920, with the build's own tabs and with the widest
+  badges. Nothing past the bar's edge, no overlap, 10 px between controls, no control under 44 px, the Feedback & support
+  button 44 px from 1366 and in the build menu at 1280-1365 as designed, the mount word clipped at 1280-1365 only, the
+  name 120 px in the tier and 67 px at 1366 in the widest case (Windows Chrome). Before, on `928e08a1`, the same script
+  failed 17 of 28 rows: Share 85 px past the edge at 1280 in the widest case, and at 1366 the button squeezed to 20 px
+  with Share 29 px past.
 
 ## 2026-10-23 (Assemble's toasts show above the player card: Share's "Link copied." was hidden)
 
