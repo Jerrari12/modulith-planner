@@ -2815,6 +2815,10 @@ Dated calls made while building, with who made them. The brief and the inventory
   - It only acts in the widest case with the big badges. The name keeps its 120 px floor in 1280-1365. Above that it
     gives way: to 67 px at 1366, 101 px at 1400, 141 px at 1440 and 201 px at 1500; then to 112 px at 1581 and 171 px
     at 1640. Without the big badges it never acts.
+    Those are Windows' figures. The deploy runner lays the same text out wider (the bullet below), and there the name
+    gives way in the tier as well: 75 px at 1280, 95 at 1300, 115 at 1320 and 120 from 1340; above it 9 px at 1366,
+    43 at 1400, 83 at 1440, 143 at 1500, 38 at 1581 and 97 at 1640. Without the big badges the runner's name is 120 in
+    the tier, 70 at 1366, 104 at 1400 and 99 at 1581.
 - **Why not the tabs on their own row up to 1365** (the other candidate). That tier moves every panel 44 px down (top 134
   instead of 90), and 1280-1365 includes the shortest laptop screens (1280×720, 1360×768). It is also not CSS alone: the
   1280 line is coded in six places across five workspace files (`innerWidth < 1280` for safe areas and narrow layouts in
@@ -2822,14 +2826,18 @@ Dated calls made while building, with who made them. The brief and the inventory
   mount chip's word was the cheapest room in the bar: 92 px in the widest case. Making the Day/Night pair one button would
   have saved about 42, which does not cover the big badges.
 - **Checks.** A new e2e case, "the top bar fits at every desktop width in its widest case, in every workspace…":
-  - It sets that build up through the setup sheet and writes the widest badges into the tabs. Then, in all five
-    workspaces, at 17 widths from 1024 to 1920 (each tier's edges among them), it asserts:
+  - It sets that build up through the setup sheet. Then, in all five workspaces, at 18 widths from 1024 to 1920 (each
+    tier's edges among them), twice over: with the build's own tabs, then with the widest badges written into them. It
+    asserts:
     - nothing past the bar's right edge;
     - 10 px between the controls (the switcher's chip is measured, not its wrapper);
     - no control narrower than 44 px, the wordmark and the switcher aside;
     - the tabs on a row of their own below 1280 only, and on the screen;
     - the mount word shown only outside 1280-1365, with the accessible name kept at 1280;
-    - the build name at least 118 px in 1280-1365, and at least 60 px elsewhere.
+    - the build name at least 118 px in 1280-1365, and at least 60 px elsewhere, with the build's own tabs; with the
+      widest badges, that the tabs are at least 40 px wider (57 px here, 61 on the runner: the badges are there and
+      count) and that the name is the only control that gives way: every other control keeps the width it had without
+      them, to the 1/64 px Chrome lays out in, and the name never grows.
   - It fails on main's CSS (`fe0a410`: 85 px past at 1280). It also fails on each of 10 mutants of the fix:
     - the chip rule removed, or the words hidden with `display: none`;
     - either bound of the tier moved;
@@ -2855,6 +2863,24 @@ Dated calls made while building, with who made them. The brief and the inventory
   - Terra `01a16900` on the follow-up: one finding, confirmed. The 44 px check read `width < 43.5`, so a control squeezed
     by under half a pixel would have passed. An unsqueezed icon chip measures exactly 44.0 px (Chrome lays out in
     1/64 px), so the check is now `width < 44`.
+- **The deploy runner lays the bar's text out wider, and the case's first version did not allow for it.** The deploy of
+  this merge (`aca5f1c`, with the Assemble toast fix on top as `eeceaeb`; run 40004575512) failed at this case on
+  2026-10-23 at 19:34Z: at 1280 in Build, with the widest badges written in, the name measured 74.6 px against the
+  118 px floor, with everything else as it should be (`edge` 1260, `last` 1260, gaps 16/20/20/10/10/10, nothing squeezed,
+  the word clipped). A throwaway diagnostic workflow on the runner's image (run 40013974563, branch `diag-topbar-runner`,
+  deleted after) measured the same bar: the same IBM Plex web fonts load there, and a canvas measures a 67-character
+  string in IBM Plex Sans 400 at 13 px as 390.3 px on both machines; but the laid-out tabs are 554 px there against 508
+  here with the build's own tabs (615 against 565 with the widest badges), about 46 px less room in the bar, and the
+  Build tab alone 91 against 83. Every hard guarantee held there at all 18 widths in both passes. So the case now asserts
+  the name's floors with the build's own tabs only, and with the widest badges that nothing but the name gives way.
+  Alone, in software rendering, it passes here in 118 s. On four mutants of the fix it fails as it should: the switcher
+  rules removed (Share 29 px past the edge at 1366 with the widest badges), the mount word's clip removed (the word shown
+  at 1280), the name's floor lowered to 80 px (the 120 px floor at 1280, with the build's own tabs) and the chip's
+  `max-width` removed (the chip 33 px over the tabs at 1366). Terra `01a16a58` on this follow-up: two findings, both
+  confirmed and fixed (the widest pass did not prove the badges had widened the tabs, so a badge hidden by CSS would have
+  passed it on the plain bar; the other controls' widths were compared rounded, so a squeeze under half a pixel would
+  have passed). Not changed here, and Joey's call: where text lays out as on the runner, the widest case leaves the name
+  9 px at 1366 and 38 px at 1581, an ellipsis and little else.
 - **Live:** not yet. To be written when the merge's stamp is live: main's merge sha, the deploy run, the `boot.js?v=`
   stamp, and the check on the live site at 1280 and 1366 px (the Feedback & support button visible from 1366, nothing in
   the top bar overlapping or past its edge).
