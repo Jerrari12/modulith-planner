@@ -2984,7 +2984,16 @@ keyboard undo or Remove").
   beside it, median 0.3 ms, max 650.6 ms, and passes alone: the Simplify file 5 of 5 in 88 ms); the e2e cases named Colors,
   the phone check, the phone journey, analytics and the boot case: 23 of 23 (11.6 min, soft). The full e2e suite runs on the
   deploy.
-- **Deploy:** a feature, so on Joey's go; the branch is `material-filter`, not merged.
+- **Deploy:** a feature, so on Joey's go (2026-10-23: "Yes, deploy the material filter chips: merge material-filter onto main
+  and push, with a live check"). The branch took main twice first (`915538f`: 56faf84; `224a7c2`: ae0d501, one DECISIONS
+  conflict, both entries kept in order); the chips case passed on each, npm test 623 / 617 pass / 5 skipped on the merged tree
+  (M28's gate under load again, 36 ms alone). Main's merge `d37efae` (run 40024341132, cancelled by the hover-hints push, as
+  pages.yml does); the stamp that carries it is `f6ba8d12` (the idle-gate merge on top of the hover clips, run 40028267309).
+- **Live 2026-10-23**, stamp `f6ba8d12`, seen at 18:11 local. `matfilter-prod.mjs f6ba8d12` (the prod-checks folder) passes all
+  20 checks at 1280 x 800 and 390 x 844: a case's All · PLA · PETG with All pressed and 8 px gaps; PETG pressed narrows the
+  heads to PETG and PLA / PETG with 27 of 118 swatches left, every one PETG; the feet with no row and 11 TPU swatches; the
+  phone row nowrap with overflow-x auto; no page errors. Its control on the pre-deploy site (928e08a1) failed exactly the
+  11 chip checks and passed the 8 feet and row checks.
 
 ## 2026-10-23 (hover-hint clips on every workspace)
 
