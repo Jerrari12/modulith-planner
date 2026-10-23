@@ -1700,6 +1700,62 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   await ctx.close();
 });
 
+/* THE TOP BAR FITS (2026-10-23). At 1280-1365 the bar is one row and was too full: Share ended 11 px past the bar's edge on
+   the root kit and 85 px in the widest case below. Above 1500, where the printer's name and Share's word come back, that
+   case was 64 px over at 1501. The widest case: a long build name, Under-Table (the widest mount word), the Prusa CORE One L
+   (the widest printer name), and tab badges no small build reaches, written into the tabs: 99/99 labelled, 999 printed
+   pieces. In every workspace, across the tiers' edges: nothing past the bar's right edge, 10 px between controls, the
+   tabs' own row on the screen below 1280; at 1280-1365 the mount chip gives up its word (not its accessible name) and the
+   build name keeps its 120 px floor; above that the name may shorten, never vanish */
+test('the top bar fits at every desktop width in its widest case, in every workspace: nothing past its edge, 10 px between controls, the build name kept', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.fill('#ws-setup input.name', 'The Mighty Bit Bucket Garage Workbench');
+  await page.locator('#ws-setup .card:has-text("Under-Table")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.locator('#ws-setup .card.len:has-text("185 mm")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.selectOption('#ws-setup select.printer', 'coreonel');
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
+  await waitBoot(page);
+  await page.evaluate(() => document.fonts.ready);   // widths in the planner's own fonts, not the fallback's
+  const bar = () => page.evaluate(() => {
+    const top = document.getElementById('ws-top'), r = (k) => k.getBoundingClientRect();
+    // the switcher's chip, not its wrapper: a wrapper that shrinks while its chip does not lets the chip run over the tabs
+    const items = [...top.children].filter((k) => k.checkVisibility() && getComputedStyle(k).position !== 'absolute' && !k.classList.contains('spacer')).map((k) => (k.id === 'ws-switch' ? k.querySelector('.chip-btn') : k));
+    const tabs = r(document.getElementById('ws-tabs'));
+    return { edge: r(top).right, last: r(items[items.length - 1]).right, inner: innerWidth, tabs: [tabs.left, tabs.right], tabsRow: getComputedStyle(document.getElementById('ws-tabs')).position === 'absolute',
+      gaps: items.slice(1).map((k, i) => Math.round(r(k).left - r(items[i]).right)), name: r(document.querySelector('#ws-switch > .chip-btn > span')).width,
+      word: r(document.querySelector('#ws-top .mount .lbl')).width > 1, printer: document.querySelector('#ws-top .printer').textContent };
+  });
+  for (const [ws, label] of [['build', 'Build'], ['colors', 'Colors'], ['labels', 'Labels'], ['parts', 'Parts'], ['assemble', 'Assemble']]) {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    if (ws !== 'build') {
+      await page.click(`#ws-tabs .tab:has-text("${label}")`);
+      await page.waitForFunction(([w, l]) => document.documentElement.dataset.ws === w && document.querySelector('#ws-tabs .tab.on')?.textContent.startsWith(l), [ws, label], { timeout: 60_000 });
+    }
+    await page.evaluate(() => { const tabs = [...document.querySelectorAll('#ws-tabs .tab')];
+      for (const [l, n] of [['Labels', '99/99'], ['Parts', '999']]) { const t = tabs.find((b) => b.textContent.startsWith(l)); const b = t.querySelector('.badge') || t.appendChild(Object.assign(document.createElement('span'), { className: 'badge' })); b.textContent = n; } });
+    assert.equal((await bar()).printer, 'Prusa CORE One L', `${ws}: the widest printer name`);
+    assert.equal(await page.getByRole('button', { name: 'Under-Table · 185' }).count(), 1, `${ws}: the mount chip's accessible name keeps its word at 1280`);
+    for (const w of [1024, 1279, 1280, 1300, 1320, 1340, 1350, 1365, 1366, 1440, 1500, 1501, 1540, 1580, 1920]) {
+      await page.setViewportSize({ width: w, height: 800 });
+      const m = await bar(), at = `${ws} at ${w}: ${JSON.stringify(m)}`;
+      assert.ok(m.last <= m.edge + 0.5 && m.edge <= m.inner, `nothing past the bar's right edge - ${at}`);
+      assert.ok(m.gaps.every((g) => g >= 10), `10 px between controls - ${at}`);
+      assert.equal(m.tabsRow, w < 1280, `the tabs have a row of their own below 1280 only - ${at}`);
+      if (m.tabsRow) assert.ok(m.tabs[0] >= 0 && m.tabs[1] <= m.inner, `the tabs' row is on the screen - ${at}`);
+      const tier = w >= 1280 && w <= 1365;
+      assert.equal(m.word, !tier, `the mount chip shows its word outside 1280-1365 only - ${at}`);
+      assert.ok(m.name >= (tier ? 118 : 60), `the build name keeps ${tier ? 'its 120 px floor' : 'some room'} - ${at}`);
+    }
+  }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* EDIT PART DETAILS OPENS THAT PART (`open/1`, LABELS-INTEGRATION.md, the parts channel's additions).
    - A Picker that offers the cap gets `open` and answers `opened`, with that part in Edit.
    - A second browser profile, whose Picker list lacks the row, gets a refusal; its words show in the dialog's head.

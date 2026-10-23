@@ -2613,3 +2613,52 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Live 2026-10-22**, stamp `c80febfa` (run for `c80febf`). `parts-print-prod.mjs` on it: in print, no canvas, top bar,
   toolbar or dock; the panel lays out whole (2055 px, none of it hidden); Chrome's print to PDF is three pages holding
   all 25 rows. On `0f32d12e` the same check had printed one page with 6 of them.
+
+## 2026-10-23 (the top bar fits at 1280-1365, and nothing in it leaves the screen)
+
+- **What was wrong.** From 1280 px the workspace tabs rejoin the bar's single row (below 1280 they have a row of their
+  own), and up to 1365 that row held more than the screen. It was found while the Feedback & support button was being
+  added (branch `feedback-support`, which hides its button at 1280-1365 for this reason). Measured headless on main
+  `7b68f9e`; every workspace measures the same:
+  - On the root kit, Share ended 10.8 px past the bar's 20 px right inset at 1280.
+  - The widest case of this kind, 27.7 px at 1280 and 7.7 px at 1300: a long build name, Under-Table and the Prusa CORE
+    One L. Under-Table is the widest mount chip (171 px; Wall Mount 165, Tabletop 148). The CORE One L is the widest
+    printer chip (167 px; Voron Switchwire 162, a 300×300 custom bed 162).
+  - The tab badges count too. With the widest badges a big build could show (Labels 99/99, Parts 999), the tabs are
+    57 px wider. That case was 85.2 px over at 1280 and still 0.2 px over at 1365.
+  - The same cases overflowed above 1500, where the printer's name and Share's word come back: 6.3 px at 1501 (63.8 px
+    with those badges, still 4.8 px at 1650; it fitted again from 1655).
+  - For scale, a 12W×5H build of 48 drawers on the root kit shows Parts 60 and no Labels badge (its faceplates take no
+    label). 999 is a generous bound.
+- **Now** (`css/app.css`, two rules):
+  - **At 1280-1365 the mount chip shows only its icon and length,** as it does on the phone: 79 px for every mount. Its
+    words are clipped, not removed, so the button's accessible name is still "Under-Table · 185". The setup sheet the chip
+    opens names the mount, and so does the chip from 1366 up.
+  - **At every width, the build switcher may shrink below its name's floor** (`min-width: 0` on `#ws-switch`, and
+    `max-width: 100%` on its chip). If the bar is still too full, the build name gets shorter instead of Share leaving
+    the screen. It only acts in the extreme cases. In 1280-1365 the name keeps its 120 px floor everywhere (6.4 px to
+    spare at 1280 in the widest case). Above 1500 it gives way: to 86 px at 1501 in the widest case, 144 px without the
+    big badges.
+- **Why not the tabs on their own row up to 1365** (the other candidate). That tier moves every panel 44 px down (top 134
+  instead of 90), and 1280-1365 includes the shortest laptop screens (1280×720, 1360×768). It is also not CSS alone: the
+  1280 line is coded in six places across five workspace files (`innerWidth < 1280` for safe areas and narrow layouts in
+  assemble.js twice, build.js, colors.js, labels.js and parts.js) and in seven `max-width: 1279px` blocks in app.css. The
+  mount chip's word was the cheapest room in the bar: 92 px in the widest case. Making the Day/Night pair one button would
+  have saved about 42, which does not cover the big badges.
+- **Checks.** A new e2e case, "the top bar fits at every desktop width in its widest case, in every workspace…":
+  - It sets that build up through the setup sheet and writes the widest badges into the tabs. Then, in all five
+    workspaces, at 15 widths from 1024 to 1920, it asserts:
+    - nothing past the bar's right edge;
+    - 10 px between the controls (the switcher's chip is measured, not its wrapper);
+    - the tabs on a row of their own below 1280 only, and on the screen;
+    - the mount word shown only outside 1280-1365, with the accessible name kept at 1280;
+    - the build name at least 118 px in 1280-1365, and at least 60 px elsewhere.
+  - It fails on the CSS of `7b68f9e` (85 px past at 1280). It also fails on each of 7 mutants of the fix: either half
+    removed, either half of the switcher rule removed, either bound of the tier moved, the word removed with
+    `display: none`.
+  - The first version let one mutant through: without the chip's `max-width`, the wrapper shrank, and the chip ran 44 px
+    over the tabs. The case now measures the chip.
+  - npm test: 603 tests, 598 pass, 5 skipped, 0 fail.
+- **Review:** Terra `01a168e4`: no findings. It was asked about the phone, the 1024-1279 tier and the switcher's menu; the
+  clipped label's layout and accessible name; a vacuous or flaky pass on the CI runner; and any width or combination left
+  uncovered.

@@ -1043,6 +1043,17 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-lib, #ws-insp, #ws-tools, #ws-steps { top: 134px; }
   #ws-dock { gap: 14px; }
 }
+/* 1280-1365: the bar is one row again, and full. At 1280 Share sat 11 px past the bar's edge on the root kit and 85 px
+   with an Under-Table build and the widest tab badges (2026-10-23, DECISIONS). So the mount chip shows its icon and
+   length, as on the phone; the words stay for a screen reader and in the setup sheet. The tabs keep their row: a second
+   row here would move every panel 44 px down on the shortest laptop screens. 1366 fits that case, under 1 px to spare */
+@media (min-width: 1280px) and (max-width: 1365px) {
+  #ws-top .chip-btn.mount .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* the last resort at any width: a bar that is still too full shortens the build name below its floor rather than push
+   Share off the screen (above 1500 the printer's name and Share's word come back, 64 px over in that case at 1501) */
+#ws-switch { min-width: 0; }
+#ws-switch > .chip-btn { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }
 
 /* THE SETUP SHEET ON A PHONE (Joey, 2026-10-18, tapping the mount chip on his phone: "it just opens a broken menu and
