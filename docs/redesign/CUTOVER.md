@@ -16,8 +16,32 @@ parity list waited on.
    stays on its Pages address; no domain of its own. (Joey asked whether it could ride under the label generator; the Part
    Picker already does, the model files are a different thing and need no address of their own.)
 3. **The kill date** for the old planner: set once the merged planner is reliable and well tested as "MODULITH planner
-   2.0", not before (2026-10-13). Cutover day and the kill date stay undetermined until Joey's own hands-on testing
-   (2026-10-14). Until then both apps stay up and the redirects wait.
+   2.0", not before (2026-10-13). Cutover day and the kill date stayed undetermined until Joey's own hands-on testing
+   (2026-10-14). **Settled 2026-10-23:** the gate is five checks Joey does himself (the buy links, the model download
+   links, his printers in the setup sheet, Very High on his screen, one phone pass), not the 89-item pass; the kill date
+   is cutover day ("merge the old planner's redirect the same day as the other steps"); the merge order is the
+   recommended one; GoatCounter moves to `jerrari` (call 3 below).
+
+## Refreshed 2026-10-23: the calls settled, the old viewer green, two more fixes on the branches
+
+Joey, 2026-10-23, after two days of prep had passed without the cutover: "why can't we just migrate the new planner in
+place of the old one". Answered: nothing technical stops it; the gate was his own rule, and he cut it to the five checks
+above. Everything the day needs is now prepared and current:
+
+| repo | branch | head | state |
+|---|---|---|---|
+| modulith-planner | `cutover-front-door` | this commit | main `545f3ed` merged (`1d09544`: Parts print, Feedback & support, its key-hold fix, the side-cover re-port). Plus, on this branch only: the counter moves to `jerrari` (index.html); the Parts list's store follows the viewer's key and a listing's `?from=` (`8ccad5c`, Terra `01a16945`). Suites: see the commit message. |
+| modulith-site | `planner-cutover` | `21de044` (local) | 0 behind its main `ff09192`. Its BOM pins this repo's `aa82df2`, and none of the BOM inputs (bom.js, schema.js, layout.js, data.js) changed through `545f3ed`, so no re-vendor is needed. |
+| gen2-visual-animator (old viewer) | `cutover-redirect` | `4b19ec8` (pushed) | main `72545c5` merged. **Its main is green:** Joey pushed it 2026-10-23 ("Yes, push"), run 39971683112 succeeded, the live viewer serves `72545c51`. On the branch: 463 tests, 440 pass, 2 fail (the EdgeLabel checkout-drift pair, as on main), 21 skipped. |
+| gen2-planner (old planner) | `cutover-redirect` | `ebd8cb7` (pushed) | **Forwards the saved slot once per browser** and marks it (`gen2-cutover-forwarded`): after the kill date the slot never changes, and the new planner keeps what it opens in Recent, so a second forward would hand a visitor a stale copy over the build they had since edited. 421 tests, 419 pass, 1 skipped, 1 fail (C-pin-2, as on main). Terra `01a16943`, two findings discarded on the code. |
+
+- **Main is green again.** The `fe0a410` deploy (Feedback & support + the re-port) failed on the runner at the Feedback
+  e2e case: the dialog's key hold ended on the dialog's queued `close` event, so an Escape pressed right after `open`
+  read false was swallowed. Fixed on main at `545f3ed` (the hold checks `open` on every key; the case forces the race),
+  DECISIONS 2026-10-23.
+- **The two defects the hands-on checklist's critic found before the old planner's redirect** are fixed on the branches
+  above: the stale forwarded copy (old-stale-copy) and the Thangs visitor getting Printables links (parts-from-store).
+- **Still Joey's:** the five checks, and the go for each step.
 
 ## Refreshed 2026-10-22 (this repo's branch): still nothing merged, nothing deployed
 
@@ -231,13 +255,15 @@ Worktree `D:/Code Projects/MODULITH-cutover`.
   40 sentences, and regenerate the registry. They are on the site's local main but not on its origin. Merging main
   brought them into `planner-cutover`, so the branch's push published them there, and merging the branch deploys them.
 
-## Joey's calls
+## Joey's calls (all settled 2026-10-23; kept as the record of each)
 
-1. **The merge order.** Recommended below.
-2. **The old planner's kill date.** It is the day the old planner's `cutover-redirect` merges: from then its address only
+1. **The merge order.** Recommended below. SETTLED: as recommended.
+2. **The old planner's kill date.** SETTLED: cutover day. It is the day the old planner's `cutover-redirect` merges: from then its address only
    forwards. The redirect carries the build that browser had open last, the only build the old planner keeps; its colours,
    parts ticks and store choice stay behind, since this origin cannot read the old one's storage (2026-10-21, above).
-3. **GoatCounter: which counter the merged planner reports to.** It counts to `jerrari-build.goatcounter.com` today, the old
+3. **GoatCounter: which counter the merged planner reports to.** SETTLED 2026-10-23: the move to `jerrari`, made on this
+   branch (index.html), so it ships with step 3 and the two dashboards overlap only for the hours between steps 3 and 6
+   on the day. Until this branch merges it counts to `jerrari-build.goatcounter.com`, the old
    viewer's counter, inherited with the viewer's index.html (the `data-goatcounter` tag at the bottom of index.html). The
    old planner counts to `jerrari.goatcounter.com`, the site to `jerrari-modulith`. The approved plan (2026-10-12, §1.6)
    had the merged planner count to `jerrari` and `jerrari-build` stop at cutover; that switch was never made, and this
@@ -269,7 +295,8 @@ Worktree `D:/Code Projects/MODULITH-cutover`.
 5. Merge the old viewer's `cutover-redirect`: `gen2build.jerrari3d.com` forwards to Assemble and keeps the part preview, the
    dock and the benchmarks.
 6. The kill date: merge the old planner's `cutover-redirect`; keep the redirect for a year.
-7. GoatCounter as decided (call 3; the recommended move goes with step 6).
+7. GoatCounter: done with step 3 (this branch moves the counter to `jerrari`); after step 6 nothing counts to
+   `jerrari-build` but the old viewer's remaining pages, and it can stop. Note the date in both READMEs.
 8. Retire the relay (`js/relay-auth.js` and the `?embed=1` path) in a later commit, once nothing docks the old viewer.
 
 ## Also prepared, with the suite that says 2.0 is tested
@@ -293,7 +320,8 @@ Since 2026-10-17 it also checks the front door on `cutover-front-door`.
   ```
 
   Re-checked 2026-10-17: it still holds, and everything else the day needs is on the branches above. Re-checked
-  2026-10-21: it still holds; the prep above is done.
+  2026-10-21: it still holds; the prep above is done. **CLEARED 2026-10-23:** Joey cut the gate to the five checks
+  (decision 3 above); the day runs on his go once they pass.
 - step 5, the old viewer's redirect (found 2026-10-21):
 
   ```
@@ -301,6 +329,8 @@ Since 2026-10-17 it also checks the front door on `cutover-front-door`.
   blocked-since: 2026-10-18
   check-by: 2026-10-27
   ```
+
+  **CLEARED 2026-10-23:** main `72545c5` pushed on Joey's go, run 39971683112 green, the live viewer at `72545c51`.
 
 ## Not in the cutover
 

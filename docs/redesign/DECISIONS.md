@@ -2669,7 +2669,9 @@ Dated calls made while building, with who made them. The brief and the inventory
   today's main, run the full suite on a quiet machine, push once, and check them live." Merged as main `fe0a410`
   (npm test 606: 601 pass, 5 skipped; e2e soft 81/81 here). **Its deploy run 39959731798 FAILED** on this case, step
   "the hold ends with the dialog": the runner's Escape, pressed after `open` read false, was swallowed. The cause and the
-  fix are the entry below; the Live line goes there.
+  fix are the 2026-10-23 entry below. **Live 2026-10-23 at `545f3ed5`** (with that fix; run 39973401947, 30 min):
+  `feedback-prod.mjs 545f3ed` passes on the desktop (the bar's button opens the dialog centred, Escape closes it onto the
+  button) and on the phone (no bar button, the build menu's item, ✕ closes it).
 
 ## 2026-10-22 (a re-port keeps the side-cover toggle: the edits ahead of the old planner live in the port)
 
@@ -2727,6 +2729,8 @@ Dated calls made while building, with who made them. The brief and the inventory
   the window-capture hold.
 - **Review:** Terra `01a16929`: no findings.
 - **Deploy:** finishes the deploy Joey approved above (the fix is to the feature's own test and code, nothing new).
+  **Live 2026-10-23 at `545f3ed5`** (run 39973401947 green on attempt 1, pushed 10:52, live 11:22 local; the `fe0a410`
+  run it replaced had failed on this case). `feedback-prod.mjs` and `parts-print-prod.mjs` pass on that stamp.
 
 ## 2026-10-23 (a listing's ?from= seeds the Parts list's store)
 
