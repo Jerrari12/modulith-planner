@@ -31,3 +31,12 @@ test('the standalone viewer offers it (topbar + the outro) and the deploy stamps
   const main = read('js/main.js').toString('utf8');
   assert.match(main, /F\.open\(\{ tool: '3D Build Studio'/);
 });
+
+// the workspace shell (2026-10-22, the cutover parity check's I1): the top bar's button and the build menu's entry; the e2e
+// case "Feedback & support: ..." drives both on a desktop and a phone
+test('the workspace shell offers it (the top bar and the build menu, js/ui/topbar.js)', () => {
+  const top = read('js/ui/topbar.js').toString('utf8');
+  assert.match(top, /F\.open\(\{ tool: 'Planner'/);
+  assert.match(top, /el\('button\.chip\.icon-btn\.feedback'/);
+  assert.match(top, /role: 'menuitem', 'aria-haspopup': 'dialog', onclick: \(\) => \{ set\(false\); feedback\(btn\); \}/);
+});

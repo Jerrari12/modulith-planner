@@ -89,8 +89,9 @@ html.ws-mode-flip #ws *, html.ws-mode-flip #ws *::before, html.ws-mode-flip #ws 
 #ws-logo img { height: 28px; width: auto; display: block; }
 #ws-switch { position: relative; margin-left: 6px; }
 /* the build name takes the bar's free room, up to 240 px (the UI review 2026-10-16: "The Mighty Bit B..." at 1440 with
-   room to spare); the width terms are measured: the bar's other items fill about 1370 px above 1500, 1260 up to it */
-#ws-switch > .chip-btn > span { max-width: clamp(150px, calc(100vw - 1370px), 240px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+   room to spare); the width terms are measured: the bar's other items fill about 1424 px above 1580 (1370 above 1500
+   until the Feedback & support button's 54 px, 2026-10-22), 1260 up to it */
+#ws-switch > .chip-btn > span { max-width: clamp(150px, calc(100vw - 1424px), 240px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #ws-switch .menu { position: absolute; top: 52px; left: 0; width: 300px; max-height: min(70vh, 640px); overflow-y: auto; padding: 8px; border-radius: 14px; display: flex; flex-direction: column; gap: 2px; z-index: 9; }
 #ws-switch .item.recent { padding: 0; height: auto; gap: 2px; }
 #ws-switch .item.recent .open { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; border: none; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -910,11 +911,12 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 @media (max-width: 1023px) {
   /* the bar (Joey's phone, 2026-10-13: at 390-412 px the switcher was a sliver under the wordmark): the wordmark,
      the build name with its caret, mount·length as icon + number, and ONE theme button (the other mode's icon);
-     Share lives in the switcher menu, the printer chip waits for the setup sheet, the tabs are the bottom bar */
+     Share and Feedback & support live in the switcher menu, the printer chip waits for the setup sheet, the tabs are the
+     bottom bar */
   /* above an open sheet (13): the switcher's menu lives in this layer, and an open sheet covered its items (the phone
      check, 2026-10-17); an open sheet never reaches up to the bar itself (openHeight leaves 110 px) */
   #ws-top { top: 10px; left: 10px; right: 10px; gap: var(--gap-ctl); z-index: 14; }
-  #ws-top #ws-tabs, #ws-top .printer, #ws-top .share, #ws-top .spacer { display: none; }
+  #ws-top #ws-tabs, #ws-top .printer, #ws-top .feedback, #ws-top .share, #ws-top .spacer { display: none; }
   #ws-top #ws-switch { flex: 1; min-width: 0; margin-left: 0; }
   #ws-top #ws-switch > .chip-btn { width: 100%; padding: 0 10px; gap: 6px; }
   #ws-top #ws-switch > .chip-btn > :first-child { display: none; }
@@ -1022,11 +1024,19 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 #ws-toast.show { opacity: 1; }
 
 /* ---- narrow desktop (1024-1279): the panels keep their width, the middle gets tight ---- */
-/* up to 1500 px the bar is one row but tight: the printer and Share chips go icon-only and the build name shortens */
-@media (max-width: 1500px) {
+/* up to 1580 px the bar is one row but tight: the printer and Share chips go icon-only and the build name shortens.
+   1500 until the Feedback & support button (2026-10-22): with it, a long build name, Under-Table and the longest printer
+   ("Prusa CORE One L") pushed Share 22 px off the screen at 1501; above 1580 that case keeps the 8 px to spare it had
+   above 1500 before. Up to here the button takes the old slack: 12 px is left in that case at 1440 and 1500 */
+@media (max-width: 1580px) {
   #ws-top .printer span, #ws-top .share span { display: none; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
   #ws-switch > .chip-btn > span { max-width: clamp(120px, calc(100vw - 1260px), 240px); }
+}
+/* 1280-1365: the bar was already full before the Feedback & support button (at 1280 Share sat 11 px past the bar's edge,
+   33 px with an Under-Table build), so the button stays in the build menu there */
+@media (min-width: 1280px) and (max-width: 1365px) {
+  #ws-top .feedback { display: none; }
 }
 /* narrow desktop (1024-1279): the workspace tabs keep their names on a row of their own under the bar, and the
    panels start below it; the chips go icon-only. From 1024 up only: this block comes after the phone's, so without the
@@ -1066,3 +1076,33 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 #ws-stale button { font: inherit; height: 40px; padding: 0 18px; border-radius: 10px; font-weight: 600; cursor: pointer; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); }
 #ws-stale button:disabled { opacity: .6; cursor: progress; }
 #ws-stale button:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+
+/* PRINT: the Parts list's Print (2026-10-22). Without these rules Print printed the screen as it was: the 3D scene, the
+   bars and the dock, with the list cut off at its own scroll height. On paper only the list shows, whole and in black on
+   white, under a line naming the build (parts.js printHead); its controls, the phone sheet's handle and the counters'
+   buttons stay off the page, and a row never splits across two pages. Only while Parts is open: from any other
+   workspace the browser's own print keeps printing the screen, as before */
+#ws-parts .printhead { display: none; }
+@media print {
+  @page { margin: 14mm 12mm; }
+  html[data-ws="parts"], html[data-ws="parts"] body { background: #fff !important; color: #000 !important; color-scheme: light !important; height: auto !important; overflow: visible !important; }   /* a dark scheme paints the page margins dark */
+  html[data-ws="parts"] body > *:not(#ws) { display: none !important; }
+  html[data-ws="parts"] #ws { position: static !important; color: #000 !important; }
+  html[data-ws="parts"] #ws > *:not(#ws-parts) { display: none !important; }
+  html[data-ws="parts"] #ws-parts, html[data-ws="parts"] #ws-parts.sheet, html[data-ws="parts"] #ws-parts.wide { position: static !important; inset: auto !important; width: auto !important; height: auto !important; max-height: none !important; display: block !important; overflow: visible !important; transform: none !important; clip-path: none !important; background: none !important; border: none !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; border-radius: 0 !important; padding: 0 !important; color: #000 !important; }
+  html[data-ws="parts"] #ws-parts > .sheet-handle, html[data-ws="parts"] #ws-parts > .sheet-peek, html[data-ws="parts"] #ws-parts .row3, html[data-ws="parts"] #ws-parts .row4, html[data-ws="parts"] #ws-parts .expand, html[data-ws="parts"] #ws-parts .counter button { display: none !important; }
+  html[data-ws="parts"] #ws-parts > .head, html[data-ws="parts"] #ws-parts > .body { display: block !important; overflow: visible !important; }
+  html[data-ws="parts"] #ws-parts .head { padding: 0 0 8px !important; border-bottom: 1px solid #888 !important; }
+  html[data-ws="parts"] #ws-parts .printhead { display: block; margin: 0 0 6px; font-size: 11px; color: #444; }
+  html[data-ws="parts"] #ws-parts .body { padding: 0 !important; }
+  html[data-ws="parts"] #ws-parts h2, html[data-ws="parts"] #ws-parts h3, html[data-ws="parts"] #ws-parts .name, html[data-ws="parts"] #ws-parts .qty, html[data-ws="parts"] #ws-parts .link, html[data-ws="parts"] #ws-parts a { color: #000 !important; }
+  html[data-ws="parts"] #ws-parts .mono, html[data-ws="parts"] #ws-parts .note, html[data-ws="parts"] #ws-parts .dim, html[data-ws="parts"] #ws-parts .left, html[data-ws="parts"] #ws-parts .foot, html[data-ws="parts"] #ws-parts .link .paid, html[data-ws="parts"] #ws-parts .counter .lbl { color: #444 !important; }
+  html[data-ws="parts"] #ws-parts .row2 .ok, html[data-ws="parts"] #ws-parts .row2 .warn { color: #000 !important; }
+  html[data-ws="parts"] #ws-parts h3 { break-after: avoid; }
+  html[data-ws="parts"] #ws-parts .prow, html[data-ws="parts"] #ws-parts .well { background: none !important; border: 1px solid #ccc !important; box-shadow: none !important; break-inside: avoid; }
+  html[data-ws="parts"] #ws-parts .prow.done { opacity: 1; }
+  html[data-ws="parts"] #ws-parts .badge { background: none !important; border: 1px solid #888 !important; color: #000 !important; }
+  html[data-ws="parts"] #ws-parts .counter { background: none !important; }
+  html[data-ws="parts"] #ws-parts .chip, html[data-ws="parts"] #ws-parts .chip i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html[data-ws="parts"] #ws-parts a { text-decoration: none !important; }
+}

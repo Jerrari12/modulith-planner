@@ -2588,6 +2588,146 @@ Dated calls made while building, with who made them. The brief and the inventory
   opens this planner in a new tab, which lands the label and saves; the first tab shows the notice, its edit writes
   nothing, and the stored build keeps the label. Both scripts are in the prod-checks folder.
 
+## 2026-10-22 (the Parts list prints the list)
+
+- **What was wrong.** The Parts list's Print (`window.print()`) printed the screen as it was: the app had no print
+  stylesheet. On the live `0f32d12e`, Chrome's print to PDF of `?ws=parts&build=185-tabletop-3w2h` gave one dark page with
+  the 3D scene, the top bar and the dock, and the list cut off at its own scroll height: 6 of its 25 rows. The old planner's
+  print hid everything but its list (its css/style.css:1826-1836). Found by the hands-on pass checklist's critic
+  (2026-10-22), checked live with `parts-print-prod.mjs` (prod-checks folder).
+- **Now** `css/app.css` has a print stylesheet, only while Parts is open. On paper the list stands alone, whole and black
+  on white (the page's dark colour scheme had painted the margins dark), under a line naming the build and the date
+  (`parts.js` `printHead`, refreshed on `beforeprint`). The panel's controls, the phone sheet's handle and the tracking
+  counters' buttons stay off the page; the counts stay. A row never splits across two pages. From any other workspace
+  the browser's own print keeps printing the screen, as before (a first draft printed a blank page there).
+- **Checks.** On the branch served locally, the same print to PDF gives the full 25-row list over three pages with white
+  margins. The e2e case "Parts: Print puts the whole list on paper…" checks, under print media: no canvas, bars, dock or
+  buttons; the print line; the panel static and not clipped; every row; black on white with a light scheme; tracking
+  without its buttons; the same on a 390×844 phone from the bottom sheet; and Build still printing its screen. With the
+  print block disabled it fails ("only the list on paper"). The four Parts e2e cases pass, and so do the node tests that
+  load `parts.js`.
+- **Review:** Terra `01a16671`: no findings.
+- **Deploy:** Joey's go, 2026-10-22: "Deploy the Parts Print fix (parts-print c80febf): run the full suite on a quiet
+  machine, merge to main, and check it live." On a quiet machine: npm test 603 (598 pass, 5 skipped, 0 fail); the full
+  e2e suite in software rendering 80 of 80.
+- **Live 2026-10-22**, stamp `c80febfa` (run for `c80febf`). `parts-print-prod.mjs` on it: in print, no canvas, top bar,
+  toolbar or dock; the panel lays out whole (2055 px, none of it hidden); Chrome's print to PDF is three pages holding
+  all 25 rows. On `0f32d12e` the same check had printed one page with 6 of them.
+
+## 2026-10-22 (Feedback & support in the workspace shell)
+
+- **Asked** (the cutover work, parity gap I1 of the 2026-10-21 check): the old planner offers "Feedback & support" in
+  its nav and its phone menu; the new planner had no way in, though the target (inventory §10) keeps it in the app
+  chrome.
+- **Now** the shared dialog (`js/vendor/modulith-feedback.js`, the old planner's file byte for byte, already loaded for
+  the standalone viewer's button) opens from two places in `js/ui/topbar.js`:
+  - the top bar: a 44 px icon button (Phosphor `chat-circle-dots`, already in the sprite) between the Day/Night toggle
+    and Share, titled and labelled "Feedback & support";
+  - the build switcher menu: a last item under a divider, on every layout. On the phone (below 1024 px) the bar hides
+    the button, so this is the way in there, as it is for Share.
+  - It sends `tool: 'Planner'` and the deploy stamp as the version (the `?v=` on topbar.js's own URL; none locally). It
+    offers the link to this build (the address, which Share copies) unticked, and only with units placed. Its events go
+    through the stage's `track`: `feedback:open`, `feedback:<kind>`, `feedback:email`, `feedback:copy`, the old planner's
+    names.
+- **Keys stay in the dialog.** The workspaces read keys on the document: on Build, Delete removes the selected unit, the
+  arrows move it and Escape deselects it; Ctrl+Z undoes in every workspace. The stage reads the arrows on the window to
+  turn steps. While the dialog is open, a window capture listener stops those keys from propagating. Escape, Tab and
+  Enter are the dialog's default actions, so they still work. The listener goes when the dialog closes.
+- **Focus comes back** to the button, or from the menu to the build chip (the item is gone with the menu). The opener
+  takes focus before the dialog opens, because Safari does not focus a clicked button.
+- **The dialog is centred again.** viewer.css's `* { margin: 0 }` reset zeroed the browser's `margin: auto` for a modal
+  `<dialog>`, so the dialog opened in the top-left corner, here and on the standalone viewer's own Feedback button.
+  `dialog.mfb-dialog { margin: auto; }` restores it.
+- **The bar's room**, measured headless in all five workspaces, with the kit and with a worst case (a long build name,
+  Under-Table, the printer "Prusa CORE One L"):
+  - Before this change the bar already overflowed its inset at 1280 (Share 11 px past it; 33 px in the worst case, 13 px
+    of it off the screen) and at 1501 in the worst case (12 px).
+  - With the button at the old breakpoints, the worst case put Share 22 px off the screen at 1501 and 3 px at 1600.
+  - So the icon-only tier (the printer and Share chips without words) now runs to 1580 instead of 1500, and the build
+    name's wide term is 1424 instead of 1370. Above 1580 the worst case keeps the 8 px it had above 1500 before; at
+    1440 and 1500 it keeps 12 px. The narrow term stays 1260, so the kit's name is not cut at 1440.
+  - From 1280 to 1365 the button is hidden (the bar there was already full); the menu has it.
+  - No overflow at 1024, 1279, 1366, 1440, 1500, 1501, 1536, 1580, 1581, 1600 or 1920, in either case. At 1280 the bar is
+    as before. On a phone (360, 390, 412) nothing changes: the button is hidden and the gaps stay 8 px.
+- **Not changed:** the overflow at 1280-1365 that was already there (a follow-up of its own).
+- **Tests.** e2e "Feedback & support: …": on a 1366 desktop the bar's button opens the dialog centred, with a unit selected
+  behind it. Delete, Backspace and the arrows change nothing and say nothing. Report a problem shows the planner's
+  subject and the build link, unticked. Escape closes the dialog onto the button, with the unit still selected and both
+  events logged, and a second Escape then deselects (the hold is gone). At 1280 the button is hidden and the menu's item
+  opens the dialog, focus coming back to the build chip. On a 390 phone there is no button, the bar fits with its 8 px
+  gaps, and the menu's item opens the dialog centred, closed by Escape and by ✕. GoatCounter is blocked in the case. The
+  keyboard case's End now lands on the new last item. test/modulith-feedback-vendor.test.mjs pins the shell's wiring.
+- **Mutants**, each run against the case, all killed: no key hold (Delete removed the unit), no focus before opening
+  (focus fell to `<body>` on the menu path), the phone not hiding the button, no 1280-1365 rule, a hold that outlives
+  the dialog, no menu item, no centring rule.
+- **Review:** Terra `01a165dd`: no findings.
+- **Suites on the final code, each run alone:** npm test 604 (599 pass, 5 skipped, 0 fail; layout-parity passes in 212
+  s, where an earlier run beside the e2e suite timed out at 905 s); the full e2e suite 80 of 80 in software rendering
+  (`E2E_SOFT=1`, the CI runner's mode).
+- **Deploy:** a new feature, so it waited for Joey's go. Branch `feedback-support`. **Joey's go, 2026-10-23 (in the 10-18
+  session):** "Yes: deploy feedback-support (35b89db) and port-side-cover-toggle (8bd564e) together: merge them onto
+  today's main, run the full suite on a quiet machine, push once, and check them live." Merged as main `fe0a410`
+  (npm test 606: 601 pass, 5 skipped; e2e soft 81/81 here). **Its deploy run 39959731798 FAILED** on this case, step
+  "the hold ends with the dialog": the runner's Escape, pressed after `open` read false, was swallowed. The cause and the
+  fix are the entry below; the Live line goes there.
+
+## 2026-10-22 (a re-port keeps the side-cover toggle: the edits ahead of the old planner live in the port)
+
+- **Why.** `npm run drift` (2026-10-21) found hand edits in two generated modules: js/rules/bom.js (5 lines added, 11
+  removed against a fresh port) and js/rules/schema.js (1 added, 5 removed). tools/port-rules.mjs rewrites both whole,
+  so the next port from the old planner would have dropped them, the live Side covers toggle (`a1f085f5`) among them.
+- **Four edits, not one.** (1) the toggle's gate in the bill, `if (build.sideCovers !== false)` (2026-10-20); (2) its
+  record field, `sideCovers` in BUILD_FIELDS and sanitize's `d.sideCovers !== false` (2026-10-20); (3) side covers on the
+  outer sides of each column run, so a gap build bills 4, not 2 (2026-10-16); (4) the back cover row's tear-away sentence
+  (v2609, 2026-10-20). None is in the old planner on main, origin/main or cutover-redirect.
+- **Where they live now.** tools/port-ahead.mjs: a dated list of exact `[from, to]` edits that port-rules.mjs applies to
+  each generated module before it writes or compares it. A planner-only change to bom.js, layout.js or schema.js goes
+  there from now on, never into the module by hand. Not taken: moving the toggle out of the ported files (a wrapper
+  that filters the bill, a hand-written field list), because it changes the served files, and the per-run rule sits
+  inside the side-cover loop, where a wrapper would have to count the covers again.
+- **Upstream, Joey's call** (the old planner is not edited from here): (3) is a bug the old planner has too (its gap
+  builds under-bill side covers the same way); (2) there would close Sol's documented limit of 2026-10-20 (an old-planner
+  re-save turns the covers back on). (1) is planner-only (the old planner has no toggle), and (4) was already his call
+  (the 2026-10-20 back cover entry). An entry goes when the old planner carries its change or retires at the cutover.
+- **How it fails.** An edit whose text is gone, is found twice, or is already there (the old planner carries it) stops
+  the port in write mode, naming the entry, and is DRIFT under `--check` (exit 1). An entry for a module the port does
+  not write is refused before anything is written; a module in the port's list that is never written fails the run.
+- **Byte-identical.** `npm run drift`: no drift on the three modules. A fresh port (`--out DIR`, new) is identical byte
+  for byte to the committed bom.js, schema.js and layout.js and to the copies fetched from planner.modulith.systems
+  before the change; an in-place port leaves js/rules unchanged. The modules' headers still list the mechanical edits
+  only: a line naming the AHEAD edits would change the served files.
+- **Checks.** test/port-ahead.test.mjs (2 tests) ports fresh into a temp directory and runs what it wrote: the field
+  in BUILD_FIELDS, sanitize's reading (absent, 0, '', null, 'false' on; false off), serializeBuild carrying it; off
+  bills no side covers and changes no other row; the gap build bills 4; the tear-away sentence; and the apply rules
+  (gone, already there, found twice, an insert-only edit already there). Mutation-checked, 8 of 8 caught: each entry
+  dropped, the field's two edits dropped one at a time, a broken `from`, the per-run rule's second edit dropped. It
+  skips without the old planner checkout (CI), like the parity gate.
+- **Suites.** npm test 605: 599 pass, 5 skipped, 1 fail, M28's timing gate in test/simplify.test.mjs (Colors code this
+  does not touch) while another session's suite shared the machine; alone it passes (median 0.19 ms). e2e with
+  `E2E_SOFT=1`: 77 of 79, also beside another session's e2e run; the two failures, the stale-tab guard's Studio case
+  (a 15 s wait) and the build store case's "the first tab did not go stale", pass when re-run alone (3 of 3 with the
+  guard's other case). No served file changed, so the page under test was main's.
+- **Review:** Terra `01a165bb`, routine: 2 findings, both confirmed and fixed (a stray entry was refused only after the
+  modules were written; the port's module list was not checked against the modules it wrote).
+- **Deploy:** none needed: the served files are byte-identical.
+
+## 2026-10-23 (the Feedback dialog's key hold ends when `open` does, not when the close event lands)
+
+- **The defect.** `close()` on a `<dialog>` clears `open` at once but only queues the `close` event (the HTML spec's
+  user-interaction task source), and the hold that keeps keys from the build behind the dialog was removed on that event.
+  A key landing between the two moments met the hold: on the deploy runner (SwiftShader, slow) the e2e case's second
+  Escape did, and the unit stayed selected (run 39959731798, 2026-10-23 13:16-13:59Z, the e2e step; locally the race was
+  never lost: 81/81 before the push). A visitor pressing Escape twice quickly loses the second press the same way.
+- **The fix** (`js/ui/topbar.js` feedback()): the hold reads `d.open` on every key and stops propagation only while it is
+  true; the removal on `close` stays. A reopen cannot land in the gap: it needs a later user task, and the queued close
+  event runs first.
+- **The test** (the Feedback case): a probe that forces the race in one task, `d.close()` then a synthetic Escape on the
+  document before the queued event can fire, then asserts the unit deselected. With the old line it fails (`1 !== null`);
+  with the fix it passes. Build's Escape handler checks no isTrusted, so the synthetic key takes the real path through
+  the window-capture hold.
+- **Review:** Terra `01a16929`: no findings.
+- **Deploy:** finishes the deploy Joey approved above (the fix is to the feature's own test and code, nothing new).
+
 ## 2026-10-23 (a listing's ?from= seeds the Parts list's store)
 
 - **The defect.** A visitor from a Thangs listing arrives with `?from=thangs`. The vendored viewer seeds its store preference
@@ -2615,3 +2755,4 @@ Dated calls made while building, with who made them. The brief and the inventory
   the viewer on a pick or a relay (`gen2-store`) and the address rider, which Share copied before this change too; a pick
   in another tab is read at this tab's next mount, as before.
 - **Deploy:** with the cutover (this branch).
+
