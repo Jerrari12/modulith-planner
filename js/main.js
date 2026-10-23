@@ -10892,7 +10892,13 @@ for (const ev of ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown',
 function idleSettling() {
   if (typeof aoWanted === 'function' && aoWanted() && (ao.blocked || ao.passes < (ao.accumMax || 0))) return true;
   if (typeof accWanted === 'function' && accWanted() && acc.ok && acc.n < ACC_SAMPLES) return true;
-  if (renderer.shadowMap.enabled && renderer.shadowMap.needsUpdate) return true;
+  /* a shadow render still owed - but NOT while a converged Very High blits its mean: every accumulated sample ends by
+     putting the sun home and flagging the map (accSetSun(0)), and after the last sample no scene render follows to
+     consume the flag, so the gate stayed open and Very High on the light stage drew ~120 frames a second at rest
+     (measured 2026-10-23, main and the Done room alike; the dark stage has no shadow map, which hid it). The flag is
+     honoured by the next plain render, which is the first frame after anything changes. */
+  if (renderer.shadowMap.enabled && renderer.shadowMap.needsUpdate
+    && !(typeof accWanted === 'function' && accWanted() && acc.ok && acc.n >= ACC_SAMPLES)) return true;
   return false;
 }
 function idleFrame(now) {
