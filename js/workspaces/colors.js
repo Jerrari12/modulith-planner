@@ -176,6 +176,28 @@ export function mountColors(stage, ctx) {
   const debug = new URLSearchParams(location.search).get('debug');
   if (debug) { window.__GEN2_CARDS__ = cards; window.__GEN2_SURPRISE__ = sp; }   // the pacing check reads what the gallery still owes; the step-5 checks read the candidates
 
+  /* THE ROOM AS A STAGE (Joey, 2026-10-23, after the Done scene: "prototype the room as a Studio / Room stage toggle in
+     the Colors workspace, still hero, orbit allowed, no sequence"; the style brief's own "later: offer the same rooms as
+     a stage option in Colors, for judging colors in context"). The Done scene's room (js/scenes/done.js) behind the same
+     `?done=room` flag: the build on the desk in daylight, so a filament is judged under a room's light and bounce as well
+     as the studio's. The studio stays the colour-accurate reference. The choice is remembered across a remount. */
+  const ROOM_FLAG = new URLSearchParams(location.search).get('done') === 'room';
+  let room = null;   // { leaveFn, handle } while the room is on or loading
+  st.room = ROOM_FLAG && !!(ctx.memo && ctx.memo.colorsRoom);
+  function enterRoom() {
+    if (!ROOM_FLAG || room) return;
+    const h = { leaveFn: null, handle: null };
+    room = h;
+    import('../scenes/done.js').then(({ enterDoneScene }) => {
+      if (room !== h) return;
+      const r = enterDoneScene(stage, { say, sequence: false });
+      h.leaveFn = r.leave;
+      r.ready.then((handle) => { if (room === h) { h.handle = handle; if (!handle) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; renderPanel(); } } });
+    }).catch((e) => { console.warn('[colors] the room did not load', e); if (room === h) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; renderPanel(); } });   // forgotten too, so a remount does not retry (Terra 01a16b56)
+  }
+  function leaveRoom() { if (!room) return; const h = room; room = null; if (h.leaveFn) h.leaveFn(); }
+  function setRoom(on) { st.room = !!on; if (ctx.memo) ctx.memo.colorsRoom = st.room; if (st.room) enterRoom(); else leaveRoom(); renderPanel(); }
+
   /* ---------------- the palette, as one undo step each ---------------- */
   const pal = () => stage.palette();
   const worn = (key) => { const p = pal(); return p.on && p.colors[key] ? p.colors[key] : null; };
@@ -232,7 +254,12 @@ export function mountColors(stage, ctx) {
   function renderPanel() {
     const p = pal();
     panel.replaceChildren();
-    panel.appendChild(el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]));
+    const head = el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]);
+    if (ROOM_FLAG) head.appendChild(el('div.stage', { role: 'group', 'aria-label': 'Stage', title: 'Studio: the colour-accurate stage. Room: the same build on a desk in daylight.' }, [
+      el('button.seg.sm' + (!st.room ? '.on' : ''), { text: 'Studio', 'aria-pressed': String(!st.room), onclick: () => setRoom(false) }),
+      el('button.seg.sm' + (st.room ? '.on' : ''), { text: 'Room', 'aria-pressed': String(st.room), onclick: () => setRoom(true) }),
+    ]));
+    panel.appendChild(head);
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
     // 2026-10-16). Opening this tab turns the visitor's colours on (onEnter below).
     // THE CURRENT LOOK, as a card (Astra: a compact card at the top; the premade list moved into the gallery)
@@ -751,7 +778,8 @@ export function mountColors(stage, ctx) {
   }
 
   /* ---------------- toolbar, dock, the shopping list ---------------- */
-  const bar = toolbar(stage, { soon, history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } } });
+  const bar = toolbar(stage, { soon, history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } },
+    reset: () => { if (room) { if (room.handle) room.handle.recenter(); return; } stage.resetView(); } });   // with the room on, Reset view returns to the room's shot; while it loads, nothing (its entrance places the camera; the stage's preset would fly out of the room: Terra 01a16b56)
   root.appendChild(bar.el);
   const dock = el('footer.glass', { id: 'ws-dock' });
   root.appendChild(dock);
@@ -803,7 +831,8 @@ export function mountColors(stage, ctx) {
      still model); on the phone the sheet manager's heights already include an open sheet */
   /* the open tray lifts the safe area's floor ONCE, when it opens (the stage refits only a camera the visitor has not taken);
      a flip never calls this, so the camera stays where the visitor left it between finalists (step 4) */
-  function safe() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
+  function safeArea() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
+  function safe() { safeArea(); if (room && room.handle) room.handle.refit(); }   // the room's shot follows the free region too (the picker opening narrows it)
   function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => {
@@ -829,8 +858,10 @@ export function mountColors(stage, ctx) {
   stage.setDims(false);
   if (!pal().on && Object.keys(pal().colors).length) commitColors('colors-on', () => stage.setUseCustom(true));   // the tab's job is the visitor's colours
   renderAll();
+  if (st.room) enterRoom();   // a remembered Room choice comes back with the workspace
 
   return {
+    onQuality(tier) { if (room && room.handle) room.handle.onQuality(tier); },   // the room re-aims its lights after the tier's rig reset
     onSelect(sel) {
       st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; }
       /* on a phone a tapped part answers with its card (over the collapsed handles) and the picker's handle, named after
@@ -841,7 +872,7 @@ export function mountColors(stage, ctx) {
       if (phone && sel && !phone.isOpen(picker)) phone.collapse();
       renderAll();
     },
-    unmount() { ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace
+    unmount() { leaveRoom(); ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace, nor does the room
     get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
     get tray() { return trayLooks.map((t) => t.name); },   // the finalists, for a check
     get surprise() { return { names: sp.cands.map((c) => c.name), colors: sp.cands.map((c) => c.colors), style: sp.style, cap: sp.cap, ownedOnly: sp.ownedOnly, locks: Object.keys(sp.locks), short: sp.short, seed: sp.seed }; },   // the candidates, for a check

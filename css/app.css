@@ -407,6 +407,9 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-colors .head { display: flex; flex-direction: column; gap: 4px; }
 #ws-colors h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
 #ws-colors .head .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
+/* the Studio / Room stage toggle (the Done scene's room as a stage, behind ?done=room, 2026-10-23) */
+#ws-colors .head .stage { display: flex; gap: 3px; padding: 3px; margin-top: 6px; align-self: flex-start; border-radius: 10px; background: var(--track); }
+#ws-colors .head .stage .seg { height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12px; }
 #ws-colors section { display: flex; flex-direction: column; gap: 6px; }
 #ws-colors .schemes { display: flex; flex-direction: column; gap: 4px; }
 #ws-colors .scheme { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 10px; border-radius: 12px; font-size: 13px; font-weight: 600; text-align: left; }

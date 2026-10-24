@@ -160,7 +160,7 @@ jobs:
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|" js/workspaces/assemble.js
           # the Done scene (2026-10-23): assemble.js imports it on demand, so its import() is stamped like a static one; the
           # module's own helper and the room assets it fetches (scenes/) are stamped inside it
-          sed -i "s|'../scenes/done.js'|'../scenes/done.js?v=$V'|" js/workspaces/assemble.js
+          sed -i "s|'../scenes/done.js'|'../scenes/done.js?v=$V'|" js/workspaces/assemble.js js/workspaces/colors.js   # Colors imports it too (the Studio / Room toggle)
           sed -i "s|'./done-fit.js'|'./done-fit.js?v=$V'|; s|'scenes/home-office/room.glb'|'scenes/home-office/room.glb?v=$V'|; s|'scenes/home-office/room.json'|'scenes/home-office/room.json?v=$V'|" js/scenes/done.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|" js/ui/toolbar.js
           sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/board.js'|'../ui/board.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'../rules/stand.js'|'../rules/stand.js?v=$V'|" js/workspaces/build.js

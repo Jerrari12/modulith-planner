@@ -1444,6 +1444,95 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
   await rm.ctx.close();
 });
 
+/* THE ROOM AS A STAGE IN COLORS (Joey 2026-10-23: "a Studio / Room stage toggle in the Colors workspace, still hero, orbit
+   allowed, no sequence"): behind the same flag, the panel head gets the toggle; Room puts the build in the room with the
+   stage held, the orbit free and no sequence; a colour pick still lands; the toolbar's Reset view returns to the room's
+   shot and gives the camera back; Studio restores the stage; the choice survives a trip to another workspace. */
+test('Colors: the Studio / Room toggle is absent without the flag; with it, Room holds the stage with a free orbit and no sequence, picks land, Reset view returns to the shot, Studio restores, the choice comes back', async () => {
+  const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, controls: v.controls.enabled, camFree: v.camFree, seq: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.on : null, seqWanted: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.wanted : null, quality: v.quality, cam: v.camera.position.toArray().map((n) => +n.toFixed(1)) }; });
+  const off = await open('colors');
+  assert.equal(await off.page.locator('#ws-colors .head .stage').count(), 0, 'no toggle without the flag');
+  assert.deepEqual(clean(off.errors), []);
+  await off.ctx.close();
+  const { ctx, page, errors } = await open('colors', { query: '&done=room' });
+  const seg = (t) => page.locator(`#ws-colors .head .stage button:has-text("${t}")`);
+  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true', 'Studio by default');
+  const s0 = await state(page);
+  assert.equal(s0.held, false); assert.equal(s0.room, false);
+  await seg('Room').click();
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
+  await settle(page, 1500);
+  const s1 = await state(page);
+  assert.equal(s1.room, true, 'the room is in the scene'); assert.equal(s1.held, true, 'the stage is held'); assert.equal(s1.bg, null);
+  assert.equal(s1.controls, true, 'the orbit is free'); assert.equal(s1.seq, false, 'no camera sequence in Colors');
+  assert.equal(await seg('Room').getAttribute('aria-pressed'), 'true');
+  /* "no sequence" has to be shown on a tier that WOULD sequence in Assemble: these cases run on Fast, where the sequence is
+     off anyway, and the slow-drift guard leaves seq.on false too, so neither tells a stage from a stopped sequence. On
+     Balanced, with the room on, the room must still want none and the camera must stay on the hero past the entrance delay. */
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await settle(page, 1500);   // past ENTER_MS + 50, where Assemble's sequence would have started
+  const sB = await state(page);
+  assert.equal(sB.quality, 'balanced'); assert.equal(sB.room, true, 'the room survived the tier change');
+  assert.equal(sB.seqWanted, false, 'no sequence wanted on Balanced either: the room is a stage in Colors');
+  assert.equal(sB.seq, false, 'and none running'); assert.ok(sB.cam.every((v, i) => Math.abs(v - s1.cam[i]) < 2), `the camera stayed on the hero (${sB.cam} vs ${s1.cam})`);
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('fast', { user: true }); });
+  await settle(page, 800);
+  // a colour pick lands while the room is on: a preset through the gallery's own path (the stage's palette changes)
+  const hexBefore = await page.evaluate(() => window.__GEN2_VIEWER__.activeHex('Faceplate'));
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.applyPreset(v.PRESETS[1]); });
+  await settle(page, 600);
+  assert.notEqual(await page.evaluate(() => window.__GEN2_VIEWER__.activeHex('Faceplate')), hexBefore, 'the preset recoloured the model');
+  assert.equal((await state(page)).room, true, 'and the room stayed');
+  // a grab takes the camera; Reset view in the toolbar returns to the room's shot and gives it back
+  const camHero = (await state(page)).cam;   // the hero, as it stands after the tier round trip
+  await page.mouse.move(640, 380); await page.mouse.down(); await page.mouse.move(720, 420, { steps: 10 }); await page.mouse.up();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === true, null, { timeout: 15_000 }).catch(() => assert.fail('the grab did not take the camera'));
+  assert.notDeepEqual((await state(page)).cam, camHero, 'the orbit moved the camera');
+  await page.locator('#ws-tools button.cam').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === false, null, { timeout: 15_000 }).catch(() => assert.fail('Reset view did not give the camera back'));
+  await settle(page, 1300);   // the 900 ms move back to the shot
+  const back = (await state(page)).cam;
+  assert.ok(camHero.every((v, i) => Math.abs(v - back[i]) < 2), `Reset view returned to the room's shot (${back} vs ${camHero})`);
+  assert.equal((await state(page)).room, true, 'the room is still on');
+  // the choice survives a trip to Parts and back
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 60_000 });
+  const sP = await state(page);
+  assert.equal(sP.room, false, 'another workspace: no room'); assert.equal(sP.held, false); assert.equal(sP.bg, 'color');
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the remembered Room did not come back with Colors'));
+  assert.equal(await seg('Room').getAttribute('aria-pressed'), 'true', 'the toggle remembers Room');
+  // Studio restores the stage
+  await seg('Studio').click();
+  await settle(page, 1500);
+  const s2 = await state(page);
+  assert.equal(s2.room, false, 'the room is gone'); assert.equal(s2.held, false); assert.equal(s2.done, null); assert.equal(s2.bg, 'color', 'the stage background is back'); assert.equal(s2.controls, true);
+  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* a room that cannot load (its module request fails) falls back to Studio AND forgets the choice, so a remount does not
+   retry it (Terra 01a16b56: the import's failure path cleared the panel's state but left the memo set) */
+test('Colors: the Studio / Room toggle when the room fails to load: Studio comes back, the choice is forgotten, a remount does not bring Room back', async () => {
+  const { ctx, page, errors } = await open('colors', { query: '&done=room' });
+  const seg = (t) => page.locator(`#ws-colors .head .stage button:has-text("${t}")`);
+  await page.route('**/scenes/done.js*', (r) => r.abort());
+  await seg('Room').click();
+  await page.waitForFunction(() => { const on = document.querySelector('#ws-colors .head .stage button[aria-pressed="true"]'); return on && on.textContent === 'Studio'; }, null, { timeout: 30_000 }).catch(() => assert.fail('Studio did not come back after the failed load'));
+  assert.equal(await page.evaluate(() => window.__GEN2_CTX__().memo.colorsRoom), false, 'the choice is forgotten, not only the panel state');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'no room');
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 60_000 });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.querySelector('#ws-colors .head .stage'), null, { timeout: 60_000 });
+  await settle(page, 600);
+  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true', 'Studio on the remount: the failed Room was not retried');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null);
+  assert.deepEqual(clean(errors).filter((e) => !/net::ERR_FAILED/.test(e)), [], 'nothing but the aborted request’s own console line');   // the abort IS the test's doing
+  await ctx.close();
+});
+
 test('the build store: an edit autosaves, a bare address reopens the build, Rename, Duplicate, Delete', async () => {
   const { ctx, page, errors } = await open('build', { query: '&new=1' });
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.feet = s.feet === 'adhesive' ? 'tpu' : 'adhesive'; }, 'edit'));

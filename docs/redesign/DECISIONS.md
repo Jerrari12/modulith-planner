@@ -2919,3 +2919,35 @@ Dated calls made while building, with who made them. The brief and the inventory
   two Done e2e cases on the GPU, five runs, pass; the sequence case under `E2E_SOFT`, pass, after the three timing
   changes above (its SwiftShader runs here took 47–105 s as the laptop's load varied). main.js is unchanged by the
   fixes, so the quiet run's suite and goldens stand.
+
+## 2026-10-23 (the room as a stage in Colors: the Studio / Room toggle, behind `?done=room`)
+
+- **What Joey asked.** After the Done scene's first slices he asked what the scene is for and where it would be better
+  used ("maybe alongside the color tab in some way while selecting colors?"), then: "prototype the room as a Studio /
+  Room stage toggle in the Colors workspace on done-scene, still hero, orbit allowed, no sequence." The style brief had
+  it as a later step ("offer the same rooms as a stage option in Colors, for judging colors in context").
+- **What it is.** Behind the same flag, the Colors panel's head gets a Studio / Room segmented toggle (`colors.js`).
+  Room enters the Done scene's room with the new `sequence: false` (`done.js`): the still hero, the orbit free, no drifts
+  and no drawer moment on any tier; picks land as before; the toolbar's camera button (`toolbar.js` takes a `reset`)
+  returns to the room's shot through the new `recenter()` and gives the camera back (the stage's own Reset view would
+  fly to the step preset, out of the room), and does nothing while the room loads; Studio leaves the room; the choice
+  is remembered on `ctx.memo.colorsRoom` across a remount (a trip to Parts and back); unmount leaves the room. The
+  studio stays the colour-accurate reference, as the toggle's title says. `refit()` now leaves a camera the visitor
+  holds where it is when there is no sequence to take it back. `pages.yml` stamps `done.js` in colors.js too.
+- **Review** (Terra, routine, thread 01a16b56): two findings, both confirmed and fixed: Reset view during the room's
+  load fell through to the stage preset; a failed module import cleared the panel's state but not the memo, so a
+  remount retried it. None discarded.
+- **Checks (laptop).** e2e: the toggle case (absent without the flag; Room holds the stage with a free orbit; no
+  sequence wanted on Balanced either, the camera on the hero past the entrance delay; a preset recolours; a grab then
+  Reset view returns to the shot within 2 mm; the choice survives Parts and back; Studio restores the stage) and the
+  failed-load case (the module request aborted: Studio comes back, the memo is cleared, a remount does not retry).
+  Five mutants killed: the sequence on in Colors, Reset view falling through, the room not left on unmount, the toggle
+  without the flag, a failed load keeping the memo. The first of them SURVIVED the case as first written: the e2e runs
+  on Fast, where the sequence is off anyway, and the slow-drift guard also leaves `seq.on` false, so neither told a
+  stage from a stopped sequence; the case now switches to Balanced inside the room and reads the debug hook's new
+  `sequence.wanted`. npm test 627 tests, 622 pass, 0 fail, 5 skipped (the Colors timing gate passed this run); goldens
+  60 shots, 0 differ. Not deployed.
+- **Open (Joey's question, 2026-10-23).** A cut-based sequence for weak devices: hold 9 s, cut, hold, in place of the
+  still hero that Fast and the slow-drift verdict give today. The room's look is baked, so a cut costs one frame; it
+  would be the SEQUENCE timing with `moveMs` 0 and the drawer moment off. Not built; `done-fit.js`'s comment ("the
+  still hero is better than a slideshow") was a judgment, not a measurement, and Joey has not seen the cut version.
