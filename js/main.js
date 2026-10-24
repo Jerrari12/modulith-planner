@@ -3588,6 +3588,51 @@ function setReliefOverride(v) {
   syncRelief();
   invalidateFrame();
 }
+/* THE RELIEF COMPILED AHEAD (the Done scene, 2026-10-24). A cut that turns the relief on rebuilds the part materials with
+   the shader patch, and the frame after it compiles their programs: on this laptop two programs at High, one frame of 1.2
+   to 1.4 s, spent in the black (the dip into the macro shot was 1.6 to 1.8 s of full black at High and 2.9 s at Very
+   High, and about 0.4 s, the beat's own, with this; D:/Claude - Output/done-scene-2026-10-23/relief-warm/). This builds
+   those programs while the relief is still held off: the relief-on materials go onto the meshes, three compiles them,
+   and the relief-off ones come back, all in one task, so no frame draws the relief. The off materials rebuilt last find
+   their programs in three's cache, and so does the cut's own rebuild later: three releases a program only when the last
+   material using it is disposed, and syncRelief disposes no part material, the per-unit colour clones included (see
+   syncRelief: Sol 01a16f55).
+   ONE DIRECTION: the scene holds the relief off but for the macro, so the relief-on programs are the ones a cut can lack.
+   A tier change during the macro leaves the next cut compiling the new tier's off programs, in the black, as before.
+   ⚠ THE VARIANTS THE STAGE WILL DRAW, AND NO MORE. Tone mapping and the output colour space are part of a program, and
+   three sets both from whether a render target is bound: the canvas pass is one program, a pass into a target another.
+   Two passes draw the parts into a target: Very High's samples and the floor mirror (the AO and outline passes draw an
+   override material, and no part material is transmissive, so three's own transmission pass never runs). So the
+   target variant is compiled on Very High or with the mirror up, the canvas one always (measured: High's cut compiled
+   two programs, Very High's four). And only the meshes that are drawn: the hidden interior never carries the relief on
+   screen. All of it is GPU work after the call returns, done during the hero's still hold, so what is not needed is not
+   done: six programs at High paused the hero's frames for 0.4 to 0.9 s in 2 runs of 7, its two in none of 4.
+   ⚠ compile, NOT compileAsync. compileAsync polls the materials it compiled until each program is ready, and the second
+   syncRelief disposes the per-unit colour clones (purgeOverrideMats): a disposed material has no program to poll, and
+   the poller throws in a timer. compile only issues the compile and the link; with KHR_parallel_shader_compile they run
+   off the main thread, and without it the GPU process runs them behind the still frame the scene called this on.
+   Once per tier, plate program, scene revision and target need; a call with nothing to do returns null. */
+let reliefWarm = null, warmTarget = null;
+function warmRelief() {
+  if (reliefOverride !== false || !LAYER_DETAIL_ENABLED || !QUALITY[quality].relief || !instances || !instances.size) return null;
+  const into = !!QUALITY[quality].accum || !!(refl.mesh && refl.mesh.visible);
+  const key = quality + '|' + bedFinishProgram + '|' + sceneRev + '|' + into;
+  if (reliefWarm === key) return null;
+  reliefWarm = key;
+  const t0 = performance.now(), before = (renderer.info.programs || []).length, prev = renderer.getRenderTarget();
+  if (into && !warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
+  try {
+    reliefOverride = null; syncRelief();
+    for (const rt of into ? [null, warmTarget] : [null]) {
+      renderer.setRenderTarget(rt);
+      for (const inst of instances.values()) inst.group.traverseVisible((o) => { if (o.isMesh) renderer.compile(o, camera, scene); });
+    }
+  } finally {
+    renderer.setRenderTarget(prev);
+    reliefOverride = false; syncRelief();
+  }
+  return { programs: (renderer.info.programs || []).length - before, targets: into ? 2 : 1, ms: +(performance.now() - t0).toFixed(1) };
+}
 
 /**
  * Rebuild the part materials when the relief crosses the tier boundary.
@@ -3605,6 +3650,16 @@ function setReliefOverride(v) {
  * ⚠ IT DOES NOT DISPOSE THE OLD MATERIALS, matching `dropFaceplateMaterials`. A tier change is
  * rare and one-way, so the leak is bounded at a few dozen programs per session; disposing while a
  * planned clone still holds a `src` reference is the more expensive mistake.
+ *
+ * ⚠ NOR THE PER-UNIT COLOUR CLONES (Sol 01a16f55, 2026-10-24). The shared purge disposes those, and
+ * three releases a program when the last material using it is disposed: on a build whose drawn parts
+ * all carry a unit's own colour the clones are a program's only users, so every flip threw away the
+ * programs of the side it left and the next flip compiled them again. The Done scene flips the relief
+ * at its cuts, twice a cycle, and compiles it ahead under the hero (warmRelief): measured with every
+ * unit coloured and the unit-less covers, rails and feet hidden, the warm-up kept no relief program,
+ * the hero compiled one on screen, the cut into the macro one and the next shot three. Dropped from the
+ * registry undisposed, a clone is collected like any orphan (three keeps a material's state in a
+ * WeakMap); what stays is its programs, the bounded set every flip needs again.
  */
 let reliefApplied = null;
 function syncRelief() {
@@ -3613,7 +3668,7 @@ function syncRelief() {
   reliefApplied = want;
   /* Boot: nothing is built yet, and everything built after this reads the flag anyway. */
   if (!instances || !instances.size) return;
-  purgePartMaterials();
+  purgePartMaterials({ keepClones: true });
   for (const inst of instances.values()) {
     inst.group.traverse((o) => {
       if (o.isMesh) o.material = materialFor(inst, false, o.userData.zone);
@@ -3626,9 +3681,11 @@ function syncRelief() {
    "the shader patch these materials carry is no longer the one wanted". Two callers: the relief's
    tier gate above, and the build plate's program switch below. It does NOT re-point meshes: syncRelief
    does that itself, and the plate switch runs inside mountManifest, whose applyState reassigns every
-   mesh from the rebuilt registries. */
-function purgePartMaterials() {
-  purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
+   mesh from the rebuilt registries. `keepClones`: the relief's flips drop the per-unit clones from
+   their registry without disposing them, so their programs stay (see syncRelief). */
+function purgePartMaterials({ keepClones = false } = {}) {
+  if (keepClones) { for (const k of Object.keys(overrideMats)) delete overrideMats[k]; }
+  else purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
   purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   for (const map of [materials, highlightMats, altMaterials, altHighlightMats,
     plannedMats, plannedHighlightMats]) {
@@ -11240,7 +11297,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, warmRelief, reliefLive: () => reliefApplied, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL

@@ -3304,3 +3304,57 @@ Dated calls made while building, with who made them. The brief and the inventory
   above the desk. Mutants: 14 on the grammar killed; of the race fixes, 4 killed, 1 survives by design (tick's waiting
   guard alone: freeze's guard covers the only caller that ticks while waiting). A live tour and a contact sheet of every
   shot at High (D:\Claude - Output\done-scene-2026-10-23\grammar\).
+
+## 2026-10-24 (the Done scene: the relief compiled ahead, so the dip into the macro is the beat's own)
+
+- **The problem, filmed and then measured.** The film of the grammar (`grammar-high-95s.mp4`) showed 1.8 s of black
+  before the macro shot and about 0.5 s before every other one. The macro is the one shot that turns the relief on
+  (where its push-in ends), and that rebuild compiled the relief's programs on the cut's first frame: at High 2
+  programs in one frame of 1.2 to 1.4 s, 1.6 to 1.8 s of full black; at Very High 4 programs (its samples draw into a
+  render target, a second variant of each program), 2.9 s. The black waited because the new shot's dip-in waits for its
+  first drawn frames.
+- **Joey's call.** Offered "compile the macro's relief shaders during the first shot, so its dip is as short as the
+  others", he answered "Yeah let's test doing that" (2026-10-24).
+- **What was built.** `stage.warmRelief()` (main.js) puts the relief-on materials on the meshes, compiles them with
+  `renderer.compile` and restores the relief-off materials, all in one task, so no frame draws the relief. It compiles
+  only what will be drawn: the meshes that are visible, the canvas variant always, the render-target variant on Very
+  High or with the floor mirror up. Nothing is disposed, so three keeps the programs, and the cut's own rebuild later
+  finds them by key. It is keyed by tier, plate program, scene revision and target need, and skips a repeat. Not
+  compileAsync, whose poller would throw on the per-unit override clones the restore disposes. The scene's `warmAhead`
+  (done.js) calls it when a hold begins on screen (the hero's landing, a frame Very High restarts its accumulation on
+  anyway) and after a change of tier, if any shot in the plan will turn the relief on. One direction only: a tier change
+  during the macro still leaves the next cut compiling the off programs, in the black, as before.
+- **Measured** (`relief-warm-probe.mjs` and its results in `D:\Claude - Output\done-scene-2026-10-23\relief-warm\`;
+  one fresh Chrome a run, the arms interleaved). At High (4 pairs) the macro's black went from 1.62-1.76 s to 0.38-0.39
+  s, the cut's longest frame from 1.27-1.42 s to 39-46 ms, and the cut compiled 0 programs instead of 2. At Very High
+  (3 pairs, through the whole macro) the black went from 2.84-2.93 s to 0.39-0.41 s, and the cut compiled 0 programs
+  instead of 4. The warm-up's own task is 40 to 64 ms. A first version compiled both variants for every mesh (six
+  programs); it paused frame delivery 0.4 to 1.2 s in 3 of 11 runs during the hero's still hold. That is why the
+  committed version compiles only what is drawn: no hold frame over 16 ms in 7 runs.
+- **Review.** Sol `01a16f55` (substantial: a new stage function and its call sites over three's program cache), one
+  finding, CONFIRMED and fixed at its root: the relief's rebuild disposed the per-unit colour clones (the shared purge's
+  `purgeOverrideMats`), and three releases a program when the last material using it is disposed. On a build whose
+  drawn parts all carry a unit's own colour the clones are a program's only users, so the warm-up's own rebuilds threw
+  its programs away and every flip of the scene's compiled again. It did not show on the root kit as it stands (the
+  unit-less covers, rails and feet keep base materials that share the programs); with every unit coloured and those
+  hidden it did: no relief program left after the warm-up, one program compiled on screen in the hero, one at the cut
+  into the macro and three by the next shot. A fix inside the warm-up alone still left two at the cut out of the macro
+  (the macro's own flip disposing the clones built after the warm-up), so the fix is in syncRelief: the relief's flips
+  drop the clones from their registry undisposed (`purgePartMaterials({ keepClones: true })`); the plate's program
+  switch still disposes them. An undisposed material is collected like any orphan (three keeps its state in a WeakMap);
+  what stays is its programs. With it: 0, 0 and 0, two relief programs alive. The e2e now counts by program ID (a count
+  stays level when a released program's slot is refilled) and its tier-change path is that clones-only build. The
+  follow-up on the fix and the new e2e: no findings.
+- **Checks.** A new e2e case, two pages, counting by program ID: the landing at High at 1280x720, where the macro
+  resolves only toward its move's end (3.88 CSS px a layer at the middle, 5.84 at the end); and a change from Fast to
+  Very High on a build drawn only in per-unit clones (every unit coloured, the unit-less parts hidden). Each checks
+  that the hero draws without the relief, that the cut into the macro compiles nothing, and that nothing compiles
+  through the macro's end and the cut out of it. The macro's end matters at Very High: its samples begin there.
+  Mutants on it, 10 of 10 killed: no warm-up at the landing; the warm-up without its compile; the relief left on; never
+  the target variant; never the canvas variant; the target need judged never; no warm-up on a tier change; the
+  look-ahead judging a moving shot at its middle; the flips disposing the clones; the purge ignoring keepClones. Before
+  the case watched through the macro's end, the two target-variant mutants survived, as did the middle-of-move one at
+  1280x800, where the macro's middle resolves. The whole e2e suite: 89 of 89. npm test: 634 tests, 629 pass, 5
+  skipped. Goldens alone: 60 shots, 59 the same on the first run. The 115 tabletop's end shot at Fast differed by
+  0.170 %, inside the known end-shot ruler flake's band, and Fast draws no relief; it matched exactly when its kit and
+  tier were run again.

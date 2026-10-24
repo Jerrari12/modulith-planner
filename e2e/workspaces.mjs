@@ -1758,6 +1758,103 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
   await rm.ctx.close();
 });
 
+/* THE RELIEF COMPILED AHEAD (stage.warmRelief, 2026-10-24). Without it the cut into the macro compiled its two relief
+   programs on its first frame, one frame of 1.2 to 1.4 s that the black waited through (1.6 to 1.8 s of full black at
+   High, against about 0.4 s with it). Two ways in, each in its own page, since a program once compiled stays compiled: booted at
+   High, as a visitor arrives, the hero's landing compiles them; booted at Fast, which draws no relief, the change to Very
+   High does, and Very High's samples draw into a render target, the second variant (its cut compiled four programs, not
+   two). Either way the hero draws without the relief, and the cut into the macro, where it comes on, compiles nothing.
+   maxFrameMs 1e9: a slow runner's entrance would lock the shots off, and a still macro never brings the relief on. */
+test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing or a change of tier, the hero stays without it, and the cut into the macro compiles nothing', async () => {
+  /* `last`: the newest program's ID. three numbers its programs in order and a released program's slot is refilled, so
+     a COUNT can stay level while a program is compiled again; a new ID cannot (Sol 01a16f55's case did exactly that) */
+  const look = (page) => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, s = window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence;
+    return { last: Math.max(0, ...v.renderer.info.programs.map((p) => p.id)), live: v.reliefLive(), override: v.reliefOverride(), shot: s && s.shot, phase: s && s.phase, mode: s && s.mode, warm: s && s.warm };
+  });
+  const enter = async (page) => {
+    await page.evaluate(() => { window.__DONE_TIMING__ = { maxFrameMs: 1e9 }; });
+    await btn(page, 'Skip to the finished build', '#ws-steps').click();
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+    await btn(page, 'Watch the final scene', '#ws-player').click();
+    await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 }).catch(async () => assert.fail('the grammar never began: ' + JSON.stringify(await look(page))));
+  };
+  /* the macro next (seed 1: hero, macro, low, ...) after a short hold: the programs counted in the black, once the hero's
+     last frames are drawn, and again in the macro's hold */
+  const intoMacro = async (page, label) => {
+    await page.evaluate(() => window.__GEN2_DONE__.setTiming({ seed: 1, holdMs: 1500, dipOutMs: 300, blackMs: 600, dipInMs: 300, maxFrameMs: 1e9 }));
+    await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return s.shot === 'hero' && s.phase === 'black'; }, null, { timeout: 20_000 }).catch(async () => assert.fail(`${label}: the hero never dipped: ` + JSON.stringify(await look(page))));
+    const b = await look(page);
+    await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return s.shot === 'macro' && s.phase === 'hold'; }, null, { timeout: 20_000 }).catch(async () => assert.fail(`${label}: the macro never came in: ` + JSON.stringify(await look(page))));
+    await settle(page, 300);
+    const m = await look(page);
+    assert.deepEqual([m.live, m.override], [true, null], `${label}: the relief came on in the macro`);
+    assert.equal(m.last, b.last, `${label}: and its cut compiled nothing (newest program ${b.last} -> ${m.last})`);
+    /* and on through the macro's end and the cut out of it: the move eases to rest by the black, where Very High samples
+       into a render target with the relief still on (the second variant: a cut that waits only two frames gives the
+       samples no time to begin); the next shot turns the relief off again on programs it already has */
+    await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return s.shot === 'low' && s.phase === 'hold'; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`${label}: the shot after the macro never came in: ` + JSON.stringify(await look(page))));
+    const n = await look(page);
+    assert.deepEqual([n.live, n.override], [false, false], `${label}: the relief off again after the macro`);
+    assert.equal(n.last, b.last, `${label}: and nothing compiled through the macro's end and the cut out of it (newest program ${b.last} -> ${n.last})`);
+  };
+  /* AT THE HERO'S LANDING: booted at High, 1280 x 720, where the macro resolves only toward the end of its move (3.88 CSS
+     px a layer at its middle, 5.84 at its end, against the cutoff of 4; at 1280 x 800 the middle is 4.31 and resolves
+     too), so the look-ahead must judge a moving shot at its ends, as the cut does */
+  const hctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await hctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const hi = await open('assemble', { query: '&done=room', context: hctx });
+  await enter(hi.page);
+  const h = await look(hi.page);
+  assert.equal(h.mode, 'full', 'High moves its shots');
+  assert.ok(h.warm && h.warm.programs > 0, `the hero's landing compiled the relief ahead (${JSON.stringify(h.warm)})`);
+  assert.deepEqual([h.live, h.override], [false, false], 'and the hero itself draws without it');
+  await intoMacro(hi.page, 'landing');
+  assert.deepEqual(clean(hi.errors), [], 'no errors (landing)');
+  await hctx.close();
+  /* AT A CHANGE OF TIER, ON A BUILD DRAWN ONLY IN PER-UNIT CLONES (Sol 01a16f55): booted at Fast, which draws no relief
+     and so has none to compile, then Very High. Every unit's every region is given its own colour and the parts that
+     belong to no unit (the covers, rails and feet, which would keep base materials) are hidden, so the clones are the
+     only materials drawn and a relief flip that disposed them would throw their programs away: the cut would compile
+     again. The Foot takes the build's own TPU filament (setOverride refuses any other on a foot). */
+  const lo = await open('assemble', { query: '&done=room' });
+  const coloured = await lo.page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__;
+    const uids = [...new Set(v.manifest.instances.map((i) => v.unitOf(i.id)).filter((u) => u != null))];
+    const foot = (() => { try { const p = v.palette(); const f = p && (p.Foot || (p.get && p.get('Foot'))); return f && f.name; } catch { return null; } })();   // the kit's feet are unit-less here (hidden below), so a missing name costs nothing
+    let set = 0;
+    for (const u of uids) for (const e of v.keysInBuild()) {
+      if (e.locked) continue;
+      const f = e.key === 'Foot' ? (foot ? { name: foot, hex: '#2a6fdb' } : null) : { name: 'Panchroma Red', hex: '#d03a2e' };
+      if (f) { v.setOverride(u, e.key, f); set++; }
+    }
+    return { uids: uids.length, set };
+  });
+  assert.ok(coloured.uids > 1 && coloured.set >= coloured.uids * 3, `every unit coloured (${JSON.stringify(coloured)})`);
+  await lo.page.evaluate(() => { window.__DONE_TIMING__ = { maxFrameMs: 1e9 }; });
+  await btn(lo.page, 'Skip to the finished build', '#ws-steps').click();
+  await lo.page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(lo.page, 'Next', '#ws-player').click();
+  await lo.page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  const unitless = await lo.page.evaluate(() => { const v = window.__GEN2_VIEWER__; let n = 0; for (const [id, inst] of v.instances) if (v.unitOf(id) == null && inst.group.visible) { inst.group.visible = false; n++; } return n; });
+  assert.ok(unitless > 0, 'the unit-less parts hidden');
+  await btn(lo.page, 'Watch the final scene', '#ws-player').click();
+  await lo.page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 }).catch(async () => assert.fail('the grammar never began: ' + JSON.stringify(await look(lo.page))));
+  assert.equal(await lo.page.evaluate(() => { const v = window.__GEN2_VIEWER__; let n = 0; for (const [id, inst] of v.instances) if (v.unitOf(id) == null && !inst.group.visible) n++; return n; }), unitless, 'and still hidden in the scene');
+  assert.equal((await look(lo.page)).warm, null, 'Fast compiles nothing ahead');
+  await lo.page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }); });
+  await settle(lo.page, 300);
+  const q = await look(lo.page);
+  assert.equal(q.mode, 'full', 'Very High moves its shots');
+  assert.ok(q.warm && q.warm.programs > 0, `the change to Very High compiled the relief ahead (${JSON.stringify(q.warm)})`);
+  assert.deepEqual([q.live, q.override], [false, false], 'and the hero still draws without it');
+  await intoMacro(lo.page, 'tier change');
+  assert.deepEqual(clean(lo.errors), [], 'no errors (tier change)');
+  await lo.ctx.close();
+});
+
 /* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty
    stage with a strip that does nothing (Sol 01a16c20). Back to the End page, HUD and all. */
 test('Assemble: the Done scene\'s final scene returns to the End page when the room fails to load', async () => {

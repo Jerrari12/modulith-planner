@@ -159,9 +159,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     seed: Date.now() >>> 0, rng: null, shot: null, skipIn: false, phase: null, k: 0.5, moving: false, cutAt: null, cutK: null, fade: 0,
     /* the beat, and three windows the e2e stretches to reach its races (Sol 01a16e0e): the entrance's length, the frames
        the entry waits before it, the frames a new shot waits in the black; `window.__DONE_TIMING__` sets any of them before
-       the entry, with ?debug only */
+       the entry, with ?debug only (and `warmRelief: false`, the probe's control arm: no relief compiled ahead) */
     timing: { ...BEAT, enterMs: ENTER_MS, preFrames: 2, waitFrames: 2, ...(debug && window.__DONE_TIMING__ ? window.__DONE_TIMING__ : {}) },
-    manual: null, slow: false, judged: false, frames: [], lastFrame: 0, checked: false };
+    manual: null, slow: false, judged: false, frames: [], lastFrame: 0, checked: false, warm: null };
   const mode = (tier) => grammarMode({ tier: tier || stage.quality, reduced, sequence, slow: seq.slow });
   const sequenceWanted = (tier) => mode(tier) !== 'off';
   const moves = (tier) => mode(tier) === 'full';
@@ -221,6 +221,20 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     stage.setReliefOverride(best.on ? null : false);
   }
   function setCam(c, ends = [c]) { putCam(c); reliefFor(ends); }
+  /* THE RELIEF COMPILED AHEAD (stage.warmRelief, 2026-10-24): the cut that turns the relief on compiles its programs on the
+     cut's first frame, one frame of 1.2 to 1.4 s that the black waits through (the dip into the macro: 1.6 to 1.8 s of full
+     black at High, 2.9 s at Very High; about 0.4 s with this). When a shot in the plan will turn it on (the macro, where
+     its move ends), the stage builds them under a hold that begins on screen, the hero's landing above all, a frame the
+     accumulation starts over on anyway; and again after a tier change, a program being per tier. The stage keys the work
+     and skips a repeat. */
+  function warmAhead(tier) {
+    if (!seq.on || !stage.warmRelief || seq.timing.warmRelief === false) return;
+    const moving = moves(tier);
+    const ends = (s) => (moving && s.to ? [fitAt(s, 0), fitAt(s, 1)] : [fitAt(s, 0.5)]);   // as beginShot decides a shot's relief
+    if (!seq.shots.some((s) => ends(s).some((c) => { const r = reliefOf(c); return !!(r && r.on); }))) return;
+    const w = stage.warmRelief();
+    if (w) seq.warm = w;
+  }
   /* the dip: the black layer's opacity, eased over `ms` (into the black ease-in, out of it ease-out) */
   function fadeTo(opacity, ms) {
     seq.fade = opacity;
@@ -247,6 +261,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     seq.k = seq.moving ? 0 : 0.5;
     const c = fitAt(shot, seq.k);
     setCam(c, seq.moving ? [c, fitAt(shot, 1)] : [c]);
+    if (skipIn) warmAhead();   // a hold that begins on screen: the relief a later shot needs is compiled under it
     if (stage.setMotionFull) stage.setMotionFull(seq.moving);   // a moving shot keeps the stage's settle passes on every frame: the room's contacts keep their AO while it moves
     seq.pausedAt = null; seq.frames.length = 0; seq.checked = false;
     stage.invalidateFrame();
@@ -564,7 +579,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
           waiting: !!seq.waiting, entering: !!(parts.enter && !parts.enter.done),
           fits: shots.map((s) => { const c = fitAt(s, 0.5); return { name: s.name, fov: c.fov, clamped: !!c.clamped, k: c.k, share: c.share, floored: !!c.floored, pos: [c.position.x, c.position.y, c.position.z] }; }),
           interior: interior && { ...interior }, paused: seq.pausedAt != null, manual: seq.manual, orbit: controls.enabled, slow: seq.slow, judged: seq.judged,
-          timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } };
+          timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open }, warm: seq.warm };
       },
       setTiming(t) { const { seed, ...rest } = t; Object.assign(seq.timing, rest); if (seed != null) seq.seed = seed >>> 0; seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict (and a new seed a new plan)
       jump(which) { jumpTo(which); }, nextShot,   // to a shot by name (or its place in GRAMMAR), its hold beginning at once
@@ -635,7 +650,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     applyLights(tier);
     /* a drop below High mid-shot: a moving shot locks off where it is, and the drawer's timers would outlive the drop (the
        still grammar has no drawer moment: Terra 01a16b6b) */
-    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); else if (!moves(tier)) { freeze({ resched: true }); drawerCancel(); } }
+    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); else { if (!moves(tier)) { freeze({ resched: true }); drawerCancel(); } warmAhead(tier); } }
     else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a)
   }
   const handle = { leave, onQuality, refit, recenter, nextShot, get on() { return on; } };
