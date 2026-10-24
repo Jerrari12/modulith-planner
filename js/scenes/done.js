@@ -1,7 +1,8 @@
 /* THE DONE SCENE (the plan's 5b, first slice, 2026-10-23; DESIGN.md in D:/Claude - Output/done-scene-2026-10-23).
  *
  * "Done step = your build in real life" (the brief, §0 Assemble): when the instructions end, the finished build appears in
- * the Home office at golden hour. This first slice is the brief's own Fast fallback and the plan's static hero: ONE room,
+ * the Home office (lit as Joey directed it on 2026-10-23: soft neutral daylight, a light oak desk; the first bake was a
+ * golden hour). This first slice is the brief's own Fast fallback and the plan's static hero: ONE room,
  * ONE lighting state baked into the room's textures (tools/done-scene/room.py), a fixed hero camera fitted to the build
  * and the free region of the canvas, props that slide clear of the build, the build's own shadow on a catcher over the
  * desk (a baked contact disc on Fast, which has no shadow map), no bokeh, no time cycle. Behind
@@ -20,13 +21,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, slideProps, contactFootprint, SHOTS, SEQUENCE, sequenceAt, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
+import { shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
 const SCALE = 1000;        // metres in the GLB -> the stage's millimetres
-const ENTER_MS = 900;      // the camera's move into the shot
-const IDLE_BACK_MS = 6000; // a grabbed camera drifts back into the sequence after this much stillness (the style doc: ~6 s)
+const ENTER_MS = 900;      // the camera's move into the shot (a grabbed camera drifts back after SEQUENCE.idleBackMs of stillness)
 const SUN_MM = 1200;       // the room's sun, this far from the build: inside the shadow camera's 3000 mm far plane (see applyLights)
 let loading = null;        // one load per page: the GLB and its JSON, shared by every entry
 let tracked = false;
@@ -104,7 +104,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      hero) and not on Fast (the brief: a fixed hero camera there). A hidden tab pauses the clock. A grab (any orbit)
      pauses it too; IDLE_BACK_MS after the last gesture the camera drifts into the next shot from wherever it was left. */
   const seq = { on: false, t0: 0, raf: 0, timer: 0, startTimer: 0, idleTimer: 0, pausedAt: null, from: null, movingTo: -1, cams: [], timing: { ...SEQUENCE }, grabbed: false,
-    intervals: [], lastFrame: 0, slow: false };   // the first drift's frame intervals: a device that cannot drift smoothly keeps the hero (driftTooSlow)
+    intervals: [], lastFrame: 0, slow: false, judged: false };   // the FIRST drift's frame intervals are the device's verdict (driftTooSlow), given once: a device that cannot drift smoothly keeps the hero; a later stall is not a verdict (Sol 01a16b2a)
   const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
   const sequenceWanted = (tier) => !reduced && (tier || stage.quality) !== 'fast';
   /* THE DRAWER MOMENT (done-fit.js DRAWER): in the detail shot's hold, the unit the shot looks at slides its drawer out
@@ -144,7 +144,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const s = sequenceAt(now - seq.t0, seq.cams.length, seq.timing);
     if (s.moving) {
       if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; drawerCancel(); }   // a drift starts from wherever the camera IS (a grab may have moved it); a drawer still out goes back
-      else if (!seq.slow) { seq.intervals.push(now - seq.lastFrame); seq.lastFrame = now; }
+      else if (!seq.judged) { seq.intervals.push(now - seq.lastFrame); seq.lastFrame = now; }
       const b = seq.cams[s.to];
       camera.position.lerpVectors(seq.from.position, v3(b.position), s.k); controls.target.lerpVectors(seq.from.target, v3(b.target), s.k);
       camera.fov = seq.from.fov + (b.fov - seq.from.fov) * s.k; camera.updateProjectionMatrix(); controls.update();
@@ -155,17 +155,18 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         /* the drift that just ended is the device's own measurement: a weak GPU or a phone that drew it as a slideshow
            (under 20 fps on average) keeps this shot for the rest of the visit rather than drifting again. Decided once;
            the tier's auto-downgrade is one-way and slower to notice. */
-        if (!seq.slow && driftTooSlow(seq.intervals, seq.timing.maxFrameMs)) { seq.slow = true; seqStop(); seq.on = false; return; }
+        if (!seq.judged) { seq.judged = true; if (driftTooSlow(seq.intervals, seq.timing.maxFrameMs, seq.timing.moveMs)) { seq.slow = true; seqStop(); return; } }
         if (shotsFor()[s.at].name === 'detail') drawerSchedule(seq.timing.holdMs);   // the drawer moment, in this hold
       }
       seq.timer = setTimeout(seqTick, Math.max(16, s.holdLeft));
     }
   }
   function seqStart() {
-    if (seq.on || !on) return;
+    if (seq.on || !on || !sequenceWanted()) return;   // the tier may have dropped to Fast while the entrance timer was pending (Sol 01a16b2a)
     if (!drawer.unit) pickDrawer();
     fitShots();
     seq.on = true; seq.t0 = performance.now(); seq.pausedAt = null; seq.movingTo = -1; seq.grabbed = false;
+    if (document.hidden) { seq.pausedAt = seq.t0; return; }   // a tab hidden before the sequence began: start paused, the visibility handler resumes it (Sol 01a16b2a)
     seqTick();
   }
   function seqStop() {
@@ -175,7 +176,12 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); }
   function seqResume() { if (!seq.on || seq.pausedAt == null) return; seq.t0 += performance.now() - seq.pausedAt; seq.pausedAt = null; seqTick(); }
-  function onVisibility() { if (document.hidden) seqPause(); else if (!seq.grabbed) seqResume(); }
+  function armReturn() { clearTimeout(seq.idleTimer); seq.idleTimer = setTimeout(driftBack, seq.timing.idleBackMs); }
+  function onVisibility() {
+    if (document.hidden) { clearTimeout(seq.idleTimer); seqPause(); }
+    else if (seq.grabbed) armReturn();   // grabbed, then hidden before the return fired: the return is re-armed, not lost (Sol 01a16b2a: it stranded the sequence)
+    else seqResume();
+  }
   function onGrabStart() { if (!seq.on) return; clearTimeout(seq.idleTimer); seqPause(); seq.grabbed = true; }
   function onGrabEnd() {
     if (!seq.on || !seq.grabbed) return;
@@ -183,7 +189,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        the toolbar's camera button lights). In the room the sequence is the return, so take it straight back: the stage's
        button would fly the camera to the step's view, out of the room's shot. */
     if (stage.setCamFree) stage.setCamFree(false);
-    clearTimeout(seq.idleTimer); seq.idleTimer = setTimeout(driftBack, IDLE_BACK_MS);
+    armReturn();
   }
   function driftBack() {
     if (!seq.on || !seq.grabbed || document.hidden) return;
@@ -252,16 +258,18 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     group.position.set(centre.x - a.x * SCALE, 0 - a.y * SCALE, buildBox.min.z - a.z * SCALE);
     group.updateMatrixWorld(true);
     // props slide clear of the build along their slots, by group
+    const anchorWorld = new THREE.Vector3(centre.x, 0, buildBox.min.z);
+    const d = json.desk || { x0: -900, x1: 900, zFront: 700, zBack: -40 };
+    // props slide clear of the build along their slots, by group; a group that cannot clear it INSIDE the desk's extent
+    // hides rather than hanging past the edge (a build wider than the desk's free run: done-fit.js fitSlides)
     const props = [];
     group.traverse((o) => { if (o.isMesh && o.userData.slot) props.push({ obj: o, group: o.userData.group || o.name, slot: o.userData.slot, gap: (+o.userData.gap || 0.06) * SCALE, box: plain(boxOf(o)) }); });
-    const slid = slideProps(props, plain(buildBox));
-    for (const p of props) { const d = slid[p.group]; if (d) p.obj.position.x += d / SCALE; }
+    const slid = fitSlides(props, slideProps(props, plain(buildBox)), { x0: anchorWorld.x + d.x0, x1: anchorWorld.x + d.x1 });
+    for (const p of props) { const dx = slid[p.group]; if (dx === null) p.obj.visible = false; else if (dx) p.obj.position.x += dx / SCALE; }
     group.updateMatrixWorld(true);
     parts.group = group;
     scene.add(group);
     // the shadow catcher over the desk top (its extent from room.json, relative to the anchor), and the Fast tier's disc
-    const anchorWorld = new THREE.Vector3(centre.x, 0, buildBox.min.z);
-    const d = json.desk || { x0: -900, x1: 900, zFront: 700, zBack: -40 };
     const catcher = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0, d.zFront - d.zBack).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
     catcher.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, 0.3, anchorWorld.z + (d.zBack + d.zFront) / 2);
     catcher.receiveShadow = true; catcher.castShadow = false; catcher.renderOrder = 1; catcher.raycast = () => {};
@@ -293,7 +301,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     document.addEventListener('visibilitychange', onVisibility);
     controls.addEventListener('start', onGrabStart); controls.addEventListener('end', onGrabEnd);
     if (debug) window.__GEN2_DONE__ = { get sequence() { return { on: seq.on, paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
-      setTiming(t) { Object.assign(seq.timing, t); if (seq.on) { seqStop(); seqStart(); } },
+      setTiming(t) { Object.assign(seq.timing, t); seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict
       jump(i) { if (!seq.on) return; cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); seq.t0 = performance.now() - i * (seq.timing.holdMs + seq.timing.moveMs); seq.pausedAt = null; seq.movingTo = -2; seqTick(); } };   // to the start of shot i's hold (-2: "land on it")
     if (!tracked) { tracked = true; stage.track('done:room'); }
     stage.invalidateFrame();
@@ -343,7 +351,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!on) return;
     applyLights(tier);
     if (sequenceWanted(tier)) { if (!seq.on) seqStart(); }
-    else if (seq.on) { seqStop(); placeCamera(false); }   // Fast: the fixed hero
+    else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // Fast: the fixed hero, and no sequence still to start (Sol 01a16b2a)
   }
   const handle = { leave, onQuality, refit, get on() { return on; } };
   return { ready, leave };

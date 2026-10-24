@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, slideProps, contactFootprint, SHOTS, SEQUENCE, sequenceAt, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -47,6 +47,25 @@ test('slideProps: a prop in the build\'s way slides along its slot by the gap, g
   close(left.plant, -((-150) - (-200 - 70)), 1e-9, 'an x- slot slides negative');
 });
 
+test('fitSlides: a slide that stays on the desk is kept; one that would carry a prop past the desk\'s edge hides the group', () => {
+  const build = { min: { x: -528, y: 0, z: -90 }, max: { x: 528, y: 134, z: 100 } };   // a 12W build, 1056 mm wide
+  const props = [
+    { group: 'monitor', slot: 'x+', gap: 80, box: { min: { x: 100, z: -60 }, max: { x: 720, z: 40 } } },
+    { group: 'mug', slot: 'x+', gap: 70, box: { min: { x: 300, z: -20 }, max: { x: 380, z: 60 } } },
+    { group: 'plant', slot: 'x-', gap: 70, box: { min: { x: -620, z: -80 }, max: { x: -470, z: 60 } } },
+  ];
+  const slid = slideProps(props, build);
+  assert.deepEqual(Object.keys(slid).sort(), ['monitor', 'mug', 'plant'], 'all three are in the way of a 12W build');
+  const desk = { x0: -680, x1: 1120 };   // room.json's desk extent about the anchor
+  const fit = fitSlides(props, slid, desk);
+  assert.equal(fit.monitor, null, 'the monitor would hang past the desk\'s right edge (720 + 508 > 1120): hidden');
+  assert.equal(fit.mug, slid.mug, `the mug still fits (380 + ${slid.mug} <= 1120): kept`);
+  assert.equal(fit.plant, null, 'the plant would pass the left edge: hidden');
+  assert.deepEqual(fitSlides(props, slid, null), slid, 'no bounds: every slide is kept');
+  assert.deepEqual(fitSlides(props, {}, desk), {}, 'nothing slid: nothing to fit');
+  assert.equal(SEQUENCE.idleBackMs, 6000, 'the style doc\'s ~6 s before a grabbed camera drifts back');
+});
+
 test('contactFootprint grows the build\'s footprint and centres it', () => {
   const f = contactFootprint({ min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } });
   close(f.w, 176 * 1.25, 1e-9, 'w'); close(f.d, 193 * 1.25, 1e-9, 'd'); close(f.x, 0, 1e-9, 'x'); close(f.z, 10.5, 1e-9, 'z');
@@ -89,6 +108,11 @@ test('driftTooSlow: a drift drawn under 20 fps on average ends the sequence; a s
   assert.equal(driftTooSlow([16, 16, 16, 400]), true, 'one long stall drags the mean over the line');
   assert.equal(driftTooSlow(null), false);
   assert.equal(SEQUENCE.maxFrameMs, 50);
+  // with the drift's length known, the verdict is the frame COUNT against a 20 fps drift: catches the slowest device too
+  assert.equal(driftTooSlow(new Array(209).fill(16.7), 50, 3500), false, '210 frames over 3.5 s: smooth');
+  assert.equal(driftTooSlow(new Array(69).fill(50), 50, 3500), false, '70 frames over 3.5 s is exactly 20 fps: kept');
+  assert.equal(driftTooSlow(new Array(17).fill(190), 50, 3500), true, '18 frames over 3.5 s (SwiftShader on a desktop): too slow');
+  assert.equal(driftTooSlow([600, 650], 50, 2000), true, 'three frames over 2 s (SwiftShader on a laptop): too slow, where the mean rule had no evidence');
 });
 
 test('the drawer moment: out, open, back inside the detail hold; none in a hold too short; the unit is a labelled drawer nearest the front-left; the shot aims at it', () => {

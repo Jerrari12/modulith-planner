@@ -2849,3 +2849,69 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Deploy:** none. The flag is off; the room is a prototype on `done-scene` for Joey to open (`?ws=assemble&build=
   185-tabletop-2w2h&done=room` on the branch's checkout, any kit, any build). Joey's direction on the look (DESIGN.md §7)
   comes first; the gate fix is worth cherry-picking to main on its own.
+
+## 2026-10-23 (the Done scene on Joey's desktop: the room re-directed, the camera sequence, the drawer moment)
+
+- **Where it ran.** Joey moved the heavy work to his desktop (RTX 3080 Ti; Blender 4.5.4 LTS portable beside Steam's
+  5.2, Node 22, the kit decoded first); a Claude session there took the brief (`tools/done-scene/DESKTOP-BRIEF.md`),
+  worked through ten direction rounds (jobs `look5`..`look14`, renders on node0 under `done-scene/renders/`) and
+  committed four slices, `ffc81c0`, `ffcb276`, `835e79c`, `c9451d1`, each checked there, none reviewed there (the
+  codex-collab skill is not on the desktop). The laptop session took them back at c9451d1: review, suites, this entry.
+- **The room as Joey directed it** (`ffc81c0`, bake2): the desk 16 in deep; soft neutral daylight in place of the golden
+  hour (ChatGPT's brief relayed by Joey: `--palette neutral --soft-light 500`, the sun high, weak and wide: el 35,
+  strength 0.12, disc 2°); the camera az 28, el 20, 45 mm, the build at half the frame; a snake plant (`snake_leaf()`),
+  a hollowed mug with coffee (steam as a Cycles volume in look mode only), chamfers on desk, mug and pot; the desk a
+  photographed CC0 veneer (Poly Haven `silver_oak_veneer_01` at its documented 1 m, box-projected, grain along the desk,
+  60 % contrast, normal map 0.3; `tools/done-scene/textures/`, SOURCE.md records the licence; Astra rejected a procedural
+  wave band as corduroy). room.json's live sun is scaled to the palette (near white, 0.62). `room.py` writes LF and
+  absolute EXR paths. **Accepted for now:** the props' shadows are baked in place, so a wide build that slides a prop
+  leaves its shadow behind (the re-bake with the props out of the desk and wall maps, their shadows from the live sun,
+  is the next room job). **Open with Joey:** 5.7 MB of bake textures now live in the planner repo under `tools/`,
+  against the repo's "stay small" rule from the gen2-parts split; the alternatives are node0's mirror or gen2-parts.
+- **The live shadow matched to the baked ones** (`ffcb276`). Two causes, both measured: `done.js` put the sun 3000 mm
+  out and the stage's shadow camera has its far plane at 3000 (`fitShadowCamera`), so the desk behind the build fell
+  outside the frustum and the cast shadow was a sliver at the feet (`SUN_MM = 1200` now); and Very High's 6° soft-shadow
+  cone averaged the shadow to a gradient beside the 2° baked disc (room.json carries `sun.halfDeg = 1`; `done.js`
+  applies it through `stage.setSunHalfDeg` and restores 6 on leave). The Done e2e case asserts both.
+- **The camera sequence** (`835e79c`, 5b's second slice; the style doc's Superposition reference). `SHOTS.tabletop` in
+  `done-fit.js`: the hero (room.json's own shot wins), a straight-on low angle, a detail close-up aimed at a drawer.
+  Hold 9 s, drift 3.5 s eased, wrap; a hold is ONE timer and a still camera, so the idle gate rests and Very High
+  converges in it (a camera that never stops never settles). A grab pauses it (the orbit is enabled in the room, pan
+  off; main.js gained `setCamFree`, so the stage's return button never shows there) and the camera drifts back 6 s
+  after the last gesture; a hidden tab pauses the clock; reduced motion and Fast keep the still hero; a slow-drift guard
+  ends the sequence when a drift averages under 20 fps (SwiftShader draws one at ~190 ms a frame: Joey's "potato"
+  question). `measure.mjs` reports the rest window as a HOLD and one drift separately. New e2e case "the Done scene's
+  camera drifts between shots..." (the clock shortened through `window.__GEN2_DONE__`, the debug hook). The pure clock,
+  the easing, the guard, the beat and the drawer pick are node-tested.
+- **The drawer moment** (`c9451d1`): in the detail hold the unit the shot aims at (a labelled drawer, else any, nearest
+  the front-left) slides out 40 % at 0.7 s, holds 3.2 s, and is back before the drift (main.js `unitHasDrawer`,
+  `slideUnitDrawer`: no focus, no dims); closed early by a drift, a grab, a hidden tab, a tier change, Back or leave.
+- **Desktop numbers** (RTX 3080 Ti): unit files 20/20; npm test 594 pass, 0 fail, 32 skipped (that machine's
+  environment skips); Done cases and neighbours 7/7, the Done cases under `E2E_SOFT` too; goldens 60 shots, 0 differ;
+  the room 560 KB; in a hold the gate rests at 10 frames per 10 s on every tier, room on or off (Very High converged:
+  2 calls a frame); a drift 467–470 frames at 7.5 ms on that GPU, 18–19 frames at ~190 ms on SwiftShader (the guard
+  then ends it).
+- **Review (laptop):** Sol `01a16b2a-2318-7e73-b10f-9baea685531c`, substantial, the four commits' main.js, done-fit.js
+  and done.js: four findings, all confirmed against the code and fixed in the commit after this entry: (1) a grab, then
+  a hidden tab before the six-second return fired, stranded the sequence (`driftBack` bailed while hidden and the
+  visibility handler never resumed a grabbed camera); (2) a drop to Fast before the entrance timer fired still started
+  the sequence; (3) a tab hidden before the sequence started let its clock run hidden; (4) the slow-drift guard judged
+  every drift, not the first as its comment said. Terra's routine pass was not run on the desktop; Sol's covers it.
+- **Also fixed with them:** the player's caption and its e2e assertion still said "golden hour" under the neutral light
+  (now "Your build on a desk. Grab the view to look around..."); `slideProps` had no clamp, so a build wider than the
+  desk's free run slid the monitor group off the desk's edge (`fitSlides` in `done-fit.js`: a group that cannot clear the
+  build inside the desk's extent hides instead, with its test); and the slow-drift guard's rule: the desktop judged the
+  MEAN interval and declined to judge fewer than four intervals, so the slowest device of all, SwiftShader on this
+  laptop's CPU drawing a two-second drift as three frames, was never caught (the desktop's faster CPU drew eighteen);
+  the verdict is now the frame COUNT against a 20 fps drift of the drift's length, which catches both and leaves a
+  smooth machine alone. The sequence e2e case gained the grab-then-hidden step (the return shortened through the hook)
+  and lost its fixed waits around the drawer beat and the guard (polled instead: SwiftShader's pace varies with load).
+- **Suites (laptop).** On c9451d1 as received: npm test 626 tests, 620 pass, 5 skipped, 1 fail, M28, the Colors timing
+  gate in `test/simplify.test.mjs`, which passes alone (median 0.09 ms) and this work does not touch; e2e 7 of 7 (the
+  boot, analytics, idle-gate, both Assemble and both Done cases); goldens 60 shots, 0 differ; `measure.mjs` on this
+  GPU: the room 560 KB, +35 draw calls a frame (101 against 67 at High), the gate at 10 frames per 10 s in a hold on every
+  tier, room on or off, a drift 420 frames at 8.3 ms, the entry's worst frame 75–158 ms (Very High 1.5 s, the
+  accumulation). After the fixes: `done-fit` and `idle-settling` 11 of 11 then 9 of 9 with the guard's new cases; the
+  two Done e2e cases on the GPU, five runs, pass; the sequence case under `E2E_SOFT`, pass, after the three timing
+  changes above (its SwiftShader runs here took 47–105 s as the laptop's load varied). main.js is unchanged by the
+  fixes, so the quiet run's suite and goldens stand.

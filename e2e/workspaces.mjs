@@ -1310,7 +1310,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s1.bg, null, 'no stage background behind the room'); assert.equal(s1.controls, true, 'the orbit stays for a grab (the sequence drifts back after it)');
   assert.equal(s1.grid, false, 'the grid is hidden'); assert.equal(s1.table, false, 'the table is hidden'); assert.equal(s1.dims, false, 'no callouts in the room');
   assert.equal(s1.quality, 'fast', 'the suite pins Fast'); assert.equal(s1.shadow, false, 'Fast has no shadow map'); assert.equal(s1.disc, true, 'Fast shows the baked contact disc'); assert.equal(s1.catcher, false);
-  assert.match(await text(page, '#ws-player .text'), /golden hour/, 'the player says where the build is');
+  assert.match(await text(page, '#ws-player .text'), /on a desk/, 'the player says where the build is');
   // a tier with shadows, still on the DARK theme (which has no shadow map of its own): the room's sun casts, the catcher shows
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
   await settle(page, 1500);
@@ -1386,22 +1386,41 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
   await settle(page, 2400);
   assert.notDeepEqual(await cam(page), cH, 'visible again: the drift resumed');
+  // a grab, then the tab hidden before the return fired: the return is re-armed when the tab is seen again, not lost
+  // (Sol 01a16b2a: it stranded the sequence). The return is shortened to 1.5 s through the hook: long enough that the
+  // hide lands before it on SwiftShader, where a page round-trip takes hundreds of milliseconds.
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1500, moveMs: 800, maxFrameMs: 1e9, idleBackMs: 1500 }));
+  await settle(page, 300);
+  await page.mouse.move(640, 380); await page.mouse.down(); await page.mouse.move(700, 410, { steps: 8 }); await page.mouse.up();
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
+  const gs = await seqOf(page);
+  assert.equal(gs.grabbed, true, 'a grab pauses the sequence'); assert.equal(gs.paused, true);
+  await settle(page, 2200);  // past the return's 1.5 s while hidden: it must neither fire hidden nor be lost
+  assert.equal((await seqOf(page)).grabbed, true, 'still grabbed while hidden');
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+  await settle(page, 2600);  // the return re-armed on return (1.5 s), then the drift begins
+  const gr = await seqOf(page);
+  assert.equal(gr.on, true, 'the sequence is still on'); assert.equal(gr.grabbed, false, 'the return fired once the tab came back'); assert.equal(gr.paused, false);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.camFree), false, 'the stage never kept the camera (setCamFree)');
   // the drawer moment: in the detail shot's hold the unit the shot looks at slides its drawer out and back (a hold long
   // enough for the beat; the suite jumps to that hold). The unit's box grows toward the front by the slide, then shrinks.
-  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 6000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });   // a 9 s hold: the beat ends by 4.6 s, and SwiftShader's slow polls still read inside the hold
   await settle(page, 200);
   const dz0 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { unit: d.unit, open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
   assert.ok(dz0.unit != null, 'a unit with a drawer was picked'); assert.equal(dz0.open, false, 'closed at the start of the hold');
-  await settle(page, 1500);                          // 1.7 s in: out (700 ms) and slid (380 ms)
+  // out at 0.7 s and slid 380 ms later; polled, not timed: on SwiftShader on a slow CPU the slide's frames come late
+  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return d.open && window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0 > 40; }, dz0.z, { timeout: 3000 }).catch(() => assert.fail('the drawer did not slide out by 40 mm within the hold'));
   const dz1 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
   assert.equal(dz1.open, true, 'the drawer is out'); assert.ok(dz1.z - dz0.z > 40, `the unit's front moved out by the slide (${(dz1.z - dz0.z).toFixed(0)} mm)`);
-  await settle(page, 3500);                          // 5.2 s in: closed at 4.28 s, slid back by 4.6 s
-  const dz2 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
-  assert.equal(dz2.open, false, 'and back before the drift'); assert.ok(Math.abs(dz2.z - dz0.z) < 2, 'the unit is where it was');
+  // closed at 4.28 s into the hold and slid back by 4.6 s, before the 6 s hold ends
+  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return !d.open && Math.abs(window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0) < 2; }, dz0.z, { timeout: 6000 }).catch(() => assert.fail('the drawer did not go back'));
+  const dz2 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z, at: window.__GEN2_DONE__.sequence.at }; });
+  assert.equal(dz2.open, false, 'and back'); assert.ok(Math.abs(dz2.z - dz0.z) < 2, 'the unit is where it was'); assert.equal(dz2.at, 2, 'still in the detail hold: back before the drift');
   // the slow-drift guard: one long drift with the guard on is the device's verdict. A real GPU drifts smoothly and the
   // sequence goes on; the CI runner's SwiftShader draws it under 20 fps and the sequence ends on the shot it reached
   await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 200, moveMs: 2000, maxFrameMs: 50 }));
-  await settle(page, 2800);
+  // until the first drift has landed (on shot 1) or the guard has spoken; polled, since a slow machine lands late
+  await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return !s.on || s.slow || (s.at === 1 && s.movingTo === -1); }, null, { timeout: 30_000 }).catch(async () => assert.fail('the first drift never landed: ' + JSON.stringify(await seqOf(page))));   // 30 s: a loaded SwiftShader draws a 2.2 s beat as a handful of frames seconds apart
   const g = await seqOf(page);
   if (process.env.E2E_SOFT) assert.equal(g.slow, true, 'SwiftShader: the drift was too slow');
   assert.equal(g.on, !g.slow, 'a slow drift ends the sequence; a smooth one does not');

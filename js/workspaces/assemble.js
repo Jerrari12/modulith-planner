@@ -6,7 +6,7 @@
  * The stage keeps all the behaviour: pages are the viewer's PAGES (0 the cover, 1 the exploded overview, then
  * the numbered steps, last the outro), and this workspace drives `goTo` / `next` / `prev` / `replay` /
  * `setPaused` / `setSlow` and listens to `onPage`. The Done scene (rooms, cameras, lightmaps) is 5b; its first slice,
- * the build in the Home office at golden hour (js/scenes/done.js), is behind `?done=room` and loads only at Done.
+ * the build in the Home office (js/scenes/done.js), is behind `?done=room` and loads only at Done.
  */
 import { el, makeToast } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
@@ -15,7 +15,7 @@ import { toolbar } from '../ui/toolbar.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 
 /* THE DONE SCENE (5b's first slice, 2026-10-23, DESIGN.md in D:/Claude - Output/done-scene-2026-10-23): with
-   `?done=room` the end of the instructions puts the finished build on a desk at golden hour. Off by default; a feature
+   `?done=room` the end of the instructions puts the finished build on a desk in a lit room. Off by default; a feature
    ships only on Joey's go, and the module is not even fetched until a visitor with the flag reaches Done. */
 const DONE_SCENE = new URLSearchParams(location.search).get('done');
 
@@ -137,7 +137,7 @@ export function mountAssemble(stage, ctx) {
     const step = cur >= 1 && cur <= pageOf.finished ? steps[cur - 1] : null;
     const num = isDone ? '■' : cur >= pageOf.first && cur <= pageOf.finished ? String(cur - 1) : 'i';
     const title = isDone ? 'End of instructions' : onCover ? (stage.manifest?.title || 'Your build') : (step?.title || '');
-    const text = isDone ? (room && room.handle ? 'Your build on a desk at golden hour. Share the link, or go back to any step.' : 'The whole assembly, finished. Share the link, or go back to any step.') : onCover ? 'Press Next to begin the step-by-step, or skip to the finished build.' : (step?.note || '');
+    const text = isDone ? (room && room.handle ? 'Your build on a desk. Grab the view to look around; share the link, or go back to any step.' : 'The whole assembly, finished. Share the link, or go back to any step.') : onCover ? 'Press Next to begin the step-by-step, or skip to the finished build.' : (step?.note || '');
     player.replaceChildren(
       el('div.row1', {}, [
         el('span.num', { text: num }),

@@ -56,6 +56,21 @@ export function slideProps(props, build) {
   return out;
 }
 
+/* The slides, clamped to the surface they slide along: a group whose slide would carry any of its props past `bounds`
+ * (the desk's x extent, mm, in the same frame) cannot clear the build on the desk, so it HIDES instead of hanging in the
+ * air past the edge (a 12W build is wider than the desk's free run). Returns { [group]: deltaX | null }, null = hide;
+ * groups slideProps did not move are absent, as before. */
+export function fitSlides(props, slid, bounds) {
+  const out = {};
+  for (const g of Object.keys(slid)) {
+    const d = slid[g];
+    const mine = props.filter((p) => (p.group || p.name || 'prop') === g && p.box);
+    const fits = !bounds || mine.every((p) => p.box.min.x + d >= bounds.x0 && p.box.max.x + d <= bounds.x1);
+    out[g] = fits ? d : null;
+  }
+  return out;
+}
+
 /* THE CAMERA SEQUENCE (the plan's curated product shots, 2026-10-23; the style doc's reference is Unigine Superposition:
  * slow dolly and push-in moves, the eye guided rather than spun). Three parametric shots per mount, each fitted to the
  * build by shotCamera: the hero 3/4 (room.json's own shot overrides this one), a straight-on low angle, and a detail
@@ -68,12 +83,17 @@ export const SHOTS = {
     { name: 'detail', az: 30, el: 10, fovV: 29.9, fill: 1.4, targetLift: -0.3, targetShift: { x: -0.18, z: 0.3 } },
   ],
 };
-export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50 };   // the style doc: shots of 8-12 s, eased drifts between them; a drift slower than 20 fps on average ends the sequence (a weak device holds the hero)
+export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50, idleBackMs: 6000 };   // the style doc: shots of 8-12 s, eased drifts between them, a grabbed camera drifts back ~6 s after the last gesture; a drift slower than 20 fps on average ends the sequence (a weak device holds the hero)
 
-/* A drift's verdict from the frame intervals it drew: too slow when their mean is over `maxFrameMs` (a potato or a phone:
- * the still hero is better than a slideshow). Fewer than 4 intervals is no evidence. */
-export function driftTooSlow(intervals, maxFrameMs = SEQUENCE.maxFrameMs) {
-  if (!intervals || intervals.length < 4) return false;
+/* A drift's verdict from the frames it drew: too slow when it drew fewer frames than a drift at `maxFrameMs` a frame
+ * (20 fps) would have over its `moveMs` (a potato or a phone: the still hero is better than a slideshow). Counting frames
+ * against the drift's length, rather than averaging intervals, catches the slowest device too: a machine that draws a
+ * two-second drift as three frames has too few intervals for a mean to trust (2026-10-23, SwiftShader on a laptop CPU).
+ * Without `moveMs` the older rule applies: the mean interval over `maxFrameMs`, four intervals or more. */
+export function driftTooSlow(intervals, maxFrameMs = SEQUENCE.maxFrameMs, moveMs = null) {
+  if (!intervals) return false;
+  if (moveMs) return (intervals.length + 1) * maxFrameMs < moveMs;
+  if (intervals.length < 4) return false;
   return intervals.reduce((a, b) => a + b, 0) / intervals.length > maxFrameMs;
 }
 
