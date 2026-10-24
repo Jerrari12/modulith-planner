@@ -71,6 +71,12 @@ ap.add_argument('--sun-size', type=float, default=0.545, help='the sun disc\'s a
 ap.add_argument('--desk-wood', action='store_true', help='look12: the photographed silver oak veneer on the desk (tools/done-scene/textures/), else the plain colour')
 ap.add_argument('--desk-contrast', type=float, default=0.6, help='how much of the veneer photo shows over its own mean colour (1 = as shot)')
 ap.add_argument('--desk-bump', type=float, default=0.0, help='the veneer normal map strength (0 = off: establish the colour grain first)')
+# the props' shadows as masks (bake3, 2026-10-23): the desk and wall maps are baked with the props hidden, and each prop
+# group's shadow is baked as its own ratio mask over the desk top and the back wall, slid with the group by the planner
+ap.add_argument('--mask-px', type=float, default=2.0, help='the shadow masks\' pixel pitch, mm on the desk and the wall (2 mm resolves the 2 degree sun\'s penumbra)')
+ap.add_argument('--mask-samples', type=int, default=512, help='Cycles samples for the mask receivers per visibility state (two small planes; a ratio of two bakes needs both quiet)')
+ap.add_argument('--mask-quality', type=int, default=90, help='WebP quality for the shadow masks')
+ap.add_argument('--no-shadow-masks', action='store_true', help='bake2\'s one pass: the props baked into the desk and wall maps, no masks (for comparison)')
 args = ap.parse_args(argv)
 W, H = (int(v) for v in args.res.lower().split('x'))
 os.makedirs(args.out_dir, exist_ok=True)
@@ -428,6 +434,8 @@ M_LEAF_EDGE = mat('leaf edge', '#c9c04e', rough=0.5)   # the snake plant's yello
 M_PAPER = mat('paper', '#f4f1e8', rough=0.9)
 M_COFFEE = mat('coffee', '#2a180e', rough=0.08, spec=0.6)
 M_PEN = mat('pen', '#1b1c1f', rough=0.3)
+M_STEEL = mat('stainless', '#c7c8c6', rough=0.32, metal=1.0)   # the calipers' beam and jaws (look15)
+M_LCD = mat('lcd', '#9aa48c', rough=0.25)                       # the calipers' display window
 M_FRAME = mat('picture frame', '#2a2724', rough=0.6)
 M_PRINT = mat('print', '#c8c3b8', rough=0.9)
 M_WINDOW_FRAME = mat('window frame', '#f5f3ee', rough=0.5)
@@ -471,7 +479,7 @@ def build_room():
     sphere('mouse', 0.035, (mx + 0.30, desk_front + 0.10, DESK_TOP_Z + 0.018), M_DARK, ROOM, scale=(0.9, 1.6, 0.55), extras={'lm': 128, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
     if args.props == 'full':
         # a mug near the front, right of the build (slot x+, on its own)
-        mug_x, mug_y = 0.19, desk_front + 0.07   # look7: at 0.30 the mug sat inside the keyboard (x 0.33..0.77) once the keyboard came forward
+        mug_x, mug_y = 0.22, desk_front + 0.07   # look7: at 0.30 the mug sat inside the keyboard (x 0.33..0.77) once the keyboard came forward; look15: 0.19 -> 0.22, room for the calipers on its left (the handle reaches 0.30)
         # look8 (Joey): the mug hollowed, coffee in it, steam off the coffee in the look renders only (a Cycles volume:
         # neither bakeable nor exportable, so bake mode never makes it)
         mug_h = 0.096
@@ -500,9 +508,35 @@ def build_room():
             snake_leaf('leaf_%d' % i, (px + rng.uniform(-0.025, 0.025), py + rng.uniform(-0.025, 0.025), soil_top - 0.004),
                        phi, h=rng.uniform(0.30, 0.50), wmax=rng.uniform(0.045, 0.065), bow=rng.uniform(0.02, 0.07),
                        twist=math.radians(rng.uniform(-35, 35)), extras={'lm': 128, 'slot': 'x-', 'gap': 0.07, 'group': 'plant'})
-        # a notebook and a pen at the front right, beside the keyboard
-        box('notebook', (0.15, 0.21, 0.012), (mx + 0.50, desk_front + 0.13, DESK_TOP_Z + 0.006), M_PAPER, ROOM, rot=(0, 0, math.radians(-8)), extras={'lm': 256, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
-        cyl('pen', 0.005, 0.14, (mx + 0.47, desk_front + 0.09, DESK_TOP_Z + 0.017), M_PEN, ROOM, verts=16, extras={'lm': 64, 'slot': 'x+', 'gap': 0.08, 'group': 'monitor'})
+        # the notebook and pen at the FRONT LEFT, between the plant and the build zone, their own slot group (x-). They
+        # used to sit past the desk's right end (mx + 0.50 = 1.05 on a 1.80 m desk) and floated in the air beside it, the
+        # pen standing on end half inside the desk (Joey, 2026-10-23: "what's this floating thing?"); the right end has
+        # no room for them beside the keyboard and mouse. The pen lies on the pad, diagonal.
+        nb_x, nb_y = BUILD_X - 0.28, desk_front + 0.13
+        box('notebook', (0.15, 0.21, 0.012), (nb_x, nb_y, DESK_TOP_Z + 0.006), M_PAPER, ROOM, rot=(0, 0, math.radians(6)), extras={'lm': 256, 'slot': 'x-', 'gap': 0.05, 'group': 'notebook'})
+        pen = cyl('pen', 0.005, 0.14, (nb_x + 0.02, nb_y + 0.01, DESK_TOP_Z + 0.012 + 0.005), M_PEN, ROOM, verts=16, extras={'lm': 64, 'slot': 'x-', 'gap': 0.05, 'group': 'notebook'})
+        pen.rotation_euler = (math.radians(90), 0, math.radians(-62))   # lying along the pad, a little off its diagonal
+        # a pair of digital calipers at the front, right of the build zone and left of the mug (Joey 2026-10-23: "every 3D
+        # printer person has a pair on their desk"): a 150 mm caliper lying closed, the beam flat on the desk, the outside
+        # jaws in the desk's plane toward the front, the display housing standing 16 mm with its LCD, thumb roller and
+        # lock screw; its own slot group (x+, gap 0.04), so a wide build slides it toward the mug, which slides with it
+        def calipers(cx, cy, theta):
+            g = {'slot': 'x+', 'gap': 0.04, 'group': 'calipers'}
+            rot = (0, 0, theta)
+            c, s = math.cos(theta), math.sin(theta)
+            at = lambda x, y, z: (cx + x * c - y * s, cy + x * s + y * c, DESK_TOP_Z + z)   # the caliper's own frame (x along the beam, +y toward the display's back) onto the desk
+            box('cal_beam', (0.235, 0.016, 0.0032), at(0.0, 0.0, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 128, **g})
+            box('cal_jaw_fixed', (0.014, 0.042, 0.0032), at(-0.1105, -0.021, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 64, **g})      # the outside jaws, closed
+            box('cal_jaw_slide', (0.014, 0.042, 0.0032), at(-0.0965, -0.021, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 64, **g})
+            box('cal_jaw_fixed_in', (0.006, 0.016, 0.0032), at(-0.1145, 0.016, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 32, **g})   # the inside jaws
+            box('cal_jaw_slide_in', (0.006, 0.016, 0.0032), at(-0.1085, 0.016, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 32, **g})
+            housing = box('cal_housing', (0.058, 0.034, 0.016), at(-0.060, 0.0, 0.008), M_DARK, ROOM, rot=rot, extras={'lm': 256, **g})
+            chamfer(housing, 0.0015, segments=2)
+            box('cal_lcd', (0.028, 0.012, 0.0006), at(-0.056, 0.004, 0.0163), M_LCD, ROOM, rot=rot, extras={'lm': 64, **g})
+            wheel = cyl('cal_wheel', 0.006, 0.004, at(-0.040, -0.0185, 0.006), M_DARK, ROOM, verts=24, extras={'lm': 32, **g})   # the thumb roller under the housing's front edge
+            wheel.rotation_euler = (math.radians(90), 0, theta)
+            cyl('cal_lock', 0.0035, 0.003, at(-0.078, 0.011, 0.0175), M_STEEL, ROOM, verts=16, extras={'lm': 32, **g})            # the lock screw on top
+        calipers(BUILD_X + 0.22, desk_front + 0.06, math.radians(8))
     # a framed print on the back wall, above and right of the monitor
     box('frame', (0.42, 0.02, 0.32), (0.95, WALL_BACK_Y - 0.01, 1.62), M_FRAME, ROOM, extras={'lm': 256})
     box('frame_print', (0.36, 0.004, 0.26), (0.95, WALL_BACK_Y - 0.022, 1.62), M_PRINT, ROOM, extras={'lm': 256})
@@ -907,12 +941,32 @@ def bake_room(samples):
                 n.select = False
             tex.select = True
             nt.nodes.active = tex
-    # bake all at once (every selected object bakes into its own active image node)
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in meshes:
-        o.select_set(True)
-    bpy.context.view_layer.objects.active = meshes[0]
-    bpy.ops.object.bake(type='COMBINED', pass_filter={'DIRECT', 'INDIRECT', 'DIFFUSE', 'EMIT'}, margin=6, use_clear=True)
+    # the bake, in two passes (bake3, 2026-10-23): the FIXED surfaces (desk, walls, floor, frame, window) with every prop
+    # hidden, so no prop's shadow is in the desk's or the wall's map (bake2 had them there, and a prop that slid or hid for a
+    # wide build left its shadow behind: the keyboard's dark patch stayed on the desk's right end after the keyboard hid for a
+    # 12W build); then the PROPS with the whole room visible, so they keep the room's bounce and their own group's shadows
+    # (the monitor's on the keyboard). The props' shadows on the desk and the wall come back as masks the planner slides
+    # with the group: bake_shadow_masks(), run BEFORE this (the props' materials are still their real ones there, not the
+    # emission this turns them into, which would light the receivers). --no-shadow-masks keeps bake2's single pass.
+    def bake_selected(objs, label):
+        if not objs:
+            return
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        print('[bake] %s: %d meshes at %d samples' % (label, len(objs), samples))
+        bpy.ops.object.bake(type='COMBINED', pass_filter={'DIRECT', 'INDIRECT', 'DIFFUSE', 'EMIT'}, margin=6, use_clear=True)
+    props = [o for o in meshes if 'slot' in o]
+    if args.no_shadow_masks or not props:
+        bake_selected(meshes, 'the room in one pass')
+    else:
+        for o in props:
+            o.hide_render = True
+        bake_selected([o for o in meshes if 'slot' not in o], 'the fixed surfaces, props hidden')
+        for o in props:
+            o.hide_render = False
+        bake_selected(props, 'the props, the room visible')
     # the exported material: an unlit emission of the baked texture (exposure folded in, so the planner's linear values
     # match the look check's), read through the LM channel
     exposure = scene['done_exposure']
@@ -942,6 +996,159 @@ def bake_room(samples):
         while len(o.data.uv_layers) > 1:
             o.data.uv_layers.remove(o.data.uv_layers[0] if o.data.uv_layers[0].name != 'LM' else o.data.uv_layers[1])
     return images
+
+# ---------------------------------------------------------------------------------------------------------------------
+# the props' shadows as masks (bake3, 2026-10-23; Joey raised the slid-prop shadow, DESIGN.md §8e item 4). bake_room
+# bakes the desk and wall maps WITHOUT the props, so a prop that slides along its slot, or hides, takes nothing with it
+# that it should not. Its shadow comes back as a MASK: the ratio of the light reaching a white receiver plane with that
+# prop GROUP alone present to the light reaching it with no props, baked over the two planar surfaces a prop's shadow
+# can fall on (the desk top, the back wall), cropped to where it darkens anything, written as a WebP beside room.glb and
+# listed in room.json with its extents in stage mm about the tabletop anchor. The planner draws each mask as a quad
+# multiplied over its surface and slides it with the group (js/scenes/done.js): the slots are straight runs along x and
+# both receivers are planes, so a translated mask is exact for any slide. Groups multiply, exact where their shadows do
+# not overlap. The ratio carries the sky occlusion and the bounce as well as the sun's umbra, so the contact darkening
+# under a keyboard is in it; a prop's own bounce onto the surface (the white mug) would read over 1 and is clamped.
+# The receivers are probes: invisible to shadow, diffuse and glossy rays, so the room is lit as if they were not there.
+# ---------------------------------------------------------------------------------------------------------------------
+def blur5(a):
+    """A separable 5-tap binomial blur over an (h, w, c) array, edges clamped: the ratio of two bakes carries both
+    bakes' noise, and the penumbra it cleans is many pixels wide at 2 mm a pixel."""
+    import numpy as np
+    k = np.array([1, 4, 6, 4, 1], dtype=np.float32) / 16.0
+    h, w = a.shape[0], a.shape[1]
+    p = np.pad(a, ((2, 2), (0, 0), (0, 0)), mode='edge')
+    t = sum(k[i] * p[i:i + h] for i in range(5))
+    p = np.pad(t, ((0, 0), (2, 2), (0, 0)), mode='edge')
+    return sum(k[i] * p[:, i:i + w] for i in range(5))
+
+def write_webp(path, rgb01, quality):
+    """An 8-bit WebP from an (h, w, 3) array in 0..1 whose rows are BOTTOM-UP (Blender's order, so the file's top row
+    is the array's last), through Blender's own writer (its Python has no PIL). Returns the mean error of the file read
+    back against the array: a colour transform on the way out, or a lossy setting too low, shows here."""
+    import numpy as np
+    h, w, _ = rgb01.shape
+    img = bpy.data.images.new('_webp', w, h, alpha=False, float_buffer=False)
+    img.colorspace_settings.name = 'sRGB'
+    buf = np.ones((h, w, 4), dtype=np.float32)
+    buf[:, :, :3] = np.clip(rgb01, 0.0, 1.0)
+    img.pixels.foreach_set(buf.reshape(-1))
+    img.file_format = 'WEBP'
+    img.save(filepath=os.path.abspath(path), quality=quality)
+    bpy.data.images.remove(img)
+    chk = bpy.data.images.load(os.path.abspath(path))
+    cb = np.empty(chk.size[0] * chk.size[1] * chk.channels, dtype=np.float32)
+    chk.pixels.foreach_get(cb)
+    err = float(np.abs(cb.reshape(h, w, chk.channels)[:, :, :3] - buf[:, :, :3]).mean())
+    bpy.data.images.remove(chk)
+    return err
+
+def bake_shadow_masks(props, desk, anchor):
+    """Bake every prop group's shadow mask over the desk top and the back wall (see the block comment above). `props` are
+    the room meshes with a slot, `desk` the desk's extent (metres) and `anchor` the tabletop anchor. Returns room.json's
+    records: [{ group, surface, file, bytes, px, x0, x1, zBack, zFront | y0, y1, min }], extents in stage mm about the
+    anchor (x right; the desk's second axis is stage z, the front positive; the wall's is height over the desk top)."""
+    import numpy as np
+    EPS = 0.0005                              # the receivers float this far off their surface (0.7 mm of shadow shift at a 35 degree sun)
+    pitch = args.mask_px / 1000.0 / max(args.lm_scale, 1e-6)   # metres a pixel; --lm-scale shrinks the masks like the lightmaps
+    ax, ay = anchor[0], anchor[1]
+    linear = 'Linear Rec.709' if 'Linear Rec.709' in [c.name for c in type(bpy.data.images[0].colorspace_settings).bl_rna.properties['name'].enum_items] else 'Non-Color'
+    specs = {   # the second axis (v) is Blender y on the desk (toward the wall) and Blender z on the wall (up)
+        'desk': dict(x0=desk['x0'], x1=desk['x1'], v0=desk['y0'], v1=desk['y1']),
+        'wall': dict(x0=desk['x0'] - 0.3, x1=desk['x1'] + 0.3, v0=DESK_TOP_Z - 0.02, v1=DESK_TOP_Z + 1.0),
+    }
+    planes = []
+    for surface, p in specs.items():
+        w, h = p['x1'] - p['x0'], p['v1'] - p['v0']
+        bpy.ops.mesh.primitive_plane_add(size=1.0, location=(0, 0, 0))   # its UV: u along local +x, v along local +y
+        o = bpy.context.active_object
+        o.name = 'mask_' + surface
+        cx, cv = (p['x0'] + p['x1']) / 2, (p['v0'] + p['v1']) / 2
+        if surface == 'wall':
+            o.rotation_euler = (math.radians(90), 0, 0)   # local +y -> world +z (up); the face turns to -y, into the room
+            o.location = (cx, WALL_BACK_Y - EPS, cv)
+        else:
+            o.location = (cx, cv, DESK_TOP_Z + EPS)
+        o.scale = (w, h, 1.0)
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        o.visible_shadow = False; o.visible_diffuse = False; o.visible_glossy = False; o.visible_transmission = False; o.visible_volume_scatter = False
+        m = bpy.data.materials.new('mask ' + surface)
+        m.use_nodes = True
+        bsdf = m.node_tree.nodes['Principled BSDF']
+        bsdf.inputs['Base Color'].default_value = (0.8, 0.8, 0.8, 1.0)
+        bsdf.inputs['Roughness'].default_value = 1.0
+        if 'Specular IOR Level' in bsdf.inputs:
+            bsdf.inputs['Specular IOR Level'].default_value = 0.0
+        o.data.materials.append(m)
+        nx, nv = max(8, int(round(w / pitch))), max(8, int(round(h / pitch)))
+        img = bpy.data.images.new('mask_' + surface, nx, nv, alpha=False, float_buffer=True)
+        img.colorspace_settings.name = linear
+        tex = m.node_tree.nodes.new('ShaderNodeTexImage')
+        tex.image = img
+        tex.name = 'BAKE'
+        for n in m.node_tree.nodes:
+            n.select = False
+        tex.select = True
+        m.node_tree.nodes.active = tex
+        move_to(o, RIG)
+        planes.append(dict(surface=surface, obj=o, img=img, spec=p, nx=nx, nv=nv, px=w / nx, pv=h / nv))
+    scene.cycles.samples = args.mask_samples
+    scene.cycles.use_denoising = False
+    scene.render.bake.use_selected_to_active = False
+
+    def bake_state(groups_shown):
+        """Irradiance (direct + indirect, no colour) on both receivers with only the named groups' props rendering."""
+        for o in props:
+            o.hide_render = o.get('group', o.name) not in groups_shown
+        bpy.ops.object.select_all(action='DESELECT')
+        for pl in planes:
+            pl['obj'].select_set(True)
+        bpy.context.view_layer.objects.active = planes[0]['obj']
+        bpy.ops.object.bake(type='DIFFUSE', pass_filter={'DIRECT', 'INDIRECT'}, margin=0, use_clear=True)
+        out = {}
+        for pl in planes:
+            buf = np.empty(pl['nx'] * pl['nv'] * 4, dtype=np.float32)
+            pl['img'].pixels.foreach_get(buf)
+            out[pl['surface']] = buf.reshape(pl['nv'], pl['nx'], 4)[:, :, :3].copy()   # rows bottom-up: row 0 is v = 0 (the desk's front edge, the wall's foot)
+        return out
+
+    groups = sorted({o.get('group', o.name) for o in props})
+    print('[mask] receivers %s; %d samples a state; groups %s' % (', '.join('%s %dx%d px' % (pl['surface'], pl['nx'], pl['nv']) for pl in planes), args.mask_samples, ', '.join(groups)))
+    base = bake_state(set())
+    records = []
+    for g in groups:
+        shown = bake_state({g})
+        for pl in planes:
+            surface, p = pl['surface'], pl['spec']
+            A, B = base[surface], shown[surface]
+            ratio = blur5(np.clip(B / np.maximum(A, 1e-4), 0.0, 1.0))
+            dark = ratio.min(axis=2) < 0.97
+            rows, cols = np.where(dark.any(axis=1))[0], np.where(dark.any(axis=0))[0]
+            if not len(rows):
+                print('[mask] %-8s on the %s: nothing darker than 3 %%, no mask' % (g, surface))
+                continue
+            pad = 4
+            r0, r1 = max(0, int(rows[0]) - pad), min(pl['nv'], int(rows[-1]) + 1 + pad)
+            c0, c1 = max(0, int(cols[0]) - pad), min(pl['nx'], int(cols[-1]) + 1 + pad)
+            crop = ratio[r0:r1, c0:c1]
+            fname = 'shadow-%s-%s.webp' % (g, surface)
+            path = os.path.join(args.out_dir, fname)
+            err = write_webp(path, to_srgb(crop), args.mask_quality)   # display-encoded, like the lightmaps: the planner reads it as sRGB
+            x0, x1 = (p['x0'] + c0 * pl['px'] - ax) * 1000, (p['x0'] + c1 * pl['px'] - ax) * 1000
+            v0, v1 = p['v0'] + r0 * pl['pv'], p['v0'] + r1 * pl['pv']
+            rec = dict(group=g, surface=surface, file=fname, bytes=os.path.getsize(path), px=[c1 - c0, r1 - r0], x0=round(x0, 1), x1=round(x1, 1), min=round(float(crop.min()), 3))
+            if surface == 'desk':
+                rec.update(zFront=round(-(v0 - ay) * 1000, 1), zBack=round(-(v1 - ay) * 1000, 1))
+            else:
+                rec.update(y0=round((v0 - DESK_TOP_Z) * 1000, 1), y1=round((v1 - DESK_TOP_Z) * 1000, 1))
+            records.append(rec)
+            print('[mask] %-8s on the %s: %4d x %4d px, x %6.0f..%6.0f mm, darkest %.3f, %5.1f KB (file read-back error %.4f)'
+                  % (g, surface, c1 - c0, r1 - r0, x0, x1, crop.min(), rec['bytes'] / 1024, err))
+    for o in props:
+        o.hide_render = False
+    for pl in planes:
+        bpy.data.objects.remove(pl['obj'], do_unlink=True)
+        bpy.data.images.remove(pl['img'])
+    return records
 
 def export_room(path):
     bpy.ops.object.select_all(action='DESELECT')
@@ -1049,6 +1256,10 @@ elif args.mode == 'bake':
                 emit.inputs['Strength'].default_value = 1.0
                 nt.links.new(emit.outputs['Emission'], nt.nodes['Material Output'].inputs['Surface'])
     else:
+        # the props' shadow masks FIRST (the props still wear their real materials; bake_room turns them into emission,
+        # which would light the receivers), then the room's maps with the props out of the desk's and the wall's
+        prop_meshes = [o for o in ROOM.objects if o.type == 'MESH' and 'slot' in o]
+        masks = [] if args.no_shadow_masks else bake_shadow_masks(prop_meshes, room['desk'], room['anchor'])
         bake_room(args.bake_samples)
     glb = stem + '.glb'
     export_room(glb)
@@ -1075,6 +1286,13 @@ elif args.mode == 'bake':
         props=props,
         glb=os.path.basename(glb), glbBytes=os.path.getsize(glb),
     )
+    if masks:
+        # the props' shadow masks (bake_shadow_masks): per group and surface, the WebP beside room.glb and the quad's
+        # extents in stage mm about the tabletop anchor; the file's top row is toward the wall on the desk and up on the
+        # wall, +x to the right. zWall: the wall surface's z about the anchor (the wall quads stand there)
+        room_json['shadows'] = dict(px=args.mask_px, bakedWithoutProps=True,
+                                    zWall=round(-(WALL_BACK_Y - room['anchor'][1]) * 1000, 1),
+                                    orientation='image top = toward the wall (desk) / up (wall); +x right', masks=masks)
     json.dump(room_json, open(stem + '.json', 'w', newline='\n'), indent=1)   # LF on Windows too (the repo's line ending)
     bpy.ops.wm.save_as_mainfile(filepath=stem + '.blend')
     print('[bake] wrote %s (%d bytes) and %s.json' % (glb, os.path.getsize(glb), stem))

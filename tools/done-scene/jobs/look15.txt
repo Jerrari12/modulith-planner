@@ -1,0 +1,5 @@
+# look15 (laptop, 2026-10-23 evening), the room pass after the massive-build probe (DESIGN.md §8e) and Joey's asks:
+# a pair of digital calipers at the front, right of the build zone ("every 3D printer person has a pair on their desk");
+# the notebook and pen moved from past the desk's right end (they floated in the air there) to the front left, their own
+# slot group; the mug 30 mm right to give the calipers room. Otherwise look14 (the leaves' slot fix is runtime, done.js).
+--mode look --name look15 --kit kit/manifest.json --parts kit/parts --out-dir renders/look15 --res 2048x1365 --samples 160 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3

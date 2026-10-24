@@ -2988,3 +2988,26 @@ Dated calls made while building, with who made them. The brief and the inventory
   "closed" proved nothing); the wall catcher ignores the tier; no wall catcher; the Fast drop leaves the timers. npm test
   628 tests, 623 pass, 0 fail, 5 skipped; goldens 60 shots, 0 differ; the Colors cases 2 of 2 with the cuts code. Not
   deployed.
+
+## 2026-10-23 (the Done scene's room pass: calipers, the notebook back on the desk, the leaves in the plant group)
+
+- **Joey's asks**, after the massive-build probe (DESIGN.md §8e): "maybe lets add a pair of digital calipers, every 3d
+  printer person has a pair on their desk"; "what's this floating thing?" (the notebook and pen, authored at mx + 0.50 =
+  1.05 m on a 1.80 m desk, hanging in the air past its right end, the pen a vertical cylinder half inside the desk);
+  and the plant's leaves that stayed behind when the pot slid or hid.
+- **room.py** (`--props full`): a procedural 150 mm digital caliper lying closed at the front, right of the build zone
+  (beam, outside and inside jaws, the display housing with LCD, thumb roller and lock screw; stainless and matte
+  plastic; its own slot group `calipers`, x+, gap 0.04); the notebook and pen at the front LEFT between the plant and
+  the build zone (their own group `notebook`, x-, gap 0.05), the pen lying on the pad; the mug 30 mm right (0.22) for
+  the calipers' room. Job `jobs/look15.txt` (look14's settings; the node0 runner's `kit/` paths, which the desktop's
+  look9-14 jobs did not use since they ran locally there).
+- **done.js:** a prop is any node carrying a slot, a Mesh or a Group of Meshes. The leaves are two-material meshes, so
+  the glTF has them as one mesh with two primitives and three.js makes a Group `leaf_N` with the extras over two child
+  Meshes without; the traversal only looked at Meshes. With the CURRENT room.glb a 12W probe build now hides all 18
+  leaf meshes with the pot (before: none).
+- **Look15** rendered on node0 and fetched to `D:\Claude - Output\done-scene-2026-10-23\renders\look15\`: the calipers,
+  pad and pen where intended, nothing intersecting; the polished jaws mirror the faceplates' orange (a duller steel
+  would stop it). **The bake is not run yet**: Joey's eye on look15 first, so `scenes/home-office/room.glb` is still
+  bake2's and the live room does not have the calipers until then.
+- **Review:** Terra `01a16b9d` (routine): no findings. Checks: room.py compiles; look15 renders; the two Done e2e cases
+  pass with the traversal change. Not deployed.

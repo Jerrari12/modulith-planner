@@ -278,7 +278,10 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // props slide clear of the build along their slots, by group; a group that cannot clear it INSIDE the desk's extent
     // hides rather than hanging past the edge (a build wider than the desk's free run: done-fit.js fitSlides)
     const props = [];
-    group.traverse((o) => { if (o.isMesh && o.userData.slot) props.push({ obj: o, group: o.userData.group || o.name, slot: o.userData.slot, gap: (+o.userData.gap || 0.06) * SCALE, box: plain(boxOf(o)) }); });
+    /* a prop is any node carrying a slot: a mesh, or a GROUP of meshes (a multi-material prop, the snake plant's leaves,
+       comes out of the glTF as a Group `leaf_N` with the extras and child meshes without them: 2026-10-23, the leaves
+       stayed behind when the pot slid or hid, since only meshes were looked at) */
+    group.traverse((o) => { if (o.userData.slot && (o.isMesh || o.children.some((c) => c.isMesh))) props.push({ obj: o, group: o.userData.group || o.name, slot: o.userData.slot, gap: (+o.userData.gap || 0.06) * SCALE, box: plain(boxOf(o)) }); });
     const slid = fitSlides(props, slideProps(props, plain(buildBox)), { x0: anchorWorld.x + d.x0, x1: anchorWorld.x + d.x1 });
     for (const p of props) { const dx = slid[p.group]; if (dx === null) p.obj.visible = false; else if (dx) p.obj.position.x += dx / SCALE; }
     group.updateMatrixWorld(true);
