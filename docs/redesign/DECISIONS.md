@@ -3216,5 +3216,9 @@ keyboard undo or Remove").
 - **Suites:** npm test 625 (620 pass, 0 fail, the 5 environment skips main has; 313 s); the full e2e suite with the
   Studio checkout, `E2E_SOFT=1`: 86 cases, 86 pass, 0 fail (2708 s), after the four touched cases had passed alone and
   the six mutants had each failed.
-- **Deploy:** Joey decided it in words, so it deploys once the suites pass.
+- **Deploy:** Joey decided it in words, so it deploys once the suites pass. **Live 2026-10-24 at `b368e693`** (01:53 push, live about 02:35 local).
+  `disclosure-prod.mjs b368e69` passes 8 of 8 on the live site: four plain "Amazon ↗" links with `rel=sponsored`, the commission
+  line under each of the two hardware groups, Amazon's sentence exactly once in the Parts foot, the picker's plain Buy label with
+  the Amazon sentence beneath, a look's detail footer with the shared disclosure, no "null", and the reworded notes. The same
+  script failed all eight on `2a5a11f7` before the deploy.
 
