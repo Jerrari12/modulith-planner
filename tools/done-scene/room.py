@@ -77,6 +77,7 @@ ap.add_argument('--mask-px', type=float, default=2.0, help='the shadow masks\' p
 ap.add_argument('--mask-samples', type=int, default=512, help='Cycles samples for the mask receivers per visibility state (two small planes; a ratio of two bakes needs both quiet)')
 ap.add_argument('--mask-quality', type=int, default=90, help='WebP quality for the shadow masks')
 ap.add_argument('--no-shadow-masks', action='store_true', help='bake2\'s one pass: the props baked into the desk and wall maps, no masks (for comparison)')
+ap.add_argument('--focus', choices=['build', 'calipers', 'jaws'], default='build', help='look/check: aim the camera (the same fit) at the calipers or their jaws instead of the build, for a close-up of a prop (2026-10-24)')
 args = ap.parse_args(argv)
 W, H = (int(v) for v in args.res.lower().split('x'))
 os.makedirs(args.out_dir, exist_ok=True)
@@ -440,6 +441,273 @@ M_FRAME = mat('picture frame', '#2a2724', rough=0.6)
 M_PRINT = mat('print', '#c8c3b8', rough=0.9)
 M_WINDOW_FRAME = mat('window frame', '#f5f3ee', rough=0.5)
 
+# ---------------------------------------------------------------------------------------------------------------------
+# the calipers (2026-10-24, Joey: "they are in clear view and modeled very blocky, mostly the caliper tips should not be
+# square blocks but rather come to sharp points, and maybe be steel metal rather than black. Reference a pair of
+# calipers to improve their design"). The reference is Mitutoyo's own drawing of the ABSOLUTE Digimatic 0-150 mm
+# (500-196-30; Mitutoyo America catalog, Small Tool Instruments p. D-6, "Dimensions and mass"): overall length L 233 mm,
+# the outside jaws a 40 mm below the beam, the inside jaws b 21 mm above it (c 16.5 mm above the slider), the beam d
+# 16 mm wide; the slider, LCD, buttons, lock screw and thumb roller measured off the same drawing (5.44 px a mm). The
+# shape every 150 mm digital caliper shares: outside jaws whose outer edges taper to narrow knife-edged tips that meet
+# in a point when the jaws are closed, and inside jaws that pass each other (each is half the steel's thickness) and
+# make one spike at zero. The tips taper further than Mitutoyo's (a 2.4 mm nib, not 5.5): the point Joey asked for.
+#
+# THE STEEL IS LIVE, NOT BAKED. A metal has no diffuse colour, so a diffuse lightmap of it is black, which is why the
+# calipers drew black in the planner while look15 showed them polished in Cycles. Every steel part is ONE mesh tagged
+# `live` that bake_room leaves alone; the glTF carries it as a metallic PBR material with the beam's printed scale as
+# its base colour, and done.js lights it like the build and gives it the room to reflect. The housing, LCD and buttons
+# are plastic and bake as one mesh (one lightmap, one material once baked: one draw call each for steel and plastic,
+# where the old calipers drew nine).
+# ---------------------------------------------------------------------------------------------------------------------
+CAL_FOCUS = {}      # --focus targets: world boxes, set when the calipers are built
+PLAIN_UV = (0.995, 0.5)   # a point of the scale texture with nothing printed on it: every steel face but the beam's top
+
+def cal_frame(cx, cy, theta, ox=103.5, oy=8.0):
+    """The caliper's own frame in MILLIMETRES onto the desk: x along the beam from the jaws' contact line (+ toward the
+    beam's end, the viewer's right), y across it from the beam's jaw-side edge (+ toward the inside jaws and the wall,
+    - toward the outside jaws and the desk's front edge), z up from the desk top. (ox, oy), the middle of the beam,
+    lands on (cx, cy). Returns world metres."""
+    c, s = math.cos(theta), math.sin(theta)
+    def P(x, y, z):
+        lx, ly = (x - ox) / 1000.0, (y - oy) / 1000.0
+        return Vector((cx + lx * c - ly * s, cy + lx * s + ly * c, DESK_TOP_Z + z / 1000.0))
+    return P
+
+def bm_face(bm, verts, mat, uvs=None):
+    f = bm.faces.new(verts)
+    f.material_index = mat
+    uvl = bm.loops.layers.uv['UVMap']
+    for i, lp in enumerate(f.loops):
+        lp[uvl].uv = uvs[i] if uvs else PLAIN_UV
+    return f
+
+def bm_box(bm, P, x0, x1, y0, y1, z0, z1, mat=0, top_uv=None):
+    """An axis-aligned box in the caliper's frame; `top_uv` (u0, v0, u1, v1) lays a texture across its top face (u along
+    +x, v along +y, so a reading faces the viewer at the desk's front)."""
+    v = {(i, j, k): bm.verts.new(P((x0, x1)[i], (y0, y1)[j], (z0, z1)[k])) for i in (0, 1) for j in (0, 1) for k in (0, 1)}
+    q = lambda *ijk: [v[t] for t in ijk]
+    top = None
+    if top_uv:
+        u0, v0, u1, v1 = top_uv
+        top = [(u0, v0), (u1, v0), (u1, v1), (u0, v1)]
+    bm_face(bm, q((0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)), mat, top)   # top, counter-clockwise from above
+    bm_face(bm, q((0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0)), mat)
+    bm_face(bm, q((0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)), mat)
+    bm_face(bm, q((1, 1, 0), (0, 1, 0), (0, 1, 1), (1, 1, 1)), mat)
+    bm_face(bm, q((0, 1, 0), (0, 0, 0), (0, 0, 1), (0, 1, 1)), mat)
+    bm_face(bm, q((1, 0, 0), (1, 1, 0), (1, 1, 1), (1, 0, 1)), mat)
+
+def bm_loft(bm, P, stations, mat=0):
+    """A solid through rectangular sections across the caliper's y, each station (y, x0, x1, z0, z1): a jaw's straight
+    measuring face, its tapered outer edge, and its tip thinned to a knife edge."""
+    rings = [[bm.verts.new(P(x0, y, z0)), bm.verts.new(P(x1, y, z0)), bm.verts.new(P(x1, y, z1)), bm.verts.new(P(x0, y, z1))]
+             for (y, x0, x1, z0, z1) in stations]
+    for a, b in zip(rings, rings[1:]):
+        for i in range(4):
+            j = (i + 1) % 4
+            bm_face(bm, [a[i], a[j], b[j], b[i]], mat)
+    bm_face(bm, rings[0][::-1], mat)
+    bm_face(bm, rings[-1], mat)
+
+def bm_wheel(bm, P, c1, c2, axis, r, a0, a1, mat=0, teeth=0, depth=0.0, sx=1.0, sides=32):
+    """A cylinder from a0 to a1 along `axis` ('z': the caliper's up; 'y': across the beam), centred on (c1, c2) in the
+    other two axes ((x, y) for 'z', (x, z) for 'y'); `teeth` knurls its rim (2 * teeth points alternating r and
+    r - depth); `sx` stretches it along x (an oval button)."""
+    n = 2 * teeth if teeth else sides
+    pts = []
+    for i in range(n):
+        ang = 2 * math.pi * i / n
+        rr = r - (depth if teeth and i % 2 else 0.0)
+        pts.append((c1 + rr * math.cos(ang) * sx, c2 + rr * math.sin(ang)))
+    if axis == 'z':
+        lo = [bm.verts.new(P(u, w, a0)) for u, w in pts]
+        hi = [bm.verts.new(P(u, w, a1)) for u, w in pts]
+    else:
+        lo = [bm.verts.new(P(u, a0, w)) for u, w in pts]
+        hi = [bm.verts.new(P(u, a1, w)) for u, w in pts]
+    for i in range(n):
+        j = (i + 1) % n
+        bm_face(bm, [lo[i], lo[j], hi[j], hi[i]], mat)
+    bm_face(bm, lo[::-1], mat)
+    bm_face(bm, hi, mat)
+
+def bm_object(bm, name, mats, extras=None, smooth_deg=30.0):
+    """The bmesh as an object in the room (its vertices are already world metres), normals outward, smooth by angle."""
+    import bmesh
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    for m in mats:
+        me.materials.append(m)
+    o = bpy.data.objects.new(name, me)
+    ROOM.objects.link(o)
+    for k, v in (extras or {}).items():
+        o[k] = v
+    bpy.ops.object.select_all(action='DESELECT')
+    o.select_set(True)
+    bpy.context.view_layer.objects.active = o
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(smooth_deg))
+    return o
+
+def join_objects(objs, name):
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.join()
+    o = bpy.context.view_layer.objects.active
+    o.name = name
+    o.data.name = name
+    return o
+
+def tex_mat(name, png, rough, metal=0.0):
+    """A Principled material whose base colour is an image, read through the mesh's own UVMap channel EXPLICITLY (the bake
+    makes its LM channel the active render UV, which would map the image by the lightmap's layout)."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes['Principled BSDF']
+    tex = nt.nodes.new('ShaderNodeTexImage')
+    tex.image = bpy.data.images.load(png)
+    tex.image.colorspace_settings.name = 'sRGB'
+    uvn = nt.nodes.new('ShaderNodeUVMap')
+    uvn.uv_map = 'UVMap'
+    nt.links.new(uvn.outputs['UV'], tex.inputs['Vector'])
+    nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
+    bsdf.inputs['Roughness'].default_value = rough
+    bsdf.inputs['Metallic'].default_value = metal
+    return m
+
+FONT5X7 = {
+    '0': ('01110', '10001', '10011', '10101', '11001', '10001', '01110'), '1': ('00100', '01100', '00100', '00100', '00100', '00100', '01110'),
+    '2': ('01110', '10001', '00001', '00010', '00100', '01000', '11111'), '3': ('11111', '00010', '00100', '00010', '00001', '10001', '01110'),
+    '4': ('00010', '00110', '01010', '10010', '11111', '00010', '00010'), '5': ('11111', '10000', '11110', '00001', '00001', '10001', '01110'),
+    '6': ('00110', '01000', '10000', '11110', '10001', '10001', '01110'), '7': ('11111', '00001', '00010', '00100', '01000', '01000', '01000'),
+    '8': ('01110', '10001', '10001', '01110', '10001', '10001', '01110'), '9': ('01110', '10001', '10001', '01111', '00001', '00010', '01100'),
+}
+
+def cal_scale_png(path):
+    """The beam's printed scale: a 1 mm graduation along the near edge from the jaws' contact line to 150 mm (longer at
+    5 and 10 mm) and the centimetre figures above it, dark on the steel's own tint, drawn at twice the size and
+    box-filtered down. u 0..1 is the beam's x -12.9..220.1 mm, v 0..1 its y 0..16 mm (image row 0 = y 16)."""
+    import numpy as np
+    W2, H2 = 4096, 256
+    img = np.ones((H2, W2, 3)) * np.array(srgb_hex('#c8c9c6'))
+    ink = np.array(srgb_hex('#26272a'))
+    pxmm, pymm = W2 / 233.0, H2 / 16.0
+    def rect(x0, y0, x1, y1):   # mm in the caliper's frame, y0 < y1
+        c0, c1 = int(round((x0 + 12.9) * pxmm)), int(round((x1 + 12.9) * pxmm))
+        r0, r1 = int(round((16.0 - y1) * pymm)), int(round((16.0 - y0) * pymm))
+        img[max(0, r0):min(H2, r1), max(0, c0):min(W2, c1)] = ink
+    for mm in range(2, 151):   # from under the slider: nothing is printed on the head (the first check showed a '0' beside the jaws)
+        rect(mm - 0.11, 0.0, mm + 0.11, 3.4 if mm % 10 == 0 else 2.3 if mm % 5 == 0 else 1.5)
+    gh, gw, sp = 3.0, 1.9, 0.45   # a figure's height, one glyph's width and the gap between glyphs, mm
+    for cm in range(1, 16):
+        s = str(cm)
+        x0 = cm * 10 - (len(s) * gw + (len(s) - 1) * sp) / 2
+        for k, ch in enumerate(s):
+            gx = x0 + k * (gw + sp)
+            for row, bits in enumerate(FONT5X7[ch]):
+                for col, b in enumerate(bits):
+                    if b == '1':
+                        rect(gx + col * gw / 5, 4.6 + (6 - row) * gh / 7, gx + (col + 1) * gw / 5, 4.6 + (7 - row) * gh / 7)
+    write_png(path, img.reshape(H2 // 2, 2, W2 // 2, 2, 3).mean(axis=(1, 3)))
+
+def cal_lcd_png(path, reading='0.00'):
+    """The LCD: grey-green glass, the reading in italic seven-segment figures with the unlit segments faintly there (in
+    ghost, as on a real display), drawn at twice the size and box-filtered down. The jaws are closed, so it reads 0.00.
+    u 0..1 is the LCD's x, v 0..1 its y (image row 0 = its far edge)."""
+    import numpy as np
+    W2, H2 = 640, 232
+    bg = np.array(srgb_hex('#9ea88f'))
+    ink, ghost = np.array(srgb_hex('#1c201c')), bg * 0.965
+    img = np.ones((H2, W2, 3)) * bg
+    ch, cw, t, slant = 150.0, 74.0, 15.0, 0.12
+    top = (H2 - ch) / 2
+    def fill(x0, y0, x1, y1, col):   # px, y down, sheared right toward the top like a real display
+        for r in range(int(y0), int(y1)):
+            sh = (top + ch - r) * slant
+            img[r, max(0, int(x0 + sh)):min(W2, int(x1 + sh))] = col
+    def segs(x):
+        hh = ch / 2
+        return {'a': (x + t * 0.6, top, x + cw - t * 0.6, top + t), 'b': (x + cw - t, top + t * 0.6, x + cw, top + hh - t * 0.3),
+                'c': (x + cw - t, top + hh + t * 0.3, x + cw, top + ch - t * 0.6), 'd': (x + t * 0.6, top + ch - t, x + cw - t * 0.6, top + ch),
+                'e': (x, top + hh + t * 0.3, x + t, top + ch - t * 0.6), 'f': (x, top + t * 0.6, x + t, top + hh - t * 0.3),
+                'g': (x + t * 0.6, top + hh - t / 2, x + cw - t * 0.6, top + hh + t / 2)}
+    lit = {'0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abgcd', '4': 'fgbc', '5': 'afgcd', '6': 'afgedc', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg'}
+    figures = [c for c in reading if c != '.'][-3:]
+    figures = [''] * (3 - len(figures)) + figures   # three positions, right-aligned (a fourth, blank but for its ghost, drew a big pale 8 in the first check)
+    gap, pt = 24.0, 30.0
+    xs, x = [], W2 - 70.0 - cw
+    for i in range(3):
+        xs.insert(0, x)
+        x -= cw + gap + (pt if i == 1 else 0.0)   # the point sits between the second and third positions from the right
+    for x, f in zip(xs, figures):
+        for name, r in segs(x).items():
+            fill(*r, ink if f and name in lit[f] else ghost)
+    px = xs[0] + cw + (gap + pt) / 2 - t / 2 - 4
+    fill(px, top + ch - t, px + t, top + ch, ink)   # the decimal point, after the first figure (the wide gap)
+    write_png(path, img.reshape(H2 // 2, 2, W2 // 2, 2, 3).mean(axis=(1, 3)))
+
+def build_calipers(cx, cy, theta, g):
+    """The 150 mm digital caliper, closed, lying display up on the desk (see the section's note). `g`: its slot extras."""
+    import bmesh
+    P = cal_frame(cx, cy, theta)
+    scale_png, lcd_png = os.path.join(args.out_dir, 'caliper-scale.png'), os.path.join(args.out_dir, 'caliper-lcd.png')
+    cal_scale_png(scale_png)
+    cal_lcd_png(lcd_png)
+    steel = tex_mat('caliper steel', scale_png, rough=0.3, metal=1.0)   # satin stainless, the printed scale in its base colour
+    body_m = mat('caliper body', '#25272b', rough=0.55)
+    lcd_m = tex_mat('caliper lcd', lcd_png, rough=0.25)
+    btn = mat('caliper button', '#45484e', rough=0.45)
+    btn_g = mat('caliper button green', '#3f8a6c', rough=0.45)
+    btn_y = mat('caliper button yellow', '#bba443', rough=0.45)
+    T, Hf = 3.5, 1.75   # the steel's thickness, and the half each inside jaw takes so the two pass each other
+    # THE STEEL (one live mesh): the beam with its scale on top; the outside jaws, closed, their measuring faces meeting
+    # on x = 0, the outer edges tapering to a 2.4 mm nib, the last 9 mm thinned to a 1.2 mm knife edge; the inside jaws,
+    # crossed: the fixed one on the steel's lower half with its measuring edge on its left, the slider's on the upper half
+    # with its measuring edge on its right, the two edges together on x = -6.7 at zero, one spike; the slider's top strip
+    # from its inside jaw to the housing; the knurled thumb roller, its rim out of the housing's lobe; the lock screw on
+    # the slider's top edge, pointing at the wall
+    bm = bmesh.new()
+    bm.loops.layers.uv.new('UVMap')
+    # the beam from the contact line on; the head and the fixed outside jaw are ONE solid with no seam between them (the
+    # first bake drew a groove across the head where a separate beam met the jaw, and they are one piece of steel)
+    bm_box(bm, P, 0.0, 220.1, 0.0, 16.0, 0.0, T, top_uv=(12.9 / 233.0, 0.0, 1.0, 1.0))
+    bm_loft(bm, P, [(16.0, -12.9, 0.0, 0.0, T), (-3.0, -12.9, 0.0, 0.0, T), (-31.0, -4.95, 0.0, 0.0, T), (-40.0, -2.4, 0.0, 1.15, 2.35)])
+    bm_loft(bm, P, [(0.0, 0.02, 14.0, 0.0, T), (-7.0, 0.02, 14.0, 0.0, T), (-31.0, 0.02, 5.56, 0.0, T), (-40.0, 0.02, 2.4, 1.15, 2.35)])
+    bm_loft(bm, P, [(16.0, -6.7, 0.0, 0.0, Hf), (33.0, -6.7, -4.45, 0.0, Hf), (37.0, -6.7, -5.5, 0.5, Hf - 0.5)])
+    bm_loft(bm, P, [(16.0, -13.4, -6.7, Hf, T), (33.0, -8.95, -6.7, Hf, T), (37.0, -7.9, -6.7, Hf + 0.5, T - 0.5)])
+    bm_box(bm, P, -6.7, 1.5, 16.0, 20.0, Hf, T)
+    bm_wheel(bm, P, 50.5, -9.5, 'z', 6.5, 4.5, 8.0, teeth=24, depth=0.45)
+    bm_wheel(bm, P, 35.0, 6.4, 'y', 1.6, 22.0, 24.2, sides=16)
+    bm_wheel(bm, P, 35.0, 6.4, 'y', 4.6, 24.2, 27.8, teeth=18, depth=0.35)
+    st = bm_object(bm, 'cal_steel', [steel], extras={**g, 'live': 1})
+    chamfer(st, 0.00035, segments=1)
+    # THE HOUSING (one baked mesh): the display unit, rounded, with the thumb rest's lobe under its right end; then the
+    # LCD (its reading on top), two buttons above it and two below, and the raised thumb panel over the roller
+    bm = bmesh.new()
+    bm.loops.layers.uv.new('UVMap')
+    bm_box(bm, P, 1.0, 60.0, -7.0, 22.4, 0.0, 12.5)
+    bm_wheel(bm, P, 50.5, -7.5, 'z', 6.0, 1.5, 11.0, sides=40)
+    body = bm_object(bm, 'cal_body', [body_m], extras={**g, 'lm': 512})
+    chamfer(body, 0.0016, segments=3)
+    bm = bmesh.new()
+    bm.loops.layers.uv.new('UVMap')
+    bm_box(bm, P, 6.4, 39.5, 2.2, 14.1, 12.40, 12.58, mat=0, top_uv=(0.0, 0.0, 1.0, 1.0))
+    for x, y, m in ((14.7, 18.7, 1), (29.4, 18.7, 1), (14.7, -2.4, 2), (29.4, -2.4, 3)):
+        bm_wheel(bm, P, x, y, 'z', 1.3, 12.3, 13.05, mat=m, sx=2.3, sides=20)
+    bm_box(bm, P, 43.5, 58.0, -5.0, 8.4, 12.3, 12.75, mat=4)
+    parts = bm_object(bm, 'cal_body_parts', [lcd_m, btn, btn_g, btn_y, body_m])
+    join_objects([body, parts], 'cal_body')
+    def wbox(pts):
+        ws = [P(*p) for p in pts]
+        return (Vector((min(w.x for w in ws), min(w.y for w in ws), min(w.z for w in ws))),
+                Vector((max(w.x for w in ws), max(w.y for w in ws), max(w.z for w in ws))))
+    CAL_FOCUS['calipers'] = wbox([(x, y, z) for x in (-13.0, 220.0) for y in (-40.0, 37.0) for z in (0.0, 13.0)])
+    CAL_FOCUS['jaws'] = wbox([(x, y, z) for x in (-16.0, 18.0) for y in (-41.0, 38.0) for z in (0.0, 13.0)])
+
 def build_room():
     # floor and walls: planes large enough that no edge is in frame
     box('floor', (6.0, 6.0, 0.02), (0, 0, -0.01), M_FLOOR, ROOM, extras={'lm': 1024})
@@ -517,26 +785,11 @@ def build_room():
         pen = cyl('pen', 0.005, 0.14, (nb_x + 0.02, nb_y + 0.01, DESK_TOP_Z + 0.012 + 0.005), M_PEN, ROOM, verts=16, extras={'lm': 64, 'slot': 'x-', 'gap': 0.05, 'group': 'notebook'})
         pen.rotation_euler = (math.radians(90), 0, math.radians(-62))   # lying along the pad, a little off its diagonal
         # a pair of digital calipers at the front, right of the build zone and left of the mug (Joey 2026-10-23: "every 3D
-        # printer person has a pair on their desk"): a 150 mm caliper lying closed, the beam flat on the desk, the outside
-        # jaws in the desk's plane toward the front, the display housing standing 16 mm with its LCD, thumb roller and
-        # lock screw; its own slot group (x+, gap 0.04), so a wide build slides it toward the mug, which slides with it
-        def calipers(cx, cy, theta):
-            g = {'slot': 'x+', 'gap': 0.04, 'group': 'calipers'}
-            rot = (0, 0, theta)
-            c, s = math.cos(theta), math.sin(theta)
-            at = lambda x, y, z: (cx + x * c - y * s, cy + x * s + y * c, DESK_TOP_Z + z)   # the caliper's own frame (x along the beam, +y toward the display's back) onto the desk
-            box('cal_beam', (0.235, 0.016, 0.0032), at(0.0, 0.0, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 128, **g})
-            box('cal_jaw_fixed', (0.014, 0.042, 0.0032), at(-0.1105, -0.021, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 64, **g})      # the outside jaws, closed
-            box('cal_jaw_slide', (0.014, 0.042, 0.0032), at(-0.0965, -0.021, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 64, **g})
-            box('cal_jaw_fixed_in', (0.006, 0.016, 0.0032), at(-0.1145, 0.016, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 32, **g})   # the inside jaws
-            box('cal_jaw_slide_in', (0.006, 0.016, 0.0032), at(-0.1085, 0.016, 0.0016), M_STEEL, ROOM, rot=rot, extras={'lm': 32, **g})
-            housing = box('cal_housing', (0.058, 0.034, 0.016), at(-0.060, 0.0, 0.008), M_DARK, ROOM, rot=rot, extras={'lm': 256, **g})
-            chamfer(housing, 0.0015, segments=2)
-            box('cal_lcd', (0.028, 0.012, 0.0006), at(-0.056, 0.004, 0.0163), M_LCD, ROOM, rot=rot, extras={'lm': 64, **g})
-            wheel = cyl('cal_wheel', 0.006, 0.004, at(-0.040, -0.0185, 0.006), M_DARK, ROOM, verts=24, extras={'lm': 32, **g})   # the thumb roller under the housing's front edge
-            wheel.rotation_euler = (math.radians(90), 0, theta)
-            cyl('cal_lock', 0.0035, 0.003, at(-0.078, 0.011, 0.0175), M_STEEL, ROOM, verts=16, extras={'lm': 32, **g})            # the lock screw on top
-        calipers(BUILD_X + 0.22, desk_front + 0.06, math.radians(8))
+        # printer person has a pair on their desk"): a 150 mm caliper lying closed and display up, the jaws toward the
+        # desk's front, its own slot group (x+, gap 0.04), so a wide build slides it toward the mug, which slides with it.
+        # Remodelled 2026-10-24 from Mitutoyo's drawing (build_calipers): pointed jaws, live steel. 15 mm further back than
+        # the first model, whose jaws were shorter: the tips stay 13 mm inside the desk's front edge.
+        build_calipers(BUILD_X + 0.22, desk_front + 0.075, math.radians(8), {'slot': 'x+', 'gap': 0.04, 'group': 'calipers'})
     # a framed print on the back wall, above and right of the monitor
     box('frame', (0.42, 0.02, 0.32), (0.95, WALL_BACK_Y - 0.01, 1.62), M_FRAME, ROOM, extras={'lm': 256})
     box('frame_print', (0.36, 0.004, 0.26), (0.95, WALL_BACK_Y - 0.022, 1.62), M_PRINT, ROOM, extras={'lm': 256})
@@ -906,7 +1159,10 @@ def bake_room(samples):
     scene.render.bake.margin = 6
     scene.render.bake.use_clear = True
     scene.render.bake.use_selected_to_active = False
-    meshes = [o for o in ROOM.objects if o.type == 'MESH']
+    # a LIVE mesh (the caliper's steel, 2026-10-24) is drawn by the planner with its own PBR material and is not baked: a
+    # metal's diffuse bake is black. It still stands in the room while the others bake, and hides with the props.
+    meshes = [o for o in ROOM.objects if o.type == 'MESH' and not o.get('live')]
+    live_props = [o for o in ROOM.objects if o.type == 'MESH' and o.get('live') and 'slot' in o]
     images = {}
     for o in meshes:
         size = max(16, int(int(o.get('lm', 256)) * args.lm_scale))
@@ -961,10 +1217,10 @@ def bake_room(samples):
     if args.no_shadow_masks or not props:
         bake_selected(meshes, 'the room in one pass')
     else:
-        for o in props:
+        for o in props + live_props:
             o.hide_render = True
         bake_selected([o for o in meshes if 'slot' not in o], 'the fixed surfaces, props hidden')
-        for o in props:
+        for o in props + live_props:
             o.hide_render = False
         bake_selected(props, 'the props, the room visible')
     # the exported material: an unlit emission of the baked texture (exposure folded in, so the planner's linear values
@@ -992,6 +1248,12 @@ def bake_room(samples):
             emit.inputs['Strength'].default_value = 1.0
             nt.links.new(nt.nodes['BAKE'].outputs['Color'], emit.inputs['Color'])
             nt.links.new(emit.outputs['Emission'], nt.nodes['Material Output'].inputs['Surface'])
+        # one baked image under every slot now, so one material: one draw call (the caliper's housing, LCD and buttons)
+        if len(o.data.materials) > 1:
+            for p in o.data.polygons:
+                p.material_index = 0
+            while len(o.data.materials) > 1:
+                o.data.materials.pop()
         # drop the first UV channel so the exporter writes the lightmap UV as TEXCOORD_0
         while len(o.data.uv_layers) > 1:
             o.data.uv_layers.remove(o.data.uv_layers[0] if o.data.uv_layers[0].name != 'LM' else o.data.uv_layers[1])
@@ -1196,6 +1458,11 @@ if not bb:   # no kit: frame a 2W2H-sized box on the anchor so the camera number
     ax, ay, az_ = room['anchor']
     bb = (Vector((ax - 0.088, ay - 0.195, az_)), Vector((ax + 0.088, ay, az_ + 0.134)))
 cam = hero_camera(bb)
+if args.focus != 'build':   # a prop's close-up (2026-10-24): the same fit about its box, which the exposure probe then reads too
+    if args.focus not in CAL_FOCUS:   # the calipers are among the full props only (Sol 01a16def: a KeyError under --props minimal)
+        sys.exit('--focus %s needs the calipers, which only --props full builds' % args.focus)
+    bb = CAL_FOCUS[args.focus]
+    cam = hero_camera(bb)
 dev = cycles(args.samples)
 stem = os.path.join(args.out_dir, args.name)
 print('[scene] %d room meshes, kit %s, sun dir %s (Blender), camera %.2f m away at az %.0f el %.0f, fovV %.1f, device %s'
@@ -1211,7 +1478,11 @@ if args.mode == 'check':
     print('[check] saved %s' % blend)
     if args.preview:
         scene.render.engine = 'BLENDER_WORKBENCH'
-        scene.render.resolution_x, scene.render.resolution_y = 640, 427
+        scene.render.resolution_x, scene.render.resolution_y = (W, H) if args.focus != 'build' else (640, 427)
+        if args.focus != 'build':   # a close-up wants the textures (the scale, the LCD) and a light that shows the shape
+            scene.display.shading.light = 'STUDIO'
+            scene.display.shading.color_type = 'TEXTURE'
+            scene.display.shading.show_cavity = True
         scene.render.image_settings.file_format = 'PNG'
         scene.render.filepath = stem + '.preview.png'
         bpy.ops.render.render(write_still=True)
@@ -1260,8 +1531,9 @@ elif args.mode == 'bake':
     measured, peak = probe_sun()   # the direction the planner's sun light takes, so the live shadow agrees with the baked ones
     masks = []
     if args.skip_bake:
-        # flat: every material becomes an unlit emission of its own base colour (the same export path as a bake)
-        for o in [o for o in ROOM.objects if o.type == 'MESH']:
+        # flat: every material becomes an unlit emission of its own base colour (the same export path as a bake); a live
+        # mesh keeps its PBR material, as in a bake
+        for o in [o for o in ROOM.objects if o.type == 'MESH' and not o.get('live')]:
             for i, m in enumerate(o.data.materials):
                 if m.users > 1:
                     o.data.materials[i] = m = m.copy()

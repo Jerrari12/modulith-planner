@@ -1,0 +1,10 @@
+# bake4 (laptop via node0, 2026-10-24): the calipers remodelled from Mitutoyo's drawing (Joey: "the caliper tips should
+# not be square blocks but rather come to sharp points, and maybe be steel metal rather than black. Reference a pair of
+# calipers"; room.py build_calipers): pointed knife-edged jaws, crossed inside jaws, a rounded housing with its LCD
+# reading 0.00, buttons, thumb roller and lock screw, the beam's printed scale; the steel LIVE (a metallic PBR mesh the
+# bake leaves alone: a metal's diffuse bake is black, which is why the old calipers drew black), the housing one baked
+# mesh. First two close-ups for the eye at look15's light and exposure (the whole caliper; the jaws), then bake3's bake
+# exactly, so only the calipers and their shadow mask change.
+--mode look --name look16-calipers --focus calipers --kit kit/manifest.json --parts kit/parts --out-dir renders/bake4 --res 1800x1200 --samples 256 --exposure 0.15686 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 16 --cam-el 38 --lens 60 --fill 0.78 --desk-wood --desk-contrast 0.6 --desk-bump 0.3
+--mode look --name look16-jaws --focus jaws --kit kit/manifest.json --parts kit/parts --out-dir renders/bake4 --res 1800x1200 --samples 256 --exposure 0.15686 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az -24 --cam-el 30 --lens 70 --fill 0.62 --desk-wood --desk-contrast 0.6 --desk-bump 0.3
+--mode bake --name room --out-dir renders/bake4 --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3

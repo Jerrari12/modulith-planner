@@ -185,62 +185,20 @@
    "group": "notebook"
   },
   {
-   "name": "cal_beam",
+   "name": "cal_steel",
    "slot": "x+",
    "gap": 0.04,
    "group": "calipers"
   },
   {
-   "name": "cal_jaw_fixed",
-   "slot": "x+",
-   "gap": 0.04,
-   "group": "calipers"
-  },
-  {
-   "name": "cal_jaw_slide",
-   "slot": "x+",
-   "gap": 0.04,
-   "group": "calipers"
-  },
-  {
-   "name": "cal_jaw_fixed_in",
-   "slot": "x+",
-   "gap": 0.04,
-   "group": "calipers"
-  },
-  {
-   "name": "cal_jaw_slide_in",
-   "slot": "x+",
-   "gap": 0.04,
-   "group": "calipers"
-  },
-  {
-   "name": "cal_housing",
-   "slot": "x+",
-   "gap": 0.04,
-   "group": "calipers"
-  },
-  {
-   "name": "cal_lcd",
-   "slot": "x+",
-   "gap": 0.04,
-   "group": "calipers"
-  },
-  {
-   "name": "cal_wheel",
-   "slot": "x+",
-   "gap": 0.04,
-   "group": "calipers"
-  },
-  {
-   "name": "cal_lock",
+   "name": "cal_body",
    "slot": "x+",
    "gap": 0.04,
    "group": "calipers"
   }
  ],
  "glb": "room.glb",
- "glbBytes": 549116,
+ "glbBytes": 631804,
  "shadows": {
   "px": 2.0,
   "bakedWithoutProps": true,
@@ -251,22 +209,22 @@
     "group": "calipers",
     "surface": "desk",
     "file": "shadow-calipers-desk.webp",
-    "bytes": 848,
+    "bytes": 788,
     "px": [
-     148,
-     59
+     145,
+     64
     ],
-    "x0": 72.0,
-    "x1": 368.0,
+    "x0": 76.0,
+    "x1": 366.0,
     "min": 0.0,
     "zFront": 381.4,
-    "zBack": 263.3
+    "zBack": 253.3
    },
    {
     "group": "monitor",
     "surface": "desk",
     "file": "shadow-monitor-desk.webp",
-    "bytes": 3042,
+    "bytes": 3044,
     "px": [
      535,
      203
@@ -281,7 +239,7 @@
     "group": "monitor",
     "surface": "wall",
     "file": "shadow-monitor-wall.webp",
-    "bytes": 5782,
+    "bytes": 5758,
     "px": [
      630,
      382
@@ -311,7 +269,7 @@
     "group": "notebook",
     "surface": "desk",
     "file": "shadow-notebook-desk.webp",
-    "bytes": 964,
+    "bytes": 962,
     "px": [
      124,
      138
@@ -326,7 +284,7 @@
     "group": "plant",
     "surface": "desk",
     "file": "shadow-plant-desk.webp",
-    "bytes": 1954,
+    "bytes": 1950,
     "px": [
      345,
      203
@@ -341,14 +299,14 @@
     "group": "plant",
     "surface": "wall",
     "file": "shadow-plant-wall.webp",
-    "bytes": 2488,
+    "bytes": 2506,
     "px": [
      384,
      279
     ],
     "x0": -768.0,
     "x1": 0.0,
-    "min": 0.198,
+    "min": 0.199,
     "y0": -20.0,
     "y1": 538.0
    }

@@ -63,11 +63,23 @@ function loadMasks(json) {
    with a BLACK base and the bake as its EMISSIVE texture (factor white), not as KHR_materials_unlit; so the emissive map
    is the room's picture and the emissive factor its tint (2026-10-23: taking `map` alone painted the room white). A
    KHR_materials_unlit material already arrives as MeshBasicMaterial and is kept. Returns the materials it made, so
-   leave() can dispose them (their textures are the cached GLB's and stay: Terra 01a16a22). */
+   leave() can dispose them (their textures are the cached GLB's and stay: Terra 01a16a22).
+   ⚠ A LIVE mesh is the exception (room.py's `live` tag; the caliper's steel, 2026-10-24): a metal has no diffuse colour,
+   so its baked lightmap would be black, which is how the first calipers drew. It keeps the glTF's own metallic PBR
+   material (the beam's printed scale its base colour), cloned per entry because the cached GLB's is shared and the
+   room's environment is set on it once it exists (enterDoneScene). Its shadow is baked as a mask, so it casts none. */
 function unlit(root) {
   const made = [];
   root.traverse((o) => {
     if (!o.isMesh) return;
+    if (o.userData.live) {
+      const m = (Array.isArray(o.material) ? o.material[0] : o.material).clone();
+      o.material = m; made.push(m);
+      o.castShadow = false; o.receiveShadow = false;
+      o.raycast = () => {};
+      o.userData.doneRoom = true;
+      return;
+    }
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     const out = mats.map((m) => {
       if (m.isMeshBasicMaterial) return m;
@@ -403,8 +415,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const pmrem = new THREE.PMREMGenerator(renderer);
     const envScene = new THREE.Scene();
     const envRoom = group.clone(true); envRoom.position.sub(centre); envScene.add(envRoom);
+    envRoom.traverse((o) => { if (o.userData.live) o.visible = false; });   // a lit metal in a scene with no lights renders black: keep it out of the room it reflects
     parts.env = pmrem.fromScene(envScene, 0.04, 10, 60000).texture;
     pmrem.dispose();
+    // the live steel reflects the room on every tier, Fast's included (it has no scene environment of its own)
+    for (const m of parts.mats) if (m.isMeshStandardMaterial) { m.envMap = parts.env; m.needsUpdate = true; }
     // the stage's holds: background off, our environment, the shadow on whatever the theme, the camera ours
     stage.table.visible = false; stage.grid.visible = false;
     if (was.dims) stage.setDims(false);   // the brief: no dimension callouts in the room

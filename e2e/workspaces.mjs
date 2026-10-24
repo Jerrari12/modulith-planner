@@ -1337,6 +1337,14 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.ok(s1.masks.every((m) => m.visible), 'the 2W2H kit hides no prop group: every shadow shows');
   assert.ok(s1.masks.every((m) => m.multiply && m.transparent && m.depthWrite === false && m.toneMapped === false && m.order === 1 && m.colorSpace === 'srgb'), 'multiplied over the surface after the room: CustomBlending zero x source colour (three\'s MultiplyBlending is ignored on this stage), transparent, no depth write, untoned, read as sRGB: ' + JSON.stringify(s1.masks[0]));
   masksPlaced(s1.masks, roomJson, s1);
+  /* THE CALIPERS' STEEL IS LIVE (bake4, 2026-10-24; room.py build_calipers): a metal's diffuse bake is black, which is how
+     the first calipers drew, so the steel is one mesh the bake leaves alone and the scene draws as a lit metal reflecting
+     the room, on Fast too; the housing is baked like the rest of the room (one mesh, one material) */
+  const cal = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, out = {}; v.scene.getObjectByName('done-room').traverse((o) => { if (o.isMesh && o.userData.group === 'calipers') out[o.name] = { live: !!o.userData.live, type: o.material.type, metal: o.material.metalness, envSet: !!o.material.envMap, map: !!o.material.map, cast: o.castShadow, visible: o.visible }; }); return out; });
+  assert.deepEqual(Object.keys(cal).sort(), ['cal_body', 'cal_steel'], `the calipers are two meshes, steel and housing (${Object.keys(cal)})`);
+  assert.equal(cal.cal_steel.live, true, 'the steel is tagged live'); assert.equal(cal.cal_steel.type, 'MeshStandardMaterial', 'the steel is a lit material, not a baked one'); assert.equal(cal.cal_steel.metal, 1, 'a metal');
+  assert.equal(cal.cal_steel.envSet, true, 'it reflects the room, on Fast too (no scene environment there)'); assert.equal(cal.cal_steel.map, true, 'the beam\'s printed scale'); assert.equal(cal.cal_steel.cast, false, 'its shadow is the baked mask, not the shadow map');
+  assert.equal(cal.cal_body.live, false, 'the housing is baked'); assert.equal(cal.cal_body.type, 'MeshBasicMaterial', 'drawn as its lightmap');
   assert.match(await text(page, '#ws-player .text'), /Watch the final scene/, 'the End page named the way in');
   /* THE INTERIOR HIDDEN and THE RELIEF BY DISTANCE (PERF.md §5, 2026-10-24). In the scene the parts inside the assembled
      units (drawer bodies, stoppers, QuickLocks, magnet clips and magnets) are not drawn: meshes, not groups, so

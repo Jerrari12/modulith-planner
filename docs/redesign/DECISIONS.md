@@ -3235,3 +3235,29 @@ Dated calls made while building, with who made them. The brief and the inventory
   each (the height ruler's two sides: the flake of 2026-10-23); nothing in this change runs on the End page.
 - **Known uncovered path.** The e2e cannot tell a cut's or landing's own relief decision (setCam) from the entrance's,
   because every current shot decides the same way; the grammar's macro shot will give it a differential case.
+
+## 2026-10-24 (the Done scene: the calipers remodelled, their steel live; bake4)
+
+- **What.** Joey: "they are in clear view and modeled very blocky, mostly the caliper tips should not be square blocks
+  but rather come to sharp points, and maybe be steel metal rather than black. Reference a pair of calipers to improve
+  their design." Remodelled from Mitutoyo's catalog drawing of the ABSOLUTE Digimatic 0-150 mm (500-196-30; Mitutoyo
+  America, Small Tool Instruments p. D-6: L 233 mm, outside jaws 40 mm, inside jaws 21 mm above the beam, beam 16 mm),
+  in room.py `build_calipers`: tapered outside jaws meeting in a point with knife-edged tips, crossed inside jaws, a
+  rounded housing with an LCD reading 0.00, four buttons, the knurled roller and the lock screw, the beam's printed
+  scale. 15 mm further back on the desk, so the longer jaws' tips stay 13 mm inside its front edge. Behind the same
+  `?done=room` flag; not deployed.
+- **Why they drew black, and the fix.** A metal has no diffuse colour, so its diffuse lightmap bakes black. The steel is
+  now one mesh tagged `live`: bake_room skips it (and hides it with the props in the fixed surfaces' pass, so its
+  shadow lands in its mask), the glTF carries its metallic PBR material with the scale as base colour, and done.js keeps
+  it, cloned per entry, with the room's environment as its envMap on every tier, no shadow casting, and out of the
+  environment capture. The housing bakes as one mesh; bake_room collapses a baked mesh's material slots to one, so the
+  calipers are 2 draw calls (were 9) and the room 39 meshes (were 46).
+- **Checks.** Local Workbench previews; Cycles close-ups and the bake on node0 (round bake4, twice: the first showed a
+  seam across the head, merged into the fixed jaw; node0_render.py fetches only files it does not already have, so the
+  second round's outputs were copied by hand); the installed GLB inspected (cal_steel metallic PBR with its texture and
+  `live` extras, cal_body one emissive primitive; room.json changed only in the calipers' mask); the planner's view by
+  the new `tools/done-scene/prop-view.mjs`. e2e: the first Done case asserts the two meshes, the live metal with its
+  envMap and map and no shadow, the baked housing; three mutants killed (the live branch removed, no envMap, the steel
+  casting). npm test 631, 626 pass, 0 fail, 5 skipped; the six room e2e cases 6 of 6.
+- **Review.** Sol `01a16def` (substantial: a multi-file change and a new bake rule), one finding, confirmed and fixed:
+  `--focus` under `--props minimal` was a KeyError; it now exits with a message. Nothing discarded.
