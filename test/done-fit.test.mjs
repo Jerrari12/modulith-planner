@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -101,7 +101,22 @@ test('the tabletop shots are three, each fittable, the detail closest, and the s
   assert.equal(easeInOut(0), 0); assert.equal(easeInOut(1), 1); close(easeInOut(0.5), 0.5, 1e-12, 'symmetric');
 });
 
-test('driftTooSlow: a drift drawn under 20 fps on average ends the sequence; a smooth one or too few frames does not', () => {
+test('sequenceMode: drifts above Fast; cuts on Fast and after a slow verdict; none under reduced motion or for a stage, whatever the tier', () => {
+  assert.equal(sequenceMode({ tier: 'veryhigh' }), 'drift');
+  assert.equal(sequenceMode({ tier: 'high' }), 'drift');
+  assert.equal(sequenceMode({ tier: 'balanced' }), 'drift');
+  assert.equal(sequenceMode({ tier: 'fast' }), 'cut', 'Fast holds and cuts (Joey 2026-10-23), it no longer keeps the hero');
+  assert.equal(sequenceMode({ tier: 'high', slow: true }), 'cut', 'a slow first drift turns the sequence to cuts');
+  assert.equal(sequenceMode({ tier: 'fast', slow: true }), 'cut');
+  assert.equal(sequenceMode({ tier: 'high', reduced: true }), 'off', 'reduced motion: the still hero');
+  assert.equal(sequenceMode({ tier: 'fast', reduced: true }), 'off', 'reduced motion beats Fast: no cuts either');
+  assert.equal(sequenceMode({ tier: 'fast', reduced: true, slow: true }), 'off');
+  assert.equal(sequenceMode({ tier: 'high', sequence: false }), 'off', 'a stage (Colors) never sequences');
+  assert.equal(sequenceMode({ tier: 'fast', sequence: false }), 'off');
+  assert.equal(sequenceMode({ tier: 'fast', sequence: false, slow: true }), 'off');
+});
+
+test('driftTooSlow: a drift drawn under 20 fps on average turns the sequence to cuts; a smooth one or too few frames does not', () => {
   assert.equal(driftTooSlow([16, 17, 16, 18, 16]), false, '60 fps');
   assert.equal(driftTooSlow([45, 48, 52, 55, 60, 70]), true, 'under 20 fps on average');
   assert.equal(driftTooSlow([300, 350]), false, 'two intervals are no evidence');

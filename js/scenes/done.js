@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
+import { shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -89,7 +89,7 @@ function contactTexture() {
 export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true } = {}) {
   const { scene, camera, controls, renderer } = stage;
   let cancelled = false, on = false;
-  const parts = { group: null, catcher: null, sprite: null, env: null, tex: null, mats: [], raf: 0 };
+  const parts = { group: null, catcher: null, wall: null, sprite: null, env: null, tex: null, mats: [], raf: 0 };
   const was = { table: stage.table.visible, grid: stage.grid.visible,
     sun: { pos: stage.sun.position.clone(), color: stage.sun.color.clone(), intensity: stage.sun.intensity },
     hemi: { color: stage.hemi.color.clone(), ground: stage.hemi.groundColor.clone(), intensity: stage.hemi.intensity },
@@ -103,12 +103,17 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      fitted to this build (done-fit.js: the clock, the shots, the easing). A drift runs on animation frames; a hold runs
      on ONE timer, so the stage sees a still camera and the idle gate rests (Very High converges in the holds: a camera
      that never stops never settles, and the gate is the number the branch keeps). Not under reduced motion (the still
-     hero) and not on Fast (the brief: a fixed hero camera there). A hidden tab pauses the clock. A grab (any orbit)
-     pauses it too; IDLE_BACK_MS after the last gesture the camera drifts into the next shot from wherever it was left. */
+     hero). On Fast, and on a device whose first drift was judged too slow, the sequence CUTS instead of drifting
+     (done-fit.js sequenceMode; Joey 2026-10-23: keep the look, "the camera just stays stationary for a bit before
+     changing angle, rather than animating it"): the hold ends and the camera is on the next shot, one frame, no drawer
+     moment. A hidden tab pauses the clock. A grab (any orbit) pauses it too; IDLE_BACK_MS after the last gesture the
+     camera drifts, or cuts, into the next shot from wherever it was left. */
   const seq = { on: false, t0: 0, raf: 0, timer: 0, startTimer: 0, idleTimer: 0, pausedAt: null, from: null, movingTo: -1, cams: [], timing: { ...SEQUENCE }, grabbed: false,
-    intervals: [], lastFrame: 0, slow: false, judged: false };   // the FIRST drift's frame intervals are the device's verdict (driftTooSlow), given once: a device that cannot drift smoothly keeps the hero; a later stall is not a verdict (Sol 01a16b2a)
+    intervals: [], lastFrame: 0, slow: false, judged: false };   // the FIRST drift's frame intervals are the device's verdict (driftTooSlow), given once: a device that cannot drift smoothly cuts from then on; a later stall is not a verdict (Sol 01a16b2a)
   const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
-  const sequenceWanted = (tier) => sequence && !reduced && (tier || stage.quality) !== 'fast';
+  const mode = (tier) => sequenceMode({ tier: tier || stage.quality, reduced, sequence, slow: seq.slow });
+  const sequenceWanted = (tier) => mode(tier) !== 'off';
+  const cutting = (tier) => mode(tier) === 'cut';
   /* THE DRAWER MOMENT (done-fit.js DRAWER): in the detail shot's hold, the unit the shot looks at slides its drawer out
      by a fraction of its travel and back before the drift. The unit is chosen once per entry (a labelled unit with a
      drawer, else any with one, nearest the front-left); the detail shot aims at it. Closed early by a grab, a hidden
@@ -145,6 +150,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const now = performance.now();
     const s = sequenceAt(now - seq.t0, seq.cams.length, seq.timing);
     if (s.moving) {
+      if (cutting()) {   // a CUT: no frames spent on the move; the camera is on the next shot and that shot's hold begins now (the clock re-based on it)
+        seq.movingTo = -1; drawerCancel(); setCam(seq.cams[s.to]);
+        seq.t0 = now - s.to * (seq.timing.holdMs + seq.timing.moveMs);
+        stage.invalidateFrame();
+        seq.timer = setTimeout(seqTick, Math.max(16, seq.timing.holdMs));
+        return;
+      }
       if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; drawerCancel(); }   // a drift starts from wherever the camera IS (a grab may have moved it); a drawer still out goes back
       else if (!seq.judged) { seq.intervals.push(now - seq.lastFrame); seq.lastFrame = now; }
       const b = seq.cams[s.to];
@@ -154,11 +166,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     } else {
       if (seq.movingTo !== -1) {   // land exactly on the shot, then be still
         seq.movingTo = -1; setCam(seq.cams[s.at]);
-        /* the drift that just ended is the device's own measurement: a weak GPU or a phone that drew it as a slideshow
-           (under 20 fps on average) keeps this shot for the rest of the visit rather than drifting again. Decided once;
-           the tier's auto-downgrade is one-way and slower to notice. */
-        if (!seq.judged) { seq.judged = true; if (driftTooSlow(seq.intervals, seq.timing.maxFrameMs, seq.timing.moveMs)) { seq.slow = true; seqStop(); return; } }
-        if (shotsFor()[s.at].name === 'detail') drawerSchedule(seq.timing.holdMs);   // the drawer moment, in this hold
+        /* the drift that just ended is the device's own measurement: a weak GPU or a phone that drew it under 20 fps cuts
+           between the shots for the rest of the visit rather than drifting again (sequenceMode: the look is baked, a cut
+           is one frame). Decided once; the tier's auto-downgrade is one-way and slower to notice. */
+        if (!seq.judged) { seq.judged = true; if (driftTooSlow(seq.intervals, seq.timing.maxFrameMs, seq.timing.moveMs)) seq.slow = true; }
+        if (!cutting() && shotsFor()[s.at].name === 'detail') drawerSchedule(seq.timing.holdMs);   // the drawer moment, in this hold (it animates: none when cutting)
       }
       seq.timer = setTimeout(seqTick, Math.max(16, s.holdLeft));
     }
@@ -226,6 +238,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // the tier's shadow or the baked disc, never both; applyQuality has just reset the rig's intensities on a tier change
     const shadow = !!(stage.QUALITY[tier || stage.quality] || {}).shadow;
     if (parts.catcher) parts.catcher.visible = shadow;
+    if (parts.wall) parts.wall.visible = shadow;
     if (parts.sprite) parts.sprite.visible = !shadow;
   }
   function placeCamera(animate) {
@@ -277,6 +290,20 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     catcher.receiveShadow = true; catcher.castShadow = false; catcher.renderOrder = 1; catcher.raycast = () => {};
     catcher.userData.doneRoom = true;
     parts.catcher = catcher; scene.add(catcher);
+    /* ... and one standing just in front of the WALL behind the desk (Joey 2026-10-23: the props' baked shadows climb the
+       wall, the build's live one stopped at the desk's back edge, since only the desk top caught it). The wall's surface
+       is the wall anchor's plane (the GLB's anchor_wall, else room.json's anchors against the tabletop one); the catcher
+       spans the desk run with a margin and reaches 1.6 m up. Inside the shadow frustum: the sun 1200 mm out, far 3000. */
+    const wallAnchor = group.getObjectByName('anchor_wall');
+    const wallZ = wallAnchor ? wallAnchor.getWorldPosition(new THREE.Vector3()).z
+      : (json.anchors && json.anchors.wall && json.anchors.tabletop ? anchorWorld.z + (json.anchors.wall[2] - json.anchors.tabletop[2]) : null);
+    if (wallZ != null) {
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
+      wall.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, 800, wallZ + 0.3);   // a plane facing +z: toward the desk
+      wall.receiveShadow = true; wall.castShadow = false; wall.renderOrder = 1; wall.raycast = () => {};
+      wall.userData.doneRoom = true;
+      parts.wall = wall; scene.add(wall);
+    }
     const fp = contactFootprint(plain(buildBox));
     parts.tex = contactTexture();
     const sprite = new THREE.Mesh(new THREE.PlaneGeometry(fp.w, fp.d).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: parts.tex, transparent: true, depthWrite: false, toneMapped: false }));
@@ -302,7 +329,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     addEventListener('resize', refit);
     document.addEventListener('visibilitychange', onVisibility);
     controls.addEventListener('start', onGrabStart); controls.addEventListener('end', onGrabEnd);
-    if (debug) window.__GEN2_DONE__ = { get sequence() { return { on: seq.on, wanted: sequenceWanted(), paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
+    if (debug) window.__GEN2_DONE__ = { get sequence() { return { on: seq.on, wanted: sequenceWanted(), mode: mode(), cams: seq.cams.map((c) => [c.position.x, c.position.y, c.position.z]), paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
       setTiming(t) { Object.assign(seq.timing, t); seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict
       jump(i) { if (!seq.on) return; cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); seq.t0 = performance.now() - i * (seq.timing.holdMs + seq.timing.moveMs); seq.pausedAt = null; seq.movingTo = -2; seqTick(); } };   // to the start of shot i's hold (-2: "land on it")
     if (!tracked) { tracked = true; stage.track('done:room'); }
@@ -339,7 +366,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     controls.removeEventListener('start', onGrabStart); controls.removeEventListener('end', onGrabEnd);
     if (debug) delete window.__GEN2_DONE__;
     delete document.documentElement.dataset.done;
-    for (const k of ['group', 'catcher', 'sprite']) { const o = parts[k]; if (o) { scene.remove(o); if (o.geometry && k !== 'group') o.geometry.dispose(); if (o.material && k !== 'group') o.material.dispose(); parts[k] = null; } }
+    for (const k of ['group', 'catcher', 'wall', 'sprite']) { const o = parts[k]; if (o) { scene.remove(o); if (o.geometry && k !== 'group') o.geometry.dispose(); if (o.material && k !== 'group') o.material.dispose(); parts[k] = null; } }
     if (parts.tex) { parts.tex.dispose(); parts.tex = null; }
     for (const m of parts.mats) m.dispose();   // the room's own materials; their textures are the cached GLB's
     parts.mats = [];
@@ -359,8 +386,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function onQuality(tier) {
     if (!on) return;
     applyLights(tier);
-    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); }
-    else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // Fast: the fixed hero, and no sequence still to start (Sol 01a16b2a)
+    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); else if (cutting(tier)) drawerCancel(); }   // a drop to Fast mid-hold: the drawer's timers would outlive it, and cuts have no drawer moment (Terra 01a16b6b)
+    else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a). A drop to Fast lands a running drift at its next tick (cutting)
   }
   const handle = { leave, onQuality, refit, recenter, get on() { return on; } };
   return { ready, leave };

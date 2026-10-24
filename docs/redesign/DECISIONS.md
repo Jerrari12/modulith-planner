@@ -2951,3 +2951,40 @@ Dated calls made while building, with who made them. The brief and the inventory
   still hero that Fast and the slow-drift verdict give today. The room's look is baked, so a cut costs one frame; it
   would be the SEQUENCE timing with `moveMs` 0 and the drawer moment off. Not built; `done-fit.js`'s comment ("the
   still hero is better than a slideshow") was a judgment, not a measurement, and Joey has not seen the cut version.
+
+## 2026-10-23 (the Done scene: cuts for weak devices, and the build's shadow on the wall)
+
+- **Cuts (Joey's call).** On the question in the previous entry he said: "Yes: build the cut-based sequence on done-scene.
+  Hold, cut, hold on Fast and on the slow-drift verdict, drawer moment off, reduced motion keeps the still hero." Until
+  now Fast kept the fixed hero and a device whose first drift was drawn under 20 fps STOPPED the sequence on the shot it
+  reached (a judgment written as "the still hero is better than a slideshow", never measured or shown to Joey). Now
+  `done-fit.js` has `sequenceMode({ tier, reduced, sequence, slow })` → `drift | cut | off`: cuts on Fast and after the
+  verdict; off under reduced motion and for the room as a stage (Colors' `sequence: false`), whatever the tier. In
+  `done.js` a cut skips the move phase: at the hold's end the camera is set on the next shot, one frame is asked for, the
+  clock is re-based so that shot's hold begins now, the hold timer is set; `movingTo` never leaves -1, no frames are
+  drawn moving, and the idle gate rests between cuts (the room's look is baked, so a cut is one frame). No drawer moment
+  while cutting (it animates). The verdict turns the sequence to cuts from the shot the drift reached instead of ending
+  it. A grab's return after 6 s of stillness is a cut too. The entrance move (900 ms) is unchanged on every tier. The
+  debug hook reports `mode` and the shots' positions (`cams`).
+- **The wall shadow (Joey, in the same hour):** "the modulith build is only casting a shadow on the table but not the wall
+  like the pre-baked shadows." The live shadow had one ShadowMaterial catcher, the desk top. A second one stands 0.3 mm
+  in front of the wall surface (the GLB's `anchor_wall`, else room.json's wall anchor against the tabletop one: 44 mm
+  behind the build's back), the desk run plus 1.2 m wide and 1.6 m tall, shown and hidden with the tier's shadow like the
+  desk one, disposed with it on leave. Checked at High (headless): the shadow continues from the desk up the wall in the
+  props' baked direction. Inside the shadow frustum by construction (the receivers lie on the caster's own light rays;
+  far 3000 mm, the sun 1200 mm out).
+- **Review** (Terra, routine, thread 01a16b6b): one finding, confirmed and fixed: a drop to Fast during the detail hold
+  left the drawer's timers running, so the drawer animated in cut mode; `onQuality` now cancels the drawer when the tier
+  turns to cuts. None discarded.
+- **Checks (laptop).** Unit: `sequenceMode`'s table (done-fit 10 of 10). e2e, the sequence case: Fast runs as cuts (on,
+  mode `cut`; still through the hold, then exactly on the next shot, `movingTo` -1; a 6 s detail hold with the drawer
+  closed, a hold long enough for the beat so "closed" means off); the Fast-drop step (the drawer closed at once, the
+  unit slid back, the sequence on); the device's own verdict (the sequence on either way, cuts when slow); and the
+  verdict FORCED through `maxFrameMs: 0.001`, so the turn to cuts is checked on a GPU too (a cut follows, never
+  "moving"). The first Done case counts two catchers, hidden on Fast, shown on Balanced. Seven mutants killed: cutting
+  never true; Fast gets no sequence; the verdict still ends it (it SURVIVED on the device's own verdict, since this
+  laptop's SwiftShader drew the 2 s drift fast enough this time; the forced-verdict step kills it); the drawer runs
+  while cutting (it survived too until the hold was long enough for the beat: a 3 s hold had no room for the drawer, so
+  "closed" proved nothing); the wall catcher ignores the tier; no wall catcher; the Fast drop leaves the timers. npm test
+  628 tests, 623 pass, 0 fail, 5 skipped; goldens 60 shots, 0 differ; the Colors cases 2 of 2 with the cuts code. Not
+  deployed.

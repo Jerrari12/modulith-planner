@@ -1291,7 +1291,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
     await btn(page, 'Next', '#ws-player').click();
     await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
   };
-  const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; let catcher = null, disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) catcher = o.visible; else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } }); return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme, sunHalfDeg: v.sunHalfDeg, sunMM: Math.round(v.sun.position.distanceTo(v.sun.target.position)), shadowFar: v.sun.shadow.camera.far }; });
+  const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; const vis = []; let disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) vis.push(o.visible); else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } }); const catcher = vis.length ? (vis.every(Boolean) ? true : vis.some(Boolean) ? 'mixed' : false) : null; return { catchers: vis.length, held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme, sunHalfDeg: v.sunHalfDeg, sunMM: Math.round(v.sun.position.distanceTo(v.sun.target.position)), shadowFar: v.sun.shadow.camera.far }; });
   // off: nothing of the room
   const off = await open('assemble');
   await toDone(off.page);
@@ -1310,6 +1310,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s1.bg, null, 'no stage background behind the room'); assert.equal(s1.controls, true, 'the orbit stays for a grab (the sequence drifts back after it)');
   assert.equal(s1.grid, false, 'the grid is hidden'); assert.equal(s1.table, false, 'the table is hidden'); assert.equal(s1.dims, false, 'no callouts in the room');
   assert.equal(s1.quality, 'fast', 'the suite pins Fast'); assert.equal(s1.shadow, false, 'Fast has no shadow map'); assert.equal(s1.disc, true, 'Fast shows the baked contact disc'); assert.equal(s1.catcher, false);
+  assert.equal(s1.catchers, 2, 'two shadow catchers: the desk top and the wall behind it (2026-10-23), both hidden on Fast');
   assert.match(await text(page, '#ws-player .text'), /on a desk/, 'the player says where the build is');
   // a tier with shadows, still on the DARK theme (which has no shadow map of its own): the room's sun casts, the catcher shows
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
@@ -1317,7 +1318,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   const s2 = await state(page);
   assert.equal(s2.room, true); assert.equal(s2.held, true); assert.notEqual(s2.theme, 'light', 'still the dark stage (named night)'); assert.equal(s2.quality, 'balanced');
   assert.equal(s2.env, true, 'Balanced has an environment'); assert.equal(s2.envIsStudio, false, 'and it is the room\'s, not the studio\'s: the tier change did not put studioEnv back');
-  assert.equal(s2.shadow, true, 'the sun shadow is on under the dark theme'); assert.equal(s2.catcher, true, 'the catcher shows'); assert.equal(s2.disc, false, 'the disc hides');
+  assert.equal(s2.shadow, true, 'the sun shadow is on under the dark theme'); assert.equal(s2.catcher, true, 'both catchers show (desk and wall)'); assert.equal(s2.disc, false, 'the disc hides');
   // the room's sun, not the studio's (2026-10-23): inside the shadow camera's far plane (3000 mm out, the desk behind the
   // build was clipped to a sliver), and Very High's soft-shadow cone is the room's sun disc, not the studio's 6 degrees
   assert.ok(s2.sunMM < s2.shadowFar - 500, `the sun sits inside the shadow frustum (${s2.sunMM} mm of ${s2.shadowFar})`);
@@ -1340,9 +1341,10 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
 });
 
 /* THE CAMERA SEQUENCE (the Done scene's second slice, 2026-10-23): above Fast the camera holds on a shot and drifts to the
-   next; between drifts it is STILL (the idle gate's condition); under reduced motion it never leaves the hero; Fast keeps
-   the fixed hero. The timing is shortened through the debug hook so the case takes seconds, not minutes. */
-test('Assemble: the Done scene\'s camera drifts between shots and holds still between drifts; reduced motion and Fast keep the hero', async () => {
+   next; between drifts it is STILL (the idle gate's condition); under reduced motion it never leaves the hero; Fast, and a
+   device whose first drift was too slow, hold and CUT instead of drifting (Joey 2026-10-23). The timing is shortened
+   through the debug hook so the case takes seconds, not minutes. */
+test('Assemble: the Done scene\'s camera drifts between shots and holds still between drifts; Fast and a slow device cut instead; reduced motion keeps the hero', async () => {
   const cam = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(2)); });
   const seqOf = (page) => page.evaluate(() => (window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence) || null);
   const toDone = async (page) => {
@@ -1351,11 +1353,27 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
     await btn(page, 'Next', '#ws-player').click();
     await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
   };
-  // Fast (the suite's pin): the fixed hero, no sequence
+  // Fast (the suite's pin): the sequence runs as CUTS: a hold, then the camera is on the next shot at once, never part-way,
+  // and no drawer moment (it animates). Short clock: hold 1.5 s and a 0.8 s "move" that a cut skips.
   const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
   await toDone(page);
   await settle(page, 1500);
-  assert.equal((await seqOf(page)).on, false, 'Fast: no sequence');
+  const f0 = await seqOf(page);
+  assert.equal(f0.on, true, 'Fast: the sequence is on'); assert.equal(f0.mode, 'cut', 'as cuts');
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1500, moveMs: 800, maxFrameMs: 1e9 }));
+  await settle(page, 200);
+  const k0 = await cam(page);
+  await settle(page, 600);
+  assert.deepEqual(await cam(page), k0, 'still in the hold');
+  await page.waitForFunction((k0) => { const p = window.__GEN2_VIEWER__.camera.position; return Math.abs(p.x - k0[0]) > 1 || Math.abs(p.z - k0[2]) > 1; }, k0, { timeout: 6000 }).catch(() => assert.fail('the cut never came'));
+  const fs = await seqOf(page), k1 = await cam(page);
+  assert.equal(fs.movingTo, -1, 'a cut is never "moving"'); assert.ok(fs.at >= 1, 'on a later shot');
+  assert.ok(fs.cams[fs.at].every((v, i) => Math.abs(v - k1[i]) < 0.5), `the camera sits exactly on shot ${fs.at}, not part-way along a drift (${k1.slice(0, 3)} vs ${fs.cams[fs.at].map((n) => n.toFixed(2))})`);
+  // the drawer moment is off in cuts: the detail hold passes with the drawer closed
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 6000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });   // a hold long enough for the whole beat (drawerBeat: 5 s), so "closed" means off, not "no room for it"
+  await settle(page, 1800);   // past the beat's 0.7 s and the 380 ms slide
+  const fd = await page.evaluate(() => window.__GEN2_DONE__.sequence.drawer);
+  assert.ok(fd.unit != null, 'a drawer unit was picked all the same'); assert.equal(fd.open, false, 'no drawer moment when cutting');
   // Balanced: the sequence runs - a short clock: hold 1.5 s, drift 0.8 s; the slow-drift guard off for the clock's own
   // checks (a software renderer draws a short drift as a handful of frames, which is no verdict: it gets its own check below)
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
@@ -1416,14 +1434,36 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
   await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return !d.open && Math.abs(window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0) < 2; }, dz0.z, { timeout: 6000 }).catch(() => assert.fail('the drawer did not go back'));
   const dz2 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z, at: window.__GEN2_DONE__.sequence.at }; });
   assert.equal(dz2.open, false, 'and back'); assert.ok(Math.abs(dz2.z - dz0.z) < 2, 'the unit is where it was'); assert.equal(dz2.at, 2, 'still in the detail hold: back before the drift');
-  // the slow-drift guard: one long drift with the guard on is the device's verdict. A real GPU drifts smoothly and the
-  // sequence goes on; the CI runner's SwiftShader draws it under 20 fps and the sequence ends on the shot it reached
-  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 200, moveMs: 2000, maxFrameMs: 50 }));
+  // a drop to Fast while the drawer is out: the drawer is closed at once (the flag, then the 320 ms slide back) and the
+  // hold goes on as cuts (Terra 01a16b6b: the drawer's timers outlived the tier change). Balanced again after, for the guard.
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.drawer.open, null, { timeout: 3000 }).catch(() => assert.fail('the drawer did not open for the Fast-drop check'));
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('fast', { user: true }); });
+  const fq = await seqOf(page);
+  assert.equal(fq.mode, 'cut', 'Fast: cuts'); assert.equal(fq.on, true, 'the sequence went on'); assert.equal(fq.drawer.open, false, 'the drop to Fast closed the drawer at once');
+  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return Math.abs(window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0) < 2; }, dz0.z, { timeout: 4000 }).catch(() => assert.fail('the drawer did not slide back after the drop to Fast'));
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await settle(page, 300);
+  // the slow-drift guard: one long drift with the guard on is the device's verdict. A real GPU drifts smoothly and keeps
+  // drifting; the CI runner's SwiftShader draws it under 20 fps and the sequence goes on as CUTS from the shot it reached
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 600, moveMs: 2000, maxFrameMs: 50 }));
   // until the first drift has landed (on shot 1) or the guard has spoken; polled, since a slow machine lands late
-  await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return !s.on || s.slow || (s.at === 1 && s.movingTo === -1); }, null, { timeout: 30_000 }).catch(async () => assert.fail('the first drift never landed: ' + JSON.stringify(await seqOf(page))));   // 30 s: a loaded SwiftShader draws a 2.2 s beat as a handful of frames seconds apart
+  await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return !s.on || s.slow || (s.at >= 1 && s.movingTo === -1); }, null, { timeout: 30_000 }).catch(async () => assert.fail('the first drift never landed: ' + JSON.stringify(await seqOf(page))));   // 30 s: a loaded SwiftShader draws a 2.6 s beat as a handful of frames seconds apart
   const g = await seqOf(page);
   if (process.env.E2E_SOFT) assert.equal(g.slow, true, 'SwiftShader: the drift was too slow');
-  assert.equal(g.on, !g.slow, 'a slow drift ends the sequence; a smooth one does not');
+  assert.equal(g.on, true, 'the verdict never ends the sequence'); assert.equal(g.mode, g.slow ? 'cut' : 'drift', 'a slow drift turns it to cuts; a smooth one keeps drifting');
+  // and it goes on: the next shot is reached (a cut after the hold on a slow device, a drift on a smooth one), still on
+  await page.waitForFunction((from) => { const s = window.__GEN2_DONE__.sequence; return s.on && s.movingTo === -1 && s.at !== from; }, g.at, { timeout: 15_000 }).catch(async () => assert.fail('the sequence did not reach another shot: ' + JSON.stringify(await seqOf(page))));
+  const g2 = await seqOf(page);
+  assert.equal(g2.on, true, 'still on at the next shot'); if (g.slow) assert.equal(g2.movingTo, -1, 'cuts: never "moving"');
+  // the verdict FORCED (a frame budget no drift can meet), so the turn to cuts is checked on any machine, a GPU included:
+  // the sequence goes on, as cuts, and reaches another shot without "moving"
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 600, moveMs: 800, maxFrameMs: 0.001 }));
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.slow, null, { timeout: 15_000 }).catch(async () => assert.fail('the forced verdict never came: ' + JSON.stringify(await seqOf(page))));
+  const v = await seqOf(page);
+  assert.equal(v.on, true, 'the slow verdict turns the sequence to cuts, it does not end it'); assert.equal(v.mode, 'cut');
+  await page.waitForFunction((from) => { const s = window.__GEN2_DONE__.sequence; return s.on && s.at !== from; }, v.at, { timeout: 10_000 }).catch(async () => assert.fail('no cut followed the verdict: ' + JSON.stringify(await seqOf(page))));
+  assert.equal((await seqOf(page)).movingTo, -1, 'cuts after the verdict: never "moving"');
   // Back stops it
   await btn(page, 'Back', '#ws-player').click();
   await settle(page, 1200);

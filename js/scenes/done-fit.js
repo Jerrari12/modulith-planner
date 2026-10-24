@@ -83,18 +83,29 @@ export const SHOTS = {
     { name: 'detail', az: 30, el: 10, fovV: 29.9, fill: 1.4, targetLift: -0.3, targetShift: { x: -0.18, z: 0.3 } },
   ],
 };
-export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50, idleBackMs: 6000 };   // the style doc: shots of 8-12 s, eased drifts between them, a grabbed camera drifts back ~6 s after the last gesture; a drift slower than 20 fps on average ends the sequence (a weak device holds the hero)
+export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50, idleBackMs: 6000 };   // the style doc: shots of 8-12 s, eased drifts between them, a grabbed camera drifts back ~6 s after the last gesture; a drift slower than 20 fps on average turns the sequence to CUTS (sequenceMode)
 
 /* A drift's verdict from the frames it drew: too slow when it drew fewer frames than a drift at `maxFrameMs` a frame
- * (20 fps) would have over its `moveMs` (a potato or a phone: the still hero is better than a slideshow). Counting frames
- * against the drift's length, rather than averaging intervals, catches the slowest device too: a machine that draws a
- * two-second drift as three frames has too few intervals for a mean to trust (2026-10-23, SwiftShader on a laptop CPU).
- * Without `moveMs` the older rule applies: the mean interval over `maxFrameMs`, four intervals or more. */
+ * (20 fps) would have over its `moveMs` (a potato or a phone: it holds and cuts from then on, see sequenceMode). Counting
+ * frames against the drift's length, rather than averaging intervals, catches the slowest device too: a machine that
+ * draws a two-second drift as three frames has too few intervals for a mean to trust (2026-10-23, SwiftShader on a
+ * laptop CPU). Without `moveMs` the older rule applies: the mean interval over `maxFrameMs`, four intervals or more. */
 export function driftTooSlow(intervals, maxFrameMs = SEQUENCE.maxFrameMs, moveMs = null) {
   if (!intervals) return false;
   if (moveMs) return (intervals.length + 1) * maxFrameMs < moveMs;
   if (intervals.length < 4) return false;
   return intervals.reduce((a, b) => a + b, 0) / intervals.length > maxFrameMs;
+}
+
+/* Which sequence a visit gets. 'drift': hold, then an eased drift to the next shot. 'cut': hold, then the camera is on the
+ * next shot at once and holds again - no frames spent moving and no drawer moment (it animates). 'off': the still hero.
+ * Cuts are for the Fast tier and for a device whose first drift was judged too slow (Joey, 2026-10-23: keep the look on
+ * weak machines and phones, "the camera just stays stationary for a bit before changing angle, rather than animating it";
+ * the room's look is baked, so a cut costs one frame and the idle gate rests between). Reduced motion gets none, whatever
+ * the tier, and so does the room used as a stage (`sequence: false`, the Colors workspace). */
+export function sequenceMode({ tier, reduced = false, sequence = true, slow = false } = {}) {
+  if (!sequence || reduced) return 'off';
+  return tier === 'fast' || slow ? 'cut' : 'drift';
 }
 
 export const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
