@@ -4889,13 +4889,16 @@ function buyFilamentEvent(pick) {
   return 'buy:filament:' + (src ? slug(src.brand + '-' + src.line) : 'unknown');
 }
 
-/* Which hosts pay a commission. HOST-driven so the "· paid link" marking and
-   the disclosures can never drift from the truth of an individual URL — the
-   filament menu mixes Amazon (paid) with Polymaker/Printed Solid (plain), so a
+/* Which hosts pay a commission. HOST-driven so rel=sponsored and the disclosure
+   lines can never drift from the truth of an individual URL — the filament
+   menu mixes Amazon and Polymaker (paid) with Printed Solid (plain), so a
    blanket label would misstate the relationship in one direction or the other.
    When a store becomes a paid program (e.g. Polymaker tracked links), its host
-   joins this list and every surface updates at once. FTC guidance: "paid link"
-   next to the link is adequate where "affiliate link" alone may not be. */
+   joins this list and every surface updates at once. The rule since 2026-10-24
+   (Joey; the planner's colors.js carries the same words): a paid link keeps a
+   PLAIN label - no "· paid link" suffix anywhere - and the disclosure is one
+   plain commission line next to the links plus Amazon's sentence once; never
+   "affiliate link" alone (the FTC FAQ's example of an unclear label). */
 const PAID_HOSTS = [/(^|\.)amzn\.to$/, /(^|\.)amazon\.[a-z.]+$/,
   // Polymaker Ambassador tracked links (2026-08-07) — every FILAMENT_DB
   // Polymaker url routes through /JERRARI, so the whole host is paid now
@@ -4905,31 +4908,34 @@ function isPaidLink(href) {
   catch (e) { return false; }
 }
 
-function linkEl(text, href, ev, mark = true) {
+function linkEl(text, href, ev) {
   const a = document.createElement('a');
   a.className = 'dl-link';
   a.href = href;
   a.target = '_blank';
-  // every paid link is marked AT the link (FTC proximity) and carries
-  // rel=sponsored (the planner's buy buttons already do). mark=false is for a
-  // caller that puts its own disclosure line directly under the link instead
-  // (the identify card) - rel=sponsored stays either way, #paid-note reads it
-  const paid = isPaidLink(href);
-  a.rel = paid ? 'noopener sponsored' : 'noopener';
-  a.textContent = paid && mark ? text + ' · paid link' : text;
+  // a paid link carries rel=sponsored (the analytics and #paid-note read it)
+  // under its plain label: the disclosure is the caller's one line right under
+  // the links (the identify card, the checklist rows) and the #paid-note line.
+  // Until 2026-10-24 this added " · paid link" to the label (Joey: "paid" read
+  // as if a brand had paid to be listed)
+  a.rel = isPaidLink(href) ? 'noopener sponsored' : 'noopener';
+  a.textContent = text;
   a.addEventListener('click', () => track(ev || 'out:' + outTarget(href)));
   return a;
 }
 /* Paid-link disclosure, consolidated 2026-09-18 (Joey: the paragraph in the
    identify card ate the card and read as "super serious"; Astra's layout). Two
    parts, from the sources read that day:
-   1. NEAR each paid link: the "· paid link" label linkEl adds (FTC Endorsement
-      Guides FAQ: "'Paid link' right next to an affiliate link should be an
-      adequate disclosure"; the same FAQ says a bare "affiliate link" may not be
-      understood - never swap the label for that), or, in the identify card and
-      (since 2026-09-19) the parts list, plain link labels with one plain
-      commission line right under them. The filament picker's buy link still
-      wears the label (markFmBuy).
+   1. NEAR the paid links: plain link labels with one plain commission line
+      right under them (cardDisclosure) - the identify card, the checklist's
+      hardware rows and, since 2026-09-19, the parts list. Until 2026-10-24
+      linkEl and markFmBuy also put "· paid link" on a link's own label (the
+      FTC Endorsement Guides FAQ: "'Paid link' right next to an affiliate link
+      should be an adequate disclosure"); Joey dropped that suffix everywhere
+      ("paid" read as if a brand had paid to be listed), so the line beside the
+      links is the proximate disclosure, and for the filament picker's buy link
+      (markFmBuy) it is the #paid-note line below. The same FAQ says a bare
+      "affiliate link" may not be understood - never use that alone.
    2. ON THE SITE, clearly: Amazon's own sentence (Associates Operating
       Agreement s.5: "clearly and prominently state ... on your Site ...: 'As an
       Amazon Associate I earn from qualifying purchases.'" - kept VERBATIM, a
@@ -4991,8 +4997,10 @@ function paidNoteText(programs, polymakerNamed = false) {
   const s = [];
   if (programs.has('amazon')) s.push('As an Amazon Associate I earn from qualifying purchases.');
   if (programs.has('polymaker') && !polymakerNamed)
-    s.push(programs.has('amazon') ? 'I’m also a Polymaker Ambassador.' : 'I’m a Polymaker Ambassador and earn a commission on Polymaker links.');
-  if (programs.has('other') && !s.length) s.push('I earn a commission on paid links.');
+    // both sentences say "commission": with the "· paid link" suffix gone (2026-10-24) this line is the only
+    // disclosure of a Polymaker link shown beside Amazon ones (Sol 01a16c4a)
+    s.push(programs.has('amazon') ? 'I’m also a Polymaker Ambassador and earn a commission on Polymaker links.' : 'I’m a Polymaker Ambassador and earn a commission on Polymaker links.');
+  if (programs.has('other') && !s.length) s.push('I earn a small commission on these links, at no extra cost to you.');   // a paid host that is neither program (none today)
   return s.join(' ');
 }
 function linkShown(a) {
@@ -5187,23 +5195,24 @@ function renderIdentifyLinks(info, filament = null) {
   const linksEl = $('identify-links');
   linksEl.innerHTML = '';
   appendStoreLinks(linksEl, info?.links);
-  // Paid links here drop the "· paid link" suffix: ONE plain commission line
-  // sits right under them instead, and the filament button names its store
-  // (Astra 2026-09-18; this replaced a four-line paragraph that covered both
-  // programs whatever the card showed). Amazon's own sentence is the shared
-  // #paid-note line. Judged by HOST: a Printed Solid pick is a plain link and
-  // brings no line; a Polymaker pick names only Polymaker. A card shows chips
-  // OR a filament link, never both - bought hardware is colour-locked.
+  // Paid links here carry plain labels, ONE plain commission line sits right
+  // under them, and the filament button names its store (Astra 2026-09-18;
+  // this replaced a four-line paragraph that covered both programs whatever
+  // the card showed; since 2026-10-24 every surface reads this way). Amazon's
+  // own sentence is the shared #paid-note line. Judged by HOST: a Printed
+  // Solid pick is a plain link and brings no line; a Polymaker pick names only
+  // Polymaker. A card shows chips OR a filament link, never both - bought
+  // hardware is colour-locked.
   const programs = new Set();
   const chips = info?.links?.buy || [];
   // purchased hardware: Amazon affiliate buy options (generate.js BUY)
   for (const b of chips) {
-    linksEl.appendChild(linkEl(b.label, b.url, buyEvent(b), false));
+    linksEl.appendChild(linkEl(b.label, b.url, buyEvent(b)));
     const p = paidProgramOf(b.url); if (p) programs.add(p);
   }
   if (filament) {
     const where = storePhrase(filament.url);
-    linksEl.appendChild(linkEl(where ? `Get filament ${where}` : 'Get filament', filament.url, buyFilamentEvent(filament), false));
+    linksEl.appendChild(linkEl(where ? `Get filament ${where}` : 'Get filament', filament.url, buyFilamentEvent(filament)));
     const p = paidProgramOf(filament.url); if (p) programs.add(p);
   }
   if (programs.size) {
@@ -5521,11 +5530,12 @@ function renderChecklist() {
       // purchased hardware: Amazon affiliate buy options (generate.js BUY). As in
       // the identify card, the chips carry their plain labels and ONE line right
       // under them says who they go to and that I earn from them (Joey 2026-09-19:
-      // it replaced a "· paid link" suffix on every chip; the Planner's parts list
-      // reads the same). Judged by host, so a plain store link brings no line.
+      // it replaced a "· paid link" suffix on every chip; the planner's parts list
+      // reads the same, and since 2026-10-24 so does every other buy link).
+      // Judged by host, so a plain store link brings no line.
       const programs = new Set();
       for (const b of p.links.buy || []) {
-        lnks.appendChild(linkEl(b.label, b.url, buyEvent(b), false));
+        lnks.appendChild(linkEl(b.label, b.url, buyEvent(b)));
         const pr = paidProgramOf(b.url); if (pr) programs.add(pr);
       }
       mid.appendChild(lnks);
@@ -7553,13 +7563,14 @@ function syncZoneChips() {
   if (selectedId && instances.has(selectedId)) renderZoneChips(instances.get(selectedId));
 }
 // #fm-buy is a STATIC anchor (markup owns it, href/label swapped in TWO places:
-// menu open + colour pick) → linkEl never sees it, so it marks itself. One
+// menu open + colour pick) → linkEl never sees it, so it sets its own rel. One
 // helper for both sites, judged by the CURRENT href like everything else —
-// Elegoo lands on Amazon (paid), Polymaker / Printed Solid are plain.
+// Elegoo lands on Amazon and Polymaker is an Ambassador link (both paid),
+// Printed Solid is plain. The label stays plain (its " · paid link" suffix went
+// on 2026-10-24); the disclosure is the #paid-note line, which reads the rel.
 function markFmBuy() {
   const buy = $('fm-buy');
-  if (isPaidLink(buy.href)) { buy.rel = 'noopener sponsored'; buy.textContent += ' · paid link'; }
-  else buy.rel = 'noopener';
+  buy.rel = isPaidLink(buy.href) ? 'noopener sponsored' : 'noopener';
   schedulePaidNote();
 }
 function openFilamentMenu(type) {

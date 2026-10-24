@@ -94,6 +94,12 @@ const btn = (page, t, root = 'body') => page.locator(`${root} button:has-text("$
 /* the "no errors" assertion ignores what headless SwiftShader itself prints (WebGL context notes) */
 const clean = (errors) => errors.filter((e) => !/WebGL|GPU|swiftshader|GroupMarkerNotSet|setPointerCapture/i.test(e));
 const settle = (page, ms = 1200) => page.waitForTimeout(ms);
+/* the disclosure sentences (colors.js disclosureFor; 2026-10-24: plain buy labels, one line next to the links, never "paid link") */
+const AMAZON_SENTENCE = 'As an Amazon Associate I earn from qualifying purchases.';
+const POLYMAKER_LINE = 'Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.';
+const DISCLOSURES = [AMAZON_SENTENCE, POLYMAKER_LINE, `${AMAZON_SENTENCE} Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.`];
+/* the text nodes under `sel` that read "null": append(null) writes the word (the look details showed one under their footer) */
+const nullText = (page, sel) => page.evaluate((sel) => { const w = document.createTreeWalker(document.querySelector(sel), NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(`${w.currentNode.parentElement.tagName.toLowerCase()}: ${w.currentNode.textContent}`); return out; }, sel);
 
 test('every workspace boots on the root kit without errors, desktop and phone', async () => {
   for (const ws of ['build', 'colors', 'labels', 'parts', 'assemble']) {
@@ -183,32 +189,60 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Case$/ }) }).first().click();
   await page.locator('#ws-picker .sw[aria-label="Elegoo PLA Black"]').first().click();
   await click(page.locator('#ws-picker .foot a.buy', { hasText: 'Buy Elegoo PLA Black' }), 'the picker\'s Elegoo');
+  // the picker's foot (2026-10-24): a plain Buy label, rel=sponsored, and the one disclosure line right under it
+  const foot = () => page.evaluate(() => { const f = document.querySelector('#ws-picker .foot'); const a = f.querySelector('a.buy'); return [a.textContent, a.rel, f.querySelector('.disc').textContent]; });
+  assert.deepEqual(await foot(), ['Buy Elegoo PLA Black →', 'noopener sponsored', AMAZON_SENTENCE], 'the picker\'s Amazon buy: a plain label, rel=sponsored, Amazon\'s sentence under it');
   await page.locator('#ws-picker .sw[aria-label="Panchroma Black"]').first().click();
   await click(page.locator('#ws-picker .foot a.buy', { hasText: /^Buy Black →/ }), 'the picker\'s Panchroma');
+  assert.deepEqual(await foot(), ['Buy Black →', 'noopener sponsored', POLYMAKER_LINE], 'the picker\'s Polymaker buy: a plain label, rel=sponsored, the Ambassador line under it');
   // the Dock's filament stack: the shopping list, one Buy per filament
   await page.locator('#ws-picker button[aria-label="Close the picker"]').click();
   await page.locator('#ws-dock .status.stack').click();
   await click(page.locator('#ws-shop .frow').filter({ has: page.locator('b', { hasText: /^Panchroma Black$/ }) }).locator('a.link'), 'the shopping list\'s');
+  const shop = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-shop .frow a.link')].map((a) => a.textContent), disc: document.querySelector('#ws-shop .disc').textContent }));
+  assert.ok(shop.buys.length && shop.buys.every((t) => t === 'Buy ↗'), `the shopping list's Buy labels are plain: ${shop.buys.join(', ')}`);
+  assert.ok(DISCLOSURES.includes(shop.disc) && /Polymaker Ambassador/.test(shop.disc), `the shopping list's one line is a disclosure sentence naming Polymaker (the Case is Panchroma Black): "${shop.disc}"`);
+  assert.deepEqual(await nullText(page, '#ws-shop'), [], 'nothing reads "null" in the shopping list');
   // the Parts list: the Case row's filament name (shortened to "Black"), then the hardware's Amazon link, in both layouts
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
   await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
   await click(page.locator('#ws-parts .printin a', { hasText: /^Black$/ }).first(), 'the Parts list\'s filament');
+  assert.deepEqual(await page.locator('#ws-parts .printin a', { hasText: /^Black$/ }).first().evaluate((a) => [a.rel, a.title]), ['noopener sponsored', 'Buy Black ↗'], 'the filament link: rel=sponsored, a plain title');
   const hw = page.locator('#ws-parts .prow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first();
   await click(hw, 'the Parts list\'s hardware');
-  // the Amazon link is marked at the link, rel=sponsored and "· paid link" (Joey, 2026-10-21), the mark on its own line so
-  // the link keeps its width; a download-site link is not marked
+  // the Amazon link carries rel=sponsored under a PLAIN label (the "· paid link" mark of 2026-10-21 went on 2026-10-24: Joey read
+  // "paid" as a brand paying to be listed); ONE commission line sits right under the hardware rows, in both layouts, the foot
+  // carries Amazon's own sentence once, and nothing on the list says "paid link"; a download-site link stays plain
   const marks = (row) => Promise.all([page.locator(`#ws-parts ${row}`).filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(),
-    page.locator(`#ws-parts ${row}`).filter({ hasNot: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first()].map((l) => l.evaluate((a) => [a.rel, a.textContent, a.querySelector('.paid') ? getComputedStyle(a.querySelector('.paid')).display : null])));
-  const plainLink = (m) => m[0] === 'noopener' && !/paid/.test(m[1]) && m[2] === null;
+    page.locator(`#ws-parts ${row}`).filter({ hasNot: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first()].map((l) => l.evaluate((a) => [a.rel, a.textContent, a.title, a.children.length])));
+  const plainLink = (m) => m[0] === 'noopener' && !/paid/i.test(m[1] + m[2]) && m[3] === 0;
+  const disclosure = () => page.evaluate(() => {
+    const groups = [...document.querySelectorAll('#ws-parts .rows')];
+    const hw = groups.filter((g) => [...g.querySelectorAll('.badge')].some((b) => b.textContent === 'BUY'));
+    const list = document.querySelector('#ws-parts').textContent;
+    return { hwGroups: hw.length, lastOfHw: [...new Set(hw.map((g) => `${g.lastElementChild.className}: ${g.lastElementChild.textContent}`))], linesElsewhere: groups.filter((g) => !hw.includes(g) && g.querySelector('.commission')).length,
+      amazonSentences: (list.match(/As an Amazon Associate I earn from qualifying purchases\./g) || []).length, paid: /paid link/i.test(list), foot: document.querySelector('#ws-parts .foot').textContent };
+  });
+  const checkDisclosure = async (layout) => {
+    const d = await disclosure();
+    assert.ok(d.hwGroups >= 1, `${layout}: a hardware group`);
+    assert.deepEqual(d.lastOfHw, ['note commission: Amazon links - I earn a small commission, at no extra cost to you.'], `${layout}: the one commission line, last under the hardware rows`);
+    assert.equal(d.linesElsewhere, 0, `${layout}: no other group carries one`);
+    assert.equal(d.amazonSentences, 1, `${layout}: Amazon's sentence once, in the foot`);
+    assert.ok(!d.paid, `${layout}: nothing says "paid link"`);
+    assert.match(d.foot, /^As an Amazon Associate I earn from qualifying purchases\. (Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you\. )?Any equivalent hardware from any store works\.$/, `${layout}: the foot`);
+  };
   const narrow = await marks('.prow');
-  assert.deepEqual(narrow[0], ['noopener sponsored', 'Amazon ↗ · paid link', 'block'], 'the narrow list\'s Amazon link');
+  assert.deepEqual(narrow[0], ['noopener sponsored', 'Amazon ↗', '', 0], 'the narrow list\'s Amazon link: rel=sponsored, a plain label');
   assert.ok(plainLink(narrow[1]), `the narrow list's download link stays plain: ${narrow[1]}`);
+  await checkDisclosure('the narrow list');
   await btn(page, 'Track my build', '#ws-parts').click();
   await page.locator('#ws-parts button.expand').click();
   await click(page.locator('#ws-parts .trow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(), 'the wide list\'s hardware');
   const wide = await marks('.trow');
-  assert.deepEqual(wide[0], ['noopener sponsored', 'Amazon ↗ · paid link', 'block'], 'the wide list\'s Amazon link');
+  assert.deepEqual(wide[0], ['noopener sponsored', 'Amazon ↗', '', 0], 'the wide list\'s Amazon link: rel=sponsored, a plain label');
   assert.ok(plainLink(wide[1]), `the wide list's download link stays plain: ${wide[1]}`);
+  await checkDisclosure('the wide table');
   // the hardware links are the root kit's magnets: the listing the catalog (HARDWARE_BUY) holds at that address, whose id
   // is the dashboard row (a renamed id would split it, so it is a literal too)
   const ids = await page.evaluate((urls) => urls.map((u) => { for (const list of Object.values(HARDWARE_BUY)) { const b = list.find((x) => x.url === u); if (b) return b.id; } return null; }), hrefs.slice(4));
@@ -644,6 +678,7 @@ test('Colors: a preset applied from the gallery recolours the model as one histo
   await cards.nth(1).click();   // Stealth, on a fresh profile
   await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   assert.match(await text(page, '#ws-gallery h2'), /Stealth/, 'its details open');
+  assert.deepEqual(await nullText(page, '#ws-gallery'), [], 'nothing reads "null" under the details (Stealth has no translucent filament)');
   await page.locator('#ws-gallery .apply').click();
   await settle(page, 600);
   const after = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
@@ -2643,6 +2678,16 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   await page.waitForSelector('#ws-gallery .frow', { timeout: 15_000 });
   assert.equal(await page.locator('#ws-gallery .frow').count(), r.sigRows, 'the Shop list lists exactly those rows');
   assert.match(await page.locator('#ws-gallery .lcount').textContent(), new RegExp(`^${r.sigCount} filaments`), 'the details say the count');   // (not the text() helper: this case declares its own `text` below)
+  // the details' footer (2026-10-24): plain "Buy ↗" labels with rel=sponsored, the one disclosure line (Signal is all Polymaker),
+  // the two reworded notes and no translucent note, and nothing reads "null": gallery.append(null) wrote the word under every
+  // look without a translucent filament (Joey saw it live)
+  const detail = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-gallery .frow a.link')].map((a) => `${a.textContent}|${a.rel}`), disc: document.querySelector('#ws-gallery .disc').textContent, notes: [...document.querySelectorAll('#ws-gallery p.note')].map((p) => p.textContent) }));
+  assert.ok(detail.buys.length && detail.buys.every((b) => b === 'Buy ↗|noopener sponsored'), `plain Buy labels, rel=sponsored: ${detail.buys.join(', ')}`);
+  assert.equal(detail.disc, POLYMAKER_LINE, 'the Shop list\'s one line is the Ambassador sentence');
+  assert.equal(detail.notes.length, 2, `two notes under the rows: ${detail.notes.join(' | ')}`);
+  assert.match(detail.notes[0], /^Colours on screen are approximate, and the look card is drawn without shadows; the Day Grid plate shows them truest\.$/);
+  assert.match(detail.notes[1], /^Looks only: whether a filament suits a part \(strength, heat, flex\) is a separate question\.$/);
+  assert.deepEqual(await nullText(page, '#ws-gallery'), [], 'nothing reads "null" under the details');
   // with no label-text pick, the label text row reads as its own colour, not "follows Body"
   await page.keyboard.press('Escape');   // the details close
   await page.keyboard.press('Escape');   // the gallery closes
@@ -3072,7 +3117,7 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
   // Review filaments opens the shopping list with the suitability note; Keep this look opens Save with the name field
   await page.locator('#ws-colors .summary .review').click();
   await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 15_000 });
-  assert.match(await page.locator('#ws-shop .note').last().textContent(), /whether a filament suits a part/);
+  assert.match(await page.locator('#ws-shop .note').last().textContent(), /^Looks only: whether a filament suits a part \(strength, heat, flex, the printer\) is a separate question\.$/);
   await page.locator('#ws-shop .x').click();
   await page.locator('#ws-colors .summary .keeplook').click();
   await page.waitForSelector('#ws-colors .saverow input', { timeout: 15_000 });

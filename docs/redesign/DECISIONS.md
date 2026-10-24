@@ -3144,3 +3144,77 @@ keyboard undo or Remove").
   shadow map, and setting light would rewrite his saved preference. Terra `01a16ad3` on this line: one finding,
   discarded (it read the evidence's "node --test" as a different command from `npm test`, whose script it is).
 
+## 2026-10-24 (the paid-link suffix goes: plain buy labels and one commission line, the September wording)
+
+- **Joey, 2026-10-24:** "paid makes it sound like polymaker paid to put their filament on here, which it's affiliate
+  links, so nothing has been paid by anyone yet"; asked: "Yes, replace the '· paid link' suffix everywhere with the
+  September wording: plain buy labels and one commission line next to the links, Amazon's sentence once; deploy once
+  checks pass."
+- **The September decision** (the old planner, `591e7bb`, 2026-09-19; the vault's "Affiliate-link disclosure"): Joey asked
+  that the parts list's "paid link" wording sound like the viewer's friendlier affiliate treatment. The buy buttons keep
+  plain labels and each hardware row carries ONE line right under them - "Amazon links - I earn a small commission, at
+  no extra cost to you." - instead of "· paid link" on every button; Amazon's required sentence, "As an Amazon Associate
+  I earn from qualifying purchases.", appears once per page, verbatim: a plain commission statement next to the links it
+  covers, Amazon's sentence once, never "affiliate link" alone. The new planner never inherited it: its Colors tab marked
+  every paid link "· paid" / "· paid link" (phase 4, 2026-10-14) and the Parts list followed on 2026-10-21.
+  `rel="noopener sponsored"` on every commission link is unchanged everywhere (the analytics read it).
+- **The wording now** (colors.js `disclosureFor`, exported with `isAmazon` / `isPolymaker` beside `isPaid`; the Parts
+  list imports it): Polymaker links only - "Polymaker links apply the JERRARI discount for you; as a Polymaker
+  Ambassador I earn a small commission, at no extra cost to you."; Amazon only - "As an Amazon Associate I earn from
+  qualifying purchases."; both - "As an Amazon Associate I earn from qualifying purchases. Polymaker links apply the
+  JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you."; a paid host that is
+  neither program (none today) - "I earn a small commission, at no extra cost to you."; plain links - nothing.
+- **The surfaces.** Colors: the look details' Shop this look rows and the shopping list ("Buy ↗" and the one line under
+  the rows, which had read "Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I
+  earn a small commission at no extra cost to you." or "Paid links · I earn a small commission at no extra cost to
+  you."), and the picker's foot ("Buy <filament> →" with the line under it; its Polymaker line had read "Polymaker links
+  apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.").
+  Parts: the "Print in" filament links' titles ("Buy <filament> ↗"), the hardware rows' "Amazon ↗" (the `span.paid`
+  mark and its app.css rules are gone), ONE line "Amazon links - I earn a small commission, at no extra cost to you." as
+  the last child of every section group whose hardware rows link to Amazon (this build has two such groups) - under the
+  section's rows, not under each row as the old planner did it: here a row has one "Amazon ↗" link and the hardware rows
+  sit together, so one line under them covers them all - in the narrow list and the wide table (hidden with the link
+  column under 1024 px), and the foot, which reads Amazon's
+  sentence once, the Ambassador line when a "Print in" link is a Polymaker one, then "Any equivalent hardware from any
+  store works." (it had read "Hardware links are Amazon affiliate links (as an Amazon Associate I earn from qualifying
+  purchases) · any equivalent hardware works."). The old viewer, which the planner serves for kit covers and part
+  previews: `linkEl` loses its `mark` parameter and the suffix, `markFmBuy` only sets rel, the `#paid-note` line stays
+  the one line next to its links, and its sentence for Amazon and Polymaker links shown together now says the commission
+  ("I'm also a Polymaker Ambassador and earn a commission on Polymaker links."; Sol's finding, below); its never-reached
+  fallback for a host in neither program no longer says "paid links". The comments in main.js (the host list, linkEl, the
+  two-part disclosure note, renderIdentifyLinks, renderChecklist, markFmBuy) and index.html's filament-menu comment
+  describe the rule as it is now.
+- **The "null" bug.** Under every look's footer without a translucent filament the word "null" showed (Joey saw it
+  live). `renderDetail` passed `translucent.length ? el('p.note', …) : null` as the last argument of
+  `gallery.append(…)`, and the DOM's `append(null)` writes the text "null": `el()` skips a null child, `append` does
+  not. The picker had the same bug and already filters - its comment reads `append(null) writes the word "null" (it
+  showed under the scope switch, 2026-10-17)`. The details' children now go through `.filter(Boolean)` too. The other
+  `append` / `replaceChildren` calls in colors.js were read for this entry and pass no nullable child (the tray, the
+  gallery grid, Find your next look, the owned editor, Simplify, the part card, the Dock, the shopping list).
+- **The footer sentences reworded.** The look details: "A screen preview: colours are approximate, and the card shows
+  the look without shadows. The Day Grid plate gives the truest read." → "Colours on screen are approximate, and the
+  look card is drawn without shadows; the Day Grid plate shows them truest."; "Appearance only: whether a filament
+  suits a part (strength, heat, flex) is a separate question." → "Looks only: whether a filament suits a part (strength,
+  heat, flex) is a separate question." The shopping list: "Appearance only: whether a filament suits a part (strength,
+  heat, flex, the printer) is a separate question." → "Looks only: whether a filament suits a part (strength, heat,
+  flex, the printer) is a separate question."
+- **Checks.** The buy-link e2e case reads, in both layouts, the Amazon link's rel, its plain text and title, the
+  commission line as the last child of every hardware group and in no other, Amazon's sentence exactly once on the
+  list, no "paid link" text, the foot's shape, the picker foot's label / rel / sentence for an Amazon and then a
+  Polymaker filament, and the shopping list's plain labels and sentence; the two look-detail cases check the sentence,
+  the reworded notes and that no text node reads "null" (a TreeWalker over #ws-gallery, and over #ws-shop); the Simplify
+  case checks the shop note's exact words. Six mutants, each failing only its own assertion: the storeLink suffix
+  restored, the `.filter(Boolean)` removed ("aside: null" in both gallery cases), the picker suffix restored, the
+  commission line's appendChild removed, the old "Paid links." disclosure restored, the old footer sentences restored.
+- **Review:** Sol `01a16c4a` (substantial): one finding, confirmed and fixed - with the suffix gone, the old viewer's
+  `#paid-note` line for Amazon and Polymaker links shown together said "I'm also a Polymaker Ambassador." without the
+  word commission (reachable on a phone, where the checklist panel stays up beside the filament menu; a desktop's
+  `body.fm-open` hides it); the sentence now says it. The fix and this entry's draft went back on the same thread: two
+  findings, one taken (the draft read as promising a line under each hardware row, the old planner's layout, while
+  this list puts one under the section's rows - now said), one discarded (it called the `append` audit and the picker's
+  2026-10-17 comment unverified; both are in the code, neither was in the payload).
+- **Suites:** npm test 625 (620 pass, 0 fail, the 5 environment skips main has; 313 s); the full e2e suite with the
+  Studio checkout, `E2E_SOFT=1`: 86 cases, 86 pass, 0 fail (2708 s), after the four touched cases had passed alone and
+  the six mutants had each failed.
+- **Deploy:** Joey decided it in words, so it deploys once the suites pass.
+

@@ -19,7 +19,7 @@ import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
-import { ZONE_LABEL, isPaid, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid buy link, and its click event
+import { ZONE_LABEL, isPaid, isAmazon, disclosureFor, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid link's disclosure, and its click event
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -259,7 +259,7 @@ export function mountParts(stage, ctx) {
       if (p.zone) kids.push(p.zone + ' ');
       p.items.forEach((it, j) => {
         if (j) kids.push(' / ');
-        kids.push(it.url ? el('a', { href: it.url, target: '_blank', rel: isPaid(it.url) ? 'noopener sponsored' : 'noopener', title: `Buy ${it.name} ↗` + (isPaid(it.url) ? ' · paid link' : ''), text: it.name, onclick: buyFilament(stage, { name: it.full }) }) : it.name);
+        kids.push(it.url ? el('a', { href: it.url, target: '_blank', rel: isPaid(it.url) ? 'noopener sponsored' : 'noopener', title: `Buy ${it.name} ↗`, text: it.name, onclick: buyFilament(stage, { name: it.full }) }) : it.name);
       });
     });
     return el('div.note.printin', {}, kids);
@@ -295,15 +295,24 @@ export function mountParts(stage, ctx) {
     panel.appendChild(head);
     const body = el('div.body');
     let last = null, group = null;
+    const groups = new Map();   // section → its rows' group, for the commission line under the hardware
     const table = st.wide && st.tracking;
     for (const r of rs) {
       if (r.section !== last) {
-        last = r.section; body.appendChild(el('h3', { text: r.section })); group = el('div.rows' + (table ? '.table' : '')); body.appendChild(group);
+        last = r.section; body.appendChild(el('h3', { text: r.section })); group = el('div.rows' + (table ? '.table' : '')); body.appendChild(group); groups.set(r.section, group);
         if (table) group.appendChild(el('div.thead', {}, [el('span'), el('span', { text: 'Part' }), el('span', { text: 'Needed' }), el('span', { text: 'Already have' }), el('span', { text: 'Printed / bought' }), el('span', { text: 'Remaining' }), el('span')]));
       }
       group.appendChild(table ? renderTableRow(r) : renderRow(r));
     }
-    body.appendChild(el('p.foot', { text: rs.some((r) => r.hardware && BUY[r.name]) ? 'Hardware links are Amazon affiliate links (as an Amazon Associate I earn from qualifying purchases) · any equivalent hardware works.' : 'Any equivalent hardware works.' }));
+    /* THE DISCLOSURE (2026-10-24, the wording the old planner adopted on 2026-09-19, 591e7bb; colors.js has the rule): the links
+       keep plain labels, and ONE plain line sits right under the hardware rows that go to Amazon, in both layouts - the viewer
+       part card's words for Amazon hardware chips. The foot carries Amazon's own sentence once, the Ambassador line when a
+       "Print in" filament link is a Polymaker one, then the shopping tip. No "paid link" anywhere (Joey: it read as if a brand
+       had paid to be listed) */
+    const hwLink = (r) => (r.hardware ? (BUY[r.name] || [])[0] : null);
+    for (const [section, g] of groups) if (rs.some((r) => r.section === section && hwLink(r) && isAmazon(hwLink(r).url))) g.appendChild(el('p.note.commission', { text: 'Amazon links - I earn a small commission, at no extra cost to you.' }));
+    const urls = rs.flatMap((r) => { const l = hwLink(r); if (l) return [l.url]; const regions = printLook(r); return regions ? printRegions(regions).flatMap((p) => p.items.map((it) => it.url)).filter(Boolean) : []; });
+    body.appendChild(el('p.foot', { text: [disclosureFor(urls), 'Any equivalent hardware from any store works.'].filter(Boolean).join(' ') }));
     panel.appendChild(body);
   }
   function renderRow(r) {
@@ -336,14 +345,11 @@ export function mountParts(stage, ctx) {
     return row;
   }
   /* a row's link, both layouts: bought hardware's Amazon listing, which reports the stage's buy:hardware:<listing id> (main.js
-     buyEvent), else the part's page on the chosen download site. A paid host is marked AT the link, rel=sponsored and
-     "· paid link", as the Colors tab marks its own (Joey, 2026-10-21); the foot line keeps Amazon's sentence. The mark
-     sits on its own line under the store name (app.css), so the link keeps its width: on one line it took 55 px from the
-     part's name, and "Magnets 10×2mm or 6×2mm" wrapped on a desktop */
+     buyEvent), else the part's page on the chosen download site. A paid host carries rel=sponsored (the analytics read it) and
+     a plain label, "Amazon ↗": the "· paid link" mark of 2026-10-21 went on 2026-10-24 (Joey: "paid" read as a brand paying to
+     be listed); the commission line under the hardware rows and the foot's Amazon sentence (renderPanel) disclose it */
   function storeLink(r, link) {
-    const paid = isPaid(link.url);
-    return el('a.link', { href: link.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null },
-      [`${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, paid ? el('span.paid', {}, [el('span.sep', { text: ' · ' }), 'paid link']) : null]);
+    return el('a.link', { href: link.url, target: '_blank', rel: isPaid(link.url) ? 'noopener sponsored' : 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null });
   }
   /* the wide list's row: one column per quantity, the counters readable, a finished row still editable */
   function renderTableRow(r) {
