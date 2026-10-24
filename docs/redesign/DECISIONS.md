@@ -3161,3 +3161,40 @@ Dated calls made while building, with who made them. The brief and the inventory
   feature's frame cost against its visible worth, on the laptop GPU and SwiftShader, not the A5000), then the camera
   grammar: cuts to distinct cameras in a random non-repeating order, each with its own lens and a slow in-shot move or
   locked off, holds of ten seconds or more, a dip to black between shots, static first for weak devices.
+
+## 2026-10-24 (the Done scene's performance study: the harness, the probe, and what to build)
+
+- **What was asked.** Joey: a PC-game-settings pass over the scene, "which settings kill fps and which ones have a
+  noticeable improvement visibly enough to keep", with the A5000 in mind as not the visitor's device; and his questions
+  on the props' triangles, on hiding the interior parts once assembled, and on thinning the part GLBs. The whole study
+  is `PERF.md` beside DESIGN.md (D:\Claude - Output\done-scene-2026-10-23); DESIGN.md §8i is its paragraph.
+- **The instrument.** `tools/done-scene/ablate.mjs`: a fresh page per tier and feature, the scene entered as a visitor
+  does, the clock stopped on the hero, the feature turned off in the page, a screenshot, then forced moving frames (the
+  camera nudged 0.01 mm a frame, the frame cap off) with a frame-bounded clock (first warm tick to last tick over the
+  frames drawn between them) and `--repeat 3`; three device classes (this laptop's GPU, the GPU with the CPU throttled
+  4x, SwiftShader); `--entry studio` runs the Colors studio for the planner's own frame. `tools/done-scene/perf-probe.mjs`:
+  draw calls and lightmaps per prop group, the shadow quads' on-screen fill, and a pixel diff of every shot with the
+  interior hidden (and with the relief off at Balanced).
+- **What it found (the repeat pass; the baseline's spread 1-3 % in software, 10-20 % throttled).** On this GPU nothing
+  in the scene costs a measurable fraction of a millisecond. In software, Balanced / High: the pixel ratio -39 / -59 %
+  (the stage's own first step); the environment -26 / -24 % (a real visual loss: keep); the relief -19 / -19 %
+  (0.2-1.4 % of the pixels, along edges: off on Balanced in the scene); the interior parts -17 / -15 % (nothing visible
+  from any shot once the drawer moment un-hides the slid unit's WHOLE interior: build); the props 7 / 6 %; the masks
+  and catchers 2-4 % each (they cover three quarters of the viewport each; the first draft's -33 % was the old clock's
+  slack: keep as they are, nothing to build). Throttled: the room's 53 calls a third of a 5 ms frame, the props' 44
+  calls a quarter to a third, the interior's 29 a fifth at Balanced. A plain merge of the props is 64 -> 54 calls (every
+  room mesh has its own lightmap); the re-atlas is written down, not built. The part GLBs are not thinned: the build's
+  cost is pixels (pixel ratio 1 gives the same 481 ms at Balanced and High) and calls, not triangles. The planner's
+  studio draws a software frame 1.8x slower than the scene at the same tier (not studied why); the interior hiding is
+  worth the same 18 % there.
+- **Build order.** (1) The interior hidden in the assembled state, in the scene, the drawer moment un-hiding its unit's
+  whole interior; a stage-wide rule after its own check of the orbit views and of units without a faceplate. (2) Relief
+  off in the scene on Balanced. (3) Nothing for the quads, the props or the GLBs. Then the camera grammar, static first.
+- **Review.** Sol `01a16cb6` (substantial: a new instrument, and a conclusion being frozen), two rounds: eleven findings
+  on the first draft and six on the second, all confirmed at least in part, none discarded. The frame-bounded clock, the
+  repeats, the probe and the studio rows exist because of round one (the first draft's SwiftShader figures carried
+  30-45 % of clock slack, more of it on the rows with faster frames, which made cheap quads look like large savings);
+  round two scoped every verdict to what was measured.
+- **Checks.** The harness's passes (66 + 42 + 12 + 18 + 4 rows, no failures; frames drawn == ticks on every row), the
+  probe at High and at Balanced (its control diffs 0 px), the wallCrop screenshot against the baseline's by eye,
+  `node --check` on both tools. Nothing in js/ or the tests changed; nothing on the ladder changed yet. Not deployed.
