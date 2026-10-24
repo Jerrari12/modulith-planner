@@ -2866,8 +2866,12 @@ Dated calls made while building, with who made them. The brief and the inventory
   wave band as corduroy). room.json's live sun is scaled to the palette (near white, 0.62). `room.py` writes LF and
   absolute EXR paths. **Accepted for now:** the props' shadows are baked in place, so a wide build that slides a prop
   leaves its shadow behind (the re-bake with the props out of the desk and wall maps, their shadows from the live sun,
-  is the next room job). **Open with Joey:** 5.7 MB of bake textures now live in the planner repo under `tools/`,
-  against the repo's "stay small" rule from the gen2-parts split; the alternatives are node0's mirror or gen2-parts.
+  is the next room job). **The bake textures left the repo** (Joey, that evening: "move the bake textures out of the
+  repo to node0's mirror; room.py fetches them from there"): the three veneer JPGs (5.7 MB) are ignored and untracked,
+  live on node0 at `~/render-assets/modulith-planner/done-scene/textures/`, and `room.py`'s `texture()` fetches a missing
+  one over scp before loading it (checked: the files moved aside, a run with `--desk-wood` fetched them back, checksums
+  equal); SOURCE.md stays in the repo as the record. The JPGs remain in the branch's HISTORY (ffc81c0); dropping them
+  from history means rewriting the desktop's four commits before the branch merges, Joey's call.
 - **The live shadow matched to the baked ones** (`ffcb276`). Two causes, both measured: `done.js` put the sun 3000 mm
   out and the stage's shadow camera has its far plane at 3000 (`fitShadowCamera`), so the desk behind the build fell
   outside the frustum and the cast shadow was a sliver at the feet (`SUN_MM = 1200` now); and Very High's 6° soft-shadow

@@ -16,6 +16,10 @@ there), files between machines through node0's mirror (`~/render-assets/modulith
    `node tools/done-scene/decode-glb.mjs test/golden/185-tabletop-2w2h.manifest.json parts/185 tools/done-scene/kit/parts`
    (`tools/done-scene/kit/` is ignored by git).
 
+The photographed textures (`tools/done-scene/textures/*/SOURCE.md` records each) are not in git: they live on node0 at
+`~/render-assets/modulith-planner/done-scene/textures/`, and `room.py` fetches a missing one over scp the first time a
+render needs it (`--desk-wood`). A new texture goes to that folder on node0 and gets a SOURCE.md line.
+
 ## A look render (direction rounds)
 
 ```

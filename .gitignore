@@ -6,3 +6,6 @@ img/parts/
 # the Done scene tooling: decoded kit copies for Blender and fetched renders are generated, never committed
 tools/done-scene/kit/
 tools/done-scene/renders/
+# the Done scene bake textures (photographed, CC0) live on node0's mirror, ~/render-assets/modulith-planner/done-scene/textures/,
+# and room.py fetches them when missing (Joey 2026-10-23: 5.7 MB does not belong in this repo); SOURCE.md stays here
+tools/done-scene/textures/**/*.jpg

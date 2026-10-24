@@ -124,6 +124,22 @@ def ribbed(m, scale=180.0, strength=0.3, distance=0.002):
     return m
 
 TEX_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'textures')
+NODE0_TEXTURES = 'node0:~/render-assets/modulith-planner/done-scene/textures'   # where the photographed textures live (Joey 2026-10-23: not in git)
+
+def texture(folder, name):
+    """A texture file's path, fetched from node0's mirror when it is not here. The JPGs are not in git (5.7 MB; Joey,
+    2026-10-23: "move the bake textures out of the repo to node0's mirror; room.py fetches them from there"), and
+    textures/<folder>/SOURCE.md records each one's origin and licence. node0's own copy is in place, so a render there
+    never fetches; a laptop or desktop checkout needs ssh to node0 the first time a render wants the file."""
+    path = os.path.join(TEX_DIR, folder, name)
+    if not os.path.exists(path):
+        import subprocess
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        print('[textures] %s/%s is not here: fetching it from %s' % (folder, name, NODE0_TEXTURES))
+        r = subprocess.run(['scp', '-q', '%s/%s/%s' % (NODE0_TEXTURES, folder, name), path])
+        if r.returncode != 0 or not os.path.exists(path):
+            sys.exit('texture %s/%s is neither here nor on node0 (%s); see textures/%s/SOURCE.md' % (folder, name, NODE0_TEXTURES, folder))
+    return path
 
 def wood_photo(m, folder, stem, size_m, contrast=0.6, tint=None, rough=0.5, bump=0.0, rotate_deg=90.0):
     """A photographed veneer on a material (look12, Astra: a photographed light oak at its documented physical scale,
@@ -135,7 +151,7 @@ def wood_photo(m, folder, stem, size_m, contrast=0.6, tint=None, rough=0.5, bump
     nt = m.node_tree
     bsdf = nt.nodes['Principled BSDF']
     bsdf.inputs['Roughness'].default_value = rough
-    img = bpy.data.images.load(os.path.join(TEX_DIR, folder, '%s_diff_2k.jpg' % stem))
+    img = bpy.data.images.load(texture(folder, '%s_diff_2k.jpg' % stem))
     tex = nt.nodes.new('ShaderNodeTexImage')
     tex.image = img
     tex.projection = 'BOX'
@@ -167,7 +183,7 @@ def wood_photo(m, folder, stem, size_m, contrast=0.6, tint=None, rough=0.5, bump
         colour_out = tn.outputs[2]
     nt.links.new(colour_out, bsdf.inputs['Base Color'])
     if bump > 0:
-        nimg = bpy.data.images.load(os.path.join(TEX_DIR, folder, '%s_nor_gl_2k.jpg' % stem))
+        nimg = bpy.data.images.load(texture(folder, '%s_nor_gl_2k.jpg' % stem))
         nimg.colorspace_settings.name = 'Non-Color'
         ntex = nt.nodes.new('ShaderNodeTexImage')
         ntex.image = nimg; ntex.projection = 'BOX'; ntex.projection_blend = 0.25
