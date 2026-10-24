@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from '../js/scenes/done-fit.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -220,4 +220,20 @@ test('maskQuad: a desk mask lies on the desk about the anchor and slides with it
   close(right.w, 220, 1e-9, 'a mask reaching past the right end is cut there'); close(right.u0, 0, 1e-9, 'u0'); close(right.u1, 220 / 300, 1e-9, 'u1');
   const wq2 = maskQuad(wall, anchor, wallZ, -800, 0.5, clip);
   close(wq2.w, 400, 1e-9, 'a wall mask is not cut'); close(wq2.u0, 0, 1e-9, 'u0'); close(wq2.u1, 1, 1e-9, 'u1');
+});
+
+test('reliefResolves: the layers can span the shader\'s cutoff only when the build is near; the nearest point of the box decides, not its centre', () => {
+  const box = { min: { x: -100, y: 0, z: -100 }, max: { x: 100, y: 200, z: 100 } };
+  const view = { width: 1280, height: 800 };
+  const focal = 400 / Math.tan(Math.PI / 12);   // half of 800 px over tan(15 deg): 1492.8 px
+  const far = reliefResolves({ position: { x: 0, y: 100, z: 1100 }, fov: 30 }, box, view);   // 1000 mm off the front face
+  close(far.distance, 1000, 1e-9, 'the distance to the face, not to the centre (1200)'); close(far.px, 0.2 * focal / 1000, 1e-9, 'a 0.2 mm layer is 0.3 CSS px there'); assert.equal(far.on, false, 'under the cutoff of 4: the relief draws nothing, the stage may take it off');
+  assert.equal(far.cutoffPx, 4, 'the default cutoff is the shader\'s 4 CSS px a layer');
+  const near = reliefResolves({ position: { x: 0, y: 100, z: 160 }, fov: 30 }, box, view);   // 60 mm off the face: 4.98 px a layer
+  close(near.distance, 60, 1e-9, 'near'); assert.equal(near.on, true, 'a layer spans the cutoff: the relief stays');
+  const corner = reliefResolves({ position: { x: 130, y: 240, z: 140 }, fov: 30 }, box, view);
+  close(corner.distance, Math.hypot(30, 40, 40), 1e-9, 'off a corner: the clamped point\'s distance');
+  assert.equal(reliefResolves({ position: { x: 0, y: 100, z: 0 }, fov: 30 }, box, view).distance, 1, 'inside the box the distance floors at 1 mm (on, whatever the cutoff)');
+  assert.equal(reliefResolves({ position: { x: 0, y: 100, z: 160 }, fov: 30 }, box, view, { cutoffPx: 12 }).on, false, 'the cutoff is the stage\'s to pass');
+  assert.equal(reliefResolves({ position: { x: 0, y: 100, z: 160 }, fov: 60 }, box, view).on, false, 'a wider lens at the same distance: fewer pixels a layer (2.3), off');
 });

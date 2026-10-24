@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
+import { shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -178,7 +178,27 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     drawer.openTimer = setTimeout(() => drawerSet(true), beat.openAt);
     drawer.closeTimer = setTimeout(() => drawerSet(false), beat.closeAt);
   }
-  function setCam(c) { camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); }
+  function setCam(c) { camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); reliefShot(c); }
+  /* THE RELIEF BY DISTANCE (Joey 2026-10-24; done-fit.js reliefResolves, PERF.md §5): for each shot, the nearest the build
+     comes to the camera says whether any layer can span the shader's cutoff; if none can, the stage takes the relief off
+     (stage.setReliefOverride(false): a material rebuild, so at a cut or a landing, never mid-drift). A drift TOWARD a shot
+     that needs it turns it on as the drift starts (the band limit fades it in on the way); a drift away from one turns it
+     off as it lands. The scene only: the Colors stage orbits freely and keeps the tier's rule. */
+  const relief = { px: null, on: null, distance: null, cutoffPx: null };
+  const viewNow = () => { const el = renderer.domElement; return { width: Math.max(1, el.clientWidth), height: Math.max(1, el.clientHeight) }; };
+  function reliefOf(c) { return stage.reliefBand && buildBox && !buildBox.isEmpty() ? reliefResolves(c, plain(buildBox), viewNow(), stage.reliefBand) : null; }
+  function reliefShot(c) {
+    if (!sequence || !stage.setReliefOverride) return;
+    const r = reliefOf(c); if (!r) return;
+    Object.assign(relief, r);
+    stage.setReliefOverride(r.on ? null : false);
+  }
+  function reliefMove(to) {
+    if (!sequence || !stage.setReliefOverride) return;
+    const r = reliefOf(to); if (!r || !r.on) return;
+    Object.assign(relief, r);
+    stage.setReliefOverride(null);
+  }
   function snapshot() { return { position: camera.position.clone(), target: controls.target.clone(), fov: camera.fov }; }
   function seqTick() {
     if (!seq.on || seq.pausedAt != null) return;
@@ -192,7 +212,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         seq.timer = setTimeout(seqTick, Math.max(16, seq.timing.holdMs));
         return;
       }
-      if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; drawerCancel(); }   // a drift starts from wherever the camera IS (a grab may have moved it); a drawer still out goes back
+      if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; drawerCancel(); reliefMove(seq.cams[s.to]); }   // a drift starts from wherever the camera IS (a grab may have moved it); a drawer still out goes back
       else if (!seq.judged) { seq.intervals.push(now - seq.lastFrame); seq.lastFrame = now; }
       const b = seq.cams[s.to];
       camera.position.lerpVectors(seq.from.position, v3(b.position), s.k); controls.target.lerpVectors(seq.from.target, v3(b.target), s.k);
@@ -281,6 +301,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   function placeCamera(animate) {
     const c = fitted(shotsFor()[0]);
+    reliefShot(c);   // the entrance lands on the hero: its relief from the start (the move only ever comes closer than the End page's view)
     const p1 = new THREE.Vector3(c.position.x, c.position.y, c.position.z), t1 = new THREE.Vector3(c.target.x, c.target.y, c.target.z);
     cancelAnimationFrame(parts.raf);
     if (!animate) { camera.position.copy(p1); controls.target.copy(t1); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); stage.invalidateFrame(); return; }
@@ -392,12 +413,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // the scene has no orbit (Joey: "don't let them rotate the camera"); a stage (Colors) keeps it; never a pan, the shots own the aim
     controls.enabled = !!orbit; controls.enablePan = false;
     on = true;
+    if (sequence && stage.setInteriorHidden) stage.setInteriorHidden(true);   // the scene's assembled build: the parts inside it are not drawn (PERF.md §4.8); a stage (Colors) orbits and keeps them
     document.documentElement.dataset.done = 'room';
     placeCamera(!reduced);
     if (sequenceWanted(stage.quality)) seq.startTimer = setTimeout(seqStart, reduced ? 0 : ENTER_MS + 50);
     addEventListener('resize', refit);
     document.addEventListener('visibilitychange', onVisibility);
-    if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height })); },
+    if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get relief() { return { override: stage.reliefOverride ? stage.reliefOverride() : null, ...relief }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height })); },
       get sequence() { return { on: seq.on, wanted: sequenceWanted(), mode: mode(), cams: seq.cams.map((c) => [c.position.x, c.position.y, c.position.z]), interior: interior && { ...interior }, fits: seq.cams.map((c) => ({ fov: c.fov, clamped: !!c.clamped, k: c.k, share: c.share })), paused: seq.pausedAt != null, manual: seq.manual, orbit: controls.enabled, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
       setTiming(t) { Object.assign(seq.timing, t); seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict
       jump(i) { if (seq.on) jumpTo(i); }, nextShot };   // to the start of shot i's hold
@@ -434,6 +456,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!on) return;
     on = false;
     seqStop();
+    if (stage.setInteriorHidden) stage.setInteriorHidden(false);   // after seqStop's drawerCancel: every interior mesh back, no re-hide timer left
+    if (stage.setReliefOverride) stage.setReliefOverride(null);    // the tier has its say again
     cancelAnimationFrame(parts.raf);
     removeEventListener('resize', refit);
     document.removeEventListener('visibilitychange', onVisibility);

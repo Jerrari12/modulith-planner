@@ -105,6 +105,25 @@ export function fitSlides(props, slid, bounds) {
  * build by shotCamera: the hero 3/4 (room.json's own shot overrides this one), a straight-on low angle, and a detail
  * close-up aimed at the front-left drawer. The camera HOLDS on a shot, then drifts to the next: a hold is where Very
  * High converges and the idle gate rests (a camera that never stops never settles), the drift is one eased move. */
+/* THE RELIEF BY DISTANCE (Joey 2026-10-24: "if far enough away that I can't see the layer lines it wouldn't make sense to
+   have it impact [performance], but if I'm zoomed in up close it makes sense to see them"). The stage's printed-layer
+   relief is band-limited in its shader: under `cutoffPx` CSS pixels a layer it draws nothing, and it costs the whole
+   fragment regardless (PERF.md §4.6: a fifth of a software frame at the hero, where a layer is a third of a pixel). The
+   nearest the build's box comes to the camera bounds the pixels a layer can span anywhere in the frame: the pitch times
+   the focal length in CSS px (half the frame's height over tan(fov/2)) over that distance; a face seen head-on at that
+   distance reaches it, every other point is foreshortened or farther. Under the cutoff the relief can show nowhere in the
+   shot and the stage may take it off with no visible change. */
+export function boxDistance(p, box) {
+  const dx = Math.max(box.min.x - p.x, 0, p.x - box.max.x), dy = Math.max(box.min.y - p.y, 0, p.y - box.max.y), dz = Math.max(box.min.z - p.z, 0, p.z - box.max.z);
+  return Math.hypot(dx, dy, dz);
+}
+export function reliefResolves(cam, box, view, { pitchMm = 0.2, cutoffPx = 4 } = {}) {
+  const distance = Math.max(1, boxDistance(cam.position, box));
+  const focal = Math.max(1, view.height) / 2 / Math.tan(((cam.fov || 36) * Math.PI) / 360);
+  const px = (pitchMm * focal) / distance;
+  return { px, on: px >= cutoffPx, distance, cutoffPx };
+}
+
 export const SHOTS = {
   tabletop: [
     { name: 'hero', az: 28, el: 20, fovV: 29.9, fill: 0.5, targetLift: -0.08 },

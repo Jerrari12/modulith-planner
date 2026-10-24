@@ -1338,6 +1338,25 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.ok(s1.masks.every((m) => m.multiply && m.transparent && m.depthWrite === false && m.toneMapped === false && m.order === 1 && m.colorSpace === 'srgb'), 'multiplied over the surface after the room: CustomBlending zero x source colour (three\'s MultiplyBlending is ignored on this stage), transparent, no depth write, untoned, read as sRGB: ' + JSON.stringify(s1.masks[0]));
   masksPlaced(s1.masks, roomJson, s1);
   assert.match(await text(page, '#ws-player .text'), /Watch the final scene/, 'the End page named the way in');
+  /* THE INTERIOR HIDDEN and THE RELIEF BY DISTANCE (PERF.md §5, 2026-10-24). In the scene the parts inside the assembled
+     units (drawer bodies, stoppers, QuickLocks, magnet clips and magnets) are not drawn: meshes, not groups, so
+     unitHasDrawer still answers; a unit's interior shows while its drawer is out (the bay shows through the opening) and
+     hides again once it is back. And the relief is off wherever no layer can span the shader's cutoff of 4 CSS px, which
+     is every shot of this build at this frame (a 0.2 mm layer needs a 60 mm field), whatever the tier says. */
+  const inner = await page.evaluate(() => window.__GEN2_VIEWER__.interiorState());
+  assert.equal(inner.on, true, 'the interior rule is on in the scene'); assert.ok(inner.hidden > 0 && inner.shown === 0, `every interior mesh hidden (${inner.hidden} hidden, ${inner.shown} shown)`);
+  const unit = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((i) => /DecorDrawer/.test(i.node)); return d ? v.unitOf(d.id) ?? null : null; });
+  assert.ok(unit != null, 'a drawer\'s unit'); assert.equal(await page.evaluate((u) => window.__GEN2_VIEWER__.unitHasDrawer(u), unit), true, 'the unit still answers unitHasDrawer with its drawer\'s meshes hidden (the group stays visible)');
+  await page.evaluate((u) => window.__GEN2_VIEWER__.slideUnitDrawer(u, true, 0.4), unit);
+  await settle(page, 500);
+  const outS = await page.evaluate(() => window.__GEN2_VIEWER__.interiorState());
+  assert.deepEqual(outS.units, [unit], 'the unit whose drawer is out shows its interior'); assert.ok(outS.shown > 0 && outS.hidden > 0, `its interior shown, the other units' hidden (${outS.shown} shown, ${outS.hidden} hidden)`);
+  await page.evaluate((u) => window.__GEN2_VIEWER__.slideUnitDrawer(u, false, 0.4), unit);
+  await settle(page, 900);
+  const backS = await page.evaluate(() => window.__GEN2_VIEWER__.interiorState());
+  assert.equal(backS.shown, 0, 'the drawer back: its interior hidden again'); assert.deepEqual(backS.units, [], 'and the unit forgotten');
+  const relief = await page.evaluate(() => ({ override: window.__GEN2_VIEWER__.reliefOverride(), ...window.__GEN2_DONE__.relief }));
+  assert.equal(relief.override, false, `the relief is off at the hero: ${relief.px && relief.px.toFixed(2)} CSS px a layer against the cutoff of ${relief.cutoffPx}`); assert.ok(relief.px > 0 && relief.px < relief.cutoffPx, 'the decision follows the measured pixels a layer');
   // a tier with shadows, still on the DARK theme (which has no shadow map of its own): the room's sun casts, the catcher shows
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
   await settle(page, 1500);
@@ -1345,6 +1364,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s2.room, true); assert.equal(s2.held, true); assert.notEqual(s2.theme, 'light', 'still the dark stage (named night)'); assert.equal(s2.quality, 'balanced');
   assert.equal(s2.env, true, 'Balanced has an environment'); assert.equal(s2.envIsStudio, false, 'and it is the room\'s, not the studio\'s: the tier change did not put studioEnv back');
   assert.equal(s2.shadow, true, 'the sun shadow is on under the dark theme'); assert.equal(s2.catcher, true, 'both catchers show (desk and wall)'); assert.equal(s2.disc, false, 'the disc hides');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.reliefWanted()), false, 'Balanced in the scene: the relief stays off by distance, though the tier has it');
   // the room's sun, not the studio's (2026-10-23): inside the shadow camera's far plane (3000 mm out, the desk behind the
   // build was clipped to a sliver), and Very High's soft-shadow cone is the room's sun disc, not the studio's 6 degrees
   assert.ok(s2.sunMM < s2.shadowFar - 500, `the sun sits inside the shadow frustum (${s2.sunMM} mm of ${s2.shadowFar})`);
@@ -1358,6 +1378,8 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   await page.keyboard.press('Escape');
   await settle(page, 1200);
   assert.equal((await state(page)).room, false, 'Esc: the room is gone'); assert.equal(await page.evaluate(() => document.documentElement.classList.contains('cinema')), false, 'and the scene mode with it');
+  const after = await page.evaluate(() => ({ interior: window.__GEN2_VIEWER__.interiorState(), relief: window.__GEN2_VIEWER__.reliefOverride(), wanted: window.__GEN2_VIEWER__.reliefWanted() }));
+  assert.equal(after.interior.on, false, 'Esc: the interior rule is off'); assert.equal(after.interior.hidden, 0, 'every interior mesh is back'); assert.equal(after.relief, null, 'and the tier has its say on the relief again'); assert.equal(after.wanted, true, 'Balanced outside the scene: the relief is on');
   assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ws-player')).opacity), '1', 'the player is back');
   assert.match(await text(page, '#ws-player .title'), /End of instructions/, 'still at the end'); assert.equal(await page.locator('#ws-scene').count(), 0, 'the strip is gone');
   await btn(page, 'Watch the final scene', '#ws-player').click();

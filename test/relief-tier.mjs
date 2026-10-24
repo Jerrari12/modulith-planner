@@ -149,9 +149,12 @@ test('the quality ladder reaches the printed relief', { skip: missing
          sitting beside it — `reliefWanted` must be false whenever the constant is false, at every
          tier, or the 2am lever leaves the relief on wherever the ladder happens to want it. */
       const src = await (await fetch(`${base}/js/main.js`)).text();
-      assert.match(src, /const reliefWanted = \(\) =>\s*LAYER_DETAIL_ENABLED && !!QUALITY\[quality\]\.relief;/,
+      /* The Done scene's override (2026-10-24, PERF.md §5) may follow as a third term, and only in the form that TAKES
+         the relief away (`reliefOverride !== false`): a term that could grant it would put a lever above the switch. */
+      assert.match(src, /const reliefWanted = \(\) =>\s*LAYER_DETAIL_ENABLED && !!QUALITY\[quality\]\.relief( && reliefOverride !== false)?;/,
         'reliefWanted no longer reads BOTH the constant and the tier — the kill switch has stopped '
         + 'being able to override the ladder');
+      assert.ok(!/reliefOverride === true|\|\|\s*reliefOverride/.test(src), 'the scene\'s override may only take the relief away, never grant it');
     });
   } finally {
     await browser.close();

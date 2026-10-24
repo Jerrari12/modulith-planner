@@ -3198,3 +3198,40 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Checks.** The harness's passes (66 + 42 + 12 + 18 + 4 rows, no failures; frames drawn == ticks on every row), the
   probe at High and at Balanced (its control diffs 0 px), the wallCrop screenshot against the baseline's by eye,
   `node --check` on both tools. Nothing in js/ or the tests changed; nothing on the ladder changed yet. Not deployed.
+
+## 2026-10-24 (the Done scene: the interior hidden, and the relief by distance)
+
+- **What.** The two rules the performance study put first (PERF.md §5; DESIGN.md §8j), on done-scene, behind the same
+  `?done=room` flag, not deployed. Joey, 2026-10-24: "Next start with the two scene changes", and on the relief: "if
+  far enough away that I can't see the layer lines it wouldn't make sense to have it impact it, but if I'm zoomed in up
+  close it makes sense to see them."
+- **The interior hidden** (`setInteriorHidden`, `interiorShow`, `interiorState` in main.js; the scene turns it on at
+  entry with `sequence: true` and off at leave). The meshes of every Drawer, Stopper, QuickLock, MagnetClip and Magnet
+  instance are hidden, mesh by mesh (not the group: `unitHasDrawer` and `unitBox` read `group.visible` and the slide
+  moves the group), each remembering that this rule hid it. `slideUnitDrawer` shows the slid unit's whole interior
+  while its drawer is out and hides it 360 ms after the close. QuickLocks belong to no unit and stay hidden, the state
+  the probe measured at 0 px. One shadow-map render per change. The Colors stage (free orbit) does not use it yet.
+- **The relief by distance** (`reliefResolves` in done-fit.js; `reliefOverride` / `setReliefOverride` in main.js;
+  `reliefShot` / `reliefMove` in done.js). The relief draws nothing under the shader's 4 CSS px a layer and costs the
+  whole fragment regardless, and it is a compile-time injection toggled by a material rebuild. So per SHOT: the nearest
+  the build's box comes to the camera and the frame's focal length say whether any 0.2 mm layer can span the cutoff;
+  if not, the stage's override takes the relief off (a third, subtractive term of `reliefWanted`: the kill switch and
+  the ladder keep their authority). Applied at a cut, a landing or the entrance; a drift toward a shot that resolves
+  turns it on at the start, one away turns it off on landing. Every current shot of the 2W2H kit is a third of a pixel
+  a layer, so the scene runs without the relief on every tier (−19 % of a software frame, no visible change); a macro
+  shot in the grammar brings it back by itself. Outside the scene the override is null.
+- **Review.** Terra `01a16dbb` (routine), one finding: QuickLocks have no unit, so a slid drawer never un-hides them.
+  True, and the state PERF.md §4.8 measured at 0 px (they sit at the case joints, not in a bay): recorded in the code's
+  comment, no change. Two source gates widened to say what they meant: test/relief-tier.mjs admits the override as a
+  term that can only TAKE the relief away; test/bed-finish.test.mjs distinguishes a READ of the shader's cutoff
+  (allowed, and now required) from main.js PASSING its own thresholds (still refused).
+- **Checks (laptop).** test/done-fit (13, with `reliefResolves`); the first Done e2e case extended (the rule on, every
+  interior mesh hidden, `unitHasDrawer` still true, the slid unit's interior shown then hidden again, the override false
+  at the hero with the measured px a layer, Balanced in the scene with `reliefWanted()` false, everything restored
+  after Esc); seven mutants killed (no hide on entry; the drawer's unit not shown; no re-hide; leave keeping the hide;
+  the entrance without its relief decision; leave keeping the override; the predicate inverted); npm test 631 tests,
+  626 pass, 0 fail, 5 skipped; the six room e2e cases 6 of 6. Goldens: 60 shots, 3 then 4 END shots differ at
+  0.10–0.17 % with the set changing between the two runs and about 1 000 sparse pixels across the build's extent on
+  each (the height ruler's two sides: the flake of 2026-10-23); nothing in this change runs on the End page.
+- **Known uncovered path.** The e2e cannot tell a cut's or landing's own relief decision (setCam) from the entrance's,
+  because every current shot decides the same way; the grammar's macro shot will give it a differential case.

@@ -118,11 +118,14 @@ test('the layer lines: Joey\'s 0.4 mm cap, and the numbers that must move with t
   const pitch = Number((main.match(/const LAYER_PITCH_MM = ([\d.]+);/) || [])[1]);
   assert.equal(BF.LAYER_LINES.pitchMm, pitch, 'the lines and the relief disagree on the layer pitch - '
     + 'their lattices would drift apart and the hand-off would shift');
-  /* the hand-off is the relief's own visibility ramp, which main.js does not override */
+  /* the hand-off is the relief's own visibility ramp, which main.js does not override: it may READ the default (the
+     Done scene's relief-by-distance rule hands the shader's cutoff to the scene, 2026-10-24) but never PASS its own
+     (`cutoffPxPerLayer:` as an option), or the lines would need the same numbers */
   assert.deepEqual([...BF.LAYER_LINES.handoffPx],
     [LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer, LAYER_DETAIL_DEFAULTS.fullDetailPxPerLayer]);
-  assert.ok(!/cutoffPxPerLayer|fullDetailPxPerLayer/.test(main),
+  assert.ok(!/\b(cutoffPxPerLayer|fullDetailPxPerLayer)\s*:/.test(main),
     'main.js now sets the relief\'s visibility thresholds - hand the lines the same numbers');
+  assert.ok(/LAYER_DETAIL_DEFAULTS\.cutoffPxPerLayer/.test(main), 'the scene\'s rule reads the cutoff the shader uses, not a number of its own');
   assert.deepEqual([u.uLLHandLo.value, u.uLLHandHi.value], [...BF.LAYER_LINES.handoffPx]);
 });
 

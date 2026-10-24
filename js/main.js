@@ -12,7 +12,7 @@ import { tabTitle } from './ui/names.js';   // the tab title's shape, shared wit
 import { createPlannerRelay } from './relay-auth.js';
 import { FILAMENT_DB } from './filament-db.js';
 import { partMaterialSpec } from './part-material.js';
-import { applyLayerDetail } from './vendor/layer-detail.js';
+import { applyLayerDetail, LAYER_DETAIL_DEFAULTS } from './vendor/layer-detail.js';
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
@@ -3564,7 +3564,20 @@ const LAYER_DETAIL_ENABLED = true;
  * the lever the auto-downgrade can pull on its own, on a device that is struggling. They answer
  * different questions and neither can stand in for the other.
  */
-const reliefWanted = () => LAYER_DETAIL_ENABLED && !!QUALITY[quality].relief;
+/* THE SCENE'S OVERRIDE (the Done scene, 2026-10-24; PERF.md §5 and done-fit.js reliefResolves): `false` takes the relief
+   off whatever the tier says, for a view in which no layer can span the shader's own cutoff (4 CSS px a layer) anywhere
+   in the frame, so nothing visible changes and a fifth of a software frame comes back; `null` gives the tier back its
+   say. It goes through syncRelief like a tier change, which is a material rebuild: the scene sets it at a cut or a
+   landing, never mid-drift. */
+let reliefOverride = null;
+const reliefWanted = () => LAYER_DETAIL_ENABLED && !!QUALITY[quality].relief && reliefOverride !== false;
+function setReliefOverride(v) {
+  v = v === false ? false : null;
+  if (v === reliefOverride) return;
+  reliefOverride = v;
+  syncRelief();
+  invalidateFrame();
+}
 
 /**
  * Rebuild the part materials when the relief crosses the tier boundary.
@@ -9300,8 +9313,59 @@ function slideUnitDrawer(unitId, open, fraction = 0.4) {
   const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
   if (!d) return false;
   slideDrawer(d, open, drawerStop() * fraction);
+  interiorShow(unitId, open);
   invalidateFrame();
   return true;
+}
+
+/* THE INTERIOR HIDDEN (the Done scene's assembled state; Joey 2026-10-24: "hiding drawer bodies after they are closed,
+   since they will be covered by the faceplate anyway ... not having to have it cast shadows and compute all the things
+   inside the build you can't actually see"; PERF.md §4.6 and §4.8: a sixth of a software frame, a fifth of a CPU-bound
+   one, and 0 px of difference from any of the scene's shots). The parts inside an assembled unit: its drawer body, the
+   stoppers, the QuickLocks, the magnet clips and magnets. Hidden MESH by mesh, not by group, so unitHasDrawer and
+   unitBox (which read group.visible) still answer and slideUnitDrawer still moves the group; each mesh remembers that
+   this rule hid it, so a mesh hidden by anything else stays as it was. A unit whose drawer is OUT shows its whole
+   interior (the bay's stoppers and magnet clips show through the opening; the drawer body alone left 2 087 px wrong,
+   §4.8) until the drawer is back: the slide's 320 ms and a margin. The QuickLocks belong to no unit (unitOf is undefined
+   for them: they sit at the case joints, not in a bay), so they stay hidden with a drawer out, which is the state the
+   probe measured at 0 px (Terra 01a16dbb). Each change is one shadow-map render (markShadowDirty),
+   not a per-frame cost. The scene turns it on at entry and off at leave; the Colors stage, with its free orbit, does
+   not use it (that check is still to do). */
+const INTERIOR_TYPES = new Set(['Drawer', 'Stopper', 'QuickLock', 'MagnetClip', 'Magnet']);
+let interiorHidden = false;
+const interiorShown = new Map();   // unit id -> its re-hide timer (0 while the drawer is out)
+function applyInterior() {
+  for (const inst of instances.values()) {
+    if (!INTERIOR_TYPES.has(typeByNode[inst.cfg.node])) continue;
+    const hide = interiorHidden && !interiorShown.has(unitOf(inst));
+    inst.group.traverse((o) => {
+      if (!o.isMesh) return;
+      if (hide) { if (o.visible) { o.visible = false; o.userData.interiorHidden = true; } }
+      else if (o.userData.interiorHidden) { o.visible = true; delete o.userData.interiorHidden; }
+    });
+  }
+  markShadowDirty();
+  invalidateFrame();
+}
+function setInteriorHidden(on) {
+  on = !!on;
+  if (on === interiorHidden) return;
+  interiorHidden = on;
+  for (const t of interiorShown.values()) clearTimeout(t);
+  interiorShown.clear();
+  applyInterior();
+}
+function interiorShow(unitId, open) {
+  if (!interiorHidden) return;
+  clearTimeout(interiorShown.get(unitId));
+  if (open) { interiorShown.set(unitId, 0); applyInterior(); return; }
+  if (!interiorShown.has(unitId)) return;
+  interiorShown.set(unitId, setTimeout(() => { if (interiorShown.delete(unitId)) applyInterior(); }, 360));
+}
+function interiorState() {
+  let hidden = 0, shown = 0;
+  for (const inst of instances.values()) if (INTERIOR_TYPES.has(typeByNode[inst.cfg.node])) inst.group.traverse((o) => { if (o.isMesh) { if (o.visible) shown++; else hidden++; } });
+  return { on: interiorHidden, hidden, shown, units: [...interiorShown.keys()] };
 }
 
 // ---------- measure tool ----------
@@ -11166,7 +11230,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setReliefOverride, reliefOverride: () => reliefOverride, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
