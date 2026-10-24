@@ -3011,3 +3011,78 @@ Dated calls made while building, with who made them. The brief and the inventory
   bake2's and the live room does not have the calipers until then.
 - **Review:** Terra `01a16b9d` (routine): no findings. Checks: room.py compiles; look15 renders; the two Done e2e cases
   pass with the traversal change. Not deployed.
+
+## 2026-10-23 (the Done scene: the props' shadows move with the props; bake3)
+
+- **Joey's report (2026-10-23, the massive-build probe, DESIGN.md §8e item 4):** a slid or hidden prop left its shadow
+  behind: the keyboard's dark patch stayed on the desk's right end after the monitor group hid for a 12W build, and the
+  snake plant's leaves kept shadowing the wall with no plant in front of them. His idea: bake the plant at several
+  positions chosen by the build's size. Taken instead, as recommended to him: ONE bake, the desk and wall maps without
+  the props, and each prop GROUP's shadow as its own mask slid with the group. Per-position bakes multiply with the
+  monitor's positions and give discrete places; letting the stage's sun cast the props' shadows live would lose Cycles'
+  soft 2° penumbra and leave Fast (no shadow map) without prop shadows. Masks are textures, so every tier has them.
+- **The bake (`tools/done-scene/room.py --mode bake`, job `jobs/bake3.txt`: look15's flags and its measured exposure
+  0.15686, so this IS the room as look15 shows it, with the calipers, the notebook and pen at the front left, the mug at
+  0.22).** `bake_room` now bakes in two passes: the fixed surfaces (desk, walls, floor, frame, window, legs) with every
+  prop hidden from render, then the props with the whole room visible (they keep the room's bounce and their own
+  group's shadows). `--no-shadow-masks` keeps bake2's one pass. New `bake_shadow_masks`, run BEFORE `bake_room` (the
+  props still wear their real materials; after `bake_room` they are emission shaders of their own lightmaps and would
+  light the receivers): two white receiver planes 0.5 mm off the desk top (900 × 203 px at 2 mm a pixel) and off the
+  back wall (1200 × 510 px, the desk run plus 0.3 m a side, 20 mm below the desk top to 1 m above), invisible to shadow,
+  diffuse and glossy rays, baked as DIFFUSE direct + indirect at 1024 samples per state: no props, then each group alone
+  (calipers, monitor, mug, notebook, plant). Mask = the lit ratio with the group over without, per channel (the screen's
+  blue fill shows in the monitor's wall shadow), clamped to 1, set to 1 where the receiver is unlit in both states
+  (inside the framed print's box the first run read 0/0 as a black patch in every group's wall mask), blurred (5-tap
+  binomial), cropped to where it darkens by 7 % or more with a 24 mm pad, the crop's inner edges feathered to exactly 1
+  (a quad's edge is never a step), sRGB-encoded, written as WebP q90 through Blender's own writer and read back (mean
+  error at most 0.004). A group that darkens a surface nowhere gets no mask there (the mug, notebook and calipers on
+  the wall). room.json gains `shadows`: `px`, `zWall`, the orientation and, per mask, the file, size, extents in stage mm
+  about the tabletop anchor (desk: x0, x1, zBack, zFront; wall: x0, x1, y0, y1 over the desk top) and the darkest value.
+- **What shipped on the branch:** `scenes/home-office/room.glb` 536 KB (bake2's 524 KB plus the calipers), `room.json`
+  5.3 KB, seven masks totalling 15.4 KB (monitor wall 5.6, monitor desk 3.0, plant wall 2.4, plant desk 1.9, notebook
+  desk 0.9, calipers desk 0.8, mug desk 0.7). node0, 1.4 minutes a bake. The exactness, as corrected by the review: the
+  slots are straight runs along x and both receivers are planes, so a mask translated by the group's slide is the shadow
+  the group casts there for the SUN (directional) and the SKY (uniform); the window's area light, finite and 2 m away,
+  moves a caster's shadow by more than the slide (on the desk by 1 + h/(hL − h) for a caster point h above the desk
+  under a light 0.91 m above it: 1.12 for the mug's rim, 2.2 for a leaf tip; on the wall 1.38 for the plant), inside a
+  penumbra that light makes 0.23 m wide for the mug and 1.2 m for a leaf tip, so a broad faint gradient lands a fraction
+  of its width off while the sun's crisp silhouette lands exactly; not corrected in the runtime, recorded (DESIGN.md §8f).
+  Groups multiply, exact where their shadows do not overlap (the mug's and the keyboard's just touch).
+- **The runtime (`js/scenes/done.js`, `done-fit.js maskQuad` + its unit test).** `loadRoom` fetches the masks with the
+  GLB (once per page; a mask that fails to load is left out with a warning), read as sRGB, their URLs carrying
+  room.json's deploy stamp. After `fitSlides`, one quad per mask at the mask's extents, lying on the desk (image top
+  toward the wall) or facing the desk 0.5 mm before the wall, `MeshBasicMaterial` with the mask, transparent, no depth
+  write, untoned, `renderOrder` 1, raycast off, `userData.doneRoom` and `doneShadow`, offset along x by the group's
+  slide and hidden when `fitSlides` hides the group; disposed on leave (the textures stay cached like the GLB's). The
+  debug hook gains `slides` and `shadows`. **Not three's `MultiplyBlending`:** on this stage it is ignored and the quad
+  replaces the frame. main.js had measured that on the AO composite ("byte-identical to NoBlending") and the Very High
+  blit already uses CustomBlending for it; the first proof shot drew the desk and the wall pure white (253) inside every
+  quad with MultiplyBlending set and reported by the material, oak (215) with the quads hidden. The multiply is spelled
+  out as CustomBlending, zero × source colour with the alpha left alone, and gives the product (210 where the mask reads
+  0.97). The catchers for the build's live shadow are unchanged.
+- **Review** (substantial: Sol `01a16bc5`, with the ledger's due Terra pair `01a16bc6` on the same prompt, blind; one
+  finding each, both confirmed, none discarded). Sol: a desk mask that reaches the desk's end and slides outward
+  overhangs the tabletop and darkens what shows past the edge (the plant's mask runs to the desk's left end; an 8W build
+  slides it 33 mm out) → `maskQuad` takes the desk's extent as a clip, cuts the quad at the desk's ends and moves its
+  texture window with the cut; a mask carried wholly off is not placed; wall masks are not cut; unit cases. Terra: the
+  translation is not exact under the finite `--soft-light 500` area light, whose shadow moves further than the caster →
+  true; the magnitude was computed (above) and sits inside that light's own penumbra, so the claim in the code, the
+  design record and this entry was corrected rather than the runtime changed.
+- **Checks (laptop).** Proof at High, headless (the session scratchpad: `before-12x2-hero.png`, `after2-12x2-hero.png`,
+  `after3-8x2-hero.png`): the 12W × 2H probe build no longer shows the keyboard's dark patch on the desk's right end nor
+  the monitor's and the leaves' shadows on the wall once those groups hid; the 8W build's plant slides 33 mm with its
+  leaf silhouette on the wall behind it and its desk quad cut at the desk's end. Unit: done-fit 11 of 11 (`maskQuad`,
+  the clip included). e2e `Done scene|Studio / Room`: 5 of 5; the first Done case counts one quad per listed mask on
+  Fast, checks the blend, the orientation flags and each quad's place from room.json's extents, and that Back disposes
+  them; the new case builds 12W × 2H through the Build workspace (the monitor and the plant hide with their quads, the
+  mug slides 201 mm with its quads, Back disposes) and then 8W × 2H (the plant's desk quad cut at the edge, the drawn
+  UVs the cut's). Mutants, all killed: the slide ignored; a hidden group keeps its shadow; the quads not removed on
+  leave; normal blending; no masks loaded; a wall quad 100 mm behind the wall; every group read as unmoved; a desk quad
+  mirrored in z; the clip ignored (the unit test); the texture window not moved with the cut (it SURVIVED the 12W leg,
+  where nothing is cut, and died once the 8W leg was added). npm test 629 tests, 624 pass, 0 fail, 5 skipped; goldens
+  60 shots, 0 differ. Not deployed, not merged.
+- **Provenance of the bake-side hunks.** `db63d08` (the room pass, the previous entry) was staged as the whole of
+  room.py while this work's first mask-pass hunks (the two-pass `bake_room`, `bake_shadow_masks`, `blur5`, `write_webp`,
+  the `shadows` block) were already in the shared working tree, so that commit carries them UNREVIEWED and its look15
+  render was made with them; Terra `01a16b9d` covered only the room pass's own hunks. This commit completes them (the
+  crop threshold and feather, the unlit-receiver guard, the exposure) and its review covers the mask pass whole.

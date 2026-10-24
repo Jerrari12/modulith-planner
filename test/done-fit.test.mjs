@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -150,4 +150,39 @@ test('the drawer moment: out, open, back inside the detail hold; none in a hold 
   close(aim.x, 0.25, 1e-9, 'the right unit\'s centre is a quarter of the width right of the build\'s'); close(aim.z, 0, 1e-9, 'same depth');
   const c = shotCamera({ ...SHOTS.tabletop[2], targetShift: aim }, build, { width: 1280, height: 800, free: { w: 972, h: 560 } });
   close(c.target.x, 88, 1e-9, 'the detail shot looks at that unit');
+});
+
+test('maskQuad: a desk mask lies on the desk about the anchor and slides with its group; a wall mask stands on the wall; a hidden group hides its shadow', () => {
+  const anchor = { x: 100, z: -50 }, wallZ = -94;
+  const desk = { group: 'monitor', surface: 'desk', x0: 300, x1: 900, zBack: -20, zFront: 380 };
+  const q = maskQuad(desk, anchor, wallZ, 0);
+  assert.equal(q.surface, 'desk'); close(q.w, 600, 1e-9, 'w'); close(q.h, 400, 1e-9, 'h');
+  close(q.x, 100 + 600, 1e-9, 'x: the anchor plus the mask\'s centre'); close(q.y, 0.5, 1e-9, 'lifted off the desk'); close(q.z, -50 + 180, 1e-9, 'z: about the anchor, the front positive');
+  assert.equal(q.visible, true);
+  close(maskQuad(desk, anchor, wallZ, 250).x, 700 + 250, 1e-9, 'a slid group carries its shadow by the same slide');
+  close(maskQuad(desk, anchor, wallZ, undefined).x, 700, 1e-9, 'a group that did not move: no offset');
+  assert.equal(maskQuad(desk, anchor, wallZ, null).visible, false, 'a hidden group: its shadow hides');
+  close(maskQuad(desk, anchor, wallZ, null).x, 700, 1e-9, 'and sits where it would be shown');
+  const wall = { group: 'plant', surface: 'wall', x0: -700, x1: -300, y0: 0, y1: 500 };
+  const wq = maskQuad(wall, anchor, wallZ, -120);
+  assert.equal(wq.surface, 'wall'); close(wq.w, 400, 1e-9, 'w'); close(wq.h, 500, 1e-9, 'h');
+  close(wq.x, 100 - 500 - 120, 1e-9, 'x, slid left with an x- group'); close(wq.y, 250, 1e-9, 'y: height over the desk top'); close(wq.z, -94 + 0.5, 1e-9, 'z: just in front of the wall');
+  assert.equal(maskQuad(wall, anchor, null, 0), null, 'no wall known: no wall quad');
+  assert.equal(maskQuad({ surface: 'floor', x0: 0, x1: 1 }, anchor, wallZ, 0), null, 'an unknown surface is not placed');
+  close(maskQuad(desk, anchor, wallZ, 0, 2).y, 2, 1e-9, 'the lift is a parameter');
+  assert.equal(q.u0, 0); assert.equal(q.u1, 1);
+  // the clip (Sol 01a16bc5): a desk mask that reaches the desk's end and slides outward is cut at the edge, its texture
+  // window with it; one that stays on the desk is whole; one carried wholly off draws nothing; a wall mask is never cut
+  const clip = { x0: -680, x1: 1120 };
+  const edge = { group: 'plant', surface: 'desk', x0: -680, x1: 10, zBack: -25, zFront: 381 };
+  const c = maskQuad(edge, anchor, wallZ, -100, 0.5, clip);
+  close(c.w, 690 - 100, 1e-9, '100 of the 690 mm cut off at the desk\'s left end'); close(c.x, 100 + (-680 + -90) / 2, 1e-9, 'centred on what remains');
+  close(c.u0, 100 / 690, 1e-9, 'the texture window starts 100 mm into the mask'); close(c.u1, 1, 1e-9, 'and ends where the mask ends');
+  const whole = maskQuad(edge, anchor, wallZ, 50, 0.5, clip);
+  close(whole.w, 690, 1e-9, 'a slide that stays on the desk cuts nothing'); close(whole.u0, 0, 1e-9, 'u0'); close(whole.u1, 1, 1e-9, 'u1'); close(whole.x, 100 + (-680 + 10) / 2 + 50, 1e-9, 'x');
+  assert.equal(maskQuad(edge, anchor, wallZ, -800, 0.5, clip), null, 'a mask carried wholly off the desk is not placed');
+  const right = maskQuad({ ...desk, x0: 900, x1: 1200 }, anchor, wallZ, 0, 0.5, clip);
+  close(right.w, 220, 1e-9, 'a mask reaching past the right end is cut there'); close(right.u0, 0, 1e-9, 'u0'); close(right.u1, 220 / 300, 1e-9, 'u1');
+  const wq2 = maskQuad(wall, anchor, wallZ, -800, 0.5, clip);
+  close(wq2.w, 400, 1e-9, 'a wall mask is not cut'); close(wq2.u0, 0, 1e-9, 'u0'); close(wq2.u1, 1, 1e-9, 'u1');
 });

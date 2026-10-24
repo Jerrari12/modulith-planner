@@ -162,3 +162,31 @@ export function contactFootprint(box, grow = 1.25) {
   const w = (box.max.x - box.min.x) * grow, d = (box.max.z - box.min.z) * grow;
   return { w, d, x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2 };
 }
+
+/* THE PROPS' SHADOW MASKS (2026-10-23): where a mask's quad goes. room.json `shadows.masks[]` holds, per prop group and
+ * surface, the WebP of the group's shadow (the bake's ratio of the light on the surface with the group to the light
+ * without it: tools/done-scene/room.py bake_shadow_masks) and its extents in mm about the tabletop anchor: on the desk
+ * x0, x1, zBack, zFront (stage z, the front positive); on the wall x0, x1, y0, y1 (height over the desk top). `anchor`
+ * is the anchor's world { x, z } (its y is 0, the desk top); `wallZ` the wall surface's world z (null: no wall known);
+ * `dx` the group's slide from fitSlides (undefined: it did not move; null: the group is hidden, so its shadow hides too).
+ * The quad stands `lift` mm off its surface for the depth test. `clip` ({ x0, x1 } about the anchor, the desk's extent)
+ * cuts a DESK quad at the desk's ends and moves its texture window (u0, u1) with the cut, so a mask that reaches the
+ * desk's edge and then slides outward never floats in the air past it (Sol 01a16bc5); a mask carried wholly off the
+ * desk is not placed. Returns { surface, w, h, x, y, z, u0, u1, visible }, or null when the mask cannot be placed.
+ * A slid mask is exact for the sun (directional) and the sky (uniform); the window's area light, finite and 2 m away,
+ * moves a caster's shadow by MORE than the slide (by 1 + h / (hL - h) on the desk: 1.12 for the mug, 2.2 for a leaf tip),
+ * inside a penumbra 0.2 to 1.2 m wide, where the offset does not read (Terra 01a16bc6). */
+export function maskQuad(mask, anchor, wallZ, dx, lift = 0.5, clip = null) {
+  const slide = dx == null ? 0 : dx, visible = dx !== null;
+  let x0 = mask.x0 + slide, x1 = mask.x1 + slide, u0 = 0, u1 = 1;
+  if (mask.surface === 'desk') {
+    if (clip) {
+      const full = x1 - x0, c0 = Math.max(x0, clip.x0), c1 = Math.min(x1, clip.x1);
+      if (c1 <= c0) return null;
+      u0 = (c0 - x0) / full; u1 = (c1 - x0) / full; x0 = c0; x1 = c1;
+    }
+    return { surface: 'desk', w: x1 - x0, h: mask.zFront - mask.zBack, x: anchor.x + (x0 + x1) / 2, y: lift, z: anchor.z + (mask.zBack + mask.zFront) / 2, u0, u1, visible };
+  }
+  if (mask.surface === 'wall') return wallZ == null ? null : { surface: 'wall', w: x1 - x0, h: mask.y1 - mask.y0, x: anchor.x + (x0 + x1) / 2, y: (mask.y0 + mask.y1) / 2, z: wallZ + lift, u0, u1, visible };
+  return null;
+}

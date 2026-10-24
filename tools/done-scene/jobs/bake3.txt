@@ -1,0 +1,7 @@
+# bake3 (laptop, 2026-10-23 night): the room as look15 shows it (Joey: "Bake the room as look15 shows it"; look15's flags
+# and its measured exposure 0.15686), with the props' shadows moving with the props. Baked the new way: the desk, walls
+# and floor WITHOUT the props, the props with the room, and each prop group's shadow as its own ratio mask over the desk
+# top and the back wall (room.py bake_shadow_masks: 2 mm a pixel, 1024 samples a state, WebP q90), listed in room.json
+# `shadows` for js/scenes/done.js to slide with the group. Joey, 2026-10-23: the keyboard's shadow stayed on the desk after
+# the keyboard hid for a 12W build; his per-position bakes multiply with the monitor's positions, the masks do not.
+--mode bake --name room --out-dir renders/bake3 --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3

@@ -1051,7 +1051,6 @@ def bake_shadow_masks(props, desk, anchor):
     EPS = 0.0005                              # the receivers float this far off their surface (0.7 mm of shadow shift at a 35 degree sun)
     pitch = args.mask_px / 1000.0 / max(args.lm_scale, 1e-6)   # metres a pixel; --lm-scale shrinks the masks like the lightmaps
     ax, ay = anchor[0], anchor[1]
-    linear = 'Linear Rec.709' if 'Linear Rec.709' in [c.name for c in type(bpy.data.images[0].colorspace_settings).bl_rna.properties['name'].enum_items] else 'Non-Color'
     specs = {   # the second axis (v) is Blender y on the desk (toward the wall) and Blender z on the wall (up)
         'desk': dict(x0=desk['x0'], x1=desk['x1'], v0=desk['y0'], v1=desk['y1']),
         'wall': dict(x0=desk['x0'] - 0.3, x1=desk['x1'] + 0.3, v0=DESK_TOP_Z - 0.02, v1=DESK_TOP_Z + 1.0),
@@ -1081,7 +1080,7 @@ def bake_shadow_masks(props, desk, anchor):
         o.data.materials.append(m)
         nx, nv = max(8, int(round(w / pitch))), max(8, int(round(h / pitch)))
         img = bpy.data.images.new('mask_' + surface, nx, nv, alpha=False, float_buffer=True)
-        img.colorspace_settings.name = linear
+        img.colorspace_settings.name = 'Linear Rec.709' if 'Linear Rec.709' in [c.name for c in type(img.colorspace_settings).bl_rna.properties['name'].enum_items] else 'Non-Color'
         tex = m.node_tree.nodes.new('ShaderNodeTexImage')
         tex.image = img
         tex.name = 'BAKE'
@@ -1120,16 +1119,35 @@ def bake_shadow_masks(props, desk, anchor):
         for pl in planes:
             surface, p = pl['surface'], pl['spec']
             A, B = base[surface], shown[surface]
-            ratio = blur5(np.clip(B / np.maximum(A, 1e-4), 0.0, 1.0))
-            dark = ratio.min(axis=2) < 0.97
+            # no ratio where the receiver sees no light WITHOUT the props: inside the framed print's box the wall plane is
+            # unlit in both states, and 0/0 read as a black patch in every group's wall mask (bake3's first run)
+            lum = A.mean(axis=2)
+            lit = lum > 0.02 * float(np.median(lum))
+            ratio = blur5(np.where(lit[:, :, None], np.clip(B / np.maximum(A, 1e-4), 0.0, 1.0), 1.0))
+            # the crop: where the group darkens the surface by 7 % or more (a lower bar read the two bakes' residual
+            # noise as shadow at 8 samples and kept whole planes), padded for the faint outer penumbra and the feather
+            dark = ratio.min(axis=2) < 0.93
             rows, cols = np.where(dark.any(axis=1))[0], np.where(dark.any(axis=0))[0]
             if not len(rows):
-                print('[mask] %-8s on the %s: nothing darker than 3 %%, no mask' % (g, surface))
+                print('[mask] %-8s on the %s: nothing darker than 7 %%, no mask' % (g, surface))
                 continue
-            pad = 4
+            pad = 12   # 24 mm at 2 mm a pixel
             r0, r1 = max(0, int(rows[0]) - pad), min(pl['nv'], int(rows[-1]) + 1 + pad)
             c0, c1 = max(0, int(cols[0]) - pad), min(pl['nx'], int(cols[-1]) + 1 + pad)
             crop = ratio[r0:r1, c0:c1]
+            # feather the quad's edges that lie INSIDE the receiver (not the ones along the desk's own edge or the wall
+            # plane's), so the mask meets the untouched surface at exactly 1 and a quad's edge is never a step
+            def feather(n, lo_open, hi_open):
+                w = np.ones(n, dtype=np.float32)
+                k = min(pad, n)
+                ramp = (np.arange(k, dtype=np.float32) + 1) / pad
+                if lo_open:
+                    w[:k] = np.minimum(w[:k], ramp)
+                if hi_open:
+                    w[n - k:] = np.minimum(w[n - k:], ramp[::-1])
+                return w
+            wgt = np.minimum.outer(feather(crop.shape[0], r0 > 0, r1 < pl['nv']), feather(crop.shape[1], c0 > 0, c1 < pl['nx']))[:, :, None]
+            crop = 1.0 - (1.0 - crop) * wgt
             fname = 'shadow-%s-%s.webp' % (g, surface)
             path = os.path.join(args.out_dir, fname)
             err = write_webp(path, to_srgb(crop), args.mask_quality)   # display-encoded, like the lightmaps: the planner reads it as sRGB
@@ -1240,6 +1258,7 @@ elif args.mode == 'bake':
         for o in holder.children_recursive:
             o.hide_render = True
     measured, peak = probe_sun()   # the direction the planner's sun light takes, so the live shadow agrees with the baked ones
+    masks = []
     if args.skip_bake:
         # flat: every material becomes an unlit emission of its own base colour (the same export path as a bake)
         for o in [o for o in ROOM.objects if o.type == 'MESH']:

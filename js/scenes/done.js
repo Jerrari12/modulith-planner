@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, slideProps, fitSlides, contactFootprint, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
+import { shotCamera, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -36,10 +36,27 @@ function loadRoom() {
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
     loading = Promise.all([loader.loadAsync(ROOM_GLB), fetch(ROOM_JSON).then((r) => { if (!r.ok) throw new Error(`${ROOM_JSON}: ${r.status}`); return r.json(); })])
-      .then(([gltf, json]) => ({ gltf, json }))
+      .then(async ([gltf, json]) => ({ gltf, json, masks: await loadMasks(json) }))
       .catch((e) => { loading = null; throw e; });
   }
   return loading;
+}
+
+/* THE PROPS' SHADOW MASKS (room.json `shadows.masks`, baked by tools/done-scene/room.py bake_shadow_masks, 2026-10-23): the
+   desk and wall lightmaps are baked with the props OUT, and each prop group's shadow is its own ratio (the light on the
+   surface with the group over the light without it) in a WebP beside room.glb, with its quad's extents in mm about the
+   tabletop anchor. So a prop that slides or hides takes its shadow with it (bake2 left the keyboard's dark patch on the
+   desk after the keyboard hid for a 12W build). Fetched once with the room, each a texture read as sRGB (the file is
+   display-encoded like the lightmaps). One that fails to load is left out with a warning: the room comes on without that
+   shadow. The deploy stamps room.json's URL (pages.yml), so the masks beside it take the same stamp. */
+function loadMasks(json) {
+  const list = json.shadows && Array.isArray(json.shadows.masks) ? json.shadows.masks : [];
+  if (!list.length) return Promise.resolve([]);
+  const q = ROOM_JSON.indexOf('?'), stamp = q < 0 ? '' : ROOM_JSON.slice(q), dir = ROOM_JSON.slice(0, ROOM_JSON.lastIndexOf('/') + 1);
+  const tl = new THREE.TextureLoader();
+  return Promise.all(list.map((m) => tl.loadAsync(dir + m.file + stamp)
+    .then((t) => { t.colorSpace = THREE.SRGBColorSpace; return { ...m, tex: t }; })
+    .catch((e) => { console.warn('[done scene] shadow mask', m.file, e); return { ...m, tex: null }; })));
 }
 
 /* the room's materials are its baked light: unlit, drawn as-is. Blender exports an Emission shader as a PBR material
@@ -89,7 +106,7 @@ function contactTexture() {
 export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true } = {}) {
   const { scene, camera, controls, renderer } = stage;
   let cancelled = false, on = false;
-  const parts = { group: null, catcher: null, wall: null, sprite: null, env: null, tex: null, mats: [], raf: 0 };
+  const parts = { group: null, catcher: null, wall: null, sprite: null, masks: [], slid: {}, env: null, tex: null, mats: [], raf: 0 };
   const was = { table: stage.table.visible, grid: stage.grid.visible,
     sun: { pos: stage.sun.position.clone(), color: stage.sun.color.clone(), intensity: stage.sun.intensity },
     hemi: { color: stage.hemi.color.clone(), ground: stage.hemi.groundColor.clone(), intensity: stage.hemi.intensity },
@@ -257,7 +274,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.raf = requestAnimationFrame(step);
   }
 
-  const ready = loadRoom().then(({ gltf, json: j }) => {
+  const ready = loadRoom().then(({ gltf, json: j, masks }) => {
     if (cancelled) return null;
     json = j;
     buildBox = stage.assembledBox.clone();
@@ -284,6 +301,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     group.traverse((o) => { if (o.userData.slot && (o.isMesh || o.children.some((c) => c.isMesh))) props.push({ obj: o, group: o.userData.group || o.name, slot: o.userData.slot, gap: (+o.userData.gap || 0.06) * SCALE, box: plain(boxOf(o)) }); });
     const slid = fitSlides(props, slideProps(props, plain(buildBox)), { x0: anchorWorld.x + d.x0, x1: anchorWorld.x + d.x1 });
     for (const p of props) { const dx = slid[p.group]; if (dx === null) p.obj.visible = false; else if (dx) p.obj.position.x += dx / SCALE; }
+    parts.slid = slid;
     group.updateMatrixWorld(true);
     parts.group = group;
     scene.add(group);
@@ -306,6 +324,32 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       wall.receiveShadow = true; wall.castShadow = false; wall.renderOrder = 1; wall.raycast = () => {};
       wall.userData.doneRoom = true;
       parts.wall = wall; scene.add(wall);
+    }
+    /* THE PROPS' SHADOWS, slid with the props (loadMasks): one quad per group per surface, the mask MULTIPLIED over the desk
+       top or the wall: the framebuffer's display value times the mask's, which is the shadow the lightmap used to carry, to
+       within the sRGB toe. The multiply is spelled out as CustomBlending (zero x source colour, the alpha left alone): on
+       this stage three's MultiplyBlending is IGNORED and the quad replaces the frame (js/main.js measured it on the AO
+       composite, "byte-identical to NoBlending", and the Very High blit uses CustomBlending for the same reason; the first
+       bake3 proof shot drew the desk white inside every quad, 2026-10-23). Offset along x by the group's slide and hidden
+       with a hidden group. Textures, so every tier has them, Fast included; the build's own live shadow stays the
+       catchers' business. Placed by done-fit.js maskQuad, 0.5 mm off the surface like the catchers (the depth test); the
+       order among these coplanar multiplies and the ShadowMaterial does not matter, multiplication commutes. Disposed on
+       leave; the textures are the cached load's and stay, like the GLB's. */
+    parts.masks = [];
+    for (const m of masks || []) {
+      if (!m.tex) continue;
+      const q = maskQuad(m, { x: anchorWorld.x, z: anchorWorld.z }, wallZ, slid[m.group], 0.5, { x0: d.x0, x1: d.x1 });   // a desk quad is cut at the desk's ends (Sol 01a16bc5)
+      if (!q) continue;
+      const geo = new THREE.PlaneGeometry(q.w, q.h);
+      if (q.u0 > 0 || q.u1 < 1) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, q.u0 + uv.getX(i) * (q.u1 - q.u0)); uv.needsUpdate = true; }   // the texture window follows the cut
+      if (q.surface === 'desk') geo.rotateX(-Math.PI / 2);   // lying on the desk, the image's top toward the wall; a wall mask faces +z, toward the desk
+      const quad = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: m.tex, transparent: true, depthWrite: false, toneMapped: false,
+        blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
+        blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }));
+      quad.position.set(q.x, q.y, q.z); quad.visible = q.visible;
+      quad.renderOrder = 1; quad.raycast = () => {}; quad.castShadow = false; quad.receiveShadow = false;
+      quad.userData.doneRoom = true; quad.userData.doneShadow = { group: m.group, surface: m.surface, dx: q.visible ? (slid[m.group] || 0) : null, u0: q.u0, u1: q.u1 };
+      parts.masks.push(quad); scene.add(quad);
     }
     const fp = contactFootprint(plain(buildBox));
     parts.tex = contactTexture();
@@ -332,7 +376,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     addEventListener('resize', refit);
     document.addEventListener('visibilitychange', onVisibility);
     controls.addEventListener('start', onGrabStart); controls.addEventListener('end', onGrabEnd);
-    if (debug) window.__GEN2_DONE__ = { get sequence() { return { on: seq.on, wanted: sequenceWanted(), mode: mode(), cams: seq.cams.map((c) => [c.position.x, c.position.y, c.position.z]), paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
+    if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height })); },
+      get sequence() { return { on: seq.on, wanted: sequenceWanted(), mode: mode(), cams: seq.cams.map((c) => [c.position.x, c.position.y, c.position.z]), paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
       setTiming(t) { Object.assign(seq.timing, t); seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict
       jump(i) { if (!seq.on) return; cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); seq.t0 = performance.now() - i * (seq.timing.holdMs + seq.timing.moveMs); seq.pausedAt = null; seq.movingTo = -2; seqTick(); } };   // to the start of shot i's hold (-2: "land on it")
     if (!tracked) { tracked = true; stage.track('done:room'); }
@@ -370,6 +415,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (debug) delete window.__GEN2_DONE__;
     delete document.documentElement.dataset.done;
     for (const k of ['group', 'catcher', 'wall', 'sprite']) { const o = parts[k]; if (o) { scene.remove(o); if (o.geometry && k !== 'group') o.geometry.dispose(); if (o.material && k !== 'group') o.material.dispose(); parts[k] = null; } }
+    for (const q of parts.masks) { scene.remove(q); q.geometry.dispose(); q.material.dispose(); }   // the props' shadow quads; their textures are the cached load's
+    parts.masks = []; parts.slid = {};
     if (parts.tex) { parts.tex.dispose(); parts.tex = null; }
     for (const m of parts.mats) m.dispose();   // the room's own materials; their textures are the cached GLB's
     parts.mats = [];

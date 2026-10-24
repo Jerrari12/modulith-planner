@@ -1291,7 +1291,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
     await btn(page, 'Next', '#ws-player').click();
     await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
   };
-  const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; const vis = []; let disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) vis.push(o.visible); else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } }); const catcher = vis.length ? (vis.every(Boolean) ? true : vis.some(Boolean) ? 'mixed' : false) : null; return { catchers: vis.length, held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme, sunHalfDeg: v.sunHalfDeg, sunMM: Math.round(v.sun.position.distanceTo(v.sun.target.position)), shadowFar: v.sun.shadow.camera.far }; });
+  const state = (page) => page.evaluate(async () => { const v = window.__GEN2_VIEWER__, THREE = await import('three'); const vis = [], masks = []; let disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) vis.push(o.visible); else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } if (o.userData.doneShadow) masks.push({ ...o.userData.doneShadow, visible: o.visible, multiply: o.material.blending === THREE.CustomBlending && o.material.blendSrc === THREE.ZeroFactor && o.material.blendDst === THREE.SrcColorFactor && o.material.blendEquation === THREE.AddEquation, transparent: o.material.transparent, depthWrite: o.material.depthWrite, toneMapped: o.material.toneMapped, order: o.renderOrder, colorSpace: o.material.map ? o.material.map.colorSpace : null, x: o.position.x, y: o.position.y, z: o.position.z, w: o.geometry.parameters.width }); }); const catcher = vis.length ? (vis.every(Boolean) ? true : vis.some(Boolean) ? 'mixed' : false) : null; const bb = v.assembledBox, rm = v.scene.getObjectByName('done-room'), wa = rm && rm.getObjectByName('anchor_wall'); return { catchers: vis.length, masks, anchorX: (bb.min.x + bb.max.x) / 2, anchorZ: bb.min.z, wallZ: wa ? wa.getWorldPosition(wa.position.clone()).z : null, held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme, sunHalfDeg: v.sunHalfDeg, sunMM: Math.round(v.sun.position.distanceTo(v.sun.target.position)), shadowFar: v.sun.shadow.camera.far }; });
   // off: nothing of the room
   const off = await open('assemble');
   await toDone(off.page);
@@ -1311,6 +1311,16 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s1.grid, false, 'the grid is hidden'); assert.equal(s1.table, false, 'the table is hidden'); assert.equal(s1.dims, false, 'no callouts in the room');
   assert.equal(s1.quality, 'fast', 'the suite pins Fast'); assert.equal(s1.shadow, false, 'Fast has no shadow map'); assert.equal(s1.disc, true, 'Fast shows the baked contact disc'); assert.equal(s1.catcher, false);
   assert.equal(s1.catchers, 2, 'two shadow catchers: the desk top and the wall behind it (2026-10-23), both hidden on Fast');
+  /* the props' shadow masks (bake3, 2026-10-23): one quad per mask room.json lists, multiplied over the desk or the wall,
+     on Fast too (textures, not the shadow map), each where room.json's extents put it about the anchor; the 2W2H kit hides
+     no group, so every shadow shows */
+  const roomJson = JSON.parse(await readFile(join(root, 'scenes', 'home-office', 'room.json'), 'utf8'));
+  const listed = (roomJson.shadows && roomJson.shadows.masks) || [];
+  assert.ok(listed.length > 0, 'room.json lists the props\' shadow masks (bake3)');
+  assert.equal(s1.masks.length, listed.length, 'one quad per listed mask, on Fast too');
+  assert.ok(s1.masks.every((m) => m.visible), 'the 2W2H kit hides no prop group: every shadow shows');
+  assert.ok(s1.masks.every((m) => m.multiply && m.transparent && m.depthWrite === false && m.toneMapped === false && m.order === 1 && m.colorSpace === 'srgb'), 'multiplied over the surface after the room: CustomBlending zero x source colour (three\'s MultiplyBlending is ignored on this stage), transparent, no depth write, untoned, read as sRGB: ' + JSON.stringify(s1.masks[0]));
+  masksPlaced(s1.masks, roomJson, s1);
   assert.match(await text(page, '#ws-player .text'), /on a desk/, 'the player says where the build is');
   // a tier with shadows, still on the DARK theme (which has no shadow map of its own): the room's sun casts, the catcher shows
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
@@ -1336,6 +1346,94 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.equal(s3.bg, 'color', 'the stage background is back'); assert.equal(s3.envIsStudio, true, 'the studio environment is back'); assert.equal(s3.controls, true); assert.equal(s3.grid, true); assert.equal(s3.table, true); assert.equal(s3.dims, true, 'the callouts are back');
   assert.ok(!/End of instructions/.test(await text(page, '#ws-player .title')), 'Back leaves the end');
   assert.equal(s3.sunHalfDeg, 6, 'Back restores the studio\'s soft-shadow cone');
+  assert.equal(s3.masks.length, 0, 'Back disposes the props\' shadow quads');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* the props' shadow masks (bake3): the check that each quad sits where room.json's extents put it about the anchor plus its
+   group's slide (done-fit.js maskQuad). `f` is the frame read from the page: anchorX (the build's centre), anchorZ (its
+   back), wallZ (the GLB's wall anchor, world). Shared by the Done cases. */
+function masksPlaced(masks, roomJson, f) {
+  const desk = roomJson.desk;
+  for (const m of masks) {
+    const rec = roomJson.shadows.masks.find((r) => r.group === m.group && r.surface === m.surface);
+    assert.ok(rec, `${m.group}'s ${m.surface} mask is one room.json lists`);
+    const dx = m.dx || 0;
+    if (m.surface === 'desk') {
+      // a desk quad is the mask's extent slid, CUT at the desk's ends (a mask reaching the edge and sliding outward would float past it)
+      const lo = Math.max(rec.x0 + dx, desk.x0), hi = Math.min(rec.x1 + dx, desk.x1), ex = f.anchorX + (lo + hi) / 2;
+      assert.ok(Math.abs(m.x - ex) < 0.01 && Math.abs(m.w - (hi - lo)) < 0.01, `${m.group}'s desk quad is the mask's extent slid and cut at the desk's ends (${m.x.toFixed(1)} vs ${ex.toFixed(1)}, ${m.w.toFixed(1)} vs ${(hi - lo).toFixed(1)}, slide ${m.dx})`);
+      assert.ok(m.x - m.w / 2 >= f.anchorX + desk.x0 - 0.01 && m.x + m.w / 2 <= f.anchorX + desk.x1 + 0.01, `${m.group}'s desk quad lies within the desk`);
+      assert.ok(Math.abs(m.z - (f.anchorZ + (rec.zBack + rec.zFront) / 2)) < 0.01 && m.y > 0 && m.y < 2, `${m.group}'s desk quad lies on the desk (${m.y.toFixed(2)}, ${m.z.toFixed(1)})`);
+    } else {
+      const ex = f.anchorX + (rec.x0 + rec.x1) / 2 + dx;
+      assert.ok(Math.abs(m.x - ex) < 0.01 && Math.abs(m.w - (rec.x1 - rec.x0)) < 0.01, `${m.group}'s wall quad sits at the mask's extent about the anchor plus its slide (${m.x.toFixed(1)} vs ${ex.toFixed(1)}, slide ${m.dx})`);
+      assert.ok(Math.abs(m.y - (rec.y0 + rec.y1) / 2) < 0.01 && m.z > f.wallZ && m.z - f.wallZ < 2, `${m.group}'s wall quad stands just in front of the wall (${m.y.toFixed(1)}, ${m.z.toFixed(2)} vs the wall at ${f.wallZ.toFixed(2)})`);
+    }
+  }
+}
+
+/* THE PROPS' SHADOWS MOVE WITH THE PROPS (Joey 2026-10-23: the keyboard's dark patch stayed on the desk's right end after the
+   keyboard hid for a 12W build). bake3 bakes the desk and wall maps without the props and each prop group's shadow as a
+   mask (room.json shadows); done.js slides each mask's quad with its group and hides it with a hidden group. A 12W x 2H
+   build through the Build workspace, as the massive-build probe did: the monitor cannot clear it on the desk and hides, a
+   group that can slides; their shadows do the same, by the same slide. */
+test('Assemble: the Done scene\'s prop shadows slide with their group and hide with a hidden group (a 12W build)', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=185-tabletop-2w2h&done=room&new=1' });
+  await page.waitForFunction(() => window.__GEN2_CTX__ && document.querySelector('#ws-build, #ws-lib'), null, { timeout: 60_000 });
+  await page.evaluate(([W, H]) => { window.__GEN2_STORE__.commit((s, R) => { s.gridW = W; s.gridH = H; s.placed = []; let id = 1; for (let c = 0; c < W / 2; c++) for (let r = 0; r < H / 2; r++) s.placed.push({ id: id++, x: c * 2, y: r * 4, w: 2, hh: 4, fill: 'decor', shelves: 0 }); s.nextId = id; if (R.syncTabletopGrid) R.syncTabletopGrid(); }, 'edit'); }, [12, 2]);
+  await settle(page, 1000);
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'assemble' && document.querySelector('#ws-steps'), null, { timeout: 60_000 });
+  await page.waitForFunction((n) => { const v = window.__GEN2_VIEWER__; return v.build && v.build.placed && v.build.placed.length === n && v.pageCount > 2; }, 6, { timeout: 120_000 });
+  await settle(page, 1000);
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
+  await settle(page, 1500);
+  const r = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, room = v.scene.getObjectByName('done-room'); const groups = {}; room.traverse((o) => { if (o.userData.slot && (o.isMesh || o.children.some((c) => c.isMesh))) { const g = o.userData.group || o.name; (groups[g] = groups[g] || []).push(o.visible); } }); const b = v.assembledBox, wa = room.getObjectByName('anchor_wall'); return { width: b.max.x - b.min.x, groups: Object.fromEntries(Object.entries(groups).map(([g, vis]) => [g, vis.every(Boolean) ? 'shown' : vis.some(Boolean) ? 'mixed' : 'hidden'])), slides: window.__GEN2_DONE__.slides, shadows: window.__GEN2_DONE__.shadows, anchorX: (b.min.x + b.max.x) / 2, anchorZ: b.min.z, wallZ: wa ? wa.getWorldPosition(wa.position.clone()).z : null }; });
+  assert.ok(r.width > 1000, `a 12W build (${r.width.toFixed(0)} mm)`);
+  assert.ok(r.shadows.length > 0, 'the shadow masks are on');
+  const hidden = Object.keys(r.groups).filter((g) => r.groups[g] === 'hidden'), slid = Object.keys(r.slides).filter((g) => r.slides[g]);
+  assert.ok(hidden.includes('monitor'), `the monitor group cannot clear a 12W build on the desk and hides (${JSON.stringify(r.groups)})`);
+  assert.ok(slid.length > 0, `a group slid clear of the build (${JSON.stringify(r.slides)})`);
+  assert.ok(Object.keys(r.groups).every((g) => r.groups[g] !== 'mixed'), `a group hides whole (${JSON.stringify(r.groups)})`);
+  for (const m of r.shadows) {
+    if (r.groups[m.group] === 'hidden') assert.equal(m.visible, false, `${m.group}'s ${m.surface} shadow hides with the group`);
+    else { assert.equal(m.visible, true, `${m.group}'s ${m.surface} shadow shows with the group`); assert.equal(m.dx, r.slides[m.group] || 0, `${m.group}'s ${m.surface} shadow slid by the group's slide`); }
+  }
+  assert.ok(r.shadows.some((m) => m.visible && m.dx), 'a slid group\'s shadow carries a slide');
+  const roomJson = JSON.parse(await readFile(join(root, 'scenes', 'home-office', 'room.json'), 'utf8'));
+  masksPlaced(r.shadows.filter((m) => m.visible), roomJson, r);   // the slid quads really moved: the extent about the anchor plus the slide
+  assert.deepEqual(clean(errors), []);
+  await btn(page, 'Back', '#ws-player').click();
+  await settle(page, 1200);
+  assert.equal(await page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.doneShadow) n++; }); return n; }), 0, 'Back disposes the shadow quads');
+  // an 8W build: the plant slides outward and its desk mask, which reaches the desk's left end, is CUT there with its
+  // texture window moved (Sol 01a16bc5); the drawn UVs are the window the hook reports (a mutant that left the UVs at
+  // 0..1 survived the 12W leg, where nothing is cut)
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'build' && window.__GEN2_CTX__, null, { timeout: 60_000 });
+  await page.evaluate(([W, H]) => { window.__GEN2_STORE__.commit((s, R) => { s.gridW = W; s.gridH = H; s.placed = []; let id = 1; for (let c = 0; c < W / 2; c++) for (let r = 0; r < H / 2; r++) s.placed.push({ id: id++, x: c * 2, y: r * 4, w: 2, hh: 4, fill: 'decor', shelves: 0 }); s.nextId = id; if (R.syncTabletopGrid) R.syncTabletopGrid(); }, 'edit'); }, [8, 2]);
+  await settle(page, 1000);
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'assemble' && document.querySelector('#ws-steps'), null, { timeout: 60_000 });
+  await page.waitForFunction((n) => { const v = window.__GEN2_VIEWER__; return v.build && v.build.placed && v.build.placed.length === n && v.pageCount > 2; }, 4, { timeout: 120_000 });
+  await settle(page, 1000);
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s (8W)'));
+  await settle(page, 1500);
+  const r8 = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, room = v.scene.getObjectByName('done-room'), b = v.assembledBox, wa = room.getObjectByName('anchor_wall'); const quads = []; v.scene.traverse((o) => { if (o.userData.doneShadow) { const uv = o.geometry.attributes.uv; let lo = 1, hi = 0; for (let i = 0; i < uv.count; i++) { lo = Math.min(lo, uv.getX(i)); hi = Math.max(hi, uv.getX(i)); } quads.push({ ...o.userData.doneShadow, visible: o.visible, x: o.position.x, y: o.position.y, z: o.position.z, w: o.geometry.parameters.width, lo, hi }); } }); return { width: b.max.x - b.min.x, slides: window.__GEN2_DONE__.slides, quads, anchorX: (b.min.x + b.max.x) / 2, anchorZ: b.min.z, wallZ: wa ? wa.getWorldPosition(wa.position.clone()).z : null }; });
+  assert.ok(r8.width > 700 && r8.width < 760, `an 8W build (${r8.width.toFixed(0)} mm)`);
+  assert.ok(r8.slides.plant < 0, `the plant slides outward, to -x (${JSON.stringify(r8.slides)})`);
+  const cut = r8.quads.filter((m) => m.visible && (m.u0 > 0 || m.u1 < 1));
+  assert.ok(cut.some((m) => m.group === 'plant' && m.surface === 'desk' && m.u0 > 0 && m.u1 === 1), `the plant's desk quad is cut at the desk's left end (${JSON.stringify(cut.map((m) => [m.group, m.surface, m.u0, m.u1]))})`);
+  for (const m of r8.quads.filter((m) => m.visible)) assert.ok(Math.abs(m.lo - m.u0) < 1e-6 && Math.abs(m.hi - m.u1) < 1e-6, `${m.group}'s ${m.surface} drawn texture window is the cut's (${m.lo.toFixed(3)}..${m.hi.toFixed(3)} vs ${m.u0.toFixed(3)}..${m.u1.toFixed(3)})`);
+  masksPlaced(r8.quads.filter((m) => m.visible), roomJson, r8);   // the cut quads lie within the desk, at the cut extents
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
