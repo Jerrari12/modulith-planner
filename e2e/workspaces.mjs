@@ -1395,6 +1395,21 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   await settle(page, 1500);
   const r = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, room = v.scene.getObjectByName('done-room'); const groups = {}; room.traverse((o) => { if (o.userData.slot && (o.isMesh || o.children.some((c) => c.isMesh))) { const g = o.userData.group || o.name; (groups[g] = groups[g] || []).push(o.visible); } }); const b = v.assembledBox, wa = room.getObjectByName('anchor_wall'); return { width: b.max.x - b.min.x, groups: Object.fromEntries(Object.entries(groups).map(([g, vis]) => [g, vis.every(Boolean) ? 'shown' : vis.some(Boolean) ? 'mixed' : 'hidden'])), slides: window.__GEN2_DONE__.slides, shadows: window.__GEN2_DONE__.shadows, anchorX: (b.min.x + b.max.x) / 2, anchorZ: b.min.z, wallZ: wa ? wa.getWorldPosition(wa.position.clone()).z : null }; });
   assert.ok(r.width > 1000, `a 12W build (${r.width.toFixed(0)} mm)`);
+  // the shots stay INSIDE the room (2026-10-23, the massive-build probe): the hero sits the top margin below the wall
+  // tops (it reached them for this build and went over them at the 12 x 12 cap), the low shot stays inside the left wall
+  // (it used to leave through it for anything wider than about 500 mm) with its fov widened so the build keeps its share
+  const d0 = await page.evaluate(() => { const s = window.__GEN2_DONE__.sequence, v = window.__GEN2_VIEWER__; return { interior: s.interior, fits: s.fits, cam: v.camera.position.toArray(), fov: v.camera.fov }; });
+  assert.ok(d0.interior && Number.isFinite(d0.interior.x0) && Number.isFinite(d0.interior.y1) && Number.isFinite(d0.interior.z0), `the room's interior came from its walls (${JSON.stringify(d0.interior)})`);
+  assert.ok(d0.cam[1] <= d0.interior.y1 - 450 + 1, `the hero sits the top margin below the wall tops (${d0.cam[1].toFixed(0)} of ${d0.interior.y1})`);
+  assert.ok(d0.cam[0] >= d0.interior.x0 + 150 - 1 && d0.cam[0] <= d0.interior.x1 - 150 + 1, `and between the walls (${d0.cam[0].toFixed(0)})`);
+  assert.equal(d0.fits[0].clamped, true, 'the hero was clamped for this build'); assert.equal(d0.fits.length, 3);
+  await page.evaluate(() => window.__GEN2_DONE__.jump(1));
+  await settle(page, 400);
+  const d1 = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { cam: v.camera.position.toArray(), fov: v.camera.fov, fit: window.__GEN2_DONE__.sequence.fits[1] }; });
+  assert.ok(d1.cam[0] >= d0.interior.x0 + 150 - 1, `the low shot stays inside the left wall (${d1.cam[0].toFixed(0)} against ${d0.interior.x0})`);
+  assert.equal(d1.fit.clamped, true, 'it was clamped'); assert.ok(d1.fov > 35 && d1.fov <= 55, `its fov widened so the 12W build keeps its share of the frame (${d1.fov.toFixed(1)})`);
+  await page.evaluate(() => window.__GEN2_DONE__.jump(0));
+  await settle(page, 400);
   assert.ok(r.shadows.length > 0, 'the shadow masks are on');
   const hidden = Object.keys(r.groups).filter((g) => r.groups[g] === 'hidden'), slid = Object.keys(r.slides).filter((g) => r.slides[g]);
   assert.ok(hidden.includes('monitor'), `the monitor group cannot clear a 12W build on the desk and hides (${JSON.stringify(r.groups)})`);

@@ -3086,3 +3086,33 @@ Dated calls made while building, with who made them. The brief and the inventory
   the `shadows` block) were already in the shared working tree, so that commit carries them UNREVIEWED and its look15
   render was made with them; Terra `01a16b9d` covered only the room pass's own hunks. This commit completes them (the
   crop threshold and feather, the unlit-receiver guard, the exposure) and its review covers the mask pass whole.
+
+## 2026-10-23 (the Done scene: the shots stay inside the room for any build up to the cap)
+
+- **Joey's call**, after the massive-build comparison (DESIGN.md §8e): "Keep every shot inside the room's interior for
+  any build up to the 12 by 12 cap, let the build fill more of the frame when a wall is near, centre builds wider than
+  the desk's free run on the desk, test it on the 2W kit, 8 by 6 and 12 by 12, review, commit." The centring was dropped:
+  the "overhang" in §8e was an arithmetic slip between room and world coordinates (the desk runs 680 mm left of the
+  anchor, the cap build spans ±531), retracted there.
+- **What it is.** `done-fit.js clampToInterior`: along the ray from a shot's target to its fitted camera, the farthest
+  point still inside the room's interior less the margins (150 mm from a wall or the floor, 450 mm below the wall tops,
+  since the frame looks down and its upper edge must not see over them). A shorter distance means the build fills more
+  of the frame (its share grows by 1/k); past 0.92 of the frame (or the shot's own share, the detail's 1.4) the fov widens
+  to keep that share, up to 55°, then the crop is accepted. `done.js roomInterior` reads the interior off the GLB's walls
+  (`wall_back`, `wall_left_*`, `floor`): the left wall's inner face, the back wall's right end (the backdrop ends there),
+  the floor's top, the wall tops, the back wall's inner face, Infinity to the front; null without walls means no clamp.
+  Applied to every fitted shot (the entrance and recenter hero, the sequence's shots, every refit); a held camera is not
+  clamped. The debug hook reports `interior` and per-shot `fits` (fov, clamped, k, share). No room.json change, no bake.
+- **Measured (High, the probe; before → after):** the 2W kit untouched. 8 × 6: the low shot (−1712, 540, 3526) → (−1230,
+  444, 2537), fov 29.9, a frontal view of the whole desk instead of a blank wall. 12 × 12: the hero (3355, 2899, 6324) →
+  (1950, 1810, 3682), the room seen from inside; the low shot (−2675, 909, 5499) → (−1230, 621, 2537) with the fov 29.9 →
+  42.7; the detail unchanged. The 12 × 2 hero in the e2e's viewport had been at y 2399, above the wall tops (2260).
+- **Review** (Terra, routine, thread 01a16bf1): one finding, discarded: the right-hand bound at the back wall's end is
+  "over-clamping" on an open side. Kept by design: past that end the backdrop ends, so a camera beyond it looking
+  back-left would frame the void whenever a shot swings right of this room's hero; it reframes, never breaks, and no
+  shot of this room reaches it. The comment now says so.
+- **Checks (laptop).** Unit: the measured cameras as cases (done-fit 12 of 12). e2e: the 12W case asserts the interior
+  from the walls, the hero the margin below the tops and between the walls, the low shot inside the left wall with its
+  fov widened (35 < fov ≤ 55). Seven mutants killed: no clamp; no top margin; no fov widening; no interior; the entrance
+  camera unclamped; the sequence shots unclamped; the wall margin dropped. npm test 630 tests, 625 pass, 0 fail, 5
+  skipped; the five room e2e cases 5 of 5; goldens 60 shots, 0 differ. Not deployed.

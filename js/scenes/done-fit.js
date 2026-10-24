@@ -33,7 +33,36 @@ export function shotCamera(shot, box, view) {
   const sh = shot.targetShift || {};
   const target = { x: centre.x + size.x * (sh.x || 0), y: centre.y + radius * (shot.targetLift || 0), z: centre.z + size.z * (sh.z || 0) };
   const position = { x: target.x + d * Math.sin(az) * Math.cos(el), y: target.y + d * Math.sin(el), z: target.z + d * Math.cos(az) * Math.cos(el) };
-  return { position, target, fov, distance: d, radius };
+  return { position, target, fov, distance: d, radius, fill: shot.fill || 0.42 };
+}
+
+/* The shot's camera kept INSIDE the room (2026-10-23, the massive-build probe: the low shot left through the left wall
+ * for any build wider than about 500 mm, the hero left above the wall tops at the 12 x 12 cap). Along the ray from the
+ * target to the fitted position, the farthest point still inside `interior` (a box in mm; an open side carries
+ * ±Infinity) less the margins: `wall` from a wall or the floor, `top` below the wall tops (the frame looks down, so its
+ * upper edge must not see over them). A shorter distance means the build fills more of the frame (Joey: "let the build
+ * fill more of the frame when a wall is near"); when it would overflow, the fov widens so the build keeps `fillMax` of
+ * the frame (or the shot's own share, when that is larger: the detail fills 1.4 by design), up to `fovMax`, and past that
+ * the crop is accepted. Returns the camera with `clamped`, the ratio `k` and `share`, the build's share at the new distance. */
+export function clampToInterior(cam, interior, { wall = 150, top = 450, fillMax = 0.92, fovMax = 55 } = {}) {
+  if (!interior) return { ...cam, clamped: false, k: 1, share: cam.fill || 0.42 };
+  const p = cam.position, t = cam.target;
+  const lo = { x: interior.x0 + wall, y: interior.y0 + wall, z: interior.z0 + wall };
+  const hi = { x: interior.x1 - wall, y: interior.y1 - top, z: interior.z1 - wall };
+  let k = 1;
+  for (const a of ['x', 'y', 'z']) {
+    const d = p[a] - t[a];
+    if (d > 1e-9 && p[a] > hi[a]) k = Math.min(k, (hi[a] - t[a]) / d);
+    else if (d < -1e-9 && p[a] < lo[a]) k = Math.min(k, (lo[a] - t[a]) / d);
+  }
+  if (!(k < 1)) return { ...cam, clamped: false, k: 1, share: cam.fill || 0.42 };
+  k = Math.max(0.05, k);   // never onto the target (a target itself past a margin: the shortest useful distance)
+  const position = { x: t.x + (p.x - t.x) * k, y: t.y + (p.y - t.y) * k, z: t.z + (p.z - t.z) * k };
+  const share = (cam.fill || 0.42) / k;   // the distance goes as 1 / fill, so the build's share of the frame grows by 1 / k
+  const cap = Math.max(fillMax, cam.fill || 0);
+  let fov = cam.fov;
+  if (share > cap) fov = Math.min(fovMax, (2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * (share / cap)) * 180) / Math.PI);
+  return { ...cam, position, fov, distance: cam.distance * k, clamped: true, k, share };
 }
 
 /* How far each prop GROUP must slide along its slot so every prop clears the build's box by its gap. `props` is

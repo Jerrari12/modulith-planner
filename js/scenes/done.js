@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
+import { shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -90,6 +90,21 @@ function unlit(root) {
 function boxOf(obj) { return new THREE.Box3().setFromObject(obj); }
 const plain = (b) => ({ min: { x: b.min.x, y: b.min.y, z: b.min.z }, max: { x: b.max.x, y: b.max.y, z: b.max.z } });
 
+/* The room's interior as a box in stage mm, read off the walls and floor the GLB names (room.py: `wall_back`, the
+ * `wall_left_*` pieces around the window, `floor`): the walls' inner faces, the wall tops, the floor's top, and Infinity
+ * to the front, where the room is open. The right side has no wall either, but the back wall ENDS there, and past its end
+ * the backdrop ends: a camera beyond it looking back-left would frame the void past the wall whenever a shot swings right
+ * of this room's hero, so the back wall's end bounds that side on purpose (Terra 01a16bf1 called it over-clamping; it
+ * reframes, never breaks, and no shot of this room reaches it). null without walls, and then no shot is clamped
+ * (done-fit.js clampToInterior). Read after the group is placed and scaled, so the box is in the stage's frame. */
+function roomInterior(group) {
+  const back = new THREE.Box3(), left = new THREE.Box3(), floor = new THREE.Box3();
+  group.traverse((o) => { if (!o.isMesh) return; if (/^wall_back/.test(o.name)) back.union(boxOf(o)); else if (/^wall_left/.test(o.name)) left.union(boxOf(o)); else if (o.name === 'floor') floor.union(boxOf(o)); });
+  if (back.isEmpty() && left.isEmpty()) return null;
+  const top = Math.min(back.isEmpty() ? Infinity : back.max.y, left.isEmpty() ? Infinity : left.max.y);
+  return { x0: left.isEmpty() ? -Infinity : left.max.x, x1: back.isEmpty() ? Infinity : back.max.x, y0: floor.isEmpty() ? -Infinity : floor.max.y, y1: top, z0: back.isEmpty() ? -Infinity : back.max.z, z1: left.isEmpty() ? Infinity : left.max.z };
+}
+
 function contactTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const g = c.getContext('2d');
@@ -113,7 +128,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     fill: { intensity: stage.fill.intensity, color: stage.fill.color.clone() },
     sunHalfDeg: stage.sunHalfDeg,
     controls: controls.enabled, pan: controls.enablePan, dims: !!stage.dimsOn };
-  let json = null, buildBox = null;
+  let json = null, buildBox = null, interior = null;   // interior: the room's box from its walls (roomInterior), the shots' clamp
   const debug = new URLSearchParams(location.search).has('debug');
 
   /* THE CAMERA SEQUENCE (the plan's curated shots, 2026-10-23): hold on a shot, drift to the next, over SHOTS.tabletop
@@ -146,7 +161,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (drawer.unit) { const i = list.findIndex((s) => s.name === 'detail'); if (i >= 0) list[i] = { ...list[i], targetShift: aimAt(plain(buildBox), drawer.unit.box) }; }
     return list;
   }
-  function fitShots() { seq.cams = shotsFor().map((s) => shotCamera(s, plain(buildBox), view())); }
+  const fitted = (s) => clampToInterior(shotCamera(s, plain(buildBox), view()), interior);   // every shot stays inside the room (a wide build's fitted camera would leave it)
+  function fitShots() { seq.cams = shotsFor().map(fitted); }
   function drawerSet(open) {
     if (!drawer.unit || drawer.open === open || !stage.slideUnitDrawer) return;
     drawer.open = open;
@@ -259,7 +275,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (parts.sprite) parts.sprite.visible = !shadow;
   }
   function placeCamera(animate) {
-    const c = shotCamera(shotsFor()[0], plain(buildBox), view());
+    const c = fitted(shotsFor()[0]);
     const p1 = new THREE.Vector3(c.position.x, c.position.y, c.position.z), t1 = new THREE.Vector3(c.target.x, c.target.y, c.target.z);
     cancelAnimationFrame(parts.raf);
     if (!animate) { camera.position.copy(p1); controls.target.copy(t1); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); stage.invalidateFrame(); return; }
@@ -289,6 +305,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const centre = buildBox.getCenter(new THREE.Vector3());
     group.position.set(centre.x - a.x * SCALE, 0 - a.y * SCALE, buildBox.min.z - a.z * SCALE);
     group.updateMatrixWorld(true);
+    interior = roomInterior(group);   // the walls do not slide: the shots' clamp is fixed from here
     // props slide clear of the build along their slots, by group
     const anchorWorld = new THREE.Vector3(centre.x, 0, buildBox.min.z);
     const d = json.desk || { x0: -900, x1: 900, zFront: 700, zBack: -40 };
@@ -377,7 +394,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     document.addEventListener('visibilitychange', onVisibility);
     controls.addEventListener('start', onGrabStart); controls.addEventListener('end', onGrabEnd);
     if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height })); },
-      get sequence() { return { on: seq.on, wanted: sequenceWanted(), mode: mode(), cams: seq.cams.map((c) => [c.position.x, c.position.y, c.position.z]), paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
+      get sequence() { return { on: seq.on, wanted: sequenceWanted(), mode: mode(), cams: seq.cams.map((c) => [c.position.x, c.position.y, c.position.z]), interior: interior && { ...interior }, fits: seq.cams.map((c) => ({ fov: c.fov, clamped: !!c.clamped, k: c.k, share: c.share })), paused: seq.pausedAt != null, grabbed: seq.grabbed, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
       setTiming(t) { Object.assign(seq.timing, t); seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict
       jump(i) { if (!seq.on) return; cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); seq.t0 = performance.now() - i * (seq.timing.holdMs + seq.timing.moveMs); seq.pausedAt = null; seq.movingTo = -2; seqTick(); } };   // to the start of shot i's hold (-2: "land on it")
     if (!tracked) { tracked = true; stage.track('done:room'); }

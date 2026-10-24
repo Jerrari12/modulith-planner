@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit } from '../js/scenes/done-fit.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -99,6 +99,41 @@ test('the tabletop shots are three, each fittable, the detail closest, and the s
   assert.equal(sequenceAt(5000, 1, o).moving, false, 'one shot never moves');
   assert.ok(SEQUENCE.holdMs >= 8000 && SEQUENCE.holdMs <= 12000, 'the style doc: 8-12 s a shot');
   assert.equal(easeInOut(0), 0); assert.equal(easeInOut(1), 1); close(easeInOut(0.5), 0.5, 1e-12, 'symmetric');
+});
+
+test('clampToInterior: a camera inside is untouched; one above the wall tops or past a wall is pulled in along its ray, the fov widening only when the build would overflow, up to 55 degrees', () => {
+  // the Home office as its walls give it: the left wall's inner face, the back wall's right end, the floor, the wall tops,
+  // the back wall's inner face; open to the front
+  const interior = { x0: -1380, x1: 3220, y0: -740, y1: 2260, z0: -138, z1: Infinity };
+  const t = { x: 0, y: 350, z: 0 };
+  const inside = clampToInterior({ position: { x: 800, y: 700, z: 1500 }, target: t, fov: 29.9, distance: 1700, radius: 150, fill: 0.5 }, interior);
+  assert.equal(inside.clamped, false); assert.deepEqual(inside.position, { x: 800, y: 700, z: 1500 }); assert.equal(inside.fov, 29.9);
+  // the 12 x 12 hero as measured: above the wall tops (y 2899) and past the back wall's end (x 3355); the top is the tighter limit
+  const hero = clampToInterior({ position: { x: 3355, y: 2899, z: 6324 }, target: t, fov: 29.9, distance: 7600, radius: 640, fill: 0.5 }, interior);
+  assert.equal(hero.clamped, true);
+  close(hero.position.y, 2260 - 450, 0.5, 'the camera sits the top margin below the wall tops');
+  close(hero.k, (1810 - 350) / (2899 - 350), 1e-9, 'k from the top');
+  assert.ok(hero.position.x < 3220 - 150, 'and inside the back wall\'s end');
+  close(hero.share, 0.5 / hero.k, 1e-9); assert.equal(hero.fov, 29.9, 'the build fills 0.87 of the frame: no widening under 0.92');
+  close(hero.distance, 7600 * hero.k, 1e-6);
+  // the 12 x 12 low shot as measured: through the left wall (x -2675); at the wall the build would fill 1.35 of the frame, so
+  // the fov widens to keep it at 0.92
+  const low = clampToInterior({ position: { x: -2675, y: 909, z: 5499 }, target: t, fov: 29.9, distance: 6150, radius: 640, fill: 0.62 }, interior);
+  close(low.position.x, -1380 + 150, 0.5, 'the wall margin');
+  const k = (-1230 - 0) / (-2675 - 0); close(low.k, k, 1e-9);
+  const want = (2 * Math.atan(Math.tan((29.9 * Math.PI) / 360) * (0.62 / k) / 0.92) * 180) / Math.PI;
+  close(low.fov, want, 1e-9, 'widened'); assert.ok(low.fov > 40 && low.fov < 46, `about 43 degrees (${low.fov.toFixed(1)})`);
+  // the cap: a shot that would need more than 55 degrees stops there and the crop is accepted
+  const far = clampToInterior({ position: { x: -8000, y: 400, z: 100 }, target: t, fov: 29.9, distance: 8000, radius: 640, fill: 0.62 }, interior);
+  assert.equal(far.fov, 55); assert.ok(far.share > 2);
+  // the detail fills 1.4 by design: its own share is its cap, so it widens only past that
+  const mild = clampToInterior({ position: { x: 3400, y: 600, z: 600 }, target: t, fov: 29.9, distance: 3450, radius: 640, fill: 1.4 }, interior);
+  assert.equal(mild.clamped, true); close(mild.k, 3070 / 3400, 1e-9); assert.ok(mild.fov > 29.9 && mild.fov < 34, `1.4 / 0.903 = 1.55 over its own 1.4: a touch wider (${mild.fov.toFixed(1)})`);
+  const own = clampToInterior({ position: { x: 3100, y: 600, z: 600 }, target: t, fov: 29.9, distance: 3160, radius: 640, fill: 1.4 }, interior);
+  assert.equal(own.clamped, true); close(own.k, 3070 / 3100, 1e-9); assert.ok(own.fov > 29.9 && own.fov < 30.3, `a 1 % clamp widens it by under half a degree (${own.fov.toFixed(2)})`);
+  // the margins are the caller's; an open side (Infinity) never clamps; no interior, no clamp
+  assert.equal(clampToInterior({ position: { x: 0, y: 2000, z: 9000 }, target: t, fov: 30, distance: 9200, fill: 0.5 }, interior, { top: 0, wall: 0 }).clamped, false, 'z is open and y 2000 is under the tops with no margin');
+  assert.equal(clampToInterior({ position: { x: 1, y: 1, z: 1 }, target: t, fov: 30, distance: 1, fill: 0.5 }, null).clamped, false);
 });
 
 test('sequenceMode: drifts above Fast; cuts on Fast and after a slow verdict; none under reduced motion or for a stage, whatever the tier', () => {
