@@ -63,7 +63,7 @@ test('fitSlides: a slide that stays on the desk is kept; one that would carry a 
   assert.equal(fit.plant, null, 'the plant would pass the left edge: hidden');
   assert.deepEqual(fitSlides(props, slid, null), slid, 'no bounds: every slide is kept');
   assert.deepEqual(fitSlides(props, {}, desk), {}, 'nothing slid: nothing to fit');
-  assert.equal(SEQUENCE.idleBackMs, 6000, 'the style doc\'s ~6 s before a grabbed camera drifts back');
+  assert.equal(SEQUENCE.idleBackMs, undefined, 'no drift-back: the scene has no orbit to drift back from (2026-10-23)');
 });
 
 test('contactFootprint grows the build\'s footprint and centres it', () => {

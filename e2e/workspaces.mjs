@@ -1298,16 +1298,32 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   await settle(off.page, 1500);
   const s0 = await state(off.page);
   assert.equal(s0.room, false, 'no room without the flag'); assert.equal(s0.held, false); assert.equal(s0.done, null); assert.equal(s0.controls, true);
+  assert.equal(await off.page.locator('#ws-player button', { hasText: 'Watch the final scene' }).count(), 0, 'no way into a scene without the flag');
+  assert.match(await text(off.page, '#ws-player .next'), /Finished/, 'the Next slot says Finished, as before');
   assert.deepEqual(clean(off.errors), []);
   await off.ctx.close();
-  // on: the room, and the holds
+  // on: the End page first (the HUD, the finished build on the stage, the way in), then the scene: the room, the holds,
+  // the HUD faded, the bars, the strip, no orbit (THE FINAL SCENE, Joey 2026-10-23: "a final scene that you have to make
+  // obvious to go into ... most of the hud disappears and black borders appear ... don't let them rotate the camera")
   const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
   await toDone(page);
+  await settle(page, 800);
+  assert.equal((await state(page)).room, false, 'the End page: the room does not come on by itself, it is stepped into');
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('cinema')), false);
+  await btn(page, 'Watch the final scene', '#ws-player').click();
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
   await settle(page, 1500);
   const s1 = await state(page);
   assert.equal(s1.room, true, 'the room is in the scene'); assert.equal(s1.held, true, 'the stage is held');
-  assert.equal(s1.bg, null, 'no stage background behind the room'); assert.equal(s1.controls, true, 'the orbit stays for a grab (the sequence drifts back after it)');
+  assert.equal(s1.bg, null, 'no stage background behind the room'); assert.equal(s1.controls, false, 'no orbit in the scene');
+  const dress = await page.evaluate(() => { const cs = (sel) => getComputedStyle(document.querySelector(sel)); const bars = document.querySelector('#cinema-bars'), bar = getComputedStyle(bars, '::before'), low = getComputedStyle(bars, '::after'); return { cinema: document.documentElement.classList.contains('cinema'), steps: cs('#ws-steps').opacity, player: cs('#ws-player').opacity, topbar: cs('#ws-top').opacity, topVis: cs('#ws-top').visibility, chipBlur: getComputedStyle(document.querySelector('#ws-top .chip')).backdropFilter, tools: cs('#ws-tools').opacity, barH: parseFloat(bar.height), lowH: parseFloat(low.height), barBg: bar.backgroundColor, barContent: bar.content, lowContent: low.content, sameLayer: bars.parentElement === document.querySelector('#ws-scene').parentElement, strip: [...document.querySelectorAll('#ws-scene button')].map((b) => b.textContent.trim()), safe: window.__GEN2_VIEWER__.safeArea, h: innerHeight }; });
+  assert.equal(dress.cinema, true, 'html.cinema'); assert.equal(dress.steps, '0', 'the steps panel faded out'); assert.equal(dress.player, '0', 'the player faded out'); assert.equal(dress.topbar, '0', 'the top bar faded out'); assert.equal(dress.topVis, 'hidden', 'and is hidden once faded'); assert.equal(dress.chipBlur, 'none', 'its glass chips lost their blur (Chrome keeps a backdrop blur at opacity 0)'); assert.equal(dress.tools, '0', 'the toolbar faded out');
+  assert.ok(Math.abs(dress.barH - dress.h * 0.07) < 2 && Math.abs(dress.lowH - dress.h * 0.07) < 2, `black bars of 7 vh top and bottom (${dress.barH}, ${dress.lowH} of ${dress.h})`); assert.equal(dress.barBg, 'rgb(0, 0, 0)');
+  assert.equal(dress.barContent, '""', 'the top bar is drawn (a pseudo-element with content; a declared height alone computes even when nothing is drawn)'); assert.equal(dress.lowContent, '""', 'and the bottom one');
+  assert.equal(dress.sameLayer, true, 'the bars live in the workspace layer with the strip, so the strip paints over them (bars on the page body covered it: the fixed workspace is its own stacking context)');
+  assert.deepEqual(dress.strip, ['← Back', 'Next view →'], 'the strip: Back and Next view');
+  const barPx = Math.round(dress.h * 0.07);
+  assert.deepEqual(dress.safe, { left: 8, right: 8, top: barPx + 8, bottom: barPx + 8 }, `the shots are fitted between the bars, not the HUD's region (safe ${JSON.stringify(dress.safe)})`);
   assert.equal(s1.grid, false, 'the grid is hidden'); assert.equal(s1.table, false, 'the table is hidden'); assert.equal(s1.dims, false, 'no callouts in the room');
   assert.equal(s1.quality, 'fast', 'the suite pins Fast'); assert.equal(s1.shadow, false, 'Fast has no shadow map'); assert.equal(s1.disc, true, 'Fast shows the baked contact disc'); assert.equal(s1.catcher, false);
   assert.equal(s1.catchers, 2, 'two shadow catchers: the desk top and the wall behind it (2026-10-23), both hidden on Fast');
@@ -1321,7 +1337,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.ok(s1.masks.every((m) => m.visible), 'the 2W2H kit hides no prop group: every shadow shows');
   assert.ok(s1.masks.every((m) => m.multiply && m.transparent && m.depthWrite === false && m.toneMapped === false && m.order === 1 && m.colorSpace === 'srgb'), 'multiplied over the surface after the room: CustomBlending zero x source colour (three\'s MultiplyBlending is ignored on this stage), transparent, no depth write, untoned, read as sRGB: ' + JSON.stringify(s1.masks[0]));
   masksPlaced(s1.masks, roomJson, s1);
-  assert.match(await text(page, '#ws-player .text'), /on a desk/, 'the player says where the build is');
+  assert.match(await text(page, '#ws-player .text'), /Watch the final scene/, 'the End page named the way in');
   // a tier with shadows, still on the DARK theme (which has no shadow map of its own): the room's sun casts, the catcher shows
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
   await settle(page, 1500);
@@ -1338,6 +1354,17 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   await settle(page, 1200);
   const s2b = await state(page);
   assert.equal(s2b.theme, 'light'); assert.equal(s2b.bg, null, 'the theme flip left the background off'); assert.equal(s2b.held, true); assert.equal(s2b.shadow, true);
+  // Esc leaves the scene: the HUD back, the room gone, still the End page; the strip's own Back does the same
+  await page.keyboard.press('Escape');
+  await settle(page, 1200);
+  assert.equal((await state(page)).room, false, 'Esc: the room is gone'); assert.equal(await page.evaluate(() => document.documentElement.classList.contains('cinema')), false, 'and the scene mode with it');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ws-player')).opacity), '1', 'the player is back');
+  assert.match(await text(page, '#ws-player .title'), /End of instructions/, 'still at the end'); assert.equal(await page.locator('#ws-scene').count(), 0, 'the strip is gone');
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the scene did not come back'));
+  await btn(page, 'Back', '#ws-scene').click();
+  await settle(page, 1000);
+  assert.equal((await state(page)).room, false, 'the strip\'s Back leaves the scene'); assert.match(await text(page, '#ws-player .title'), /End of instructions/);
   // Back: the stage whole again
   await btn(page, 'Back', '#ws-player').click();
   await settle(page, 1500);
@@ -1391,6 +1418,14 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   await btn(page, 'Skip to the finished build', '#ws-steps').click();
   await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
   await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  // a PORTRAIT window for the camera checks below: the fit's horizontal term grows with a narrow aspect, so the 12W hero is
+  // fitted far enough back to need the clamp (in the scene's layout a landscape window no longer does: the bars leave the
+  // camera more room than the HUD did). Put back after.
+  const landscape = page.viewportSize();
+  await page.setViewportSize({ width: 900, height: 1400 });
+  await settle(page, 400);
+  await btn(page, 'Watch the final scene', '#ws-player').click();
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
   await settle(page, 1500);
   const r = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, room = v.scene.getObjectByName('done-room'); const groups = {}; room.traverse((o) => { if (o.userData.slot && (o.isMesh || o.children.some((c) => c.isMesh))) { const g = o.userData.group || o.name; (groups[g] = groups[g] || []).push(o.visible); } }); const b = v.assembledBox, wa = room.getObjectByName('anchor_wall'); return { width: b.max.x - b.min.x, groups: Object.fromEntries(Object.entries(groups).map(([g, vis]) => [g, vis.every(Boolean) ? 'shown' : vis.some(Boolean) ? 'mixed' : 'hidden'])), slides: window.__GEN2_DONE__.slides, shadows: window.__GEN2_DONE__.shadows, anchorX: (b.min.x + b.max.x) / 2, anchorZ: b.min.z, wallZ: wa ? wa.getWorldPosition(wa.position.clone()).z : null }; });
@@ -1409,7 +1444,8 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   assert.ok(d1.cam[0] >= d0.interior.x0 + 150 - 1, `the low shot stays inside the left wall (${d1.cam[0].toFixed(0)} against ${d0.interior.x0})`);
   assert.equal(d1.fit.clamped, true, 'it was clamped'); assert.ok(d1.fov > 35 && d1.fov <= 55, `its fov widened so the 12W build keeps its share of the frame (${d1.fov.toFixed(1)})`);
   await page.evaluate(() => window.__GEN2_DONE__.jump(0));
-  await settle(page, 400);
+  await page.setViewportSize(landscape);   // the window back; the shots refit to it
+  await settle(page, 600);
   assert.ok(r.shadows.length > 0, 'the shadow masks are on');
   const hidden = Object.keys(r.groups).filter((g) => r.groups[g] === 'hidden'), slid = Object.keys(r.slides).filter((g) => r.slides[g]);
   assert.ok(hidden.includes('monitor'), `the monitor group cannot clear a 12W build on the desk and hides (${JSON.stringify(r.groups)})`);
@@ -1423,9 +1459,9 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   const roomJson = JSON.parse(await readFile(join(root, 'scenes', 'home-office', 'room.json'), 'utf8'));
   masksPlaced(r.shadows.filter((m) => m.visible), roomJson, r);   // the slid quads really moved: the extent about the anchor plus the slide
   assert.deepEqual(clean(errors), []);
-  await btn(page, 'Back', '#ws-player').click();
+  await page.keyboard.press('Escape');   // out of the scene (the player is faded out in it)
   await settle(page, 1200);
-  assert.equal(await page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.doneShadow) n++; }); return n; }), 0, 'Back disposes the shadow quads');
+  assert.equal(await page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.doneShadow) n++; }); return n; }), 0, 'leaving the scene disposes the shadow quads');
   // an 8W build: the plant slides outward and its desk mask, which reaches the desk's left end, is CUT there with its
   // texture window moved (Sol 01a16bc5); the drawn UVs are the window the hook reports (a mutant that left the UVs at
   // 0..1 survived the 12W leg, where nothing is cut)
@@ -1440,6 +1476,8 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   await btn(page, 'Skip to the finished build', '#ws-steps').click();
   await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
   await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s (8W)'));
   await settle(page, 1500);
   const r8 = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, room = v.scene.getObjectByName('done-room'), b = v.assembledBox, wa = room.getObjectByName('anchor_wall'); const quads = []; v.scene.traverse((o) => { if (o.userData.doneShadow) { const uv = o.geometry.attributes.uv; let lo = 1, hi = 0; for (let i = 0; i < uv.count; i++) { lo = Math.min(lo, uv.getX(i)); hi = Math.max(hi, uv.getX(i)); } quads.push({ ...o.userData.doneShadow, visible: o.visible, x: o.position.x, y: o.position.y, z: o.position.z, w: o.geometry.parameters.width, lo, hi }); } }); return { width: b.max.x - b.min.x, slides: window.__GEN2_DONE__.slides, quads, anchorX: (b.min.x + b.max.x) / 2, anchorZ: b.min.z, wallZ: wa ? wa.getWorldPosition(wa.position.clone()).z : null }; });
@@ -1464,6 +1502,8 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
     await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+    await btn(page, 'Watch the final scene', '#ws-player').click();
     await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
   };
   // Fast (the suite's pin): the sequence runs as CUTS: a hold, then the camera is on the next shot at once, never part-way,
@@ -1517,22 +1557,24 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
   await settle(page, 2400);
   assert.notDeepEqual(await cam(page), cH, 'visible again: the drift resumed');
-  // a grab, then the tab hidden before the return fired: the return is re-armed when the tab is seen again, not lost
-  // (Sol 01a16b2a: it stranded the sequence). The return is shortened to 1.5 s through the hook: long enough that the
-  // hide lands before it on SwiftShader, where a page round-trip takes hundreds of milliseconds.
-  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1500, moveMs: 800, maxFrameMs: 1e9, idleBackMs: 1500 }));
-  await settle(page, 300);
+  // the orbit is OFF in the scene (Joey: "don't let them rotate the camera"): a drag leaves the camera where it is. The
+  // strip's Next view cuts to the next shot and starts its hold over; a jump is no drift, so it is never the device's
+  // verdict (the guard is on here: maxFrameMs 50, and a jump draws no frames)
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 3000, moveMs: 800, maxFrameMs: 50 }));
+  await settle(page, 400);
+  const cG = await cam(page);
   await page.mouse.move(640, 380); await page.mouse.down(); await page.mouse.move(700, 410, { steps: 8 }); await page.mouse.up();
-  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
-  const gs = await seqOf(page);
-  assert.equal(gs.grabbed, true, 'a grab pauses the sequence'); assert.equal(gs.paused, true);
-  await settle(page, 2200);  // past the return's 1.5 s while hidden: it must neither fire hidden nor be lost
-  assert.equal((await seqOf(page)).grabbed, true, 'still grabbed while hidden');
-  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
-  await settle(page, 2600);  // the return re-armed on return (1.5 s), then the drift begins
-  const gr = await seqOf(page);
-  assert.equal(gr.on, true, 'the sequence is still on'); assert.equal(gr.grabbed, false, 'the return fired once the tab came back'); assert.equal(gr.paused, false);
-  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.camFree), false, 'the stage never kept the camera (setCamFree)');
+  await settle(page, 300);
+  assert.deepEqual(await cam(page), cG, 'a drag does not move the camera'); assert.equal((await seqOf(page)).orbit, false, 'the orbit is off');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.camFree), false, 'the stage never took the camera');
+  const before = await seqOf(page);
+  await btn(page, 'Next view', '#ws-scene').click();
+  await settle(page, 400);
+  const after = await seqOf(page);
+  assert.equal(after.at, (before.at + 1) % 3, `Next view is the next shot (${before.at} -> ${after.at})`); assert.equal(after.movingTo, -1, 'landed at once'); assert.equal(after.on, true);
+  assert.equal(after.slow, false, 'a jump is no verdict'); assert.equal(after.paused, false);
+  const cN = await cam(page);
+  assert.ok(after.cams[after.at].every((v, i) => Math.abs(v - cN[i]) < 0.5), `the camera sits on that shot (${cN.slice(0, 3)} vs ${after.cams[after.at].map((n) => n.toFixed(2))})`);
   // the drawer moment: in the detail shot's hold the unit the shot looks at slides its drawer out and back (a hold long
   // enough for the beat; the suite jumps to that hold). The unit's box grows toward the front by the slide, then shrinks.
   await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });   // a 9 s hold: the beat ends by 4.6 s, and SwiftShader's slow polls still read inside the hold
@@ -1577,10 +1619,10 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
   assert.equal(v.on, true, 'the slow verdict turns the sequence to cuts, it does not end it'); assert.equal(v.mode, 'cut');
   await page.waitForFunction((from) => { const s = window.__GEN2_DONE__.sequence; return s.on && s.at !== from; }, v.at, { timeout: 10_000 }).catch(async () => assert.fail('no cut followed the verdict: ' + JSON.stringify(await seqOf(page))));
   assert.equal((await seqOf(page)).movingTo, -1, 'cuts after the verdict: never "moving"');
-  // Back stops it
-  await btn(page, 'Back', '#ws-player').click();
+  // leaving the scene (Esc; the player is faded out in it) stops it
+  await page.keyboard.press('Escape');
   await settle(page, 1200);
-  assert.equal(await seqOf(page), null, 'Back removes the sequence');
+  assert.equal(await seqOf(page), null, 'leaving the scene removes the sequence');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
   // reduced motion: the still hero, on a tier that would otherwise drift
@@ -1593,8 +1635,40 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
   const r0 = await cam(rm.page);
   await settle(rm.page, 2500);
   assert.deepEqual(await cam(rm.page), r0, 'the hero holds');
+  // and Next view turns the shots by hand, one cut each, with no sequence to run
+  await btn(rm.page, 'Next view', '#ws-scene').click();
+  await settle(rm.page, 400);
+  const r1 = await cam(rm.page);
+  assert.notDeepEqual(r1, r0, 'Next view: the next shot'); assert.equal((await seqOf(rm.page)).on, false, 'still no sequence'); assert.equal((await seqOf(rm.page)).manual, 1);
+  await settle(rm.page, 1200);
+  assert.deepEqual(await cam(rm.page), r1, 'and it holds there');
+  // a resize refits the chosen view, not the hero (Sol 01a16c20: the refit put the hero back and the next click skipped a shot)
+  const vp = rm.page.viewportSize();
+  await rm.page.setViewportSize({ width: vp.width - 200, height: vp.height - 100 });
+  await settle(rm.page, 600);
+  const rs = await seqOf(rm.page), r2 = await cam(rm.page);
+  assert.equal(rs.manual, 1, 'the hand-chosen view is kept'); assert.ok(rs.cams[1].every((v, i) => Math.abs(v - r2[i]) < 0.5), `the camera sits on the refitted second shot (${r2.slice(0, 3)} vs ${rs.cams[1].map((n) => n.toFixed(2))})`);
+  assert.ok(rs.cams[0].some((v, i) => Math.abs(v - r2[i]) > 1), 'and not on the hero');
+  await rm.page.setViewportSize(vp);
   assert.deepEqual(clean(rm.errors), []);
   await rm.ctx.close();
+});
+
+/* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty
+   stage with a strip that does nothing (Sol 01a16c20). Back to the End page, HUD and all. */
+test('Assemble: the Done scene\'s final scene returns to the End page when the room fails to load', async () => {
+  const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
+  await page.route('**/scenes/done.js*', (r) => r.abort());
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => !document.documentElement.classList.contains('cinema') && !document.querySelector('#ws-scene') && !document.querySelector('#cinema-bars') && getComputedStyle(document.querySelector('#ws-player')).opacity === '1', null, { timeout: 15_000 }).catch(() => assert.fail('the failed load left the scene mode on'));
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'no room');
+  assert.match(await text(page, '#ws-player .title'), /End of instructions/, 'back on the End page');
+  assert.deepEqual(clean(errors).filter((e) => !/net::ERR_FAILED/.test(e)), [], 'nothing but the aborted request’s own console line');
+  await ctx.close();
 });
 
 /* THE ROOM AS A STAGE IN COLORS (Joey 2026-10-23: "a Studio / Room stage toggle in the Colors workspace, still hero, orbit

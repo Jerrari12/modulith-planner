@@ -3116,3 +3116,48 @@ Dated calls made while building, with who made them. The brief and the inventory
   fov widened (35 < fov ≤ 55). Seven mutants killed: no clamp; no top margin; no fov widening; no interior; the entrance
   camera unclamped; the sequence shots unclamped; the wall margin dropped. npm test 630 tests, 625 pass, 0 fail, 5
   skipped; the five room e2e cases 5 of 5; goldens 60 shots, 0 differ. Not deployed.
+
+## 2026-10-24 (the Done scene as a FINAL SCENE you step into: the entry, the HUD gone, the bars, no orbit)
+
+- **Joey's call** (2026-10-23 night): "when you get to the cinematic view in the instructions, it should be a little more
+  interesting, maybe it's more than just a step in the instructions but like a final scene that you have to make obvious
+  to go into, maybe most of the hud disappears and black borders appear on top and bottom of the screen slightly, kind
+  of like scope in cinematic movies or games, and maybe a button to return back or change camera view, but don't let
+  them be able to rotate the camera." Agreed and built as proposed.
+- **The entry.** The End page shows the finished build in the studio as the other steps do, and the Next slot becomes a
+  prominent "Watch the final scene" (`assemble.js renderPlayer`, behind `?done=room`; without the flag "Finished" as
+  before). The room no longer comes on by itself at Done (`finish()` and the remembered-Done remount no longer enter it).
+- **The scene** (`enterScene` / `leaveScene`): `html.cinema` fades the HUD out (`#ws-top`, the steps panel, the toolbar,
+  the player, the dock, the phone chrome: opacity 0 then `visibility: hidden`); black bars 7vh top and bottom; one strip
+  in the lower bar, "Back" and "Next view"; Esc is Back; the camera's safe area is the frame between the bars. Left on
+  Back, Skip, any step, unmount, and when the room fails to load (Sol). The room enters with `orbit: false`
+  (`done.js`): the controls are off, so a drag does nothing; a stage (Colors) keeps its orbit. `nextShot()` on the
+  handle jumps to the next shot's hold (`jumpTo`; a jump is no drift, so it is never the slow-drift verdict, which also
+  cures the debug hook's `jump(i)` artefact of §8e); under reduced motion the shots turn by hand (`seq.manual`), and a
+  refit re-places the hand-chosen view (Sol). The grab-and-drift-back machinery (grab listeners, `driftBack`,
+  `armReturn`, `idleBackMs`) is removed: nothing can grab the camera in the scene and the stage has no sequence.
+- **Two things the browser taught.** Chrome keeps an element's `backdrop-filter` at opacity 0, so the top bar's glass
+  chips stayed as blurred ghosts under the bar; the glass loses its blur at once and ends hidden. And bars drawn as
+  `body::before/::after` with z-index 60 painted over a strip inside the workspace with z-index 61, the fixed `#ws`
+  being its own stacking context; the bars are `#cinema-bars` inside the workspace, under the strip.
+- **Review:** Sol `01a16c20` (substantial), two findings, both confirmed and fixed: a resize under reduced motion put
+  the hero back while the hand-chosen index stayed, so the next click skipped a shot (the refit now re-places the chosen
+  view); a room that failed to load left the scene mode on with the HUD hidden over an empty stage (both failure paths
+  now leave the scene). None discarded.
+- **Checks (laptop).** e2e, four Assemble cases: the first (no scene button without the flag; the End page first with no
+  room until the click; after it html.cinema, no orbit, every HUD element at opacity 0 and the top bar hidden with its
+  chips' blur gone, both bars drawn at 7vh, the strip's two buttons, the bars in the workspace layer with the strip, the
+  safe area exactly the bars' frame; Esc leaves to the End page; the strip's Back too), the sequence case (the entry by
+  the button; a drag does not move the camera; Next view lands on the next shot at once with no verdict; under reduced
+  motion Next view turns the shots by hand and a resize keeps the chosen one), the 12W case (in by the button, out by
+  Esc), and a new failed-load case (the scene mode goes with the room). Fourteen mutants killed (the room on by itself;
+  the orbit on; no fade; no bars; Next view inert; Esc inert; the strip's Back not leaving the room; a jump judging; the
+  shots ignoring the bars; the button without the flag; Next view by hand inert; the strip under the bars; a refit
+  putting the hero back; a failed load keeping the mode); three of them survived until the checks were made to tell a
+  drawn pseudo-element from a declared one, the bars' frame from the HUD's, and the bars' layer. npm test 630 tests,
+  625 pass, 0 fail, 5 skipped (before Sol's fixes, which touch files it does not cover); the six room e2e cases 6 of 6;
+  goldens 60 shots, 0 differ. Checked in the browser pane at Very High. Not deployed.
+- **Next, in this order (Joey, 2026-10-24; DESIGN.md §8h):** a performance study of the scene (an ablation of each
+  feature's frame cost against its visible worth, on the laptop GPU and SwiftShader, not the A5000), then the camera
+  grammar: cuts to distinct cameras in a random non-repeating order, each with its own lens and a slow in-shot move or
+  locked off, holds of ten seconds or more, a dip to black between shots, static first for weak devices.

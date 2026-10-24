@@ -112,7 +112,7 @@ export const SHOTS = {
     { name: 'detail', az: 30, el: 10, fovV: 29.9, fill: 1.4, targetLift: -0.3, targetShift: { x: -0.18, z: 0.3 } },
   ],
 };
-export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50, idleBackMs: 6000 };   // the style doc: shots of 8-12 s, eased drifts between them, a grabbed camera drifts back ~6 s after the last gesture; a drift slower than 20 fps on average turns the sequence to CUTS (sequenceMode)
+export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50 };   // the style doc: shots of 8-12 s, eased drifts between them; a drift slower than 20 fps on average turns the sequence to CUTS (sequenceMode). The grab-and-drift-back went with the orbit (the final scene, 2026-10-23)
 
 /* A drift's verdict from the frames it drew: too slow when it drew fewer frames than a drift at `maxFrameMs` a frame
  * (20 fps) would have over its `moveMs` (a potato or a phone: it holds and cuts from then on, see sequenceMode). Counting
