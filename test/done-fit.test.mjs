@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from '../js/scenes/done-fit.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -63,7 +63,7 @@ test('fitSlides: a slide that stays on the desk is kept; one that would carry a 
   assert.equal(fit.plant, null, 'the plant would pass the left edge: hidden');
   assert.deepEqual(fitSlides(props, slid, null), slid, 'no bounds: every slide is kept');
   assert.deepEqual(fitSlides(props, {}, desk), {}, 'nothing slid: nothing to fit');
-  assert.equal(SEQUENCE.idleBackMs, undefined, 'no drift-back: the scene has no orbit to drift back from (2026-10-23)');
+  assert.equal(BEAT.idleBackMs, undefined, 'no drift-back: the scene has no orbit to drift back from (2026-10-23)');
 });
 
 test('contactFootprint grows the build\'s footprint and centres it', () => {
@@ -78,27 +78,96 @@ test('shotCamera: targetShift aims by fractions of the box\'s width and depth (t
   close(c.target.x, -0.25 * 176, 1e-9, 'a quarter of the width to -X'); close(c.target.z, 10.5 + 0.5 * 193, 1e-9, 'half the depth toward the front');
 });
 
-test('the tabletop shots are three, each fittable, the detail closest, and the sequence holds then drifts and wraps', () => {
+test('the grammar\'s shots: eight distinct cameras, four still and four moving, each fittable to the build, the lenses and heights Joey asked for', () => {
   const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
-  const view = { width: 1280, height: 800, free: { w: 972, h: 560 } };
-  const shots = SHOTS.tabletop;
-  assert.equal(shots.length, 3); assert.deepEqual(shots.map((s) => s.name), ['hero', 'low', 'detail']);
-  const cams = shots.map((s) => shotCamera(s, box, view));
-  for (const c of cams) assert.ok(c.distance > 0 && Number.isFinite(c.position.x + c.position.y + c.position.z), 'fits');
-  assert.ok(cams[2].distance < cams[0].distance && cams[2].distance < cams[1].distance, 'the detail shot is the closest');
-  assert.ok(cams[1].position.y < cams[0].position.y, 'the low angle is lower than the hero');
-  // the clock: hold on 0, drift 0 -> 1 eased, hold on 1 ... wrap after the last
-  const o = { moveMs: 1000, holdMs: 2000 };
-  assert.deepEqual([sequenceAt(0, 3, o).at, sequenceAt(0, 3, o).moving], [0, false]);
-  const mid = sequenceAt(2500, 3, o);
-  assert.equal(mid.moving, true); assert.equal(mid.at, 0); assert.equal(mid.to, 1); close(mid.k, 0.5, 1e-9, 'half way, eased, is half way');
-  close(sequenceAt(2250, 3, o).k, easeInOut(0.25), 1e-12, 'eased progress');
-  assert.deepEqual([sequenceAt(3000, 3, o).at, sequenceAt(3000, 3, o).moving], [1, false]);
-  assert.deepEqual([sequenceAt(8500, 3, o).at, sequenceAt(8500, 3, o).to], [2, 0]);   // the third beat's move wraps to the hero
-  assert.deepEqual([sequenceAt(9000, 3, o).at, sequenceAt(9000, 3, o).moving], [0, false]);
-  assert.equal(sequenceAt(5000, 1, o).moving, false, 'one shot never moves');
-  assert.ok(SEQUENCE.holdMs >= 8000 && SEQUENCE.holdMs <= 12000, 'the style doc: 8-12 s a shot');
-  assert.equal(easeInOut(0), 0); assert.equal(easeInOut(1), 1); close(easeInOut(0.5), 0.5, 1e-12, 'symmetric');
+  const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
+  const shots = GRAMMAR.tabletop;
+  assert.deepEqual(shots.map((s) => s.name), ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side']);
+  assert.equal(new Set(shots.map((s) => s.name)).size, shots.length, 'distinct');
+  assert.deepEqual(shots.filter((s) => s.to).map((s) => s.name), ['push', 'slide', 'macro', 'side'], 'four moving shots');
+  assert.equal(shots[0].name, 'hero'); assert.equal(shots[0].to, undefined, 'the hero holds still (the entrance lands on it)');
+  const unit = { min: { x: -88, y: 0, z: -86 }, max: { x: 0, y: 67, z: 107 } };
+  const aims = { drawer: aimAt(box, unit), front: { x: -61.6, y: 41.5, z: 107 } };
+  const cams = Object.fromEntries(shots.map((s) => [s.name, fitShot(mixShot(s, 0.5), box, view, null, aims)]));
+  for (const [n, c] of Object.entries(cams)) assert.ok(c.distance > 0 && Number.isFinite(c.position.x + c.position.y + c.position.z), `${n} fits`);
+  assert.ok(cams.push.fov < cams.hero.fov, 'the front push-in is a long lens ("a zoomed in panning front view")');
+  assert.ok(cams.low.fov > 40 && cams.low.position.y < cams.hero.position.y && cams.low.position.y < cams.low.target.y, 'the low shot: a wide lens, down below, looking up ("from down below with a wider angle lens")');
+  assert.ok(cams.top.position.y > cams.hero.position.y, 'the top shot looks down from higher than the hero');
+  const macro = shots.find((s) => s.name === 'macro');
+  close(cams.macro.distance, (macro.from.distMm + macro.to.distMm) / 2, 1e-9, 'the macro is a set distance from its corner (the middle of its push)');
+  const end = fitShot(mixShot(macro, 1), box, view, null, aims);
+  const layerPx = 0.2 * (800 / 2) / Math.tan((end.fov * Math.PI) / 360) / end.distance;
+  assert.ok(layerPx >= 4, `at the end of its push a 0.2 mm layer spans the relief's 4 px cutoff (${layerPx.toFixed(1)} px): the lines show`);
+  assert.deepEqual(cams.macro.target, aims.front, 'aimed at the spot on the drawer unit\'s face');
+  close(cams.detail.target.x, box.min.x + 0.25 * 176, 1e-9, 'the detail shot looks at the drawer unit, as before');
+  // with no drawer unit the macro frames the build closely instead (it has nothing of its own to aim at)
+  const noUnit = fitShot(mixShot(shots.find((s) => s.name === 'macro'), 0.5), box, view, null, {});
+  assert.ok(noUnit.distance > 130 && Number.isFinite(noUnit.position.y), 'no drawer: a close framing of the build, not a point in space');
+  assert.ok(BEAT.holdMs >= 10000, 'holds of ten seconds or more ("very slow pace")');
+});
+
+test('fitShot keeps every camera above the desk (the low shot on a wide build would go under it) and mixShot interpolates the move\'s parameters, so an arc stays an arc', () => {
+  const wide = { min: { x: -530, y: 0, z: -86 }, max: { x: 530, y: 134, z: 107 } };
+  const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
+  const low = GRAMMAR.tabletop.find((s) => s.name === 'low');
+  const raw = shotCamera(mixShot(low, 0.5), wide, view);
+  assert.ok(raw.position.y < FLOOR_MM, `the low shot on a 12W build fits under the desk top (${raw.position.y.toFixed(0)} mm)`);
+  const kept = fitShot(mixShot(low, 0.5), wide, view, null);
+  assert.equal(kept.position.y, FLOOR_MM, 'lifted to the floor'); assert.equal(kept.floored, true);
+  const side = GRAMMAR.tabletop.find((s) => s.name === 'side');
+  const a = mixShot(side, 0), b = mixShot(side, 1), m = mixShot(side, 0.5);
+  assert.equal(a.az, side.from.az); assert.equal(b.az, side.to.az); close(m.az, (side.from.az + side.to.az) / 2, 1e-12, 'the azimuth half way');
+  const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
+  const [ca, cb, cm] = [a, b, m].map((s) => shotCamera(s, box, view));
+  const r = (c) => Math.hypot(c.position.x - c.target.x, c.position.y - c.target.y, c.position.z - c.target.z);
+  close(r(cm), r(ca), 1e-6, 'the arc\'s middle is as far from the build as its ends (a straight lerp would cut the chord)'); close(r(cb), r(ca), 1e-6, 'and its end');
+  const lerped = { x: (ca.position.x + cb.position.x) / 2, y: (ca.position.y + cb.position.y) / 2, z: (ca.position.z + cb.position.z) / 2 };
+  assert.ok(Math.hypot(lerped.x - ca.target.x, lerped.y - ca.target.y, lerped.z - ca.target.z) < r(ca) - 1, 'where a straight line between the ends would come closer');
+  assert.deepEqual(mixShot(GRAMMAR.tabletop[0], 0.7), GRAMMAR.tabletop[0].from, 'a still shot is its from, whatever k');
+});
+
+test('beatAt: the dip-in, the hold, the dip-out and the black, the move eased across the visible time and never at rest on screen', () => {
+  const b = { holdMs: 1000, dipInMs: 200, dipOutMs: 300, blackMs: 100 };
+  assert.deepEqual([beatAt(0, b).phase, beatAt(0, b).fade, beatAt(0, b).fadeMs], ['in', 0, 200], 'the black fades out first');
+  assert.equal(beatAt(199, b).phase, 'in'); assert.equal(beatAt(200, b).phase, 'hold');
+  assert.deepEqual([beatAt(1200, b).phase, beatAt(1200, b).fade, beatAt(1200, b).fadeMs], ['out', 1, 300], 'then back to black over dipOutMs');
+  assert.equal(beatAt(1350, b).fadeMs, 150, 'half way through the dip-out: half its time left');
+  assert.deepEqual([beatAt(1500, b).phase, beatAt(1500, b).fade], ['black', 1]);
+  assert.equal(beatAt(1600, b).phase, 'next', 'the cut, at the end of the black');
+  close(beatAt(0, b).k, 0, 1e-12, 'the move starts as the frame begins to show'); close(beatAt(750, b).k, 0.5, 1e-12, 'half way through the visible time, half way along');
+  close(beatAt(1500, b).k, 1, 1e-12, 'at its end as the frame has gone black');
+  assert.ok(beatAt(10, b).k < 0.001 && beatAt(1490, b).k > 0.999, 'eased: gentle at both ends'); close(easeSine(0.25), 0.5 - 0.5 * Math.cos(Math.PI / 4), 1e-12, 'a half cosine');
+  // the first shot: the entrance has landed on it, so no dip-in
+  assert.equal(beatAt(0, b, { skipIn: true }).phase, 'hold'); assert.equal(beatAt(1000, b, { skipIn: true }).phase, 'out');
+  assert.equal(beatAt(-5, b).phase, 'in', 'a clock read early is at the start');
+  assert.ok(BEAT.dipInMs >= 800 && BEAT.dipOutMs >= 600, 'fades to black, not hard cuts: slow enough to read as a dip');
+  assert.equal(easeInOut(0), 0); assert.equal(easeInOut(1), 1); close(easeInOut(0.5), 0.5, 1e-12, 'the entrance\'s ease, symmetric');
+});
+
+test('planCycle: every shot once a cycle in a seeded random order, the hero first on the first, no shot ever following itself across cycles, a still between two moves where it can', () => {
+  const names = GRAMMAR.tabletop.map((s) => s.name);
+  const moving = (n) => !!GRAMMAR.tabletop.find((s) => s.name === n).to;
+  const rng = rngFrom(7);
+  const c1 = planCycle(names, rng, { first: 'hero', moving });
+  assert.equal(c1[0], 'hero'); assert.deepEqual([...c1].sort(), [...names].sort(), 'a permutation: every shot once');
+  for (let i = 1; i < c1.length; i++) assert.ok(!(moving(c1[i]) && moving(c1[i - 1])), `no two moves back to back (${c1.join(' ')})`);
+  let prev = c1[c1.length - 1];
+  for (let k = 0; k < 40; k++) {
+    const c = planCycle(names, rng, { prev, moving });
+    assert.notEqual(c[0], prev, `a cycle never opens on the shot the last one closed on (${prev} | ${c.join(' ')})`);
+    assert.ok(!(moving(prev) && moving(c[0])), `nor two moves across the seam (${prev} | ${c.join(' ')})`);
+    assert.deepEqual([...c].sort(), [...names].sort());
+    for (let i = 1; i < c.length; i++) assert.ok(!(moving(c[i]) && moving(c[i - 1])), `four stills always separate four moves (${c.join(' ')})`);
+    prev = c[c.length - 1];
+  }
+  // seeded: the same seed, the same plan; another seed, another plan (random per visit, reproducible in a test)
+  assert.deepEqual(planCycle(names, rngFrom(3), { first: 'hero', moving }), planCycle(names, rngFrom(3), { first: 'hero', moving }));
+  const plans = new Set(Array.from({ length: 12 }, (_, s) => planCycle(names, rngFrom(s + 1), { first: 'hero', moving }).join(' ')));
+  assert.ok(plans.size >= 8, `different seeds, different orders (${plans.size} of 12)`);
+  // where the moves outnumber the stills it does what it can, and still gives every shot once
+  const many = planCycle(['a', 'b', 'c', 'd'], rngFrom(1), { moving: (n) => n !== 'd' });
+  assert.deepEqual([...many].sort(), ['a', 'b', 'c', 'd']);
+  for (let s = 0; s < 50; s++) { const r = rngFrom(s)(); assert.ok(r >= 0 && r < 1); }
 });
 
 test('clampToInterior: a camera inside is untouched; one above the wall tops or past a wall is pulled in along its ray, the fov widening only when the build would overflow, up to 55 degrees', () => {
@@ -136,19 +205,18 @@ test('clampToInterior: a camera inside is untouched; one above the wall tops or 
   assert.equal(clampToInterior({ position: { x: 1, y: 1, z: 1 }, target: t, fov: 30, distance: 1, fill: 0.5 }, null).clamped, false);
 });
 
-test('sequenceMode: drifts above Fast; cuts on Fast and after a slow verdict; none under reduced motion or for a stage, whatever the tier', () => {
-  assert.equal(sequenceMode({ tier: 'veryhigh' }), 'drift');
-  assert.equal(sequenceMode({ tier: 'high' }), 'drift');
-  assert.equal(sequenceMode({ tier: 'balanced' }), 'drift');
-  assert.equal(sequenceMode({ tier: 'fast' }), 'cut', 'Fast holds and cuts (Joey 2026-10-23), it no longer keeps the hero');
-  assert.equal(sequenceMode({ tier: 'high', slow: true }), 'cut', 'a slow first drift turns the sequence to cuts');
-  assert.equal(sequenceMode({ tier: 'fast', slow: true }), 'cut');
-  assert.equal(sequenceMode({ tier: 'high', reduced: true }), 'off', 'reduced motion: the still hero');
-  assert.equal(sequenceMode({ tier: 'fast', reduced: true }), 'off', 'reduced motion beats Fast: no cuts either');
-  assert.equal(sequenceMode({ tier: 'fast', reduced: true, slow: true }), 'off');
-  assert.equal(sequenceMode({ tier: 'high', sequence: false }), 'off', 'a stage (Colors) never sequences');
-  assert.equal(sequenceMode({ tier: 'fast', sequence: false }), 'off');
-  assert.equal(sequenceMode({ tier: 'fast', sequence: false, slow: true }), 'off');
+test('grammarMode: static first: the shots move only on High and Very High and only on a device not judged slow; still on Balanced, Fast and after a slow verdict; off under reduced motion or for a stage', () => {
+  assert.equal(grammarMode({ tier: 'veryhigh' }), 'full');
+  assert.equal(grammarMode({ tier: 'high' }), 'full');
+  assert.equal(grammarMode({ tier: 'balanced' }), 'still', 'Balanced: locked-off views (Joey 2026-10-24: "maybe we only use stationary views for those devices")');
+  assert.equal(grammarMode({ tier: 'fast' }), 'still', 'Fast: locked-off views with the dips (2026-10-23: "stays stationary for a bit before changing angle")');
+  assert.equal(grammarMode({ tier: 'high', slow: true }), 'still', 'a slow verdict locks the views off');
+  assert.equal(grammarMode({ tier: 'veryhigh', slow: true }), 'still');
+  assert.equal(grammarMode({ tier: 'high', reduced: true }), 'off', 'reduced motion: the still hero, the views by hand');
+  assert.equal(grammarMode({ tier: 'fast', reduced: true }), 'off', 'reduced motion beats Fast');
+  assert.equal(grammarMode({ tier: 'fast', reduced: true, slow: true }), 'off');
+  assert.equal(grammarMode({ tier: 'high', sequence: false }), 'off', 'a stage (Colors) never sequences');
+  assert.equal(grammarMode({ tier: 'fast', sequence: false, slow: true }), 'off');
 });
 
 test('driftTooSlow: a drift drawn under 20 fps on average turns the sequence to cuts; a smooth one or too few frames does not', () => {
@@ -157,7 +225,7 @@ test('driftTooSlow: a drift drawn under 20 fps on average turns the sequence to 
   assert.equal(driftTooSlow([300, 350]), false, 'two intervals are no evidence');
   assert.equal(driftTooSlow([16, 16, 16, 400]), true, 'one long stall drags the mean over the line');
   assert.equal(driftTooSlow(null), false);
-  assert.equal(SEQUENCE.maxFrameMs, 50);
+  assert.equal(BEAT.maxFrameMs, 50);
   // with the drift's length known, the verdict is the frame COUNT against a 20 fps drift: catches the slowest device too
   assert.equal(driftTooSlow(new Array(209).fill(16.7), 50, 3500), false, '210 frames over 3.5 s: smooth');
   assert.equal(driftTooSlow(new Array(69).fill(50), 50, 3500), false, '70 frames over 3.5 s is exactly 20 fps: kept');
@@ -166,11 +234,11 @@ test('driftTooSlow: a drift drawn under 20 fps on average turns the sequence to 
 });
 
 test('the drawer moment: out, open, back inside the detail hold; none in a hold too short; the unit is a labelled drawer nearest the front-left; the shot aims at it', () => {
-  const b = drawerBeat(SEQUENCE.holdMs);
+  const b = drawerBeat(BEAT.holdMs);
   assert.ok(b, 'the default hold has room for it');
   assert.equal(b.openAt, DRAWER.outMs);
   assert.equal(b.closeAt, DRAWER.outMs + DRAWER.slideOutMs + DRAWER.openMs);
-  assert.ok(b.closeAt + DRAWER.slideBackMs < SEQUENCE.holdMs, 'back before the drift');
+  assert.ok(b.closeAt + DRAWER.slideBackMs < BEAT.holdMs, 'back before the dip');
   assert.equal(drawerBeat(1500), null, 'the suite\'s short clock has no drawer moment');
   const build = { min: { x: -176, y: 0, z: -86 }, max: { x: 176, y: 134, z: 107 } };
   const units = [
@@ -183,7 +251,7 @@ test('the drawer moment: out, open, back inside the detail hold; none in a hold 
   assert.equal(pickDrawerUnit([units[2]], build), null, 'none without a drawer');
   const aim = aimAt(build, units[2 - 1].box);
   close(aim.x, 0.25, 1e-9, 'the right unit\'s centre is a quarter of the width right of the build\'s'); close(aim.z, 0, 1e-9, 'same depth');
-  const c = shotCamera({ ...SHOTS.tabletop[2], targetShift: aim }, build, { width: 1280, height: 800, free: { w: 972, h: 560 } });
+  const c = fitShot(GRAMMAR.tabletop.find((s) => s.name === 'detail').from, build, { width: 1280, height: 800, free: { w: 972, h: 560 } }, null, { drawer: aim });
   close(c.target.x, 88, 1e-9, 'the detail shot looks at that unit');
 });
 

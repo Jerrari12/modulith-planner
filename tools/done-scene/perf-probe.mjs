@@ -171,7 +171,7 @@ const setInterior = (mode) => page.evaluate(([mode, re]) => {   // 'on' | 'off' 
   return { unit, hidden: [...v.scene.children].filter((c) => byId.has(c.userData.instanceId) && !c.visible).length };
 }, [mode, INTERIOR.source]);
 const shots = ['hero', 'low', 'detail'];
-const atShot = async (i) => { await page.evaluate((i) => window.__GEN2_DONE__.jump(i), i); await page.waitForTimeout(i === 2 ? 1800 : 900); };   // the detail shot's drawer opens 700 ms into its hold and is out by 1080
+const atShot = async (i) => { await page.evaluate((name) => window.__GEN2_DONE__.jump(name), shots[i]); await page.waitForTimeout(i === 2 ? 1800 : 900); };   // by name (the grammar's shots, 2026-10-24); the detail shot's drawer opens 700 ms into its hold and is out by 1080
 const RELIEF = process.argv.includes('--relief');
 /* 4. the relief on and off, per shot: the flag changed and the tier round-tripped (ablate.mjs's way: a same-tier
    setQuality is a no-op), with a round trip that changes nothing as the control */

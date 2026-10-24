@@ -507,7 +507,10 @@ function sceneEnv() { const q = QUALITY[quality]; if (!q.env) return null; retur
 function holdScene(on, { environment = null } = {}) {
   if (!!on === sceneHold.on) { if (on) { sceneHold.env = environment; if (!cinema.on) scene.environment = sceneEnv(); } return; }
   sceneHold.on = !!on; sceneHold.env = on ? environment : null;
-  if (on) { sceneHold.bg = scene.background; scene.background = null; }
+  /* ... and the camera is the scene's from here: a stage camera tween still under way (the End page's own move into its
+     view) would go on writing the camera under the scene's shots and leave it on the End page's view (the 2026-10-24
+     grammar e2e, a cached room entered inside that tween) */
+  if (on) { sceneHold.bg = scene.background; scene.background = null; camTweenToken++; }
   else { scene.background = sceneHold.bg && sceneHold.bg.isColor ? sceneHold.bg : new THREE.Color(0xffffff); sceneHold.bg = null; applyStageTheme(stageTheme); }
   if (!cinema.on) scene.environment = sceneEnv();
   applyShadowQuality();
@@ -2596,8 +2599,15 @@ const SETTLE_MS = 160;
  * do not flip the passes on and off.
  */
 function motionLite() {
-  return perf.cameraMoving && !cinema.on && !window.__FILM_AO_DURING_TWEENS;
+  return perf.cameraMoving && !cinema.on && !window.__FILM_AO_DURING_TWEENS && !motionFull;
 }
+/* THE DONE SCENE'S MOVING SHOTS (js/scenes/done.js, the camera grammar, 2026-10-24) are a slow camera move of thirteen
+   seconds, and only on High and Very High: there the room's contacts would lose their AO for the whole shot (the at-rest
+   AO is 3.4 % of the hero's pixels: the build's base, the desk against the wall, the pot, the mug). The scene opts its
+   moving shots out of the lite frame, as the outro and the filming rig do; a fresh AO pass every frame, as before
+   motionLite existed. Off again at the shot's end, at a lock-off and at leave. */
+let motionFull = false;
+function setMotionFull(on) { motionFull = !!on; }
 
 /* ---- the auto-downgrade (rewritten 2026-09-14, Astra's rules) -------------------------------------
    MEASURED before the rewrite: an 80-unit build under a 4x CPU throttle ran High at ~9 fps, and from a
@@ -11230,7 +11240,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setReliefOverride, reliefOverride: () => reliefOverride, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL

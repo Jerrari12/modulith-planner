@@ -173,12 +173,13 @@ test('a healthy device is left alone: 45 fps for a minute changes nothing', () =
 
 /* ------------------------------------------------------------------------------ the moving-frame passes */
 
-test('motionLite is the CAMERA moving, never during the outro, never under the capture flag', () => {
-  const motionLite = new Function('perf', 'cinema', 'window', takeAt('function motionLite(', { fn: true }) + '\nreturn motionLite;');
-  assert.equal(motionLite({ cameraMoving: true }, { on: false }, {})(), true);
-  assert.equal(motionLite({ cameraMoving: false }, { on: false }, {})(), false);
-  assert.equal(motionLite({ cameraMoving: true }, { on: true }, {})(), false, 'the outro lost its reflection');
-  assert.equal(motionLite({ cameraMoving: true }, { on: false }, { __FILM_AO_DURING_TWEENS: true })(), false, 'a capture harness lost AO mid-clip');
+test('motionLite is the CAMERA moving, never during the outro, never under the capture flag, never in the Done scene\'s moving shots', () => {
+  const motionLite = new Function('perf', 'cinema', 'window', 'motionFull', takeAt('function motionLite(', { fn: true }) + '\nreturn motionLite;');
+  assert.equal(motionLite({ cameraMoving: true }, { on: false }, {}, false)(), true);
+  assert.equal(motionLite({ cameraMoving: false }, { on: false }, {}, false)(), false);
+  assert.equal(motionLite({ cameraMoving: true }, { on: true }, {}, false)(), false, 'the outro lost its reflection');
+  assert.equal(motionLite({ cameraMoving: true }, { on: false }, { __FILM_AO_DURING_TWEENS: true }, false)(), false, 'a capture harness lost AO mid-clip');
+  assert.equal(motionLite({ cameraMoving: true }, { on: false }, {}, true)(), false, 'the Done scene\'s moving shot lost its AO (setMotionFull, the camera grammar, 2026-10-24)');
 });
 
 test('holding AO for motion forces a regeneration on return, and engages at once unless a tween is running', () => {

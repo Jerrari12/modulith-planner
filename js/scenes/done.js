@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, SHOTS, SEQUENCE, sequenceAt, sequenceMode, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -135,7 +135,7 @@ function contactTexture() {
 export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true, orbit = true } = {}) {
   const { scene, camera, controls, renderer } = stage;
   let cancelled = false, on = false;
-  const parts = { group: null, catcher: null, wall: null, sprite: null, masks: [], slid: {}, env: null, tex: null, mats: [], raf: 0 };
+  const parts = { group: null, catcher: null, wall: null, sprite: null, masks: [], slid: {}, env: null, tex: null, mats: [], raf: 0, fade: null };
   const was = { table: stage.table.visible, grid: stage.grid.visible,
     sun: { pos: stage.sun.position.clone(), color: stage.sun.color.clone(), intensity: stage.sun.intensity },
     hemi: { color: stage.hemi.color.clone(), ground: stage.hemi.groundColor.clone(), intensity: stage.hemi.intensity },
@@ -145,21 +145,26 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   let json = null, buildBox = null, interior = null;   // interior: the room's box from its walls (roomInterior), the shots' clamp
   const debug = new URLSearchParams(location.search).has('debug');
 
-  /* THE CAMERA SEQUENCE (the plan's curated shots, 2026-10-23): hold on a shot, drift to the next, over SHOTS.tabletop
-     fitted to this build (done-fit.js: the clock, the shots, the easing). A drift runs on animation frames; a hold runs
-     on ONE timer, so the stage sees a still camera and the idle gate rests (Very High converges in the holds: a camera
-     that never stops never settles, and the gate is the number the branch keeps). Not under reduced motion (the still
-     hero). On Fast, and on a device whose first drift was judged too slow, the sequence CUTS instead of drifting
-     (done-fit.js sequenceMode; Joey 2026-10-23: keep the look, "the camera just stays stationary for a bit before
-     changing angle, rather than animating it"): the hold ends and the camera is on the next shot, one frame, no drawer
-     moment. A hidden tab pauses the clock. The scene has no orbit (`orbit: false`), so the shots are the only views and
-     `nextShot()` cuts to the next one (the grab-and-drift-back of the first slices went with the orbit, 2026-10-23). */
-  const seq = { on: false, t0: 0, raf: 0, timer: 0, startTimer: 0, pausedAt: null, from: null, movingTo: -1, cams: [], timing: { ...SEQUENCE }, manual: null,
-    intervals: [], lastFrame: 0, slow: false, judged: false };   // the FIRST drift's frame intervals are the device's verdict (driftTooSlow), given once: a device that cannot drift smoothly cuts from then on; a later stall is not a verdict (Sol 01a16b2a); `manual`: the shot shown by hand when no sequence runs (reduced motion)
-  const v3 = (p) => new THREE.Vector3(p.x, p.y, p.z);
-  const mode = (tier) => sequenceMode({ tier: tier || stage.quality, reduced, sequence, slow: seq.slow });
+  /* THE CAMERA GRAMMAR (done-fit.js GRAMMAR, BEAT, beatAt, planCycle, grammarMode; Joey 2026-10-24, DESIGN.md §8l):
+     distinct cameras in a random order that never repeats a shot, each fitted to this build, CUT between through a dip
+     to black (parts.fade: a black layer over the canvas, under the cinema bars and the strip). A moving shot moves slowly
+     across its whole visible time, on animation frames; a still one holds on ONE timer, so the stage sees a still camera
+     and the idle gate rests (Very High converges in the black, before the frame fades in). Static first: 'full' moves the
+     moving shots (High and Very High, once the entrance move drew at 20 fps or better: the device's verdict, taken on the
+     entrance and again on every moving shot, one-way); 'still' locks every shot off at the middle of its move (Balanced,
+     Fast, a slow verdict); 'off' (reduced motion) is the still hero, the views turned by hand with a plain cut. A hidden
+     tab pauses the clock. The scene has no orbit (`orbit: false`): the shots are the only views, and Next view dips to
+     the next one. `seq.k`: where the shot on screen is along its move; `cutAt`: Next view's dip-out, the camera held. */
+  const seq = { on: false, t0: 0, raf: 0, timer: 0, startTimer: 0, pausedAt: null, pendingBegin: false, shots: null, order: [], idx: 0, cycle: 0,
+    seed: Date.now() >>> 0, rng: null, shot: null, skipIn: false, phase: null, k: 0.5, moving: false, cutAt: null, cutK: null, fade: 0,
+    /* the beat, and three windows the e2e stretches to reach its races (Sol 01a16e0e): the entrance's length, the frames
+       the entry waits before it, the frames a new shot waits in the black; `window.__DONE_TIMING__` sets any of them before
+       the entry, with ?debug only */
+    timing: { ...BEAT, enterMs: ENTER_MS, preFrames: 2, waitFrames: 2, ...(debug && window.__DONE_TIMING__ ? window.__DONE_TIMING__ : {}) },
+    manual: null, slow: false, judged: false, frames: [], lastFrame: 0, checked: false };
+  const mode = (tier) => grammarMode({ tier: tier || stage.quality, reduced, sequence, slow: seq.slow });
   const sequenceWanted = (tier) => mode(tier) !== 'off';
-  const cutting = (tier) => mode(tier) === 'cut';
+  const moves = (tier) => mode(tier) === 'full';
   /* THE DRAWER MOMENT (done-fit.js DRAWER): in the detail shot's hold, the unit the shot looks at slides its drawer out
      by a fraction of its travel and back before the drift. The unit is chosen once per entry (a labelled unit with a
      drawer, else any with one, nearest the front-left); the detail shot aims at it. Closed early by a grab, a hidden
@@ -170,13 +175,21 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     drawer.unit = pickDrawerUnit(units, plain(buildBox));
   }
   function shotsFor() {
-    const list = SHOTS.tabletop.map((s) => ({ ...s }));
-    if (json.shots && json.shots.hero) list[0] = { ...list[0], ...json.shots.hero, name: 'hero' };   // the bake's own hero shot wins
-    if (drawer.unit) { const i = list.findIndex((s) => s.name === 'detail'); if (i >= 0) list[i] = { ...list[i], targetShift: aimAt(plain(buildBox), drawer.unit.box) }; }
+    const list = GRAMMAR.tabletop.map((s) => ({ ...s, from: { ...s.from }, to: s.to ? { ...s.to } : undefined }));
+    const hero = list.find((s) => s.name === 'hero');
+    if (hero && json.shots && json.shots.hero) hero.from = { ...hero.from, ...json.shots.hero };   // the bake's own hero shot wins
     return list;
   }
-  const fitted = (s) => clampToInterior(shotCamera(s, plain(buildBox), view()), interior);   // every shot stays inside the room (a wide build's fitted camera would leave it)
-  function fitShots() { seq.cams = shotsFor().map(fitted); }
+  /* the shots that look at the drawer unit: the detail shot at its box centre (targetShift, as before), the macro at the
+     top-left corner of its face (the faceplate's edge, the seam to the case and to the unit above: structure at the scale
+     where the layer lines show) */
+  function aims() {
+    if (!drawer.unit || !drawer.unit.box) return {};
+    const b = drawer.unit.box;
+    return { drawer: aimAt(plain(buildBox), b), front: { x: b.min.x + 0.08 * (b.max.x - b.min.x), y: b.max.y - 0.12 * (b.max.y - b.min.y), z: b.max.z } };
+  }
+  const shotNamed = (name) => (seq.shots || shotsFor()).find((s) => s.name === name);
+  const fitAt = (shot, k) => fitShot(mixShot(shot, k), plain(buildBox), view(), interior, aims());   // inside the room and above the desk, at k along its move
   function drawerSet(open) {
     if (!drawer.unit || drawer.open === open || !stage.slideUnitDrawer) return;
     drawer.open = open;
@@ -190,97 +203,177 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     drawer.openTimer = setTimeout(() => drawerSet(true), beat.openAt);
     drawer.closeTimer = setTimeout(() => drawerSet(false), beat.closeAt);
   }
-  function setCam(c) { camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); reliefShot(c); }
-  /* THE RELIEF BY DISTANCE (Joey 2026-10-24; done-fit.js reliefResolves, PERF.md §5): for each shot, the nearest the build
-     comes to the camera says whether any layer can span the shader's cutoff; if none can, the stage takes the relief off
-     (stage.setReliefOverride(false): a material rebuild, so at a cut or a landing, never mid-drift). A drift TOWARD a shot
-     that needs it turns it on as the drift starts (the band limit fades it in on the way); a drift away from one turns it
-     off as it lands. The scene only: the Colors stage orbits freely and keeps the tier's rule. */
+  function putCam(c) { camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); }
+  /* THE RELIEF BY DISTANCE (Joey 2026-10-24; done-fit.js reliefResolves, PERF.md §5): the nearest the build comes to the
+     camera says whether any layer can span the shader's cutoff; if none can, the stage takes the relief off
+     (stage.setReliefOverride(false): a material rebuild, so once a shot, at its cut, in the black). A moving shot is
+     decided for its whole move: on if either end resolves (the band limit fades the lines in as the camera closes, so
+     the macro shows them where it ends). The scene only: the Colors stage orbits freely and keeps the tier's rule. */
   const relief = { px: null, on: null, distance: null, cutoffPx: null };
   const viewNow = () => { const el = renderer.domElement; return { width: Math.max(1, el.clientWidth), height: Math.max(1, el.clientHeight) }; };
   function reliefOf(c) { return stage.reliefBand && buildBox && !buildBox.isEmpty() ? reliefResolves(c, plain(buildBox), viewNow(), stage.reliefBand) : null; }
-  function reliefShot(c) {
+  function reliefFor(cams) {
     if (!sequence || !stage.setReliefOverride) return;
-    const r = reliefOf(c); if (!r) return;
-    Object.assign(relief, r);
-    stage.setReliefOverride(r.on ? null : false);
+    const rs = cams.map(reliefOf).filter(Boolean);
+    if (!rs.length) return;
+    const best = rs.reduce((a, b) => (b.px > a.px ? b : a));
+    Object.assign(relief, best);
+    stage.setReliefOverride(best.on ? null : false);
   }
-  function reliefMove(to) {
-    if (!sequence || !stage.setReliefOverride) return;
-    const r = reliefOf(to); if (!r || !r.on) return;
-    Object.assign(relief, r);
-    stage.setReliefOverride(null);
+  function setCam(c, ends = [c]) { putCam(c); reliefFor(ends); }
+  /* the dip: the black layer's opacity, eased over `ms` (into the black ease-in, out of it ease-out) */
+  function fadeTo(opacity, ms) {
+    seq.fade = opacity;
+    const f = parts.fade;
+    if (!f) return;
+    f.style.transition = `opacity ${Math.max(0, Math.round(ms))}ms ${opacity ? 'ease-in' : 'ease-out'}`;
+    f.style.opacity = String(opacity);
   }
-  function snapshot() { return { position: camera.position.clone(), target: controls.target.clone(), fov: camera.fov }; }
-  function seqTick() {
-    if (!seq.on || seq.pausedAt != null) return;
-    const now = performance.now();
-    const s = sequenceAt(now - seq.t0, seq.cams.length, seq.timing);
-    if (s.moving) {
-      if (cutting()) {   // a CUT: no frames spent on the move; the camera is on the next shot and that shot's hold begins now (the clock re-based on it)
-        seq.movingTo = -1; drawerCancel(); setCam(seq.cams[s.to]);
-        seq.t0 = now - s.to * (seq.timing.holdMs + seq.timing.moveMs);
-        stage.invalidateFrame();
-        seq.timer = setTimeout(seqTick, Math.max(16, seq.timing.holdMs));
-        return;
-      }
-      if (seq.movingTo !== s.to) { seq.movingTo = s.to; seq.from = snapshot(); seq.intervals.length = 0; seq.lastFrame = now; drawerCancel(); reliefMove(seq.cams[s.to]); }   // a drift starts from wherever the camera IS (a grab may have moved it); a drawer still out goes back
-      else if (!seq.judged) { seq.intervals.push(now - seq.lastFrame); seq.lastFrame = now; }
-      const b = seq.cams[s.to];
-      camera.position.lerpVectors(seq.from.position, v3(b.position), s.k); controls.target.lerpVectors(seq.from.target, v3(b.target), s.k);
-      camera.fov = seq.from.fov + (b.fov - seq.from.fov) * s.k; camera.updateProjectionMatrix(); controls.update();
-      seq.raf = requestAnimationFrame(seqTick);
-    } else {
-      if (seq.movingTo !== -1) {   // land exactly on the shot, then be still
-        const jumped = seq.movingTo === -2;   // a jump (Next view, the debug hook) is no drift: it drew no frames and is never the device's verdict
-        seq.movingTo = -1; setCam(seq.cams[s.at]);
-        /* the drift that just ended is the device's own measurement: a weak GPU or a phone that drew it under 20 fps cuts
-           between the shots for the rest of the visit rather than drifting again (sequenceMode: the look is baked, a cut
-           is one frame). Decided once; the tier's auto-downgrade is one-way and slower to notice. */
-        if (!seq.judged && !jumped) { seq.judged = true; if (driftTooSlow(seq.intervals, seq.timing.maxFrameMs, seq.timing.moveMs)) seq.slow = true; }
-        if (!cutting() && shotsFor()[s.at].name === 'detail') drawerSchedule(seq.timing.holdMs);   // the drawer moment, in this hold (it animates: none when cutting)
-      }
-      seq.timer = setTimeout(seqTick, Math.max(16, s.holdLeft));
+  const currentShot = () => shotNamed(seq.order[seq.idx]);
+  /* the next cycle of shots, once this one is used up: the hero first on the first cycle (the entrance lands on it), a
+     later cycle never opening on the shot the last one closed on, a still between two moves where it can */
+  function planNext() {
+    const prev = seq.order.length ? seq.order[seq.order.length - 1] : null;
+    seq.order = planCycle(seq.shots.map((s) => s.name), seq.rng, { first: seq.cycle === 0 ? 'hero' : null, prev, moving: (n) => !!shotNamed(n).to });
+    seq.cycle++; seq.idx = 0;
+  }
+  /* a shot begins, in the black: the camera on its opening (a moving shot at its start, any shot locked off at the middle
+     of its move), the relief decided for the whole shot, the stage told whether this one moves, the clock at the start of
+     its dip-in (`skipIn`: at its hold, the frame already showing: the first shot, and a jump) */
+  function beginShot({ skipIn = false } = {}) {
+    const shot = currentShot();
+    seq.shot = shot.name; seq.skipIn = skipIn; seq.cutAt = null; seq.cutK = null; seq.phase = null;
+    seq.moving = moves() && !!shot.to;
+    seq.k = seq.moving ? 0 : 0.5;
+    const c = fitAt(shot, seq.k);
+    setCam(c, seq.moving ? [c, fitAt(shot, 1)] : [c]);
+    if (stage.setMotionFull) stage.setMotionFull(seq.moving);   // a moving shot keeps the stage's settle passes on every frame: the room's contacts keep their AO while it moves
+    seq.pausedAt = null; seq.frames.length = 0; seq.checked = false;
+    stage.invalidateFrame();
+    if (skipIn) { startClock(); return; }
+    /* in the black, the clock waits for the new view to be DRAWN before the frame fades in: a cut that rebuilds the part
+       materials (the relief on or off) compiles their shaders on its first frame, about a second on this laptop's GPU, and
+       a dip-in already running would have shown the last shot's frame through it (the 2026-10-24 tour, the macro) */
+    seq.waiting = true; fadeTo(1, 0);
+    afterFrames(seq.timing.waitFrames, () => { seq.waiting = false; startClock(); });
+  }
+  function startClock() { seq.t0 = performance.now(); seq.lastFrame = seq.t0; tick(); }
+  /* `fn` once `n` frames have gone by (the stage draws the frame it was invalidated for on the first of them) */
+  function afterFrames(n, fn) {
+    cancelAnimationFrame(seq.waitRaf);   // one wait at a time: a second one replaces the first (it would have run its callback too)
+    const step = () => { if (--n <= 0) fn(); else seq.waitRaf = requestAnimationFrame(step); };
+    seq.waitRaf = requestAnimationFrame(step);
+  }
+  /* where the shot on screen is: its own beat, or, once Next view asked for the next shot, a dip-out from that moment */
+  function phaseNow(now) {
+    if (seq.cutAt == null) return beatAt(now - seq.t0, seq.timing, { skipIn: seq.skipIn });
+    const t = now - seq.cutAt, o = seq.timing.dipOutMs, bl = seq.timing.blackMs;
+    if (t < o) return { phase: 'out', fade: 1, fadeMs: o - t, k: seq.cutK, left: o - t };
+    if (t < o + bl) return { phase: 'black', fade: 1, fadeMs: 0, k: seq.cutK, left: o + bl - t };
+    return { phase: 'next', fade: 1, fadeMs: 0, k: seq.cutK, left: 0 };
+  }
+  function tick() {
+    // not while a new shot waits for its first frames: its clock has not begun, and the last shot's would run on (Sol 01a16e0e)
+    if (!seq.on || seq.pausedAt != null || seq.waiting) return;
+    const now = performance.now(), b = phaseNow(now);
+    if (b.phase === 'next') { seq.idx++; if (seq.idx >= seq.order.length) planNext(); beginShot(); return; }
+    if (b.phase !== seq.phase) {   // a phase begins: its fade, and in the detail shot's hold, when the shots move, its drawer moment
+      seq.phase = b.phase;
+      fadeTo(b.fade, b.fadeMs);
+      if (b.phase === 'hold' && moves() && currentShot().drawer) drawerSchedule(b.left);
+      if (b.phase === 'out') drawerCancel();
     }
+    if (seq.moving && seq.cutAt == null) {
+      seq.k = b.k;
+      putCam(fitAt(currentShot(), seq.k));
+      /* every moving shot is a verdict too, on its frames from 0.4 s to 2.4 s in (the first frames after a cut carry the
+         new view's compiles): under 20 fps it locks off where it is, and the visit stays still from then on */
+      const ms = now - seq.t0;
+      if (ms > 400) seq.frames.push(now - seq.lastFrame);
+      seq.lastFrame = now;
+      if (!seq.checked && ms > 2400) {
+        seq.checked = true;
+        if (driftTooSlow(seq.frames, seq.timing.maxFrameMs, ms - 400)) { seq.slow = true; seq.judged = true; freeze(); }
+      }
+      if (seq.moving) { seq.raf = requestAnimationFrame(tick); return; }
+    }
+    seq.timer = setTimeout(tick, Math.max(16, b.left));
+  }
+  /* a moving shot locks off where it is (a slow verdict; a drop below High): the rest of it is a still, its drawer back.
+     `resched`: called from outside the clock, which then needs its timer again */
+  function freeze({ resched = false } = {}) {
+    if (!seq.moving) return;
+    seq.moving = false;
+    cancelAnimationFrame(seq.raf);
+    if (stage.setMotionFull) stage.setMotionFull(false);
+    drawerCancel();
+    if (resched && seq.on && seq.pausedAt == null && !seq.waiting) { clearTimeout(seq.timer); tick(); }   // a shot still waiting for its first frames starts its own clock (Sol 01a16e0e)
   }
   function seqStart() {
-    if (seq.on || !on || !sequenceWanted()) return;   // the tier may have dropped to Fast while the entrance timer was pending (Sol 01a16b2a)
+    if (seq.on || !on || !sequenceWanted()) return;   // the tier may have changed while the entrance timer was pending (Sol 01a16b2a)
+    /* an entrance still moving (Next view during it, or a device so slow its last frame comes after the timer) ends here,
+       its verdict taken on the frames it drew: two writers of one camera would fight to the entrance's end and leave it on
+       the hero (Sol 01a16e0e) */
+    if (parts.enter && !parts.enter.done) {
+      cancelAnimationFrame(parts.raf); parts.enter.done = true;
+      if (!seq.judged) { seq.judged = true; if (entranceTooSlow(parts.enter.intervals, seq.timing.maxFrameMs)) seq.slow = true; }
+    }
     if (!drawer.unit) pickDrawer();
-    fitShots();
-    seq.on = true; seq.t0 = performance.now(); seq.pausedAt = null; seq.movingTo = -1;
-    if (document.hidden) { seq.pausedAt = seq.t0; return; }   // a tab hidden before the sequence began: start paused, the visibility handler resumes it (Sol 01a16b2a)
-    seqTick();
+    seq.shots = shotsFor(); seq.rng = rngFrom(seq.seed); seq.order = []; seq.cycle = 0;
+    planNext();
+    seq.on = true;
+    if (document.hidden) { seq.pausedAt = performance.now(); seq.pendingBegin = true; return; }   // a tab hidden before it began: it begins when the tab comes back (Sol 01a16b2a)
+    beginShot({ skipIn: true });   // the entrance has landed on the hero: its hold begins now, no dip
   }
   function seqStop() {
-    seq.on = false; seq.pausedAt = null;
-    cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); clearTimeout(seq.startTimer);
-    drawerCancel();
+    seq.on = false; seq.pausedAt = null; seq.pendingBegin = false; seq.moving = false; seq.cutAt = null; seq.waiting = false;
+    cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); clearTimeout(seq.timer); clearTimeout(seq.startTimer);
+    drawerCancel(); fadeTo(0, 0);
+    if (stage.setMotionFull) stage.setMotionFull(false);
   }
-  function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel(); }
-  function seqResume() { if (!seq.on || seq.pausedAt == null) return; seq.t0 += performance.now() - seq.pausedAt; seq.pausedAt = null; seqTick(); }
+  function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); clearTimeout(seq.timer); drawerCancel(); }
+  function seqResume() {
+    if (!seq.on || seq.pausedAt == null) return;
+    const d = performance.now() - seq.pausedAt;
+    seq.pausedAt = null;
+    if (seq.pendingBegin) { seq.pendingBegin = false; beginShot({ skipIn: true }); return; }
+    if (seq.waiting) { afterFrames(seq.timing.waitFrames, () => { seq.waiting = false; startClock(); }); return; }   // hidden in the black, before the new view was drawn: wait for it again
+    seq.t0 += d; if (seq.cutAt != null) seq.cutAt += d;
+    seq.lastFrame = performance.now(); seq.phase = null;   // the phase takes up its fade again from where the frame is
+    tick();
+  }
   function onVisibility() { if (document.hidden) seqPause(); else seqResume(); }
-  /* to the start of shot i's hold, landing at once (movingTo -2: "land on it"; the landing is no verdict) */
-  function jumpTo(i) {
-    cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); drawerCancel();
-    seq.t0 = performance.now() - i * (seq.timing.holdMs + seq.timing.moveMs); seq.pausedAt = null; seq.movingTo = -2;
-    if (document.hidden) { seq.pausedAt = performance.now(); setCam(seq.cams[i]); stage.invalidateFrame(); return; }   // shown, and the clock waits with the tab
-    seqTick();
+  /* to a shot at once (by name, or by its place in GRAMMAR), its hold beginning now with no dip: the debug hook's (the
+     e2e, the probe). It takes the place of the shot on screen in the plan, which otherwise goes on as it was. */
+  function jumpTo(which) {
+    if (!seq.on) return;
+    const name = typeof which === 'number' ? (seq.shots[which] || {}).name : which;
+    const i = seq.order.indexOf(name);
+    if (i < 0) return;
+    cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); seq.waiting = false; clearTimeout(seq.timer); drawerCancel();
+    [seq.order[i], seq.order[seq.idx]] = [seq.order[seq.idx], seq.order[i]];
+    if (document.hidden) { seq.pausedAt = performance.now(); seq.pendingBegin = true; seq.shot = name; setCam(fitAt(shotNamed(name), 0.5)); stage.invalidateFrame(); return; }   // shown, and the shot begins afresh when the tab comes back
+    beginShot({ skipIn: true });
   }
-  /* THE NEXT VIEW (the scene's strip): the next shot, as a cut, and its hold starts over. With the sequence off (reduced
-     motion: the still hero) the shots are shown by hand, one cut each. A stage (`sequence: false`) has no views to turn. */
+  /* THE NEXT VIEW (the scene's strip): the shot on screen dips out from where it is (a moving one held still), and the
+     next one in the plan fades in. With the sequence off (reduced motion: the still hero) the shots are turned by hand,
+     locked off, a plain cut each. A stage (`sequence: false`) has no views to turn. */
   function nextShot() {
     if (!on || !sequence) return false;
-    if (!seq.cams.length) fitShots();
-    const n = seq.cams.length;
-    if (!n) return false;
+    if (!seq.shots) seq.shots = shotsFor();
     if (sequenceWanted()) {
       clearTimeout(seq.startTimer);
-      if (!seq.on) seqStart();   // the entrance timer still pending: the sequence begins now, on the shot asked for
-      const t = seq.pausedAt == null ? performance.now() : seq.pausedAt;
-      jumpTo((sequenceAt(t - seq.t0, n, seq.timing).at + 1) % n);
+      if (!seq.on) seqStart();   // the entrance timer still pending: the sequence begins now, on the hero, and dips on from it below
+      if (seq.pausedAt != null || seq.waiting) return true;   // hidden: it waits with the tab; in the black before a shot: already on its way
+      const b = phaseNow(performance.now());
+      if (b.phase === 'out' || b.phase === 'black') return true;   // already on its way to the next one
+      seq.cutAt = performance.now(); seq.cutK = seq.k;
+      if (seq.moving) { cancelAnimationFrame(seq.raf); if (stage.setMotionFull) stage.setMotionFull(false); }
+      drawerCancel();
+      clearTimeout(seq.timer); seq.phase = null; tick();
     } else {
-      seq.manual = ((seq.manual == null ? 0 : seq.manual) + 1) % n;
-      setCam(seq.cams[seq.manual]); stage.invalidateFrame();
+      seq.manual = ((seq.manual == null ? 0 : seq.manual) + 1) % seq.shots.length;
+      setCam(fitAt(seq.shots[seq.manual], 0.5)); stage.invalidateFrame();
     }
     return true;
   }
@@ -312,18 +405,27 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (parts.sprite) parts.sprite.visible = !shadow;
   }
   function placeCamera(animate) {
-    const c = fitted(shotsFor()[0]);
-    reliefShot(c);   // the entrance lands on the hero: its relief from the start (the move only ever comes closer than the End page's view)
+    const c = fitAt(shotNamed('hero'), 0);
+    reliefFor([c]);   // the entrance lands on the hero: its relief from the start (the move only ever comes closer than the End page's view)
     const p1 = new THREE.Vector3(c.position.x, c.position.y, c.position.z), t1 = new THREE.Vector3(c.target.x, c.target.y, c.target.z);
     cancelAnimationFrame(parts.raf);
     if (!animate) { camera.position.copy(p1); controls.target.copy(t1); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); stage.invalidateFrame(); return; }
     const p0 = camera.position.clone(), t0 = controls.target.clone(), f0 = camera.fov, start = performance.now();
+    const intervals = []; let last = start;
+    parts.enter = { intervals, done: false };   // seqStart ends an entrance still running and takes its verdict
     const step = (now) => {
-      if (!on) return;
-      const k = Math.min(1, (now - start) / ENTER_MS), e = 1 - Math.pow(1 - k, 3);
+      if (!on || parts.enter.done) return;
+      intervals.push(now - last); last = now;
+      const k = Math.min(1, (now - start) / seq.timing.enterMs), e = 1 - Math.pow(1 - k, 3);
       camera.position.lerpVectors(p0, p1, e); controls.target.lerpVectors(t0, t1, e);
       camera.fov = f0 + (c.fov - f0) * e; camera.updateProjectionMatrix(); controls.update();
-      if (k < 1) parts.raf = requestAnimationFrame(step);
+      if (k < 1) { parts.raf = requestAnimationFrame(step); return; }
+      /* the entrance is the device's first verdict (DESIGN.md §8h: before any shot moves, not after a stuttering first
+         one): a device whose median frame in it was over 50 ms, or that drew fewer than four, gets the still grammar
+         from the start. Once a visit. (The scene's own setup stalls are drawn before the move begins: the entry waits
+         two frames for them.) */
+      parts.enter.done = true;
+      if (sequence && !seq.judged) { seq.judged = true; if (entranceTooSlow(intervals, seq.timing.maxFrameMs)) seq.slow = true; }
     };
     parts.raf = requestAnimationFrame(step);
   }
@@ -428,16 +530,45 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // the scene has no orbit (Joey: "don't let them rotate the camera"); a stage (Colors) keeps it; never a pan, the shots own the aim
     controls.enabled = !!orbit; controls.enablePan = false;
     on = true;
+    /* the dip to black (the grammar's transitions): a black layer over the canvas, in the stage's own wrapper, so the
+       workspace above it (the cinema bars, the strip) stays drawn over the black */
+    if (sequence && renderer.domElement.parentElement) {
+      const f = document.createElement('div');
+      f.id = 'done-fade'; f.setAttribute('aria-hidden', 'true');
+      Object.assign(f.style, { position: 'absolute', inset: '0', background: '#000', opacity: '0', pointerEvents: 'none' });
+      renderer.domElement.parentElement.appendChild(f);
+      parts.fade = f;
+    }
     if (sequence && stage.setInteriorHidden) stage.setInteriorHidden(true);   // the scene's assembled build: the parts inside it are not drawn (PERF.md §4.8); a stage (Colors) orbits and keeps them
     document.documentElement.dataset.done = 'room';
-    placeCamera(!reduced);
-    if (sequenceWanted(stage.quality)) seq.startTimer = setTimeout(seqStart, reduced ? 0 : ENTER_MS + 50);
+    /* the entrance waits for the room's first frames: its materials' compiles, and the relief's rebuild when the hero
+       turns it off, are drawn before the camera moves, so the move is smooth and is a fair verdict on the device (the
+       2026-10-24 tour: a second of compile inside the 0.9 s move had this laptop's GPU judged slow) */
+    reliefFor([fitAt(shotNamed('hero'), 0)]);
+    stage.invalidateFrame();
+    afterFrames(seq.timing.preFrames, () => {
+      if (!on || seq.on) return;   // Next view in these frames has begun the grammar already: no entrance to make (Sol 01a16e0e)
+      placeCamera(!reduced);
+      if (sequenceWanted(stage.quality)) seq.startTimer = setTimeout(seqStart, reduced ? 0 : seq.timing.enterMs + 50);
+    });
     addEventListener('resize', refit);
     document.addEventListener('visibilitychange', onVisibility);
     if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get relief() { return { override: stage.reliefOverride ? stage.reliefOverride() : null, ...relief }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height })); },
-      get sequence() { return { on: seq.on, wanted: sequenceWanted(), mode: mode(), cams: seq.cams.map((c) => [c.position.x, c.position.y, c.position.z]), interior: interior && { ...interior }, fits: seq.cams.map((c) => ({ fov: c.fov, clamped: !!c.clamped, k: c.k, share: c.share })), paused: seq.pausedAt != null, manual: seq.manual, orbit: controls.enabled, movingTo: seq.movingTo, at: seq.on && seq.pausedAt == null ? sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at : -1, shots: seq.cams.length, slow: seq.slow, timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } }; },
-      setTiming(t) { Object.assign(seq.timing, t); seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict
-      jump(i) { if (seq.on) jumpTo(i); }, nextShot };   // to the start of shot i's hold
+      /* the grammar as it stands: `names` the shots in GRAMMAR order, `fits` each one's camera at the middle of its move
+         (clamped, fov), `ends` the shot on screen's two ends, `order` this cycle's plan and `idx` the place in it */
+      get sequence() {
+        const shots = seq.shots || shotsFor(), sh = seq.on ? currentShot() : null;
+        const ends = sh ? [fitAt(sh, 0), fitAt(sh, 1)].map((c) => [c.position.x, c.position.y, c.position.z]) : [];
+        return { on: seq.on, wanted: sequenceWanted(), mode: mode(), names: shots.map((s) => s.name), order: [...seq.order], idx: seq.idx, cycle: seq.cycle, seed: seq.seed,
+          shot: seq.on ? seq.shot : null, phase: seq.phase, k: seq.k, moving: seq.moving, cut: seq.cutAt != null, fade: seq.fade, ends,
+          waiting: !!seq.waiting, entering: !!(parts.enter && !parts.enter.done),
+          fits: shots.map((s) => { const c = fitAt(s, 0.5); return { name: s.name, fov: c.fov, clamped: !!c.clamped, k: c.k, share: c.share, floored: !!c.floored, pos: [c.position.x, c.position.y, c.position.z] }; }),
+          interior: interior && { ...interior }, paused: seq.pausedAt != null, manual: seq.manual, orbit: controls.enabled, slow: seq.slow, judged: seq.judged,
+          timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open } };
+      },
+      setTiming(t) { const { seed, ...rest } = t; Object.assign(seq.timing, rest); if (seed != null) seq.seed = seed >>> 0; seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict (and a new seed a new plan)
+      jump(which) { jumpTo(which); }, nextShot,   // to a shot by name (or its place in GRAMMAR), its hold beginning at once
+      seek(ms) { if (!seq.on || seq.waiting || seq.pausedAt != null || seq.cutAt != null) return; cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); seq.t0 = performance.now() - ms; seq.phase = null; tick(); } };   // the shot on screen's clock put at `ms`
     if (!tracked) { tracked = true; stage.track('done:room'); }
     stage.invalidateFrame();
     return handle;
@@ -459,12 +590,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!on) return;
     if (!seq.on) {
       if (stage.camFree) return;   // a camera the visitor holds (the Colors stage: no sequence to take it back) is left where it is
-      if (seq.manual != null && seq.cams.length) { fitShots(); setCam(seq.cams[seq.manual]); stage.invalidateFrame(); }   // the view chosen by hand (reduced motion) is refitted, not the hero (Sol 01a16c20)
+      if (seq.manual != null && seq.shots) { setCam(fitAt(seq.shots[seq.manual], 0.5)); stage.invalidateFrame(); }   // the view chosen by hand (reduced motion) is refitted, not the hero (Sol 01a16c20)
       else placeCamera(false);
       return;
     }
-    fitShots();   // the shots follow the free region; a hold re-lands on its shot, a drift lands on the refitted one
-    if (seq.movingTo === -1 && seq.pausedAt == null) setCam(seq.cams[sequenceAt(performance.now() - seq.t0, seq.cams.length, seq.timing).at]);
+    // the shot on screen follows the new size: a still (or a held one) re-lands where it is along its move, a moving one
+    // picks the new fit up on its next frame
+    if ((!seq.moving || seq.cutAt != null) && seq.shot) { putCam(fitAt(currentShot(), seq.cutK != null ? seq.cutK : seq.k)); stage.invalidateFrame(); }
   }
   function leave() {
     cancelled = true;
@@ -478,6 +610,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     document.removeEventListener('visibilitychange', onVisibility);
     if (debug) delete window.__GEN2_DONE__;
     delete document.documentElement.dataset.done;
+    if (parts.fade) { parts.fade.remove(); parts.fade = null; }
     for (const k of ['group', 'catcher', 'wall', 'sprite']) { const o = parts[k]; if (o) { scene.remove(o); if (o.geometry && k !== 'group') o.geometry.dispose(); if (o.material && k !== 'group') o.material.dispose(); parts[k] = null; } }
     for (const q of parts.masks) { scene.remove(q); q.geometry.dispose(); q.material.dispose(); }   // the props' shadow quads; their textures are the cached load's
     parts.masks = []; parts.slid = {};
@@ -500,8 +633,10 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function onQuality(tier) {
     if (!on) return;
     applyLights(tier);
-    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); else if (cutting(tier)) drawerCancel(); }   // a drop to Fast mid-hold: the drawer's timers would outlive it, and cuts have no drawer moment (Terra 01a16b6b)
-    else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a). A drop to Fast lands a running drift at its next tick (cutting)
+    /* a drop below High mid-shot: a moving shot locks off where it is, and the drawer's timers would outlive the drop (the
+       still grammar has no drawer moment: Terra 01a16b6b) */
+    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); else if (!moves(tier)) { freeze({ resched: true }); drawerCancel(); } }
+    else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a)
   }
   const handle = { leave, onQuality, refit, recenter, nextShot, get on() { return on; } };
   return { ready, leave };

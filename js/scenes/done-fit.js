@@ -27,11 +27,14 @@ export function shotCamera(shot, box, view) {
   const centre = { x: (box.min.x + box.max.x) / 2, y: (box.min.y + box.max.y) / 2, z: (box.min.z + box.max.z) / 2 };
   const radius = Math.hypot(size.x, size.y, size.z) / 2;
   const fov = shot.fovV || 36;
-  const d = fitDistance({ radius, fovDeg: fov, width: view.width, height: view.height, free: view.free, fill: shot.fill || 0.42 });
+  // `distMm`: the camera's distance from the aim, set rather than fitted (the macro shot, 2026-10-24)
+  const d = shot.distMm || fitDistance({ radius, fovDeg: fov, width: view.width, height: view.height, free: view.free, fill: shot.fill || 0.42 });
   const az = ((shot.az || 0) * Math.PI) / 180, el = ((shot.el || 0) * Math.PI) / 180;
-  // targetShift: the aim moved by fractions of the box's width and depth (the detail shot looks at a drawer front, not the centre)
+  // targetShift: the aim moved by fractions of the box's width and depth (the detail shot looks at a drawer front, not the
+  // centre); targetAt: the aim itself, a point in mm (the macro's spot on a faceplate)
   const sh = shot.targetShift || {};
-  const target = { x: centre.x + size.x * (sh.x || 0), y: centre.y + radius * (shot.targetLift || 0), z: centre.z + size.z * (sh.z || 0) };
+  const target = shot.targetAt ? { x: shot.targetAt.x, y: shot.targetAt.y, z: shot.targetAt.z }
+    : { x: centre.x + size.x * (sh.x || 0), y: centre.y + radius * (shot.targetLift || 0), z: centre.z + size.z * (sh.z || 0) };
   const position = { x: target.x + d * Math.sin(az) * Math.cos(el), y: target.y + d * Math.sin(el), z: target.z + d * Math.cos(az) * Math.cos(el) };
   return { position, target, fov, distance: d, radius, fill: shot.fill || 0.42 };
 }
@@ -100,11 +103,6 @@ export function fitSlides(props, slid, bounds) {
   return out;
 }
 
-/* THE CAMERA SEQUENCE (the plan's curated product shots, 2026-10-23; the style doc's reference is Unigine Superposition:
- * slow dolly and push-in moves, the eye guided rather than spun). Three parametric shots per mount, each fitted to the
- * build by shotCamera: the hero 3/4 (room.json's own shot overrides this one), a straight-on low angle, and a detail
- * close-up aimed at the front-left drawer. The camera HOLDS on a shot, then drifts to the next: a hold is where Very
- * High converges and the idle gate rests (a camera that never stops never settles), the drift is one eased move. */
 /* THE RELIEF BY DISTANCE (Joey 2026-10-24: "if far enough away that I can't see the layer lines it wouldn't make sense to
    have it impact [performance], but if I'm zoomed in up close it makes sense to see them"). The stage's printed-layer
    relief is band-limited in its shader: under `cutoffPx` CSS pixels a layer it draws nothing, and it costs the whole
@@ -124,36 +122,72 @@ export function reliefResolves(cam, box, view, { pitchMm = 0.2, cutoffPx = 4 } =
   return { px, on: px >= cutoffPx, distance, cutoffPx };
 }
 
-export const SHOTS = {
+/* THE CAMERA GRAMMAR (Joey, 2026-10-24; DESIGN.md §8h and §8l). Distinct cameras, CUT between through a dip to black,
+ * in a random order that does not repeat: "the cinematic camera views should cut to a random different camera, position
+ * and zoom ... a zoomed in panning front view, then a completely stationary view ... then another view from down below
+ * with a wider angle lens, basically like the cameras used in that Superposition Unigine benchmark"; "keep them slow ...
+ * a relaxing cinematic scene, very slow pace giving the visitor time to study how their custom storage unit appears";
+ * "fades to black for transition". Each shot is fitted to the build (fitShot: shotCamera, the room's walls, the desk's
+ * floor): `from` is where it opens, `to` (a moving shot) where it is when the frame has gone black again, the move eased
+ * across the whole visible time. `fill` sizes the build's sphere in the frame; `distMm` instead sets the camera's
+ * distance from its aim (the macro); `aim` points a shot at the drawer unit ('drawer': its box centre, as the detail shot
+ * always did; 'drawer-front': a spot on its faceplate). Four still, four moving, so a still can sit between two moves. */
+export const GRAMMAR = {
   tabletop: [
-    { name: 'hero', az: 28, el: 20, fovV: 29.9, fill: 0.5, targetLift: -0.08 },
-    { name: 'low', az: -26, el: 5, fovV: 29.9, fill: 0.62, targetLift: 0.04 },
-    { name: 'detail', az: 30, el: 10, fovV: 29.9, fill: 1.4, targetLift: -0.3, targetShift: { x: -0.18, z: 0.3 } },
+    { name: 'hero', from: { az: 28, el: 20, fovV: 29.9, fill: 0.5, targetLift: -0.08 } },   // room.json's own hero wins
+    { name: 'push', from: { az: 13, el: 12, fovV: 20, fill: 0.56, targetLift: -0.06 }, to: { az: 6, el: 9, fovV: 20, fill: 0.76, targetLift: -0.06 } },   // a long lens pushing in on the front, drifting a few degrees
+    { name: 'low', from: { az: -34, el: -7, fovV: 46, fill: 0.78, targetLift: 0.14 } },   // down at the desk with a wide lens, looking up, locked off
+    { name: 'detail', from: { az: 30, el: 10, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },   // the drawer moment in its hold
+    { name: 'slide', from: { az: -22, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 }, to: { az: 14, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 } },   // a slow truck across the front
+    { name: 'top', from: { az: 40, el: 50, fovV: 28, fill: 0.58 } },   // high, looking down on the covers, locked off
+    // pushing in on a corner of the drawer unit's faceplate until its layer lines show: a 0.2 mm layer needs a frame about
+    // 20 mm tall to span the relief's cutoff (4 px a layer at 800 px), so the macro ends that close, on an edge, at a
+    // grazing angle (a flat face at that scale was a frame of plain orange, the 2026-10-24 tour)
+    // (it ends at 105 mm, a frame about 26 mm tall: at 78 mm the corner had left the frame and it was a flat face again)
+    { name: 'macro', from: { az: -40, el: 12, fovV: 14, distMm: 210, aim: 'drawer-front' }, to: { az: -31, el: 8, fovV: 14, distMm: 105, aim: 'drawer-front' } },
+    { name: 'side', from: { az: 66, el: 15, fovV: 26, fill: 0.62 }, to: { az: 50, el: 13, fovV: 26, fill: 0.62 } },   // a slow arc round the side
   ],
 };
-export const SEQUENCE = { moveMs: 3500, holdMs: 9000, maxFrameMs: 50 };   // the style doc: shots of 8-12 s, eased drifts between them; a drift slower than 20 fps on average turns the sequence to CUTS (sequenceMode). The grab-and-drift-back went with the orbit (the final scene, 2026-10-23)
+/* A shot's beat: the black fades out (dipIn), the shot holds, the black fades back in (dipOut), a moment of black in which
+ * the camera cuts to the next shot (blackMs). Slow on purpose: about 13 s a shot. A move's frame budget for the device's
+ * verdict: 20 fps (maxFrameMs). */
+export const BEAT = { holdMs: 11000, dipInMs: 1100, dipOutMs: 800, blackMs: 350, maxFrameMs: 50 };
+export const FLOOR_MM = 18;   // no camera lower than this over the desk top (the low shot, on any build)
 
 /* A drift's verdict from the frames it drew: too slow when it drew fewer frames than a drift at `maxFrameMs` a frame
- * (20 fps) would have over its `moveMs` (a potato or a phone: it holds and cuts from then on, see sequenceMode). Counting
+ * (20 fps) would have over its `moveMs` (a potato or a phone: it locks off from then on, see grammarMode). Counting
  * frames against the drift's length, rather than averaging intervals, catches the slowest device too: a machine that
  * draws a two-second drift as three frames has too few intervals for a mean to trust (2026-10-23, SwiftShader on a
  * laptop CPU). Without `moveMs` the older rule applies: the mean interval over `maxFrameMs`, four intervals or more. */
-export function driftTooSlow(intervals, maxFrameMs = SEQUENCE.maxFrameMs, moveMs = null) {
+export function driftTooSlow(intervals, maxFrameMs = BEAT.maxFrameMs, moveMs = null) {
   if (!intervals) return false;
   if (moveMs) return (intervals.length + 1) * maxFrameMs < moveMs;
   if (intervals.length < 4) return false;
   return intervals.reduce((a, b) => a + b, 0) / intervals.length > maxFrameMs;
 }
 
-/* Which sequence a visit gets. 'drift': hold, then an eased drift to the next shot. 'cut': hold, then the camera is on the
- * next shot at once and holds again - no frames spent moving and no drawer moment (it animates). 'off': the still hero.
- * Cuts are for the Fast tier and for a device whose first drift was judged too slow (Joey, 2026-10-23: keep the look on
- * weak machines and phones, "the camera just stays stationary for a bit before changing angle, rather than animating it";
- * the room's look is baked, so a cut costs one frame and the idle gate rests between). Reduced motion gets none, whatever
- * the tier, and so does the room used as a stage (`sequence: false`, the Colors workspace). */
-export function sequenceMode({ tier, reduced = false, sequence = true, slow = false } = {}) {
+/* The entrance move's verdict (0.9 s, before any shot moves): too slow when it drew fewer than `minFrames` frames, or when
+ * its MEDIAN frame took longer than `maxFrameMs`. The median, not the count: a single stall (a shader compile, a texture
+ * upload) is not a frame rate, and over a move this short one stall is most of it: the count rule judged this laptop's
+ * GPU slow on 2026-10-24, when the relief's material rebuild landed inside the entrance. The moving shots' own verdicts,
+ * over two seconds, keep the count rule. */
+export function entranceTooSlow(intervals, maxFrameMs = BEAT.maxFrameMs, minFrames = 4) {
+  if (!intervals || intervals.length < minFrames) return true;
+  const s = [...intervals].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)] > maxFrameMs;
+}
+
+/* Which grammar a visit gets: STATIC FIRST (Joey 2026-10-24: "we are on an A5000 GPU, so most other devices might be way
+ * too slow to be able to smoothly render panning scenes and maybe we only use stationary views for those devices"; and
+ * 2026-10-23, "the camera just stays stationary for a bit before changing angle, rather than animating it"). 'full': the
+ * moving shots move and the detail shot's drawer slides (High and Very High, on a device that drew the entrance move at
+ * 20 fps or better). 'still': every shot locked off at the middle of its move, the dips between them, no drawer moment
+ * (Balanced, Fast, a device judged slow: the room's look is baked, so a still costs one frame and the idle gate rests).
+ * 'off': the still hero and the views turned by hand with a plain cut (reduced motion), or no views at all (the room as
+ * a stage, `sequence: false`, the Colors workspace). */
+export function grammarMode({ tier, reduced = false, sequence = true, slow = false } = {}) {
   if (!sequence || reduced) return 'off';
-  return tier === 'fast' || slow ? 'cut' : 'drift';
+  return slow || tier === 'fast' || tier === 'balanced' ? 'still' : 'full';
 }
 
 export const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
@@ -192,17 +226,84 @@ export function pickDrawerUnit(units, build) {
   return best;
 }
 
-/* Where a sequence of n shots is at time t (ms since the first hold began): { at, to, moving, k }. Each beat is a hold on
- * shot `at` (holdMs) then a move to `to` (moveMs, k the EASED progress 0..1); after the last shot it wraps to the first.
- * Pure, so the clock is testable without a frame. */
-export function sequenceAt(t, n, { moveMs = SEQUENCE.moveMs, holdMs = SEQUENCE.holdMs } = {}) {
-  const beat = holdMs + moveMs, count = Math.max(1, n | 0);
-  const tt = Math.max(0, t) % (beat * count);
-  const i = Math.floor(tt / beat), phase = tt - i * beat;
-  const at = i % count, to = (i + 1) % count;
-  if (phase < holdMs || count === 1) return { at, to, moving: false, k: 0, holdLeft: Math.max(0, holdMs - phase) };
-  const raw = Math.min(1, (phase - holdMs) / moveMs);
-  return { at, to, moving: true, k: easeInOut(raw), raw };
+/* A slow move's easing: a half cosine, gentle at both ends (a cubic's middle is too quick for a move this long). */
+export const easeSine = (k) => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, k)));
+
+/* Where a shot is at t ms after its frame began to fade in: { phase, fade, fadeMs, k, left }. The phases: 'in' (the black
+ * overlay fading out over dipInMs), 'hold', 'out' (fading back in over dipOutMs), 'black' (the cut happens at its end),
+ * then 'next'. `fade` is the overlay's opacity the phase goes to and `fadeMs` the time it takes; `k` the shot's move, eased
+ * from 0 as the frame begins to show to 1 as it has gone black (a move never comes to rest on screen); `left` the ms to the
+ * phase's end. `skipIn`: no dip-in (the first shot, which the entrance move has already landed on). Pure: the clock is
+ * testable without a frame. */
+export function beatAt(t, b = BEAT, { skipIn = false } = {}) {
+  const inMs = skipIn ? 0 : b.dipInMs, vis = inMs + b.holdMs + b.dipOutMs, tt = Math.max(0, t);
+  const k = easeSine(tt / Math.max(1, vis));
+  if (tt < inMs) return { phase: 'in', fade: 0, fadeMs: inMs - tt, k, left: inMs - tt };
+  if (tt < inMs + b.holdMs) return { phase: 'hold', fade: 0, fadeMs: 0, k, left: inMs + b.holdMs - tt };
+  if (tt < vis) return { phase: 'out', fade: 1, fadeMs: vis - tt, k, left: vis - tt };
+  if (tt < vis + b.blackMs) return { phase: 'black', fade: 1, fadeMs: 0, k: 1, left: vis + b.blackMs - tt };
+  return { phase: 'next', fade: 1, fadeMs: 0, k: 1, left: 0 };
+}
+
+/* A seeded random source (mulberry32): the order differs per visit (seeded from the clock), the tests seed it. */
+export function rngFrom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* One cycle of the shots in a random order: every shot once, `first` at the front (the hero, on the first cycle: the
+ * entrance lands on it), the cycle never opening on `prev` (the shot the last one closed on, so no shot ever follows
+ * itself), and never two moving shots back to back, the cycle's seam with the last one included, wherever the stills
+ * can part them. The shuffle picks; a pick is taken only if the shots left can still keep a still between any two moves
+ * (after a move, the moves left may be at most the stills left; after a still, at most one more): a greedy pick without
+ * that look-ahead spent the stills early and closed on two moves together (the first unit run). */
+export function planCycle(names, rng, { first = null, prev = null, moving = () => false } = {}) {
+  const pool = names.filter((n) => n !== first);
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const order = first != null && names.includes(first) ? [first] : [];
+  while (pool.length) {
+    const last = order.length ? order[order.length - 1] : prev;
+    const lastMoves = last != null && moving(last);
+    const m = pool.filter(moving).length, s = pool.length - m;
+    const notPrev = (n) => !(order.length === 0 && n === prev);
+    const feasible = (n) => (moving(n) ? !lastMoves && m - 1 <= s : m <= s);
+    let i = pool.findIndex((n) => notPrev(n) && feasible(n));
+    if (i < 0) i = pool.findIndex((n) => notPrev(n) && !(lastMoves && moving(n)));   // more moves than the stills can part: no two together where it can
+    if (i < 0) i = pool.findIndex(notPrev);
+    if (i < 0) i = 0;
+    order.push(pool.splice(i, 1)[0]);
+  }
+  return order;
+}
+
+/* A shot at k (0..1) of its move: its parameters interpolated, so an arc stays an arc and a push-in stays on its line; a
+ * still shot is its `from`. */
+export function mixShot(shot, k) {
+  const a = shot.from, b = shot.to;
+  if (!b) return { ...a };
+  const m = { ...a };
+  for (const key of ['az', 'el', 'fovV', 'fill', 'distMm', 'targetLift']) if (a[key] != null && b[key] != null) m[key] = a[key] + (b[key] - a[key]) * k;
+  return m;
+}
+
+/* A shot's camera for this build and view: its aim resolved (`aims.drawer`, a targetShift onto the drawer unit; `aims.front`,
+ * a spot on its faceplate; with no drawer unit the macro frames the build closely instead), fitted (shotCamera), kept
+ * inside the room (clampToInterior) and above the desk top (FLOOR_MM). */
+export function fitShot(spec, box, view, interior, aims = {}) {
+  const s = { ...spec };
+  if (s.aim === 'drawer' && aims.drawer) s.targetShift = aims.drawer;
+  if (s.aim === 'drawer-front') {
+    if (aims.front) s.targetAt = aims.front;
+    else { delete s.distMm; s.fill = 1.2; }
+  }
+  const cam = clampToInterior(shotCamera(s, box, view), interior);
+  return cam.position.y < FLOOR_MM ? { ...cam, position: { ...cam.position, y: FLOOR_MM }, floored: true } : cam;
 }
 
 /* The baked contact shadow's footprint for the Fast tier: a disc-ish plane under the build, a little wider than it. */

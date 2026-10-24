@@ -1467,13 +1467,23 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   assert.ok(d0.interior && Number.isFinite(d0.interior.x0) && Number.isFinite(d0.interior.y1) && Number.isFinite(d0.interior.z0), `the room's interior came from its walls (${JSON.stringify(d0.interior)})`);
   assert.ok(d0.cam[1] <= d0.interior.y1 - 450 + 1, `the hero sits the top margin below the wall tops (${d0.cam[1].toFixed(0)} of ${d0.interior.y1})`);
   assert.ok(d0.cam[0] >= d0.interior.x0 + 150 - 1 && d0.cam[0] <= d0.interior.x1 - 150 + 1, `and between the walls (${d0.cam[0].toFixed(0)})`);
-  assert.equal(d0.fits[0].clamped, true, 'the hero was clamped for this build'); assert.equal(d0.fits.length, 3);
-  await page.evaluate(() => window.__GEN2_DONE__.jump(1));
+  const heroFit = d0.fits.find((f) => f.name === 'hero');
+  assert.equal(heroFit.clamped, true, 'the hero was clamped for this build'); assert.equal(d0.fits.length, 8, 'the grammar\'s eight shots');
+  // EVERY shot of the grammar, still or at the middle of its move, inside the walls, under the tops, above the desk
+  for (const f of d0.fits) {
+    assert.ok(f.pos[0] >= d0.interior.x0 + 150 - 1 && f.pos[0] <= d0.interior.x1 - 150 + 1, `${f.name} between the walls (${f.pos[0].toFixed(0)})`);
+    assert.ok(f.pos[1] <= d0.interior.y1 - 450 + 1 && f.pos[1] >= 18 - 0.5, `${f.name} under the wall tops and above the desk (${f.pos[1].toFixed(0)})`);
+    assert.ok(f.pos[2] >= d0.interior.z0 + 150 - 1, `${f.name} in front of the back wall (${f.pos[2].toFixed(0)})`);
+  }
+  await page.evaluate(() => window.__GEN2_DONE__.jump('low'));
   await settle(page, 400);
-  const d1 = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { cam: v.camera.position.toArray(), fov: v.camera.fov, fit: window.__GEN2_DONE__.sequence.fits[1] }; });
+  const d1 = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { cam: v.camera.position.toArray(), fov: v.camera.fov, fit: window.__GEN2_DONE__.sequence.fits.find((f) => f.name === 'low') }; });
   assert.ok(d1.cam[0] >= d0.interior.x0 + 150 - 1, `the low shot stays inside the left wall (${d1.cam[0].toFixed(0)} against ${d0.interior.x0})`);
-  assert.equal(d1.fit.clamped, true, 'it was clamped'); assert.ok(d1.fov > 35 && d1.fov <= 55, `its fov widened so the 12W build keeps its share of the frame (${d1.fov.toFixed(1)})`);
-  await page.evaluate(() => window.__GEN2_DONE__.jump(0));
+  assert.equal(d1.fit.clamped, true, 'it was clamped');
+  const lowShare = d1.fit.share, lowWant = Math.min(55, (2 * Math.atan(Math.tan((46 * Math.PI) / 360) * Math.max(1, lowShare / 0.92)) * 180) / Math.PI);
+  assert.ok(Math.abs(d1.fov - lowWant) < 0.05, `its fov is the clamp's: the 46 degree lens, widened only past a 0.92 share (share ${lowShare.toFixed(2)}, fov ${d1.fov.toFixed(1)} vs ${lowWant.toFixed(1)})`);
+  assert.ok(d1.cam[1] >= 18 - 0.5, `and it stays above the desk (${d1.cam[1].toFixed(0)} mm)`);
+  await page.evaluate(() => window.__GEN2_DONE__.jump('hero'));
   await page.setViewportSize(landscape);   // the window back; the shots refit to it
   await settle(page, 600);
   assert.ok(r.shadows.length > 0, 'the shadow masks are on');
@@ -1521,13 +1531,19 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   await ctx.close();
 });
 
-/* THE CAMERA SEQUENCE (the Done scene's second slice, 2026-10-23): above Fast the camera holds on a shot and drifts to the
-   next; between drifts it is STILL (the idle gate's condition); under reduced motion it never leaves the hero; Fast, and a
-   device whose first drift was too slow, hold and CUT instead of drifting (Joey 2026-10-23). The timing is shortened
-   through the debug hook so the case takes seconds, not minutes. */
-test('Assemble: the Done scene\'s camera drifts between shots and holds still between drifts; Fast and a slow device cut instead; reduced motion keeps the hero', async () => {
+/* THE CAMERA GRAMMAR (Joey 2026-10-24; DESIGN.md §8l): distinct cameras, CUT between through a dip to black, in a seeded
+   random order that never repeats a shot (the hero first). Static first: on Fast (the suite's pin) and Balanced every shot
+   is locked off; on High the moving shots move (with the verdict off, maxFrameMs 1e9: SwiftShader draws a move as a
+   handful of frames, which is the verdict's own business, checked on its own below); the detail shot's drawer moment only
+   when the shots move; a slow verdict locks the views off, mid-move too; Next view dips from where the shot is; a hidden
+   tab pauses the clock; reduced motion keeps the still hero and turns the views by hand with a plain cut. The clock is
+   shortened through the debug hook so the case takes seconds, and every wait on the clock is a poll (SwiftShader). */
+test('Assemble: the Done scene\'s camera grammar: distinct shots in a random order through a dip to black; locked off on Fast and Balanced, moving on High; Next view dips; a slow device locks off; reduced motion keeps the hero', async () => {
   const cam = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(2)); });
   const seqOf = (page) => page.evaluate(() => (window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence) || null);
+  const fadeOf = (page) => page.evaluate(() => { const f = document.getElementById('done-fade'); return f ? +getComputedStyle(f).opacity : null; });
+  const near = (a, b, tol = 0.5) => a.every((v, i) => Math.abs(v - b[i]) < tol);
+  const fitOf = (s, name) => s.fits.find((f) => f.name === name);
   const toDone = async (page) => {
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
@@ -1536,149 +1552,207 @@ test('Assemble: the Done scene\'s camera drifts between shots and holds still be
     await btn(page, 'Watch the final scene', '#ws-player').click();
     await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
   };
-  // Fast (the suite's pin): the sequence runs as CUTS: a hold, then the camera is on the next shot at once, never part-way,
-  // and no drawer moment (it animates). Short clock: hold 1.5 s and a 0.8 s "move" that a cut skips.
+  /* NEXT VIEW DURING THE ENTRANCE (Sol 01a16e0e), in its two windows: while the entry waits for the room's first frames,
+     and while the entrance move runs. Either way the grammar begins on the hero and dips on to the plan's next shot, and
+     the entrance neither starts after it nor keeps moving the camera under it. The windows are stretched through the debug
+     timing (a 40-frame wait, a 6 s entrance, a quick dip), or a fast GPU closes them before a click can land. */
+  for (const when of ['before', 'during']) {
+    const early = await open('assemble', { query: '&done=room' });
+    /* 'before': the dip-out outlasts the 40-frame wait, as the real 800 ms dip outlasts the real 2-frame one, so the
+       entry's own guard is what keeps the entrance from starting (a quick dip let the next shot's wait cancel it first,
+       and a mutant without the guard survived) */
+    await early.page.evaluate((w) => { window.__DONE_TIMING__ = w === 'before' ? { preFrames: 40, enterMs: 6000, dipOutMs: 1500, blackMs: 80, dipInMs: 150 } : { enterMs: 6000, dipOutMs: 150, blackMs: 80, dipInMs: 150 }; }, when);
+    await btn(early.page, 'Skip to the finished build', '#ws-steps').click();
+    await early.page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(early.page, 'Next', '#ws-player').click();
+    await early.page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+    await btn(early.page, 'Watch the final scene', '#ws-player').click();
+    if (when === 'before') await early.page.waitForFunction(() => window.__GEN2_DONE__ && !window.__GEN2_DONE__.sequence.entering && !window.__GEN2_DONE__.sequence.on, null, { timeout: 60_000 });
+    else await early.page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence.entering, null, { timeout: 60_000 }).catch(() => assert.fail('the entrance never began'));
+    await early.page.evaluate(() => { const b = [...document.querySelectorAll('#ws-scene button')].find((x) => /Next view/.test(x.textContent)); b.click(); });
+    await early.page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return s.on && s.shot !== 'hero' && s.phase === 'hold'; }, null, { timeout: 15_000 }).catch(async () => assert.fail(`Next view ${when} the entrance never reached the next shot: ` + JSON.stringify(await seqOf(early.page))));
+    await settle(early.page, 300);
+    const es = await seqOf(early.page), ec = await cam(early.page);
+    assert.equal(es.shot, es.order[1], `${when}: the plan's second shot`); assert.equal(es.entering, false, `${when}: no entrance running`);
+    assert.ok(near(ec.slice(0, 3), fitOf(es, es.shot).pos), `${when}: the camera on it, not drawn back toward the hero (${ec.slice(0, 3)} vs ${fitOf(es, es.shot).pos.map((n) => n.toFixed(1))})`);
+    await settle(early.page, 1200);
+    assert.deepEqual(await cam(early.page), ec, `${when}: and nothing moves it after`);
+    assert.deepEqual(clean(early.errors), []);
+    await early.ctx.close();
+  }
   const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
   await toDone(page);
-  await settle(page, 1500);
+  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence.on, null, { timeout: 15_000 }).catch(() => assert.fail('the grammar never began'));
+  // FAST (the suite's pin): the still grammar, eight distinct shots, the hero first, the black layer over the canvas only
   const f0 = await seqOf(page);
-  assert.equal(f0.on, true, 'Fast: the sequence is on'); assert.equal(f0.mode, 'cut', 'as cuts');
-  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1500, moveMs: 800, maxFrameMs: 1e9 }));
-  await settle(page, 200);
-  const k0 = await cam(page);
-  await settle(page, 600);
-  assert.deepEqual(await cam(page), k0, 'still in the hold');
-  await page.waitForFunction((k0) => { const p = window.__GEN2_VIEWER__.camera.position; return Math.abs(p.x - k0[0]) > 1 || Math.abs(p.z - k0[2]) > 1; }, k0, { timeout: 6000 }).catch(() => assert.fail('the cut never came'));
-  const fs = await seqOf(page), k1 = await cam(page);
-  assert.equal(fs.movingTo, -1, 'a cut is never "moving"'); assert.ok(fs.at >= 1, 'on a later shot');
-  assert.ok(fs.cams[fs.at].every((v, i) => Math.abs(v - k1[i]) < 0.5), `the camera sits exactly on shot ${fs.at}, not part-way along a drift (${k1.slice(0, 3)} vs ${fs.cams[fs.at].map((n) => n.toFixed(2))})`);
-  // the drawer moment is off in cuts: the detail hold passes with the drawer closed
-  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 6000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });   // a hold long enough for the whole beat (drawerBeat: 5 s), so "closed" means off, not "no room for it"
+  assert.equal(f0.mode, 'still', 'Fast: locked-off views (static first)');
+  assert.deepEqual(f0.names, ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side'], 'eight distinct shots');
+  assert.equal(f0.order[0], 'hero', 'the first cycle opens on the hero (the entrance lands on it)'); assert.deepEqual([...f0.order].sort(), [...f0.names].sort(), 'every shot once a cycle');
+  assert.equal(new Set(f0.fits.map((f) => f.pos.map((n) => n.toFixed(0)).join())).size, 8, 'eight different camera positions');
+  assert.ok(new Set(f0.fits.map((f) => f.fov.toFixed(1))).size >= 5, `and lenses (${f0.fits.map((f) => f.fov.toFixed(1))})`);
+  const layer = await page.evaluate(() => { const f = document.getElementById('done-fade'), c = document.getElementById('stage'); if (!f) return null; const r = f.getBoundingClientRect(), rc = c.getBoundingClientRect(); return { beside: f.parentElement === c.parentElement, pe: getComputedStyle(f).pointerEvents, cover: Math.abs(r.width - rc.width) < 2 && Math.abs(r.height - rc.height) < 2, inWs: document.getElementById('ws').contains(f) }; });
+  assert.deepEqual(layer, { beside: true, pe: 'none', cover: true, inWs: false }, 'the black layer covers the canvas, outside the workspace (the bars and the strip draw over the black)');
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1200, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 1e9, seed: 1 }));
+  await settle(page, 150);
+  const s1 = await seqOf(page), k1 = await cam(page);
+  assert.deepEqual([s1.shot, s1.phase, s1.moving], ['hero', 'hold', false], 'the hero, holding');
+  await settle(page, 400);
+  assert.deepEqual(await cam(page), k1, 'a locked-off shot does not move');
+  // the dip: black at the cut, the next shot in the plan fading in on a different camera
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.phase === 'black', null, { timeout: 10_000 }).catch(async () => assert.fail('the dip never reached black: ' + JSON.stringify(await seqOf(page))));
+  assert.ok((await fadeOf(page)) > 0.9, `black at the cut (${await fadeOf(page)})`);
+  await page.waitForFunction((first) => { const s = window.__GEN2_DONE__.sequence; return s.shot !== first && s.phase === 'hold'; }, s1.shot, { timeout: 10_000 }).catch(async () => assert.fail('the next shot never faded in: ' + JSON.stringify(await seqOf(page))));
+  const s2 = await seqOf(page), k2 = await cam(page);
+  assert.equal(s2.shot, s2.order[1], 'the next shot in the plan'); assert.ok((await fadeOf(page)) < 0.1, 'faded back in');
+  assert.notDeepEqual(k2, k1, 'a different camera');
+  assert.ok(near(k2.slice(0, 3), fitOf(s2, s2.shot).pos), `locked off where its move is half way (${k2.slice(0, 3)} vs ${fitOf(s2, s2.shot).pos.map((n) => n.toFixed(1))})`);
+  // a moving shot in the still grammar is locked off at the middle of its move, and the detail shot has no drawer moment
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 6000, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 1e9, seed: 1 }); window.__GEN2_DONE__.jump('push'); });
+  await settle(page, 300);
+  const p0 = await cam(page), sp = await seqOf(page);
+  assert.deepEqual([sp.shot, sp.moving], ['push', false], 'the push-in, locked off'); assert.ok(near(p0.slice(0, 3), fitOf(sp, 'push').pos), 'at the middle of its move');
+  await settle(page, 700);
+  assert.deepEqual(await cam(page), p0, 'and it stays there');
+  await page.evaluate(() => window.__GEN2_DONE__.jump('detail'));
   await settle(page, 1800);   // past the beat's 0.7 s and the 380 ms slide
-  const fd = await page.evaluate(() => window.__GEN2_DONE__.sequence.drawer);
-  assert.ok(fd.unit != null, 'a drawer unit was picked all the same'); assert.equal(fd.open, false, 'no drawer moment when cutting');
-  // Balanced: the sequence runs - a short clock: hold 1.5 s, drift 0.8 s; the slow-drift guard off for the clock's own
-  // checks (a software renderer draws a short drift as a handful of frames, which is no verdict: it gets its own check below)
+  const fd = (await seqOf(page)).drawer;
+  assert.ok(fd.unit != null, 'a drawer unit was picked'); assert.equal(fd.open, false, 'no drawer moment in the still grammar (it animates)');
+  // BALANCED: still too (Joey 2026-10-24: "maybe we only use stationary views for those devices")
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
   await settle(page, 300);
-  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1500, moveMs: 800, maxFrameMs: 1e9 }));
+  assert.equal((await seqOf(page)).mode, 'still', 'Balanced: locked off');
+  // HIGH: the moving shots move, the stage keeping its AO through the move; a still holds and gives the frame back
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
+  await settle(page, 300);
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 6000, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 1e9, seed: 2 }));
+  assert.equal((await seqOf(page)).mode, 'full', 'High: the shots move');
+  await page.evaluate(() => window.__GEN2_DONE__.jump('push'));
   await settle(page, 200);
-  const s = await seqOf(page);
-  assert.equal(s.on, true, 'Balanced: the sequence is on'); assert.equal(s.shots, 3, 'three shots'); assert.equal(s.paused, false);
-  const c0 = await cam(page);                        // on the hero, in its hold (0.2 s in)
-  await settle(page, 400);
-  assert.deepEqual(await cam(page), c0, 'still during the hold');
-  await settle(page, 2100);                          // 2.7 s in: past the first drift (1.5 + 0.8), in the second hold
-  const c1 = await cam(page);
-  assert.notDeepEqual(c1, c0, 'the camera drifted to the second shot');
-  await settle(page, 400);
-  assert.deepEqual(await cam(page), c1, 'still again in the second hold');
-  await settle(page, 2000);                          // 5.1 s: through the second drift (3.8 - 4.6) and into the third hold
-  const c2 = await cam(page);
-  assert.notDeepEqual(c2, c1, 'then to the third');
-  assert.ok((await seqOf(page)).movingTo === -1, 'holding between drifts');
-  // a hidden tab pauses the clock; the camera does not move while hidden
+  const m0 = await cam(page);
+  await page.waitForFunction((m0) => { const p = window.__GEN2_VIEWER__.camera.position; return Math.hypot(p.x - m0[0], p.y - m0[1], p.z - m0[2]) > 1; }, m0, { timeout: 10_000 }).catch(() => assert.fail('the push-in never moved'));
+  const sm = await seqOf(page);
+  assert.deepEqual([sm.shot, sm.moving, sm.phase], ['push', true, 'hold'], 'moving, in its hold'); assert.ok(sm.k > 0 && sm.k < 1, `part way along (k ${sm.k})`);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.motionFull()), true, 'the stage keeps its settle passes (AO) through the move');
+  assert.ok(sm.ends.length === 2 && Math.hypot(...sm.ends[1].map((v, i) => v - sm.ends[0][i])) > 20, 'a real move: its two ends apart');
+  await page.evaluate(() => window.__GEN2_DONE__.jump('top'));
+  await settle(page, 300);
+  const t0 = await cam(page);
+  await settle(page, 700);
+  assert.deepEqual(await cam(page), t0, 'a still shot holds on High too'); assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.motionFull()), false, 'and the stage has its lite frames back');
+  // the drawer moment: in the detail shot's hold, when the shots move. The unit's box grows toward the front by the slide,
+  // then shrinks (polled, not timed: on SwiftShader on a slow CPU the slide's frames come late)
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 1e9, seed: 2 }); window.__GEN2_DONE__.jump('detail'); });
+  await settle(page, 200);
+  const dz0 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { unit: d.unit, open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
+  assert.ok(dz0.unit != null, 'a unit with a drawer'); assert.equal(dz0.open, false, 'closed as the hold begins');
+  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return d.open && window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0 > 40; }, dz0.z, { timeout: 4000 }).catch(() => assert.fail('the drawer did not slide out by 40 mm within the hold'));
+  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return !d.open && Math.abs(window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0) < 2; }, dz0.z, { timeout: 7000 }).catch(() => assert.fail('the drawer did not go back'));
+  assert.equal((await seqOf(page)).shot, 'detail', 'back before the dip');
+  // a drop below High while the drawer is out closes it at once, and a moving shot locks off where it is (Terra 01a16b6b)
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 1e9, seed: 2 }); window.__GEN2_DONE__.jump('detail'); });
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.drawer.open, null, { timeout: 4000 }).catch(() => assert.fail('the drawer did not open for the drop check'));
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('fast', { user: true }); });
+  const fq = await seqOf(page);
+  assert.equal(fq.mode, 'still', 'Fast: still'); assert.equal(fq.on, true); assert.equal(fq.drawer.open, false, 'the drop closed the drawer at once');
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
+  await settle(page, 300);
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 1e9, seed: 2 }); window.__GEN2_DONE__.jump('slide'); });
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.moving, null, { timeout: 4000 }).catch(() => assert.fail('the slide did not move'));
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await settle(page, 200);
+  const lk = await cam(page), sl = await seqOf(page);
+  assert.deepEqual([sl.shot, sl.moving], ['slide', false], 'a drop mid-move locks the shot off where it is');
+  await settle(page, 600);
+  assert.deepEqual(await cam(page), lk, 'and it stays there'); assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.motionFull()), false);
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
+  await settle(page, 300);
+  /* A DROP BELOW HIGH WHILE A NEW SHOT WAITS IN THE BLACK FOR ITS FIRST FRAMES (Sol 01a16e0e): the shot that was cut to
+     fades in, once, locked off; the plan does not run on to the one after it. The wait is stretched to 90 frames. */
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 500, dipInMs: 100, dipOutMs: 100, blackMs: 50, waitFrames: 90, maxFrameMs: 1e9, seed: 6 }));
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.waiting, null, { timeout: 8000 }).catch(async () => assert.fail('no shot waited in the black: ' + JSON.stringify(await seqOf(page))));
+  const w = await seqOf(page);
+  assert.equal(w.shot, w.order[1], 'the hero\'s successor'); assert.equal(w.moving, true, 'a moving shot (after a still, the plan moves), waiting');
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return !s.waiting && (s.phase === 'in' || s.phase === 'hold'); }, null, { timeout: 10_000 }).catch(async () => assert.fail('the waiting shot never came in: ' + JSON.stringify(await seqOf(page))));
+  const wa = await seqOf(page);
+  assert.equal(wa.shot, w.shot, 'the shot that was cut to fades in, and only it'); assert.equal(wa.idx, w.idx, 'the plan did not run on'); assert.equal(wa.moving, false, 'locked off by the drop');
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
+  await settle(page, 300);
+  // NEXT VIEW: a dip from where the shot is (a moving one held still in it), then the next shot in the plan
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 8000, dipInMs: 300, dipOutMs: 500, blackMs: 150, maxFrameMs: 1e9, seed: 3 }); window.__GEN2_DONE__.jump('side'); });
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.moving && window.__GEN2_DONE__.sequence.k > 0, null, { timeout: 6000 }).catch(() => assert.fail('the side arc did not move'));
+  const nb = await seqOf(page);
+  await btn(page, 'Next view', '#ws-scene').click();
+  await settle(page, 60);
+  const nd = await seqOf(page), h0 = await cam(page);
+  assert.equal(nd.cut, true, 'Next view: the dip-out begins'); assert.equal(nd.phase, 'out'); assert.equal(nd.shot, 'side');
+  await settle(page, 200);
+  if ((await seqOf(page)).phase === 'out') assert.deepEqual(await cam(page), h0, 'the camera held still in the dip');
+  await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return s.shot !== 'side' && s.phase === 'hold'; }, null, { timeout: 10_000 }).catch(async () => assert.fail('Next view never reached the next shot: ' + JSON.stringify(await seqOf(page))));
+  const na = await seqOf(page);
+  assert.equal(na.shot, na.order[na.idx], 'the plan\'s next'); assert.notEqual(na.shot, nb.shot); assert.equal(na.cut, false); assert.equal(na.slow, false, 'a Next view is no verdict');
+  // a hidden tab pauses the clock: a moving shot does not move while hidden, and goes on after
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 8000, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 1e9, seed: 3 }); window.__GEN2_DONE__.jump('push'); });
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.moving, null, { timeout: 4000 });
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
   await settle(page, 100);
   const cH = await cam(page);
   assert.equal((await seqOf(page)).paused, true, 'hidden: paused');
-  await settle(page, 2200);
-  assert.deepEqual(await cam(page), cH, 'no drift while hidden');
+  await settle(page, 1200);
+  assert.deepEqual(await cam(page), cH, 'no move while hidden');
   await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
-  await settle(page, 2400);
-  assert.notDeepEqual(await cam(page), cH, 'visible again: the drift resumed');
-  // the orbit is OFF in the scene (Joey: "don't let them rotate the camera"): a drag leaves the camera where it is. The
-  // strip's Next view cuts to the next shot and starts its hold over; a jump is no drift, so it is never the device's
-  // verdict (the guard is on here: maxFrameMs 50, and a jump draws no frames)
-  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 3000, moveMs: 800, maxFrameMs: 50 }));
-  await settle(page, 400);
+  await page.waitForFunction((cH) => { const p = window.__GEN2_VIEWER__.camera.position; return Math.hypot(p.x - cH[0], p.y - cH[1], p.z - cH[2]) > 0.5; }, cH, { timeout: 10_000 }).catch(() => assert.fail('visible again: the move did not resume'));
+  // the orbit is OFF in the scene (Joey: "don't let them rotate the camera"): a drag leaves the camera where it is
+  await page.evaluate(() => window.__GEN2_DONE__.jump('top'));
+  await settle(page, 300);
   const cG = await cam(page);
   await page.mouse.move(640, 380); await page.mouse.down(); await page.mouse.move(700, 410, { steps: 8 }); await page.mouse.up();
   await settle(page, 300);
   assert.deepEqual(await cam(page), cG, 'a drag does not move the camera'); assert.equal((await seqOf(page)).orbit, false, 'the orbit is off');
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.camFree), false, 'the stage never took the camera');
-  const before = await seqOf(page);
-  await btn(page, 'Next view', '#ws-scene').click();
-  await settle(page, 400);
-  const after = await seqOf(page);
-  assert.equal(after.at, (before.at + 1) % 3, `Next view is the next shot (${before.at} -> ${after.at})`); assert.equal(after.movingTo, -1, 'landed at once'); assert.equal(after.on, true);
-  assert.equal(after.slow, false, 'a jump is no verdict'); assert.equal(after.paused, false);
-  const cN = await cam(page);
-  assert.ok(after.cams[after.at].every((v, i) => Math.abs(v - cN[i]) < 0.5), `the camera sits on that shot (${cN.slice(0, 3)} vs ${after.cams[after.at].map((n) => n.toFixed(2))})`);
-  // the drawer moment: in the detail shot's hold the unit the shot looks at slides its drawer out and back (a hold long
-  // enough for the beat; the suite jumps to that hold). The unit's box grows toward the front by the slide, then shrinks.
-  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });   // a 9 s hold: the beat ends by 4.6 s, and SwiftShader's slow polls still read inside the hold
-  await settle(page, 200);
-  const dz0 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { unit: d.unit, open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
-  assert.ok(dz0.unit != null, 'a unit with a drawer was picked'); assert.equal(dz0.open, false, 'closed at the start of the hold');
-  // out at 0.7 s and slid 380 ms later; polled, not timed: on SwiftShader on a slow CPU the slide's frames come late
-  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return d.open && window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0 > 40; }, dz0.z, { timeout: 3000 }).catch(() => assert.fail('the drawer did not slide out by 40 mm within the hold'));
-  const dz1 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z }; });
-  assert.equal(dz1.open, true, 'the drawer is out'); assert.ok(dz1.z - dz0.z > 40, `the unit's front moved out by the slide (${(dz1.z - dz0.z).toFixed(0)} mm)`);
-  // closed at 4.28 s into the hold and slid back by 4.6 s, before the 6 s hold ends
-  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return !d.open && Math.abs(window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0) < 2; }, dz0.z, { timeout: 6000 }).catch(() => assert.fail('the drawer did not go back'));
-  const dz2 = await page.evaluate(() => { const d = window.__GEN2_DONE__.sequence.drawer; return { open: d.open, z: window.__GEN2_VIEWER__.unitBox(d.unit).max.z, at: window.__GEN2_DONE__.sequence.at }; });
-  assert.equal(dz2.open, false, 'and back'); assert.ok(Math.abs(dz2.z - dz0.z) < 2, 'the unit is where it was'); assert.equal(dz2.at, 2, 'still in the detail hold: back before the drift');
-  // a drop to Fast while the drawer is out: the drawer is closed at once (the flag, then the 320 ms slide back) and the
-  // hold goes on as cuts (Terra 01a16b6b: the drawer's timers outlived the tier change). Balanced again after, for the guard.
-  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 9000, moveMs: 300, maxFrameMs: 1e9 }); window.__GEN2_DONE__.jump(2); });
-  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.drawer.open, null, { timeout: 3000 }).catch(() => assert.fail('the drawer did not open for the Fast-drop check'));
-  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('fast', { user: true }); });
-  const fq = await seqOf(page);
-  assert.equal(fq.mode, 'cut', 'Fast: cuts'); assert.equal(fq.on, true, 'the sequence went on'); assert.equal(fq.drawer.open, false, 'the drop to Fast closed the drawer at once');
-  await page.waitForFunction((z0) => { const d = window.__GEN2_DONE__.sequence.drawer; return Math.abs(window.__GEN2_VIEWER__.unitBox(d.unit).max.z - z0) < 2; }, dz0.z, { timeout: 4000 }).catch(() => assert.fail('the drawer did not slide back after the drop to Fast'));
-  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
-  await settle(page, 300);
-  // the slow-drift guard: one long drift with the guard on is the device's verdict. A real GPU drifts smoothly and keeps
-  // drifting; the CI runner's SwiftShader draws it under 20 fps and the sequence goes on as CUTS from the shot it reached
-  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 600, moveMs: 2000, maxFrameMs: 50 }));
-  // until the first drift has landed (on shot 1) or the guard has spoken; polled, since a slow machine lands late
-  await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return !s.on || s.slow || (s.at >= 1 && s.movingTo === -1); }, null, { timeout: 30_000 }).catch(async () => assert.fail('the first drift never landed: ' + JSON.stringify(await seqOf(page))));   // 30 s: a loaded SwiftShader draws a 2.6 s beat as a handful of frames seconds apart
-  const g = await seqOf(page);
-  if (process.env.E2E_SOFT) assert.equal(g.slow, true, 'SwiftShader: the drift was too slow');
-  assert.equal(g.on, true, 'the verdict never ends the sequence'); assert.equal(g.mode, g.slow ? 'cut' : 'drift', 'a slow drift turns it to cuts; a smooth one keeps drifting');
-  // and it goes on: the next shot is reached (a cut after the hold on a slow device, a drift on a smooth one), still on
-  await page.waitForFunction((from) => { const s = window.__GEN2_DONE__.sequence; return s.on && s.movingTo === -1 && s.at !== from; }, g.at, { timeout: 15_000 }).catch(async () => assert.fail('the sequence did not reach another shot: ' + JSON.stringify(await seqOf(page))));
-  const g2 = await seqOf(page);
-  assert.equal(g2.on, true, 'still on at the next shot'); if (g.slow) assert.equal(g2.movingTo, -1, 'cuts: never "moving"');
-  // the verdict FORCED (a frame budget no drift can meet), so the turn to cuts is checked on any machine, a GPU included:
-  // the sequence goes on, as cuts, and reaches another shot without "moving"
-  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 600, moveMs: 800, maxFrameMs: 0.001 }));
+  // THE SLOW VERDICT, forced (a frame budget no move can meet): a moving shot locks off where it is two seconds in, the
+  // visit goes on still, on any machine, a GPU included
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 8000, dipInMs: 300, dipOutMs: 300, blackMs: 150, maxFrameMs: 0.001, seed: 4 }); window.__GEN2_DONE__.jump('slide'); });
   await page.waitForFunction(() => window.__GEN2_DONE__.sequence.slow, null, { timeout: 15_000 }).catch(async () => assert.fail('the forced verdict never came: ' + JSON.stringify(await seqOf(page))));
   const v = await seqOf(page);
-  assert.equal(v.on, true, 'the slow verdict turns the sequence to cuts, it does not end it'); assert.equal(v.mode, 'cut');
-  await page.waitForFunction((from) => { const s = window.__GEN2_DONE__.sequence; return s.on && s.at !== from; }, v.at, { timeout: 10_000 }).catch(async () => assert.fail('no cut followed the verdict: ' + JSON.stringify(await seqOf(page))));
-  assert.equal((await seqOf(page)).movingTo, -1, 'cuts after the verdict: never "moving"');
-  // leaving the scene (Esc; the player is faded out in it) stops it
+  assert.deepEqual([v.on, v.mode, v.moving, v.shot], [true, 'still', false, 'slide'], 'the verdict locks the shot off and the grammar goes still, it does not end it');
+  const vk = await cam(page);
+  await settle(page, 600);
+  assert.deepEqual(await cam(page), vk, 'locked off where it was');
+  // leaving the scene (Esc) removes the grammar and its black layer, and gives the stage its lite frames back
   await page.keyboard.press('Escape');
   await settle(page, 1200);
-  assert.equal(await seqOf(page), null, 'leaving the scene removes the sequence');
+  assert.equal(await seqOf(page), null, 'leaving the scene removes the grammar');
+  assert.equal(await page.evaluate(() => !!document.getElementById('done-fade')), false, 'and the black layer');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.motionFull()), false);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
-  // reduced motion: the still hero, on a tier that would otherwise drift
+  // REDUCED MOTION: the still hero, on a tier that would otherwise move; Next view turns the views by hand, a plain cut each
   const rm = await open('assemble', { query: '&done=room' });
   await rm.page.emulateMedia({ reducedMotion: 'reduce' });
-  await rm.page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('balanced', { user: true }); });
+  await rm.page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
   await toDone(rm.page);
   await settle(rm.page, 1500);
-  assert.equal((await seqOf(rm.page)).on, false, 'reduced motion: no sequence');
+  const r0s = await seqOf(rm.page);
+  assert.equal(r0s.on, false, 'reduced motion: no grammar running'); assert.equal(r0s.mode, 'off');
   const r0 = await cam(rm.page);
   await settle(rm.page, 2500);
   assert.deepEqual(await cam(rm.page), r0, 'the hero holds');
-  // and Next view turns the shots by hand, one cut each, with no sequence to run
   await btn(rm.page, 'Next view', '#ws-scene').click();
-  await settle(rm.page, 400);
-  const r1 = await cam(rm.page);
-  assert.notDeepEqual(r1, r0, 'Next view: the next shot'); assert.equal((await seqOf(rm.page)).on, false, 'still no sequence'); assert.equal((await seqOf(rm.page)).manual, 1);
+  await settle(rm.page, 100);
+  const r1 = await cam(rm.page), r1s = await seqOf(rm.page);
+  assert.notDeepEqual(r1, r0, 'Next view: the next view at once'); assert.equal(r1s.manual, 1); assert.equal(r1s.on, false, 'still no grammar');
+  assert.ok((await fadeOf(rm.page)) < 0.05, 'a plain cut: no dip');
+  assert.ok(near(r1.slice(0, 3), fitOf(r1s, r1s.names[1]).pos), 'the second shot, locked off');
   await settle(rm.page, 1200);
   assert.deepEqual(await cam(rm.page), r1, 'and it holds there');
-  // a resize refits the chosen view, not the hero (Sol 01a16c20: the refit put the hero back and the next click skipped a shot)
+  // a resize refits the chosen view, not the hero (Sol 01a16c20)
   const vp = rm.page.viewportSize();
   await rm.page.setViewportSize({ width: vp.width - 200, height: vp.height - 100 });
   await settle(rm.page, 600);
   const rs = await seqOf(rm.page), r2 = await cam(rm.page);
-  assert.equal(rs.manual, 1, 'the hand-chosen view is kept'); assert.ok(rs.cams[1].every((v, i) => Math.abs(v - r2[i]) < 0.5), `the camera sits on the refitted second shot (${r2.slice(0, 3)} vs ${rs.cams[1].map((n) => n.toFixed(2))})`);
-  assert.ok(rs.cams[0].some((v, i) => Math.abs(v - r2[i]) > 1), 'and not on the hero');
+  assert.equal(rs.manual, 1, 'the hand-chosen view is kept'); assert.ok(near(r2.slice(0, 3), fitOf(rs, rs.names[1]).pos), `the camera sits on the refitted second shot (${r2.slice(0, 3)} vs ${fitOf(rs, rs.names[1]).pos.map((n) => n.toFixed(2))})`);
+  assert.ok(!near(r2.slice(0, 3), fitOf(rs, 'hero').pos, 1), 'and not on the hero');
   await rm.page.setViewportSize(vp);
   assert.deepEqual(clean(rm.errors), []);
   await rm.ctx.close();

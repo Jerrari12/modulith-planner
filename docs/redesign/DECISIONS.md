@@ -3261,3 +3261,46 @@ Dated calls made while building, with who made them. The brief and the inventory
   casting). npm test 631, 626 pass, 0 fail, 5 skipped; the six room e2e cases 6 of 6.
 - **Review.** Sol `01a16def` (substantial: a multi-file change and a new bake rule), one finding, confirmed and fixed:
   `--focus` under `--props minimal` was a KeyError; it now exits with a message. Nothing discarded.
+
+## 2026-10-24 (the Done scene: the camera grammar)
+
+- **What.** Joey's direction (DESIGN.md §8h): "the cinematic camera views should cut to a random different camera,
+  position and zoom ... a zoomed in panning front view, then a completely stationary view ... then another view from
+  down below with a wider angle lens, basically like the cameras used in that Superposition Unigine benchmark"; "keep
+  them slow ... a relaxing cinematic scene, very slow pace"; "fades to black for transition"; and "we are on an A5000
+  GPU, so most other devices might be way too slow ... maybe we only use stationary views for those devices". Built in
+  done-fit.js (pure: GRAMMAR, BEAT, beatAt, planCycle, mixShot, fitShot, grammarMode, entranceTooSlow) and done.js (the
+  runner); the old hold-and-drift sequence (SHOTS, SEQUENCE, sequenceAt, sequenceMode) is gone. Behind `?done=room`;
+  not deployed.
+- **The shots.** Eight, fitted to the build, inside the room and above the desk (an 18 mm floor): hero (still, the
+  entrance lands on it), push (a 20 degree lens pushing in on the front), low (a 46 degree lens down at the desk, still),
+  detail (the drawer unit, its drawer moment), slide (a truck across the front), top (looking down, still), macro (a 14
+  degree lens pushing in on a corner of the drawer unit's face to 105 mm, where the layer lines resolve and the relief
+  turns itself on), side (an arc). Moves interpolate the shot's parameters, eased across the whole visible time.
+- **The beat and the order.** About 13 s a shot: the black fades out 1.1 s, a hold of 11 s, the black fades in 0.8 s,
+  0.35 s of black in which the camera cuts (`#done-fade`, over the canvas, under the workspace). Every shot once a
+  cycle in a seeded random order, the hero first, no shot following itself, never two moving shots together.
+- **Static first.** 'full' on High and Very High after the entrance verdict (its median frame under 50 ms); 'still'
+  (every shot locked off at the middle of its move, no drawer moment) on Balanced, Fast and after a slow verdict
+  (re-taken on every moving shot); 'off' under reduced motion (the still hero; Next view by hand, a plain cut). Moving
+  shots keep the stage's AO through the move (`setMotionFull`, main.js; AO is 3.4 % of the hero's pixels). A cut's
+  dip-in waits until the new view is drawn (the relief's rebuild compiles about a second), and the entrance draws the
+  room's first frames before the camera moves. Next view dips out from where the shot is.
+- **Not built:** bokeh (a lens jitter in Very High's accumulation; 24 samples would band a strong blur).
+- **Review.** Sol `01a16e0e` (substantial: the grammar is a new state machine over timers, animation frames and a wait
+  for the first drawn frame), three findings: (1) "the slow tier falls through to full" DISCARDED (there is no `slow`
+  tier; the flag is tested and parses as intended; lesson written to reviewer-lessons.md); (2) Next view during the
+  entrance let two writers fight over the camera, CONFIRMED and fixed (seqStart ends a running entrance and takes its
+  verdict on the frames so far; the entry's pending callback stands down once the grammar runs); (3) a tier drop while
+  a new shot waited for its first frames ticked the last shot's clock and could start a second one, CONFIRMED and fixed
+  (no tick while waiting; one wait at a time). A fourth bug turned up in the new e2e step for (2): the stage's own
+  camera tween into the End page's view kept writing the camera under the scene when the scene was entered inside it;
+  `holdScene(true)` now cancels it (main.js). The follow-up on all four: no findings.
+- **Checks.** Unit tests (16 for the grammar's pure part; the motionLite gate extended with the scene's opt-out); the
+  grammar e2e case (Fast still, Balanced still, High moving with AO kept, the dips, Next view's dip, the drawer only
+  when moving, a drop locking a move off, a hidden tab, the forced verdict, reduced motion, Next view before and during
+  the entrance, a drop during a shot's wait) with debug-only timing knobs to stretch the race windows (`enterMs`,
+  `preFrames`, `waitFrames` via `window.__DONE_TIMING__`); the 12W case now checks all eight shots inside the room and
+  above the desk. Mutants: 14 on the grammar killed; of the race fixes, 4 killed, 1 survives by design (tick's waiting
+  guard alone: freeze's guard covers the only caller that ticks while waiting). A live tour and a contact sheet of every
+  shot at High (D:\Claude - Output\done-scene-2026-10-23\grammar\).
