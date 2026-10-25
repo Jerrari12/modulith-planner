@@ -3222,3 +3222,41 @@ keyboard undo or Remove").
   the Amazon sentence beneath, a look's detail footer with the shared disclosure, no "null", and the reworded notes. The same
   script failed all eight on `2a5a11f7` before the deploy.
 
+## 2026-10-25 · Settle toward the mount after every edit (the Under-Table report)
+
+- **Asked:** Joey, 2026-10-25, relaying his tech-support thread: in Under-Table mode removing a unit only shifted the units
+  fully beneath it; a 2W that straddled two 3Ws was left floating with its rows below, hatched voids and "!" badges, and he
+  settled it by hand. The revised spec, replacing the 2026-10-21 "don't move anything automatically, just highlight the
+  gap": settle after every edit (add, remove, move, resize, mount switch) - hanging and wall builds up toward the rail,
+  tabletop down; each unit slides straight toward the mount until it touches the mount or any unit on that side (any
+  overlap in width counts), repeated until nothing moves, never sideways; drops allowed anywhere that does not collide or
+  leave the board, the settle decides the final position; one action = one undo, briefly animated; hatched voids become a
+  drag preview only; what remains is structural (the both-ends support rule, sag, alignment), still counted on the badge.
+- **Cause:** the 2026-10-21 settle moved only the units the both-ends rule flagged, and HELD every unit that was already
+  over a gap before the edit (so a mount switch's gaps stayed slots). The straddling 2W lost one end's support, could not
+  rise under the remaining 3W (a collision), and from then on was "already over a gap": held forever, with every row
+  under it. `js/rules/settle.js` says this in its header.
+- **Change:** `js/rules/settle.js` `settleToward(s, Rs)` - every unit, nearest the mount first, slides while `canPlace`
+  allows (the grid's edge or any held cell stops it), repeated until nothing moves; nothing is held. `build.js` `edit()`
+  uses it for every gravity edit; `moveCheck` refuses only a collision, the board's bounds, the width cap and the height
+  cap (the "would leave a unit without support" refusal is gone), and a drop below a hanging build grows the grid down for
+  the move as a placement there does (`tallFor`), in the same undo step; the removal toast names what settled ("Removed
+  3W·1.5H · 2W·2H (unit 3), ... moved up against what is above · Ctrl+Z puts it all back") and the moved units pulse as
+  before. The board draws the hatched open cells only while a drag is in progress (`deficit(dragging)`); the tabletop
+  completion guide stays. The setup sheet settles the layout on a change of mount (moves only, adds nothing - the
+  2026-10-21 "switching mounts adds no units" stands; the page reloads on a mount change, so that settle has no toast).
+- **What a settle leaves:** a wide case over nothing on one end stays where it hooks and is flagged by the both-ends rule
+  (a real structural issue, as the spec says); its slot is still a slot for the generator. The report's layout after both
+  3Ws go has none: three 2W-2H on top, three 2W-3H, two 3W-1.5H at the bottom, 0 issues.
+- **Tests:** `test/settle.test.mjs` (4 cases against the real layout rules: the report's two removals, the drop below the
+  stack, the tabletop half-step, any-overlap stopping); `tools/settle-mutants.mjs` 4/4 killed (direction flipped, one pass
+  with far-first order - the two alone are equivalent by design and are mutated together -, the hold reintroduced, the
+  slide stopping one short); e2e `Build: Under-Table settles up after every edit` (the report's layout through the setup
+  wizard, the two removals, 0 issues, the merged toast, one Undo each, the drop below the stack growing the grid, no
+  hatched cell at rest).
+- **Review:** Terra `01a174b5` (routine): one finding, discarded-known (no toast on the mount-switch settle - the page
+  reloads on a mount change, so none could show; a comment says so); its judgment taken: `hug()` leaves the empty bottom
+  rows a risen drop leaves on a hanging grid.
+- **Suites:** npm test 606 (599 pass; the 2 fails were a stale run of settle.test and a feet-pool flake that passes alone and under the
+  stashed tree); the settle case alone 1/1; the three cases that exercise gravity, moves and grow-down 5/5; mutants 4/4.
+- **Deploy:** staged on branch `settle-toward-mount`; it changes a 2026-10-21 decision and a refusal, so it waits for Joey's go.

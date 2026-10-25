@@ -107,7 +107,7 @@ export function board(opts) {
     svgEl('line', { x1: px(vL) - 6, y1: edgeY, x2: px(vR) + 6, y2: edgeY, class: 'b-mount' }, svg);
     svgEl('text', { x: px(vR) + 6, y: edgeY + (st.mount === 'tabletop' ? 14 : -5), class: 'b-mount-lbl', 'text-anchor': 'end' }, svg).textContent = st.mount === 'tabletop' ? 'table surface' : st.mount === 'wall' ? 'wall bracket row' : 'underside of the table';
     // the tabletop deficit: hatched cells (the Dock's "one area left to fill" says the same)
-    for (const d of opts.deficit()) svgEl('rect', { x: px(d.x) + 2, y: py(d.y) + 2, width: cell - 4, height: half() - 4, rx: 3, class: 'b-deficit', fill: 'url(#b-hatch)' }, svg);
+    for (const d of opts.deficit(!!drag)) svgEl('rect', { x: px(d.x) + 2, y: py(d.y) + 2, width: cell - 4, height: half() - 4, rx: 3, class: 'b-deficit', fill: 'url(#b-hatch)' }, svg);
     // the units
     const sel = opts.selected(), flagged = opts.flagged();
     for (const u of st.placed) {
