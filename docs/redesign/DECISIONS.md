@@ -3580,3 +3580,80 @@ Dated calls made while building, with who made them. The brief and the inventory
   2 %, the visitor's own colour 60.0 % against 30 %).
 - **Not done.** The desk's own bounce (a dark-desk endpoint bake and its tiles) is offered to Joey as the next step. Not
   deployed: the branch is done-scene, behind `?done=room`.
+
+## 2026-10-25 (the Done scene: the shadows on down the wall, smoother walls, a plain desk's sheen, the coffee's steam, the macro pulled back)
+
+- **The asks.** Joey, of the final scene, 2026-10-25, in this order: "one thing i notice that feels a little weird, the
+  way the shadows cut off or start right at where the table is nearest the wall, i see it for both the plant and build
+  shadows"; "i notice the wall texture looks gross and highly compressed, like maybe we are making it too low res or
+  scaling it wrong? Also the black desk feels like a void? maybe a slight sheen or reflection on the table surface?";
+  "also is there anyway to add a steaming animation to the coffee?", then, of its first form, "wouldn't the steam be
+  rolling off the entire coffee surface and not just a small circle in the center?"; and "the zoomed in camera is a bit
+  too zoomed in in my opinion, maybe bring it out about twice as far?".
+- **The shadows at the desk's back edge.** The desk stands 20 mm off the wall, so the sun reaches a strip of wall under
+  the desk top through the gap: 29.9 mm on the wall's face (the gap times the sun's 578 up over 387 toward the room). The
+  bake lights that strip, and the build's wall catcher and the props' wall masks stopped at the desk top, so a lit line
+  parted the shadow on the desk from the one on the wall. Both now reach down past the desk top by `gapDrop` (done-fit.js):
+  the gap to the anchor plane they stand on, 19 mm, times the same rise over run, and 3 mm for the sun's disc, 31.4 mm.
+  A wall mask draws its texture's bottom row on down (v0 below 0, clamped), not its picture stretched. Measured on the top
+  shot at 1280 x 720: 4,609 pixels of the strip darker where the build's shadow crosses it, none lighter.
+- **The walls' texture.** Not the texture's resolution: the plain surfaces' lightmaps, about 6 mm a texel, held the
+  bake's grain (192 samples, no denoiser: 0.6 to 1.1 levels in a smooth patch of the back wall) and WebP's blocking of it,
+  and a close view magnifies that into soft blotches. tools/done-scene/smooth-maps.py blurs the walls', the floor's and the
+  window frame's maps over their covered texels (room.py's blur5, in linear light, the gutters left out), adds a
+  half-level dither and re-encodes at the same WebP 82. Measured: the mottle on a sage wall seen from 600 mm 1.20 -> 0.59
+  levels (1.20 alike on High and Very High before); the back wall's map 31,120 -> 15,044 bytes; room.glb 627,612 ->
+  589,504 bytes. Both bakes were smoothed before endpoint.py rebuilt the walls' bounce atlas from them (133,532 -> 127,432
+  bytes). The tool keeps the bake as room.unsmoothed.glb, records the digests of the bake it read and the file it wrote,
+  and refuses a room.glb it cannot place (Sol `01a174d3`, below).
+- **A plain desk's sheen.** A coat's reflection of the room's own environment: Schlick's Fresnel for a dielectric (F0
+  0.04), roughness 0.35 with Fdez-Aguera's term, on White, Grey, Black and a visitor's own colour; Oak and Walnut keep the
+  bake's matte veneer. The environment captured after each colour change is the one the desk reflects. Measured on the
+  black desk at the hero, 1280 x 720: 16 % of the frame lighter with it (151,518 pixels by more than 24 levels summed),
+  46,275 of them by more than 120, the farther half of them twice the nearer (131 against 68): the coat shows most toward
+  grazing. Not modelled: the desk in the captured environment carries the previous capture's reflection, a lag of one
+  step at its Fresnel weight, estimated at a few per cent of the desk's look in the build's reflections.
+- **The coffee's steam.** Four camera-facing sheets stood across the coffee front to back (at -0.75, -0.25, 0.25 and 0.75
+  of its radius along the view), each as wide at its foot as the coffee's chord there, over a faint mist on the surface,
+  about 100 mm wide and 170 tall over the 36.5 mm mug; a noise rises through each sheet, its tendrils merging as they
+  widen. Its first form, one column from the middle, was Joey's "small circle in the center". It moves on High at 24
+  frames a second and on Balanced at 15, only while it is in the shot, at that rate whatever the display's (done-fit.js
+  `steamBeat`: a 60 Hz screen alternates 2 and 3 frames); on Very High only on the frames the camera's own move draws, so a
+  still shot's accumulation converges on still steam; not at all on Fast or with reduced motion. Its frames are asked
+  for with main.js's new `drawNextFrame()`: one frame, nothing invalidated. Its first form called invalidateFrame(),
+  which holds the idle gate open 600 ms each time, so a held High shot drew at the display's rate, 120 frames a second
+  on a 120 Hz screen against 5 with the steam stopped (its coffee hidden); now 24.
+- **The macro, twice as far.** The push on the drawer unit's corner runs 420 -> 210 mm (it was 210 -> 105) in all three
+  mounts' grammars, its frame about 52 mm tall at the end. The trade, for Joey: the layer lines draw only where a 0.2 mm
+  layer spans 4 CSS px, so at the macro's end they now come on only on a canvas about 1,003 CSS px tall or more (4.30 px
+  a layer at 1080, 3.99 at 1000, 3.19 at 800, 2.87 at 720; before, from about 493 px, computed from its 5.84 at 720).
+  The relief case moved to 1280 x 1080 to keep its variants apart (2.16, 2.87 and 4.30 px at the push's start, middle
+  and end).
+- **Review.** Sol `01a174d3`. Round 1: three findings, all held: the kept bake could stand in for a newer one; the
+  steam's beat ran 20 a second at 60 Hz (it restarted its interval at each tick); three of the case's lower bounds
+  assumed a GPU's frame rate. From its answers, also taken: the Very High signature carries fov and zoom, the sheen's two
+  frames hide the steam, and a comment no longer says the gutters stay exactly as baked through a lossy encode. Kept: the
+  capture's one-step lag (above). Round 2: one finding, held: a missing kept copy under a record would have smoothed
+  twice; refused now. And the case counts the steam's calls for a frame, which a slow runner's frame count cannot show.
+  Round 3: no findings.
+- **Checks.** Three existing e2e checks had gone stale against the edge fix: two Done cases' shared `masksPlaced` and the
+  mount case's wall catcher still expected the old extents. The mutation runs found them: those cases failed unmutated, so
+  every mutant run against them "died" at the same stale assertion (20 of the mount list's 27 at one line). The tree
+  runner now runs each list's case unmutated first and skips a list whose case fails.
+  Then every Done mutant list, each with its case run unmutated first: 157 killed, each at its own assertion. The
+  sheen, steam and beat list is 33, new, 17 of them on the steam; the edge list 6, new. Re-run: mount 27, colours 17,
+  the scene's 7, the cuts' 2, the clamp's 4 (k3, the fov widening, by the unit tests: that runner runs only an e2e case),
+  the first Done case's 6 and its two shell lists' 9. From the first round, their cases untouched since: lens 19,
+  grammar 14, warm 10.
+  - The re-run also found that mutants.mjs's m1 had been editing the colour change's hold, not the entry's. The call
+    has appeared twice since the colours; the colours case now checks that the stage holds each new capture (m1b), and
+    the runners refuse an anchor that is not unique.
+  - Two survive, both older than this batch: m5, the entrance's own relief decision, which only makes the relief draw
+    unseen during the 3 s entrance and in Colors' Room stage; and s3, tick's waiting guard, which freeze's guard covers
+    (both removed, s4, dies).
+  - 16 mutants of the older lists lost their anchors in the 10-24 grammar rewrite, before this batch.
+  On the final code: the whole e2e suite 94 of 94. npm test: 654 tests, 648 pass, 5 skipped and 1 failing on the
+  machine, not the batch. test/adhesive-foot.test.mjs reads gen2-parts' parts/, where another session's untracked
+  parts/skin/ folder (made at 15:34 that day) reads as a collection pool with no feet.
+- **Not done.** Not deployed: the branch is done-scene, behind `?done=room`. Next: Joey's idea of a slow zoom or pan on
+  the still shots, done on the finished picture without drawing the scene again.

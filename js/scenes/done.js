@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -102,6 +102,66 @@ function addBounce(m, bounce, rect) {
       '#include <map_fragment>\n\tdiffuseColor.rgb = max(diffuseColor.rgb - uBounceK * texture2D(uBounce, uBounceRect.xy + vMapUv * uBounceRect.zw).rgb, 0.0);');
   };
   m.customProgramCacheKey = () => 'done-bounce';
+  m.needsUpdate = true;
+}
+/* A PLAIN DESK'S SHEEN (Joey 2026-10-25: "the black desk feels like a void? maybe a slight sheen or reflection on the table
+   surface?"): the bake has no glossy at all, so a plain colour over the light-only map is flat paint, and a dark one reads
+   as a hole. A laminate's coat reflects: Schlick's Fresnel for a dielectric (F0 0.04), reduced at grazing for a satin
+   roughness (Fdez-Aguera's max(1 - roughness, F0)), of the room's own environment (the PMREM captured from the build,
+   envMap, which also defines its CubeUV sampler), its diffuse scaled by 1 - F so the coat adds no light of its own.
+   MeshBasicMaterial computes the world normal and position once an envMap is set; it has no CubeUV sampling, so the chunk
+   is included here. The oak and the walnut keep the bake's matte look: off for them (paintRoom). The build is not in the
+   environment, so it is not reflected. `userData.sheen.on` is 0 or 1, set by paintRoom. */
+/* THE COFFEE'S STEAM, its shaders (makeSteam). The sheets (STEAM_VERT, STEAM_FRAG): unit quads (x -0.5..0.5, y 0..1), each
+   turned about the vertical to face the camera and stood on the coffee at its own depth along the view (aSlice.x, in
+   radii), sized in the stage's millimetres; a noise risen through a sheet as wide at its foot as the coffee's chord there
+   (aSlice.y, in radii, a little inside the rim), its tendrils merging as it rises, widening and fading; each sheet its own
+   seed (aSlice.z). The mist (STEAM_MIST_FRAG): a disc on the surface, two noises drifting across each other, thinning to
+   its edge. */
+const STEAM_NOISE = 'float sHash( vec2 p ) { p = fract( p * vec2( 123.34, 456.21 ) ); p += dot( p, p + 45.32 ); return fract( p.x * p.y ); }\n'
+  + 'float sNoise( vec2 p ) { vec2 i = floor( p ), f = fract( p ); vec2 u = f * f * ( 3.0 - 2.0 * f );\n'
+  + '\treturn mix( mix( sHash( i ), sHash( i + vec2( 1.0, 0.0 ) ), u.x ), mix( sHash( i + vec2( 0.0, 1.0 ) ), sHash( i + vec2( 1.0, 1.0 ) ), u.x ), u.y ); }\n'
+  + 'float sFbm( vec2 p ) { float v = 0.0, a = 0.5; for ( int k = 0; k < 4; k ++ ) { v += a * sNoise( p ); p = p * 2.03 + vec2( 1.7, 9.2 ); a *= 0.5; } return v; }\n';
+const STEAM_VERT = 'uniform float uW;\nuniform float uH;\nuniform float uR;\nattribute vec3 aSlice;\nvarying vec2 vUv;\nvarying vec3 vSlice;\n'
+  + 'void main() {\n\tvUv = uv;\n\tvSlice = aSlice;\n'
+  + '\tvec3 foot = ( modelMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;\n\tvec3 toCam = cameraPosition - foot;\n\ttoCam.y = 0.0;\n'
+  + '\tvec3 fwd = dot( toCam, toCam ) > 1e-6 ? normalize( toCam ) : vec3( 0.0, 0.0, 1.0 );\n\tvec3 right = vec3( fwd.z, 0.0, - fwd.x );\n'
+  + '\tvec3 base = foot + fwd * aSlice.x * uR;\n'
+  + '\tgl_Position = projectionMatrix * viewMatrix * vec4( base + right * position.x * uW + vec3( 0.0, position.y * uH, 0.0 ), 1.0 );\n}';
+const STEAM_FRAG = 'uniform float uTime;\nuniform float uAlpha;\nuniform vec3 uColor;\nuniform float uW;\nuniform float uR;\nvarying vec2 vUv;\nvarying vec3 vSlice;\n'
+  + STEAM_NOISE
+  + 'void main() {\n\tfloat y = vUv.y, t = uTime + vSlice.z * 3.7;\n'
+  + '\tfloat sway = ( sin( t * 0.61 + y * 3.1 ) * 0.07 + sin( t * 0.37 + y * 5.3 ) * 0.035 ) * y;\n'
+  + '\tfloat hw = mix( vSlice.y * uR / uW * 0.92, 0.42, pow( y, 0.8 ) );\n'
+  + '\tfloat x = ( vUv.x - 0.5 - sway ) / hw;\n\tfloat column = exp( - x * x * x * x * 1.5 );\n'
+  + '\tvec2 q = vec2( ( vUv.x - 0.5 ) * mix( 5.0, 2.2, y ) + sway * 3.0 + vSlice.z * 7.31, y * 1.8 - t * 0.32 );\n'
+  + '\tfloat n = sFbm( q + vec2( 0.0, 0.6 * sFbm( q * 1.6 + vec2( t * 0.07, vSlice.z * 1.9 ) ) ) );\n'
+  + '\tfloat fade = smoothstep( 0.0, 0.04, y ) * pow( 1.0 - y, 1.7 );\n'
+  + '\tgl_FragColor = vec4( uColor, uAlpha * column * smoothstep( 0.30, 0.72, n ) * fade );\n\t#include <colorspace_fragment>\n}';
+const STEAM_MIST_VERT = 'varying vec2 vUv;\nvoid main() {\n\tvUv = uv;\n\tgl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n}';
+const STEAM_MIST_FRAG = 'uniform float uTime;\nuniform float uMist;\nuniform vec3 uColor;\nvarying vec2 vUv;\n'
+  + STEAM_NOISE
+  + 'void main() {\n\tvec2 p = ( vUv - 0.5 ) * 2.0;\n\tfloat r = length( p ), t = uTime;\n'
+  + '\tfloat n = sFbm( p * 1.5 + vec2( t * 0.11, t * 0.07 ) ) * sFbm( p * 2.1 - vec2( t * 0.05, t * 0.13 ) + 4.7 );\n'
+  + '\tgl_FragColor = vec4( uColor, uMist * smoothstep( 0.06, 0.40, n ) * ( 1.0 - smoothstep( 0.60, 1.0, r ) ) );\n\t#include <colorspace_fragment>\n}';
+const SHEEN_ROUGH = 0.35;
+function addSheen(m) {
+  const prev = m.onBeforeCompile;
+  m.userData.sheen = { on: { value: 0 }, rough: { value: SHEEN_ROUGH } };
+  m.onBeforeCompile = (sh, r) => {
+    if (prev) prev.call(m, sh, r);
+    sh.uniforms.uSheen = m.userData.sheen.on;
+    sh.uniforms.uSheenRough = m.userData.sheen.rough;
+    sh.vertexShader = 'varying vec3 vSheenN;\nvarying vec3 vSheenV;\n' + sh.vertexShader.replace('#include <envmap_vertex>',
+      '#include <envmap_vertex>\n#ifdef USE_ENVMAP\n\tvSheenN = transformNormalByInverseViewMatrix( transformedNormal, viewMatrix );\n\tvSheenV = cameraPosition - worldPosition.xyz;\n#endif');
+    sh.fragmentShader = 'uniform float uSheen;\nuniform float uSheenRough;\nvarying vec3 vSheenN;\nvarying vec3 vSheenV;\n' + sh.fragmentShader
+      .replace('#include <envmap_pars_fragment>', '#include <envmap_pars_fragment>\n#include <cube_uv_reflection_fragment>')
+      .replace('#include <envmap_fragment>', '#include <envmap_fragment>\n#ifdef ENVMAP_TYPE_CUBE_UV\n\tif ( uSheen > 0.0 ) {\n\t\tvec3 sN = normalize( vSheenN ), sV = normalize( vSheenV );\n'
+        + '\t\tfloat sF = uSheen * ( 0.04 + ( max( 1.0 - uSheenRough, 0.04 ) - 0.04 ) * pow( 1.0 - clamp( dot( sN, sV ), 0.0, 1.0 ), 5.0 ) );\n'
+        + '\t\tvec3 sEnv = textureCubeUV( envMap, envMapRotation * reflect( - sV, sN ), uSheenRough ).rgb;\n'
+        + '\t\toutgoingLight = outgoingLight * ( 1.0 - sF ) + sEnv * sF;\n\t}\n#endif');
+  };
+  m.customProgramCacheKey = () => 'done-bounce-sheen';
   m.needsUpdate = true;
 }
 
@@ -536,6 +596,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
           if (m.map !== map) { m.map = map; m.needsUpdate = true; }
           if (dl.use === 'light') set(m, dl.factor, dl.colour, 'desk_top:light');
           else set(m, dl.factor, dl.factor, 'desk_top');
+          if (m.userData.sheen) {   // a plain desk's coat reflects the room (addSheen); the oak and the walnut stay matte
+            const on = dl.use === 'light', env = on ? parts.env || null : null;
+            m.userData.sheen.on.value = on ? 1 : 0;
+            if (m.envMap !== env) { m.envMap = env; m.needsUpdate = true; }
+          }
         } else set(m, [1, 1, 1], [1, 1, 1], o.name);
       }
     });
@@ -550,8 +615,82 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     pmrem.dispose();
     if (parts.env) parts.env.dispose();
     parts.env = next; colours.envs++;
-    // the live steel reflects the room on every tier, Fast's included (it has no scene environment of its own)
-    for (const m of parts.mats) if (m.isMeshStandardMaterial) { m.envMap = parts.env; m.needsUpdate = true; }
+    // the live steel reflects the room on every tier, Fast's included (it has no scene environment of its own), and so
+    // does a plain desk's sheen (paintRoom turns it on); the old environment is gone, so neither may keep it
+    for (const m of parts.mats) {
+      if (m.isMeshStandardMaterial) { m.envMap = parts.env; m.needsUpdate = true; }
+      else if (m.userData.sheen && m.userData.sheen.on.value > 0) { m.envMap = parts.env; m.needsUpdate = true; }
+    }
+  }
+  /* THE COFFEE'S STEAM (done-fit.js steamRate, steamSize, steamSlices; Joey 2026-10-25: "is there anyway to add a steaming
+     animation to the coffee?", then "wouldn't the steam be rolling off the entire coffee surface and not just a small
+     circle in the center?"): soft wisps rising off the whole surface, in sheets stood across it (STEAM_VERT, STEAM_FRAG,
+     one mesh), over a mist lying on it (STEAM_MIST_FRAG), both children of the coffee, so they slide and hide with the
+     mug, and one clock. Added after the environment's capture, so the room it reflects has none; ghosts (userData), so
+     the AO's and the selection outline's passes leave them out; no shadow either way. The clock runs only while it may
+     move (steamRate): ticked at the tier's frame rate on High and Balanced while the steam is in view (drawNextFrame: one
+     frame a tick, nothing invalidated, so the idle gate does not stay open after it and their AO's accumulation is left
+     alone), carried by the camera's own moves on Very High (a still shot's accumulation converges on still steam), still
+     on Fast and with reduced motion. */
+  function makeSteam(group) {
+    const coffee = group.getObjectByName('coffee');
+    if (!coffee || !coffee.geometry) return;
+    coffee.geometry.computeBoundingBox();
+    const bb = coffee.geometry.boundingBox, r = (bb.max.x - bb.min.x) / 2, size = steamSize(r * SCALE);   // the GLB's metres to mm
+    const time = { value: 7.3 }, colour = { value: new THREE.Color(0.95, 0.95, 0.96) };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uTime: time, uW: { value: size.w }, uH: { value: size.h }, uR: { value: r * SCALE }, uAlpha: { value: STEAM.alpha }, uColor: colour },
+      vertexShader: STEAM_VERT, fragmentShader: STEAM_FRAG, transparent: true, depthWrite: false, toneMapped: false,
+    });
+    // the sheets in one geometry: each a quad carrying its depth across the coffee, its foot's half-width and its seed
+    const quad = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), slices = steamSlices(), nq = quad.attributes.position.count;
+    const pos = new Float32Array(nq * 3 * slices.length), uvs = new Float32Array(nq * 2 * slices.length), sl = new Float32Array(nq * 3 * slices.length), idx = [];
+    slices.forEach((c, k) => {
+      pos.set(quad.attributes.position.array, k * nq * 3); uvs.set(quad.attributes.uv.array, k * nq * 2);
+      for (let v = 0; v < nq; v++) sl.set([c.d, c.half, c.seed], (k * nq + v) * 3);
+      for (const i of quad.index.array) idx.push(i + k * nq);
+    });
+    quad.dispose();
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2)); geo.setAttribute('aSlice', new THREE.BufferAttribute(sl, 3)); geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set((bb.min.x + bb.max.x) / 2, bb.max.y + 0.001, (bb.min.z + bb.max.z) / 2);   // the coffee's own frame
+    const mist = new THREE.Mesh(new THREE.CircleGeometry(r * 0.97, 48).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+      uniforms: { uTime: time, uMist: { value: STEAM.mist }, uColor: colour },
+      vertexShader: STEAM_MIST_VERT, fragmentShader: STEAM_MIST_FRAG, transparent: true, depthWrite: false, toneMapped: false,
+    }));
+    mist.position.set((bb.min.x + bb.max.x) / 2, bb.max.y + 0.0015, (bb.min.z + bb.max.z) / 2);   // 1.5 mm over the coffee
+    for (const o of [mesh, mist]) { o.frustumCulled = false; o.castShadow = false; o.receiveShadow = false; o.renderOrder = 2; o.raycast = () => {}; }
+    mesh.name = 'done-steam'; mesh.userData.ghost = true; mesh.userData.doneRoom = true;
+    mist.name = 'done-steam-mist'; mist.userData.ghost = true; mist.userData.doneRoom = true;
+    coffee.add(mesh);
+    coffee.add(mist);
+    const foot = new THREE.Vector3(), sphere = new THREE.Sphere(), frustum = new THREE.Frustum(), pv = new THREE.Matrix4();
+    const s = parts.steam = { mesh, mist, size, slices: slices.length, t: 7.3, at: 0, dueAt: 0, sig: '', ticks: 0 };
+    const tick = (now) => {
+      if (!on || parts.steam !== s) return;
+      parts.steamRaf = requestAnimationFrame(tick);
+      const rate = steamRate(stage.quality, reduced), dt = s.at ? Math.min(0.1, (now - s.at) / 1000) : 0;
+      s.at = now;
+      if (rate === 'motion') {   // Very High: on the frames the camera's own move draws
+        const c = stage.camera, sig = c.position.toArray().concat(c.quaternion.toArray(), [c.fov, c.zoom]).map((v) => v.toFixed(3)).join();
+        if (sig !== s.sig) { s.sig = sig; s.t += dt; mat.uniforms.uTime.value = s.t; }
+        return;
+      }
+      if (!rate || !coffee.visible) return;
+      const c = stage.camera;
+      mesh.getWorldPosition(foot);
+      sphere.set(foot.add({ x: 0, y: size.h / 2, z: 0 }), size.h / 2 + size.w / 2);
+      frustum.setFromProjectionMatrix(pv.multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse));
+      if (!frustum.intersectsSphere(sphere)) return;   // out of the shot: no frames for it
+      s.t += dt;
+      const beat = steamBeat(now, s.dueAt, rate);   // the tier's rate on average, at any display rate (done-fit.js)
+      if (!beat.tick) return;
+      s.dueAt = beat.dueAt; s.ticks++;
+      mat.uniforms.uTime.value = s.t;
+      stage.drawNextFrame();
+    };
+    parts.steamRaf = requestAnimationFrame(tick);
   }
   /* the handle's: paint the room, capture it again, remember the choice in this browser, draw it (Very High's mean
      starts over: invalidateFrame) */
@@ -667,6 +806,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (!rec) return;
       for (const m of [].concat(o.material)) if (m.isMeshBasicMaterial && m.map) addBounce(m, roomBounce, rec.rect);
     });
+    const deskTop = group.getObjectByName('desk_top');   // ... and the desk top a sheen for a plain colour (addSheen)
+    if (deskTop) for (const m of [].concat(deskTop.material)) if (m.isMeshBasicMaterial && m.map) addSheen(m);
     group.name = 'done-room';
     group.scale.setScalar(SCALE);
     const anchor = group.getObjectByName('anchor_tabletop');
@@ -716,9 +857,15 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const wallAnchor = group.getObjectByName('anchor_wall');
     const wallZ = wallAnchor ? wallAnchor.getWorldPosition(new THREE.Vector3()).z
       : (json.anchors && json.anchors.wall && json.anchors.tabletop ? anchorWorld.z + (json.anchors.wall[2] - json.anchors.tabletop[2]) : null);
+    /* ... down past the desk top by the strip the sun reaches through the gap behind the desk (done-fit.js gapDrop; Joey
+       2026-10-25: "the shadows cut off or start right at where the table is nearest the wall"): a lit line of wall parted
+       the shadow on the desk from the one on the wall. The props' wall masks reach down over it too (maskQuad's below).
+       The gap is measured to the wall anchor's plane, where the catchers stand, 1 mm in front of the wall's face: 19 mm,
+       so 31.4 mm with the margin, over the 29.9 mm the sun reaches on the face itself. */
+    const drop = wallZ != null ? gapDrop(json.sun && json.sun.dir, anchorWorld.z + d.zBack - wallZ) : 0;
     if (wallZ != null) {
-      const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
-      wall.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, deskY + 800, wallZ + 0.3);   // a plane facing +z: toward the desk
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600 + drop), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
+      wall.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, deskY + 800 - drop / 2, wallZ + 0.3);   // a plane facing +z: toward the desk
       wall.receiveShadow = true; wall.castShadow = false; wall.renderOrder = 1; wall.raycast = () => {};
       wall.userData.doneRoom = true;
       parts.wall = wall; scene.add(wall);
@@ -736,10 +883,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.masks = [];
     for (const m of masks || []) {
       if (!m.tex) continue;
-      const q = maskQuad(m, { x: anchorWorld.x, y: deskY, z: anchorWorld.z }, wallZ, slid[m.group], 0.5, { x0: d.x0, x1: d.x1 });   // a desk quad is cut at the desk's ends (Sol 01a16bc5)
+      const q = maskQuad(m, { x: anchorWorld.x, y: deskY, z: anchorWorld.z }, wallZ, slid[m.group], 0.5, { x0: d.x0, x1: d.x1 }, drop);   // a desk quad is cut at the desk's ends (Sol 01a16bc5)
       if (!q) continue;
       const geo = new THREE.PlaneGeometry(q.w, q.h);
       if (q.u0 > 0 || q.u1 < 1) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, q.u0 + uv.getX(i) * (q.u1 - q.u0)); uv.needsUpdate = true; }   // the texture window follows the cut
+      if (q.v0 < 0) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, q.v0 + uv.getY(i) * (1 - q.v0)); uv.needsUpdate = true; }   // a wall mask carried down the strip under the desk top: its bottom row, clamped
       if (q.surface === 'desk') geo.rotateX(-Math.PI / 2);   // lying on the desk, the image's top toward the wall; a wall mask faces +z, toward the desk
       const quad = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: m.tex, transparent: true, depthWrite: false, toneMapped: false,
         blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
@@ -770,6 +918,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     envRoom.traverse((o) => { if (o.userData.live) o.visible = false; });   // a lit metal in a scene with no lights renders black: keep it out of the room it reflects
     paintRoom(savedRoomColours());
     captureEnv();
+    makeSteam(group);   // after the capture: the room it reflects has no steam
     // the stage's holds: background off, our environment, the shadow on whatever the theme, the camera ours
     stage.table.visible = false; stage.grid.visible = false;
     if (was.dims) stage.setDims(false);   // the brief: no dimension callouts in the room
@@ -801,10 +950,10 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     });
     addEventListener('resize', refit);
     document.addEventListener('visibilitychange', onVisibility);
-    if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get relief() { return { override: stage.reliefOverride ? stage.reliefOverride() : null, ...relief }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height })); },
+    if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get relief() { return { override: stage.reliefOverride ? stage.reliefOverride() : null, ...relief }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height, vMin: Math.min(...q.geometry.attributes.uv.array.filter((_, i) => i % 2 === 1)) })); },
       // where the room went for this build's mount (roomAnchor): the desk top's height, and the room's meshes that cast, read
       // from their flags as they stand (Sol 01a17311: a list kept beside the flags can say what they do not)
-      get placement() { const casters = []; if (parts.group) parts.group.traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o.name); }); return { mount, deskY, sprite: parts.sprite ? parts.sprite.visible : null, casters }; },
+      get placement() { const casters = []; if (parts.group) parts.group.traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o.name); }); return { mount, deskY, sprite: parts.sprite ? parts.sprite.visible : null, casters, gapDrop: drop, wallCatcherBottom: parts.wall ? parts.wall.position.y - parts.wall.geometry.parameters.height / 2 : null }; },
       // the room colours as drawn, read off the materials themselves (the wall's and the desk top's colour, linear; the
       // desk's texture), the environment's texture and how often it was captured
       get colours() {
@@ -814,10 +963,20 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         return { wall: colours.wall, desk: colours.desk, envs: colours.envs, env: parts.env ? parts.env.uuid : null, wallColor: w && w.color.toArray(), wallBase: w && w.userData.doneBase.toArray(),
           wallMap: w ? (w.map === w.userData.doneMap ? 'bake' : 'other') : null,
           deskColor: t && t.color.toArray(), deskBase: t && t.userData.doneBase.toArray(), deskMap: t ? (lt && t.map === lt ? 'light' : t.map === t.userData.doneMap ? 'bake' : 'other') : null, plainDesk: !!lt,
+          // the desk's sheen (addSheen): on for a plain colour, its environment the one captured last
+          deskSheen: t && t.userData.sheen ? { on: t.userData.sheen.on.value, rough: t.userData.sheen.rough.value, env: !!t.envMap, current: !!t.envMap && t.envMap === parts.env } : null,
           // the walls' bounce each surface loses (its k, per channel), and the atlas rect it reads, off the materials
           bounce: roomBounce ? { wall: k(w), desk: k(t), floor: k(first('floor')), deskRect: t && t.userData.bounce ? t.userData.bounce.rect.toArray() : null } : null };
       },
       setRoomColours,
+      // the coffee's steam (makeSteam): its clock, the frames its tick asked for, its tier's rate, where its foot stands, its
+      // sheets and its mist (on the coffee, a ghost, on the same clock)
+      get steam() {
+        const s = parts.steam; if (!s) return null;
+        const m = s.mist;
+        return { t: s.t, ticks: s.ticks, rate: steamRate(stage.quality, reduced), shown: !!s.mesh.parent && s.mesh.parent.visible, foot: s.mesh.getWorldPosition(new THREE.Vector3()).toArray(), w: s.size.w, h: s.size.h, ghost: !!s.mesh.userData.ghost, uTime: s.mesh.material.uniforms.uTime.value,
+          sheets: s.mesh.geometry.attributes.aSlice.count / 4, mist: { on: m.parent === s.mesh.parent, ghost: !!m.userData.ghost, at: m.getWorldPosition(new THREE.Vector3()).toArray(), clock: m.material.uniforms.uTime === s.mesh.material.uniforms.uTime } };
+      },
       /* the grammar as it stands: `names` the shots in GRAMMAR order, `fits` each one's camera at the middle of its move
          (clamped, fov), `ends` the shot on screen's two ends, `order` this cycle's plan and `idx` the place in it */
       get sequence() {
@@ -875,6 +1034,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (stage.setInteriorHidden) stage.setInteriorHidden(false);   // after seqStop's drawerCancel: every interior mesh back, no re-hide timer left
     if (stage.setReliefOverride) stage.setReliefOverride(null);    // the tier has its say again
     cancelAnimationFrame(parts.raf);
+    cancelAnimationFrame(parts.steamRaf);
+    if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
     removeEventListener('resize', refit);
     document.removeEventListener('visibilitychange', onVisibility);
     if (debug) delete window.__GEN2_DONE__;

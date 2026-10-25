@@ -165,11 +165,13 @@ export const GRAMMAR = {
     { name: 'detail', from: { az: 30, el: 10, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },   // the drawer moment in its hold
     { name: 'slide', from: { az: -22, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 }, to: { az: 14, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 } },   // a slow truck across the front
     { name: 'top', from: { az: 40, el: 50, fovV: 28, fill: 0.58 } },   // high, looking down on the covers, locked off
-    // pushing in on a corner of the drawer unit's faceplate until its layer lines show: a 0.2 mm layer needs a frame about
-    // 20 mm tall to span the relief's cutoff (4 px a layer at 800 px), so the macro ends that close, on an edge, at a
-    // grazing angle (a flat face at that scale was a frame of plain orange, the 2026-10-24 tour)
-    // (it ends at 105 mm, a frame about 26 mm tall: at 78 mm the corner had left the frame and it was a flat face again)
-    { name: 'macro', from: { az: -40, el: 12, fovV: 14, distMm: 210, aim: 'drawer-front' }, to: { az: -31, el: 8, fovV: 14, distMm: 105, aim: 'drawer-front' } },
+    // pushing in on a corner of the drawer unit's faceplate, on an edge, at a grazing angle (a flat face that close was a
+    // frame of plain orange, the 2026-10-24 tour). It ended at 105 mm, a frame about 26 mm tall, where a 0.2 mm layer
+    // spanned 5.84 CSS px on a 720 px canvas, past the relief's cutoff of 4; Joey found it "a bit too zoomed in ... maybe
+    // bring it out about twice as far?" (2026-10-25): 420 to 210 mm now, a frame about 52 mm tall, where a layer spans
+    // 4.30 px at its end on a 1080 px canvas (3.19 at 800), so the layer lines draw only on a canvas about 1,003 CSS px
+    // tall and up
+    { name: 'macro', from: { az: -40, el: 12, fovV: 14, distMm: 420, aim: 'drawer-front' }, to: { az: -31, el: 8, fovV: 14, distMm: 210, aim: 'drawer-front' } },
     { name: 'side', from: { az: 66, el: 15, fovV: 26, fill: 0.62 }, to: { az: 50, el: 13, fovV: 26, fill: 0.62 } },   // a slow arc round the side
   ],
   /* A WALL BUILD hangs on the back wall over the desk (roomAnchor), so it is seen standing in front of the desk or from
@@ -182,7 +184,7 @@ export const GRAMMAR = {
     { name: 'detail', from: { az: 30, el: 3, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },
     { name: 'slide', from: { az: -22, el: 2, fovV: 22, fill: 0.7 }, to: { az: 14, el: 2, fovV: 22, fill: 0.7 } },
     { name: 'wide', from: { az: 30, el: 10, fovV: 34, fill: 0.3, targetLift: -0.35 } },   // the corner: the desk under the build
-    { name: 'macro', from: { az: -40, el: 6, fovV: 14, distMm: 210, aim: 'drawer-front' }, to: { az: -31, el: 4, fovV: 14, distMm: 105, aim: 'drawer-front' } },
+    { name: 'macro', from: { az: -40, el: 6, fovV: 14, distMm: 420, aim: 'drawer-front' }, to: { az: -31, el: 4, fovV: 14, distMm: 210, aim: 'drawer-front' } },   // as the tabletop's (Joey 2026-10-25)
     { name: 'side', from: { az: 66, el: 6, fovV: 26, fill: 0.62 }, to: { az: 50, el: 5, fovV: 26, fill: 0.62 } },
   ],
   /* AN UNDER-TABLE BUILD hangs under the desk's front edge (roomAnchor; Joey 2026-10-25: "align the under-table build to
@@ -196,7 +198,7 @@ export const GRAMMAR = {
     { name: 'detail', from: { az: 30, el: 4, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },
     { name: 'slide', from: { az: -22, el: 3, fovV: 22, fill: 0.7 }, to: { az: 14, el: 3, fovV: 22, fill: 0.7 } },
     { name: 'wide', from: { az: 28, el: 18, fovV: 34, fill: 0.3, targetLift: 0.3 } },   // the desk, the build under its edge
-    { name: 'macro', from: { az: -40, el: 5, fovV: 14, distMm: 210, aim: 'drawer-front' }, to: { az: -31, el: 3, fovV: 14, distMm: 105, aim: 'drawer-front' } },
+    { name: 'macro', from: { az: -40, el: 5, fovV: 14, distMm: 420, aim: 'drawer-front' }, to: { az: -31, el: 3, fovV: 14, distMm: 210, aim: 'drawer-front' } },   // as the tabletop's (Joey 2026-10-25)
     { name: 'side', from: { az: 60, el: 2, fovV: 26, fill: 0.62 }, to: { az: 46, el: 2, fovV: 26, fill: 0.62 } },   // round the knee-space side
   ],
 };
@@ -481,11 +483,14 @@ export function contactFootprint(box, grow = 1.25) {
  * The quad stands `lift` mm off its surface for the depth test. `clip` ({ x0, x1 } about the anchor, the desk's extent)
  * cuts a DESK quad at the desk's ends and moves its texture window (u0, u1) with the cut, so a mask that reaches the
  * desk's edge and then slides outward never floats in the air past it (Sol 01a16bc5); a mask carried wholly off the
- * desk is not placed. Returns { surface, w, h, x, y, z, u0, u1, visible }, or null when the mask cannot be placed.
+ * desk is not placed. `below` (mm) carries a WALL quad down to that depth under the desk top where its bake stops short
+ * of it, the texture's bottom row drawn on down (v0 < 0, the texture clamped at its edge): the strip of wall the sun
+ * reaches through the gap behind the desk (gapDrop). Returns { surface, w, h, x, y, z, u0, u1, v0, visible }, or null
+ * when the mask cannot be placed.
  * A slid mask is exact for the sun (directional) and the sky (uniform); the window's area light, finite and 2 m away,
  * moves a caster's shadow by MORE than the slide (by 1 + h / (hL - h) on the desk: 1.12 for the mug, 2.2 for a leaf tip),
  * inside a penumbra 0.2 to 1.2 m wide, where the offset does not read (Terra 01a16bc6). */
-export function maskQuad(mask, anchor, wallZ, dx, lift = 0.5, clip = null) {
+export function maskQuad(mask, anchor, wallZ, dx, lift = 0.5, clip = null, below = 0) {
   const slide = dx == null ? 0 : dx, visible = dx !== null;
   let x0 = mask.x0 + slide, x1 = mask.x1 + slide, u0 = 0, u1 = 1;
   if (mask.surface === 'desk') {
@@ -494,9 +499,56 @@ export function maskQuad(mask, anchor, wallZ, dx, lift = 0.5, clip = null) {
       if (c1 <= c0) return null;
       u0 = (c0 - x0) / full; u1 = (c1 - x0) / full; x0 = c0; x1 = c1;
     }
-    return { surface: 'desk', w: x1 - x0, h: mask.zFront - mask.zBack, x: anchor.x + (x0 + x1) / 2, y: (anchor.y || 0) + lift, z: anchor.z + (mask.zBack + mask.zFront) / 2, u0, u1, visible };
+    return { surface: 'desk', w: x1 - x0, h: mask.zFront - mask.zBack, x: anchor.x + (x0 + x1) / 2, y: (anchor.y || 0) + lift, z: anchor.z + (mask.zBack + mask.zFront) / 2, u0, u1, v0: 0, visible };
   }
   // (anchor.y: the desk top's height, 0 for a build on it; a wall or under-table build moves the room, roomAnchor)
-  if (mask.surface === 'wall') return wallZ == null ? null : { surface: 'wall', w: x1 - x0, h: mask.y1 - mask.y0, x: anchor.x + (x0 + x1) / 2, y: (anchor.y || 0) + (mask.y0 + mask.y1) / 2, z: wallZ + lift, u0, u1, visible };
+  if (mask.surface === 'wall') {
+    if (wallZ == null) return null;
+    const y0 = below > 0 ? Math.min(mask.y0, -below) : mask.y0, v0 = (y0 - mask.y0) / (mask.y1 - mask.y0);
+    return { surface: 'wall', w: x1 - x0, h: mask.y1 - y0, x: anchor.x + (x0 + x1) / 2, y: (anchor.y || 0) + (y0 + mask.y1) / 2, z: wallZ + lift, u0, u1, v0, visible };
+  }
   return null;
+}
+/* THE STRIP OF WALL UNDER THE DESK TOP THAT THE SUN REACHES (Joey 2026-10-25: "the shadows cut off or start right at where
+ * the table is nearest the wall"): the desk stands `gap` mm off the wall, so the sun's ray over its back edge falls
+ * gap x (rise over run toward the wall) before it meets the wall: 29.9 mm in the home office (a 20 mm gap, the sun's
+ * direction 0.578 up over 0.387 toward the room). That strip is sunlit in the bake, so the shadows cast onto the wall must
+ * reach down over it or a lit line parts them from the shadows on the desk. `margin` mm more for the sun's disc. Below
+ * the strip the desk itself shades the wall in the bake. 0 when there is no gap or the sun does not come from the room. */
+export function gapDrop(sunDir, gap, margin = 3) {
+  if (!sunDir || !(gap > 0) || !(sunDir[1] > 0) || !(sunDir[2] > 0)) return 0;
+  return gap * sunDir[1] / sunDir[2] + margin;
+}
+/* THE COFFEE'S STEAM (Joey 2026-10-25: "is there anyway to add a steaming animation to the coffee?"): how it moves on each
+ * tier. The scene stops drawing when nothing moves (main.js's idle gate), so a wisp that rises at rest costs frames:
+ * - 'motion' on Very High: its accumulation builds a still shot from many frames of an unchanging scene, so the wisp
+ *   rises only while the camera moves (frames that are drawn anyway) and holds still while a still shot converges;
+ * - a frame rate on High (24) and Balanced (15): the wisp keeps rising through a hold, at that many frames a second;
+ * - 0 on Fast, and with reduced motion asked for: a still wisp.
+ * The column's size from the coffee's radius: about 2.8 radii wide and 4.6 tall (100 by 170 mm over the 36.5 mm mug).
+ * It rises off the whole surface (Joey: "wouldn't the steam be rolling off the entire coffee surface and not just a small
+ * circle in the center?"; one column from the middle, it was): `slices` camera-facing sheets stood across the coffee at
+ * these depths, in radii along the view (+ toward the camera), each as wide at its foot as the coffee's chord there
+ * (steamSlices), and a thin mist lying on the surface (`mist`, its alpha). `alpha` is a sheet's. */
+export const STEAM = { fps: { high: 24, balanced: 15 }, width: 2.8, height: 4.6, alpha: 0.6, mist: 0.16, slices: [-0.75, -0.25, 0.25, 0.75] };
+export function steamSlices(depths = STEAM.slices) {
+  return depths.map((d, i) => ({ d, half: Math.sqrt(Math.max(0, 1 - d * d)), seed: i }));
+}
+export function steamRate(tier, reduced) {
+  if (reduced || tier === 'fast') return 0;
+  if (tier === 'veryhigh') return 'motion';
+  return STEAM.fps[tier] || 0;
+}
+export function steamSize(radius) {
+  return { w: STEAM.width * radius, h: STEAM.height * radius };
+}
+/* The steam's beat (Sol 01a174d3): whether a tick falls due at `now` (ms) and when the next one does. Each falls due an
+ * interval after the last fell due, 4 ms early counting as on time (the rAF's own beat), so the tier's rate holds on
+ * average at any display rate (a 60 Hz display alternates 2 and 3 frames for High's 24, where restarting the interval
+ * at each tick settled on every third frame: 20); more than an interval late (the first tick, a stall, the steam back
+ * in the shot) starts the beat again from now. */
+export function steamBeat(now, dueAt, rate) {
+  const iv = 1000 / rate;
+  if (now < dueAt - 4) return { tick: false, dueAt };
+  return { tick: true, dueAt: now - dueAt > iv ? now + iv : dueAt + iv };
 }

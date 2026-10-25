@@ -1413,6 +1413,10 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
    back), wallZ (the GLB's wall anchor, world). Shared by the Done cases. */
 function masksPlaced(masks, roomJson, f) {
   const desk = roomJson.desk;
+  // a wall mask reaches down over the strip of wall the sun reaches under the desk top, from the room's own record
+  // (done-fit.js gapDrop, 2026-10-25: the gap behind the desk times the sun's rise over its run toward the room, + 3 mm)
+  const sun = roomJson.sun && roomJson.sun.dir, gap = desk.zBack - (roomJson.anchors.wall[2] - roomJson.anchors.tabletop[2]);
+  const drop = sun && gap > 0 && sun[1] > 0 && sun[2] > 0 ? gap * sun[1] / sun[2] + 3 : 0;
   for (const m of masks) {
     const rec = roomJson.shadows.masks.find((r) => r.group === m.group && r.surface === m.surface);
     assert.ok(rec, `${m.group}'s ${m.surface} mask is one room.json lists`);
@@ -1426,7 +1430,8 @@ function masksPlaced(masks, roomJson, f) {
     } else {
       const ex = f.anchorX + (rec.x0 + rec.x1) / 2 + dx;
       assert.ok(Math.abs(m.x - ex) < 0.01 && Math.abs(m.w - (rec.x1 - rec.x0)) < 0.01, `${m.group}'s wall quad sits at the mask's extent about the anchor plus its slide (${m.x.toFixed(1)} vs ${ex.toFixed(1)}, slide ${m.dx})`);
-      assert.ok(Math.abs(m.y - (rec.y0 + rec.y1) / 2) < 0.01 && m.z > f.wallZ && m.z - f.wallZ < 2, `${m.group}'s wall quad stands just in front of the wall (${m.y.toFixed(1)}, ${m.z.toFixed(2)} vs the wall at ${f.wallZ.toFixed(2)})`);
+      const y0 = drop > 0 ? Math.min(rec.y0, -drop) : rec.y0;
+      assert.ok(Math.abs(m.y - (y0 + rec.y1) / 2) < 0.01 && (m.h == null || Math.abs(m.h - (rec.y1 - y0)) < 0.01) && m.z > f.wallZ && m.z - f.wallZ < 2, `${m.group}'s wall quad stands just in front of the wall, down over the strip under the desk top (${m.y.toFixed(1)} vs ${((y0 + rec.y1) / 2).toFixed(1)}, ${m.z.toFixed(2)} vs the wall at ${f.wallZ.toFixed(2)})`);
     }
   }
 }
@@ -1801,10 +1806,12 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
     assert.deepEqual([n.live, n.override], [false, false], `${label}: the relief off again after the macro`);
     assert.equal(n.last, b.last, `${label}: and nothing compiled through the macro's end and the cut out of it (newest program ${b.last} -> ${n.last})`);
   };
-  /* AT THE HERO'S LANDING: booted at High, 1280 x 720, where the macro resolves only toward the end of its move (3.88 CSS
-     px a layer at its middle, 5.84 at its end, against the cutoff of 4; at 1280 x 800 the middle is 4.31 and resolves
-     too), so the look-ahead must judge a moving shot at its ends, as the cut does */
-  const hctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  /* AT THE HERO'S LANDING: booted at High, 1280 x 1080, where the macro resolves only at the end of its move (2.16 CSS px
+     a layer at its start, 2.87 at its middle, 4.30 at its end, against the cutoff of 4), so the look-ahead must judge a
+     moving shot at its ends, as the cut does. The macro was pulled back to twice its distance (Joey 2026-10-25: "maybe
+     bring it out about twice as far?"): a canvas under about 1,003 CSS px tall never resolves it (3.99 at 1000, 3.19 at
+     800, 2.87 at 720), and there the macro draws without the relief and nothing is compiled ahead */
+  const hctx = await browser.newContext({ viewport: { width: 1280, height: 1080 } });
   await hctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const hi = await open('assemble', { query: '&done=room', context: hctx });
   await enter(hi.page);
@@ -1819,8 +1826,11 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
      and so has none to compile, then Very High. Every unit's every region is given its own colour and the parts that
      belong to no unit (the covers, rails and feet, which would keep base materials) are hidden, so the clones are the
      only materials drawn and a relief flip that disposed them would throw their programs away: the cut would compile
-     again. The Foot takes the build's own TPU filament (setOverride refuses any other on a foot). */
-  const lo = await open('assemble', { query: '&done=room' });
+     again. The Foot takes the build's own TPU filament (setOverride refuses any other on a foot). As tall as the first,
+     for the macro to resolve. */
+  const lctx = await browser.newContext({ viewport: { width: 1280, height: 1080 } });
+  await lctx.addInitScript(FAST);
+  const lo = await open('assemble', { query: '&done=room', context: lctx });
   const coloured = await lo.page.evaluate(async () => {
     const v = window.__GEN2_VIEWER__;
     const uids = [...new Set(v.manifest.instances.map((i) => v.unitOf(i.id)).filter((u) => u != null))];
@@ -2043,7 +2053,8 @@ test('Assemble: the Done scene hangs a wall build on its wall and an under-table
     near(g.desk.max[1], deskY, 0.01, `${mount}: the desk top where the scene says`);
     for (const y of g.deskMasks) near(y, deskY + 0.5, 0.01, `${mount}: a prop's shadow on the desk top`);
     assert.ok(g.catcherYs.some((y) => Math.abs(y - (deskY + 0.3)) < 0.01), `${mount}: the desk's shadow catcher on the desk top (${g.catcherYs.map((y) => y.toFixed(1))} vs ${deskY.toFixed(1)})`);
-    assert.ok(g.catcherYs.some((y) => Math.abs(y - (deskY + 800)) < 0.01), `${mount}: the wall's shadow catcher over the desk top (${g.catcherYs.map((y) => y.toFixed(1))})`);
+    // the wall's, reaching down over the strip of wall under the desk top (done-fit.js gapDrop), its centre half that lower
+    assert.ok(g.placement.gapDrop > 25 && g.catcherYs.some((y) => Math.abs(y - (deskY + 800 - g.placement.gapDrop / 2)) < 0.01), `${mount}: the wall's shadow catcher over the desk top, down over the strip under it (${g.catcherYs.map((y) => y.toFixed(1))}, the strip ${g.placement.gapDrop})`);
     // the hero from about the build's own height (the bake's hero, for a build on the desk, looks down from 20 degrees)
     const hero = g.fits.find((f) => f.name === 'hero'), c = g.build.min.map((v, i) => (v + g.build.max[i]) / 2);
     const heroEl = Math.atan2(hero.y - c[1], Math.hypot(hero.x - c[0], hero.z - c[2])) * 180 / Math.PI;
@@ -2161,6 +2172,8 @@ test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark
     window.__diff = (a, b) => { let darker = 0, lighter = 0, sum = 0; for (let i = 0; i < a.length; i += 4) { const d = (b[i] + b[i + 1] + b[i + 2]) - (a[i] + a[i + 1] + a[i + 2]); sum += d; if (d > 24) lighter++; else if (d < -24) darker++; } return { darker, lighter, mean: +(sum / (a.length / 4) / 3).toFixed(3), px: a.length / 4 }; };
     // every room material's share of the walls' bounce, off (kept) and back
     window.__bounceOff = (off) => v.scene.getObjectByName('done-room').traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { const b = m.userData.bounce; if (!b) continue; if (off) { b.saved = b.k.clone(); b.k.set(0, 0, 0); } else if (b.saved) { b.k.copy(b.saved); delete b.saved; } } });
+    // the coffee's steam keeps rising on High: out of these frames, which compare colours (its own case reads it)
+    for (const n of ['done-steam', 'done-steam-mist']) { const o = v.scene.getObjectByName(n); if (o) o.visible = false; }
   });
   // THE BAKE'S OWN COLOURS draw the bake itself: every surface its own lightmap at its baked colour, no bounce taken off
   const def = await page.evaluate(async () => {
@@ -2186,10 +2199,14 @@ test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark
     const lit = await window.__frame();
     window.__bounceOff(true); const flat = await window.__frame(); window.__bounceOff(false);
     window.__navy = lit;
-    return { read, wall: window.__diff(window.__white, lit), bounce: window.__diff(flat, lit), saved: localStorage.getItem('gen2-room-colours'), pressed: [...document.querySelectorAll('#ws-scene-colours [aria-pressed="true"]')].map((b) => b.getAttribute('aria-label')) };
+    const held = window.__GEN2_VIEWER__.scene.environment;
+    return { read, held: held ? held.uuid : null, wall: window.__diff(window.__white, lit), bounce: window.__diff(flat, lit), saved: localStorage.getItem('gen2-room-colours'), pressed: [...document.querySelectorAll('#ws-scene-colours [aria-pressed="true"]')].map((b) => b.getAttribute('aria-label')) };
   });
   assert.equal(navy.read.wall, 'navy');
   assert.equal(navy.read.envs, def.read.envs + 1, 'the room captured again as the build\'s environment');
+  // ... and held by the stage as its environment, the one the build reflects, not the capture just disposed (a mutant that
+  // kept the old hold after a change passed this case before, 2026-10-25)
+  assert.equal(navy.held, navy.read.env, 'the stage holds the new capture as the scene\'s environment');
   assert.ok(navy.wall.darker > navy.wall.px * 0.3, `the wall goes navy (${JSON.stringify(navy.wall)})`);
   assert.ok(navy.read.bounce.desk.every((v) => v > 0) && navy.read.bounce.floor.every((v) => v > 0), `the desk and the floor lose the walls' bounce (${JSON.stringify(navy.read.bounce)})`);
   assert.ok(navy.bounce.darker > navy.bounce.px * 0.02 && navy.bounce.lighter * 10 < navy.bounce.darker, `and darken in the frame (${JSON.stringify(navy.bounce)})`);
@@ -2249,6 +2266,256 @@ test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark
   await page.locator('#ws-colors .stage button:has-text("Room")').click();
   await page.waitForFunction(() => !!document.querySelector('#ws-colors .roomc'), null, { timeout: 60_000 }).catch(() => assert.fail('the Room stage brought no wall and desk control'));
   assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ws-colors .roomc [aria-pressed="true"]')].map((b) => b.getAttribute('aria-label'))), ['Wall: Navy', 'Desk: White'], 'Colors\' Room stage shows the same choice');
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
+});
+
+/* THE SHADOWS RUN FROM THE DESK ONTO THE WALL (2026-10-25; Joey: "the way the shadows cut off or start right at where the
+   table is nearest the wall, i see it for both the plant and build shadows"). The desk stands 20 mm off the wall, and the
+   sun reaches a strip of wall under the desk top through that gap; the build's wall catcher and the props' wall masks
+   stopped above it, so a lit line parted the shadow on the desk from the one on the wall. They reach down over the strip
+   now (done-fit.js gapDrop): read off the catcher and the masks as drawn, and off the frame, the catcher put back to its
+   old extent for one frame. */
+test('Assemble: the Done scene\'s shadows run from the desk top onto the wall, over the strip of wall the sun reaches under the desk top', async () => {
+  const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+  const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 });
+  await page.evaluate(() => { window.__GEN2_DONE__.setTiming({ holdMs: 1e9, maxFrameMs: 1e9, seed: 1 }); window.__GEN2_DONE__.jump('top'); });
+  await settle(page, 800);
+  // the strip, from the room's own record: the gap behind the desk times the sun's rise over its run toward the room, + 3 mm
+  const rec = await page.evaluate(() => fetch('scenes/home-office/room.json').then((r) => r.json()));
+  const gap = rec.desk.zBack - (rec.anchors.wall[2] - rec.anchors.tabletop[2]);
+  const want = gap * rec.sun.dir[1] / rec.sun.dir[2] + 3;
+  const st = await page.evaluate(() => ({ place: window.__GEN2_DONE__.placement, shadows: window.__GEN2_DONE__.shadows }));
+  near(st.place.gapDrop, want, 1e-3, 'the strip the sun reaches under the desk top');
+  assert.ok(gap > 0 && st.place.gapDrop > 25 && st.place.gapDrop < 40, `about 33 mm in this room (${st.place.gapDrop}, the gap ${gap} mm)`);
+  near(st.place.wallCatcherBottom, st.place.deskY - want, 1e-3, 'the build\'s wall catcher reaches down over it');
+  const walls = st.shadows.filter((s) => s.surface === 'wall' && s.visible);
+  assert.ok(walls.length >= 1, 'the props cast onto the wall');
+  for (const s of walls) {
+    assert.ok(s.y - s.h / 2 <= st.place.deskY - want + 1e-3, `the ${s.group}'s wall mask reaches down over it (${s.y - s.h / 2})`);
+    assert.ok(s.vMin < 0, `drawing its own bottom row on down, not its picture stretched (vMin ${s.vMin})`);
+  }
+  // the picture: the wall catcher back at its old extent, from the desk top up, for one frame; drawn as it is, the strip under
+  // the desk top is darker where the build's shadow crosses it, and nothing is lighter
+  const diff = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__;
+    let wall = null; v.scene.traverse((o) => { if (o.isMesh && o.material && o.material.isShadowMaterial && o.geometry.parameters.height > 1600) wall = o; });
+    const steam = ['done-steam', 'done-steam-mist'].map((n) => v.scene.getObjectByName(n)).filter(Boolean);
+    for (const o of steam) o.visible = false;   // it keeps rising on High: out of the two frames compared
+    const frame = async () => {
+      v.renderer.shadowMap.needsUpdate = true; v.invalidateFrame();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const img = new Image(); img.src = v.renderer.domElement.toDataURL('image/png'); await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, c.width, c.height).data;
+    };
+    const now = await frame();
+    const h = wall.geometry.parameters.height, y = wall.position.y, drop = h - 1600;
+    wall.scale.y = 1600 / h; wall.position.y = y + drop / 2;
+    const old = await frame();
+    wall.scale.y = 1; wall.position.y = y; for (const o of steam) o.visible = true; v.invalidateFrame();
+    let darker = 0, lighter = 0;
+    for (let i = 0; i < now.length; i += 4) { const d = (now[i] + now[i + 1] + now[i + 2]) - (old[i] + old[i + 1] + old[i + 2]); if (d < -24) darker++; else if (d > 24) lighter++; }
+    return { darker, lighter, drop, px: now.length / 4 };
+  });
+  assert.ok(diff.darker > 1500 && diff.lighter === 0, `the strip under the desk top in the build's shadow (${JSON.stringify(diff)}; 4609 px when written)`);
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
+});
+
+/* THE DESK'S SHEEN AND THE COFFEE'S STEAM (2026-10-25). Joey: "the black desk feels like a void? maybe a slight sheen or
+   reflection on the table surface?", and "is there anyway to add a steaming animation to the coffee?". A plain desk's
+   coat reflects the room's environment (done.js addSheen); the oak and the walnut stay matte. Read off the material and
+   off the frame (the sheen taken off for one frame), and again after the wall changes, when the room is captured again
+   and the desk must reflect the new capture. The steam (makeSteam, done-fit.js steamRate) rises at High's 24 frames a
+   second while it is in the shot, and the held shot draws no more than that (it drew 120 a second when each of the
+   steam's frames invalidated the picture: the idle gate stayed open; a software runner draws slower than either, so
+   there this bound cannot fail); it changes nothing in the frame outside its own column, stops with its mug hidden or
+   out of the shot, holds still on Fast, and on Very High rises only while the camera moves, so a still shot converges. */
+test('Assemble: the Done scene\'s plain desk reflects the room and the oak does not; the coffee steams at its tier\'s rate, in its own column only', async () => {
+  const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+  const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 });
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1e9, maxFrameMs: 1e9, seed: 1 }));   // the hero, held
+  await settle(page, 800);
+  await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    window.__frame = async () => {
+      v.renderer.shadowMap.needsUpdate = true; v.invalidateFrame();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const img = new Image(); img.src = v.renderer.domElement.toDataURL('image/png'); await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, c.width, c.height).data;
+    };
+    window.__diff = (a, b) => { let darker = 0, lighter = 0; for (let i = 0; i < a.length; i += 4) { const d = (b[i] + b[i + 1] + b[i + 2]) - (a[i] + a[i + 1] + a[i + 2]); if (d > 24) lighter++; else if (d < -24) darker++; } return { darker, lighter, px: a.length / 4 }; };
+    window.__desk = () => [].concat(v.scene.getObjectByName('done-room').getObjectByName('desk_top').material).find((m) => m.userData.sheen);
+    /* the steam over `ms`: its ticks, its clock, its uniform's, the stage's frames drawn, and its calls for a frame
+       (stage.drawNextFrame, counted on the way through: on a slow runner the frames drawn cannot tell them apart from the
+       once-a-second safety net, Sol 01a174d3) */
+    window.__steamOver = async (ms) => {
+      const d = window.__GEN2_DONE__, a = d.steam, ia = v.idleStats(), t0 = performance.now(), next = v.drawNextFrame;
+      let calls = 0; v.drawNextFrame = () => { calls++; next(); };
+      try { await new Promise((r) => setTimeout(r, ms)); } finally { v.drawNextFrame = next; }
+      const b = d.steam, ib = v.idleStats();
+      return { rate: b.rate, shown: b.shown, ticks: b.ticks - a.ticks, calls, t: +(b.t - a.t).toFixed(3), uTime: +(b.uTime - a.uTime).toFixed(3), drawn: ib.drawn - ia.drawn, ms: Math.round(performance.now() - t0) };
+    };
+  });
+  // THE OAK: matte, no environment on the desk
+  const oak = await page.evaluate(() => window.__GEN2_DONE__.colours);
+  assert.deepEqual([oak.desk, oak.deskSheen], ['oak', { on: 0, rough: 0.35, env: false, current: false }], 'the oak: no sheen');
+  // A BLACK DESK reflects the room: lighter where it shows the lit room, and next to nowhere darker
+  await page.evaluate(() => window.__GEN2_DONE__.setRoomColours({ wall: 'white', desk: 'black' }));
+  await settle(page, 600);
+  const black = await page.evaluate(async () => {
+    const read = window.__GEN2_DONE__.colours, m = window.__desk();
+    const steam = ['done-steam', 'done-steam-mist'].map((n) => window.__GEN2_VIEWER__.scene.getObjectByName(n));
+    for (const o of steam) o.visible = false;   // the sheen the one difference between the two frames (Sol 01a174d3): the steam keeps rising on High
+    const lit = await window.__frame();
+    m.userData.sheen.on.value = 0; const flat = await window.__frame(); m.userData.sheen.on.value = 1; for (const o of steam) o.visible = true; window.__GEN2_VIEWER__.invalidateFrame();
+    // the lift by where it lands: the pixels lifted strongly, and the mean lift over the upper (farther, more grazing) half
+    // of the lifted pixels against the lower
+    let strong = 0; const rows = [];
+    const w = window.__GEN2_VIEWER__.renderer.domElement.width;
+    for (let i = 0; i < lit.length; i += 4) { const d = (lit[i] + lit[i + 1] + lit[i + 2]) - (flat[i] + flat[i + 1] + flat[i + 2]); if (d > 120) strong++; if (d > 24) rows.push([Math.floor(i / 4 / w), d]); }
+    rows.sort((p, q) => p[0] - q[0]);
+    const half = Math.floor(rows.length / 2), mean = (a) => a.reduce((s, p) => s + p[1], 0) / Math.max(1, a.length);
+    return { read, diff: window.__diff(flat, lit), strong, far: +mean(rows.slice(0, half)).toFixed(1), near: +mean(rows.slice(half)).toFixed(1) };
+  });
+  assert.deepEqual([black.read.desk, black.read.deskMap], ['black', 'light'], 'the black desk, from its light-only map');
+  assert.deepEqual(black.read.deskSheen, { on: 1, rough: 0.35, env: true, current: true }, 'its sheen on, reflecting the room as captured last');
+  assert.ok(black.diff.lighter > black.diff.px * 0.02 && black.diff.darker * 20 < black.diff.lighter, `and drawn: the desk lighter for the room it reflects (${JSON.stringify(black.diff)})`);
+  /* most toward grazing, as a coat's Fresnel rises (measured when written: 46,275 of 151,518 lifted pixels by over 120,
+     the far half 131 against the near half's 68; held at the normal's 0.04 throughout, 4 pixels and 47 against 36) */
+  assert.ok(black.strong > black.diff.lighter * 0.1 && black.far > black.near * 1.5, `and most toward grazing (${JSON.stringify({ strong: black.strong, lighter: black.diff.lighter, far: black.far, near: black.near })})`);
+  // A NEW WALL: the room captured again, and the desk reflects the new capture, not the one disposed
+  await page.evaluate(() => window.__GEN2_DONE__.setRoomColours({ wall: 'navy', desk: 'black' }));
+  await settle(page, 600);
+  const navy = await page.evaluate(() => window.__GEN2_DONE__.colours);
+  assert.equal(navy.envs, black.read.envs + 1, 'the room captured again');
+  assert.deepEqual(navy.deskSheen, { on: 1, rough: 0.35, env: true, current: true }, 'and the desk reflects the new capture');
+  // THE WALNUT: matte again, its environment dropped
+  await page.evaluate(() => window.__GEN2_DONE__.setRoomColours({ wall: 'navy', desk: 'walnut' }));
+  await settle(page, 600);
+  assert.deepEqual((await page.evaluate(() => window.__GEN2_DONE__.colours)).deskSheen, { on: 0, rough: 0.35, env: false, current: false }, 'the walnut: no sheen');
+  // THE STEAM, on High at the held hero: its foot on the coffee's top, 2.8 by 4.6 of the mug's radii, a ghost to the AO and
+  // the outline
+  const st = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, c = v.scene.getObjectByName('done-room').getObjectByName('coffee');
+    c.geometry.computeBoundingBox(); const b = c.geometry.boundingBox.clone().applyMatrix4(c.matrixWorld);
+    return { steam: window.__GEN2_DONE__.steam, coffee: { x: (b.min.x + b.max.x) / 2, y: b.max.y, z: (b.min.z + b.max.z) / 2, r: (b.max.x - b.min.x) / 2 } };
+  });
+  assert.deepEqual([st.steam.rate, st.steam.shown, st.steam.ghost], [24, true, true], 'High: 24 frames a second, shown, a ghost');
+  near(st.steam.foot[0], st.coffee.x, 0.5, 'its foot over the coffee (x)');
+  near(st.steam.foot[2], st.coffee.z, 0.5, 'its foot over the coffee (z)');
+  near(st.steam.foot[1], st.coffee.y, 1.5, 'on the coffee\'s top');
+  near(st.steam.w, 2.8 * st.coffee.r, 1, 'its width off the mug');
+  near(st.steam.h, 4.6 * st.coffee.r, 1.5, 'its height off the mug');
+  assert.equal(st.steam.sheets, 4, 'four sheets stood across the coffee');
+  assert.deepEqual([st.steam.mist.on, st.steam.mist.ghost, st.steam.mist.clock], [true, true, true], 'and a mist on it, a ghost, on the same clock');
+  near(st.steam.mist.at[0], st.coffee.x, 0.5, 'the mist over the coffee (x)');
+  near(st.steam.mist.at[2], st.coffee.z, 0.5, 'the mist over the coffee (z)');
+  near(st.steam.mist.at[1], st.coffee.y + 1.5, 0.5, 'the mist 1.5 mm over its surface');
+  await page.waitForFunction(() => { const v = window.__GEN2_VIEWER__; return !v.aoWanted() || (!v.ao.blocked && v.ao.passes >= (v.ao.accumMax || 0)); }, null, { timeout: 60_000 });   // High's AO converged: the frames below differ by the steam alone
+  const high = await page.evaluate(() => window.__steamOver(2000));
+  // at least one frame and some time, not more (Sol 01a174d3): a software runner's frames can come 700 ms apart, and the
+  // clock takes at most 0.1 s a frame
+  assert.ok(high.ticks >= 1 && high.ticks <= 24 * high.ms / 1000 + 2, `it rises at no more than 24 frames a second (${JSON.stringify(high)})`);
+  assert.ok(high.uTime > 0 && high.t <= high.ms / 1000 + 0.05, `its clock runs, no faster than time (${JSON.stringify(high)})`);
+  assert.equal(high.calls, high.ticks, `each tick asks the stage for its frame (${JSON.stringify(high)})`);
+  assert.ok(high.drawn >= high.ticks - 2 && high.drawn <= 24 * high.ms / 1000 + 8, `and the held shot draws the frames it asks for, each of them, not the display's rate (${JSON.stringify(high)})`);
+  /* two frames 400 ms apart: the steam moved, inside its own volume (a box of its width round its foot, its height), and
+     nothing else in the frame changed. And where it stands just over the coffee (a band from the coffee's far edge, above
+     the mist, up a sixth of the steam's height), drawn against the same frame without it at three moments: it covers most
+     of the coffee's width (a column counts where the steam adds at least 30 % of the most it adds in the band), not one
+     column up from the middle, its first form */
+  const col = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, cam = v.camera, el = v.renderer.domElement, s = window.__GEN2_DONE__.steam;
+    const a = await window.__frame(); await new Promise((r) => setTimeout(r, 400)); const b = await window.__frame();
+    const f = new T.Vector3(...s.foot), r = s.w / 2.8;
+    const scr = (p) => { const q = p.clone().project(cam); return [(q.x + 1) / 2 * el.width, (1 - q.y) / 2 * el.height]; };
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const dx of [-s.w / 2, s.w / 2]) for (const dz of [-s.w / 2, s.w / 2]) for (const dy of [0, s.h]) {
+      const [px, py] = scr(f.clone().add(new T.Vector3(dx, dy, dz)));
+      x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+    }
+    let inside = 0, outside = 0;
+    for (let y = 0; y < el.height; y++) for (let x = 0; x < el.width; x++) {
+      const i = (y * el.width + x) * 4;
+      if (Math.abs((b[i] + b[i + 1] + b[i + 2]) - (a[i] + a[i + 1] + a[i + 2])) <= 6) continue;
+      if (x >= x0 - 3 && x <= x1 + 3 && y >= y0 - 3 && y <= y1 + 3) inside++; else outside++;
+    }
+    const toCam = cam.position.clone().sub(f); toCam.y = 0; toCam.normalize();
+    const right = new T.Vector3(toCam.z, 0, -toCam.x);
+    const far = scr(f.clone().addScaledVector(toCam, -r)), top = scr(f.clone().add(new T.Vector3(0, s.h / 6, 0)));
+    const xl = scr(f.clone().addScaledVector(right, -r))[0], xr = scr(f.clone().addScaledVector(right, r))[0];
+    const bx0 = Math.round(Math.min(xl, xr)), bx1 = Math.round(Math.max(xl, xr)), by0 = Math.round(top[1]), by1 = Math.round(far[1]) - 2;
+    const steam = ['done-steam', 'done-steam-mist'].map((n) => v.scene.getObjectByName(n));
+    const add = new Float32Array(bx1 - bx0 + 1);
+    for (let k = 0; k < 3; k++) {
+      const on = await window.__frame();
+      for (const o of steam) o.visible = false;
+      const off = await window.__frame();
+      for (const o of steam) o.visible = true;
+      for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) { const i = (y * el.width + x) * 4; add[x - bx0] = Math.max(add[x - bx0], (on[i] + on[i + 1] + on[i + 2]) - (off[i] + off[i + 1] + off[i + 2])); }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    const most = Math.max(...add), across = add.filter((d) => d >= 0.3 * most).length / add.length;
+    return { inside, outside, across: +across.toFixed(3), most, band: [bx0, by0, bx1, by1], rect: [x0, y0, x1, y1].map(Math.round) };
+  });
+  assert.ok(col.inside > 50 && col.outside === 0, `the steam moved in its own volume, and nothing else in the frame changed (${JSON.stringify(col)})`);
+  assert.ok(col.band[3] > col.band[1] && col.most > 20 && col.across >= 0.75, `just over the coffee the steam covers most of its width (${JSON.stringify(col)})`);
+  // OUT OF THE SHOT (the macro, on the drawer's face): no frames, its clock stopped; and with its mug hidden, the same
+  await page.evaluate(() => window.__GEN2_DONE__.jump('macro'));
+  await settle(page, 600);
+  const away = await page.evaluate(() => window.__steamOver(1500));
+  assert.deepEqual([away.ticks, away.calls, away.t], [0, 0, 0], `out of the shot it asks for no frames and its clock stops (${JSON.stringify(away)})`);
+  await page.evaluate(() => window.__GEN2_DONE__.jump('hero'));
+  await settle(page, 600);
+  const hidden = await page.evaluate(async () => {
+    const c = window.__GEN2_VIEWER__.scene.getObjectByName('done-room').getObjectByName('coffee');
+    c.visible = false; await new Promise((r) => setTimeout(r, 200));
+    const r = await window.__steamOver(1500);
+    c.visible = true; window.__GEN2_VIEWER__.invalidateFrame();
+    return r;
+  });
+  assert.deepEqual([hidden.shown, hidden.ticks, hidden.calls, hidden.t], [false, 0, 0, 0], `with its mug hidden it asks for no frames (${JSON.stringify(hidden)})`);
+  // FAST: a still wisp
+  await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('fast', { user: true }));
+  await settle(page, 800);
+  const fast = await page.evaluate(() => window.__steamOver(1500));
+  assert.deepEqual([fast.rate, fast.ticks, fast.calls, fast.t], [0, 0, 0, 0], `Fast: a still wisp (${JSON.stringify(fast)})`);
+  // VERY HIGH: still through a still shot, whose mean converges where this runner's accumulator runs; rising through a
+  // moving one, on the frames its move draws, asking for none of its own
+  await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }));
+  await settle(page, 800);
+  await page.evaluate(() => window.__GEN2_DONE__.jump('hero'));
+  await settle(page, 800);
+  const vh = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, r = await window.__steamOver(1500);
+    let converged = null;
+    if (v.acc.ok) { const t0 = performance.now(); while (v.acc.n < v.accTotal() && performance.now() - t0 < 90_000) await new Promise((ok) => setTimeout(ok, 100)); converged = v.acc.n >= v.accTotal(); }   // the lens case's 90 s
+    return { ...r, ok: v.acc.ok, converged };
+  });
+  assert.deepEqual([vh.rate, vh.ticks, vh.calls, vh.t], ['motion', 0, 0, 0], `Very High, a still shot: the wisp holds (${JSON.stringify(vh)})`);
+  if (vh.ok) assert.equal(vh.converged, true, `and the still shot's mean converges (${JSON.stringify(vh)})`);
+  await page.evaluate(() => { const d = window.__GEN2_DONE__; d.setTiming({ holdMs: 4000, maxFrameMs: 1e9, seed: 1 }); d.jump('slide'); });
+  const mv = await page.evaluate(() => window.__steamOver(1500));
+  assert.ok(mv.uTime > 0 && mv.ticks === 0 && mv.calls === 0, `a moving shot on Very High: the wisp rises with the camera's move, asking for no frames of its own (${JSON.stringify(mv)})`);
   assert.deepEqual(clean(errors), [], 'no errors');
   await ctx.close();
 });

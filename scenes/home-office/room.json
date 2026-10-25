@@ -198,7 +198,7 @@
   }
  ],
  "glb": "room.glb",
- "glbBytes": 627612,
+ "glbBytes": 589504,
  "shadows": {
   "px": 2.0,
   "bakedWithoutProps": true,
@@ -332,7 +332,7 @@
  },
  "bounce": {
   "file": "wall-bounce.webp",
-  "bytes": 133532,
+  "bytes": 127432,
   "size": [
    1024,
    952
@@ -370,7 +370,7 @@
      256,
      256
     ],
-    "scale": 4.07108,
+    "scale": 4.06439,
     "factor": 4
    },
    "wall_back": {
@@ -382,7 +382,7 @@
      256,
      256
     ],
-    "scale": 1.68555,
+    "scale": 1.7097,
     "factor": 4
    },
    "desk_top:light": {
@@ -550,7 +550,7 @@
      128,
      128
     ],
-    "scale": 3.06929,
+    "scale": 2.90224,
     "factor": 4
    },
    "wall_left_b": {
@@ -562,7 +562,7 @@
      128,
      128
     ],
-    "scale": 1.85508,
+    "scale": 1.88399,
     "factor": 4
    },
    "wall_left_c": {
@@ -574,7 +574,7 @@
      128,
      128
     ],
-    "scale": 1.92802,
+    "scale": 1.98776,
     "factor": 4
    },
    "wall_left_d": {
@@ -586,7 +586,7 @@
      128,
      128
     ],
-    "scale": 2.23419,
+    "scale": 2.27948,
     "factor": 4
    },
    "win_head": {
@@ -598,7 +598,7 @@
      128,
      128
     ],
-    "scale": 1.19357,
+    "scale": 1.2878,
     "factor": 2
    },
    "win_jamb_a": {
@@ -610,7 +610,7 @@
      128,
      128
     ],
-    "scale": 1.6677,
+    "scale": 1.71707,
     "factor": 2
    },
    "win_jamb_b": {
@@ -622,7 +622,7 @@
      128,
      128
     ],
-    "scale": 1.08923,
+    "scale": 1.1057,
     "factor": 2
    },
    "win_sill": {
@@ -634,7 +634,7 @@
      128,
      128
     ],
-    "scale": 1.14862,
+    "scale": 1.15455,
     "factor": 2
    },
    "leaf_0": {
@@ -818,6 +818,105 @@
     "factor": 2
    }
   },
-  "readBack": 0.00536
+  "readBack": 0.00534
+ },
+ "smoothed": {
+  "meshes": [
+   "wall_back",
+   "wall_left_a",
+   "wall_left_b",
+   "wall_left_c",
+   "wall_left_d",
+   "floor",
+   "win_sill",
+   "win_head",
+   "win_jamb_a",
+   "win_jamb_b"
+  ],
+  "filter": "blur5 over each map's covered texels, a half-level dither, WebP 82",
+  "bytes": {
+   "wall_back": [
+    31120,
+    15044
+   ],
+   "wall_left_a": [
+    5392,
+    3260
+   ],
+   "wall_left_b": [
+    6884,
+    4598
+   ],
+   "wall_left_c": [
+    5036,
+    4864
+   ],
+   "wall_left_d": [
+    6660,
+    3988
+   ],
+   "floor": [
+    11914,
+    6918
+   ],
+   "win_sill": [
+    5404,
+    2100
+   ],
+   "win_head": [
+    4088,
+    2408
+   ],
+   "win_jamb_a": [
+    4610,
+    1862
+   ],
+   "win_jamb_b": [
+    4736,
+    2694
+   ]
+  },
+  "fineDetail": {
+   "wall_back": [
+    6.687,
+    3.23
+   ],
+   "wall_left_a": [
+    10.036,
+    4.399
+   ],
+   "wall_left_b": [
+    13.18,
+    7.296
+   ],
+   "wall_left_c": [
+    14.502,
+    9.553
+   ],
+   "wall_left_d": [
+    10.029,
+    7.353
+   ],
+   "floor": [
+    3.636,
+    1.255
+   ],
+   "win_sill": [
+    9.464,
+    5.117
+   ],
+   "win_head": [
+    11.477,
+    7.264
+   ],
+   "win_jamb_a": [
+    11.861,
+    7.463
+   ],
+   "win_jamb_b": [
+    12.997,
+    8.358
+   ]
+  }
  }
 }

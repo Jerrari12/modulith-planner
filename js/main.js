@@ -1956,6 +1956,12 @@ function accCamStore() {
    var is callable from the first line of the file. */
 var accRev = 0;
 function invalidateFrame() { accRev++; }
+/* ONE FRAME, NOTHING ELSE CHANGED (the Done scene's steam, 2026-10-25): a caller that animates at its own rate asks for
+   exactly the next frame. invalidateFrame() says the picture changed: Very High's mean starts over, and the idle gate
+   draws every frame for IDLE_SETTLE_MS after it, so a wisp that called it 24 times a second held a still High shot at
+   the display's rate (120 frames a second on a 120 Hz screen, measured; 5 with the mug hidden). Not for Very High: a
+   held mean is blitted, not drawn again, so a change there must invalidate. */
+function drawNextFrame() { idle.force = true; }
 /* Equal-area disk, deterministic, index 0 at the CENTRE.
    ⚠ NOT random. Sixteen random directions read as sixteen ghost shadows rather
    than one soft one. A golden-angle spiral at r = sqrt(i/(n-1)) covers the disc
@@ -11322,7 +11328,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     /* the moving-frame savings' switches (2026-09-14) and what they work on, so a harness can measure the viewer with
        and without each in one page and prove the image unchanged - see MOVE_OPT */
     moveOpt: MOVE_OPT, dimCover, shadowWatch, get cavityClones() { return cavity.clones; },   // ground.seen: see `ground`
-    acc, accumFrame, accVerify, invalidateFrame, accWanted,
+    acc, accumFrame, accVerify, invalidateFrame, drawNextFrame, accWanted,
     get accSamples() { return acc.n; }, ACC_SAMPLES, ACC_WARMUP,
     get sunHalfDeg() { return ACC_SUN_HALF_DEG; },
     setSunHalfDeg(v) { ACC_SUN_HALF_DEG = +v; acc.blocked = true; },

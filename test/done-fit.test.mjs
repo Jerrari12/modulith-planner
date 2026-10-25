@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -97,8 +97,11 @@ test('the grammar\'s shots: eight distinct cameras, four still and four moving, 
   const macro = shots.find((s) => s.name === 'macro');
   close(cams.macro.distance, (macro.from.distMm + macro.to.distMm) / 2, 1e-9, 'the macro is a set distance from its corner (the middle of its push)');
   const end = fitShot(mixShot(macro, 1), box, view, null, aims);
-  const layerPx = 0.2 * (800 / 2) / Math.tan((end.fov * Math.PI) / 360) / end.distance;
-  assert.ok(layerPx >= 4, `at the end of its push a 0.2 mm layer spans the relief's 4 px cutoff (${layerPx.toFixed(1)} px): the lines show`);
+  /* twice as far as it first ended (Joey 2026-10-25: "a bit too zoomed in ... maybe bring it out about twice as far?"): a
+     0.2 mm layer at the end of its push spans the relief's 4 px cutoff on a tall canvas only (1080 CSS px), not at 800 */
+  const layerPx = (h) => 0.2 * (h / 2) / Math.tan((end.fov * Math.PI) / 360) / end.distance;
+  close(end.distance, 210, 1e-9, 'it ends 210 mm off its corner');
+  assert.ok(layerPx(800) < 4 && layerPx(1080) >= 4, `the layer lines show at its end on a 1080 px canvas (${layerPx(1080).toFixed(2)} px), not on an 800 px one (${layerPx(800).toFixed(2)})`);
   assert.deepEqual(cams.macro.target, aims.front, 'aimed at the spot on the drawer unit\'s face');
   close(cams.detail.target.x, box.min.x + 0.25 * 176, 1e-9, 'the detail shot looks at the drawer unit, as before');
   // with no drawer unit the macro frames the build closely instead (it has nothing of its own to aim at)
@@ -291,6 +294,21 @@ test('maskQuad: a desk mask lies on the desk about the anchor and slides with it
   close(wq2.w, 400, 1e-9, 'a wall mask is not cut'); close(wq2.u0, 0, 1e-9, 'u0'); close(wq2.u1, 1, 1e-9, 'u1');
 });
 
+test('the strip of wall under the desk top that the sun reaches through the gap: the wall masks reach down over it, their bottom row drawn on', () => {
+  // the home office: the desk's back edge 20 mm off the wall, the sun (room.json sun.dir) 578 up over 387 toward the room
+  close(gapDrop([-718.308, 578.014, 387.213], 20), 20 * 578.014 / 387.213 + 3, 1e-9, '29.9 mm, and 3 for the sun\'s disc');
+  close(gapDrop([0, 1, 1], 20, 0), 20, 1e-12, 'a 45 degree sun falls as far as the gap');
+  for (const [dir, gap, why] of [[[0, 1, 1], 0, 'no gap'], [[0, 1, -1], 20, 'a sun behind the wall'], [[0, -1, 1], 20, 'a sun below the horizon'], [null, 20, 'no sun']]) assert.equal(gapDrop(dir, gap), 0, why);
+  const anchor = { x: 100, z: -50 }, wallZ = -94;
+  const wall = { group: 'plant', surface: 'wall', x0: -700, x1: -300, y0: -20, y1: 500 };
+  const q = maskQuad(wall, anchor, wallZ, 0, 0.5, null, 33);
+  close(q.h, 533, 1e-9, 'reaches 33 mm under the desk top, from its baked -20'); close(q.y, (-33 + 500) / 2, 1e-9, 'its centre moves down with it');
+  close(q.v0, -13 / 520, 1e-12, 'the texture window starts 13 mm (in the mask\'s scale) under its bottom row');
+  const same = maskQuad(wall, anchor, wallZ, 0, 0.5, null, 10);
+  close(same.h, 520, 1e-9, 'a mask baked deeper than the strip keeps its own extent'); close(same.v0, 0, 1e-12, 'v0 0');
+  assert.equal(maskQuad({ group: 'plant', surface: 'desk', x0: 0, x1: 100, zBack: -25, zFront: 381 }, anchor, wallZ, 0, 0.5, null, 33).v0, 0, 'a desk mask is never carried down');
+});
+
 test('reliefResolves: the layers can span the shader\'s cutoff only when the build is near; the nearest point of the box decides, not its centre', () => {
   const box = { min: { x: -100, y: 0, z: -100 }, max: { x: 100, y: 200, z: 100 } };
   const view = { width: 1280, height: 800 };
@@ -449,4 +467,54 @@ test('room colours: the desk is its oak, a tint of it over its baked albedo, or 
   assert.deepEqual(deskLook('#336699', DESK_LIGHT).colour, hexToLinear('#336699'), 'a hex of the visitor\'s own is a plain colour');
   assert.equal(deskLook('white', null), null, 'no light-only map: no plain colour');
   assert.equal(deskLook('walnut', { scale: 1 }), null, 'no baked albedo: no tint');
+});
+
+test('the coffee\'s steam: it rises with the camera\'s moves on Very High, at the tier\'s frame rate on High and Balanced, not at all on Fast or with reduced motion; its column sized off the mug', () => {
+  assert.equal(steamRate('veryhigh', false), 'motion', 'Very High: on the frames the camera\'s own move draws');
+  assert.equal(steamRate('high', false), 24, 'High: 24 frames a second');
+  assert.equal(steamRate('balanced', false), 15, 'Balanced: 15');
+  assert.equal(steamRate('fast', false), 0, 'Fast: a still wisp');
+  for (const t of ['veryhigh', 'high', 'balanced', 'fast']) assert.equal(steamRate(t, true), 0, `${t} with reduced motion: a still wisp`);
+  assert.equal(steamRate('ultra', false), 0, 'a tier it does not know: still');
+  assert.deepEqual(STEAM.fps, { high: 24, balanced: 15 });
+  const s = steamSize(36.5);   // the room's mug
+  close(s.w, 2.8 * 36.5, 1e-9, 'about 2.8 radii wide');
+  close(s.h, 4.6 * 36.5, 1e-9, 'and 4.6 tall');
+  assert.ok(s.w > 95 && s.w < 110 && s.h > 160 && s.h < 175, `about 100 by 170 mm over the mug (${s.w} x ${s.h})`);
+});
+
+test('the coffee\'s steam rises off the whole surface: four sheets stood across it, each as wide at its foot as the coffee\'s chord there, over a fainter mist', () => {
+  const s = steamSlices();
+  assert.deepEqual(s.map((c) => c.d), [-0.75, -0.25, 0.25, 0.75], 'front to back across the coffee, in radii');
+  for (const c of s) close(c.half, Math.sqrt(1 - c.d * c.d), 1e-12, `the chord's half-width at ${c.d}`);
+  close(s[0].half, 0.6614, 1e-4, 'the outer sheets about two thirds of the radius');
+  close(s[1].half, 0.9682, 1e-4, 'the inner ones nearly all of it');
+  assert.deepEqual(s.map((c) => c.seed), [0, 1, 2, 3], 'each its own noise');
+  assert.deepEqual(steamSlices([1.2]).map((c) => c.half), [0], 'past the rim: no width');
+  assert.ok(STEAM.mist > 0 && STEAM.mist < STEAM.alpha, `the mist fainter than a sheet (${STEAM.mist} against ${STEAM.alpha})`);
+});
+
+test('the steam\'s beat holds its tier\'s rate at any display rate, and a stall starts it again without a burst', () => {
+  // rAF callbacks at a display's rate for 10 s: the ticks a second
+  const run = (hz, rate, { ms = 10000, stall = null } = {}) => {
+    let dueAt = 0, ticks = 0; const at = [];
+    for (let now = 1000; now < 1000 + ms; now += 1000 / hz) {
+      if (stall && now > 1000 + stall[0] && now < 1000 + stall[0] + stall[1]) continue;
+      const b = steamBeat(now, dueAt, rate);
+      if (b.tick) { ticks++; at.push(now); }
+      dueAt = b.dueAt;
+    }
+    return { perS: ticks / (ms / 1000), at };
+  };
+  for (const hz of [60, 75, 100, 120, 144, 240]) {
+    close(run(hz, 24).perS, 24, 0.15, `High at ${hz} Hz`);
+    close(run(hz, 15).perS, 15, 0.15, `Balanced at ${hz} Hz`);
+  }
+  // the rule it replaced (the interval restarted at each tick) held 20 a second at 60 Hz and 25 at 100
+  // a 700 ms stall: the 250 ms after it hold the rate's 6 or 7 ticks, not the 17 a beat catching up would fire
+  const after = run(120, 24, { stall: [3000, 700] }).at.filter((t) => t > 4700 && t < 4950);
+  assert.ok(after.length >= 5 && after.length <= 7, `after a 700 ms stall, the beat again from then, no burst to catch up (${after.length} ticks in the next 250 ms)`);
+  assert.deepEqual(steamBeat(5000, 0, 24), { tick: true, dueAt: 5000 + 1000 / 24 }, 'the first tick: due an interval from now');
+  assert.equal(steamBeat(5000, 5003, 24).tick, true, '4 ms early counts as on time');
+  assert.equal(steamBeat(5000, 5005, 24).tick, false, 'more than that does not');
 });
