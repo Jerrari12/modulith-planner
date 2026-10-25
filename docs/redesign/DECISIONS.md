@@ -3396,7 +3396,9 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **The scene's rule** (done-fit.js `lensFor`). The whole build is held sharp to `LENS.maxPx` at its nearest and
   farthest corners. The focus is the harmonic mean of the box's depths along the view axis, and the aperture is the
   widest that holds both ends. The look test chose 3 px: on the hero a wall a metre behind the focus blurs about 11 px
-  and the mug in front reads soft. 1.5 px was barely there, and 6 px began to soften the build's own grain.
+  and the mug in front reads soft. 1.5 px was barely there, and 6 px began to soften the build's own grain. Asked after
+  the final comparison (`bokeh/final/`) whether to keep 3 px or try 6 px, Joey answered "I think v3 is good"
+  (2026-10-24). No version had been labelled v3, so it is read as the 3 px one, and the value stays.
 - **Where the lens applies.** Still shots of the moving grammar, only where the stage accumulates (Very High). Not a
   moving shot, not the detail shot (its drawer moment restarts the accumulation, so the blur would pump), not the still
   grammar (a slow device, a tier below High), and cleared when the grammar stops. A resize and a tier change recompute
