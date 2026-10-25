@@ -6,6 +6,7 @@ import { el, trapTab } from './dom.js';
 import { icon } from './icons.js';
 import { layoutRules } from '../rules/layout.js';
 import { standUp, slotWords } from '../rules/stand.js';
+import { settleToward } from '../rules/settle.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest } from '../generate.js';
 
@@ -85,7 +86,12 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     s.spaceH = asks && draft.spaceH ? Number(draft.spaceH) : null;
     s.length = draft.length;
     if (fresh) { s.placed = [starterUnit({ ...s, mount: draft.mount })]; s.nextId = 2; delete s.labelList; delete s.labelAssign; }
+    const switched = draft.mount !== s.mount;
     if (R.setMount) R.setMount(draft.mount); else s.mount = draft.mount;
+    // a change of mount settles the layout toward the new surface (js/rules/settle.js, Joey 2026-10-25): moves only, adds nothing.
+    // No toast or pulse for it: a mount change reloads the page (the stage's parts pool is fixed at boot), so the board the
+    // visitor sees next is already settled (Terra 01a174b5 asked)
+    if (switched && !fresh) settleToward(s, R);
     // the starter sits on its mount's edge. setMount rebases only on a CHANGE of mount, and a fresh Tabletop build from a
     // Tabletop kit is not one. The stress test, 2026-10-15: the starter stayed at the top, syncTabletopGrid grew the grid
     // under it, and the page stopped on "A unit is floating", with no way back

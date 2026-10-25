@@ -2181,9 +2181,14 @@ test('Build: a case that would open an empty slot is refused with the column rul
    and "an auto fix button" is welcome). The sheet says how many empty slots the switch leaves; the reload boots with his 11
    units only, a ghost in each slot on the stage and no instructions; Build lists the slots with Fill all. Filling one slot
    by hand leaves the other floating case where it is (gravity drops only what an edit unsupports); Fill all fills the rest
-   and the build is whole. JOEY is his board: [id, x, y, w, hh], y and hh in half-rows from the top of a 7W x 4H wall grid. */
+   and the build is whole. JOEY is his board: [id, x, y, w, hh], y and hh in half-rows from the top of a 7W x 4H wall grid.
+   2026-10-25 (js/rules/settle.js, the Under-Table report): a change of mount SETTLES the layout toward the new surface
+   first - moves only, still adds nothing. Of his four gaps two close (units 3, 4, 6 and 7 drop one row onto the table or
+   onto what is below); the two under the left half of the 4W cannot close (it rests on unit 8 by its right half) and stay
+   empty slots, one row above the table over unit 7. */
 const JOEY = [[1, 0, 0, 4, 4], [2, 4, 0, 1, 2], [3, 5, 0, 1, 2], [4, 6, 0, 1, 2], [5, 4, 2, 1, 2], [6, 5, 2, 2, 4], [7, 0, 4, 2, 2], [8, 2, 4, 2, 2], [9, 4, 4, 1, 2], [10, 2, 6, 2, 2], [11, 4, 6, 1, 2]];
-test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as empty slots, adds nothing, and Fill all completes it', async () => {
+const SETTLED = { 3: 2, 4: 2, 6: 2, 7: 2 };   // half-rows each unit drops toward the table on the switch; the rest keep their height
+test('the setup sheet: Joey\'s wall build switched to Tabletop settles toward the table, keeps the gaps that cannot close as empty slots, adds nothing; Fill all fills them and the top is levelled by hand', async () => {
   const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
   await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
@@ -2197,7 +2202,7 @@ test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as
   await page.locator('#ws-top .chip-btn.mount').click();
   await page.waitForSelector('#ws-setup .card', { timeout: 30_000 });
   await page.locator('#ws-setup .card:has-text("Tabletop")').click();
-  assert.match(await text(page, '#ws-setup .warn.stand'), /^As a Tabletop build it will have 4 empty slots under it · Apply adds nothing: fill them in Build before it can be assembled\.$/);
+  assert.match(await text(page, '#ws-setup .warn.stand'), /^As a Tabletop build it will have 2 empty slots under it · Apply adds nothing: fill them in Build before it can be assembled\.$/);
   await page.evaluate(() => { window.__e2eBeforeReload = 1; });
   await btn(page, 'Apply and rebuild', '#ws-setup').click();
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'tabletop', null, { timeout: 150_000 });
@@ -2205,14 +2210,17 @@ test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as
   assert.equal(await page.locator('#loading-text:has-text("Can’t show")').count(), 0, 'the build shows');
   const s = await S(page);
   assert.equal(s.placed.length, 11, 'the switch added nothing');
+  assert.equal(s.gridH, 5, 'the tabletop grid: his 4 rows plus the headroom row on top');
   const rows = s.gridH * 2, by = new Map(s.placed.map((p) => [p.id, p]));
-  // his 11 where they were: the same columns and sizes, each at the same height above the table (the tabletop grid adds
-  // headroom on top, so y itself moves with it)
-  for (const [id, x, y, w, hh] of JOEY) { const p = by.get(id); assert.ok(p && p.x === x && p.w === w && p.hh === hh && rows - (p.y + p.hh) === 8 - (y + hh), `unit ${id} kept its place: ${JSON.stringify(p)}`); }
+  // his 11 settled: the same columns and sizes; the four that could drop sit one row lower, the rest at the same height
+  // above the table (the tabletop grid adds headroom on top, so y itself moves with it)
+  for (const [id, x, y, w, hh] of JOEY) { const p = by.get(id); assert.ok(p && p.x === x && p.w === w && p.hh === hh && rows - (p.y + p.hh) === 8 - (y + hh) - (SETTLED[id] || 0), `unit ${id} ${SETTLED[id] ? 'settled one row down' : 'kept its place'}: ${JSON.stringify(p)}`); }
   const shown = () => page.evaluate(() => { const M = window.__GEN2_VIEWER__.manifest; return { incomplete: M.incomplete || null, ghosts: (M.ghosts || []).length, steps: M.steps.length }; });
   const m0 = await shown();
-  assert.ok(m0.incomplete && m0.incomplete.voids === 4 && m0.ghosts === 4 && m0.steps === 1, `a ghost in each of the 4 slots, no instructions: ${JSON.stringify(m0)}`);
-  await page.waitForFunction(() => /Tabletop: 4 empty slots under it to fill · they show red in Build, where Fill all adds 1W cases\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast naming the empty slots'));
+  // 4 ghosts: one per slot, and one per short top column - units 3 and 4 dropped a row, so the tabletop's top is no longer
+  // level over columns 5 and 6 (the 2026-08-23 "finish the top" guide), which Fill all does not fill
+  assert.ok(m0.incomplete && m0.incomplete.voids === 2 && m0.incomplete.columns === 4 && m0.ghosts === 4 && m0.steps === 1, `a ghost in each of the 2 slots and the 2 short top columns, no instructions: ${JSON.stringify(m0)}`);
+  await page.waitForFunction(() => /Tabletop: 2 empty slots under it to fill · they show red in Build, where Fill all adds 1W cases\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast naming the empty slots'));
   // Assemble says it is not ready and sends the visitor back to Build; nothing to step through
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
   await page.waitForSelector('#ws-player.blocked', { timeout: 15_000 }).catch(() => assert.fail('Assemble did not say the build is not ready'));
@@ -2223,22 +2231,38 @@ test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as
   await page.waitForSelector('#ws-dock', { timeout: 15_000 }).catch(() => assert.fail('Go to Build did not open Build'));
   // Build offers a "+" in each slot (the placement judge asks the generator as the stage does: slots are not refusals)
   const offered = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
-  for (const x of [0, 1, 5, 6]) assert.ok(offered.includes(`${x},${rows - 2}`), `a "+" in the slot at column ${x}: ${offered}`);
-  // fill ONE slot by hand (the left gap's left column): the other floating case, unit 6, keeps its height
-  const h6 = rows - (by.get(6).y + by.get(6).hh);
-  await page.evaluate((y) => window.__GEN2_BUILD__.placeAt(0, y, { w: 1, h: 1, hh: 2 }, 'decor'), rows - 2);
+  // the two slots sit one row above the table, under the 4W's left half, over unit 7 (which settled onto the table)
+  for (const x of [0, 1]) assert.ok(offered.includes(`${x},${rows - 4}`), `a "+" in the slot at column ${x}: ${offered}`);
+  // fill ONE slot by hand (the left column): the 4W above keeps its height - it was resting on unit 8 already
+  const h1 = rows - (by.get(1).y + by.get(1).hh);
+  await page.evaluate((y) => window.__GEN2_BUILD__.placeAt(0, y, { w: 1, h: 1, hh: 2 }, 'decor'), rows - 4);
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 12, null, { timeout: 30_000 }).catch(() => assert.fail('the slot was not filled'));
-  const s1 = await S(page); const u6 = s1.placed.find((p) => p.id === 6);
-  assert.equal(s1.gridH * 2 - (u6.y + u6.hh), h6, 'gravity left the other floating case over its slot');
-  // the stage follows: 3 slots left, still a preview, not "can't be shown"
-  await page.waitForFunction(() => { const M = window.__GEN2_VIEWER__.manifest; return M.incomplete && M.incomplete.voids === 3 && !window.__GEN2_VIEWER__.regenBusy; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`the stage did not show the 3 slots left: ${JSON.stringify(await shown())}`));
-  // the issue card names the slots left and fills them all
+  const s1 = await S(page); const u1 = s1.placed.find((p) => p.id === 1);
+  assert.equal(s1.gridH * 2 - (u1.y + u1.hh), h1, 'the 4W kept its height');
+  // the slot left is the other one, in column 1, where it was (Terra 01a17520: a count alone would let a void relocate)
+  const offered1 = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
+  assert.ok(offered1.includes(`1,${rows - 4}`) && !offered1.includes(`0,${rows - 4}`), `the column-1 slot is still offered and the filled one is not: ${offered1}`);
+  // the stage follows: 1 slot left, still a preview, not "can't be shown"
+  await page.waitForFunction(() => { const M = window.__GEN2_VIEWER__.manifest; return M.incomplete && M.incomplete.voids === 1 && !window.__GEN2_VIEWER__.regenBusy; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`the stage did not show the 1 slot left: ${JSON.stringify(await shown())}`));
+  // the issue card names the slot left and fills it
   await page.locator('#ws-dock button.status.issue').click();
   await page.waitForSelector('#ws-issues button:has-text("Fill all")', { timeout: 15_000 }).catch(() => assert.fail('no Fill all in the issue card'));
-  assert.match(await text(page, '#ws-issues'), /3 empty slots to fill\./);
+  assert.match(await text(page, '#ws-issues'), /1 empty slot to fill\./);
   await page.locator('#ws-issues button:has-text("Fill all")').click();
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 15 && !window.__GEN2_VIEWER__.manifest.incomplete && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 }).catch(() => assert.fail('Fill all did not complete the build'));
-  // filled, it assembles: the step list is back
+  await page.waitForFunction(() => { const M = window.__GEN2_VIEWER__.manifest; return window.__GEN2_STORE__.state.placed.length === 13 && M.incomplete && !M.incomplete.voids && !window.__GEN2_VIEWER__.regenBusy; }, null, { timeout: 60_000 }).catch(async () => assert.fail(`Fill all did not fill the slots: ${JSON.stringify(await shown())}`));
+  // the slots are filled; the top is still not level, so Assemble still waits, with the top's words this time
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForSelector('#ws-player.blocked', { timeout: 15_000 }).catch(() => assert.fail('Assemble did not say the top is not level'));
+  assert.match(await text(page, '#ws-player.blocked .text'), /top isn’t level/);
+  // level the top by hand: a 1W-1H in each short column, beside unit 2 on the top row
+  await btn(page, 'Go to Build', '#ws-player').click();
+  await page.waitForSelector('#ws-dock', { timeout: 15_000 });
+  const top = by.get(2).y;
+  await page.evaluate(([x, y]) => window.__GEN2_BUILD__.placeAt(x, y, { w: 1, h: 1, hh: 2 }, 'decor'), [5, top]);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 14, null, { timeout: 30_000 });
+  await page.evaluate(([x, y]) => window.__GEN2_BUILD__.placeAt(x, y, { w: 1, h: 1, hh: 2 }, 'decor'), [6, top]);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 15 && !window.__GEN2_VIEWER__.manifest.incomplete && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 }).catch(async () => assert.fail(`levelling the top did not complete the build: ${JSON.stringify(await shown())}`));
+  // filled and level, it assembles: the step list is back
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
   await page.waitForSelector('#ws-steps', { timeout: 15_000 }).catch(() => assert.fail('the filled build has no step list'));
   assert.equal(await page.locator('#ws-player.blocked').count(), 0, 'not blocked once filled');
@@ -4344,6 +4368,85 @@ test('hover hints: every hinted control shows its clip on hover and hides on lea
   await shown(N.page, 'assemble-camera').catch(() => assert.fail('narrow: no bubble once the sheet closed'));
   assert.deepEqual(clean(N.errors), [], 'narrow');
   await narrow.close();
+});
+
+/* SETTLING TOWARD THE MOUNT (Joey, 2026-10-25, the Under-Table report from tech support: "the Planner should work like gravity,
+   pulling everything toward the mount after every change"). The report's layout on an Under-Table 185: top 2 x 3W-1.5H, then
+   3 x 2W-2H, 3 x 2W-3H, 2 x 3W-1.5H at the bottom. Acceptance: removing both top 3Ws ends as three 2W-2H on top, three 2W-3H
+   below, two 3W-1.5H at the bottom, 0 issues and no manual moves; dragging the top-right 3W below the bottom row settles
+   everything up in one action (one Undo); the voids are not a standing warning. */
+test('Build: Under-Table settles up after every edit - the report\'s layout, a drop below the stack, one Undo each', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Under-Table")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.locator('#ws-setup .card.len:has-text("185 mm")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
+  await waitBoot(page);
+  const U = [[1, 0, 0, 3, 3], [2, 3, 0, 3, 3], [3, 0, 3, 2, 4], [4, 2, 3, 2, 4], [5, 4, 3, 2, 4], [6, 0, 7, 2, 6], [7, 2, 7, 2, 6], [8, 4, 7, 2, 6], [9, 0, 13, 3, 3], [10, 3, 13, 3, 3]];
+  const load = () => page.evaluate((U) => window.__GEN2_STORE__.commit((s) => { s.placed = U.map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0, closure: 'magnet' })); s.nextId = 11; s.gridW = 6; s.gridH = 8; s.spaceW = null; s.spaceH = null; }, 'edit'), U);
+  await load();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 10 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 }).catch(() => assert.fail('the report\'s build did not reach the stage'));
+  const at = async () => Object.fromEntries((await S(page)).placed.map((p) => [p.id, [p.x, p.y]]));
+  const issues = () => page.evaluate(() => window.__GEN2_BUILD__.issues().filter((i) => i.sev !== 'guide').map((i) => i.kind));
+  // the store coalesces commits made within 350 ms into ONE history entry (a drag is one undo); this script edits faster than
+  // a hand can, so every edit that must be its own undo step is flushed into history first (2026-10-25: without it the two
+  // removals merged and "one Undo per edit" timed out waiting for 9 units - a flake that passed alone, failed in the suite)
+  const flush = () => page.evaluate(() => window.__GEN2_STORE__.flush());
+  await flush();
+  // 1. remove the right 3W, then the left: everything settles up, nothing is held, 0 issues, no manual move
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(2));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  await flush();
+  let a = await at();
+  assert.deepEqual([a[5], a[8], a[4]], [[4, 0], [4, 4], [2, 3]], `the right column rose, the centre stays hooked under the left 3W: ${JSON.stringify(a)}`);
+  // the toast is read right after the removal: it hides itself 2.6 s after it shows (dom.js say()) and the reads below can
+  // outlast that under a full-suite load; its text stays readable once hidden, so the first removal's is cleared first
+  // (it matches the same words) and this wait proves the SECOND removal's toast (Terra 01a1752f)
+  await page.evaluate(() => { document.getElementById('ws-toast').textContent = ''; });
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(1));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 8, null, { timeout: 30_000 });
+  await page.waitForFunction(() => /Removed 3W·1\.5H · .*moved up against what is above/.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('the removal toast did not name what settled'));
+  a = await at();
+  assert.deepEqual(a, { 3: [0, 0], 4: [2, 0], 5: [4, 0], 6: [0, 4], 7: [2, 4], 8: [4, 4], 9: [0, 10], 10: [3, 10] }, `three 2W-2H on top, three 2W-3H, two 3W-1.5H at the bottom: ${JSON.stringify(a)}`);
+  await settle(page, 800);
+  assert.deepEqual(await issues(), [], 'no issues after settling');
+  assert.equal(await page.locator('#ws-dock .status.issue').count(), 0, 'the Dock shows no issue');
+  // one Undo per edit: the second removal comes back WITH its settle undone
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  a = await at();
+  assert.deepEqual([a[1], a[4], a[9]], [[0, 0], [2, 3], [0, 13]], `one Undo restores the removal and the settle together: ${JSON.stringify(a)}`);
+  // 2. the same starting layout: drag the top-right 3W below the bottom row - allowed (no "would leave a unit without
+  //    support"), the grid grows down for it, everything above settles up in one action
+  await load();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 10, null, { timeout: 30_000 });
+  await flush();   // the load is its own history entry; the move must not merge into it
+  const check = await page.evaluate(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 2); return window.__GEN2_BUILD__.moveCheck(u, 3, 16); });
+  assert.ok(check.g, `the drop below the stack is allowed: ${JSON.stringify(check)}`);
+  await page.evaluate(() => window.__GEN2_BUILD__.moveTo(2, 3, 16));
+  await page.waitForFunction(() => { const p = window.__GEN2_STORE__.state.placed.find((q) => q.id === 2); return p && p.y === 16; }, null, { timeout: 30_000 }).catch(() => assert.fail('the 3W did not move below the stack'));
+  a = await at();
+  assert.deepEqual([a[2], a[5], a[8], a[4]], [[3, 16], [4, 0], [4, 4], [2, 3]], `the dropped 3W hangs at the bottom, the right column rose: ${JSON.stringify(a)}`);
+  assert.ok((await S(page)).gridH >= 10, 'the grid grew down for the drop');
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => { const p = window.__GEN2_STORE__.state.placed.find((q) => q.id === 2); return p && p.y === 0; }, null, { timeout: 30_000 });
+  assert.deepEqual(await at(), Object.fromEntries(U.map(([id, x, y]) => [id, [x, y]])), 'one Undo puts the whole move and its settle back');
+  // 3. the voids are a drag preview only: with the centre column hooked by one end (after the first removal) the board
+  //    draws no hatched cell at rest
+  await flush();
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(2));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-unit', { timeout: 30_000 });
+  assert.equal(await page.locator('#ws-board .b-deficit').count(), 0, 'no hatched void at rest');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
 });
 
 /* THE BAKED TOP LAYERS (2026-10-25, js/skin-map.js): a map is fetched only while the tier is Very High, and drawn only in its
