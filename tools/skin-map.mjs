@@ -2,7 +2,7 @@
  *
  *   node tools/skin-map.mjs plan [--out <dir>] [--nodes a,b] [--match TEXT] [--limit N]
  *   node tools/skin-map.mjs push [--out <dir>]
- *   node tools/skin-map.mjs ship --raw <dir> [--out <dir>] [--nodes a,b] [--match TEXT] [--max-mpx 1.5]
+ *   node tools/skin-map.mjs ship --raw <dir> [--out <dir>] [--nodes a,b] [--match TEXT] [--max-mpx 1.5] [--rg-bits 8] [--dest <dir>] [--families a,b]
  *   node tools/skin-map.mjs check [--out <dir>] [--nodes a,b] [--match TEXT]
  *
  * plan   For every part GLB the pools ship, decide what node0 slices: the release STL it corresponds to (the catalog's
@@ -64,6 +64,13 @@ const LIMIT = +opt('--limit', 0) || 0;
    was budgeted; past the cap the map ships scaled down (the normal box-averaged, the layer height nearest), its px/mm
    recorded in the index, so the stage reads it the same way. --max-mpx overrides. */
 const MAX_MPX = +opt('--max-mpx', 1.5);
+/* the normal's precision: 8 bits a channel as baked, or fewer (the bead flanks use about a tenth of the range; fewer
+   levels compress better). --rg-bits 6 keeps 64 levels. */
+const RG_BITS = Math.max(2, Math.min(8, +opt('--rg-bits', 8)));
+/* --dest <dir> ships somewhere other than parts/skin (a size experiment); --families a,b keeps only nodes whose name
+   starts with one of them (Faceplate_EdgeLabel, CL-, ...) */
+const DEST = opt('--dest', null);
+const FAMILIES = opt('--families', '') ? opt('--families', '').split(',') : null;
 
 const norm = (s) => s.toLowerCase().replace(/\.stl$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
@@ -237,7 +244,7 @@ async function push() {
 async function ship() {
   const RAW = opt('--raw', join(OUT, 'raw'));
   const plan = JSON.parse(readFileSync(join(OUT, 'jobs.json'), 'utf8'));
-  const dest = join(root, 'parts', 'skin');
+  const dest = DEST || join(root, 'parts', 'skin');
   mkdirSync(dest, { recursive: true });
   const index = existsSync(join(dest, 'index.json')) ? JSON.parse(readFileSync(join(dest, 'index.json'), 'utf8')) : { version: 1, pxPerMm: SM.SKIN_MAP.pxPerMm, nodes: {} };
   const report = [];
@@ -245,16 +252,18 @@ async function ship() {
   for (const job of plan.jobs) {
     if (ONLY && !ONLY.has(job.node)) continue;
     if (MATCH && !job.node.includes(MATCH)) continue;
+    if (FAMILIES && !FAMILIES.some((f) => job.node.startsWith(f))) continue;
     const key = `${job.sha256.slice(0, 16)}-rx${job.rotate_x}-px${SM.SKIN_MAP.pxPerMm}`;
     const row = { node: job.node, key };
     report.push(row);
     const jsonPath = join(RAW, key + '.json');
     if (!existsSync(jsonPath)) { row.skip = 'no raw bake'; continue; }
+    try {
     const raw = JSON.parse(readFileSync(jsonPath, 'utf8'));
     if (raw.failed) { row.skip = 'the bake failed: ' + raw.error; continue; }
     if (raw.stl_sha256 !== job.sha256 || raw.rotate_x_deg !== job.rotate_x) { row.skip = 'the raw bake is for another STL or rotation'; continue; }
     /* the slice frame from the STL and the GLB, re-measured here rather than trusted from the plan */
-    const glb = await readGlbTriangles(join(root, 'parts', '185', job.node + '.lib.glb').replace(/parts[\\/]185/, (s) => s) );
+    const glb = await readGlbTriangles(glbPathOf(job.node));
     const stl = readStlTriangles(join(CORPUS, job.stl));
     const m = matchRotation(glb, stl, job.axis);
     if (m.error || m.ambiguous) { row.skip = 'the frame no longer matches: ' + (m.error || 'ambiguous'); continue; }
@@ -273,8 +282,11 @@ async function ship() {
     for (let i = 0; i < sp.length; i += 3) { const v = rotate(S, [glb.positions[i], glb.positions[i + 1], glb.positions[i + 2]]); sp[i] = v[0] + tR[0] + off[0]; sp[i + 1] = v[1] + tR[1] + off[1]; sp[i + 2] = v[2]; }
     const b = bounds(sp);
     const predicted = [b.lo[0], b.lo[1], b.hi[0], b.hi[1]];
-    const ext = raw.gcode_extents_above_mm || raw.gcode_extents_mm;
-    const slack = Math.max(...[0, 1, 2, 3].map((k) => Math.abs(predicted[k] - ext[k])));
+    /* against the extrusion above the first millimetre (a case's helper disks lie below it) OR the whole extrusion (a
+       wall bracket is a thin plate with one rib above 1 mm): a wrong frame matches neither */
+    const slackOf = (ext) => (ext && Number.isFinite(ext[0])) ? Math.max(...[0, 1, 2, 3].map((k) => Math.abs(predicted[k] - ext[k]))) : Infinity;
+    const slack = Math.min(slackOf(raw.gcode_extents_above_mm), slackOf(raw.gcode_extents_mm));
+    const ext = slackOf(raw.gcode_extents_above_mm) <= slackOf(raw.gcode_extents_mm) ? raw.gcode_extents_above_mm : raw.gcode_extents_mm;
     row.extentSlack = +slack.toFixed(3);
     if (slack > 1.0) { row.skip = `the predicted placement misses the G-code's extents by ${slack.toFixed(2)} mm (predicted ${predicted.map((v) => v.toFixed(2))}, g-code ${ext.map((v) => v.toFixed(2))})`; continue; }
     /* the part's bed-plane frame: q = (p . s1, p . s2); g.xy = A q + c, A the sliced images of s1 and s2 (the axis part
@@ -314,17 +326,26 @@ async function ship() {
       shipPx = shipW / (OW / px);
       shipped_ = SM.resampleMap(out, OW, OH, shipW, shipH);
     }
+    if (RG_BITS < 8) {
+      /* quantise the normal's two channels around the flat value 128 (a zero normal must stay exactly flat) */
+      const step = 1 << (8 - RG_BITS);
+      const q = shipped_ === out ? new Uint8Array(shipped_) : shipped_;
+      for (let i = 0; i < q.length; i += 4) { q[i] = Math.max(0, Math.min(255, Math.round((q[i] - 128) / step) * step + 128)); q[i + 1] = Math.max(0, Math.min(255, Math.round((q[i + 1] - 128) / step) * step + 128)); }
+      shipped_ = q;
+    }
     const png = SM.encodePng(shipped_, shipW, shipH, (b) => deflateSync(b, { level: 9 }));
     writeFileSync(join(dest, job.node + '.png'), png);
     index.nodes[job.node] = {
       file: job.node + '.png', size: [shipW, shipH], q0: [+q0[0].toFixed(4), +q0[1].toFixed(4)], pxPerMm: +shipPx.toFixed(5), axis: job.axis,
       skinLayersZ: raw.skin_layers_z, topAngleDeg: raw.top_infill_angle_deg, crownMm: raw.crown_mm,
+      rgBits: RG_BITS,
       bake: { stl: job.stl, stlSha256: job.sha256, rotateX: job.rotate_x, profile: raw.profile, slicer: raw.slicer, bakeVersion: raw.bake_version, key },
       pngSha256: sha256(png), bytes: png.length,
     };
     row.size = [shipW, shipH]; row.bakedSize = [OW, OH]; row.pxPerMm = +shipPx.toFixed(3); row.bytes = png.length; row.q0 = index.nodes[job.node].q0;
     shipped++;
     console.log(`  ${job.node.padEnd(36)} ${shipW}x${shipH}${shipW !== OW ? ' (baked ' + OW + 'x' + OH + ', ' + shipPx.toFixed(2) + ' px/mm)' : ''}  ${(png.length / 1024).toFixed(0)} KB  q0 ${row.q0}  slack ${slack.toFixed(3)}`);
+    } catch (e) { row.skip = 'error: ' + ((e && e.message) || e); console.log(`  ${job.node.padEnd(36)} ERROR ${row.skip.slice(0, 100)}`); }
   }
   index.generated = new Date().toISOString();
   writeFileSync(join(dest, 'index.json'), JSON.stringify(index, null, 1));
@@ -350,10 +371,13 @@ async function check() {
     rows.push(row);
     console.log(`  ${node.padEnd(36)} agree ${(row.rate * 100).toFixed(1).padStart(5)} %  control ${(row.control * 100).toFixed(1).padStart(5)} %  visible ${row.visibleMm2} mm2`);
   }
-  const weak = rows.filter((r) => r.rate < 0.8 || r.control > r.rate - 0.15);
+  /* weak = the map disagrees with the GLB's visible top skins; the mirrored controls are reported, not judged: a flat
+     cover tile's mirrored map covers its top just as well (the frame's sense matters only where the part is asymmetric,
+     and there - the EdgeLabel's window and tab - the unit test reads it) */
+  const weak = rows.filter((r) => r.rate < 0.8);
   writeFileSync(join(OUT, 'check.json'), JSON.stringify({ generated: new Date().toISOString(), maps: rows.length, weak: weak.map((r) => r.node), rows }, null, 1));
   console.log(`
-${rows.length} maps checked; ${weak.length} weak (agree under 80 % or a control within 15 points) -> ${join(OUT, 'check.json')}`);
+${rows.length} maps checked; ${weak.length} weak (agree under 80 %) -> ${join(OUT, 'check.json')}`);
   for (const r of weak) console.log(`  weak ${r.node}: agree ${(r.rate * 100).toFixed(1)} %, control ${(r.control * 100).toFixed(1)} %`);
 }
 

@@ -64,6 +64,7 @@ for (const [lib, Ctor] of [['physical', THREE.MeshPhysicalMaterial], ['standard'
     m.onBeforeCompile(sh, null);
     const vs = resolveIncludes(sh.vertexShader), fs = resolveIncludes(sh.fragmentShader);
     for (const [src, needle] of [[vs, 'attribute float aSkinId;'], [vs, 'vSkinId = aSkinId;'],
+      [fs, 'if ( vSkinId > 0.5 && gBFTop > 0.0 ) {'], [fs, 'int idSM = int( vSkinId + 0.5 ) - 1;'],
       [fs, 'uniform sampler2D uSMAtlas;'], [fs, 'uniform sampler2D uSMTable;'],
       [fs, 'if ( uSMOn > 0.5 && uLLOn > 0.5 ) {'], [fs, 'textureGrad( uSMAtlas, uvSM'], [fs, 'texelFetch( uSMAtlas, ivec2( rSM.xy + floor( pxSM ) ), 0 )'],
       [fs, 'gBFContact = smoothstep( 0.82, 0.94'], [fs, 'float bandPx = max('], [vs, 'vObjPos = aBfMm;']]) {
@@ -152,6 +153,8 @@ test('⚔ the GLSL frame is skinTangents(): the same two vectors from the same a
 /* ── 4. the atlas ──────────────────────────────────────────────────────────────────────────── */
 
 test('the packer: the small atlas first at full scale, no overlaps, gutters, a scale only when nothing fits', () => {
+  /* the gutter is what keeps a minified map's mipmaps out of its neighbour: two texels at the coarsest useful level */
+  assert.ok(SM.SKIN_MAP.gutterPx >= 2, `a ${SM.SKIN_MAP.gutterPx} px gutter lets the mipmaps bleed across maps`);
   const a = SM.packAtlas([{ id: 'a', w: 1413, h: 453 }, { id: 'b', w: 700, h: 450 }, { id: 'c', w: 1000, h: 1000 }]);
   assert.equal(a.size, 2048); assert.equal(a.scale, 1);
   const rects = [...a.rects.values()];
@@ -313,6 +316,43 @@ test('⚔ the label window is empty, the plate around it is skin, and the REMOVE
   assert.ok(hMax - hMin > 24, 'the GLB is not the 24 mm deep EdgeLabel plate');
 });
 
+/* ── 6b. the normal's sign on a part whose frame is a quarter turn ───────────────────────── */
+
+/* The outermost perimeter bead's outer flank slopes down and away from the part, so at the top skin's boundary the
+   normal leans OUTWARD. The EdgeLabel's frame is a pure sign flip (its own transpose), so a shipping tool that applied
+   the frame matrix instead of its transpose would ship that map unchanged; a cover tile's frame is a quarter turn, and
+   there the error turns every normal half a turn - inward. Both fixtures, all four edges of the tile. */
+const edgeLean = (map, frame, which, dir) => {
+  const W = map.width, H = map.height;
+  const z = (i, j) => (i < 0 || j < 0 || i >= W || j >= H) ? 0 : map.data[(j * W + i) * 4 + 2] * 256 + map.data[(j * W + i) * 4 + 3];
+  const nrm = (i, j, c) => map.data[(j * W + i) * 4 + c] / 127.5 - 1;
+  let lines = 0, ok = 0;
+  for (let k = 1; k <= 12; k++) {
+    const other = Math.floor((which === 'q1' ? H : W) * k / 13);
+    const len = which === 'q1' ? W : H;
+    let edge = -1;
+    for (let s = 0; s < len; s++) { const idx = dir > 0 ? len - 1 - s : s; if ((which === 'q1' ? z(idx, other) : z(other, idx)) > 0) { edge = idx; break; } }
+    if (edge < 0) continue;
+    let m = 0;
+    for (let d = 0; d < 2; d++) { const idx = edge - dir * d; m += which === 'q1' ? nrm(idx, other, 0) : nrm(other, idx, 1); }
+    m /= 2; lines++;
+    if (Math.abs(m) > 0.08 && Math.sign(m) === dir) ok++;
+  }
+  return lines ? ok / lines : 0;
+};
+
+for (const [name, edges] of [['Faceplate_EdgeLabel_2W-1H', [['q1', -1], ['q1', 1]]], ['CL-185-1W', [['q1', -1], ['q1', 1], ['q2', -1], ['q2', 1]]]]) {
+  test(`⚔ ${name}: the outermost bead leans outward at every edge - the normal's sign survives the frame`, async () => {
+    const fx = JSON.parse(readFileSync(join(FIX, name + '.json'), 'utf8'));
+    const map = await SM.decodePng(readFileSync(join(FIX, fx.file)), (b) => inflateSync(b));
+    assert.deepEqual([map.width, map.height], fx.size);
+    for (const [which, dir] of edges) {
+      const r = edgeLean(map, fx, which, dir);
+      assert.ok(r >= 0.6, `${name} ${which} ${dir > 0 ? '+' : '-'} edge: the outer flank leans outward on ${(r * 100).toFixed(0)} % of the lines`);
+    }
+  });
+}
+
 /* ── 7. main.js, bed-finish.js and the deploy ──────────────────────────────────────────────── */
 
 test('main.js patches every finished material, stamps every template, syncs on the mount and the tier switch; the trial is gone', () => {
@@ -326,6 +366,9 @@ test('main.js patches every finished material, stamps every template, syncs on t
   assert.match(main, /applyQuality\(quality\);\n\s*skinMaps\.sync\(\);/, 'the mount does not sync the maps');
   assert.match(main, /function setQuality\(name, \{ user = false \} = \{\}\) \{\n\s*applyQuality\(name\);\n\s*skinMaps\.sync\(\);/, 'a tier switch does not sync the maps');
   assert.match(main, /skinMap: skinMaps,/, 'the debug hook lost the maps');
+  /* the attribute carries the slot PLUS ONE, so a mesh that never got it (it reads 0) draws no map: both sides pinned */
+  assert.ok(main.includes('st.slots.set(n, slot); stamp(n, slot + 1); slot++;'), 'the template is not stamped with slot + 1');
+  assert.ok(main.includes('for (const n of st.slots.keys()) stamp(n, 0);'), 'a repack does not clear the old slots to 0');
   /* the fetch waits for Very High: the gate reads the tier's accumulator flag, like the settle detail it draws in */
   assert.match(main, /const wanted = \(\) => skinU\.uSMOn\.value > 0\.5 && !!QUALITY\[quality\]\.accum;/);
   /* the atlas's empty space reads flat (R,G 128), or the mipmaps blend a -1 slope into every map's minified edge (Sol 01a174ad) */

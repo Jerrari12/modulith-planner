@@ -3222,3 +3222,103 @@ keyboard undo or Remove").
   the Amazon sentence beneath, a look's detail footer with the shared disclosure, no "null", and the reworded notes. The same
   script failed all eight on `2a5a11f7` before the deploy.
 
+
+## 2026-10-25 (every part's real printed top layer at Very High: the baked skin maps)
+
+Joey, 2026-10-25, after the slice-based prototype on a 2W-1H EdgeLabel faceplate (`D:\Claude - Output\skin-beads-2026-10-25`):
+"build the baked top-layer pipeline into the planner for every part (node0 bake per part type, shader module at Very
+High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts branch `skin-maps`. Not merged, not deployed.
+
+- **What it draws.** On every face that looks along a part's build axis - the last layer, and every lower top skin a
+  ledge, a step or a pocket floor leaves - the slicer's own top solid infill lines at the slicer's angle and the perimeter
+  loops around every edge and pocket of that skin, from a normal map baked from the part's real G-code. Nothing is invented
+  in a shader: the `?skinlines=on` trial (bed-finish.js SKIN_LINES, 2026-09-22) guessed a bead direction 90 degrees off
+  the slicer's and is removed. Very High's settle samples only, like the layer lines and the powder grain's detail form
+  (the block is gated on uLLOn); Fast, Balanced and High draw nothing new and never fetch a map. `?skinmap=off` draws and
+  fetches nothing, for comparison; the debug hook is `skinMap` (status, set, uniforms, atlas).
+- **The bake (node0, `D:/MODULITH/ops/slicing/skin_bake.py`, vault `fa67ef0`).** Per part: PrusaSlicer 2.9.4 with the
+  Core One profile where the footprint fits its bed, else the XL's (the two lay the same skin: monotonic lines at 45
+  degrees, 0.42 mm top infill, 0.45 mm perimeters, 0.2 mm layers - only the bed differs), `--rotate-x=180` where the
+  STL sits upside down to Joey's pose; every layer that lays Top solid infill plus the last layer (a thin ridge such as
+  the EdgeLabel grip's top edge is perimeters alone), its infill and its perimeters, overhang perimeters, gap fill, drawn
+  as beads of their recorded width with a 0.06 mm elliptic crown (the prototype's guess, to be judged by eye); the higher
+  bead wins and the Z channel records its layer; 8 px/mm; one RGBA8 PNG per part in the G-code frame (R,G the normal's
+  xy, B,A the layer height in 0.01 mm) with a JSON record, keyed by the STL's sha256 + the rotation + px/mm, so a changed
+  model re-bakes. ⚠ The profiles emit G2/G3 arcs (2,077 in the EdgeLabel 2W-1H file); the prototype's parser read G0/G1
+  only, so its perimeter loops had gaps at every rounded corner. The bake refuses a G-code shorter than the STL's own
+  height (see the race below). Measured: the EdgeLabel 2W-1H slices and bakes in 1.9 s; the 555-part batch took 132 min of CPU (20 min slicing, 110 min rasterising 8.27 million bead segments, 2 min PNG) over a 1 h 46 min wall clock
+  on node0 (numpy 2.3.5 is there; no PIL; PNGs are written with zlib); the raw set is 112 MB.
+- **The frame (`tools/skin-map.mjs plan`, `tools/lib/skin-geometry.mjs`).** The GLB the stage draws and the STL the
+  slicer saw are different asset sets, so the rotation between them is MEASURED, never typed: the 24 proper 90-degree
+  rotations are tried; the extents must agree on every axis (x and y over the vertices above a 1 mm bottom cut - the
+  case and extender STLs carry corner helper disks inside the bottom millimetre that the GLB lacks; measured 2026-10-25:
+  the 185 1W-1H case STL spans 96 x 193.6 where the GLB spans 88 x 185); among the survivors the nearest occupancy grid
+  wins (24 cells a side, filled from points sampled over each triangle's AREA and splatted trilinearly - triangle
+  centroids read the cover tiles 1.0 apart of a possible 2.0 for the same shape, because the GLB and the STL triangulate
+  the same flat faces along different diagonals; hard bins read them 0.58 apart from a sub-cell offset). A runner-up that
+  is the winner turned half a turn about the build axis is harmless; any other within 0.7 of its distance refuses the part.
+  Then R * axis (generate.js buildAxisForType) must be +Z (slice as it sits) or -Z (rotate-x 180): the Cover Uppers and the
+  59 rails come out as 180, confirming slice_batch.py's hard-coded six independently, and the Deco handle does too (its STL
+  sits top-up). The map ships in the part's own bed-plane frame q = (p . t1, p . t2), the two tangents bed-finish.js's grain
+  derives from the axis in GLSL and js/skin-map.js `skinTangents` derives in JS (test-pinned to each other), so the shader
+  needs no flip, swap or offset per part - only the map's origin and px/mm. The slicer's placement (the STL's own bounding
+  box centred on the bed, dropped to z 0) is predicted and checked against the G-code's extrusion extents (above 1 mm, or
+  the whole: a wall bracket is a thin plate with one rib) within 1 mm, else the map is refused.
+- **What is baked and what is not.** 555 of the pools' 632 nodes baked (0 failed). Not: the 27 side covers (they print
+  face-down, so the printed top faces the case wall; and their GLB carries the panel's surface twice, 41,050 mm2 against
+  the STL's 21,467, which no frame match can read); the 25 Decor drawers of 2H and 3H outside the 240 collection (their
+  STLs ship with built-in supports and no clean file exists; 240's "No Support" set is used); 21 hardware, label and handle
+  nodes without a confirmed pose; the four EdgeLabel back covers 1W-15H, 1W-2H, 2W-15H, 2W-2H (the STL is another revision
+  of the GLB, not a mirror - tested). One baked map is refused at shipping: GridfinityDecorDrawer_270-3W-1H, whose G-code
+  reaches 18 mm past the GLB's outline on one side.
+- **The coverage check (`tools/skin-map.mjs check`, `tools/lib/skin-check.mjs`).** Every shipped map read as the shader
+  reads it against the GLB's VISIBLE top faces (surface-sampled, area-weighted; the GLB models the EdgeLabel's raised band
+  as a solid on the plate, so 45 % of its 4.5 mm face runs on underneath as an internal face and is set aside): a sample
+  agrees when the texel holds a bead within 0.45 mm of its own height. Over the 554 shipped maps: median 98.3 %, the tenth percentile 88.1 %, 22 under 80 % - all of them face-down Essential and Chevron plates (their printed top is the back, whose clips and bosses the GLB models differently; lowest 74.6 %) and one Classic Pro plate at 77.0 %; every other family's lowest map is above 84 % (cases 96.7, Decor drawers 96.1, Classic drawers 99.1, cover tiles 96.2, Gridfinity drawers 85.7, accents 84.8). The EdgeLabel 2W-1H: 97.0 % of
+  7,607 mm2; the same map mirrored in q1 / q2 / both: 67.9 / 1.9 / 2.0 %. The mirrored controls mean something only where a
+  part is asymmetric (a flat cover tile's mirror covers its top just as well).
+- **⚠ Six bake processes in parallel on one output folder produced ten "ok" records from G-code another process was still
+  writing** (a drawer with 108 of its 250 layers and no floor), found by the check (Gridfinity drawers at 7-20 %),
+  re-baked one at a time, and the height guard above was added. Run the batch as one process.
+- **The maps shipped (gen2-parts branch `skin-maps`, `parts/skin/<node>.png` + `index.json`).** 554 maps, 96.9 MB in all, median 156 KB, the 90th percentile 325 KB, the largest 623 KB, at 8 px/mm capped at 1.5 Mpx (308 maps scaled down, the biggest 270 cases to 3.8 px/mm) with the normal's two channels at 6 bits (64 levels: the bead flanks use about a tenth of the range; measured against 8 bits on the EdgeLabel macro, 0.01 % of the pixels differ by more than 8 levels and the mean difference is 0.2 of a level; 8 bits would have been 159 MB). The EdgeLabel 2W-1H is 74 KB. The
+  brief budgeted ~160 KB a part; the 8 px/mm RGBA bake with the Z channel costs more on the big parts, and a 1.0 Mpx cap
+  helps little, because the bulk is hundreds of mid-size maps (all 554 maps: 159 MB at 1.5 Mpx and 138 MB at 1.0 Mpx with 8-bit normals; 96.9 MB at 1.5 Mpx and 80.7 MB at 1.0 Mpx with 6-bit). The levers are the tool's
+  `--max-mpx`, `--rg-bits` and `--families`; the raw bakes of every part stay in the work folder and on node0, so shipping
+  a family later is one command. The index is the planner's one fetch (`parts/skin/index.json`: node -> file, size, q0,
+  px/mm, axis, skin layers, the bake's provenance); a node without an entry is never fetched.
+- **The runtime (js/skin-map.js, the atlas manager in main.js).** Part materials are shared per TYPE while a map is per
+  NODE, so the node is a per-vertex attribute (aSkinId = slot + 1, 0 for none, stamped on the template like aBfMm), the
+  slot's frame and atlas rectangle sit in a 2 x 64 float table texture, and every map on the stage is packed into one
+  RGBA8 atlas (2048 px first, 4096 when needed, scaled down past that; 4 px gutters; the empty space is a FLAT normal).
+  The normal's xy is sampled with textureGrad (its derivatives taken in the uniform branch) so a minified map averages
+  toward flat; the layer height is texelFetched, never filtered, and a fragment takes the map only within 0.25-0.45 mm
+  of its own height along the axis (stacked skins under an overhang go plain rather than wearing the skin above). The maps
+  are fetched only while the tier is Very High (the mount's and the tier switch's sync), only for nodes the manifest
+  places, decoded by a hand-written PNG reader (an <img> route premultiplies the alpha that carries half of the layer
+  height), and a failed one leaves its part plain with a console warning. Measured with tools/skin-cost.mjs on the 185 2W-2H tabletop kit (this machine's GPU through Chrome, 1600 x 1000 at dpr 2, the dark stage): the moving frame's median interval with the maps on / off, in ms - veryhigh 8.5 / 8.3, high 8.3 / 8.4, balanced 8.7 / 8.7, fast 8.2 / 8.2 - identical within the vsync; Very High's settle (24 samples) with ten maps on the stage in a 4096 px atlas, three runs each: 393, 413, 465 ms on against 366, 379, 395 ms off - the medians 413 and 379, 34 ms apart, about 1.4 ms a sample (the means 424 and 380, 44 ms apart).
+- **Checks.** test/skin-map.test.mjs (14): the patch composes on three r185's real shader sources after the relief, the
+  bed finish and the cover edge, every block once, its normal work after the finish's plain restore and before the lights;
+  the switch a shared uniform, one program; the GLSL frame pinned to skinTangents() and the Z decode to the bake's encode;
+  the packer; the codec; the EdgeLabel 2W-1H map as a fixture against its GLB (97 % agreement, the controls under 68 %;
+  the label window empty, the plate around it skin, the REMOVE tab along the window's lower edge, the perimeter bead's
+  flank leaning into the opening on both sides); main.js's wiring and the trial's absence; the pages.yml stamp. The feet
+  test reads only numeric pool folders. An e2e case: Fast fetches no map (no request to parts/skin/) and holds none, the
+  switch reaches the uniform; the whole e2e suite on the branch with the maps served from the checkout: 87 of 87, 8.1 min on the GPU. npm test: the first full run (before the two fixes) was 637 tests, 627 pass, 5 fail, 5 skipped - the feet test, the smoke test's three cases and their parent; after the fixes the feet test (4 of 4) and the smoke test (4 of 4, with GEN2_PARTS_LOCAL=1, since it reads the maps from the checkout - see the deploy order) pass alone, and the full suite re-run with GEN2_PARTS_LOCAL=1 reads 639 tests, 634 pass, 0 fail, 5 skipped (the two new fixture tests included). Goldens (TOL 8 per channel, THRESHOLD 0.1 % of a shot's pixels): with the maps ABSENT (the live parts host) 60 of 60 pass
+  at Very High and Fast, so the shader patch alone changes no shot beyond that tolerance; with the maps on (GEN2_PARTS_LOCAL=1) also 60 of 60 pass: at the goldens' whole-build distance (about 2.4 device px per mm) the mipmaps average the beads to flat, so the goldens cannot see the feature within their tolerance and need no re-blessing.
+  Mutants: 15 of 15 killed, each by the test that names its defect (the settle gate, the top-skin weight, the Z decode and gate, the tangents on both sides, the finish guard, the tier gate, the flat atlas fill, the gutter, the resampler, the PNG filter, the mount's and the tier switch's sync, the slot's +1, and the shipping tool's transpose - that last one is a no-op on the EdgeLabel, whose frame is a pure sign flip and its own transpose, and is caught by a second fixture, the CL-185-1W tile, whose frame is a quarter turn: the outermost bead must lean outward on all four edges). ⚠ A first run showed two kills that were artefacts of the runner (its re-ship had refreshed the fixture PNG from a newer bake without its JSON); read which test killed a mutant. Proof shots (`tools/skin-shots.mjs`, `D:\Claude - Output\skin-map-2026-10-25\shots`, the map on
+  and off at the settled Very High frame, next to the FaderBox print-finish stills in reference/): the EdgeLabel plate,
+  macro and window; a cover row and macro - the visible top of a cover row is the Cover Upper's BED face, so on and off
+  are the same there by design; a Decor drawer fully out, its rim's beads from above. Pixels changed by more than 8 levels between on and off (the accumulator restarted by invalidateFrame, no camera nudge - a 0.01 mm nudge alone moved the powder grain on 3-8 % of a frame): covers-macro 0.00 %, covers-row 0.00 %, drawer-macro 0.80 %, drawer-rim 0.21 %, edgelabel-macro 3.80 %, edgelabel-plate 1.62 %, edgelabel-window 3.61 %.
+- **⚠ The deploy order.** The planner's smoke test asserts nothing on the console, and until gen2-parts carries
+  `parts/skin/index.json` the live host answers 404 (a Very High visitor's one request): the smoke step passes locally with
+  GEN2_PARTS_LOCAL=1 and FAILS against the live host. So gen2-parts (branch `skin-maps`) publishes first, the planner
+  merges after. Nothing else in the planner changes for the other tiers.
+- **Review:** Sol `01a174ad` (substantial, the runtime): two findings, both confirmed and fixed in 5f3e295 - the atlas's
+  empty space was cleared to 0, a (-1,-1) normal the mipmaps blend into every map's minified edge, now 128 (flat); the
+  packer's 0.9 steps never tried its floor scale. Terra `01a174b0` (routine, the bake and the frame maths): one finding,
+  confirmed and fixed in vault fa67ef0 - a full-circle arc read as a zero sweep (none in the real file; G-code allows it).
+  Sol `01a17542` (substantial, this entry as the architecture note): five findings, all confirmed and corrected here and in the
+  vault's copy - an npm total quoted without re-running the suite after the two fixes, the settle overhead understated (the
+  medians are 34 ms apart, not 25), the 6-bit comparison counting only differences over 8 levels, "moves no pixel" claiming
+  more than the goldens' tolerance proves, and the 1.0 Mpx figure lacking its precision.
+- **Deploy:** not yet. Joey's go is needed for both pushes (gen2-parts `skin-maps` first, then the planner).

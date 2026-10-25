@@ -34,9 +34,9 @@ for (const tier of ['veryhigh', 'high', 'balanced', 'fast']) {
   await ctx.addInitScript(([th, t]) => { try { localStorage.setItem('gen2-theme', th); localStorage.setItem('gen2-theme:t', String(Date.now())); localStorage.setItem('gen2-quality', t); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('skipgc', 't'); } catch {} }, [theme, tier]);
   const pg = await ctx.newPage();
   const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
-  await pg.goto(`${base}/index.html?ws=build&debug=1&kit=${kit}`, { waitUntil: 'load', timeout: 120000 });
+  await pg.goto(`${base}/index.html?build=${kit}&debug=1`, { waitUntil: 'load', timeout: 120000 });   // an official kit, the way the goldens open it
   await pg.waitForFunction(() => window.__GEN2_VIEWER__?.manifest && window.__GEN2_VIEWER__.skinMap, null, { timeout: 120000 });
-  await pg.evaluate(() => { const v = window.__GEN2_VIEWER__; if (v.skipToEnd) v.skipToEnd(); });
+  await pg.evaluate(() => { const v = window.__GEN2_VIEWER__; v.goTo(v.manifest.steps.length - 1, { animate: false }); });   // the finished build
   await pg.waitForTimeout(2500);
   if (tier === 'veryhigh') await pg.waitForFunction(() => { const s = window.__GEN2_VIEWER__.skinMap.status(); return s.loading.length === 0 && (Object.keys(s.slots).length > 0 || s.index === 0); }, null, { timeout: 90000 }).catch(() => {});
   const status = await pg.evaluate(() => window.__GEN2_VIEWER__.skinMap.status());
@@ -59,6 +59,8 @@ for (const tier of ['veryhigh', 'high', 'balanced', 'fast']) {
         for (let k = 0; k < 3; k++) {
           v.camera.position.x += 0.5 * (k % 2 ? -1 : 1); v.controls.update(); v.invalidateFrame();
           const t0 = performance.now();
+          /* the accumulator restarts on the next frame: wait for its count to drop before timing its climb */
+          while (performance.now() - t0 < 3000 && v.acc.n >= v.ACC_SAMPLES) await wait(8);
           while (performance.now() - t0 < 20000) { if (v.accWanted() && v.acc.ok && v.acc.n >= v.ACC_SAMPLES) break; await wait(16); }
           settles.push(performance.now() - t0);
         }

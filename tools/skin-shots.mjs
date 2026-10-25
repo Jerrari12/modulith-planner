@@ -39,7 +39,9 @@ const SCENES = {
   drawer: {
     build: { length: 185, placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, closure: 'magnet' }], nextId: 2, gridW: 2, gridH: 2, faceStyle: 'essential' },
     node: /^DecorDrawer_185-2W-1H$/, frame: /^DecorDrawer_185/, pull: true,
-    framings: { rim: { at: [0, 'top', 60], cam: [60, 90, 120] }, macro: { at: [-70, 'top', 70], cam: [15, 35, 40] } },
+    /* the rim's top skin: the drawer fully out, its back-right top corner seen from above and behind (the faceplate hides
+       the front edge) */
+    framings: { rim: { at: ['hi', 'hi', 'lo'], cam: [50, 60, -60] }, macro: { at: ['hi', 'hi', 'lo'], cam: [16, 22, -20] } },
   },
 };
 const scenes = (opt('--scenes', 'edgelabel') || '').split(',').filter((s) => SCENES[s]);
@@ -58,8 +60,9 @@ for (const name of scenes) {
   const pg = await ctx.newPage();
   const errs = []; pg.on('pageerror', (e) => errs.push(e.message)); pg.on('console', (m) => { if (m.type() === 'error' || /skin map/.test(m.text())) errs.push(m.type() + ': ' + m.text()); });
   const t0 = Date.now();
-  await pg.goto(`${base}/index.html?ws=build&debug=1${sc.kit ? '&kit=' + sc.kit : ''}`, { waitUntil: 'load', timeout: 120000 });
-  await pg.waitForFunction(() => window.__GEN2_VIEWER__?.manifest && window.__GEN2_STORE__ && window.__GEN2_VIEWER__.skinMap, null, { timeout: 120000 });
+  await pg.goto(sc.kit ? `${base}/index.html?build=${sc.kit}&debug=1` : `${base}/index.html?ws=build&debug=1`, { waitUntil: 'load', timeout: 120000 });   // an official kit opens the way the goldens open it
+  /* a kit page has no planner store: wait for the stage alone there */
+  await pg.waitForFunction((kit) => window.__GEN2_VIEWER__?.manifest && window.__GEN2_VIEWER__.skinMap && (kit || window.__GEN2_STORE__), !!sc.kit, { timeout: 120000 });
   await pg.waitForTimeout(2000);
   if (sc.build) {
     const ok = await pg.evaluate(async ({ build, node }) => {
@@ -78,7 +81,7 @@ for (const name of scenes) {
     }, { build: sc.build, node: sc.node.source });
     if (!ok) throw new Error(`${name}: the node did not mount`);
   } else {
-    await pg.evaluate(() => { const v = window.__GEN2_VIEWER__; v.skipToEnd && v.skipToEnd(); });
+    await pg.evaluate(() => { const v = window.__GEN2_VIEWER__; v.goTo(v.manifest.steps.length - 1, { animate: false }); });   // the finished build, as the goldens' end page
     await pg.waitForTimeout(1500);
   }
   await pg.evaluate((n) => { const v = window.__GEN2_VIEWER__; const p = v.PRESETS && v.PRESETS.find((p) => p.name === n); if (p) v.applyPreset(p, { quiet: true }); }, LOOKS[lookKey]);
@@ -87,7 +90,7 @@ for (const name of scenes) {
   const st = await pg.evaluate(() => window.__GEN2_VIEWER__.skinMap.status());
   status.scenes[name] = { loaded, status: st, bootMs: Date.now() - t0, shots: {} };
   console.log(name, 'skin map status', JSON.stringify(st));
-  if (sc.pull) await pg.evaluate(() => { const v = window.__GEN2_VIEWER__; const inst = [...v.instances.values()].find((i) => /^DecorDrawer/.test(i.cfg.node)); if (inst) inst.group.position.z += 120; v.invalidateFrame(); });
+  if (sc.pull) await pg.evaluate(() => { const v = window.__GEN2_VIEWER__; for (const inst of v.instances.values()) if (/^(DecorDrawer|Faceplate|Handle|Label)/.test(inst.cfg.node)) inst.group.position.z += 200; v.invalidateFrame(); });   // the drawer and its front, fully out
   const settle = async () => { await pg.evaluate(async () => { const v = window.__GEN2_VIEWER__; const t0 = performance.now(); await new Promise((ok) => setTimeout(ok, 700)); while (performance.now() - t0 < 15000) { const accDone = !v.accWanted() || !v.acc.ok || v.acc.n >= v.ACC_SAMPLES; if (v.tweenCount === 0 && accDone) break; await new Promise((ok) => setTimeout(ok, 100)); } await new Promise((ok) => setTimeout(ok, 300)); }); };
   for (const [framing, f] of Object.entries(sc.framings)) {
     for (const on of [true, false]) {
@@ -97,12 +100,12 @@ for (const name of scenes) {
         const re = new RegExp(frame);
         const box = new T.Box3(); v.scene.traverse((o) => { if (o.isMesh && re.test(o.name || '')) box.expandByObject(o); });
         const cen = box.getCenter(new T.Vector3());
-        const pick = (k, c, lo, hi) => (k === 'top' ? hi : typeof k === 'number' ? c + k : c);
+        const pick = (k, c, lo, hi) => (k === 'top' || k === 'hi' ? hi : k === 'lo' ? lo : typeof k === 'number' ? c + k : c);
         const t = new T.Vector3(pick(at[0], cen.x, box.min.x, box.max.x), pick(at[1], cen.y, box.min.y, box.max.y), pick(at[2], cen.z, box.min.z, box.max.z));
         v.controls.target.copy(t); v.camera.position.copy(t.clone().add(new T.Vector3(cam[0] + nudge, cam[1], cam[2])));
         v.camera.updateProjectionMatrix(); v.controls.update(); v.invalidateFrame();
         await new Promise((ok) => setTimeout(ok, 1200));
-      }, { frame: sc.frame.source, at: f.at, cam: f.cam, on, nudge: on ? 0 : 0.01 });
+      }, { frame: sc.frame.source, at: f.at, cam: f.cam, on, nudge: 0 });   // invalidateFrame restarts the accumulator; a camera nudge would move the grain and inflate the on/off difference
       await settle();
       const samples = await pg.evaluate(() => ({ n: window.__GEN2_VIEWER__.acc.n, detail: window.__GEN2_VIEWER__.acc.detailCount, quality: window.__GEN2_VIEWER__.quality }));
       const file = `${name}-${framing}-${on ? 'on' : 'off'}.png`;
