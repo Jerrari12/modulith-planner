@@ -52,10 +52,6 @@ const XL = { profile: 'xl-5t-hf04-02speed-pla.ini', bed: [360, 360] };
 const BED_MARGIN_MM = 0;         // the slicer's own rule: a 4W part fits the XL's 360 with zero margin (catalog_slice.py); the bake records a refusal
 const BED_EPS = 0.01;
 const DEFAULT_OUT = 'D:/Claude - Output/skin-map-2026-10-25';
-/* a shipped map's pixel cap: a 270 case bakes to 1485 x 2242 px (3.3 Mpx, 460 KB) at 8 px/mm, far past the ~160 KB a part
-   was budgeted; past the cap the map ships scaled down (the normal box-averaged, the layer height nearest), its px/mm
-   recorded in the index, so the stage reads it the same way. --max-mpx overrides. */
-const MAX_MPX = +opt('--max-mpx', 1.5);
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -64,6 +60,10 @@ const OUT = opt('--out', DEFAULT_OUT);
 const ONLY = opt('--nodes', '') ? new Set(opt('--nodes', '').split(',')) : null;
 const MATCH = opt('--match', null);
 const LIMIT = +opt('--limit', 0) || 0;
+/* a shipped map's pixel cap: a 270 case bakes to 1485 x 2242 px (3.3 Mpx, 460 KB) at 8 px/mm, far past the ~160 KB a part
+   was budgeted; past the cap the map ships scaled down (the normal box-averaged, the layer height nearest), its px/mm
+   recorded in the index, so the stage reads it the same way. --max-mpx overrides. */
+const MAX_MPX = +opt('--max-mpx', 1.5);
 
 const norm = (s) => s.toLowerCase().replace(/\.stl$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
@@ -214,16 +214,21 @@ async function push() {
   const plan = JSON.parse(readFileSync(join(OUT, 'jobs.json'), 'utf8'));
   const want = new Map();
   for (const j of plan.jobs) want.set(j.stl, j.sha256);
-  const list = [...want.keys()].map((p) => '~/models/' + p.replace(/(["$`\\])/g, '\\$1')).map((p) => `"${p}"`).join(' ');
+  /* the list goes over stdin: 555 quoted paths overflow a Windows command line (the first run died there, and a
+     `| tail` hid its exit code - the grep-gate hole, again) */
   const have = new Map();
-  const out = execFileSync('ssh', ['-o', 'BatchMode=yes', 'node0', `sha256sum ${list} 2>/dev/null || true`], { encoding: 'utf8', maxBuffer: 1 << 26 });
-  for (const line of out.split('\n')) { const m = line.match(/^([0-9a-f]{64})\s+\*?(.+)$/); if (m) have.set(m[2].replace(/^\/home\/[^/]+\/models\//, ''), m[1]); }
+  const out = execFileSync('ssh', ['-o', 'BatchMode=yes', 'node0', 'cd ~/models && xargs -d "\\n" sha256sum 2>/dev/null || true'],
+    { encoding: 'utf8', maxBuffer: 1 << 26, input: [...want.keys()].join('\n') + '\n' });
+  for (const line of out.split('\n')) { const m = line.match(/^([0-9a-f]{64})\s+\*?(.+)$/); if (m) have.set(m[2].replace(/^\.\//, ''), m[1]); }
   const missing = [...want].filter(([p, sha]) => have.get(p) !== sha);
   console.log(`${want.size} STLs in the jobs; node0 has ${want.size - missing.length} with the right hash; ${missing.length} to copy`);
+  /* streamed over ssh into a single-quoted path under ~/models (scp's remote-shell parsing mangled the spaces) */
+  const q = (t) => "'" + t.replace(/'/g, "'\\''") + "'";
   for (const [p, sha] of missing) {
-    const dir = '~/models/' + p.split('/').slice(0, -1).join('/');
-    execFileSync('ssh', ['-o', 'BatchMode=yes', 'node0', `mkdir -p "${dir.replace(/(["$`\\])/g, '\\$1')}"`]);
-    execFileSync('scp', ['-q', join(CORPUS, p), `node0:"${('~/models/' + p).replace(/(["$`\\ ])/g, '\\$1')}"`]);
+    const dir = p.split('/').slice(0, -1).join('/');
+    execFileSync('ssh', ['-o', 'BatchMode=yes', 'node0', `cd ~/models && mkdir -p ${q(dir)} && cat > ${q(p)}`], { input: readFileSync(join(CORPUS, p)), maxBuffer: 1 << 28 });
+    const back = execFileSync('ssh', ['-o', 'BatchMode=yes', 'node0', `cd ~/models && sha256sum ${q(p)}`], { encoding: 'utf8' }).slice(0, 64);
+    if (back !== sha) throw new Error(`${p}: node0 reads ${back.slice(0, 12)} after the copy, the job wants ${sha.slice(0, 12)}`);
     console.log('  copied', p, sha.slice(0, 12));
   }
 }
