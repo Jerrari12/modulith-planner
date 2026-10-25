@@ -36,8 +36,9 @@ const GOLDEN_PATH = join(root, 'test', 'golden', 'adhesive-foot.json');
 const UPDATE = !!process.env.UPDATE_GOLDEN;
 // read from disk, not hardcoded: a NEW collection pool must carry both feet
 // or adhesive builds hang on it, and a hardcoded list would not notice
+// a pool is a folder named by its collection depth; parts/skin holds the baked top-layer maps (2026-10-25), not GLBs
 const POOLS = readdirSync(join(root, 'parts'), { withFileTypes: true })
-  .filter(d => d.isDirectory()).map(d => d.name);
+  .filter(d => d.isDirectory() && /^\d+$/.test(d.name)).map(d => d.name);
 const pool = (c, node) => join(root, 'parts', c, node + '.lib.glb');
 const PRINTED = pool('185', 'Tabletop-Kit-Foot');
 const ADHESIVE = pool('185', 'Adhesive-Foot');

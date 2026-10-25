@@ -16,6 +16,7 @@ import { applyLayerDetail } from './vendor/layer-detail.js';
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
+import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
@@ -738,6 +739,7 @@ function applyQuality(name) {
 }
 function setQuality(name, { user = false } = {}) {
   applyQuality(name);
+  skinMaps.sync();   // a visitor stepping up to Very High fetches the maps then, not before
   if (user) qualityLocked = true;
   try {
     if (user) { localStorage.setItem('gen2-quality', quality); localStorage.setItem('gen2-quality:set', '1'); }
@@ -3132,7 +3134,7 @@ const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness:
 const zoneKey = (type, zone) => zone ? `${type}:${zone}` : type;
 function ensureMaterials() { // one shared material per type/zone key (idempotent across re-mounts)
   for (const [key, hex] of Object.entries(manifest.colors))
-    if (!materials[key]) materials[key] = seamPatched(key, seeIntoPatched(key, newPartMaterial(key)));
+    if (!materials[key]) materials[key] = skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key))));
 }
 /* the see-into experiment's patch on the back cover material, or the material unchanged (see-into.js) */
 /* ---------------------------------------------------------------- supported translucent previews (Astra 2026-09-17)
@@ -3290,7 +3292,7 @@ function seeIntoPatched(key, m) {
 }
 function baseMatFor(type, zone = '') { // shared material per (type, zone) — zones build lazily off the active palette
   const key = zoneKey(type, zone);
-  if (!materials[key]) materials[key] = seamPatched(key, seeIntoPatched(key, newPartMaterial(key)));
+  if (!materials[key]) materials[key] = skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key))));
   return materials[key];
 }
 /* COVER SEAMS (2026-10-21, js/cover-seam.js): the Cover Lower and Cover Upper tiles butt with no gap, so in one filament a
@@ -3301,6 +3303,131 @@ const seamU = createCoverSeamUniforms({ on: new URLSearchParams(location.search)
 function seamPatched(key, m) {
   return SEAM_TYPES.has(key) ? applyCoverSeam(m, { uniforms: seamU }) : m;
 }
+
+/* SKIN MAPS (2026-10-25, js/skin-map.js): every part's real printed top layer - the slicer's own lines and perimeter
+   loops, baked on node0 from the part's G-code and shipped as parts/skin/<node>.png beside the GLBs - drawn on every
+   top-facing skin in Very High's settle samples. One atlas and one float table serve every node on the stage; a mesh
+   names its map by the per-vertex aSkinId its template is stamped with here. The maps are fetched only while the tier is
+   Very High (the other tiers never draw them), only for nodes the mounted manifest places, and a map that fails to load
+   leaves its part plain. ?skinmap=off draws nothing and fetches nothing, for comparison. */
+const skinU = createSkinMapUniforms({ on: new URLSearchParams(location.search).get('skinmap') !== 'off' });
+function skinPatched(key, m) {
+  return m.userData && m.userData.bedFinish ? applySkinMap(m, { uniforms: skinU }) : m;
+}
+const skinMaps = (() => {
+  const SLOTS = SKIN_MAP.slots;
+  const st = { index: null, indexP: null, atlas: null, atlasPx: 0, atlasData: null, table: null, tableData: new Float32Array(2 * SLOTS * 4),
+    sources: new Map(), roots: new Map(), slots: new Map(), loading: new Map(), failed: new Map(), scale: 1, rev: 0, syncing: null };
+  const wanted = () => skinU.uSMOn.value > 0.5 && !!QUALITY[quality].accum;
+  const base = () => assetUrl('parts/skin/');
+  const inflate = (bytes) => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer().then((b) => new Uint8Array(b));
+  function loadIndex() {
+    if (!st.indexP) {
+      st.indexP = fetch(base() + 'index.json').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        .then((j) => { st.index = j && j.nodes ? j : { nodes: {} }; return st.index; });
+    }
+    return st.indexP;
+  }
+  async function load(node) {
+    const entry = st.index.nodes[node];
+    const r = await fetch(base() + entry.file);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const png = await decodePng(new Uint8Array(await r.arrayBuffer()), inflate);
+    if (png.width !== entry.size[0] || png.height !== entry.size[1]) throw new Error(`the map is ${png.width}x${png.height}, the index says ${entry.size}`);
+    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm });
+  }
+  function ensureTable() {
+    if (st.table) return;
+    st.table = new THREE.DataTexture(st.tableData, 2, SLOTS, THREE.RGBAFormat, THREE.FloatType);
+    st.table.minFilter = THREE.NearestFilter; st.table.magFilter = THREE.NearestFilter; st.table.generateMipmaps = false;
+    st.table.needsUpdate = true;
+    skinU.uSMTable.value = st.table;
+  }
+  function ensureAtlas(px) {
+    if (st.atlas && st.atlasPx === px) return;
+    if (st.atlas) st.atlas.dispose();
+    st.atlasData = new Uint8Array(px * px * 4);
+    st.atlas = new THREE.DataTexture(st.atlasData, px, px, THREE.RGBAFormat, THREE.UnsignedByteType);
+    st.atlas.minFilter = THREE.LinearMipmapLinearFilter; st.atlas.magFilter = THREE.LinearFilter; st.atlas.generateMipmaps = true;
+    st.atlas.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    st.atlas.flipY = false; st.atlas.colorSpace = THREE.NoColorSpace;
+    st.atlas.wrapS = THREE.ClampToEdgeWrapping; st.atlas.wrapT = THREE.ClampToEdgeWrapping;
+    st.atlasPx = px; skinU.uSMAtlas.value = st.atlas; skinU.uSMAtlasPx.value = px;
+  }
+  /* the per-vertex slot on every mesh of a node's template (the instances share the template's geometries) */
+  function stamp(node, id) {
+    const root = st.roots.get(node);
+    if (!root) return;
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      const g = o.geometry, n = g.attributes.position.count, a = g.attributes.aSkinId;
+      if (a && a.count === n) { a.array.fill(id); a.needsUpdate = true; }
+      else g.setAttribute('aSkinId', new THREE.BufferAttribute(new Float32Array(n).fill(id), 1));
+    });
+  }
+  /* the nodes the stage places and has a decoded map for - the atlas holds exactly these */
+  function live() {
+    const on = new Set(manifest ? manifest.instances.map((i) => i.node) : []);
+    return [...st.sources.keys()].filter((n) => on.has(n) && st.roots.has(n)).sort();
+  }
+  function repack() {
+    const nodes = live();
+    const pack = packAtlas(nodes.map((n) => { const s = st.sources.get(n); return { id: n, w: s.w, h: s.h }; }));
+    for (const n of st.slots.keys()) stamp(n, 0);
+    st.slots.clear();
+    if (!nodes.length) { st.rev++; invalidateFrame(); return; }   // nothing on the stage has a map: no atlas is allocated for it
+    if (!pack) { console.warn('[skin map] the maps on the stage do not fit the atlas even scaled down - none drawn'); invalidateFrame(); return; }
+    ensureTable(); ensureAtlas(pack.size);
+    /* the empty atlas reads FLAT - R,G = 128 is a zero normal, B,A = 0 no bead; a zero byte would be a slope of -1 that the
+       mipmaps blend into every map's edge when it is minified (Sol 01a174ad) */
+    new Uint32Array(st.atlasData.buffer).fill(0x00008080); st.tableData.fill(0);
+    let slot = 0;
+    for (const n of nodes) {
+      if (slot >= SLOTS) { console.warn('[skin map] more than ' + SLOTS + ' mapped nodes on the stage - the rest stay plain'); break; }
+      const s = st.sources.get(n), r = pack.rects.get(n);
+      const data = pack.scale === 1 ? s.data : resampleMap(s.data, s.w, s.h, r.w, r.h);
+      for (let y = 0; y < r.h; y++) st.atlasData.set(data.subarray(y * r.w * 4, (y + 1) * r.w * 4), ((r.y + y) * pack.size + r.x) * 4);
+      const rows = tableRows(r, s, pack.scale);
+      st.tableData.set(rows[0], slot * 2 * 4); st.tableData.set(rows[1], (slot * 2 + 1) * 4);
+      st.slots.set(n, slot); stamp(n, slot + 1); slot++;
+    }
+    st.scale = pack.scale; st.atlas.needsUpdate = true; st.table.needsUpdate = true; st.rev++;
+    invalidateFrame();
+  }
+  /* fetch what the stage needs and repack when the set on stage changed; one run at a time, the next waits for it */
+  async function sync() {
+    if (!wanted()) return st.rev;
+    if (st.syncing) await st.syncing;
+    st.syncing = (async () => {
+      const index = await loadIndex();
+      const on = new Set(manifest ? manifest.instances.map((i) => i.node) : []);
+      const need = [...st.roots.keys()].filter((n) => on.has(n) && index.nodes[n] && !st.sources.has(n) && !st.loading.has(n) && !st.failed.has(n));
+      for (const n of need) {
+        st.loading.set(n, load(n).catch((e) => { st.failed.set(n, (e && e.message) || String(e)); console.warn(`[skin map] ${n}: ${(e && e.message) || e} - left plain`); }).finally(() => st.loading.delete(n)));
+      }
+      await Promise.all([...st.loading.values()]);
+      const want = live();
+      const same = want.length === st.slots.size && want.every((n) => st.slots.has(n));
+      if (!same) repack();
+    })();
+    try { await st.syncing; } finally { st.syncing = null; }
+    return st.rev;
+  }
+  return {
+    uniforms: skinU,
+    /* a template that just loaded: remembered, and fetched on the next sync (the mount's) */
+    adopt(node, root) { st.roots.set(node, root); const slot = st.slots.get(node); if (slot != null) stamp(node, slot + 1); },
+    sync,
+    get on() { return skinU.uSMOn.value === 1; },
+    set(on) { skinU.uSMOn.value = on ? 1 : 0; invalidateFrame(); if (on) sync(); return !!on; },
+    get atlas() { return st.atlas; },
+    status() {
+      return { wanted: wanted(), on: skinU.uSMOn.value === 1, atlasPx: st.atlasPx, scale: st.scale, rev: st.rev,
+        slots: Object.fromEntries(st.slots), sources: [...st.sources.keys()], failed: Object.fromEntries(st.failed),
+        loading: [...st.loading.keys()], index: st.index ? Object.keys(st.index.nodes).length : null };
+    },
+  };
+})();
 
 // ---- build plate (2026-08-10; every eligible part since 2026-09-14) ----------
 // Every printed part's BED-CONTACT FACE takes the finish of the sheet it was
@@ -3326,8 +3453,6 @@ const plateProfile = () => PLATE_PROFILES.find(p => p.key === plateFinishOf(buil
 /* One set of finish uniforms for every part material that carries the finish, so Powder <-> Smooth
    is a uniform write and every clone of every material follows it. */
 const bedFinishU = createBedFinishUniforms();
-/* the skin's extrusion lines, a trial (2026-09-22): ?skinlines=on draws them in Very High's settle samples */
-if (new URLSearchParams(location.search).get('skinlines') === 'on') bedFinishU.uSKOn.value = 1;
 const plateSupported = () => !!build && PLATE_FAMILIES.has(currentFaceplateStyle()?.key);
 const plateActive = () => plateSupported() && plateProfile().holo > 0;
 // which key carries the CONTACT face: Chevron's raised strips are its FACE zone
@@ -3915,6 +4040,7 @@ function adoptTemplate(sceneRoot, type, node) {
     try { stampSeams(sceneRoot); }
     catch (e) { console.warn(`[cover seams] ${node}: ${(e && e.message) || e} - left square`); }
   }
+  skinMaps.adopt(node, sceneRoot);   // its baked top layer, fetched on the mount's sync while the tier is Very High (skinMaps)
   return sceneRoot;
 }
 /* the cover edges' aSeam (js/cover-seam.js): x and the part's half-width, mm, in the part frame. Per TEMPLATE, like
@@ -10364,6 +10490,7 @@ async function mountManifest(m) {
   // reflector plane are both sized off assembledBox, and regenerate() replaces
   // every instance group, so the shadow casters have to be re-flagged too.
   applyQuality(quality);
+  skinMaps.sync();   // the maps of the nodes this build places, while the tier is Very High; not awaited - they land into a settled frame
   if (isWallBuild) fitWall();
   if (isUnderTableBuild) fitSurface();
   buildAfterState();
@@ -11034,6 +11161,8 @@ for (const m of ['toDataURL', 'toBlob']) {
       uniforms: seamU, get on() { return seamU.uSeamOn.value === 1; },
       set(on) { seamU.uSeamOn.value = on ? 1 : 0; invalidateFrame(); return !!on; },
     },
+    /* the baked top layers (js/skin-map.js): skinMap.set(false) draws every top skin plain, status() says what is loaded */
+    skinMap: skinMaps,
     wall, surface,   // the mount backdrops, for capture tooling that needs the mounting surface as context
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the

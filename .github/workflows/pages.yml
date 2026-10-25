@@ -208,6 +208,8 @@ jobs:
           sed -i "s|'./bed-finish.js'|'./bed-finish.js?v=$V'|" js/main.js
           # the cover tiles' shading-only edge (2026-10-21) - a main.js import too
           sed -i "s|'./cover-seam.js'|'./cover-seam.js?v=$V'|" js/main.js
+          # the baked top layers (2026-10-25) - a main.js import too; the maps under parts/skin/ are part assets on the parts host
+          sed -i "s|'./skin-map.js'|'./skin-map.js?v=$V'|" js/main.js
           # the dimension labels' cover test (2026-09-14, the moving-frame savings) - a main.js import too
           sed -i "s|'./dim-cover.js'|'./dim-cover.js?v=$V'|" js/main.js
           # the orbit benchmark, ?bench=orbit (2026-09-14) - a main.js import (the version its results report is main.js's

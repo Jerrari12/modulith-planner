@@ -1,0 +1,41 @@
+{
+ "node": "Faceplate_EdgeLabel_2W-1H",
+ "file": "Faceplate_EdgeLabel_2W-1H.png",
+ "size": [
+  1413,
+  453
+ ],
+ "q0": [
+  -88.35,
+  -55.85
+ ],
+ "pxPerMm": 8,
+ "axis": [
+  0,
+  0,
+  1
+ ],
+ "skinLayersZ": [
+  0.8,
+  1.8,
+  2.2,
+  3.2,
+  3.6,
+  4.6,
+  5.8,
+  6.6
+ ],
+ "topAngleDeg": 45,
+ "crownMm": 0.06,
+ "bake": {
+  "stl": "GEN2/Decor Faceplates/EdgeLabel/v2602/2W-1H/EdgeLabel 2W-1H.stl",
+  "stlSha256": "89ba68166d254d1e18d322cc526b5bb440f7a5a9e54950c854cb36ec78902f0d",
+  "rotateX": 0,
+  "profile": "core-one-04hf-02speed-pla.ini",
+  "slicer": "2.9.4+UNKNOWN",
+  "bakeVersion": 2,
+  "key": "89ba68166d254d1e-rx0-px8"
+ },
+ "pngSha256": "3d710cc19977d648561dbc13c2acf72012131656f7f026875b0275d4621ef420",
+ "bytes": 115956
+}
