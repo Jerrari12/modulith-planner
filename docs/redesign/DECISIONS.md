@@ -3697,6 +3697,7 @@ Dated calls made while building, with who made them. The brief and the inventory
   - Mutants: 14 of 14 killed, each at its own assertion, the case and the unit tests run unmutated first (5 by the
     unit tests: the scale, the slide past its reach, the reach without its scale, the kinds' turn, the slides swapped).
   - The whole e2e suite: 95 of 95. The done-fit unit tests: 30 of 30.
-- **Not done.** Not deployed: behind `?done=room`. The strength (1.045) is a first guess for Joey's eye. A low-end
-  device's cost is not measured: the A5000 laptop shows that the drift does not depend on the scene's drawing, not what
-  a weak GPU pays to composite it.
+- **The strength, Joey's call.** Shown the clip of the hero's push at 1.045 and offered about 7 % instead, Joey: "The
+  drift strength looks right, keep it at 4.5%." (2026-10-25). 1.045 stays.
+- **Not done.** Not deployed: behind `?done=room`. A low-end device's cost is not measured: the A5000 laptop shows that
+  the drift does not depend on the scene's drawing, not what a weak GPU pays to composite it.
