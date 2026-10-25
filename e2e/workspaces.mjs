@@ -2372,7 +2372,7 @@ test('Assemble: the Done scene\'s plain desk reflects the room and the oak does 
       let calls = 0; v.drawNextFrame = () => { calls++; next(); };
       try { await new Promise((r) => setTimeout(r, ms)); } finally { v.drawNextFrame = next; }
       const b = d.steam, ib = v.idleStats();
-      return { rate: b.rate, shown: b.shown, ticks: b.ticks - a.ticks, calls, t: +(b.t - a.t).toFixed(3), uTime: +(b.uTime - a.uTime).toFixed(3), drawn: ib.drawn - ia.drawn, ms: Math.round(performance.now() - t0) };
+      return { rate: b.rate, shown: b.shown, visible: b.visible, ticks: b.ticks - a.ticks, calls, t: +(b.t - a.t).toFixed(3), uTime: +(b.uTime - a.uTime).toFixed(3), drawn: ib.drawn - ia.drawn, ms: Math.round(performance.now() - t0) };
     };
   });
   // THE OAK: matte, no environment on the desk
@@ -2499,6 +2499,7 @@ test('Assemble: the Done scene\'s plain desk reflects the room and the oak does 
   await settle(page, 800);
   const fast = await page.evaluate(() => window.__steamOver(1500));
   assert.deepEqual([fast.rate, fast.ticks, fast.calls, fast.t], [0, 0, 0, 0], `Fast: a still wisp (${JSON.stringify(fast)})`);
+  assert.equal(fast.visible, false, 'and, since Fast\'s shots drift, not drawn: the change of tier hid it (done-fit.js steamShown)');
   // VERY HIGH: still through a still shot, whose mean converges where this runner's accumulator runs; rising through a
   // moving one, on the frames its move draws, asking for none of its own
   await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }));
@@ -2512,6 +2513,7 @@ test('Assemble: the Done scene\'s plain desk reflects the room and the oak does 
     return { ...r, ok: v.acc.ok, converged };
   });
   assert.deepEqual([vh.rate, vh.ticks, vh.calls, vh.t], ['motion', 0, 0, 0], `Very High, a still shot: the wisp holds (${JSON.stringify(vh)})`);
+  assert.equal(vh.visible, true, 'drawn again on Very High, where nothing drifts');
   if (vh.ok) assert.equal(vh.converged, true, `and the still shot's mean converges (${JSON.stringify(vh)})`);
   await page.evaluate(() => { const d = window.__GEN2_DONE__; d.setTiming({ holdMs: 4000, maxFrameMs: 1e9, seed: 1 }); d.jump('slide'); });
   const mv = await page.evaluate(() => window.__steamOver(1500));
@@ -2524,8 +2526,11 @@ test('Assemble: the Done scene\'s plain desk reflects the room and the oak does 
    slightly, like without it rerendering the scene ... maybe this would work on low end pc's as well"). On Fast, where
    every shot is still: the hero's picture pushes in by a CSS transform on the canvas while the stage draws only its
    once-a-second safety net, the canvas's box clipping it; the next shot takes its own drift from the shot as framed;
-   leaving puts the canvas back. On High a moving shot has none. Under reduced motion there is none at all. */
-test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed in or slid without the scene drawn again, on any tier', async () => {
+   leaving puts the canvas back; the steam, which cannot move on Fast, is not drawn (Joey: "it's the obvious dead giveaway
+   that it's a static image"). On High a moving shot has none and a still one does, the steam rising over it. Very High
+   has none ("on very high we never use this static image zoom feature"), and a change to it ends one. Under reduced
+   motion there is none at all. */
+test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed in or slid without the scene drawn again, on every tier but Very High', async () => {
   const enterScene = async (page) => {
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
@@ -2552,6 +2557,8 @@ test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed i
   const set = (a.d0.origin.match(/[\d.]+(?=%)/g) || []).map(Number);   // the page writes "50.00%" back as "50%"
   assert.ok(set.length === 2 && Math.abs(set[0] - o.x * 100) < 0.01 && Math.abs(set[1] - o.y * 100) < 0.01, `about the build's place in the frame (${a.d0.origin} for ${JSON.stringify(o)})`);
   assert.ok(o.x >= 0.2 && o.x <= 0.8 && o.y >= 0.2 && o.y <= 0.8, `held inside the frame's middle (${JSON.stringify(o)})`);
+  // the coffee's steam cannot move on Fast: a frozen wisp in a zooming picture gives it away, so it is not drawn (Joey)
+  assert.equal((await page.evaluate(() => window.__GEN2_DONE__.steam)).visible, false, 'Fast: no steam over the drifting picture');
   assert.ok(a.drawn <= 3, `while the stage draws only its safety net (${a.drawn} frames in 1.5 s)`);
   // the next shot: the last drift cleared in the black, its own from the shot as framed
   await page.waitForFunction(() => window.__GEN2_DONE__.sequence.shot !== 'hero' && window.__GEN2_DONE__.drift.state === 'running', null, { timeout: 30_000 });
@@ -2588,9 +2595,19 @@ test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed i
   assert.deepEqual([push.moving, push.drift.plan, push.drift.transform], [true, null, 'none'], `High: a moving shot moves its camera, no drift (${JSON.stringify(push)})`);
   await hi.page.evaluate(() => window.__GEN2_DONE__.jump('top'));
   await settle(hi.page, 600);
-  const top = await hi.page.evaluate(() => window.__GEN2_DONE__.drift);
-  assert.equal(top.state, 'running', `a still one drifts (${JSON.stringify(top)})`);
-  assert.deepEqual(clean(hi.errors), [], 'no errors (High)');
+  const top = await hi.page.evaluate(() => ({ drift: window.__GEN2_DONE__.drift, steam: window.__GEN2_DONE__.steam.visible }));
+  assert.equal(top.drift.state, 'running', `a still one drifts (${JSON.stringify(top.drift)})`);
+  assert.equal(top.steam, true, 'and the steam, which rises on High, is drawn over it');
+  // VERY HIGH: a change of tier ends the drift on screen, and its still shots have none (its converged pictures, Joey)
+  await hi.page.evaluate(() => window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }));
+  await settle(hi.page, 800);
+  const vh0 = await hi.page.evaluate(() => window.__GEN2_DONE__.drift);
+  assert.deepEqual([vh0.plan, vh0.transform], [null, 'none'], `the change to Very High ends the drift (${JSON.stringify(vh0)})`);
+  await hi.page.evaluate(() => window.__GEN2_DONE__.jump('hero'));
+  await settle(hi.page, 800);
+  const vh1 = await hi.page.evaluate(() => ({ drift: window.__GEN2_DONE__.drift, moving: window.__GEN2_DONE__.sequence.moving, steam: window.__GEN2_DONE__.steam.visible }));
+  assert.deepEqual([vh1.moving, vh1.drift.plan, vh1.drift.transform, vh1.steam], [false, null, 'none', true], `Very High: a still shot is not zoomed (${JSON.stringify(vh1)})`);
+  assert.deepEqual(clean(hi.errors), [], 'no errors (High, Very High)');
   await hctx.close();
   // REDUCED MOTION: none
   const rctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
@@ -2647,6 +2664,8 @@ test('Colors: the Studio / Room toggle is absent without the flag; with it, Room
   const s1 = await state(page);
   assert.equal(s1.room, true, 'the room is in the scene'); assert.equal(s1.held, true, 'the stage is held'); assert.equal(s1.bg, null);
   assert.equal(s1.controls, true, 'the orbit is free'); assert.equal(s1.seq, false, 'no camera sequence in Colors');
+  // nothing here drifts, so the coffee's steam is drawn on Fast too, unlike Assemble's still shots (Terra 01a1755a)
+  assert.equal(await page.evaluate(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.steam && window.__GEN2_DONE__.steam.visible), true, 'the steam stays in a scene that never drifts');
   assert.equal(await seg('Room').getAttribute('aria-pressed'), 'true');
   /* "no sequence" has to be shown on a tier that WOULD sequence in Assemble: these cases run on Fast, where the sequence is
      off anyway, and the slow-drift guard leaves seq.on false too, so neither tells a stage from a stopped sequence. On

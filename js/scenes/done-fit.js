@@ -546,12 +546,28 @@ export function steamSize(radius) {
  * slightly, like without it rerendering the scene, kind of like cropping or expanding or panning an image? just as an
  * alternative to always sitting still, maybe this would work on low end pc's as well"). A still shot's finished picture
  * is slowly scaled or slid by a CSS transform on the canvas: the compositor's work, so the scene is not drawn again and
- * the idle gate stays at rest, on any tier. A push in, a pull out, or a slide across at a held scale, `scale` at most,
- * about the build's place in the frame (`origin`, fractions of the canvas). A slide reaches only as far as its scale
- * covers, so the canvas's edge never shows: with the transform scale(s) translate(t) about an origin o, an edge stays
- * outside the view while t lies within -(1 - o)(s - 1)/s .. o(s - 1)/s (fractions of the canvas); `slide` is the share of
- * that reach a slide uses. */
-export const DRIFT = { scale: 1.045, slide: 0.7, kinds: ['in', 'left', 'out', 'right'] };
+ * the idle gate stays at rest. A push in, a pull out, or a slide across at a held scale, `scale` at most (1.09: Joey,
+ * shown 1.045, "maybe try double that"), about the build's place in the frame (`origin`, fractions of the canvas). A
+ * slide reaches only as far as its scale covers, so the canvas's edge never shows: with the transform scale(s)
+ * translate(t) about an origin o, an edge stays outside the view while t lies within -(1 - o)(s - 1)/s .. o(s - 1)/s
+ * (fractions of the canvas); `slide` is the share of that reach a slide uses. */
+export const DRIFT = { scale: 1.09, slide: 0.7, kinds: ['in', 'left', 'out', 'right'] };
+/* where the drift runs (Joey, the same day: "on very high we never use this static image zoom feature"): not on Very
+ * High, whose still shots are its converged pictures, the lens's bokeh among them, which a zoom of the finished frame
+ * would only soften, and whose steam holds still through a still shot; not under reduced motion */
+export function driftWanted(tier, reduced) {
+  return !reduced && tier !== 'veryhigh';
+}
+/* whether the coffee's steam is drawn (Joey: on the zoomed shots "maybe we omit the steam from the coffee on those
+ * because it's the obvious dead giveaway that it's a static image"): not where it cannot move and the shots drift
+ * (Fast: a frozen wisp in a picture that zooms gives the picture away). Where it moves (High, Balanced) it rises in the
+ * zoomed picture as it does in a still one; under reduced motion nothing drifts and a still wisp is a still scene's.
+ * `drifts`: whether this scene runs the grammar at all (Colors' Room stage does not: nothing there ever drifts, Terra
+ * 01a1755a). On Fast it is hidden from the entrance on, so it does not vanish on screen when the first shot's drift
+ * begins. */
+export function steamShown(tier, reduced, drifts = true) {
+  return !(drifts && steamRate(tier, reduced) === 0 && driftWanted(tier, reduced));
+}
 export function driftReach(o, s) {
   return { lo: -(1 - o) * (s - 1) / s, hi: o * (s - 1) / s };
 }
