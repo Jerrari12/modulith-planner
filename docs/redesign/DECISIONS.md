@@ -3259,4 +3259,15 @@ keyboard undo or Remove").
   rows a risen drop leaves on a hanging grid.
 - **Suites:** npm test 606 (599 pass; the 2 fails were a stale run of settle.test and a feet-pool flake that passes alone and under the
   stashed tree); the settle case alone 1/1; the three cases that exercise gravity, moves and grow-down 5/5; mutants 4/4.
-- **Deploy:** staged on branch `settle-toward-mount`; it changes a 2026-10-21 decision and a refusal, so it waits for Joey's go.
+- **Deploy:** Joey's go 2026-10-25 ("merge settle-toward-mount onto main and push, with a live check"); merged as `5721da3`.
+  The deploy's smoke step FAILED (run 40231025225): the e2e case "Joey's wall build switched to Tabletop keeps its gaps as
+  empty slots" encoded the 2026-10-21 rule this entry replaces - the switch now settles his layout first, so of his four
+  gaps two close (units 3, 4, 6, 7 drop a row) and the sheet says 2 slots, not 4; and, because units 3 and 4 drop, the
+  tabletop's top is no longer level over columns 5-6, so after Fill all the build still waits on the "finish the top"
+  guide (two 1W-1H by hand). The case now says exactly that (branch `settle-e2e-fix`). The run's second failure, the
+  Colors "preset after a region pick" undo timing, passed locally and is the runner's timing flake. Lesson recorded: run
+  the WHOLE e2e before a push, and grep the tests for the words of the rule a change replaces. The full local run then
+  failed this entry's own case ("Under-Table settles up after every edit") on an Undo wait: the store coalesces commits
+  made within 350 ms into one history entry (a drag is one undo), and the script's two removals were one round trip
+  apart, so one Undo put both back - a flake that passed alone. The case now flushes history between the edits that must
+  be separate undo steps, as a hand's pace does. LIVE LINE TO FILL.
