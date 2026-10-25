@@ -3295,8 +3295,7 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   bead wins and the Z channel records its layer; 8 px/mm; one RGBA8 PNG per part in the G-code frame (R,G the normal's
   xy, B,A the layer height in 0.01 mm) with a JSON record, keyed by the STL's sha256 + the rotation + px/mm, so a changed
   model re-bakes. ⚠ The profiles emit G2/G3 arcs (2,077 in the EdgeLabel 2W-1H file); the prototype's parser read G0/G1
-  only, so its perimeter loops had gaps at every rounded corner. The bake refuses a G-code shorter than the STL's own
-  height (see the race below). Measured: the EdgeLabel 2W-1H slices and bakes in 1.9 s; the 555-part batch took 132 min of CPU (20 min slicing, 110 min rasterising 8.27 million bead segments, 2 min PNG) over a 1 h 46 min wall clock
+  only, so its perimeter loops had gaps at every rounded corner. The race below is why the bake refuses a G-code that does not end with the slicer's own trailer line, whose parsed top differs from the max_layer_z it declares, or that stops more than 0.25 mm short of the STL's height (all 555 bakes of 2026-10-25 sat within +/-0.1 mm of it; Terra 01a1755f). Measured: the EdgeLabel 2W-1H slices and bakes in 1.9 s; the 555-part batch took 132 min of CPU (20 min slicing, 110 min rasterising 8.27 million bead segments, 2 min PNG) over a 1 h 46 min wall clock
   on node0 (numpy 2.3.5 is there; no PIL; PNGs are written with zlib); the raw set is 112 MB.
 - **The frame (`tools/skin-map.mjs plan`, `tools/lib/skin-geometry.mjs`).** The GLB the stage draws and the STL the
   slicer saw are different asset sets, so the rotation between them is MEASURED, never typed: the 24 proper 90-degree
