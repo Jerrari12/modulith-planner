@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -235,6 +235,16 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const w = stage.warmRelief();
     if (w) seq.warm = w;
   }
+  /* THE LENS (Very High's bokeh, 2026-10-24; done-fit.js lensFor, main.js THE LENS): a still shot of the moving grammar gets
+     a thin lens, the build held sharp and the room beyond it soft, drawn by the stage's accumulator. So only where it
+     accumulates (Very High); not a moving shot (nothing accumulates while the camera moves); not the detail shot (its
+     drawer moment restarts the accumulation twice a hold, so the blur would come and go); not the still grammar (a
+     device judged slow, a tier below High: every sample is a full render); and cleared whenever the grammar stops. */
+  function setLensFor(shot, c) {
+    if (!stage.setLens) return;
+    const want = moves() && !seq.moving && !shot.drawer && !!(stage.accumulates && stage.accumulates()) && buildBox && !buildBox.isEmpty();
+    stage.setLens(want ? lensFor(c, plain(buildBox), viewNow()) : null);
+  }
   /* the dip: the black layer's opacity, eased over `ms` (into the black ease-in, out of it ease-out) */
   function fadeTo(opacity, ms) {
     seq.fade = opacity;
@@ -262,6 +272,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const c = fitAt(shot, seq.k);
     setCam(c, seq.moving ? [c, fitAt(shot, 1)] : [c]);
     if (skipIn) warmAhead();   // a hold that begins on screen: the relief a later shot needs is compiled under it
+    setLensFor(shot, c);
     if (stage.setMotionFull) stage.setMotionFull(seq.moving);   // a moving shot keeps the stage's settle passes on every frame: the room's contacts keep their AO while it moves
     seq.pausedAt = null; seq.frames.length = 0; seq.checked = false;
     stage.invalidateFrame();
@@ -345,6 +356,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); clearTimeout(seq.timer); clearTimeout(seq.startTimer);
     drawerCancel(); fadeTo(0, 0);
     if (stage.setMotionFull) stage.setMotionFull(false);
+    if (stage.setLens) stage.setLens(null);   // no grammar, no lens (leave() comes through here too)
   }
   function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); clearTimeout(seq.timer); drawerCancel(); }
   function seqResume() {
@@ -611,7 +623,12 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     // the shot on screen follows the new size: a still (or a held one) re-lands where it is along its move, a moving one
     // picks the new fit up on its next frame
-    if ((!seq.moving || seq.cutAt != null) && seq.shot) { putCam(fitAt(currentShot(), seq.cutK != null ? seq.cutK : seq.k)); stage.invalidateFrame(); }
+    if ((!seq.moving || seq.cutAt != null) && seq.shot) {
+      const c = fitAt(currentShot(), seq.cutK != null ? seq.cutK : seq.k);
+      putCam(c);
+      if (!seq.moving) setLensFor(currentShot(), c);   // the lens follows the new framing (its blur is in pixels of this view)
+      stage.invalidateFrame();
+    }
   }
   function leave() {
     cancelled = true;
@@ -650,7 +667,14 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     applyLights(tier);
     /* a drop below High mid-shot: a moving shot locks off where it is, and the drawer's timers would outlive the drop (the
        still grammar has no drawer moment: Terra 01a16b6b) */
-    if (sequenceWanted(tier)) { if (!seq.on) seqStart(); else { if (!moves(tier)) { freeze({ resched: true }); drawerCancel(); } warmAhead(tier); } }
+    if (sequenceWanted(tier)) {
+      if (!seq.on) seqStart();
+      else {
+        if (!moves(tier)) { freeze({ resched: true }); drawerCancel(); }
+        warmAhead(tier);
+        if (seq.shot && seq.cutAt == null) setLensFor(currentShot(), fitAt(currentShot(), seq.k));   // a lens only where the new tier accumulates
+      }
+    }
     else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a)
   }
   const handle = { leave, onQuality, refit, recenter, nextShot, get on() { return on; } };

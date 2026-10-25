@@ -2,7 +2,8 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor } from '../js/scenes/done-fit.js';
+import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
 
@@ -304,4 +305,25 @@ test('reliefResolves: the layers can span the shader\'s cutoff only when the bui
   assert.equal(reliefResolves({ position: { x: 0, y: 100, z: 0 }, fov: 30 }, box, view).distance, 1, 'inside the box the distance floors at 1 mm (on, whatever the cutoff)');
   assert.equal(reliefResolves({ position: { x: 0, y: 100, z: 160 }, fov: 30 }, box, view, { cutoffPx: 12 }).on, false, 'the cutoff is the stage\'s to pass');
   assert.equal(reliefResolves({ position: { x: 0, y: 100, z: 160 }, fov: 60 }, box, view).on, false, 'a wider lens at the same distance: fewer pixels a layer (2.3), off');
+});
+
+test('lensFor: a still shot holds the whole build sharp to LENS.maxPx at its nearest and farthest corners, and blurs what lies beyond', () => {
+  const box = { min: { x: -100, y: 0, z: -90 }, max: { x: 100, y: 200, z: 90 } }, view = { width: 1280, height: 720 };
+  const cam = { position: { x: 600, y: 400, z: 1200 }, target: { x: 0, y: 80, z: 0 }, fov: 29.9 };
+  const l = lensFor(cam, box, view);
+  assert.equal(l.samples, LENS.samples);
+  // the corners' depths along the view axis, measured here independently
+  const f = [cam.target.x - cam.position.x, cam.target.y - cam.position.y, cam.target.z - cam.position.z], fl = Math.hypot(...f);
+  const depths = [];
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) depths.push(((x - cam.position.x) * f[0] + (y - cam.position.y) * f[1] + (z - cam.position.z) * f[2]) / fl);
+  const near = Math.min(...depths), far = Math.max(...depths), at = (depth) => cocPx({ ...l, depth, heightPx: view.height, fovDeg: cam.fov });
+  close(at(near), LENS.maxPx, 1e-9, 'the nearest corner');
+  close(at(far), LENS.maxPx, 1e-9, 'the farthest corner');
+  for (const d of depths) assert.ok(at(d) <= LENS.maxPx + 1e-9, `every corner within maxPx (${at(d)})`);
+  assert.ok(at(far + 1000) > 3 * LENS.maxPx, `a wall a metre behind blurs well past it (${at(far + 1000).toFixed(1)} px)`);
+  assert.ok(l.focus > near && l.focus < far, 'focused inside the build');
+  // the blur is in pixels of THIS view: a shorter canvas wants a wider aperture for the same pixels
+  close(lensFor(cam, box, { width: 1280, height: 360 }).aperture, 2 * l.aperture, 1e-9, 'half the height, twice the aperture');
+  assert.equal(lensFor({ ...cam, target: { ...cam.position } }, box, view), null, 'no view axis, no lens');
+  assert.equal(lensFor({ position: { x: 0, y: 100, z: 0 }, target: { x: 0, y: 100, z: -1 }, fov: 30 }, box, view), null, 'a camera inside the box: no lens');
 });

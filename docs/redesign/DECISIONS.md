@@ -3358,3 +3358,66 @@ Dated calls made while building, with who made them. The brief and the inventory
   skipped. Goldens alone: 60 shots, 59 the same on the first run. The 115 tabletop's end shot at Fast differed by
   0.170 %, inside the known end-shot ruler flake's band, and Fast draws no relief; it matched exactly when its kit and
   tier were run again.
+
+## 2026-10-24 (the Done scene: bokeh, a thin lens in Very High's accumulator)
+
+- **The ask.** Joey, from the start of the grammar: "a completely stationary view (maybe with bokeh)"; on 2026-10-24,
+  "Let's tackle bokeh next". It had been left out because Very High's 24 accumulation samples would band a strong blur.
+- **What was built.** A thin lens in the accumulator (`js/lens.js`, main.js THE LENS). While a lens is set, every
+  sample moves the camera across the lens's aperture, in its own right/up plane, and shears the projection
+  (elements[8] and [9]) so the plane in focus lands where a pinhole puts it. The mean is the lens's depth of field. Every
+  sample is a real render, so occlusion is right and there are no edge halos; nothing is post-processed. Details:
+  - **128 samples, not 24.** At 6 px the look test showed no ghost copies.
+  - **A golden-angle spiral that grows from the centre** (`lensDisk`). A part-way mean is the same lens stopped down,
+    so a shot's blur opens as it settles; it never shows separate copies.
+  - **The light's disc out of step with the lens's** (`lightStride`; Sol `01a17057`). Both spirals grow from the
+    centre, so visited in the same order a sample's light offset and lens offset shared a radius, and the build's soft
+    shadow on the blurred wall and desk came out wrong: up to 14 levels from a 1024-sample reference on the hero. Under
+    a lens the light's point for sample i is (i * 79) mod 128, and the error where the two orders differ fell from 3.85
+    to 1.14 levels on average. Without a lens the order is the old one exactly, so every other frame is unchanged.
+  - **The camera is put back exactly.** The position is copied back, not moved back, because the next frame compares
+    the camera's matrices bit for bit.
+  - **Debug read-outs.** `acc.lensError` is the worst NDC error of a point on the plane in focus; `acc.lensSpread` the
+    farthest the camera really moved (from its position, not from the offset asked for: Sol `01a17057`); `acc.lightSums`
+    the burst's sums for the correlation of the lens's radius with the light's. The live hero read 4.4e-16 and the full
+    aperture, and the e2e holds the correlation under 0.2 (in step it is 1).
+- **The occlusion overlay under a lens.** It is drawn from the pinhole camera after the mean, so whole it laid sharp
+  contact shadows under blurred props, and switched off it took the build's creases and contacts with it. It now fades
+  with the circle of confusion, read from the AO pass's own depth: whole up to 1.5 px, gone by 5 px. It uses the
+  aperture of the mean actually on screen, so it fades as the blur grows, and only while the accumulator is wanted: a
+  tween's plain frame keeps its AO whole (Sol `01a17057`). The anchors see-into patches stay verbatim.
+  - **Known limitation, deferred.** The weight is taken from the depth AT each pixel, so it cannot see a blurred
+    foreground spreading over in-focus AO. Its size on the three still shots is not measured. The one place examined,
+    the low shot's wall-desk seam whose AO band ends sharp, turned out to be the AO pass's own edge at a depth step,
+    with both sides in focus (a circle of confusion of 0.03 and 0.46 px at one column, measured by ray). Down one column
+    a blurred pen (5.7 px) begins four rows below the band's end, and by the thin-lens model its blur reaches the band's
+    last rows, which are down to 2 levels there. Other builds and framings are not measured. The fix would be a
+    near-field circle-of-confusion dilation in the composite.
+- **The scene's rule** (done-fit.js `lensFor`). The whole build is held sharp to `LENS.maxPx` at its nearest and
+  farthest corners. The focus is the harmonic mean of the box's depths along the view axis, and the aperture is the
+  widest that holds both ends. The look test chose 3 px: on the hero a wall a metre behind the focus blurs about 11 px
+  and the mug in front reads soft. 1.5 px was barely there, and 6 px began to soften the build's own grain.
+- **Where the lens applies.** Still shots of the moving grammar, only where the stage accumulates (Very High). Not a
+  moving shot, not the detail shot (its drawer moment restarts the accumulation, so the blur would pump), not the still
+  grammar (a slow device, a tier below High), and cleared when the grammar stops. A resize and a tier change recompute
+  it.
+- **The beat is unchanged.** The new shot fades in while its lens settles. 128 samples took about 1.2 s on this
+  laptop's 120 Hz display, and should take about 2.1 s at 60 Hz. The dips measured 0.5 to 0.6 s in the film, as before.
+- **Measured.** The vault's measurements.md, "The Done scene's lens". In short: the frame's sharpness falls 18.6 to
+  19.6 % on the three still shots; the half-float mean is within 2 levels of a float32 one at 128 samples.
+- **Review.** Sol `01a17057`, three rounds. Round 1, four findings, all confirmed:
+  - A tween's plain frame faded its AO by the last burst's count. The weight now applies only while the accumulator is
+    wanted.
+  - The weight is per pixel, so it cannot see a blurred foreground spreading over in-focus AO. Deferred.
+  - The light's disc was visited in step with the lens's. Fixed with `lightStride`.
+  - The e2e passed with no lens at all. It now reads the picture and the camera's real move.
+
+  Round 2: no new findings, and the deferral held. Round 3 corrected round 2's evidence: the 3.4 px behind its "one
+  measured case" was my estimate, not a measurement. Measured by ray, both sides of that edge are in focus, so there is
+  no case. Sol withdrew the 1.7 px defect and found nothing else that rested on it.
+- **Checks.** npm test: 642 tests, 637 pass, 5 skipped. The lens case and the warm-up case pass. Every mutant is killed,
+  each at its own assertion: the round's five (L15 to L19; L19, the lens removed with its spread read from the offsets
+  asked for, only by the picture check), the fourteen earlier lens mutants, and the ten warm-up mutants (w6 re-anchored
+  to the restructured onQuality). The whole e2e suite: 89 of 90. The one failure, Colors step 5's camera read (0.75 mm,
+  in a workspace with no lens), passed alone three times in three. Goldens: 60 shots, the 115 tabletop's Very High end
+  shot 0.141 %, only its height ruler drawn on the other side (the known end-shot flake); alone, 60 of 60 the same.

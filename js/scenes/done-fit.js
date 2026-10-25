@@ -6,6 +6,7 @@
  * the build's right, the viewer's left... no: to +X, the viewer's RIGHT when looking at the front), elevation above the
  * desk, a vertical field of view, and the fraction of the free region's height the build's bounding sphere may fill.
  */
+import { lensForRange } from '../lens.js';   // the thin lens's arithmetic, pure too (stamped in pages.yml)
 
 /* The distance at which a sphere of `radius` fills `fill` of the FREE region's height and width. The free region is the
  * canvas minus the workspace's panels (the stage's safeArea); the stage pans the projection into it (updateViewInset),
@@ -120,6 +121,28 @@ export function reliefResolves(cam, box, view, { pitchMm = 0.2, cutoffPx = 4 } =
   const focal = Math.max(1, view.height) / 2 / Math.tan(((cam.fov || 36) * Math.PI) / 360);
   const px = (pitchMm * focal) / distance;
   return { px, on: px >= cutoffPx, distance, cutoffPx };
+}
+
+/* THE LENS (Very High's bokeh, 2026-10-24; js/lens.js, main.js THE LENS). A still shot's thin lens: the whole build held
+ * sharp to within `maxPx` at its nearest and farthest corners, and what lies beyond it blurred, more the farther it is:
+ * focused at the harmonic mean of the box's depths along the view axis, with the widest aperture that holds both ends.
+ * The look test (D:/Claude - Output/done-scene-2026-10-23/bokeh/look1) chose 3 px: on the hero a wall a metre behind
+ * the focus blurs about 11 px and the mug in front reads soft, while the build stays crisp but for its farthest corners
+ * (1.5 px was barely there; 6 px began to soften the build's own grain). 128 samples: no ghost copies even at 6 px, and
+ * about 1.2 s to converge on a 120 Hz display. */
+export const LENS = { maxPx: 3, samples: 128 };
+export function lensFor(cam, box, view, { maxPx = LENS.maxPx, samples = LENS.samples } = {}) {
+  const fx = cam.target.x - cam.position.x, fy = cam.target.y - cam.position.y, fz = cam.target.z - cam.position.z;
+  const fl = Math.hypot(fx, fy, fz);
+  if (!(fl > 0)) return null;
+  let near = Infinity, far = -Infinity;
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+    const d = ((x - cam.position.x) * fx + (y - cam.position.y) * fy + (z - cam.position.z) * fz) / fl;   // depth along the view axis
+    if (d < near) near = d;
+    if (d > far) far = d;
+  }
+  const l = lensForRange({ near, far, heightPx: Math.max(1, view.height), fovDeg: cam.fov || 36, maxPx });
+  return l && { ...l, samples };
 }
 
 /* THE CAMERA GRAMMAR (Joey, 2026-10-24; DESIGN.md §8h and §8l). Distinct cameras, CUT between through a dip to black,

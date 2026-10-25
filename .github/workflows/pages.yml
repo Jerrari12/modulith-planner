@@ -196,6 +196,9 @@ jobs:
           # ES module - requirement-scope.js and tabletop-completion.js are classic script tags,
           # stamped against index.html above. This one is a real import and needs a real line.
           sed -i "s|'./vendor/layer-detail.js'|'./vendor/layer-detail.js?v=$V'|" js/main.js
+          # Very High's thin lens (2026-10-24, the Done scene's bokeh): main.js imports it, and so does the scene's arithmetic
+          sed -i "s|'./lens.js'|'./lens.js?v=$V'|" js/main.js
+          sed -i "s|'../lens.js'|'../lens.js?v=$V'|" js/scenes/done-fit.js
           # ⚠ THE FIRST SPECIFIER THAT IS NOT IN main.js. filament-profiles.js is the Lab's authored
           # per-filament finish, and part-material.js imports it as a SIBLING — so the sed target is
           # part-material.js, not main.js, and a line copied from the block above would silently

@@ -1764,7 +1764,8 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
    High, as a visitor arrives, the hero's landing compiles them; booted at Fast, which draws no relief, the change to Very
    High does, and Very High's samples draw into a render target, the second variant (its cut compiled four programs, not
    two). Either way the hero draws without the relief, and the cut into the macro, where it comes on, compiles nothing.
-   maxFrameMs 1e9: a slow runner's entrance would lock the shots off, and a still macro never brings the relief on. */
+   maxFrameMs 1e9 and a 3 s entrance: a slow runner's entrance would lock the shots off (its verdict also calls a device
+   slow when the entrance draws fewer than 4 frames, whatever their length), and a still macro never brings the relief on. */
 test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing or a change of tier, the hero stays without it, and the cut into the macro compiles nothing', async () => {
   /* `last`: the newest program's ID. three numbers its programs in order and a released program's slot is refilled, so
      a COUNT can stay level while a program is compiled again; a new ID cannot (Sol 01a16f55's case did exactly that) */
@@ -1773,7 +1774,7 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
     return { last: Math.max(0, ...v.renderer.info.programs.map((p) => p.id)), live: v.reliefLive(), override: v.reliefOverride(), shot: s && s.shot, phase: s && s.phase, mode: s && s.mode, warm: s && s.warm };
   });
   const enter = async (page) => {
-    await page.evaluate(() => { window.__DONE_TIMING__ = { maxFrameMs: 1e9 }; });
+    await page.evaluate(() => { window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
     await btn(page, 'Next', '#ws-player').click();
@@ -1833,7 +1834,7 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
     return { uids: uids.length, set };
   });
   assert.ok(coloured.uids > 1 && coloured.set >= coloured.uids * 3, `every unit coloured (${JSON.stringify(coloured)})`);
-  await lo.page.evaluate(() => { window.__DONE_TIMING__ = { maxFrameMs: 1e9 }; });
+  await lo.page.evaluate(() => { window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
   await btn(lo.page, 'Skip to the finished build', '#ws-steps').click();
   await lo.page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
   await btn(lo.page, 'Next', '#ws-player').click();
@@ -1853,6 +1854,136 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
   await intoMacro(lo.page, 'tier change');
   assert.deepEqual(clean(lo.errors), [], 'no errors (tier change)');
   await lo.ctx.close();
+});
+
+/* THE LENS (Very High's bokeh, 2026-10-24; js/lens.js, done-fit.js lensFor, main.js THE LENS). A still shot of the moving
+   grammar gets a thin lens that holds the build sharp and lets the room blur; Very High's accumulator draws it, every
+   sample moving the camera across the aperture and shearing the projection so the plane in focus stays put. Where this
+   runner's accumulator runs (acc.ok: a GPU here, possibly not under software rendering), the burst's own check is read:
+   a point on the plane in focus never moves (lensError), the camera really crossed the aperture (lensSpread), it ends
+   exactly where it began, the light's disc is visited out of step with the lens's (lightSums), and the AO overlay fades
+   with the blur actually on screen (its uniforms); then the picture itself is read, with the lens and without it, and a
+   frame the accumulator does not draw keeps its AO whole (Sol 01a17057). */
+test('Assemble: the Done scene\'s lens: still shots of the moving grammar on Very High get one, moving shots and the drawer moment do not, it follows a resize and a tier, and leaving clears it', async () => {
+  const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+  const L = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__, s = window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence;
+    return { lens: v.lens(), total: v.accTotal(), shot: s && s.shot, moving: s && s.moving, ok: v.acc.ok, probed: v.acc.probed, n: v.acc.n, h: v.renderer.domElement.clientHeight }; });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+  const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 }).catch(async () => assert.fail('the grammar never began: ' + JSON.stringify(await L(page))));
+  // THE HERO, a still shot: a lens, the accumulator running to its samples
+  const h = await L(page);
+  assert.equal(h.shot, 'hero');
+  assert.ok(h.lens && h.lens.focus > 0 && h.lens.aperture > 0, `the hero has a lens (${JSON.stringify(h.lens)})`);
+  assert.equal(h.lens.samples, 128, 'the lens runs 128 samples'); assert.equal(h.total, 128, 'and the accumulator runs to them');
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.acc.probed, null, { timeout: 20_000 }).catch(() => {});
+  if ((await L(page)).ok) {
+    const home = await page.evaluate(() => window.__GEN2_VIEWER__.camera.position.toArray());
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.acc.n >= 40, null, { timeout: 90_000 }).catch(async () => assert.fail('the lens burst never reached 40 samples: ' + JSON.stringify(await L(page))));
+    const b = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, u = v.ao.compMat ? v.ao.compMat.uniforms.uLensAO.value.toArray() : null; return { err: v.acc.lensError, spread: v.acc.lensSpread, n: v.acc.n, home: v.camera.position.toArray(), aoLens: u, light: v.acc.lightSums.slice() }; });
+    assert.ok(b.err < 1e-9, `a point on the plane in focus never moved (worst ${b.err} in NDC)`);
+    assert.ok(b.spread > 0.5 * h.lens.aperture, `the camera crossed the aperture (${b.spread.toFixed(2)} of ${h.lens.aperture.toFixed(2)} mm)`);
+    assert.deepEqual(b.home, home, 'and ends every sample exactly where it began');
+    if (b.aoLens) {
+      assert.equal(b.aoLens[0], 1, 'the AO overlay fades under the lens');
+      close(b.aoLens[1], 1 / h.lens.focus, 1e-12, 'by its focus');
+      assert.ok(b.aoLens[2] > 0, 'with the aperture of the mean on screen');
+    }
+    /* the light out of step (lens.js lightStride): over the burst so far, the squared radius of each sample's lens point
+       against its light point's, uncorrelated; in step they are the same radius sample for sample, a correlation of 1 */
+    const [k, sx, sy, sxy, sxx, syy] = b.light;
+    const rho = (sxy / k - (sx / k) * (sy / k)) / Math.sqrt((sxx / k - (sx / k) ** 2) * (syy / k - (sy / k) ** 2));
+    assert.ok(k >= 39 && Math.abs(rho) < 0.2, `the light's radius out of step with the lens's (correlation ${rho.toFixed(3)} over ${k} samples)`);
+  } else console.log('  (this runner\'s accumulator does not run: the lens is set but not drawn, its sample checks skipped)');
+  // THE GRAMMAR'S OTHER SHOTS, held so nothing cuts under the checks
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1e9, maxFrameMs: 1e9, seed: 1 }));
+  await settle(page, 200);
+  for (const [shot, want] of [['push', false], ['detail', false], ['low', true]]) {
+    await page.evaluate((s) => window.__GEN2_DONE__.jump(s), shot);
+    await settle(page, 200);
+    const s = await L(page);
+    assert.equal(s.shot, shot);
+    if (want) assert.ok(s.lens && s.lens.focus > 0, `${shot}: a still shot has a lens`);
+    else assert.equal(s.lens, null, `${shot}: ${shot === 'detail' ? 'the drawer moment has none (it restarts the accumulation)' : 'a moving shot has none'}`);
+  }
+  const low = await L(page);
+  assert.notEqual(low.lens.focus, h.lens.focus, 'each still shot its own focus');
+  if (low.ok) {
+    const V = (fn, arg) => page.evaluate(fn, arg);
+    const converged = (k0, n) => page.waitForFunction(([k0, n]) => { const a = window.__GEN2_VIEWER__.acc; return a.key !== k0 && a.n >= n; }, [k0, n], { timeout: 90_000 });
+    /* THE PICTURE (Sol 01a17057): the checks above could all hold with no blur drawn (a pinhole keeps the plane in focus
+       in place too), so the frame itself is read: the held still shot converged with its lens, then without it, the AO
+       overlay off both times so the lens is the only difference. The room softens, so the frame's sharpness (the mean
+       luminance step to the next pixel right and below) falls: by 18.6 to 19.6 % on the three still shots at this size
+       (D:/Claude - Output/done-scene-2026-10-23/bokeh/measure-before/720). 128 samples with no lens drawn fall 5.4 %
+       (mutant L19), so the 10 % asked sits between the two. Read through the stage's canvas read, which draws its frame
+       in the same task. */
+    const sharp = () => V(async () => {
+      const img = new Image(); img.src = window.__GEN2_VIEWER__.renderer.domElement.toDataURL('image/png'); await img.decode();
+      const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height;
+      const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, cv.width, cv.height).data, w = cv.width, hh = cv.height, Y = new Float32Array(w * hh);
+      for (let i = 0; i < w * hh; i++) Y[i] = 0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2];
+      let s = 0;
+      for (let y = 0; y < hh - 1; y++) for (let x = 0; x < w - 1; x++) { const i = y * w + x; s += Math.abs(Y[i + 1] - Y[i]) + Math.abs(Y[i + w] - Y[i]); }
+      return s / ((w - 1) * (hh - 1));
+    });
+    const aoS = await V(() => { const u = window.__GEN2_VIEWER__.ao.compMat.uniforms.uStrength, s = u.value; u.value = 0; return s; });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.acc.n >= window.__GEN2_VIEWER__.accTotal(), null, { timeout: 90_000 });
+    const withLens = await sharp();
+    const k1 = await V(() => { const v = window.__GEN2_VIEWER__, k = v.acc.key; v.setLens(null); return k; });
+    await converged(k1, await V(() => window.__GEN2_VIEWER__.ACC_SAMPLES));
+    const without = await sharp();
+    const k2 = await V(([l, s]) => { const v = window.__GEN2_VIEWER__, k = v.acc.key; v.setLens(l); v.ao.compMat.uniforms.uStrength.value = s; return k; }, [low.lens, aoS]);
+    assert.ok(withLens < 0.9 * without, `the lens softens the frame (sharpness ${withLens.toFixed(3)} with it, ${without.toFixed(3)} without)`);
+    /* A FRAME THE ACCUMULATOR DOES NOT DRAW (Sol 01a17057): a tween stops it and the plain frame is drawn, sharp, while
+       acc.n still holds the last burst's count; its AO must be whole there, not faded as if the blurred mean were on
+       screen. The filming rig's flag keeps the AO composite drawing during the tween, so the frame read has one. */
+    await converged(k2, 16);
+    const unit = await V(() => { const v = window.__GEN2_VIEWER__, d = v.manifest.instances.find((i) => /DecorDrawer/.test(i.node)); return d ? v.unitOf(d.id) ?? null : null; });
+    const stale = await V(async (u) => {
+      const v = window.__GEN2_VIEWER__, x0 = v.ao.compMat.uniforms.uLensAO.value.x;
+      window.__FILM_AO_DURING_TWEENS = true;
+      v.slideUnitDrawer(u, true, 0.4);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+      return { x0, x: v.ao.compMat.uniforms.uLensAO.value.x, n: v.acc.n };
+    }, unit);
+    await V((u) => { window.__GEN2_VIEWER__.slideUnitDrawer(u, false, 0.4); }, unit);
+    await settle(page, 900);
+    await V(() => { delete window.__FILM_AO_DURING_TWEENS; });
+    assert.equal(stale.x0, 1, 'the converged mean\'s AO fades under the lens');
+    assert.equal(stale.x, 0, `the plain frame of a tween keeps its AO whole (the lens weight ${stale.x}, the last burst's ${stale.n} samples still counted)`);
+  }
+  // A RESIZE: the lens's blur is in pixels of the view, so a shorter canvas widens the aperture for the same pixels
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.waitForFunction((h0) => window.__GEN2_VIEWER__.renderer.domElement.clientHeight !== h0, low.h, { timeout: 10_000 }).catch(() => {});
+  await settle(page, 400);
+  const r = await L(page);
+  assert.ok(r.lens && r.h < low.h, `refitted (${low.h} -> ${r.h} px)`);
+  close(r.lens.aperture / low.lens.aperture, low.h / r.h, 0.02 * low.h / r.h, 'the aperture scales with the canvas height it is blurred in');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await settle(page, 400);
+  // A TIER: High does not accumulate, so no lens; back on Very High the still shot has one again
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
+  await settle(page, 400);
+  assert.equal((await L(page)).lens, null, 'High: no lens (nothing accumulates)');
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }); });
+  await settle(page, 400);
+  const back = await L(page);
+  assert.ok(back.lens && back.shot === 'low', `Very High again: the still shot's lens back (${JSON.stringify(back)})`);
+  // LEAVING: no lens on the stage the scene hands back
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 10_000 }).catch(() => {});
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.lens()), null, 'leaving the scene clears the lens');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.accTotal()), await page.evaluate(() => window.__GEN2_VIEWER__.ACC_SAMPLES), 'and the accumulator is back to its own samples');
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
 });
 
 /* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty

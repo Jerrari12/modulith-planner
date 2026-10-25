@@ -13,6 +13,7 @@ import { createPlannerRelay } from './relay-auth.js';
 import { FILAMENT_DB } from './filament-db.js';
 import { partMaterialSpec } from './part-material.js';
 import { applyLayerDetail, LAYER_DETAIL_DEFAULTS } from './vendor/layer-detail.js';
+import { lensDisk, lensShear, lightStride } from './lens.js';   // Very High's thin lens (the Done scene's bokeh); stamped in pages.yml
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
@@ -1443,13 +1444,28 @@ function ensureAO() {
      no outward halo beyond a sub-pixel feather.
      ⚠ Output is BLACK with alpha, never MultiplyBlending - measured earlier:
      Multiply was ignored on this quad and REPLACED the frame. */
+  /* THE LENS'S WEIGHT (2026-10-24, THE LENS): the overlay is the pinhole camera's, so under a lens it would lay SHARP
+     contact shadows over what the lens blurs (a prop in front, the plant behind). It fades instead with the circle of
+     confusion, read from the AO pass's own depth: whole up to 1.5 px, gone by 5, so the build in focus keeps its creases
+     and contacts. uLensAO: on, 1 / focus, and px per unit of |1/focus - 1/depth|; uLensNF the camera's near and far.
+     ⚠ see-into patches this shader by its uniform line and its output line (see-into.js patchAO): both stay verbatim,
+     the weight is applied to `a` between them. */
   ao.compMat = new THREE.ShaderMaterial({
-    uniforms: { tAO: { value: ao.rtBlur.texture }, uStrength: { value: AO_STRENGTH } },
+    uniforms: { tAO: { value: ao.rtBlur.texture }, uStrength: { value: AO_STRENGTH },
+      tLensDepth: { value: ao.rtN.depthTexture }, uLensAO: { value: new THREE.Vector3(0, 0, 0) }, uLensNF: { value: new THREE.Vector2(1, 1000) } },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4( position.xy, 0.0, 1.0 ); }`,
     fragmentShader: `
+      uniform sampler2D tLensDepth; uniform vec3 uLensAO; uniform vec2 uLensNF;
       uniform sampler2D tAO; uniform float uStrength; varying vec2 vUv;
+      float lensAOWeight() {
+        if ( uLensAO.x < 0.5 ) return 1.0;
+        float z = texture2D( tLensDepth, vUv ).x;
+        float d = ( uLensNF.x * uLensNF.y ) / ( uLensNF.y - z * ( uLensNF.y - uLensNF.x ) );
+        return 1.0 - smoothstep( 1.5, 5.0, uLensAO.z * abs( uLensAO.y - 1.0 / d ) );
+      }
       void main(){
         float a = texture2D( tAO, vUv ).r;
+        a = mix( 1.0, a, lensAOWeight() );
         gl_FragColor = vec4( 0.0, 0.0, 0.0, clamp( ( 1.0 - a ) * uStrength, 0.0, 1.0 ) );
       }`,
     transparent: true, depthTest: false, depthWrite: false,
@@ -1673,6 +1689,21 @@ function holdAOForMotion() {
 }
 function compositeAO() {
   if (!aoWanted() || !ao.rtAO || ao.busy || fxDead.ao || !ao.passes) return;
+  /* under a lens the overlay fades with the circle of confusion (THE LENS'S WEIGHT, at the material): the depth is the one
+     the bilateral blur reads this frame, the AO pass's own for this camera */
+  /* ⚠ THE APERTURE OF THE MEAN ON SCREEN, not the lens's: the spiral grows from the centre, so n samples of N are the
+     same lens stopped down to sqrt((n - 1) / (N - 1)) of it, and a plain frame (any tier that does not accumulate, or
+     the warm-up's hand-back) has no blur at all; the overlay fades as the blur it would sit over grows */
+  /* ⚠ accWanted(), not the tier's flag: acc.n is the last burst's count, and it stays put while the accumulator is not
+     wanted (a tween, the settle after one), when the frame on screen is the plain one, sharp, and its AO is whole
+     (Sol 01a17057) */
+  const lu = ao.compMat.uniforms;
+  const shown = lens && accWanted() && acc.ok && acc.n > ACC_WARMUP ? Math.sqrt((Math.min(acc.n, lens.samples) - 1) / (lens.samples - 1)) : 0;
+  if (shown > 0) {
+    lu.tLensDepth.value = ao.blurMat.uniforms.tCDepth.value || ao.rtN.depthTexture;
+    lu.uLensAO.value.set(1, 1 / lens.focus, shown * lens.aperture * canvas.clientHeight / Math.tan(camera.fov * Math.PI / 360));
+    lu.uLensNF.value.set(camera.near, camera.far);
+  } else lu.uLensAO.value.x = 0;
   // safety net: never lay the overlay over a frame drawn from a different camera
   // than the buffer was rendered from. Losing AO for one frame is invisible; a
   // mismatched overlay is a ghost of the build sitting beside the build.
@@ -1763,6 +1794,29 @@ let ACC_SUN_HALF_DEG = 6;
    improvement rather than a jump. Cost: one extra scene render on each of those
    frames, about 2 ms each on the machine this was built on. */
 const ACC_WARMUP = 6;
+/* THE LENS (the Done scene's bokeh, 2026-10-24; js/lens.js). `null`, or { focus, aperture, samples } in millimetres and
+   samples: while set, every accumulated sample also moves the camera across an aperture of that RADIUS and shears the
+   projection so the plane `focus` away (camera-space depth) stays put, and the mean is a thin lens's depth of field,
+   with real occlusion because every sample is a real render. It wants more samples than the 24 a soft shadow needs: a
+   disc of confusion 20 px across, sampled 24 times, shows its samples as separate copies on a high-contrast edge.
+   ⚠ The lens's spiral grows from the centre (lensDisk), so a part-way mean is the same lens stopped down: the blur
+   OPENS as a still frame settles, it never shows ghost copies on the way.
+   ⚠ The AO overlay is drawn from the pinhole camera after the mean, so under a lens it fades with the circle of
+   confusion (THE LENS'S WEIGHT, at ao.compMat): kept on the build in focus, gone where the lens blurs, never a sharp
+   contact shadow under a blurred prop. Very High only, and only while still, like everything the accumulator does. */
+let lens = null;
+const LENS_TURN = 2.4;   // radians: the lens's spiral turned against the light's, so their offsets do not line up
+function setLens(l) {
+  const next = l && l.aperture > 0 && l.focus > 0
+    ? { focus: +l.focus, aperture: +l.aperture, samples: Math.max(ACC_SAMPLES, Math.round(+l.samples || ACC_SAMPLES)) }
+    : null;
+  const same = (a, b) => (!a && !b) || (!!a && !!b && a.focus === b.focus && a.aperture === b.aperture && a.samples === b.samples);
+  if (same(next, lens)) return;
+  lens = next;
+  invalidateFrame();   // a new lens is a new picture: the mean starts over
+}
+/* the samples a burst runs to: the lens's while one is set, the soft shadow's otherwise */
+const accTotal = () => (lens ? lens.samples : ACC_SAMPLES);
 /* ⚠⚠ CAN A BACK COVER BE SEEN AT ALL THIS FRAME? (Astra 2026-09-17: "skip the behind-cover rendering when no eligible
    cover can contribute to the displayed image ... uncertain cases should render normally".) A back cover clips onto the
    BACK of a faceplate, facing into its drawer, so in the finished build with that drawer shut it is enclosed by the
@@ -1866,6 +1920,12 @@ const acc = {
   sunHome: new THREE.Vector3(), disk: null,
   // monotonic, never reset: samples rendered, and samples rendered with the settle detail on (settle-bench.js)
   sampleCount: 0, detailCount: 0,
+  // the lens (THE LENS): its spiral, and the burst's check on itself (accumFrame): the worst NDC error of a point on the
+  // plane in focus, and the farthest the camera really moved
+  lensDisk: null, lensError: 0, lensSpread: 0,
+  /* the light's order under a lens (lens.js lightStride): the stride, the light point accSetSun last took, and the burst's
+     sums for the correlation of the lens's radius with the light's (n, x, y, xy, xx, yy; x and y the squared radii) */
+  lightStride: 1, lightAt: 0, lightSums: [0, 0, 0, 0, 0, 0],
 };
 /* ⚠ Float64Array, NOT Float32. Matrix4.elements are doubles; a Float32 copy
    rounds, and the comparison then reports a moved camera on EVERY frame. That
@@ -1873,6 +1933,8 @@ const acc = {
    (see the AO section) and this is the same compare. */
 const _accCam = new Float64Array(32);
 const _accClear = new THREE.Color();
+const _lensHome = new THREE.Vector3();   // the camera's place while a lens sample moves it (accumFrame)
+const _lensProbe = new THREE.Vector3(), _lensA = new THREE.Vector3(), _lensB = new THREE.Vector3();   // the burst's focus check
 function accCamMoved() {
   const m = camera.matrixWorld.elements, p = camera.projectionMatrix.elements;
   for (let i = 0; i < 16; i++) if (_accCam[i] !== m[i] || _accCam[16 + i] !== p[i]) return true;
@@ -1993,6 +2055,7 @@ function accResize() {
    drops the shadow entirely on some samples, which averages into a pale band.
    A sphere is rotation-invariant by construction, so one fit covers the disk. */
 function accSetSun(i) {
+  acc.lightAt = i;   // the light point this sample really takes (the lens's burst check reads it)
   const s = acc.disk[i];
   if (s.x === 0 && s.y === 0) sun.position.copy(acc.sunHome);
   else {
@@ -2031,7 +2094,14 @@ function accumFrame() {
   const key = instances.size + '|' + cur + '|' + ao.rev + '|' + accRev + '|' + quality;
   if (acc.blocked || key !== acc.key || accCamMoved()) {
     acc.blocked = false; acc.n = 0; acc.key = key; accCamStore();
+    acc.lensError = 0; acc.lensSpread = 0; acc.lightSums.fill(0);
   }
+  /* a burst's discs, sized to the samples it runs to (a lens wants more than a soft shadow), rebuilt only between bursts;
+     under a lens the light's disc is visited out of step with the lens's (lens.js lightStride), otherwise in order */
+  const total = accTotal();
+  if (acc.n === 0 && acc.disk.length !== total) acc.disk = accDisk(total);
+  if (acc.n === 0 && lens && (!acc.lensDisk || acc.lensDisk.length !== total)) acc.lensDisk = lensDisk(total, LENS_TURN);
+  if (acc.n === 0) acc.lightStride = lens ? lightStride(total) : 1;
   /* Only a Color or nothing. A texture or cube background would have to be
      accumulated with the scene rather than cleared, and the outro - the one
      thing here that uses a mesh dome - never accumulates. Anything else falls
@@ -2039,12 +2109,13 @@ function accumFrame() {
   const bg = scene.background;
   if (bg && !bg.isColor) return false;
   const prevAuto = renderer.autoClear;
-  if (acc.n < ACC_SAMPLES) {
+  if (acc.n < total) {
     const savedProj = camera.projectionMatrix, savedInv = camera.projectionMatrixInverse;
     const jProj = new THREE.Matrix4(), jInv = new THREE.Matrix4();
     const savedClear = renderer.getClearColor(_accClear).clone(), savedAlpha = renderer.getClearAlpha();
+    let lensMoved = false;
     try {
-      accSetSun(acc.jitter ? acc.n : 0);
+      accSetSun(acc.jitter ? (acc.n * acc.lightStride) % total : 0);
       // the lit scene only - see the note on outMat
       scene.background = null;
       renderer.setClearColor(0x000000, 0);
@@ -2058,6 +2129,32 @@ function accumFrame() {
         const s = acc.disk[acc.n];
         jProj.elements[8] += s.x / acc.rtScene.width;
         jProj.elements[9] += s.y / acc.rtScene.height;
+        /* THE LENS: the camera across its aperture, in its own right/up plane (matrixWorld's first two columns; the camera
+           has no parent, so world and local agree), and the projection sheared so the plane in focus stays put. Put
+           back in the finally, exactly (a copy, not an inverse move): the next frame compares the matrices bit for bit. */
+        if (lens) {
+          const [lx, ly] = acc.lensDisk[acc.n];
+          const u = lx * lens.aperture, v = ly * lens.aperture, m = camera.matrixWorld.elements;
+          const [d8, d9] = lensShear(jProj.elements[0], jProj.elements[5], u, v, lens.focus);
+          jProj.elements[8] += d8; jProj.elements[9] += d9;
+          _lensHome.copy(camera.position); lensMoved = true;
+          /* the burst's check on itself (debug read-outs, the e2e's): an off-axis point ON the plane in focus, projected
+             by the pinhole and by this sample, must land in the same place (lensError, NDC), and the camera must really
+             have moved (lensSpread, mm, measured from where it went, not from the offset asked for: Sol 01a17057) - a
+             shear without its move, or a move without its shear, fails one of them, and no lens at all fails the
+             second; and the lens's radius against the light's (lightSums), out of step under a lens */
+          _lensProbe.set(m[0] * 37 + m[4] * 21 - m[8] * lens.focus, m[1] * 37 + m[5] * 21 - m[9] * lens.focus, m[2] * 37 + m[6] * 21 - m[10] * lens.focus).add(camera.position);
+          _lensA.copy(_lensProbe).applyMatrix4(camera.matrixWorldInverse).applyMatrix4(savedProj);
+          camera.position.x += m[0] * u + m[4] * v; camera.position.y += m[1] * u + m[5] * v; camera.position.z += m[2] * u + m[6] * v;
+          camera.updateMatrixWorld();
+          _lensB.copy(_lensProbe).applyMatrix4(camera.matrixWorldInverse).applyMatrix4(jProj);
+          // the anti-aliasing jitter moves EVERY point, the focus plane's too, by -s/size in NDC: what is left is the lens's
+          const ex = _lensB.x - _lensA.x + s.x / acc.rtScene.width, ey = _lensB.y - _lensA.y + s.y / acc.rtScene.height;
+          acc.lensError = Math.max(acc.lensError, Math.hypot(ex, ey));
+          acc.lensSpread = Math.max(acc.lensSpread, camera.position.distanceTo(_lensHome));
+          const q = acc.lightSums, lp = acc.disk[acc.lightAt], lr = lx * lx + ly * ly, sr = lp.x * lp.x + lp.y * lp.y;
+          q[0]++; q[1] += lr; q[2] += sr; q[3] += lr * sr; q[4] += lr * lr; q[5] += sr * sr;
+        }
       }
       jInv.copy(jProj).invert();
       camera.projectionMatrix = jProj; camera.projectionMatrixInverse = jInv;
@@ -2077,6 +2174,7 @@ function accumFrame() {
     } finally {
       setSettleDetail(bedFinishU, false);   // every frame outside a sample: folded grain, no lines
       camera.projectionMatrix = savedProj; camera.projectionMatrixInverse = savedInv;
+      if (lensMoved) { camera.position.copy(_lensHome); camera.updateMatrixWorld(); }
       accSetSun(0);
       scene.background = bg;
       renderer.setClearColor(savedClear, savedAlpha);
@@ -2157,7 +2255,7 @@ function accVerify(mode = 'stale') {
   const grab = () => { ctx.drawImage(renderer.domElement, 0, 0); return ctx.getImageData(0, 0, w, h).data; };
   const converge = () => {
     acc.blocked = true;                       // force a restart from sample 0
-    for (let i = 0; i < ACC_SAMPLES + 2; i++) { accumFrame(); compositeAO(); }
+    for (let i = 0; i < accTotal() + 2; i++) { accumFrame(); compositeAO(); }
   };
   const savedJitter = acc.jitter;
   let a, b, label;
@@ -2211,7 +2309,7 @@ function accVerify(mode = 'stale') {
     }
   }
   const n = (a.length / 4) * 3;
-  return { mode, label, samples: ACC_SAMPLES, pixels: a.length / 4,
+  return { mode, label, samples: accTotal(), pixels: a.length / 4,
            flatMaxDelta: fMax, flatMeanDelta: +(fSum / Math.max(fN, 1)).toFixed(4),
            flatPctOver1: +(100 * fOver1 / Math.max(fN, 1)).toFixed(3), flatPixels: fN / 3,
            allMaxDelta: max, allMeanDelta: +(sum / n).toFixed(4),
@@ -11055,14 +11153,14 @@ for (const ev of ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown',
   lm.onProgress = (...a) => { idle.inputRev++; if (onP) onP(...a); }; lm.onLoad = (...a) => { idle.inputRev++; if (onL) onL(...a); }; }
 function idleSettling() {
   if (typeof aoWanted === 'function' && aoWanted() && (ao.blocked || ao.passes < (ao.accumMax || 0))) return true;
-  if (typeof accWanted === 'function' && accWanted() && acc.ok && acc.n < ACC_SAMPLES) return true;
+  if (typeof accWanted === 'function' && accWanted() && acc.ok && acc.n < accTotal()) return true;
   /* a shadow render still owed - but NOT while a converged Very High blits its mean: every accumulated sample ends by
      putting the sun home and flagging the map (accSetSun(0)), and after the last sample no scene render follows to
      consume the flag, so the gate stayed open and Very High on the light stage drew ~120 frames a second at rest
      (measured 2026-10-23, main and the Done room alike; the dark stage has no shadow map, which hid it). The flag is
      honoured by the next plain render, which is the first frame after anything changes. */
   if (renderer.shadowMap.enabled && renderer.shadowMap.needsUpdate
-    && !(typeof accWanted === 'function' && accWanted() && acc.ok && acc.n >= ACC_SAMPLES)) return true;
+    && !(typeof accWanted === 'function' && accWanted() && acc.ok && acc.n >= accTotal())) return true;
   return false;
 }
 function idleFrame(now) {
@@ -11297,7 +11395,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, warmRelief, reliefLive: () => reliefApplied, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, warmRelief, reliefLive: () => reliefApplied, setLens, lens: () => (lens ? { ...lens } : null), accTotal, accumulates: () => !!QUALITY[quality].accum, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL

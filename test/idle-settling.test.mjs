@@ -28,10 +28,10 @@ function takeFn(needle) {
 }
 const IDLE = takeFn('function idleSettling()');
 
-/* the names idleSettling reads, each a knob */
+/* the names idleSettling reads, each a knob; ACC is the burst's total (accTotal: 24, or a lens's 128 - main.js THE LENS) */
 function settling({ aoWanted = false, aoBlocked = false, aoPasses = 16, aoMax = 16, accWanted = false, accOk = true, accN = 24, ACC = 24, shadowEnabled = false, needsUpdate = false }) {
-  const fn = new Function('aoWanted', 'ao', 'accWanted', 'acc', 'ACC_SAMPLES', 'renderer', `${IDLE}\nreturn idleSettling();`);
-  return fn(() => aoWanted, { blocked: aoBlocked, passes: aoPasses, accumMax: aoMax }, () => accWanted, { ok: accOk, n: accN }, ACC, { shadowMap: { enabled: shadowEnabled, needsUpdate } });
+  const fn = new Function('aoWanted', 'ao', 'accWanted', 'acc', 'accTotal', 'renderer', `${IDLE}\nreturn idleSettling();`);
+  return fn(() => aoWanted, { blocked: aoBlocked, passes: aoPasses, accumMax: aoMax }, () => accWanted, { ok: accOk, n: accN }, () => ACC, { shadowMap: { enabled: shadowEnabled, needsUpdate } });
 }
 
 test('AO still accumulating, or an accumulation still short of its samples, keeps the gate open', () => {
@@ -48,4 +48,10 @@ test('a shadow render owed keeps the gate open, except while a converged Very Hi
   assert.equal(settling({ shadowEnabled: true, needsUpdate: true, accWanted: true, accOk: false, accN: 24 }), true, 'an accumulator that is not ok falls back to plain frames, which do consume the flag: open');
   assert.equal(settling({ shadowEnabled: false, needsUpdate: true }), false, 'no shadow map: nothing owed');
   assert.equal(settling({ shadowEnabled: true, needsUpdate: false, accWanted: true, accN: 24 }), false, 'converged and nothing owed: rest');
+});
+
+test('a lens burst runs to its own total: 24 samples of 128 still settle, 128 rest', () => {
+  assert.equal(settling({ accWanted: true, accN: 24, ACC: 128 }), true, 'a lens burst at 24 of 128: still accumulating');
+  assert.equal(settling({ shadowEnabled: true, needsUpdate: true, accWanted: true, accN: 24, ACC: 128 }), true, 'and an owed shadow render keeps it open');
+  assert.equal(settling({ shadowEnabled: true, needsUpdate: true, accWanted: true, accN: 128, ACC: 128 }), false, 'converged at 128 and blitting: rest');
 });
