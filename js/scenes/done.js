@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, driftFor, driftKind, driftCss, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -372,6 +372,38 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const want = moves() && !seq.moving && !shot.drawer && !!(stage.accumulates && stage.accumulates()) && buildBox && !buildBox.isEmpty();
     stage.setLens(want ? lensFor(c, plain(buildBox), viewNow()) : null);
   }
+  /* THE STILL SHOTS' DRIFT (done-fit.js driftFor; Joey 2026-10-25: "slowly zoom in or out slightly, like without it
+     rerendering the scene"): a shot that does not move (every shot of the still grammar, the still shots of the moving
+     one) has its finished picture slowly pushed in, pulled out or slid across while it is on screen, from its clock's
+     start to the end of its dip-out, by a CSS transform on the canvas the compositor animates (the Web Animations API on
+     `transform` only). Nothing is drawn again for it: the idle gate, Very High's mean and the steam are as they were. About
+     the build's place in the frame; the canvas's box clips it, so the cinema bars and the strip stay put. Cleared in the
+     black, paused with the tab, never under reduced motion. */
+  const drift = { anim: null, plan: null, clip: null, origin: null, n: 0 };   // clip, origin: the box's overflow and the canvas's own origin, as they were
+  function driftStart() {
+    driftStop();
+    const el = renderer.domElement, box = el.parentElement;
+    if (reduced || seq.moving || !el.animate || !box || !buildBox || buildBox.isEmpty()) return;
+    const ctr = buildBox.getCenter(new THREE.Vector3()).project(camera);
+    const origin = { x: Math.min(0.8, Math.max(0.2, (ctr.x + 1) / 2)), y: Math.min(0.8, Math.max(0.2, (1 - ctr.y) / 2)) };
+    const plan = driftFor(driftKind(seq.shot, drift.n++), origin);
+    const ms = (seq.skipIn ? 0 : seq.timing.dipInMs) + seq.timing.holdMs + seq.timing.dipOutMs;
+    if (drift.clip == null) { drift.clip = box.style.overflow; drift.origin = el.style.transformOrigin; box.style.overflow = 'hidden'; }
+    el.style.transformOrigin = `${(plan.origin.x * 100).toFixed(2)}% ${(plan.origin.y * 100).toFixed(2)}%`;
+    drift.plan = plan;
+    drift.anim = el.animate([{ transform: driftCss(plan.from) }, { transform: driftCss(plan.to) }], { duration: Math.max(1, ms), easing: 'ease-in-out', fill: 'forwards' });
+  }
+  function driftStop() {
+    if (drift.anim) { drift.anim.cancel(); drift.anim = null; }
+    drift.plan = null;
+    if (drift.origin != null) renderer.domElement.style.transformOrigin = drift.origin;
+  }
+  function driftLeave() {
+    driftStop();
+    const box = renderer.domElement.parentElement;
+    if (box && drift.clip != null) box.style.overflow = drift.clip;
+    drift.clip = null; drift.origin = null;
+  }
   /* the dip: the black layer's opacity, eased over `ms` (into the black ease-in, out of it ease-out) */
   function fadeTo(opacity, ms) {
     seq.fade = opacity;
@@ -392,6 +424,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      of its move), the relief decided for the whole shot, the stage told whether this one moves, the clock at the start of
      its dip-in (`skipIn`: at its hold, the frame already showing: the first shot, and a jump) */
   function beginShot({ skipIn = false } = {}) {
+    driftStop();   // the last shot's drift ends in the black
     const shot = currentShot();
     seq.shot = shot.name; seq.skipIn = skipIn; seq.cutAt = null; seq.cutK = null; seq.phase = null;
     seq.moving = moves() && !!shot.to;
@@ -410,7 +443,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     seq.waiting = true; fadeTo(1, 0);
     afterFrames(seq.timing.waitFrames, () => { seq.waiting = false; startClock(); });
   }
-  function startClock() { seq.t0 = performance.now(); seq.lastFrame = seq.t0; tick(); }
+  function startClock() { seq.t0 = performance.now(); seq.lastFrame = seq.t0; driftStart(); tick(); }
   /* `fn` once `n` frames have gone by (the stage draws the frame it was invalidated for on the first of them) */
   function afterFrames(n, fn) {
     cancelAnimationFrame(seq.waitRaf);   // one wait at a time: a second one replaces the first (it would have run its callback too)
@@ -484,8 +517,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     drawerCancel(); fadeTo(0, 0);
     if (stage.setMotionFull) stage.setMotionFull(false);
     if (stage.setLens) stage.setLens(null);   // no grammar, no lens (leave() comes through here too)
+    driftLeave();   // no grammar, no drift: the canvas back as it was
   }
-  function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); clearTimeout(seq.timer); drawerCancel(); }
+  function seqPause() { if (!seq.on || seq.pausedAt != null) return; seq.pausedAt = performance.now(); cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); clearTimeout(seq.timer); drawerCancel(); if (drift.anim) drift.anim.pause(); }
   function seqResume() {
     if (!seq.on || seq.pausedAt == null) return;
     const d = performance.now() - seq.pausedAt;
@@ -493,6 +527,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (seq.pendingBegin) { seq.pendingBegin = false; beginShot({ skipIn: true }); return; }
     if (seq.waiting) { afterFrames(seq.timing.waitFrames, () => { seq.waiting = false; startClock(); }); return; }   // hidden in the black, before the new view was drawn: wait for it again
     seq.t0 += d; if (seq.cutAt != null) seq.cutAt += d;
+    if (drift.anim) drift.anim.play();   // the drift takes up where it was, as the clock does
     seq.lastFrame = performance.now(); seq.phase = null;   // the phase takes up its fade again from where the frame is
     tick();
   }
@@ -968,6 +1003,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
           // the walls' bounce each surface loses (its k, per channel), and the atlas rect it reads, off the materials
           bounce: roomBounce ? { wall: k(w), desk: k(t), floor: k(first('floor')), deskRect: t && t.userData.bounce ? t.userData.bounce.rect.toArray() : null } : null };
       },
+      // the still shot's drift (driftStart): its plan, its animation's state, and the canvas's transform as the page has it
+      get drift() {
+        const el = renderer.domElement, box = el.parentElement;
+        return { plan: drift.plan, state: drift.anim ? drift.anim.playState : null, transform: getComputedStyle(el).transform, origin: el.style.transformOrigin, clip: box ? getComputedStyle(box).overflow : null, n: drift.n };
+      },
       setRoomColours,
       // the coffee's steam (makeSteam): its clock, the frames its tick asked for, its tier's rate, where its foot stands, its
       // sheets and its mist (on the coffee, a ghost, on the same clock)
@@ -1023,6 +1063,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       const c = fitAt(currentShot(), seq.cutK != null ? seq.cutK : seq.k);
       putCam(c);
       if (!seq.moving) setLensFor(currentShot(), c);   // the lens follows the new framing (its blur is in pixels of this view)
+      driftStop();   // and its drift ends: about the old framing it would carry the build off its place (Sol 01a17503); a resize is a jump anyway
       stage.invalidateFrame();
     }
   }

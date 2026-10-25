@@ -3657,3 +3657,46 @@ Dated calls made while building, with who made them. The brief and the inventory
   parts/skin/ folder (made at 15:34 that day) reads as a collection pool with no feet.
 - **Not done.** Not deployed: the branch is done-scene, behind `?done=room`. Next: Joey's idea of a slow zoom or pan on
   the still shots, done on the finished picture without drawing the scene again.
+
+## 2026-10-25 (the Done scene: the still shots drift, the picture pushed in or slid without the scene drawn again)
+
+- **The ask.** Joey, 2026-10-25: "maybe on static screens, like would it be possible to slowly zoom in or out slightly,
+  like without it rerendering the scene, kind of like cropping or expanding or panning an image? just as an alternative
+  to always sitting still, maybe this would work on low end pc's as well where we aren't moving the camera, but can
+  cheat a movement appearance this way?"
+- **What it does.** A shot that does not move has its finished picture slowly pushed in, pulled out or slid across while
+  it is on screen. That is every shot of the still grammar (Fast, Balanced, a device judged slow) and the still shots
+  of the moving one (on High and Very High the hero, low, detail and top).
+  - The mechanism: a CSS transform on the canvas, animated by the browser's compositor (the Web Animations API, transform
+    only), 1.045 at most over the shot's time on screen (dip-in, hold and dip-out), eased.
+  - It works about the build's place in the frame: its centre projected, held to the frame's middle 60 %.
+  - The hero pushes in. The others turn through push in, slide left, pull out and slide right by their place among the
+    visit's drifts.
+  - A slide holds the scale and uses 70 % of the reach that scale covers, so the canvas's edge never shows (done-fit.js
+    `driftFor`: with scale(s) translate(t) about an origin o, the edges stay out of view while t lies within
+    -(1 - o)(s - 1)/s .. o(s - 1)/s).
+  - The canvas's box clips it, so the cinema bars and the strip stay put.
+  - It ends in the black before the next shot, on a resize (about the old framing it would carry the build off its
+    place), and on leaving, when the canvas's own origin and its box's overflow are put back. It pauses with the tab
+    and never runs under reduced motion.
+- **What it costs.** The drift draws nothing of its own; the stage's frames are what they were. On Fast at 1280 x 720,
+  the held hero drew 1 frame a second (the idle gate's safety net) while its picture grew from 1.002 to 1.040 over 4 s,
+  and a screencast painted it at 67 frames a second. A canvas export (toDataURL) shows the frame as drawn, without the
+  drift.
+- **Review.** Sol `01a17503`, two rounds. Round 1: two findings and points from its answers.
+  - Held: the resize case (a resize now ends the drift); the canvas's own transform-origin, now restored; and the comment
+    that counted shots where the code counts drifts.
+  - Partly not a defect: the count does start over each visit (the drift's state lives in enterDoneScene's closure).
+    The case now re-enters to check it.
+  - Round 2: no findings.
+- **Checks.**
+  - Unit: every kind keeps the canvas's edges out of view about origins across the frame; also the reach, the kinds'
+    turn, and the transform's text.
+  - The e2e case, on Fast: the push in, the frames drawn, the origin, the clip, the next shot's own drift, a resize,
+    leaving, and a second visit's count. On High: a moving shot has none, a still one does. Under reduced motion: none.
+  - Mutants: 14 of 14 killed, each at its own assertion, the case and the unit tests run unmutated first (5 by the
+    unit tests: the scale, the slide past its reach, the reach without its scale, the kinds' turn, the slides swapped).
+  - The whole e2e suite: 95 of 95. The done-fit unit tests: 30 of 30.
+- **Not done.** Not deployed: behind `?done=room`. The strength (1.045) is a first guess for Joey's eye. A low-end
+  device's cost is not measured: the A5000 laptop shows that the drift does not depend on the scene's drawing, not what
+  a weak GPU pays to composite it.

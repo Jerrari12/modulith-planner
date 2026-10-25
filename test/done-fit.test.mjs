@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -517,4 +517,30 @@ test('the steam\'s beat holds its tier\'s rate at any display rate, and a stall 
   assert.deepEqual(steamBeat(5000, 0, 24), { tick: true, dueAt: 5000 + 1000 / 24 }, 'the first tick: due an interval from now');
   assert.equal(steamBeat(5000, 5003, 24).tick, true, '4 ms early counts as on time');
   assert.equal(steamBeat(5000, 5005, 24).tick, false, 'more than that does not');
+});
+
+test('the still shots\' drift: a push in, a pull out or a slide, about the build\'s place, never showing the canvas\'s edge', () => {
+  // where a point of the canvas lands (fractions of it) under scale(s) translate(t) about the origin o, as CSS composes them
+  const land = (p, o, at) => o + at.s * (p - o + at.x);
+  for (const kind of DRIFT.kinds) for (const ox of [0.2, 0.35, 0.5, 0.65, 0.8]) for (const oy of [0.2, 0.5, 0.8]) {
+    const d = driftFor(kind, { x: ox, y: oy });
+    assert.equal(d.kind, kind);
+    for (const at of [d.from, d.to]) {
+      assert.ok(at.s >= 1 && at.s <= DRIFT.scale + 1e-12, `${kind} at ${ox}: the scale within 1 .. ${DRIFT.scale}`);
+      // the canvas's left and right edges stay outside the view: 0 lands at or left of 0, 1 at or right of 1
+      assert.ok(land(0, ox, at) <= 1e-12 && land(1, ox, at) >= 1 - 1e-12, `${kind} about ${ox}: the edges stay out of the view (${land(0, ox, at)}, ${land(1, ox, at)})`);
+      assert.ok(land(0, oy, { s: at.s, x: at.y }) <= 1e-12 && land(1, oy, { s: at.s, x: at.y }) >= 1 - 1e-12, `${kind}: and the top and bottom`);
+    }
+  }
+  const r = driftReach(0.5, 1.045);
+  close(r.hi, 0.5 * 0.045 / 1.045, 1e-12, 'about the middle a slide may reach (s - 1) / 2s either way');
+  close(r.lo, -r.hi, 1e-12, 'the same on both sides');
+  assert.deepEqual([driftFor('in', { x: 0.5, y: 0.5 }).from.s, driftFor('in', { x: 0.5, y: 0.5 }).to.s], [1, DRIFT.scale], 'a push in from the shot as framed');
+  assert.deepEqual([driftFor('out', { x: 0.5, y: 0.5 }).from.s, driftFor('out', { x: 0.5, y: 0.5 }).to.s], [DRIFT.scale, 1], 'a pull out to it');
+  const left = driftFor('left', { x: 0.5, y: 0.5 });
+  assert.ok(left.from.x > 0 && left.to.x < 0 && left.from.s === left.to.s, 'a slide crosses at a held scale');
+  assert.deepEqual(driftFor('in', { x: 1.7, y: -2 }).origin, { x: 1, y: 0 }, 'an origin off the canvas is held to its edge');
+  assert.equal(driftKind('hero', 7), 'in', 'the hero pushes in');
+  assert.deepEqual([0, 1, 2, 3, 4, -1].map((i) => driftKind('low', i)), ['in', 'left', 'out', 'right', 'in', 'right'], 'the others turn through the kinds');
+  assert.equal(driftCss({ s: 1.045, x: -0.015, y: 0 }), 'scale(1.0450) translate(-1.500%, 0.000%)');
 });

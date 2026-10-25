@@ -2520,6 +2520,95 @@ test('Assemble: the Done scene\'s plain desk reflects the room and the oak does 
   await ctx.close();
 });
 
+/* THE STILL SHOTS' DRIFT (2026-10-25; Joey: "maybe on static screens, like would it be possible to slowly zoom in or out
+   slightly, like without it rerendering the scene ... maybe this would work on low end pc's as well"). On Fast, where
+   every shot is still: the hero's picture pushes in by a CSS transform on the canvas while the stage draws only its
+   once-a-second safety net, the canvas's box clipping it; the next shot takes its own drift from the shot as framed;
+   leaving puts the canvas back. On High a moving shot has none. Under reduced motion there is none at all. */
+test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed in or slid without the scene drawn again, on any tier', async () => {
+  const enterScene = async (page) => {
+    await btn(page, 'Skip to the finished build', '#ws-steps').click();
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+    await btn(page, 'Watch the final scene', '#ws-player').click();
+    await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 });
+  };
+  const scale = (m) => { const v = /matrix\(([^,]+)/.exec(m || ''); return v ? +v[1] : 1; };
+  // FAST
+  const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
+  await page.evaluate(() => { window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+  await enterScene(page);
+  await page.evaluate(() => { const d = window.__GEN2_DONE__; d.setTiming({ holdMs: 6000, maxFrameMs: 1e9, seed: 1 }); d.jump('hero'); });
+  await settle(page, 2000);   // past the jump's own frames and the idle gate's settle time after them, on a slow runner too
+  const a = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, i0 = v.idleStats(), d0 = d.drift;
+    await new Promise((r) => setTimeout(r, 1500));
+    return { d0, d1: d.drift, drawn: v.idleStats().drawn - i0.drawn, mode: d.sequence.mode, shot: d.sequence.shot };
+  });
+  assert.deepEqual([a.mode, a.shot, a.d0.plan && a.d0.plan.kind, a.d0.state, a.d0.clip], ['still', 'hero', 'in', 'running', 'hidden'], `Fast: the hero pushes in, its canvas's box clipping it (${JSON.stringify(a.d0)})`);
+  assert.ok(scale(a.d1.transform) > scale(a.d0.transform) + 0.004, `the picture grows (${a.d0.transform} -> ${a.d1.transform})`);
+  const o = a.d0.plan.origin;
+  const set = (a.d0.origin.match(/[\d.]+(?=%)/g) || []).map(Number);   // the page writes "50.00%" back as "50%"
+  assert.ok(set.length === 2 && Math.abs(set[0] - o.x * 100) < 0.01 && Math.abs(set[1] - o.y * 100) < 0.01, `about the build's place in the frame (${a.d0.origin} for ${JSON.stringify(o)})`);
+  assert.ok(o.x >= 0.2 && o.x <= 0.8 && o.y >= 0.2 && o.y <= 0.8, `held inside the frame's middle (${JSON.stringify(o)})`);
+  assert.ok(a.drawn <= 3, `while the stage draws only its safety net (${a.drawn} frames in 1.5 s)`);
+  // the next shot: the last drift cleared in the black, its own from the shot as framed
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.shot !== 'hero' && window.__GEN2_DONE__.drift.state === 'running', null, { timeout: 30_000 });
+  const b = await page.evaluate(() => ({ drift: window.__GEN2_DONE__.drift, shot: window.__GEN2_DONE__.sequence.shot }));
+  assert.ok(b.drift.plan.kind !== 'in' && scale(b.drift.transform) >= 1, `the next shot (${b.shot}) drifts its own way (${b.drift.plan.kind}, ${b.drift.transform})`);
+  // a resize re-lands the still where it is, and its drift ends there (about the old framing it would carry the build off)
+  const vp = page.viewportSize();
+  await page.setViewportSize({ width: vp.width - 80, height: vp.height - 40 });
+  await settle(page, 600);
+  const resized = await page.evaluate(() => window.__GEN2_DONE__.drift);
+  assert.deepEqual([resized.plan, resized.transform], [null, 'none'], `a resize ends the shot's drift (${JSON.stringify(resized)})`);
+  await page.setViewportSize(vp);
+  // leaving: the canvas as it was
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 15_000 });
+  const gone = await page.evaluate(() => { const el = window.__GEN2_VIEWER__.renderer.domElement; return { transform: getComputedStyle(el).transform, clip: el.parentElement.style.overflow, origin: el.style.transformOrigin, anims: el.getAnimations().length }; });
+  assert.deepEqual([gone.transform, gone.anims, gone.origin], ['none', 0, ''], `leaving puts the canvas back (${JSON.stringify(gone)})`);
+  assert.equal(gone.clip, '', 'its box unclipped again');
+  // a second visit counts its drifts afresh: its hero pushes in, then the next shot takes the first slide again
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering && d.drift.state === 'running'; }, null, { timeout: 60_000 });
+  const again = await page.evaluate(() => window.__GEN2_DONE__.drift);
+  assert.deepEqual([again.plan.kind, again.n], ['in', 1], `the next visit's hero pushes in, its count begun again (${JSON.stringify(again)})`);
+  assert.deepEqual(clean(errors), [], 'no errors (Fast)');
+  await ctx.close();
+  // HIGH: a moving shot has none, a still one does
+  const hctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await hctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+  const hi = await open('assemble', { query: '&done=room', context: hctx });
+  await enterScene(hi.page);
+  await hi.page.evaluate(() => { const d = window.__GEN2_DONE__; d.setTiming({ holdMs: 4000, maxFrameMs: 1e9, seed: 1 }); d.jump('push'); });
+  await settle(hi.page, 600);
+  const push = await hi.page.evaluate(() => ({ drift: window.__GEN2_DONE__.drift, moving: window.__GEN2_DONE__.sequence.moving }));
+  assert.deepEqual([push.moving, push.drift.plan, push.drift.transform], [true, null, 'none'], `High: a moving shot moves its camera, no drift (${JSON.stringify(push)})`);
+  await hi.page.evaluate(() => window.__GEN2_DONE__.jump('top'));
+  await settle(hi.page, 600);
+  const top = await hi.page.evaluate(() => window.__GEN2_DONE__.drift);
+  assert.equal(top.state, 'running', `a still one drifts (${JSON.stringify(top)})`);
+  assert.deepEqual(clean(hi.errors), [], 'no errors (High)');
+  await hctx.close();
+  // REDUCED MOTION: none
+  const rctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: 'reduce' });
+  await rctx.addInitScript(FAST);
+  const rm = await open('assemble', { query: '&done=room', context: rctx });
+  await btn(rm.page, 'Skip to the finished build', '#ws-steps').click();
+  await rm.page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(rm.page, 'Next', '#ws-player').click();
+  await rm.page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(rm.page, 'Watch the final scene', '#ws-player').click();
+  await rm.page.waitForFunction(() => !!window.__GEN2_DONE__, null, { timeout: 60_000 });
+  await settle(rm.page, 1500);
+  const still = await rm.page.evaluate(() => window.__GEN2_DONE__.drift);
+  assert.deepEqual([still.plan, still.transform], [null, 'none'], `reduced motion: no drift (${JSON.stringify(still)})`);
+  assert.deepEqual(clean(rm.errors), [], 'no errors (reduced motion)');
+  await rctx.close();
+});
+
 /* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty
    stage with a strip that does nothing (Sol 01a16c20). Back to the End page, HUD and all. */
 test('Assemble: the Done scene\'s final scene returns to the End page when the room fails to load', async () => {

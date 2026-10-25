@@ -542,6 +542,36 @@ export function steamRate(tier, reduced) {
 export function steamSize(radius) {
   return { w: STEAM.width * radius, h: STEAM.height * radius };
 }
+/* THE STILL SHOTS' DRIFT (Joey 2026-10-25: "maybe on static screens, like would it be possible to slowly zoom in or out
+ * slightly, like without it rerendering the scene, kind of like cropping or expanding or panning an image? just as an
+ * alternative to always sitting still, maybe this would work on low end pc's as well"). A still shot's finished picture
+ * is slowly scaled or slid by a CSS transform on the canvas: the compositor's work, so the scene is not drawn again and
+ * the idle gate stays at rest, on any tier. A push in, a pull out, or a slide across at a held scale, `scale` at most,
+ * about the build's place in the frame (`origin`, fractions of the canvas). A slide reaches only as far as its scale
+ * covers, so the canvas's edge never shows: with the transform scale(s) translate(t) about an origin o, an edge stays
+ * outside the view while t lies within -(1 - o)(s - 1)/s .. o(s - 1)/s (fractions of the canvas); `slide` is the share of
+ * that reach a slide uses. */
+export const DRIFT = { scale: 1.045, slide: 0.7, kinds: ['in', 'left', 'out', 'right'] };
+export function driftReach(o, s) {
+  return { lo: -(1 - o) * (s - 1) / s, hi: o * (s - 1) / s };
+}
+export function driftFor(kind, origin, { scale = DRIFT.scale, slide = DRIFT.slide } = {}) {
+  const o = { x: Math.min(1, Math.max(0, origin.x)), y: Math.min(1, Math.max(0, origin.y)) }, r = driftReach(o.x, scale);
+  const at = (s, x) => ({ s, x, y: 0 });
+  if (kind === 'out') return { kind, origin: o, from: at(scale, 0), to: at(1, 0) };
+  if (kind === 'left') return { kind, origin: o, from: at(scale, r.hi * slide), to: at(scale, r.lo * slide) };   // the picture slides left: a pan to the right
+  if (kind === 'right') return { kind, origin: o, from: at(scale, r.lo * slide), to: at(scale, r.hi * slide) };
+  return { kind: 'in', origin: o, from: at(1, 0), to: at(scale, 0) };
+}
+/* the drift a shot takes: the hero pushes in (the visit opens on it), the others turn through the kinds by their place
+ * among the visit's drifts (`i`, counted from the entrance; a moving shot has none and is not counted), so two drifts in
+ * a row move differently */
+export function driftKind(name, i) {
+  return name === 'hero' ? 'in' : DRIFT.kinds[((i % DRIFT.kinds.length) + DRIFT.kinds.length) % DRIFT.kinds.length];
+}
+export function driftCss(p) {
+  return `scale(${p.s.toFixed(4)}) translate(${(p.x * 100).toFixed(3)}%, ${(p.y * 100).toFixed(3)}%)`;
+}
 /* The steam's beat (Sol 01a174d3): whether a tick falls due at `now` (ms) and when the next one does. Each falls due an
  * interval after the last fell due, 4 ms early counting as on time (the rAF's own beat), so the tier's rate holds on
  * average at any display rate (a 60 Hz display alternates 2 and 3 frames for High's 24, where restarting the interval
