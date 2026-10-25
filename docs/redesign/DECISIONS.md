@@ -3270,7 +3270,10 @@ keyboard undo or Remove").
   failed this entry's own case ("Under-Table settles up after every edit") on an Undo wait: the store coalesces commits
   made within 350 ms into one history entry (a drag is one undo), and the script's two removals were one round trip
   apart, so one Undo put both back - a flake that passed alone. The case now flushes history between the edits that must
-  be separate undo steps, as a hand's pace does. LIVE LINE TO FILL.
+  be separate undo steps, as a hand's pace does. **Live 2026-10-25 at `dbf76ba8`** (18:41 push, live 19:49 local; the
+  runner's smoke step alone takes 51-65 min). The live check `settle-prod.mjs dbf76ba8` (D:\Claude - Output\
+  planner-prod-checks-2026-10-18) passed every check: the two removals settle the report's layout, 0 issues, the toast
+  names the settle, the drop below the stack is allowed and settles up, no hatched cell at rest.
 
 
 ## 2026-10-25 (every part's real printed top layer at Very High: the baked skin maps)
