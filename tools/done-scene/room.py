@@ -71,6 +71,11 @@ ap.add_argument('--sun-size', type=float, default=0.545, help='the sun disc\'s a
 ap.add_argument('--desk-wood', action='store_true', help='look12: the photographed silver oak veneer on the desk (tools/done-scene/textures/), else the plain colour')
 ap.add_argument('--desk-contrast', type=float, default=0.6, help='how much of the veneer photo shows over its own mean colour (1 = as shot)')
 ap.add_argument('--desk-bump', type=float, default=0.0, help='the veneer normal map strength (0 = off: establish the colour grain first)')
+# the visitor's room colours (2026-10-25, Joey: "would it be possible for the user to maybe adjust the wall and maybe desk
+# color"): the planner recolours the bake, so a reference bake in another colour says how far that is from the truth
+ap.add_argument('--wall-hex', help='the wall paint in this colour (sRGB hex) instead of the palette\'s: a reference bake for the planner\'s wall recolour')
+ap.add_argument('--desk-hex', help='a plain desk top in this colour (sRGB hex), the veneer off: a reference bake for the planner\'s desk colours')
+ap.add_argument('--light-maps', default='', help='bake: comma-separated mesh names that also get a LIGHT-ONLY map (the diffuse light, direct and indirect, no colour; the props hidden and the bump off), written as light-<name>.webp beside room.glb and listed in room.json: the planner draws a new colour over it as colour x light')
 # the props' shadows as masks (bake3, 2026-10-23): the desk and wall maps are baked with the props hidden, and each prop
 # group's shadow is baked as its own ratio mask over the desk top and the back wall, slid with the group by the planner
 ap.add_argument('--mask-px', type=float, default=2.0, help='the shadow masks\' pixel pitch, mm on the desk and the wall (2 mm resolves the 2 degree sun\'s penumbra)')
@@ -418,10 +423,11 @@ KIT = new_collection('kit')
 RIG = new_collection('rig')
 
 NEUTRAL = args.palette == 'neutral'
-M_WALL = mat('wall paint', '#e2e4e1' if NEUTRAL else '#e9e2d6', rough=0.85, spec=0.3)
+WALL_HEX = args.wall_hex or ('#e2e4e1' if NEUTRAL else '#e9e2d6')   # room.json carries it: the planner's wall recolour is a ratio to it
+M_WALL = mat('wall paint', WALL_HEX, rough=0.85, spec=0.3)
 M_FLOOR = mat('oak floor', '#9a8a74' if NEUTRAL else '#a67c52', rough=0.5, spec=0.4)
-M_DESK = mat('desk oak', '#c4b08e' if NEUTRAL else '#b98a5a', rough=0.45 if NEUTRAL else 0.38, spec=0.4)
-if args.desk_wood:   # look12: the photographed silver oak veneer (tools/done-scene/textures/silver_oak_veneer_01/SOURCE.md), 1 m per repeat
+M_DESK = mat('desk oak', args.desk_hex or ('#c4b08e' if NEUTRAL else '#b98a5a'), rough=0.45 if NEUTRAL else 0.38, spec=0.4)
+if args.desk_wood and not args.desk_hex:   # look12: the photographed silver oak veneer (tools/done-scene/textures/silver_oak_veneer_01/SOURCE.md), 1 m per repeat
     M_DESK = wood_photo(M_DESK, 'silver_oak_veneer_01', 'silver_oak_veneer_01', 1.0, contrast=args.desk_contrast,
                         tint=None if NEUTRAL else '#d9b98c', rough=0.5, bump=args.desk_bump)
 M_DESK_LEG = mat('desk steel', '#2b2d31', rough=0.5, metal=0.3)
@@ -1152,6 +1158,9 @@ def post(exr_path, png_path, exposure, probe_box=None):
 # bake: every room mesh gets a lightmap UV and a baked diffuse (direct + indirect + colour, emission) texture, then the
 # material becomes an unlit emission of that texture, which the glTF exporter writes as KHR_materials_unlit
 # ---------------------------------------------------------------------------------------------------------------------
+LIGHT_MAPS = {}   # mesh name -> its light-only map's record for room.json (--light-maps; bake_room fills it)
+
+
 def bake_room(samples):
     import numpy as np   # noqa: F401 - asserts numpy is there before an hour of baking
     scene.cycles.samples = samples
@@ -1223,6 +1232,50 @@ def bake_room(samples):
         for o in props + live_props:
             o.hide_render = False
         bake_selected(props, 'the props, the room visible')
+    # LIGHT-ONLY MAPS (--light-maps, 2026-10-25, the visitor's room colours): for the named meshes, the diffuse light alone
+    # (direct and indirect, no colour), the props hidden as for the fixed surfaces' pass and the bump unhooked, so a plain
+    # colour the planner draws over it (colour x light) shows no grain. Same LM UV and size as the mesh's own lightmap,
+    # baked after it (the bump is unhooked for good: the export below rewires the material to its BAKE image anyway).
+    light = {}
+    names = [n for n in args.light_maps.split(',') if n]
+    if names:
+        targets = [o for o in meshes if o.name in names]
+        missing = sorted(set(names) - {o.name for o in targets})
+        if missing:
+            raise SystemExit('--light-maps: no baked mesh named %s' % ', '.join(missing))
+        for o in props + live_props:
+            o.hide_render = True
+        for o in targets:
+            img = bpy.data.images.new('light_' + o.name, images[o.name].size[0], images[o.name].size[1], alpha=False, float_buffer=True)
+            img.colorspace_settings.name = images[o.name].colorspace_settings.name
+            light[o.name] = img
+            for m in o.data.materials:
+                nt = m.node_tree
+                tex = nt.nodes.new('ShaderNodeTexImage')
+                tex.image = img
+                tex.name = 'LIGHT'
+                uvn = nt.nodes.new('ShaderNodeUVMap')
+                uvn.uv_map = 'LM'
+                nt.links.new(uvn.outputs['UV'], tex.inputs['Vector'])
+                for n in nt.nodes:
+                    n.select = False
+                tex.select = True
+                nt.nodes.active = tex
+                bsdf = nt.nodes.get('Principled BSDF')
+                if bsdf:
+                    for lk in list(bsdf.inputs['Normal'].links):
+                        nt.links.remove(lk)
+        bpy.ops.object.select_all(action='DESELECT')
+        for o in targets:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = targets[0]
+        print('[bake] light-only maps: %s at %d samples' % (', '.join(o.name for o in targets), samples))
+        bpy.ops.object.bake(type='DIFFUSE', pass_filter={'DIRECT', 'INDIRECT'}, margin=6, use_clear=True)
+        for o in props + live_props:
+            o.hide_render = False
+        for o in targets:
+            for m in o.data.materials:
+                m.node_tree.nodes.active = m.node_tree.nodes['BAKE']
     # the exported material: an unlit emission of the baked texture (exposure folded in, so the planner's linear values
     # match the look check's), read through the LM channel
     exposure = scene['done_exposure']
@@ -1257,6 +1310,35 @@ def bake_room(samples):
         # drop the first UV channel so the exporter writes the lightmap UV as TEXCOORD_0
         while len(o.data.uv_layers) > 1:
             o.data.uv_layers.remove(o.data.uv_layers[0] if o.data.uv_layers[0].name != 'LM' else o.data.uv_layers[1])
+    # the light-only maps on disk: exposure folded in like the lightmaps', then `scale` so the brightest 0.1 % of the
+    # covered texels reads 0.9 before the sRGB encoding (light under a white albedo runs past 1 where the mesh's own map
+    # does not). `albedo` is the mesh's colour as the bake drew it: its exposed lightmap over its light, texel by texel, the
+    # median per channel (the planner tints the bake by a target over it). The file is the light through blur5, as the
+    # masks are: unfiltered, 192 samples left a grain of about 3 levels in 215 that the oak's own grain hides and a plain
+    # desk would not (bake5, 2026-10-25); its 2 px reach stays inside the islands' 6 px margin. The file's rows as the
+    # exporter writes the GLB's images (write_webp takes Blender's bottom-up rows), so the planner samples it like them.
+    for name, limg in light.items():
+        w, h = limg.size
+        lb = np.empty(w * h * 4, dtype=np.float32)
+        limg.pixels.foreach_get(lb)
+        lb = lb.reshape(h, w, 4)[:, :, :3] * exposure
+        cb = np.empty(w * h * 4, dtype=np.float32)
+        images[name].pixels.foreach_get(cb)                      # already exposed, above
+        cb = cb.reshape(h, w, 4)[:, :, :3]
+        covered = lb.sum(axis=2) > 1e-4                         # the texels the mesh's islands (and the margin) cover
+        if not covered.any():
+            # Cycles leaves the light pass of a surface with a BLACK colour empty (bake5-dark, 2026-10-25): give a dark end a
+            # near-black paint instead (#010101, albedo 0.0003, which bounces nothing that matters)
+            raise SystemExit('--light-maps: %s baked no light (a black colour bakes none; use a near-black one)' % name)
+        albedo = np.median(cb[covered] / np.maximum(lb[covered], 1e-6), axis=0)
+        lb = np.where(covered[:, :, None], blur5(lb), 0.0)
+        scale = 0.9 / float(np.percentile(lb[covered], 99.9))
+        fname = 'light-%s.webp' % name
+        path = os.path.join(args.out_dir, fname)
+        err = write_webp(path, to_srgb(np.clip(lb * scale, 0.0, 1.0)), args.mask_quality)
+        LIGHT_MAPS[name] = dict(file=fname, bytes=os.path.getsize(path), px=w, scale=round(scale, 5),
+                                albedo=[round(float(v), 5) for v in albedo], err=round(err, 5))
+        print('[bake] %s: %d px, scale %.4f, albedo %s, %d bytes, read-back error %.5f' % (fname, w, scale, LIGHT_MAPS[name]['albedo'], LIGHT_MAPS[name]['bytes'], err))
     return images
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -1584,6 +1666,11 @@ elif args.mode == 'bake':
         room_json['shadows'] = dict(px=args.mask_px, bakedWithoutProps=True,
                                     zWall=round(-(WALL_BACK_Y - room['anchor'][1]) * 1000, 1),
                                     orientation='image top = toward the wall (desk) / up (wall); +x right', masks=masks)
+    # the colours the bake was made in (the planner's wall recolour is a ratio to the wall's), and the light-only maps
+    # (--light-maps): the planner's plain desk colours are colour x light, the light being the file over `scale`
+    room_json['colours'] = dict(wall=WALL_HEX, desk=args.desk_hex or ('veneer silver_oak_veneer_01, contrast %g' % args.desk_contrast if args.desk_wood else ('#c4b08e' if NEUTRAL else '#b98a5a')))
+    if LIGHT_MAPS:
+        room_json['light'] = LIGHT_MAPS
     json.dump(room_json, open(stem + '.json', 'w', newline='\n'), indent=1)   # LF on Windows too (the repo's line ending)
     bpy.ops.wm.save_as_mainfile(filepath=stem + '.blend')
     print('[bake] wrote %s (%d bytes) and %s.json' % (glb, os.path.getsize(glb), stem))

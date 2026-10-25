@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -35,8 +35,13 @@ function loadRoom() {
   if (!loading) {
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
-    loading = Promise.all([loader.loadAsync(ROOM_GLB), fetch(ROOM_JSON).then((r) => { if (!r.ok) throw new Error(`${ROOM_JSON}: ${r.status}`); return r.json(); })])
-      .then(async ([gltf, json]) => ({ gltf, json, masks: await loadMasks(json) }))
+    /* the files room.json names (the masks, the light-only maps, the walls' bounce) start as soon as it is in, while the
+       GLB is still coming: none of them needs it (2026-10-25: loaded one after another after it, they added 0.6 s to the
+       entry on a 10 Mbit/s line). Each one catches its own failure. */
+    const meta = fetch(ROOM_JSON).then((r) => { if (!r.ok) throw new Error(`${ROOM_JSON}: ${r.status}`); return r.json(); })
+      .then((json) => Promise.all([loadMasks(json), loadLight(json), loadBounce(json)]).then(([masks, light, bounce]) => ({ json, masks, light, bounce })));
+    loading = Promise.all([loader.loadAsync(ROOM_GLB), meta])
+      .then(([gltf, m]) => ({ gltf, ...m }))
       .catch((e) => { loading = null; throw e; });
   }
   return loading;
@@ -59,11 +64,61 @@ function loadMasks(json) {
     .catch((e) => { console.warn('[done scene] shadow mask', m.file, e); return { ...m, tex: null }; })));
 }
 
+/* THE LIGHT-ONLY MAPS (room.json `light`, room.py --light-maps, 2026-10-25): a mesh's diffuse light with no colour, on its
+   own lightmap UV, for the visitor's plain desk colours (done-fit.js deskLook). Read like the GLB's own lightmaps (sRGB,
+   flipY off: the file's rows as the exporter writes them). One that fails to load leaves its mesh with the bake's look. */
+function loadLight(json) {
+  const list = json.light && typeof json.light === 'object' ? Object.entries(json.light) : [];
+  if (!list.length) return Promise.resolve({});
+  const q = ROOM_JSON.indexOf('?'), stamp = q < 0 ? '' : ROOM_JSON.slice(q), dir = ROOM_JSON.slice(0, ROOM_JSON.lastIndexOf('/') + 1);
+  const tl = new THREE.TextureLoader();
+  return Promise.all(list.map(([mesh, rec]) => tl.loadAsync(dir + rec.file + stamp)
+    .then((t) => { t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return [mesh, { ...rec, tex: t }]; })
+    .catch((e) => { console.warn('[done scene] light-only map', rec.file, e); return [mesh, { ...rec, tex: null }]; })))
+    .then((pairs) => Object.fromEntries(pairs));
+}
+
+/* THE WALLS' BOUNCE (room.json `bounce`, tools/done-scene/endpoint.py, 2026-10-25): the light the walls bounce onto every
+   surface, one atlas of small tiles, a rect per mesh. Read like the lightmaps (sRGB, flipY off). Without it a dark wall
+   paints the wall alone and the rest of the room keeps the bake's bounce. */
+function loadBounce(json) {
+  if (!json.bounce || !json.bounce.file) return Promise.resolve(null);
+  const q = ROOM_JSON.indexOf('?'), stamp = q < 0 ? '' : ROOM_JSON.slice(q), dir = ROOM_JSON.slice(0, ROOM_JSON.lastIndexOf('/') + 1);
+  return new THREE.TextureLoader().loadAsync(dir + json.bounce.file + stamp)
+    .then((t) => { t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return { ...json.bounce, tex: t }; })
+    .catch((e) => { console.warn('[done scene] the walls\' bounce', json.bounce.file, e); return null; });
+}
+/* a room material that draws its bake less a share of the walls' bounce: diffuse = colour x map - k x bounce(rect), never
+   below black; `rect` and `k` live in userData.bounce, so paintRoom moves them (the desk's rect follows its map) */
+function addBounce(m, bounce, rect) {
+  const s = bounce.size;
+  const toUv = (r) => new THREE.Vector4(r[0] / s[0], r[1] / s[1], r[2] / s[0], r[3] / s[1]);
+  m.userData.bounce = { k: new THREE.Vector3(), rect: toUv(rect), toUv };
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uBounce = { value: bounce.tex };
+    sh.uniforms.uBounceK = { value: m.userData.bounce.k };
+    sh.uniforms.uBounceRect = { value: m.userData.bounce.rect };
+    sh.fragmentShader = 'uniform sampler2D uBounce;\nuniform vec3 uBounceK;\nuniform vec4 uBounceRect;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+      '#include <map_fragment>\n\tdiffuseColor.rgb = max(diffuseColor.rgb - uBounceK * texture2D(uBounce, uBounceRect.xy + vMapUv * uBounceRect.zw).rgb, 0.0);');
+  };
+  m.customProgramCacheKey = () => 'done-bounce';
+  m.needsUpdate = true;
+}
+
+/* the visitor's room colours, remembered in this browser (a viewing choice, not part of the build): { wall, desk }, each a
+   preset id or '#rrggbb' (done-fit.js WALL_PAINTS, DESK_FINISHES) */
+const ROOM_COLOURS_KEY = 'gen2-room-colours';
+function savedRoomColours() {
+  try { const c = JSON.parse(localStorage.getItem(ROOM_COLOURS_KEY) || 'null'); return c && typeof c === 'object' ? { wall: c.wall || 'white', desk: c.desk || 'oak' } : { wall: 'white', desk: 'oak' }; } catch { return { wall: 'white', desk: 'oak' }; }
+}
+
 /* the room's materials are its baked light: unlit, drawn as-is. Blender exports an Emission shader as a PBR material
    with a BLACK base and the bake as its EMISSIVE texture (factor white), not as KHR_materials_unlit; so the emissive map
    is the room's picture and the emissive factor its tint (2026-10-23: taking `map` alone painted the room white). A
-   KHR_materials_unlit material already arrives as MeshBasicMaterial and is kept. Returns the materials it made, so
-   leave() can dispose them (their textures are the cached GLB's and stay: Terra 01a16a22).
+   KHR_materials_unlit material already arrives as MeshBasicMaterial and is cloned. Every one remembers its baked colour
+   and map (userData doneBase, doneMap), the base the visitor's room colours multiply (2026-10-25), and is the entry's own,
+   so a colour never reaches the cached GLB's. Returns the materials it made, so leave() can dispose them (their textures
+   are the cached GLB's and stay: Terra 01a16a22).
    ⚠ A LIVE mesh is the exception (room.py's `live` tag; the caliper's steel, 2026-10-24): a metal has no diffuse colour,
    so its baked lightmap would be black, which is how the first calipers drew. It keeps the glTF's own metallic PBR
    material (the beam's printed scale its base colour), cloned per entry because the cached GLB's is shared and the
@@ -82,12 +137,16 @@ function unlit(root) {
     }
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     const out = mats.map((m) => {
-      if (m.isMeshBasicMaterial) return m;
-      const emissive = m.emissive && m.emissiveIntensity ? m.emissive.clone().multiplyScalar(m.emissiveIntensity) : null;
-      const b = new THREE.MeshBasicMaterial({ side: m.side });
-      if (m.emissiveMap) { b.map = m.emissiveMap; b.color.copy(emissive || new THREE.Color(0xffffff)); }
-      else if (m.map) { b.map = m.map; b.color.copy(m.color || new THREE.Color(0xffffff)); }
-      else { b.color.copy(m.color || new THREE.Color(0xffffff)); if (emissive) b.color.add(emissive); }
+      let b;
+      if (m.isMeshBasicMaterial) b = m.clone();
+      else {
+        const emissive = m.emissive && m.emissiveIntensity ? m.emissive.clone().multiplyScalar(m.emissiveIntensity) : null;
+        b = new THREE.MeshBasicMaterial({ side: m.side });
+        if (m.emissiveMap) { b.map = m.emissiveMap; b.color.copy(emissive || new THREE.Color(0xffffff)); }
+        else if (m.map) { b.map = m.map; b.color.copy(m.color || new THREE.Color(0xffffff)); }
+        else { b.color.copy(m.color || new THREE.Color(0xffffff)); if (emissive) b.color.add(emissive); }
+      }
+      b.userData.doneBase = b.color.clone(); b.userData.doneMap = b.map || null;
       made.push(b);
       return b;
     });
@@ -143,6 +202,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     sunHalfDeg: stage.sunHalfDeg,
     controls: controls.enabled, pan: controls.enablePan, dims: !!stage.dimsOn };
   let json = null, buildBox = null, interior = null;   // interior: the room's box from its walls (roomInterior), the shots' clamp
+  let roomLight = {};   // room.json's light-only maps, loaded (loadLight): the desk top's, for the visitor's plain desk colours
+  let roomBounce = null;   // room.json's walls' bounce, loaded (loadBounce): the atlas and its rects
+  const colours = { wall: 'white', desk: 'oak', envs: 0 };   // the room colours drawn now (paintRoom), and how often the environment was captured
   /* the build's mount (stage.mountFrame) and the desk top's height in the stage once the room is placed (roomAnchor): 0 for
      a build standing on it, lower for one hanging on the wall over it, just over the rails of one hanging under it */
   let mount = 'tabletop', deskY = 0;
@@ -436,6 +498,135 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (parts.wall) parts.wall.visible = shadow;
     if (parts.sprite) parts.sprite.visible = !shadow && mount === 'tabletop';   // the disc under a build that stands on the desk
   }
+  /* THE VISITOR'S ROOM COLOURS (done-fit.js wallFactor, wallWeight, bounceK, deskLook; Joey 2026-10-25): every material
+     from its baked base (userData doneBase / doneMap, unlit). The walls take the new paint over the baked one; the desk
+     top a tint of its oak or, for a plain colour, the colour over its light-only map; and every surface with a tile in the
+     walls' bounce loses the share of it the new paint does not bounce (k, per channel: Joey, "dark wall should also darken
+     the rest of the room"). The desk's own bounce onto the room stays the oak's (done-fit.js, the measured limit). A
+     choice the bake cannot draw (no light-only map, a bad value) keeps the bake's own look. */
+  function paintRoom(c) {
+    const g = parts.group;
+    if (!g || !json) return;
+    const baked = json.colours && json.colours.wall;
+    const wf = wallFactor(c.wall, baked), weight = wallWeight(c.wall, baked);
+    const rho0 = hexToLinear(baked) || [1, 1, 1], rho = weight.map((v, i) => v * rho0[i]);   // the new paint, linear
+    const lt = roomLight.desk_top && roomLight.desk_top.tex ? roomLight.desk_top : null;
+    const dl = deskLook(c.desk, lt) || deskLook('oak');
+    const tile = (key) => roomBounce && roomBounce.meshes[key];
+    const set = (m, colour, bounceFactor, key) => {
+      m.color.copy(m.userData.doneBase).multiply(new THREE.Color(colour[0], colour[1], colour[2]));
+      const b = m.userData.bounce, rec = tile(key);
+      if (!b) return;
+      if (!rec) { b.k.set(0, 0, 0); return; }
+      const k = bounceK(bounceFactor, weight, rec.scale);
+      b.k.set(k[0], k[1], k[2]).multiply(new THREE.Vector3(m.userData.doneBase.r, m.userData.doneBase.g, m.userData.doneBase.b));
+      b.rect.copy(b.toUv(rec.rect));
+    };
+    g.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material)) {
+        if (!m.userData.doneBase) continue;   // the live steel: its own PBR, the room's environment
+        /* a wall is its bake x the new paint over the baked one: its light, one plain paint (the bake reaches its 8-bit top
+           only on faces outside the room, the back wall's stretch past the left wall and the left wall's outer face:
+           2026-10-25). Its bounce tile is of its light (times the paint's diffuse share: endpoint.py), so the new paint
+           multiplies it too. The bake's own paint draws its bake exactly (weight 1, nothing taken off). */
+        if (/^wall_/.test(o.name)) set(m, weight, rho, o.name);
+        else if (o.name === 'desk_top') {
+          const map = dl.use === 'light' ? lt.tex : m.userData.doneMap;
+          if (m.map !== map) { m.map = map; m.needsUpdate = true; }
+          if (dl.use === 'light') set(m, dl.factor, dl.colour, 'desk_top:light');
+          else set(m, dl.factor, dl.factor, 'desk_top');
+        } else set(m, [1, 1, 1], [1, 1, 1], o.name);
+      }
+    });
+    colours.wall = wf ? c.wall : 'white';
+    colours.desk = dl.use === 'light' || dl.factor.some((v) => v !== 1) ? c.desk : 'oak';
+  }
+  /* the room as the build's environment, captured from the build's centre; again after a colour change, so the build's
+     reflections and its light from the room follow the new wall and desk */
+  function captureEnv() {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const next = pmrem.fromScene(parts.envScene, 0.04, 10, 60000).texture;
+    pmrem.dispose();
+    if (parts.env) parts.env.dispose();
+    parts.env = next; colours.envs++;
+    // the live steel reflects the room on every tier, Fast's included (it has no scene environment of its own)
+    for (const m of parts.mats) if (m.isMeshStandardMaterial) { m.envMap = parts.env; m.needsUpdate = true; }
+  }
+  /* the handle's: paint the room, capture it again, remember the choice in this browser, draw it (Very High's mean
+     starts over: invalidateFrame) */
+  function setRoomColours(c) {
+    if (!on || !parts.envScene) return null;
+    paintRoom({ wall: (c && c.wall) || colours.wall, desk: (c && c.desk) || colours.desk });
+    captureEnv();
+    stage.holdScene(true, { environment: parts.env });
+    try { localStorage.setItem(ROOM_COLOURS_KEY, JSON.stringify({ wall: colours.wall, desk: colours.desk })); } catch {}
+    stage.invalidateFrame();
+    return { wall: colours.wall, desk: colours.desk };
+  }
+  /* the presets as the visitor's swatches: the bake's own paint and its oak in their baked colours (room.json), the desk
+     finishes the bake cannot draw (no light-only map) left out */
+  function roomPresets() {
+    const lt = roomLight.desk_top, plain = !!(lt && lt.tex);
+    const oak = lt && Array.isArray(lt.albedo) ? linearToHex(lt.albedo) : '#d9c4a6';
+    return {
+      walls: WALL_PAINTS.map((p) => ({ id: p.id, name: p.name, swatch: p.hex || (json && json.colours && json.colours.wall) || '#e2e4e1' })),
+      desks: DESK_FINISHES.filter((p) => p.kind === 'bake' || plain).map((p) => ({ id: p.id, name: p.name, swatch: p.hex || oak })),
+      ownDesk: plain,
+    };
+  }
+  /* THE ROOM-COLOUR CONTROL (Joey 2026-10-25), one for both of the room's places, Colors' Room stage and the final scene's
+     strip: a swatch row for the wall and one for the desk, the visitor's own colour last (live while it is dragged, a
+     frame at a time); every choice goes through setRoomColours, so it is remembered and both places show it */
+  function roomColoursPanel() {
+    const p = roomPresets();
+    const root = document.createElement('div');
+    root.className = 'roomc';
+    root.setAttribute('role', 'group'); root.setAttribute('aria-label', 'Room colours');
+    const rows = {};
+    const own = (v) => /^#[0-9a-f]{6}$/i.test(v || '');
+    const sync = () => {
+      for (const key of ['wall', 'desk']) {
+        if (!rows[key]) continue;
+        for (const b of rows[key].querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.id === colours[key]));
+        const lab = rows[key].querySelector('label.own');
+        if (lab) { lab.classList.toggle('on', own(colours[key])); if (own(colours[key])) lab.style.setProperty('--c', colours[key]); }
+      }
+    };
+    for (const [key, list, label] of [['wall', p.walls, 'Wall'], ['desk', p.desks, 'Desk']]) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const cap = document.createElement('span');
+      cap.textContent = label;
+      const sw = document.createElement('div');
+      sw.className = 'sw';
+      sw.setAttribute('role', 'group'); sw.setAttribute('aria-label', label + ' colour');
+      for (const s of list) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.id = s.id; b.title = s.name;
+        b.setAttribute('aria-label', label + ': ' + s.name);
+        b.style.setProperty('--c', s.swatch);
+        b.addEventListener('click', () => { setRoomColours({ [key]: s.id }); sync(); });
+        sw.append(b);
+      }
+      if (key === 'wall' || p.ownDesk) {
+        const lab = document.createElement('label');
+        lab.className = 'own'; lab.title = 'Your own colour';
+        const inp = document.createElement('input');
+        inp.type = 'color'; inp.setAttribute('aria-label', 'Your own ' + label.toLowerCase() + ' colour');
+        inp.value = own(colours[key]) ? colours[key] : (key === 'wall' ? '#8e9aa6' : '#a8a29a');
+        let raf = 0;
+        inp.addEventListener('input', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { setRoomColours({ [key]: inp.value }); sync(); }); });
+        lab.append(inp);
+        sw.append(lab);
+      }
+      row.append(cap, sw);
+      rows[key] = sw;
+      root.append(row);
+    }
+    sync();
+    return root;
+  }
   function placeCamera(animate) {
     const c = fitAt(shotNamed('hero'), 0);
     reliefFor([c]);   // the entrance lands on the hero: its relief from the start (the move only ever comes closer than the End page's view)
@@ -462,14 +653,20 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.raf = requestAnimationFrame(step);
   }
 
-  const ready = loadRoom().then(({ gltf, json: j, masks }) => {
+  const ready = loadRoom().then(({ gltf, json: j, masks, light, bounce }) => {
     if (cancelled) return null;
-    json = j;
+    json = j; roomLight = light || {}; roomBounce = bounce || null;
     buildBox = stage.assembledBox.clone();
     if (buildBox.isEmpty()) throw new Error('no build to place');
     // the room, scaled to millimetres, its anchor on the build's back-centre at desk height
     const group = gltf.scene.clone(true);
     parts.mats = unlit(group);
+    // every baked mesh with a tile in the walls' bounce draws its bake less its share (paintRoom sets the share)
+    if (roomBounce) group.traverse((o) => {
+      const rec = o.isMesh && roomBounce.meshes[o.name];
+      if (!rec) return;
+      for (const m of [].concat(o.material)) if (m.isMeshBasicMaterial && m.map) addBounce(m, roomBounce, rec.rect);
+    });
     group.name = 'done-room';
     group.scale.setScalar(SCALE);
     const anchor = group.getObjectByName('anchor_tabletop');
@@ -566,15 +763,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (o) o.traverse((m) => { if (m.isMesh) m.castShadow = true; });
     }
     parts.sprite = sprite; scene.add(sprite);
-    // the build's lighting: the room itself, seen from the build, as the environment (the baked textures are its light)
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    const envScene = new THREE.Scene();
-    const envRoom = group.clone(true); envRoom.position.sub(centre); envScene.add(envRoom);
+    // the build's lighting: the room itself, seen from the build, as the environment (the baked textures are its light).
+    // The clone shares the room's materials, so the visitor's colours (painted first) are in it, and in every capture after.
+    parts.envScene = new THREE.Scene();
+    const envRoom = group.clone(true); envRoom.position.sub(centre); parts.envScene.add(envRoom);
     envRoom.traverse((o) => { if (o.userData.live) o.visible = false; });   // a lit metal in a scene with no lights renders black: keep it out of the room it reflects
-    parts.env = pmrem.fromScene(envScene, 0.04, 10, 60000).texture;
-    pmrem.dispose();
-    // the live steel reflects the room on every tier, Fast's included (it has no scene environment of its own)
-    for (const m of parts.mats) if (m.isMeshStandardMaterial) { m.envMap = parts.env; m.needsUpdate = true; }
+    paintRoom(savedRoomColours());
+    captureEnv();
     // the stage's holds: background off, our environment, the shadow on whatever the theme, the camera ours
     stage.table.visible = false; stage.grid.visible = false;
     if (was.dims) stage.setDims(false);   // the brief: no dimension callouts in the room
@@ -610,6 +805,19 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       // where the room went for this build's mount (roomAnchor): the desk top's height, and the room's meshes that cast, read
       // from their flags as they stand (Sol 01a17311: a list kept beside the flags can say what they do not)
       get placement() { const casters = []; if (parts.group) parts.group.traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o.name); }); return { mount, deskY, sprite: parts.sprite ? parts.sprite.visible : null, casters }; },
+      // the room colours as drawn, read off the materials themselves (the wall's and the desk top's colour, linear; the
+      // desk's texture), the environment's texture and how often it was captured
+      get colours() {
+        const g = parts.group, first = (n) => { const o = g && g.getObjectByName(n); return o ? [].concat(o.material)[0] : null; }, w = first('wall_back'), t = first('desk_top');
+        const lt = roomLight.desk_top && roomLight.desk_top.tex;
+        const k = (m) => (m && m.userData.bounce ? m.userData.bounce.k.toArray() : null);
+        return { wall: colours.wall, desk: colours.desk, envs: colours.envs, env: parts.env ? parts.env.uuid : null, wallColor: w && w.color.toArray(), wallBase: w && w.userData.doneBase.toArray(),
+          wallMap: w ? (w.map === w.userData.doneMap ? 'bake' : 'other') : null,
+          deskColor: t && t.color.toArray(), deskBase: t && t.userData.doneBase.toArray(), deskMap: t ? (lt && t.map === lt ? 'light' : t.map === t.userData.doneMap ? 'bake' : 'other') : null, plainDesk: !!lt,
+          // the walls' bounce each surface loses (its k, per channel), and the atlas rect it reads, off the materials
+          bounce: roomBounce ? { wall: k(w), desk: k(t), floor: k(first('floor')), deskRect: t && t.userData.bounce ? t.userData.bounce.rect.toArray() : null } : null };
+      },
+      setRoomColours,
       /* the grammar as it stands: `names` the shots in GRAMMAR order, `fits` each one's camera at the middle of its move
          (clamped, fov), `ends` the shot on screen's two ends, `order` this cycle's plan and `idx` the place in it */
       get sequence() {
@@ -687,6 +895,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (was.dims) stage.setDims(true);
     stage.holdScene(false);
     if (parts.env) { parts.env.dispose(); parts.env = null; }
+    parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
     controls.enabled = was.controls; controls.enablePan = was.pan;
     stage.resetView();   // the guided camera of the page the stage is on (the finished step, or the one a click chose)
     stage.invalidateFrame();
@@ -706,6 +915,6 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a)
   }
-  const handle = { leave, onQuality, refit, recenter, nextShot, get on() { return on; } };
+  const handle = { leave, onQuality, refit, recenter, nextShot, setRoomColours, roomColoursPanel, get roomColours() { return { wall: colours.wall, desk: colours.desk, plainDesk: !!(roomLight.desk_top && roomLight.desk_top.tex) }; }, get on() { return on; } };
   return { ready, leave };
 }

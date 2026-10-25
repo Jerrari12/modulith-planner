@@ -1,0 +1,6 @@
+# bake5-share (2026-10-25): bake5 with light-only maps of the walls too. Not shipped as a room: tools/done-scene/endpoint.py
+# reads its walls' baked albedo (room.json light.wall_*.albedo, the median of bake over light) over the paint as c, the
+# share of the paint the bake draws as diffuse (0.9873: the Principled BSDF's specular layer takes the rest), so a
+# wall's bounce is c x its light's (--share). Run first as round bake5, when bake5's job still listed the walls, and kept
+# as renders/bake5-v2 in the output folder; that run is the one endpoint.py read for the room as shipped.
+--out-dir renders/bake5-share --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3 --light-maps desk_top,wall_back,wall_left_a,wall_left_b,wall_left_c,wall_left_d

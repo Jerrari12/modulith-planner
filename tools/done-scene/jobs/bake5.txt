@@ -1,0 +1,6 @@
+# bake5 (2026-10-25): bake4 exactly, plus the desk top's LIGHT-ONLY map (the diffuse light, no colour, props hidden, bump
+# off) for the visitor's room colours (Joey: "would it be possible for the user to maybe adjust the wall and maybe desk
+# color"): a plain desk is colour x light. A wall in a new paint is its bake x the new paint over the old (one plain paint).
+# room.json gains `colours` (the bake's wall paint) and `light`; tools/done-scene/endpoint.py adds `bounce` from this and
+# bake5-dark (the walls' bounce, so a dark wall darkens the room).
+--out-dir renders/bake5 --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3 --light-maps desk_top

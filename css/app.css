@@ -244,6 +244,20 @@ html.cinema :is(#ws-top, #ws-steps, #ws-tools, #ws-player, #ws-dock, #ws-tabbar)
 @keyframes cinema-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 #ws-scene { position: fixed; left: 50%; bottom: calc(3.5vh - 22px); transform: translateX(-50%); z-index: 61; display: flex; gap: 8px; padding: 4px; border-radius: 14px; }
 #ws-scene .key { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+/* the room's wall and desk colours (2026-10-25; done.js roomColoursPanel): over the final scene's strip, 8 px above it, and
+   in Colors' Room stage. Swatches 28 px, 6 px apart (the planner's control gaps), the chosen one ringed */
+#ws-scene-colours { position: fixed; left: 50%; bottom: calc(3.5vh + 32px);   /* the strip's bottom + its 46 px (36 + 2 x 4 padding + 2 x 1 border) + 8 */ transform: translateX(-50%); z-index: 61; width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 12px 14px; border-radius: 14px; }
+#ws-scene-colours[hidden] { display: none; }
+.roomc { display: flex; flex-direction: column; gap: 10px; }
+.roomc .row { display: flex; flex-direction: column; gap: 6px; }
+.roomc .row > span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.roomc .sw { display: flex; flex-wrap: wrap; gap: 6px; }
+.roomc .sw button, .roomc .sw label.own { position: relative; width: 28px; height: 28px; padding: 0; box-sizing: border-box; border-radius: 8px; border: 1px solid rgba(128,128,128,.45); background: var(--c); cursor: pointer; }
+.roomc .sw button[aria-pressed="true"], .roomc .sw label.own.on { outline: 2px solid var(--ink); outline-offset: 2px; }
+.roomc .sw label.own { overflow: hidden; background: conic-gradient(#e0605a, #e0c05a, #6ac46a, #5aa8e0, #8a6ae0, #e05aa8, #e0605a); }
+.roomc .sw label.own.on { background: var(--c); }
+.roomc .sw label.own input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.roomc .sw button:focus-visible, .roomc .sw label.own:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { #cinema-bars::before, #cinema-bars::after { animation: none; } html.cinema #ws-top, html.cinema #ws-steps, html.cinema #ws-tools, html.cinema #ws-player, html.cinema #ws-dock { transition: none; } }
 #ws-player .pip { display: block; width: 7px; height: 7px; border-radius: 99px; background: var(--seg-track); }
 #ws-player .pip.done { background: var(--ink-3); }

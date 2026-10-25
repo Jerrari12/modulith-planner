@@ -3499,3 +3499,84 @@ Dated calls made while building, with who made them. The brief and the inventory
   9 end shots differ at 0.10 to 0.15 % after the suite, and alone one other at 0.106 %. In each the differing pixels
   lie in two narrow bands either side of the build, and the one opened (270 3W2H, end, Fast) has the height ruler drawn
   on the other side: the known end-shot flake.
+
+## 2026-10-25 (the Done scene: the visitor's wall and desk colours, a dark wall darkening the room)
+
+- **The ask.** Joey: "Just something else to think of next, would it be possible for the user to maybe adjust the wall
+  and maybe desk color if the scene? Like in case they want to actually see how this looks in a closer representation of
+  where they will be installing this to get a better idea of how the colors look together"; and, shown that a dark wall
+  left the rest of the room as bright as a white one, "Yes dark wall should also darken the rest of the room" (both
+  2026-10-25).
+- **The control.** "Wall & desk" on the final scene's strip (Back | Wall & desk | Next view) opens a panel 8 px over it;
+  in Colors the same control sits in a "The room" section while the stage is Room. Nine wall paints (White, the bake's
+  own; Warm white, Light grey, Greige, Sage, Dusty blue, Navy, Charcoal, Terracotta), five desks (Oak, the bake's own
+  veneer; Walnut, a tint of it; White, Grey, Black, plain), and the visitor's own colour for each, applied a frame at a
+  time while it is dragged. Remembered in this browser (`gen2-room-colours`), so the next entry and the other place open
+  in it. Esc closes the panel before it leaves the scene. One implementation, done.js `roomColoursPanel`, on the scene's
+  handle; the workspaces only place it.
+- **How the room is repainted.** The room is baked: each surface's texture is its colour times its light (diffuse only),
+  so a new colour is a multiply, channel by channel in linear light.
+  - **A wall** is its bake times the new paint over the baked one (one plain paint).
+  - **A plain desk** is its colour times the desk top's light-only map (bake5: room.py `--light-maps desk_top`, the
+    diffuse light with no colour, the props hidden and the bump unhooked, through blur5). **Walnut** tints the oak's bake
+    by its colour over the oak's albedo as baked (room.json light.desk_top.albedo, the median of bake over light), so the
+    grain stays.
+  - **The walls' bounce** (Joey's second ask). Each channel of each surface's texture is close to a straight line in the
+    walls' albedo, between the bake's paint and black walls: L(w) = L(w0) - (1 - w/w0) x D, D the light the walls bounce
+    onto it. D comes from a second bake with near-black walls (bake5-dark, `--wall-hex #010101`: Cycles bakes no light
+    pass on #000000), differenced against bake5 by tools/done-scene/endpoint.py, averaged over each mesh's own texels at
+    a quarter of its resolution (a half for 256 px and under, whose thin islands, a window jamb or a leaf, blurred into
+    their neighbours at a quarter), clamped at 0 after that average, pushed into the gutters, and packed into one
+    1024 x 952 atlas (`wall-bounce.webp`, a scale per tile). Each room material takes its share off in its own shader
+    (done.js `addBounce`). After every change the room is captured again as the build's environment, so the build's
+    reflections follow.
+  - **The walls' diffuse share.** A wall's bake over its paint is its light times c = 0.9873, the share of the paint the
+    bake draws as diffuse; the Principled BSDF's specular layer takes the rest. Measured, the same on all five walls, in
+    bake5-share (run as bake5-v2: light-only maps of the walls in the shipped paint). A wall's D is c x (L(w0) - L(0)).
+    Taken as 1, c left the walls' D short (wall_back's mean by 8 %, wall_left_a's by 17 %, wall_left_b's by 8 %) and
+    below zero on 9 to 28 % of those three walls' sunlit texels (4 to 6 % with it). That c holds in another paint is the
+    specular layer's theory, not measured.
+- **A detour on the way.** An intermediate build drew the walls from light-only maps of their own (bake5's first run,
+  kept as bake5-v2), on an assumption written into bake5's job comment, not told to Joey: that the bake clips the walls'
+  sun patch at 1.0, so a ratio over it would leave a dark wall's patch too dim. The wall texels at the 8-bit top are
+  real, but every one lies outside the room's interior: on the back wall's outer face, on its room-facing face only past
+  the left wall (x -3.00 to -1.65 m; the left wall stands at -1.6 m), and on the left wall's outer face (x -1.62 m, 3.6
+  to 88.1 % of each panel's). The left wall's inner faces and the window reveals hold none (each wall triangle's texels
+  counted in room.glb). The walls went back to the ratio over their bake.
+- **Measured against true re-bakes** (Cycles at the shipped settings in that colour, drawn by the planner as it draws the
+  shipped room; 1600 x 900, High; hero / low / top; the mean signed difference in display levels, planner minus truth;
+  the frames in `colours/truth2/` and the scripts in `colours/scripts/` in the Done scene's output folder):
+  - Navy wall: +0.0 / +0.0 / +0.1 (mean absolute 0.7 to 1.0, 99th percentile 5 to 8).
+  - Sage wall: +0.3 / +0.3 / +0.5 (0.9 to 1.1; 5 to 6). The sign is the one the straight line's own error has for a mid
+    paint (light that meets the walls twice goes as w squared, so the line runs above the truth between its ends); navy,
+    near the dark end, cannot confirm it.
+  - White desk, like for like (#f2f1ec): -1.1 / -1.7 / -1.0. The rest of the room is 1.3 to 2.1 levels too dark (blue
+    1.9 to 3.2), because the light the desk bounces onto the room stays the oak's: there is no dark-desk endpoint. Stated
+    in done-fit.js and done.js, not corrected (Sol `01a17447`, below). The desk top itself is 1.6 to 2.3 levels too
+    bright; what makes that up is not isolated (the desk's own specular share, left out of colour x light, and the light
+    it gets back from the room are both candidates).
+  - The default colours against bake4's room (as shipped before): 0.0, 99th percentile 2. The default draws the bake
+    exactly: every surface its own map at its baked colour, nothing taken off.
+  - Before the diffuse share and the clamp order were fixed: navy +0.1 / +0.1 / +0.2, sage +0.5 / +0.4 / +0.6.
+- **Cost.** The room's files 652,190 -> 811,299 bytes (the atlas 133,532, the desk's light-only map 22,536, room.json
+  +7,181). They load as soon as room.json is in, beside the GLB, not one after another after it: on a throttled line
+  (80 ms latency, 10 Mbit/s) the click to the scene fell from 1736 to 1345 ms (median of 3), the new files done by about
+  880 ms while the GLB runs to about 1100 ms. A colour change, over 24 changes at 1280 x 720 in Chrome at High on an
+  RTX A5000 laptop, measured with gl.finish: 7.4 ms median, 12.4 ms the most observed, the next frame 10.6 ms after it.
+  The atlas keeps its mipmaps: without them every error statistic against the truth agreed to 0.01 level, and among the
+  pixels the two differed on by more than 2 levels the mipmapped atlas was usually the closer (no mipmaps closer on 12
+  to 26 % of them; on navy's hero their mean absolute error 1.65 against 3.05 levels).
+- **Review.** Sol `01a17447`. Round 1: one finding, the desk's bounce (above), confirmed and stated rather than
+  corrected; and, in its answers, two gaps in the e2e case, each shown by a mutant that passed it: a Walnut drawn as the
+  oak (C19) and the visitor's own colour chosen but not painted (C20). The case now reads the desk's and the wall's colour
+  off their materials, and the change in the frame. Round 2: no findings. Round 3, these records: seven findings, all
+  taken. Signed means had been stated as accuracy; no room-facing face was said to clip, when the back wall's does past
+  the left wall; the desk top's excess was pinned on the oak's bounce; the mipmap and timing figures had lost their
+  conditions; the probe scripts were cited from a temporary folder; and a claim was recorded as told to Joey that had
+  only ever been in a job comment. Round 4: no findings.
+- **Checks.** Mutants against the colours case: all 17 killed, each at its own assertion (C19 and C20 had passed it
+  before round 1's checks). The whole e2e suite: 92 of 92. npm test: 650 tests, 645 pass, 5 skipped. The colours case
+  runs in 19 s; each of its frame checks clears its bar at least twice over (Walnut 22.1 % of the frame darker against
+  2 %, the visitor's own colour 60.0 % against 30 %).
+- **Not done.** The desk's own bounce (a dark-desk endpoint bake and its tiles) is offered to Joey as the next step. Not
+  deployed: the branch is done-scene, behind `?done=room`.

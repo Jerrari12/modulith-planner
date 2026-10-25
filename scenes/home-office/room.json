@@ -198,7 +198,7 @@
   }
  ],
  "glb": "room.glb",
- "glbBytes": 631804,
+ "glbBytes": 627612,
  "shadows": {
   "px": 2.0,
   "bakedWithoutProps": true,
@@ -224,7 +224,7 @@
     "group": "monitor",
     "surface": "desk",
     "file": "shadow-monitor-desk.webp",
-    "bytes": 3044,
+    "bytes": 3078,
     "px": [
      535,
      203
@@ -239,7 +239,7 @@
     "group": "monitor",
     "surface": "wall",
     "file": "shadow-monitor-wall.webp",
-    "bytes": 5758,
+    "bytes": 5798,
     "px": [
      630,
      382
@@ -284,7 +284,7 @@
     "group": "plant",
     "surface": "desk",
     "file": "shadow-plant-desk.webp",
-    "bytes": 1950,
+    "bytes": 1928,
     "px": [
      345,
      203
@@ -311,5 +311,513 @@
     "y1": 538.0
    }
   ]
+ },
+ "colours": {
+  "wall": "#e2e4e1",
+  "desk": "veneer silver_oak_veneer_01, contrast 0.6"
+ },
+ "light": {
+  "desk_top": {
+   "file": "light-desk_top.webp",
+   "bytes": 22536,
+   "px": 1024,
+   "scale": 0.86807,
+   "albedo": [
+    0.75414,
+    0.59246,
+    0.4403
+   ],
+   "err": 0.00345
+  }
+ },
+ "bounce": {
+  "file": "wall-bounce.webp",
+  "bytes": 133532,
+  "size": [
+   1024,
+   952
+  ],
+  "wallAlbedo": [
+   0.76052,
+   0.77582,
+   0.75294
+  ],
+  "wallShare": [
+   0.98732,
+   0.98731,
+   0.98731
+  ],
+  "note": "L(w) = L(w0) - (1 - w/w0) * D per channel; D = texture(file, rect) / scale; kind light: of the light on the surface, which its colour multiplies (a wall's: its light x wallShare, which its paint multiplies)",
+  "meshes": {
+   "desk_top": {
+    "mesh": "desk_top",
+    "kind": "bake",
+    "rect": [
+     2,
+     2,
+     256,
+     256
+    ],
+    "scale": 2.55549,
+    "factor": 4
+   },
+   "floor": {
+    "mesh": "floor",
+    "kind": "bake",
+    "rect": [
+     262,
+     2,
+     256,
+     256
+    ],
+    "scale": 4.07108,
+    "factor": 4
+   },
+   "wall_back": {
+    "mesh": "wall_back",
+    "kind": "light",
+    "rect": [
+     522,
+     2,
+     256,
+     256
+    ],
+    "scale": 1.68555,
+    "factor": 4
+   },
+   "desk_top:light": {
+    "mesh": "desk_top",
+    "kind": "light",
+    "rect": [
+     2,
+     262,
+     256,
+     256
+    ],
+    "scale": 1.94608,
+    "factor": 4
+   },
+   "cal_body": {
+    "mesh": "cal_body",
+    "kind": "bake",
+    "rect": [
+     262,
+     262,
+     128,
+     128
+    ],
+    "scale": 13.64855,
+    "factor": 4
+   },
+   "desk_leg_l": {
+    "mesh": "desk_leg_l",
+    "kind": "bake",
+    "rect": [
+     394,
+     262,
+     128,
+     128
+    ],
+    "scale": 149.74401,
+    "factor": 2
+   },
+   "desk_leg_r": {
+    "mesh": "desk_leg_r",
+    "kind": "bake",
+    "rect": [
+     526,
+     262,
+     128,
+     128
+    ],
+    "scale": 244.79755,
+    "factor": 2
+   },
+   "frame": {
+    "mesh": "frame",
+    "kind": "bake",
+    "rect": [
+     658,
+     262,
+     128,
+     128
+    ],
+    "scale": 124.09336,
+    "factor": 2
+   },
+   "frame_print": {
+    "mesh": "frame_print",
+    "kind": "bake",
+    "rect": [
+     790,
+     262,
+     128,
+     128
+    ],
+    "scale": 18.78545,
+    "factor": 2
+   },
+   "keyboard": {
+    "mesh": "keyboard",
+    "kind": "bake",
+    "rect": [
+     2,
+     522,
+     128,
+     128
+    ],
+    "scale": 326.54002,
+    "factor": 2
+   },
+   "monitor_base": {
+    "mesh": "monitor_base",
+    "kind": "bake",
+    "rect": [
+     134,
+     522,
+     128,
+     128
+    ],
+    "scale": 370.6425,
+    "factor": 2
+   },
+   "monitor_body": {
+    "mesh": "monitor_body",
+    "kind": "bake",
+    "rect": [
+     266,
+     522,
+     128,
+     128
+    ],
+    "scale": 184.50223,
+    "factor": 4
+   },
+   "monitor_screen": {
+    "mesh": "monitor_screen",
+    "kind": "bake",
+    "rect": [
+     398,
+     522,
+     128,
+     128
+    ],
+    "scale": 363.99233,
+    "factor": 4
+   },
+   "mug": {
+    "mesh": "mug",
+    "kind": "bake",
+    "rect": [
+     530,
+     522,
+     128,
+     128
+    ],
+    "scale": 4.23003,
+    "factor": 2
+   },
+   "notebook": {
+    "mesh": "notebook",
+    "kind": "bake",
+    "rect": [
+     662,
+     522,
+     128,
+     128
+    ],
+    "scale": 3.18945,
+    "factor": 2
+   },
+   "pot": {
+    "mesh": "pot",
+    "kind": "bake",
+    "rect": [
+     794,
+     522,
+     128,
+     128
+    ],
+    "scale": 4.13124,
+    "factor": 2
+   },
+   "wall_left_a": {
+    "mesh": "wall_left_a",
+    "kind": "light",
+    "rect": [
+     2,
+     654,
+     128,
+     128
+    ],
+    "scale": 3.06929,
+    "factor": 4
+   },
+   "wall_left_b": {
+    "mesh": "wall_left_b",
+    "kind": "light",
+    "rect": [
+     134,
+     654,
+     128,
+     128
+    ],
+    "scale": 1.85508,
+    "factor": 4
+   },
+   "wall_left_c": {
+    "mesh": "wall_left_c",
+    "kind": "light",
+    "rect": [
+     266,
+     654,
+     128,
+     128
+    ],
+    "scale": 1.92802,
+    "factor": 4
+   },
+   "wall_left_d": {
+    "mesh": "wall_left_d",
+    "kind": "light",
+    "rect": [
+     398,
+     654,
+     128,
+     128
+    ],
+    "scale": 2.23419,
+    "factor": 4
+   },
+   "win_head": {
+    "mesh": "win_head",
+    "kind": "bake",
+    "rect": [
+     530,
+     654,
+     128,
+     128
+    ],
+    "scale": 1.19357,
+    "factor": 2
+   },
+   "win_jamb_a": {
+    "mesh": "win_jamb_a",
+    "kind": "bake",
+    "rect": [
+     662,
+     654,
+     128,
+     128
+    ],
+    "scale": 1.6677,
+    "factor": 2
+   },
+   "win_jamb_b": {
+    "mesh": "win_jamb_b",
+    "kind": "bake",
+    "rect": [
+     794,
+     654,
+     128,
+     128
+    ],
+    "scale": 1.08923,
+    "factor": 2
+   },
+   "win_sill": {
+    "mesh": "win_sill",
+    "kind": "bake",
+    "rect": [
+     2,
+     786,
+     128,
+     128
+    ],
+    "scale": 1.14862,
+    "factor": 2
+   },
+   "leaf_0": {
+    "mesh": "leaf_0",
+    "kind": "bake",
+    "rect": [
+     134,
+     786,
+     64,
+     64
+    ],
+    "scale": 6.72495,
+    "factor": 2
+   },
+   "leaf_1": {
+    "mesh": "leaf_1",
+    "kind": "bake",
+    "rect": [
+     202,
+     786,
+     64,
+     64
+    ],
+    "scale": 6.32032,
+    "factor": 2
+   },
+   "leaf_2": {
+    "mesh": "leaf_2",
+    "kind": "bake",
+    "rect": [
+     270,
+     786,
+     64,
+     64
+    ],
+    "scale": 6.27791,
+    "factor": 2
+   },
+   "leaf_3": {
+    "mesh": "leaf_3",
+    "kind": "bake",
+    "rect": [
+     338,
+     786,
+     64,
+     64
+    ],
+    "scale": 6.91935,
+    "factor": 2
+   },
+   "leaf_4": {
+    "mesh": "leaf_4",
+    "kind": "bake",
+    "rect": [
+     406,
+     786,
+     64,
+     64
+    ],
+    "scale": 6.35431,
+    "factor": 2
+   },
+   "leaf_5": {
+    "mesh": "leaf_5",
+    "kind": "bake",
+    "rect": [
+     474,
+     786,
+     64,
+     64
+    ],
+    "scale": 6.82127,
+    "factor": 2
+   },
+   "leaf_6": {
+    "mesh": "leaf_6",
+    "kind": "bake",
+    "rect": [
+     542,
+     786,
+     64,
+     64
+    ],
+    "scale": 8.16511,
+    "factor": 2
+   },
+   "leaf_7": {
+    "mesh": "leaf_7",
+    "kind": "bake",
+    "rect": [
+     610,
+     786,
+     64,
+     64
+    ],
+    "scale": 7.49186,
+    "factor": 2
+   },
+   "leaf_8": {
+    "mesh": "leaf_8",
+    "kind": "bake",
+    "rect": [
+     678,
+     786,
+     64,
+     64
+    ],
+    "scale": 8.44477,
+    "factor": 2
+   },
+   "monitor_neck": {
+    "mesh": "monitor_neck",
+    "kind": "bake",
+    "rect": [
+     746,
+     786,
+     64,
+     64
+    ],
+    "scale": 370.6425,
+    "factor": 2
+   },
+   "mouse": {
+    "mesh": "mouse",
+    "kind": "bake",
+    "rect": [
+     814,
+     786,
+     64,
+     64
+    ],
+    "scale": 284.31033,
+    "factor": 2
+   },
+   "mug_handle": {
+    "mesh": "mug_handle",
+    "kind": "bake",
+    "rect": [
+     882,
+     786,
+     64,
+     64
+    ],
+    "scale": 6.39367,
+    "factor": 2
+   },
+   "coffee": {
+    "mesh": "coffee",
+    "kind": "bake",
+    "rect": [
+     950,
+     786,
+     32,
+     32
+    ],
+    "scale": 358.98306,
+    "factor": 2
+   },
+   "pen": {
+    "mesh": "pen",
+    "kind": "bake",
+    "rect": [
+     986,
+     786,
+     32,
+     32
+    ],
+    "scale": 196.9421,
+    "factor": 2
+   },
+   "soil": {
+    "mesh": "soil",
+    "kind": "bake",
+    "rect": [
+     2,
+     918,
+     32,
+     32
+    ],
+    "scale": 187.51118,
+    "factor": 2
+   }
+  },
+  "readBack": 0.00536
  }
 }

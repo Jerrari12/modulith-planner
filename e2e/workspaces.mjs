@@ -1321,7 +1321,7 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
   assert.ok(Math.abs(dress.barH - dress.h * 0.07) < 2 && Math.abs(dress.lowH - dress.h * 0.07) < 2, `black bars of 7 vh top and bottom (${dress.barH}, ${dress.lowH} of ${dress.h})`); assert.equal(dress.barBg, 'rgb(0, 0, 0)');
   assert.equal(dress.barContent, '""', 'the top bar is drawn (a pseudo-element with content; a declared height alone computes even when nothing is drawn)'); assert.equal(dress.lowContent, '""', 'and the bottom one');
   assert.equal(dress.sameLayer, true, 'the bars live in the workspace layer with the strip, so the strip paints over them (bars on the page body covered it: the fixed workspace is its own stacking context)');
-  assert.deepEqual(dress.strip, ['← Back', 'Next view →'], 'the strip: Back and Next view');
+  assert.deepEqual(dress.strip, ['← Back', 'Wall & desk', 'Next view →'], 'the strip: Back, the room\'s wall and desk colours, and Next view');
   const barPx = Math.round(dress.h * 0.07);
   assert.deepEqual(dress.safe, { left: 8, right: 8, top: barPx + 8, bottom: barPx + 8 }, `the shots are fitted between the bars, not the HUD's region (safe ${JSON.stringify(dress.safe)})`);
   assert.equal(s1.grid, false, 'the grid is hidden'); assert.equal(s1.table, false, 'the table is hidden'); assert.equal(s1.dims, false, 'no callouts in the room');
@@ -2123,6 +2123,134 @@ test('Assemble: the Done scene hangs a wall build on its wall and an under-table
     assert.deepEqual(clean(errors), [], `${mount}: no errors`);
     await ctx.close();
   }
+});
+
+/* THE ROOM'S WALL AND DESK COLOURS (2026-10-25; Joey: "would it be possible for the user to maybe adjust the wall and maybe
+   desk color if the scene?", then "Yes dark wall should also darken the rest of the room"). The final scene's "Wall &
+   desk" panel: a paint repaints the wall (its bake times the new paint over the baked one) and takes its share of the
+   walls' bounce off every other surface; a plain desk is drawn from the desk's light-only map; the visitor's own colour
+   works; Esc closes the panel and keeps the scene; the choice is remembered, opens the next entry and shows in Colors'
+   Room stage. The bake's own colours draw the bake itself: every surface its own lightmap at its baked colour, nothing
+   taken off. Each effect is read off the picture as well as the materials, not off the flags alone. */
+test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark wall darkens the rest of it, and the choice is remembered', async () => {
+  const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+  const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  const watch = async () => {
+    await btn(page, 'Watch the final scene', '#ws-player').click();
+    await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 });
+    await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1e9, maxFrameMs: 1e9, seed: 1 }));   // the hero, held
+    await settle(page, 600);
+  };
+  await watch();
+  // the frame as the canvas holds it, kept in the page; __diff counts the pixels two frames apart by more than 24 (RGB sum)
+  await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    window.__frame = async () => {
+      v.renderer.shadowMap.needsUpdate = true; v.invalidateFrame();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const img = new Image(); img.src = v.renderer.domElement.toDataURL('image/png'); await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, c.width, c.height).data;
+    };
+    window.__diff = (a, b) => { let darker = 0, lighter = 0, sum = 0; for (let i = 0; i < a.length; i += 4) { const d = (b[i] + b[i + 1] + b[i + 2]) - (a[i] + a[i + 1] + a[i + 2]); sum += d; if (d > 24) lighter++; else if (d < -24) darker++; } return { darker, lighter, mean: +(sum / (a.length / 4) / 3).toFixed(3), px: a.length / 4 }; };
+    // every room material's share of the walls' bounce, off (kept) and back
+    window.__bounceOff = (off) => v.scene.getObjectByName('done-room').traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { const b = m.userData.bounce; if (!b) continue; if (off) { b.saved = b.k.clone(); b.k.set(0, 0, 0); } else if (b.saved) { b.k.copy(b.saved); delete b.saved; } } });
+  });
+  // THE BAKE'S OWN COLOURS draw the bake itself: every surface its own lightmap at its baked colour, no bounce taken off
+  const def = await page.evaluate(async () => {
+    const out = { read: window.__GEN2_DONE__.colours, saved: localStorage.getItem('gen2-room-colours'), off: [] };
+    window.__GEN2_VIEWER__.scene.getObjectByName('done-room').traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { if (!m.userData.doneBase) continue; if (m.map !== m.userData.doneMap || !m.color.equals(m.userData.doneBase) || (m.userData.bounce && m.userData.bounce.k.lengthSq() > 0)) out.off.push(o.name); } });
+    window.__white = await window.__frame();
+    return out;
+  });
+  assert.deepEqual([def.read.wall, def.read.desk, def.read.wallMap, def.read.deskMap], ['white', 'oak', 'bake', 'bake'], 'the bake\'s own colours');
+  assert.deepEqual(def.off, [], 'every surface its bake, at its baked colour, nothing taken off');
+  assert.equal(def.saved, null, 'nothing remembered before a choice');
+  // THE PANEL, opened from the strip, 8 px over it
+  await btn(page, 'Wall & desk', '#ws-scene').click();
+  const pop = await page.evaluate(() => { const p = document.querySelector('#ws-scene-colours'), r = p.getBoundingClientRect(), s = document.querySelector('#ws-scene').getBoundingClientRect(); return { hidden: p.hidden, gap: s.top - r.bottom, walls: p.querySelectorAll('.row:first-child .sw button').length, desks: p.querySelectorAll('.row:last-child .sw button').length, own: p.querySelectorAll('label.own input[type="color"]').length }; });
+  assert.equal(pop.hidden, false, 'the panel opens');
+  near(pop.gap, 8, 1, 'the panel 8 px over the strip');
+  assert.deepEqual([pop.walls, pop.desks, pop.own], [9, 5, 2], 'nine paints, five desks, the visitor\'s own colour for each');
+  // NAVY: the wall goes navy, and the walls' bounce comes off the rest of the room (the frame with it put back is lighter)
+  await page.locator('#ws-scene-colours button[aria-label="Wall: Navy"]').click();
+  await settle(page, 600);
+  const navy = await page.evaluate(async () => {
+    const read = window.__GEN2_DONE__.colours;
+    const lit = await window.__frame();
+    window.__bounceOff(true); const flat = await window.__frame(); window.__bounceOff(false);
+    window.__navy = lit;
+    return { read, wall: window.__diff(window.__white, lit), bounce: window.__diff(flat, lit), saved: localStorage.getItem('gen2-room-colours'), pressed: [...document.querySelectorAll('#ws-scene-colours [aria-pressed="true"]')].map((b) => b.getAttribute('aria-label')) };
+  });
+  assert.equal(navy.read.wall, 'navy');
+  assert.equal(navy.read.envs, def.read.envs + 1, 'the room captured again as the build\'s environment');
+  assert.ok(navy.wall.darker > navy.wall.px * 0.3, `the wall goes navy (${JSON.stringify(navy.wall)})`);
+  assert.ok(navy.read.bounce.desk.every((v) => v > 0) && navy.read.bounce.floor.every((v) => v > 0), `the desk and the floor lose the walls' bounce (${JSON.stringify(navy.read.bounce)})`);
+  assert.ok(navy.bounce.darker > navy.bounce.px * 0.02 && navy.bounce.lighter * 10 < navy.bounce.darker, `and darken in the frame (${JSON.stringify(navy.bounce)})`);
+  /* each share as the room's own record says it should be: (1 - the walls' weight) x what multiplies the surface's light,
+     over its tile's scale (the wall's light: its paint; the oak and the floor: 1), the weight being navy over the bake's
+     paint, channel by channel (room.json colours.wall, bounce.meshes) */
+  const rec = await page.evaluate(() => fetch('scenes/home-office/room.json').then((r) => r.json()));
+  const lin = (h) => [1, 3, 5].map((i) => { const c = parseInt(h.slice(i, i + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const rho = lin('#3b4b5e'), rho0 = lin(rec.colours.wall), wgt = rho.map((v, i) => v / rho0[i]);
+  for (let i = 0; i < 3; i++) {
+    near(navy.read.bounce.wall[i], rho[i] * (1 - wgt[i]) / rec.bounce.meshes.wall_back.scale, 1e-6, `the wall's share, its paint's (${'rgb'[i]})`);
+    near(navy.read.bounce.desk[i], (1 - wgt[i]) / rec.bounce.meshes.desk_top.scale, 1e-6, `the oak's share (${'rgb'[i]})`);
+    near(navy.read.bounce.floor[i], (1 - wgt[i]) / rec.bounce.meshes.floor.scale, 1e-6, `the floor's share (${'rgb'[i]})`);
+  }
+  assert.equal(navy.saved, JSON.stringify({ wall: 'navy', desk: 'oak' }), 'remembered');
+  assert.deepEqual(navy.pressed, ['Wall: Navy', 'Desk: Oak'], 'the panel marks the choice');
+  // WALNUT: the oak's own bake tinted by walnut over the oak's colour as baked, its grain kept, and drawn darker than the
+  // oak (Sol 01a17447: no check here could tell a Walnut drawn as the oak)
+  await page.locator('#ws-scene-colours button[aria-label="Desk: Walnut"]').click();
+  await settle(page, 600);
+  const walnut = await page.evaluate(async () => { const read = window.__GEN2_DONE__.colours; const lit = await window.__frame(); return { read, diff: window.__diff(window.__navy, lit) }; });
+  assert.deepEqual([walnut.read.desk, walnut.read.deskMap], ['walnut', 'bake'], 'walnut: the oak\'s own bake');
+  const tint = lin('#6b4a35').map((v, i) => v / rec.light.desk_top.albedo[i]);
+  for (let i = 0; i < 3; i++) near(walnut.read.deskColor[i], walnut.read.deskBase[i] * tint[i], 1e-6, `the oak tinted to walnut (${'rgb'[i]})`);
+  assert.ok(walnut.diff.darker > walnut.diff.px * 0.02 && walnut.diff.lighter * 10 < walnut.diff.darker, `the desk goes walnut, darker than the oak (${JSON.stringify(walnut.diff)})`);
+  // A WHITE DESK: drawn from its light-only map, its bounce tile the light's
+  await page.locator('#ws-scene-colours button[aria-label="Desk: White"]').click();
+  await settle(page, 600);
+  const desk = await page.evaluate(async () => { const read = window.__GEN2_DONE__.colours; const lit = await window.__frame(); return { read, diff: window.__diff(window.__navy, lit) }; });
+  assert.deepEqual([desk.read.desk, desk.read.deskMap], ['white', 'light'], 'the desk from its light-only map');
+  assert.notDeepEqual(desk.read.bounce.deskRect, navy.read.bounce.deskRect, 'its bounce tile the light\'s, not the oak\'s');
+  const white = lin('#f0efea');
+  for (let i = 0; i < 3; i++) near(desk.read.bounce.desk[i], white[i] * (1 - wgt[i]) / rec.bounce.meshes['desk_top:light'].scale, 1e-6, `the white desk's share, its colour's (${'rgb'[i]})`);
+  assert.ok(desk.diff.lighter > desk.diff.px * 0.05, `the desk goes white (${JSON.stringify(desk.diff)})`);
+  // THE VISITOR'S OWN COLOUR, then navy again
+  await page.locator('#ws-scene-colours label.own input').first().fill('#336699');
+  await settle(page, 400);
+  const mine = await page.evaluate(async () => { const read = window.__GEN2_DONE__.colours; const lit = await window.__frame(); return { read, on: document.querySelector('#ws-scene-colours label.own').classList.contains('on'), diff: window.__diff(window.__white, lit) }; });
+  assert.deepEqual([mine.read.wall, mine.on], ['#336699', true], 'the visitor\'s own wall colour');
+  const own = lin('#336699');   // and the wall painted in it, not only chosen (Sol 01a17447)
+  for (let i = 0; i < 3; i++) near(mine.read.wallColor[i], mine.read.wallBase[i] * own[i] / rho0[i], 1e-6, `the wall painted in it (${'rgb'[i]})`);
+  assert.ok(mine.diff.darker > mine.diff.px * 0.3, `and drawn in it (${JSON.stringify(mine.diff)})`);  await page.locator('#ws-scene-colours button[aria-label="Wall: Navy"]').click();
+  await settle(page, 400);
+  // Esc closes the panel and keeps the scene; the next Esc leaves it
+  await page.keyboard.press('Escape');
+  await settle(page, 300);
+  assert.deepEqual(await page.evaluate(() => ({ hidden: document.querySelector('#ws-scene-colours').hidden, scene: !!window.__GEN2_DONE__ })), { hidden: true, scene: true }, 'Esc closes the panel, the scene stays');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !window.__GEN2_DONE__ && !window.__GEN2_VIEWER__.sceneHeld, null, { timeout: 10_000 }).catch(() => assert.fail(`Escape never left the scene (page errors ${JSON.stringify(clean(errors))})`));
+  // THE NEXT ENTRY opens in the remembered colours, its environment captured once, in them
+  await watch();
+  const again = await page.evaluate(() => window.__GEN2_DONE__.colours);
+  assert.deepEqual([again.wall, again.desk, again.envs], ['navy', 'white', 1], 'the next entry in the remembered colours');
+  // COLORS' ROOM STAGE shows the same choice
+  await page.goto(`${base}/index.html?ws=colors&debug=1&done=room`, { waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(page);
+  await page.locator('#ws-colors .stage button:has-text("Room")').click();
+  await page.waitForFunction(() => !!document.querySelector('#ws-colors .roomc'), null, { timeout: 60_000 }).catch(() => assert.fail('the Room stage brought no wall and desk control'));
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ws-colors .roomc [aria-pressed="true"]')].map((b) => b.getAttribute('aria-label'))), ['Wall: Navy', 'Desk: White'], 'Colors\' Room stage shows the same choice');
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
 });
 
 /* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty

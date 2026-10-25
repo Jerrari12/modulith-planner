@@ -1,0 +1,5 @@
+# bake5-dark (2026-10-25): bake5 with the walls near-BLACK (#010101: Cycles bakes no light pass on a pure black colour), the dark end of the wall's bounce (Joey: "Yes dark wall should also
+# darken the rest of the room"). Not shipped as a room: tools/done-scene/endpoint.py takes its maps and bake5's and writes
+# the difference (the light the walls bounce) as one small atlas the planner blends by the visitor's wall colour. Its
+# light-only maps give the walls' and the desk's light with no wall bounce.
+--out-dir renders/bake5-dark --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3 --wall-hex #010101 --light-maps desk_top,wall_back,wall_left_a,wall_left_b,wall_left_c,wall_left_d

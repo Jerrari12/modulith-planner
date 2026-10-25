@@ -192,7 +192,7 @@ export function mountColors(stage, ctx) {
       if (room !== h) return;
       const r = enterDoneScene(stage, { say, sequence: false });
       h.leaveFn = r.leave;
-      r.ready.then((handle) => { if (room === h) { h.handle = handle; if (!handle) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; renderPanel(); } } });
+      r.ready.then((handle) => { if (room === h) { h.handle = handle; if (!handle) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; } renderPanel(); } });   // a room that came on brings its wall and desk control
     }).catch((e) => { console.warn('[colors] the room did not load', e); if (room === h) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; renderPanel(); } });   // forgotten too, so a remount does not retry (Terra 01a16b56)
   }
   function leaveRoom() { if (!room) return; const h = room; room = null; if (h.leaveFn) h.leaveFn(); }
@@ -260,6 +260,15 @@ export function mountColors(stage, ctx) {
       el('button.seg.sm' + (st.room ? '.on' : ''), { text: 'Room', 'aria-pressed': String(st.room), onclick: () => setRoom(true) }),
     ]));
     panel.appendChild(head);
+    /* the room's wall and desk, while the room is the stage (Joey 2026-10-25: "would it be possible for the user to maybe
+       adjust the wall and maybe desk color ... to get a better idea of how the colors look together"): the scene's own
+       control (done.js roomColoursPanel), remembered in this browser, the final scene's too */
+    if (st.room && room && room.handle && room.handle.roomColoursPanel) {
+      const rs = el('section.roomcols');
+      rs.appendChild(el('h3.h2', { text: 'The room' }));
+      rs.appendChild(room.handle.roomColoursPanel());
+      panel.appendChild(rs);
+    }
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
     // 2026-10-16). Opening this tab turns the visitor's colours on (onEnter below).
     // THE CURRENT LOOK, as a card (Astra: a compact card at the top; the premade list moved into the gallery)

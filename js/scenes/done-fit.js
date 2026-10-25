@@ -233,6 +233,78 @@ export function roomAnchor(mount, box, frame = {}, anchors = {}, desk = {}) {
   }
   return { x: cx, y: 0, z: box.min.z };
 }
+
+/* THE VISITOR'S ROOM COLOURS (2026-10-25; Joey: "would it be possible for the user to maybe adjust the wall and maybe desk
+ * color ... in case they want to actually see how this looks in a closer representation of where they will be installing
+ * this"). The room is baked: every surface's texture is its colour times its light (room.py bake_room, diffuse only), so
+ * a new colour is a multiply on the texture, channel by channel in linear light.
+ * - The wall, one plain paint: the bake times the new paint over the bake's own (room.json colours.wall). The light the
+ *   walls bounce onto the rest of the room, and onto each other, follows the new paint too: the walls' bounce, below.
+ * - The desk, a plain colour: the colour times the desk top's light-only map (room.json light.desk_top, the diffuse light
+ *   with no colour, the file over its `scale`), so no oak grain shows through. A wood finish: the bake's own oak, tinted
+ *   by the finish over the oak's colour as baked (light.desk_top.albedo), its grain kept. The light the DESK bounces onto
+ *   the room stays the oak's: there is no dark-desk endpoint. Measured against a true re-bake with a white desk
+ *   (#f2f1ec, 2026-10-25): the rest of the room 1.3 to 2.1 display levels too dark (blue 1.9 to 3.2), the desk top
+ *   itself 1.6 to 2.3 too bright (Sol 01a17447: stated, not corrected).
+ * A choice is a preset's id or a '#rrggbb' of the visitor's own. */
+export const WALL_PAINTS = [
+  { id: 'white', name: 'White', hex: null },   // the bake's own paint
+  { id: 'warm', name: 'Warm white', hex: '#ece6da' },
+  { id: 'grey', name: 'Light grey', hex: '#c9cbc9' },
+  { id: 'greige', name: 'Greige', hex: '#b8afa2' },
+  { id: 'sage', name: 'Sage', hex: '#9aab94' },
+  { id: 'blue', name: 'Dusty blue', hex: '#8fa3b6' },
+  { id: 'navy', name: 'Navy', hex: '#3b4b5e' },
+  { id: 'charcoal', name: 'Charcoal', hex: '#47494d' },
+  { id: 'terracotta', name: 'Terracotta', hex: '#b4705a' },
+];
+export const DESK_FINISHES = [
+  { id: 'oak', name: 'Oak', kind: 'bake' },   // the bake's own veneer
+  { id: 'walnut', name: 'Walnut', kind: 'tint', hex: '#6b4a35' },
+  { id: 'white', name: 'White', kind: 'plain', hex: '#f0efea' },
+  { id: 'grey', name: 'Grey', kind: 'plain', hex: '#b5b7b6' },
+  { id: 'black', name: 'Black', kind: 'plain', hex: '#2a2b2d' },
+];
+const HEX = /^#[0-9a-f]{6}$/i;
+export function hexToLinear(hex) {
+  if (typeof hex !== 'string' || !HEX.test(hex)) return null;
+  return [1, 3, 5].map((i) => { const c = parseInt(hex.slice(i, i + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+}
+export function linearToHex(lin) {
+  return '#' + lin.map((v) => { const c = Math.min(1, Math.max(0, v)); const s = c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055; return Math.round(s * 255).toString(16).padStart(2, '0'); }).join('');
+}
+/* the wall's texture factor for a choice: null for the bake's own paint (or a bake that does not say its paint), else the
+   new paint over the baked one, per channel */
+export function wallFactor(choice, bakedHex) {
+  const preset = WALL_PAINTS.find((p) => p.id === choice);
+  const hex = preset ? preset.hex : choice;
+  const to = hexToLinear(hex), from = hexToLinear(bakedHex);
+  if (!to || !from) return null;
+  return to.map((v, i) => v / from[i]);
+}
+/* THE WALLS' BOUNCE (room.json bounce, tools/done-scene/endpoint.py; Joey 2026-10-25: "Yes dark wall should also darken the
+ * rest of the room"). A surface's light is close to a straight line in the walls' albedo, channel by channel, between the
+ * bake's paint (w0) and black walls: L(w) = L(w0) - (1 - w/w0) * D, D the light the walls bounce onto it (the atlas). The
+ * walls' WEIGHT is w/w0 per channel: 1 for the bake's own paint, 0 for black. A surface draws colour x its map less
+ * k x its bounce texel, k = bounceFactor x (1 - weight) / the entry's scale: bounceFactor is what multiplies its light
+ * (the tint for a baked surface; the new paint for a wall, whose D is of its light times the paint's diffuse share,
+ * room.json bounce.wallShare; the plain colour for the desk, whose D is of its light). */
+export function wallWeight(choice, bakedHex) {
+  return wallFactor(choice, bakedHex) || [1, 1, 1];
+}
+export function bounceK(bounceFactor, weight, scale) {
+  return [0, 1, 2].map((i) => (scale > 0 ? (bounceFactor[i] * (1 - weight[i])) / scale : 0));
+}
+/* the desk top's look for a choice: which texture it draws (`bake`, its own lightmap; `light`, the light-only map) and the
+   factor on it. Null when the choice cannot be drawn: a plain colour or a tint on a bake with no light-only map. */
+export function deskLook(choice, light) {
+  const preset = DESK_FINISHES.find((p) => p.id === choice) || (HEX.test(choice || '') ? { kind: 'plain', hex: choice } : null);
+  if (!preset || preset.kind === 'bake') return { use: 'bake', factor: [1, 1, 1] };
+  const lin = hexToLinear(preset.hex);
+  if (!lin || !light) return null;
+  if (preset.kind === 'tint') return Array.isArray(light.albedo) && light.albedo.every((v) => v > 0) ? { use: 'bake', factor: lin.map((v, i) => v / light.albedo[i]) } : null;
+  return light.scale > 0 ? { use: 'light', factor: lin.map((v) => v / light.scale), colour: lin } : null;
+}
 /* A shot's beat: the black fades out (dipIn), the shot holds, the black fades back in (dipOut), a moment of black in which
  * the camera cuts to the next shot (blackMs). Slow on purpose: about 13 s a shot. A move's frame budget for the device's
  * verdict: 20 fps (maxFrameMs). */

@@ -1,0 +1,3 @@
+# bake5-navy (2026-10-25): a REFERENCE, not shipped: bake5 with the wall painted navy, to measure the planner's wall
+# recolour (a ratio over bake5's wall) against the truth, the bounce of a dark wall included.
+--out-dir renders/bake5-navy --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3 --wall-hex #3b4b5e

@@ -84,15 +84,28 @@ export function mountAssemble(stage, ctx) {
   let room = null;   // { leaveFn, handle, mineWas } while the room is on or loading
   let inScene = false;
   const bars = el('div', { id: 'cinema-bars', 'aria-hidden': 'true' });   // the black bars, in the workspace's own layer so the strip paints over them
+  /* the room's wall and desk colours (Joey 2026-10-25): the scene's own control (done.js roomColoursPanel) in a panel over
+     the strip, opened by its button once the room is on; Esc closes it before it leaves the scene */
+  const pop = el('div.glass', { id: 'ws-scene-colours', role: 'dialog', 'aria-label': 'Wall and desk colours', hidden: true });
+  const colBtn = el('button.key', { text: 'Wall & desk', title: 'The room\'s wall and desk colours', 'aria-expanded': 'false', disabled: true, onclick: () => toggleColours() });
+  function toggleColours(open) {
+    const want = open != null ? !!open : pop.hidden;
+    if (want && !(room && room.handle && room.handle.roomColoursPanel)) return;
+    pop.hidden = !want;
+    colBtn.setAttribute('aria-expanded', String(want));
+    if (want) pop.replaceChildren(room.handle.roomColoursPanel()); else pop.replaceChildren();
+  }
   const strip = el('div.glass', { id: 'ws-scene', role: 'toolbar', 'aria-label': 'Final scene' }, [
     el('button.key', { text: '← Back', title: 'Back to the instructions · Esc', onclick: () => leaveScene() }),
+    colBtn,
     el('button.key.on', { text: 'Next view →', title: 'The next camera view', onclick: () => { if (room && room.handle) room.handle.nextShot(); } }),
   ]);
   function enterScene() {
     if (DONE_SCENE !== 'room' || inScene) return;
     inScene = true;
     document.documentElement.classList.add('cinema');
-    root.append(bars, strip);
+    colBtn.disabled = !(room && room.handle);
+    root.append(bars, strip, pop);
     enterRoom();
     safe();
   }
@@ -100,7 +113,8 @@ export function mountAssemble(stage, ctx) {
     if (!inScene) { leaveRoom(); return; }
     inScene = false;
     document.documentElement.classList.remove('cinema');
-    bars.remove(); strip.remove();
+    toggleColours(false);
+    bars.remove(); strip.remove(); pop.remove();
     leaveRoom();
     renderPlayer(); safe();
   }
@@ -114,7 +128,7 @@ export function mountAssemble(stage, ctx) {
       const r = enterDoneScene(stage, { say, orbit: false });
       h.leaveFn = r.leave;
       // a room that did not load takes the scene mode with it: the HUD must not stay hidden over an empty stage (Sol 01a16c20)
-      r.ready.then((handle) => { if (room !== h) return; h.handle = handle; if (!handle) { room = null; setColors(h.mineWas); if (inScene) leaveScene(); } renderPlayer(); });
+      r.ready.then((handle) => { if (room !== h) return; h.handle = handle; colBtn.disabled = !handle; if (!handle) { room = null; setColors(h.mineWas); if (inScene) leaveScene(); } renderPlayer(); });
     }).catch((e) => { console.warn('[done scene] the module did not load', e); if (room === h) { room = null; setColors(h.mineWas); if (inScene) leaveScene(); say('The room could not load; the build stays on the stage.'); } });
   }
   function leaveRoom() {
@@ -205,7 +219,7 @@ export function mountAssemble(stage, ctx) {
   const safe = () => { safeArea(); if (room && room.handle) room.handle.refit(); };   // the room's camera is fitted to the free region too
   if (phone) phone.onLayout(safe);
   addEventListener('resize', safe, { signal });
-  document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; if (e.key === 'Escape' && inScene) leaveScene(); }, { signal });
+  document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; if (e.key === 'Escape' && inScene) { if (!pop.hidden) toggleColours(false); else leaveScene(); } }, { signal });
   setColors(false);
   // the step a visitor left on comes back after a trip to another workspace (ctx.memo); a first arrival lands on the
   // exploded overview, from the cover (a ?ws=assemble address) AND from the finished step the other workspaces park

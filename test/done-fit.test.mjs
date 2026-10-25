@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -396,4 +396,57 @@ test('the grammar per mount: a wall and an under-table build get eight shots eac
     const low = fitShot(mixShot(shots.find((s) => s.name === 'low'), 0.5), box, view, null, {}, { floorY: -Infinity });
     assert.ok(low.position.y < low.target.y, `${m}: the low shot looks up`);
   }
+});
+
+/* THE VISITOR'S ROOM COLOURS (2026-10-25): the colour maths the room is repainted by. The bake's paint is room.json's
+   (#e2e4e1), the oak's baked albedo and the desk's light-only map scale are bake5's. */
+const BAKED_WALL = '#e2e4e1';
+const DESK_LIGHT = { scale: 0.86807, albedo: [0.75414, 0.59246, 0.4403] };
+
+test('room colours: sRGB hex to linear light and back, the presets well formed', () => {
+  assert.deepEqual(hexToLinear('#000000'), [0, 0, 0]);
+  assert.deepEqual(hexToLinear('#ffffff'), [1, 1, 1]);
+  close(hexToLinear('#808080')[0], 0.2158605, 1e-6, 'mid grey, the sRGB curve');
+  for (const bad of [null, '', '#fff', 'navy', '#12345g', '#1234567']) assert.equal(hexToLinear(bad), null, `${bad} is no colour`);
+  for (const h of ['#000000', '#3b4b5e', '#9aab94', '#e2e4e1', '#ffffff']) assert.equal(linearToHex(hexToLinear(h)), h, `${h} round-trips`);
+  for (const list of [WALL_PAINTS, DESK_FINISHES]) {
+    assert.equal(new Set(list.map((p) => p.id)).size, list.length, 'distinct ids');
+    for (const p of list) assert.ok(p.hex == null || hexToLinear(p.hex), `${p.id}: a colour or the bake's own`);
+  }
+  assert.equal(WALL_PAINTS[0].hex, null, 'the first paint is the bake\'s own'); assert.equal(DESK_FINISHES[0].kind, 'bake', 'and the first desk the bake\'s oak');
+});
+
+test('room colours: the wall is the new paint over the baked one per channel, its weight 1 for the bake\'s own paint and 0 for black', () => {
+  assert.equal(wallFactor('white', BAKED_WALL), null, 'the bake\'s own paint: nothing to change');
+  assert.equal(wallFactor('#zzzzzz', BAKED_WALL), null, 'a bad value: nothing to change');
+  assert.equal(wallFactor('navy', null), null, 'a bake that does not say its paint: nothing to change');
+  const navy = wallFactor('navy', BAKED_WALL), lin = hexToLinear('#3b4b5e'), base = hexToLinear(BAKED_WALL);
+  for (let i = 0; i < 3; i++) close(navy[i], lin[i] / base[i], 1e-12, 'navy over the baked paint');
+  assert.deepEqual(wallFactor('#3b4b5e', BAKED_WALL), navy, 'a hex of the visitor\'s own is the same as its preset');
+  assert.deepEqual(wallWeight('white', BAKED_WALL), [1, 1, 1], 'the bake\'s own paint keeps all its bounce');
+  assert.deepEqual(wallWeight('#000000', BAKED_WALL), [0, 0, 0], 'black keeps none');
+  assert.deepEqual(wallWeight('navy', BAKED_WALL), navy, 'the weight is the paint ratio');
+});
+
+test('room colours: a surface loses (1 - weight) of its bounce, scaled by what multiplies its light and the tile\'s scale', () => {
+  assert.deepEqual(bounceK([1, 1, 1], [1, 1, 1], 2.5), [0, 0, 0], 'the bake\'s own paint: no change');
+  assert.deepEqual(bounceK([1, 1, 1], [0, 0, 0], 2), [0.5, 0.5, 0.5], 'black walls: all of it, over the scale');
+  const k = bounceK([0.5, 1, 2], [0.25, 0.5, 1], 4);
+  close(k[0], 0.5 * 0.75 / 4, 1e-12, 'red'); close(k[1], 1 * 0.5 / 4, 1e-12, 'green'); close(k[2], 0, 1e-12, 'blue, its weight 1');
+  assert.ok(bounceK([1, 1, 1], [1.2, 1.2, 1.2], 1).every((v) => v < 0), 'a paint brighter than the bake\'s adds bounce (k < 0)');
+  assert.deepEqual(bounceK([1, 1, 1], [0, 0, 0], 0), [0, 0, 0], 'no scale, no bounce');
+});
+
+test('room colours: the desk is its oak, a tint of it over its baked albedo, or a plain colour over its light-only map', () => {
+  assert.deepEqual(deskLook('oak', DESK_LIGHT), { use: 'bake', factor: [1, 1, 1] });
+  assert.deepEqual(deskLook(undefined, DESK_LIGHT), { use: 'bake', factor: [1, 1, 1] }, 'no choice: the oak');
+  const walnut = deskLook('walnut', DESK_LIGHT), wl = hexToLinear('#6b4a35');
+  assert.equal(walnut.use, 'bake');
+  for (let i = 0; i < 3; i++) close(walnut.factor[i], wl[i] / DESK_LIGHT.albedo[i], 1e-12, 'walnut over the oak as baked');
+  const white = deskLook('white', DESK_LIGHT), wh = hexToLinear('#f0efea');
+  assert.equal(white.use, 'light');
+  for (let i = 0; i < 3; i++) { close(white.factor[i], wh[i] / DESK_LIGHT.scale, 1e-12, 'white over the map\'s scale'); close(white.colour[i], wh[i], 1e-12, 'and its colour, for its bounce'); }
+  assert.deepEqual(deskLook('#336699', DESK_LIGHT).colour, hexToLinear('#336699'), 'a hex of the visitor\'s own is a plain colour');
+  assert.equal(deskLook('white', null), null, 'no light-only map: no plain colour');
+  assert.equal(deskLook('walnut', { scale: 1 }), null, 'no baked albedo: no tint');
 });
