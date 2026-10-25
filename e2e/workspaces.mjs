@@ -4448,3 +4448,27 @@ test('Build: Under-Table settles up after every edit - the report\'s layout, a d
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* THE BAKED TOP LAYERS (2026-10-25, js/skin-map.js): a map is fetched only while the tier is Very High, and drawn only in its
+   settle samples. The suite runs on Fast, so what it can hold is the other side of that rule: a build with faceplates on Fast
+   asks the parts host for no map and holds none, while the switch and the status sit on the stage hook. The Very High side
+   (the atlas, the settled frame) is proven by tools/skin-shots.mjs and the Very High goldens on a GPU. */
+test('the baked top layers: Fast fetches no map and holds none; the switch and the status are on the stage hook', async () => {
+  const c = await freshContext();
+  const skinRequests = [];
+  await c.route('**/parts/skin/**', (r) => { skinRequests.push(r.request().url()); return r.continue(); });
+  const { ctx, page, errors } = await open('build', { context: c });
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }]);   // a Decor drawer unit: a faceplate with a map on the parts host
+  await settle(page, 2500);
+  const st = await page.evaluate(() => { const s = window.__GEN2_VIEWER__.skinMap; return { on: s.on, status: s.status(), tier: window.__GEN2_VIEWER__.quality }; });
+  assert.equal(st.tier, 'fast');
+  assert.equal(st.on, true, 'the maps are on by default; only ?skinmap=off turns them off');
+  assert.equal(st.status.wanted, false, 'Fast must not want the maps');
+  assert.equal(st.status.index, null, 'the index was fetched on Fast');
+  assert.deepEqual(st.status.slots, {}, 'a map was packed on Fast');
+  assert.deepEqual(skinRequests, [], 'Fast asked the parts host for a map');
+  const flipped = await page.evaluate(() => { const s = window.__GEN2_VIEWER__.skinMap; s.set(false); const off = s.uniforms.uSMOn.value; s.set(true); return [off, s.uniforms.uSMOn.value]; });
+  assert.deepEqual(flipped, [0, 1], 'the switch does not reach the shared uniform');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
