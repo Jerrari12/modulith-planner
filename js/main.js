@@ -777,8 +777,9 @@ function setQuality(name, { user = false } = {}) {
 // sampled.
 function shadowsWanted() {
   // part-preview floats the part on a transparent stage — no floor, no catcher
-  // a held scene (the Done room) is lit by its own sun, whatever the stage theme
-  return QUALITY[quality].shadow && (stageTheme === 'light' || sceneHold.on) && !cinema.on && !isWallBuild && !isUnderTableBuild && !IS_PART;
+  // a held scene (the Done room) is lit by its own sun, whatever the stage theme, and catches a hanging build's shadow
+  // on its own wall and desk (2026-10-25); the studio's wall and slab backdrops catch none
+  return QUALITY[quality].shadow && (stageTheme === 'light' || sceneHold.on) && !cinema.on && (sceneHold.on || (!isWallBuild && !isUnderTableBuild)) && !IS_PART;
 }
 function applyShadowQuality() {
   const on = shadowsWanted();
@@ -4394,6 +4395,12 @@ function basePos(inst, staged) {
   return p;
 }
 
+/* THE MOUNTING FRAME (2026-10-25, the Done scene's wall and under-table builds): where the build meets what it hangs on,
+   in stage mm, as fitWall and fitSurface measure it - a wall build's back plane (the case backs, its screw tips left
+   out), an under-table build's rail tops and rail fronts (the desk's underside and its front edge). The room scene puts
+   its own wall and desk there (stage.mountFrame). */
+const mountGeom = { backZ: null, underY: null, frontZ: null };
+
 // size the wall backdrop to the assembled build + a margin, sitting just behind
 // it — a "mounting surface" that reads as sized to the kit, not an infinite wall.
 function fitWall() {
@@ -4407,6 +4414,7 @@ function fitWall() {
     if (!one.isEmpty()) box.union(one);
   }
   if (box.isEmpty()) return;
+  mountGeom.backZ = box.min.z;
   const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
   // Sized from the build's bounding SPHERE, not its box + 90 mm (2026-08-23):
   // at the tour's fit framing a box-plus-margin plane showed all four edges
@@ -4450,6 +4458,7 @@ function fitSurface() {
   const R = size.length() / 2, margin = Math.max(90, R * 4);
   surfaceUnderY = box.max.y;
   const front = rails.isEmpty() ? box.max.z : rails.max.z; // rail front = the desk edge
+  mountGeom.underY = surfaceUnderY; mountGeom.frontZ = front;
   const depth = (front - box.min.z) + margin;              // margin on the back only
   surface.geometry.dispose();
   surface.geometry = new THREE.BoxGeometry(size.x + margin * 2, 25, depth);
@@ -11192,10 +11201,12 @@ function renderLoop(now) {
   if (cinema.on) updateCinema(now); else updateOrbit();
   // the wall is a backdrop, not part of the model — drop it out of the way when
   // the camera orbits behind it, so you can inspect the pegs/case backs freely.
-  if (isWallBuild && !cinema.on) wall.visible = camera.position.z > wall.position.z;
+  // A held scene (the Done room) brings its own wall and desk: the backdrops stay out of it (2026-10-25: they stood in
+  // front of the room's wall and floated over its desk).
+  if (isWallBuild && !cinema.on) wall.visible = !sceneHold.on && camera.position.z > wall.position.z;
   // same rule for the under-table surface: hide it when the camera rises above
   // its underside, so the rails/screw layout can be inspected from the top.
-  if (isUnderTableBuild && !cinema.on) surface.visible = camera.position.y < surfaceUnderY;
+  if (isUnderTableBuild && !cinema.on) surface.visible = !sceneHold.on && camera.position.y < surfaceUnderY;
   updateViewInset();
   updatePointerLine();
   updateMeasure();
@@ -11286,6 +11297,8 @@ for (const m of ['toDataURL', 'toBlob']) {
       set(on) { seamU.uSeamOn.value = on ? 1 : 0; invalidateFrame(); return !!on; },
     },
     wall, surface,   // the mount backdrops, for capture tooling that needs the mounting surface as context
+    // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
+    mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
     // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
     sun, hemi, fill, holdScene, setSunHome, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },

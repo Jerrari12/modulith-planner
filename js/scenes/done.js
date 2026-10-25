@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -143,6 +143,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     sunHalfDeg: stage.sunHalfDeg,
     controls: controls.enabled, pan: controls.enablePan, dims: !!stage.dimsOn };
   let json = null, buildBox = null, interior = null;   // interior: the room's box from its walls (roomInterior), the shots' clamp
+  /* the build's mount (stage.mountFrame) and the desk top's height in the stage once the room is placed (roomAnchor): 0 for
+     a build standing on it, lower for one hanging on the wall over it, just over the rails of one hanging under it */
+  let mount = 'tabletop', deskY = 0;
   const debug = new URLSearchParams(location.search).has('debug');
 
   /* THE CAMERA GRAMMAR (done-fit.js GRAMMAR, BEAT, beatAt, planCycle, grammarMode; Joey 2026-10-24, DESIGN.md §8l):
@@ -175,9 +178,10 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     drawer.unit = pickDrawerUnit(units, plain(buildBox));
   }
   function shotsFor() {
-    const list = GRAMMAR.tabletop.map((s) => ({ ...s, from: { ...s.from }, to: s.to ? { ...s.to } : undefined }));
+    const list = (GRAMMAR[mount] || GRAMMAR.tabletop).map((s) => ({ ...s, from: { ...s.from }, to: s.to ? { ...s.to } : undefined }));
     const hero = list.find((s) => s.name === 'hero');
-    if (hero && json.shots && json.shots.hero) hero.from = { ...hero.from, ...json.shots.hero };   // the bake's own hero shot wins
+    // the bake's own hero shot wins - for a build on the desk, the one it was framed for
+    if (mount === 'tabletop' && hero && json.shots && json.shots.hero) hero.from = { ...hero.from, ...json.shots.hero };
     return list;
   }
   /* the shots that look at the drawer unit: the detail shot at its box centre (targetShift, as before), the macro at the
@@ -189,7 +193,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     return { drawer: aimAt(plain(buildBox), b), front: { x: b.min.x + 0.08 * (b.max.x - b.min.x), y: b.max.y - 0.12 * (b.max.y - b.min.y), z: b.max.z } };
   }
   const shotNamed = (name) => (seq.shots || shotsFor()).find((s) => s.name === name);
-  const fitAt = (shot, k) => fitShot(mixShot(shot, k), plain(buildBox), view(), interior, aims());   // inside the room and above the desk, at k along its move
+  // inside the room and above the desk, at k along its move (an under-table build's shots go below the desk top)
+  const fitAt = (shot, k) => fitShot(mixShot(shot, k), plain(buildBox), view(), interior, aims(), { floorY: mount === 'under-table' ? -Infinity : deskY });
   function drawerSet(open) {
     if (!drawer.unit || drawer.open === open || !stage.slideUnitDrawer) return;
     drawer.open = open;
@@ -429,7 +434,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const shadow = !!(stage.QUALITY[tier || stage.quality] || {}).shadow;
     if (parts.catcher) parts.catcher.visible = shadow;
     if (parts.wall) parts.wall.visible = shadow;
-    if (parts.sprite) parts.sprite.visible = !shadow;
+    if (parts.sprite) parts.sprite.visible = !shadow && mount === 'tabletop';   // the disc under a build that stands on the desk
   }
   function placeCamera(animate) {
     const c = fitAt(shotNamed('hero'), 0);
@@ -470,12 +475,22 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const anchor = group.getObjectByName('anchor_tabletop');
     const a = anchor ? anchor.position : new THREE.Vector3();
     const centre = buildBox.getCenter(new THREE.Vector3());
-    group.position.set(centre.x - a.x * SCALE, 0 - a.y * SCALE, buildBox.min.z - a.z * SCALE);
+    const d = json.desk || { x0: -900, x1: 900, zFront: 700, zBack: -40 };
+    /* placed by the build's mount (done-fit.js roomAnchor): on the desk top, on the wall over the desk, or under the desk's
+       front edge; the stage's own wall and slab stay hidden while the scene holds it (main.js, the render loop) */
+    const frame = stage.mountFrame ? stage.mountFrame() : { mount: 'tabletop' };
+    mount = GRAMMAR[frame.mount] ? frame.mount : 'tabletop';
+    // the desk's left leg measured from the anchor, the group scaled and still at the origin: an under-table build is
+    // left-justified against its inner face (roomAnchor)
+    group.updateMatrixWorld(true);
+    const legL = group.getObjectByName('desk_leg_l');
+    const legInnerL = legL ? new THREE.Box3().setFromObject(legL).max.x - a.x * SCALE : null;
+    const at = roomAnchor(mount, plain(buildBox), frame, json.anchors, { ...d, legInnerL });
+    const anchorWorld = new THREE.Vector3(at.x, at.y, at.z);
+    deskY = at.y;
+    group.position.set(anchorWorld.x - a.x * SCALE, anchorWorld.y - a.y * SCALE, anchorWorld.z - a.z * SCALE);
     group.updateMatrixWorld(true);
     interior = roomInterior(group);   // the walls do not slide: the shots' clamp is fixed from here
-    // props slide clear of the build along their slots, by group
-    const anchorWorld = new THREE.Vector3(centre.x, 0, buildBox.min.z);
-    const d = json.desk || { x0: -900, x1: 900, zFront: 700, zBack: -40 };
     // props slide clear of the build along their slots, by group; a group that cannot clear it INSIDE the desk's extent
     // hides rather than hanging past the edge (a build wider than the desk's free run: done-fit.js fitSlides)
     const props = [];
@@ -483,7 +498,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        comes out of the glTF as a Group `leaf_N` with the extras and child meshes without them: 2026-10-23, the leaves
        stayed behind when the pot slid or hid, since only meshes were looked at) */
     group.traverse((o) => { if (o.userData.slot && (o.isMesh || o.children.some((c) => c.isMesh))) props.push({ obj: o, group: o.userData.group || o.name, slot: o.userData.slot, gap: (+o.userData.gap || 0.06) * SCALE, box: plain(boxOf(o)) }); });
-    const slid = fitSlides(props, slideProps(props, plain(buildBox)), { x0: anchorWorld.x + d.x0, x1: anchorWorld.x + d.x1 });
+    // (a build under the desk never meets a prop on it; one on the wall meets only a prop that reaches up to it)
+    const slides = mount === 'under-table' ? {} : slideProps(props, plain(buildBox), { height: mount === 'wall' });
+    const slid = fitSlides(props, slides, { x0: anchorWorld.x + d.x0, x1: anchorWorld.x + d.x1 });
     for (const p of props) { const dx = slid[p.group]; if (dx === null) p.obj.visible = false; else if (dx) p.obj.position.x += dx / SCALE; }
     parts.slid = slid;
     group.updateMatrixWorld(true);
@@ -491,7 +508,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     scene.add(group);
     // the shadow catcher over the desk top (its extent from room.json, relative to the anchor), and the Fast tier's disc
     const catcher = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0, d.zFront - d.zBack).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
-    catcher.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, 0.3, anchorWorld.z + (d.zBack + d.zFront) / 2);
+    catcher.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, deskY + 0.3, anchorWorld.z + (d.zBack + d.zFront) / 2);
     catcher.receiveShadow = true; catcher.castShadow = false; catcher.renderOrder = 1; catcher.raycast = () => {};
     catcher.userData.doneRoom = true;
     parts.catcher = catcher; scene.add(catcher);
@@ -504,7 +521,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       : (json.anchors && json.anchors.wall && json.anchors.tabletop ? anchorWorld.z + (json.anchors.wall[2] - json.anchors.tabletop[2]) : null);
     if (wallZ != null) {
       const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
-      wall.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, 800, wallZ + 0.3);   // a plane facing +z: toward the desk
+      wall.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, deskY + 800, wallZ + 0.3);   // a plane facing +z: toward the desk
       wall.receiveShadow = true; wall.castShadow = false; wall.renderOrder = 1; wall.raycast = () => {};
       wall.userData.doneRoom = true;
       parts.wall = wall; scene.add(wall);
@@ -522,7 +539,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.masks = [];
     for (const m of masks || []) {
       if (!m.tex) continue;
-      const q = maskQuad(m, { x: anchorWorld.x, z: anchorWorld.z }, wallZ, slid[m.group], 0.5, { x0: d.x0, x1: d.x1 });   // a desk quad is cut at the desk's ends (Sol 01a16bc5)
+      const q = maskQuad(m, { x: anchorWorld.x, y: deskY, z: anchorWorld.z }, wallZ, slid[m.group], 0.5, { x0: d.x0, x1: d.x1 });   // a desk quad is cut at the desk's ends (Sol 01a16bc5)
       if (!q) continue;
       const geo = new THREE.PlaneGeometry(q.w, q.h);
       if (q.u0 > 0 || q.u1 < 1) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, q.u0 + uv.getX(i) * (q.u1 - q.u0)); uv.needsUpdate = true; }   // the texture window follows the cut
@@ -538,7 +555,16 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const fp = contactFootprint(plain(buildBox));
     parts.tex = contactTexture();
     const sprite = new THREE.Mesh(new THREE.PlaneGeometry(fp.w, fp.d).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: parts.tex, transparent: true, depthWrite: false, toneMapped: false }));
-    sprite.position.set(fp.x, 0.2, fp.z); sprite.renderOrder = 1; sprite.raycast = () => {}; sprite.userData.doneRoom = true;
+    sprite.position.set(fp.x, deskY + 0.2, fp.z); sprite.renderOrder = 1; sprite.raycast = () => {}; sprite.userData.doneRoom = true;
+    /* UNDER THE DESK (an under-table build, 2026-10-25): the room is baked and unlit, so its desk casts no shadow, and the
+       build hung under it took the sun as if the desk were not there. The desk's own top and legs cast it, drawn as
+       before and now in the shadow map too: the left leg stands 20 mm from a left-justified build, on the window's side.
+       (A stand-in box under the top was drawn by the AO's override pass, its square edges over the top's 3 mm bevel:
+       Sol 01a17311.) The room is a fresh clone each entry, so the flags go with it. */
+    if (mount === 'under-table') for (const n of ['desk_top', 'desk_leg_l', 'desk_leg_r']) {
+      const o = group.getObjectByName(n);
+      if (o) o.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+    }
     parts.sprite = sprite; scene.add(sprite);
     // the build's lighting: the room itself, seen from the build, as the environment (the baked textures are its light)
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -581,6 +607,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     addEventListener('resize', refit);
     document.addEventListener('visibilitychange', onVisibility);
     if (debug) window.__GEN2_DONE__ = { get slides() { return { ...parts.slid }; }, get relief() { return { override: stage.reliefOverride ? stage.reliefOverride() : null, ...relief }; }, get shadows() { return parts.masks.map((q) => ({ ...q.userData.doneShadow, visible: q.visible, x: q.position.x, y: q.position.y, z: q.position.z, w: q.geometry.parameters.width, h: q.geometry.parameters.height })); },
+      // where the room went for this build's mount (roomAnchor): the desk top's height, and the room's meshes that cast, read
+      // from their flags as they stand (Sol 01a17311: a list kept beside the flags can say what they do not)
+      get placement() { const casters = []; if (parts.group) parts.group.traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o.name); }); return { mount, deskY, sprite: parts.sprite ? parts.sprite.visible : null, casters }; },
       /* the grammar as it stands: `names` the shots in GRAMMAR order, `fits` each one's camera at the middle of its move
          (clamped, fov), `ends` the shot on screen's two ends, `order` this cycle's plan and `idx` the place in it */
       get sequence() {

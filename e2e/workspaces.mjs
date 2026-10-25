@@ -1986,6 +1986,145 @@ test('Assemble: the Done scene\'s lens: still shots of the moving grammar on Ver
   await ctx.close();
 });
 
+/* THE MOUNTS (2026-10-25; Joey: "hide the fake table surface we use in the builder and align the under-table build to be
+   installed under this scenes table", then "always left justify them"). A wall build hangs on the room's wall over
+   the desk; an under-table build hangs under the desk's front edge, its left edge 20 mm from the desk's left leg (done-fit.js
+   roomAnchor). The builder's own wall and slab stay out of the room, the build casts its shadow there (the stage turns
+   shadows off for hanging builds in the studio), and each mount has its own shots. Each made through the setup sheet as a
+   visitor makes it, then given a 6W x 2H layout, at High (a shadow tier) on the dark theme. */
+test('Assemble: the Done scene hangs a wall build on its wall and an under-table build under its desk, left-justified, the builder\'s backdrops hidden, shadows on, each with its own shots', async () => {
+  const SIX = [[1, 0, 0, 3], [2, 3, 0, 3], [3, 0, 2, 3], [4, 3, 2, 3]];   // [id, x, y (half-rows), w]: 6W x 2H
+  const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+  for (const mount of ['wall', 'under-table']) {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+    const { page, errors } = await open('build', { query: '&new=1&setup=1', context: ctx });
+    await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+    await page.locator(`#ws-setup .card:has-text("${mount === 'wall' ? 'Wall Mount' : 'Under-Table'}")`).click();
+    for (let i = 0; i < 4 && !(await page.locator('#ws-setup button:has-text("Start build")').count()); i++) {   // the length and printer pages
+      if (await page.locator('#ws-setup .card.len:has-text("185 mm")').count()) await page.locator('#ws-setup .card.len:has-text("185 mm")').click();
+      await btn(page, 'Next', '#ws-setup').click();
+      await settle(page, 300);
+    }
+    await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+    await btn(page, 'Start build', '#ws-setup').click();
+    await page.waitForFunction((m) => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === m, mount, { timeout: 150_000 });
+    await waitBoot(page);
+    await page.evaluate((six) => window.__GEN2_STORE__.commit((s) => { s.placed = six.map(([id, x, y, w]) => ({ id, x, y, w, hh: 2, fill: 'decor', shelves: 0 })); s.nextId = 5; s.gridW = 6; s.gridH = 2; }, 'e2e layout'), SIX);
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 4 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 120_000 }).catch(() => assert.fail(`the ${mount} build did not reach the stage`));
+    await settle(page, 800);
+    await page.goto(`${base}/index.html?ws=assemble&debug=1&done=room`, { waitUntil: 'load', timeout: 90_000 });
+    await waitBoot(page);
+    await btn(page, 'Skip to the finished build', '#ws-steps').click();
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+    await btn(page, 'Watch the final scene', '#ws-player').click();
+    await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 }).catch(() => assert.fail(`${mount}: the grammar never began`));
+    await settle(page, 400);
+    const g = await page.evaluate(() => {
+      const v = window.__GEN2_VIEWER__, T = v.THREE, room = v.scene.getObjectByName('done-room'), d = window.__GEN2_DONE__;
+      const bx = (n) => { const b = new T.Box3().setFromObject(room.getObjectByName(n)); return { min: b.min.toArray(), max: b.max.toArray() }; };
+      const catcherYs = []; v.scene.traverse((o) => { if (o.isMesh && o.material && o.material.isShadowMaterial) catcherYs.push(o.position.y); });
+      const desk = d.shadows.filter((q) => q.surface === 'desk');
+      // the rails' own front, from their meshes: the mounting frame's frontZ is what placed the desk, so it cannot check it (Sol 01a17311)
+      const rails = new T.Box3(); for (const inst of v.instances.values()) if (inst.cfg.node.startsWith('UnderTableRail')) rails.union(new T.Box3().setFromObject(inst.group));
+      return { frame: v.mountFrame(), build: { min: v.assembledBox.min.toArray(), max: v.assembledBox.max.toArray() }, desk: bx('desk_top'), wall: bx('wall_back'), leg: bx('desk_leg_l'),
+        railsFront: rails.isEmpty() ? null : rails.max.z, notebook: bx('notebook'), notebookGap: room.getObjectByName('notebook').userData.gap * 1000,   // the room is scaled x1000
+        backdrops: { wall: v.wall.visible, surface: v.surface.visible }, shadows: v.renderer.shadowMap.enabled && v.sun.castShadow, placement: d.placement, names: d.sequence.names, slides: d.slides,
+        fits: d.sequence.fits.map((f) => ({ name: f.name, x: f.pos[0], y: f.pos[1], z: f.pos[2], finite: f.pos.every(Number.isFinite) })), deskMasks: desk.map((q) => q.y), catcherYs };
+    });
+    assert.equal(g.frame.mount, mount); assert.equal(g.placement.mount, mount, `${mount}: the scene read the mount`);
+    assert.deepEqual(g.backdrops, { wall: false, surface: false }, `${mount}: the builder's wall and slab stay out of the room`);
+    assert.equal(g.shadows, true, `${mount}: the build casts its shadow in the room`);
+    assert.deepEqual(g.names, ['hero', 'push', 'low', 'detail', 'slide', 'wide', 'macro', 'side'], `${mount}: its own shots, a wide one for the top`);
+    for (const f of g.fits) assert.ok(f.finite, `${mount} ${f.name}: fitted`);
+    const deskY = g.placement.deskY;
+    near(g.desk.max[1], deskY, 0.01, `${mount}: the desk top where the scene says`);
+    for (const y of g.deskMasks) near(y, deskY + 0.5, 0.01, `${mount}: a prop's shadow on the desk top`);
+    assert.ok(g.catcherYs.some((y) => Math.abs(y - (deskY + 0.3)) < 0.01), `${mount}: the desk's shadow catcher on the desk top (${g.catcherYs.map((y) => y.toFixed(1))} vs ${deskY.toFixed(1)})`);
+    assert.ok(g.catcherYs.some((y) => Math.abs(y - (deskY + 800)) < 0.01), `${mount}: the wall's shadow catcher over the desk top (${g.catcherYs.map((y) => y.toFixed(1))})`);
+    // the hero from about the build's own height (the bake's hero, for a build on the desk, looks down from 20 degrees)
+    const hero = g.fits.find((f) => f.name === 'hero'), c = g.build.min.map((v, i) => (v + g.build.max[i]) / 2);
+    const heroEl = Math.atan2(hero.y - c[1], Math.hypot(hero.x - c[0], hero.z - c[2])) * 180 / Math.PI;
+    assert.ok(Math.abs(heroEl) < 10, `${mount}: the hero from about the build's height (${heroEl.toFixed(1)} degrees)`);
+    if (mount === 'wall') {
+      near(g.frame.backZ, g.build.min[2], 0.01, 'the mounting frame\'s back plane is the build\'s back');
+      near(g.build.min[2] - g.wall.max[2], 0.5, 0.01, 'the wall\'s face just behind the case backs');
+      near(g.build.min[1] - deskY, 550, 0.01, 'the build\'s bottom 550 mm over the desk top');
+      assert.deepEqual(g.placement.casters, [], 'nothing of the room casts onto a wall build');
+      // a wall build moves only a prop that reaches up to it (slideProps' height option): the notebook, 12 mm tall, lies
+      // under this one's footprint, where the desk's rule (by footprint alone) would slide it away
+      assert.equal(g.slides.notebook, undefined, `the notebook stays put under a wall build (${JSON.stringify(g.slides)})`);
+      const nb = g.notebook, gap = g.notebookGap;
+      assert.ok(nb.max[0] > g.build.min[0] - gap && nb.min[0] < g.build.max[0] + gap && nb.max[2] > g.build.min[2] - gap && nb.min[2] < g.build.max[2] + gap, 'the notebook lies under the build\'s footprint, within its gap');
+      assert.ok(nb.max[1] < g.build.min[1] - gap, 'and wholly below the build');
+    } else {
+      near(g.desk.min[1], g.build.max[1], 0.01, 'the desk\'s underside on the build\'s top, its rail tops');
+      assert.ok(g.railsFront != null, 'the build has its rails');
+      near(g.frame.frontZ, g.railsFront, 0.01, 'the mounting frame\'s front is the rails\' own front');
+      near(g.desk.max[2], g.railsFront, 0.01, 'its front edge on the rail fronts');
+      const proud = g.build.max[2] - g.desk.max[2];
+      assert.ok(proud > 20 && proud < 40, `the drawer fronts stand proud of the desk's edge, as the kit mounts (${proud.toFixed(1)} mm)`);
+      near(g.build.min[0] - g.leg.max[0], 20, 0.01, 'left-justified: the build\'s left edge 20 mm from the desk\'s left leg');
+      assert.deepEqual([...g.placement.casters].sort(), ['desk_leg_l', 'desk_leg_r', 'desk_top'], 'the desk\'s own top and legs cast onto the build');
+      assert.ok(g.fits.find((f) => f.name === 'low').y < deskY, 'the low shot looks up from under the desk top');
+      assert.deepEqual(g.slides, {}, 'nothing on the desk moves for a build under it (the plant stands over this one\'s left end)');
+      // the slab's own rule shows it while the camera is under the rail tops; the hero's camera is over them, where that
+      // rule hides it anyway. The low shot puts the camera under them, and the room still keeps the slab out.
+      await page.evaluate(() => window.__GEN2_DONE__.jump('low'));
+      await settle(page, 600);
+      const low = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { surface: v.surface.visible, y: v.camera.position.y, underY: v.mountFrame().underY }; });
+      assert.ok(low.y < low.underY, `the low shot's camera under the rail tops (${low.y.toFixed(1)} vs ${low.underY.toFixed(1)})`);
+      assert.equal(low.surface, false, 'the builder\'s slab stays out of the room with the camera under it');
+      // and the desk's shadow really reaches the map, not just its flags (Sol 01a17311): the same still frame, the map
+      // re-rendered each time (the stage renders it on demand), with the casters' flags dropped comes out lighter
+      const shade = await page.evaluate(async () => {
+        const v = window.__GEN2_VIEWER__, casters = [];
+        v.scene.getObjectByName('done-room').traverse((o) => { if (o.isMesh && o.castShadow) casters.push(o); });
+        const frame = async () => {
+          v.renderer.shadowMap.needsUpdate = true; v.invalidateFrame();
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const img = new Image(); img.src = v.renderer.domElement.toDataURL('image/png'); await img.decode();
+          const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+          const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, c.width, c.height).data;
+        };
+        const lit = await frame();
+        for (const o of casters) o.castShadow = false;
+        const bare = await frame();
+        for (const o of casters) o.castShadow = true;
+        v.renderer.shadowMap.needsUpdate = true; v.invalidateFrame();
+        let shaded = 0, brighter = 0;
+        for (let i = 0; i < lit.length; i += 4) {
+          const d = (bare[i] + bare[i + 1] + bare[i + 2]) - (lit[i] + lit[i + 1] + lit[i + 2]);
+          if (d > 24) shaded++; else if (d < -24) brighter++;
+        }
+        return { casters: casters.length, shaded, brighter, px: lit.length / 4 };
+      });
+      // (measured 2026-10-25 at 1280 x 720: 1747 pixels shaded on the build's end by the window, none brighter)
+      assert.ok(shade.shaded > 500 && shade.brighter * 10 < shade.shaded, `the desk shades the build in the frame (${JSON.stringify(shade)})`);
+    }
+    // FAST, no shadow map: the contact disc is for a build standing on the desk, not one hanging off the wall or under it
+    await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('fast', { user: true }));
+    await settle(page, 600);
+    assert.equal(await page.evaluate(() => window.__GEN2_DONE__.placement.sprite), false, `${mount}: no contact disc on Fast`);
+    // LEAVING: the studio's rule for its backdrop again (the wall while the camera is in front of it; the slab below it),
+    // read in a frame drawn after the scene let go of the stage (2026-10-25: read 400 ms after the scene's hook went, it
+    // disagreed with the rule once in about sixty runs, cause not found; the message carries what it read)
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !window.__GEN2_DONE__ && !window.__GEN2_VIEWER__.sceneHeld, null, { timeout: 10_000 }).catch(() => assert.fail(`${mount}: Escape never took the stage back from the scene (page errors ${JSON.stringify(clean(errors))})`));
+    await settle(page, 400);
+    const back = await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => {
+      const v = window.__GEN2_VIEWER__, f = v.mountFrame();
+      done({ wall: v.wall.visible, surface: v.surface.visible, z: v.camera.position.z > v.wall.position.z, y: v.camera.position.y < f.underY, cinema: v.cinema.on, camera: v.camera.position.toArray().map((n) => +n.toFixed(1)), wallZ: +v.wall.position.z.toFixed(1), underY: f.underY });
+    }))));
+    const read = `${JSON.stringify(back)}; page errors ${JSON.stringify(clean(errors))}`;
+    if (mount === 'wall') assert.equal(back.wall, back.z, `the builder's wall back, by its own rule (${read})`); else assert.equal(back.surface, back.y, `the builder's slab back, by its own rule (${read})`);
+    assert.deepEqual(clean(errors), [], `${mount}: no errors`);
+    await ctx.close();
+  }
+});
+
 /* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty
    stage with a strip that does nothing (Sol 01a16c20). Back to the End page, HUD and all. */
 test('Assemble: the Done scene\'s final scene returns to the End page when the room fails to load', async () => {

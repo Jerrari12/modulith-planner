@@ -3423,3 +3423,79 @@ Dated calls made while building, with who made them. The brief and the inventory
   to the restructured onQuality). The whole e2e suite: 89 of 90. The one failure, Colors step 5's camera read (0.75 mm,
   in a workspace with no lens), passed alone three times in three. Goldens: 60 shots, the 115 tabletop's Very High end
   shot 0.141 %, only its height ruler drawn on the other side (the known end-shot flake); alone, 60 of 60 the same.
+
+## 2026-10-25 (the Done scene: wall and under-table builds hung where they mount)
+
+- **The ask.** Joey: "Looking good, yes next we must tackle under table and wall mount, this might require some
+  different camera angles and figuring out positioning based on the build size"; then "I'd say hide the fake table
+  surface we use in the builder and align the under-table build to be installed under this scenes table"; and on seeing
+  the first frames, "Maybe for the under table build always left justify them ... that way it won't create awkward gaps
+  on both sides and rather a larger gap on the right for knee space" (all 2026-10-25).
+- **Before.** Every build was placed as a tabletop one. A wall or under-table build stood on the desk 112 mm in the air
+  (its grid puts the unit in the top row), the builder's own wall plane or slab stood in the room, in front of the room's
+  wall or over its desk, and the build cast no shadow (the stage turns shadows off for hanging builds: its backdrops
+  catch none). Frames: `mounts/baseline/` in the Done scene's output folder.
+- **Where the room goes** (done-fit.js `roomAnchor`; the room moves to the build, as before):
+  - **Wall.** The room's wall face 0.5 mm behind the build's back plane, and the build's bottom 550 mm over the desk top
+    (the room's own wall anchor, clear of the monitor's top at 510 mm). Centred on the build zone, like a tabletop build.
+  - **Under-table.** The desk's underside on the rail tops and its front edge on the rail fronts: the builder's own claim
+    (fitSurface) that the kit mounts at a desk's front edge and the drawers pull out past it. The build's left edge 20 mm
+    (`UNDER_LEFT_GAP`) from the inner face of the desk's left leg at any width, the leg measured from the GLB's
+    `desk_leg_l`.
+  - **The mounting frame** (main.js `mountGeom`, `stage.mountFrame()`): where the build meets its mount, as fitWall and
+    fitSurface already measure it. A wall build's back plane (the case backs, the screw tips left out), an under-table
+    build's rail tops and rail fronts.
+- **The builder's backdrops stay out of the room.** The render loop hides the wall plane and the slab while a scene holds
+  the stage. A hanging build casts its shadow there (shadowsWanted: the held scene is lit by its own sun) onto the room's
+  wall and desk.
+- **The desk's shadow on an under-table build.** The room is baked and unlit, so its desk cast nothing, and the build
+  under it took the sun as if the desk were not there. The desk's own top and both legs cast it now (they draw as
+  before; the shadow map gains them): the left leg stands 20 mm from a left-justified build, between it and the window.
+  At High, 1600 x 900, on a 6W2H build the desk darkens 2440 to 2795 px of the build's window-side end on the low and
+  slide shots (545 to 641 of them the legs') and 32710 on the macro; the hero, from the right, shows none
+  (`mounts/v4-desk-shadow/`).
+- **The desk top's height, carried through.** The catchers, the props' shadow masks, the contact disc (shown on Fast for
+  a tabletop build only) and the camera's floor (18 mm over the desk top; none for an under-table build, whose shots go
+  below it) follow the desk wherever the room is placed.
+- **The props.** A tabletop build slides them by footprint, as before. A wall build moves only a prop that reaches up to
+  it (slideProps' `height` option): the notebook under a 6W one stays put. An under-table build moves nothing.
+- **The shots** (`GRAMMAR.wall`, `GRAMMAR['under-table']`): eight each, built like the tabletop's. The hero is still and
+  first, four shots move, and one has the drawer moment. They keep near the build's own height: nothing looks down on a
+  wall build from over the wall's top, or down past the desk's edge onto an under-table build. The low shot looks up,
+  from the chair or from under the desk. The tabletop's look-down top shot becomes a wide one of the desk. The bake's
+  hero (20 degrees down) is a tabletop build's only.
+- **Measured** (`mount-probe.mjs` at 1600 x 900, the setup sheet's own 185 builds given layouts through the store; 15
+  probe records with their frames in the Done scene's output folder, `mounts/`; no page error in any):
+  - Wall, on High at 2W1H, 4W3H and 12W6H and on Very High at 4W3H: the build's bottom 550.0 mm over the desk top and
+    the wall's face 0.50 mm behind the build's back (z -93.4 against -92.9) at every size.
+  - Under-table, on High at 2W1H, 4W3H and 12W6H and on Very High at 1W1H, 4W3H, 6W2H and 12W6H: the desk's underside
+    on the build's top and its front edge at z 92.5, the rails' front by the stage's frame (the e2e checks that frame
+    against the rails' own meshes); the build's front 29.3 mm past the edge at every size (every probed build is of the
+    same 185 cases). Left-justified (1W1H, 6W2H, 12W6H): 20.0 mm from the left leg's inner face at each, leaving 1497,
+    1057 and 529 mm of knee space to the right leg; centred, the 12W6H had stood 54.5 mm from the left leg. A 12W6H's
+    bottom is 372.1 mm over the floor.
+- **Review.** Sol `01a17311`, four rounds.
+  - Round 1, one finding: the e2e checked the desk's front edge against the mounting frame's `frontZ`, the very value
+    that placed it, so a frame 5 mm off passed (the 20 to 40 mm projection window cannot see 5 mm). The rails' own front
+    is now measured from their meshes. The change's own mutants found two more gaps that round 1 missed. The slab check
+    was read at the hero, whose camera sits over the rail tops, where the slab's own rule hides it anyway; it is now also
+    read at the low shot, the camera asserted under the rail tops first. And nothing checked a wall build's slides; now
+    the notebook under a 6W one must stay put.
+  - Round 2: the first desk shadow was a stand-in box (the desk top's size, its colour and depth writes off), and the
+    AO's override-material depth pass drew it anyway, its square edges over the desk top's 3 mm bevel; its checks read
+    its flags and its centre, not its shadow. The desk's own meshes cast now (a layer cannot keep a caster out of the
+    main passes alone: r185's shadow pass tests the main camera's layers), and the e2e compares one still frame with and
+    without their flags, the map re-rendered each time (1747 px shaded at 1280 x 720, none brighter). Discarded: the
+    environment map sampled at one point, the scene's existing approximation for every mount.
+  - Round 3: the debug hook reported a list kept beside the flags, so a top-only flag passed both checks; it now reads
+    the flags themselves. Round 4: no findings.
+- **The leave check's flake, not explained.** Read 400 ms after the scene's hook went, a wall build's backdrop disagreed
+  with the studio's rule once in about sixty runs. Twenty runs logging that read's state never disagreed, and no cause
+  was found. The read now waits for the hold to be released, reads in an animation frame, and carries its state and the
+  page's errors if it fails again.
+- **Checks.** npm test: 646 tests, 641 pass, 5 skipped. The whole e2e suite before rounds 2 to 4: 91 of 91; after
+  them, the Done scene's seven cases, and the mounts case in all 21 runs since its leave read changed. Mutants: all 27
+  of the mounts' killed, each at its own assertion, and the 19 lens and 10 warm-up mutants again. Goldens, 60 shots:
+  9 end shots differ at 0.10 to 0.15 % after the suite, and alone one other at 0.106 %. In each the differing pixels
+  lie in two narrow bands either side of the build, and the one opened (270 3W2H, end, Fast) has the height ruler drawn
+  on the other side: the known end-shot flake.

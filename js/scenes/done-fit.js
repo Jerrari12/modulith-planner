@@ -71,14 +71,16 @@ export function clampToInterior(cam, interior, { wall = 150, top = 450, fillMax 
 
 /* How far each prop GROUP must slide along its slot so every prop clears the build's box by its gap. `props` is
  * [{ group, slot: 'x+' | 'x-', gap, box: { min: {x,z}, max: {x,z} } }] in mm, `build` a box in mm. A prop that does not
- * overlap the build in depth (z) stays. Returns { [group]: deltaX }; groups with nothing to clear are absent. */
-export function slideProps(props, build) {
+ * overlap the build in depth (z) stays; with `height` (a build hanging on the wall over the desk, 2026-10-25), so does
+ * one wholly below or above it. Returns { [group]: deltaX }; groups with nothing to clear are absent. */
+export function slideProps(props, build, { height = false } = {}) {
   const out = {};
   for (const p of props) {
     if (!p.slot || !p.box) continue;
     const gap = p.gap || 0;
     const overlapZ = p.box.max.z > build.min.z - gap && p.box.min.z < build.max.z + gap;
     if (!overlapZ) continue;
+    if (height && !(p.box.max.y > build.min.y - gap && p.box.min.y < build.max.y + gap)) continue;
     let delta = 0;
     if (p.slot === 'x+') { const need = build.max.x + gap - p.box.min.x; if (need > 0) delta = need; }
     else if (p.slot === 'x-') { const need = p.box.max.x - (build.min.x - gap); if (need > 0) delta = -need; }
@@ -170,7 +172,67 @@ export const GRAMMAR = {
     { name: 'macro', from: { az: -40, el: 12, fovV: 14, distMm: 210, aim: 'drawer-front' }, to: { az: -31, el: 8, fovV: 14, distMm: 105, aim: 'drawer-front' } },
     { name: 'side', from: { az: 66, el: 15, fovV: 26, fill: 0.62 }, to: { az: 50, el: 13, fovV: 26, fill: 0.62 } },   // a slow arc round the side
   ],
+  /* A WALL BUILD hangs on the back wall over the desk (roomAnchor), so it is seen standing in front of the desk or from
+     its chair: the shots keep near the build's own height, none looks down on it from over the wall's top, and the top
+     shot gives way to a wide one of the whole corner, the desk under the build (2026-10-25) */
+  wall: [
+    { name: 'hero', from: { az: 24, el: 4, fovV: 30, fill: 0.5, targetLift: -0.04 } },
+    { name: 'push', from: { az: 12, el: 3, fovV: 20, fill: 0.56 }, to: { az: 6, el: 2, fovV: 20, fill: 0.76 } },
+    { name: 'low', from: { az: -30, el: -24, fovV: 46, fill: 0.7, targetLift: 0.1 } },   // from the desk chair, looking up at it
+    { name: 'detail', from: { az: 30, el: 3, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },
+    { name: 'slide', from: { az: -22, el: 2, fovV: 22, fill: 0.7 }, to: { az: 14, el: 2, fovV: 22, fill: 0.7 } },
+    { name: 'wide', from: { az: 30, el: 10, fovV: 34, fill: 0.3, targetLift: -0.35 } },   // the corner: the desk under the build
+    { name: 'macro', from: { az: -40, el: 6, fovV: 14, distMm: 210, aim: 'drawer-front' }, to: { az: -31, el: 4, fovV: 14, distMm: 105, aim: 'drawer-front' } },
+    { name: 'side', from: { az: 66, el: 6, fovV: 26, fill: 0.62 }, to: { az: 50, el: 5, fovV: 26, fill: 0.62 } },
+  ],
+  /* AN UNDER-TABLE BUILD hangs under the desk's front edge (roomAnchor; Joey 2026-10-25: "align the under-table build to
+     be installed under this scenes table"), so it is seen from in front of the desk, from about its top or below:
+     nothing looks down past the edge onto it (the desk top would hide it), the low shot looks up at the rails and the
+     drawers' undersides, and the top shot gives way to a wide one of the desk with the build under its edge */
+  'under-table': [
+    { name: 'hero', from: { az: 26, el: 6, fovV: 30, fill: 0.5 } },
+    { name: 'push', from: { az: 12, el: 3, fovV: 20, fill: 0.56 }, to: { az: 6, el: 2, fovV: 20, fill: 0.76 } },
+    { name: 'low', from: { az: -30, el: -18, fovV: 46, fill: 0.72, targetLift: 0.1 } },   // crouched in front of the desk, looking up under it
+    { name: 'detail', from: { az: 30, el: 4, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },
+    { name: 'slide', from: { az: -22, el: 3, fovV: 22, fill: 0.7 }, to: { az: 14, el: 3, fovV: 22, fill: 0.7 } },
+    { name: 'wide', from: { az: 28, el: 18, fovV: 34, fill: 0.3, targetLift: 0.3 } },   // the desk, the build under its edge
+    { name: 'macro', from: { az: -40, el: 5, fovV: 14, distMm: 210, aim: 'drawer-front' }, to: { az: -31, el: 3, fovV: 14, distMm: 105, aim: 'drawer-front' } },
+    { name: 'side', from: { az: 60, el: 2, fovV: 26, fill: 0.62 }, to: { az: 46, el: 2, fovV: 26, fill: 0.62 } },   // round the knee-space side
+  ],
 };
+
+/* WHERE THE ROOM GOES, by the build's mount (2026-10-25: a wall or under-table build stood on the desk in the air, the
+ * stage's own wall or slab in front of the room). The world point, stage mm, for the room's tabletop anchor (the desk
+ * top at the build zone's back-centre); its y is the desk top's height.
+ * - tabletop: the build stands on the desk top (y 0), its back at the anchor, as before;
+ * - wall: it hangs on the back wall, its back plane 0.5 mm off the wall's face and its bottom at the wall anchor's
+ *   height over the desk top (room.json: 550 mm, clear of the monitor's top);
+ * - under-table: its rail tops against the desk's underside and its rail fronts on the desk's front edge (the stage's own
+ *   claim, fitSurface: the kit mounts at a desk's front edge and the drawers pull out past it), and LEFT-JUSTIFIED: its
+ *   left edge UNDER_LEFT_GAP from the inner face of the desk's left leg, whatever its width (Joey 2026-10-25: "always
+ *   left justify them ... that way it won't create awkward gaps on both sides and rather a larger gap on the right for
+ *   knee space").
+ * `frame` is the stage's mounting frame (backZ, underY, frontZ; stage.mountFrame), `anchors` room.json's ([x, y, z] in
+ * the room's mm, z toward the wall negative; the wall anchor stands 1 mm off the wall's face), `desk` its extent about the
+ * tabletop anchor, with `legInnerL` the left leg's inner face along x from that anchor (the scene measures the GLB's
+ * desk_leg_l; without it an under-table build is centred too). A tabletop or wall build is centred on the build zone. */
+export const UNDER_LEFT_GAP = 20;
+export function roomAnchor(mount, box, frame = {}, anchors = {}, desk = {}) {
+  const cx = (box.min.x + box.max.x) / 2;
+  const t = anchors.tabletop || [0, 740, -755];
+  if (mount === 'wall') {
+    const w = anchors.wall || [t[0], t[1] + 550, t[2] - 44];
+    const back = frame.backZ != null ? frame.backZ : box.min.z;
+    return { x: cx, y: box.min.y - (w[1] - t[1]), z: back - 0.5 + (t[2] - (w[2] - 1)) };
+  }
+  if (mount === 'under-table') {
+    const u = anchors['under-table'] || [t[0], t[1] - 25, t[2]];
+    const top = frame.underY != null ? frame.underY : box.max.y, front = frame.frontZ != null ? frame.frontZ : box.max.z;
+    const x = desk.legInnerL != null ? box.min.x - (desk.legInnerL + UNDER_LEFT_GAP) : cx;
+    return { x, y: top + (t[1] - u[1]), z: front - (desk.zFront != null ? desk.zFront : 381.4) };
+  }
+  return { x: cx, y: 0, z: box.min.z };
+}
 /* A shot's beat: the black fades out (dipIn), the shot holds, the black fades back in (dipOut), a moment of black in which
  * the camera cuts to the next shot (blackMs). Slow on purpose: about 13 s a shot. A move's frame budget for the device's
  * verdict: 20 fps (maxFrameMs). */
@@ -317,8 +379,10 @@ export function mixShot(shot, k) {
 
 /* A shot's camera for this build and view: its aim resolved (`aims.drawer`, a targetShift onto the drawer unit; `aims.front`,
  * a spot on its faceplate; with no drawer unit the macro frames the build closely instead), fitted (shotCamera), kept
- * inside the room (clampToInterior) and above the desk top (FLOOR_MM). */
-export function fitShot(spec, box, view, interior, aims = {}) {
+ * inside the room (clampToInterior) and above the desk top (FLOOR_MM over `floorY`, the desk top's height: 0 for a build on
+ * it, the room's own for a wall build; an under-table build's shots go below the desk top, so it passes -Infinity and the
+ * room's floor is the interior's). */
+export function fitShot(spec, box, view, interior, aims = {}, { floorY = 0 } = {}) {
   const s = { ...spec };
   if (s.aim === 'drawer' && aims.drawer) s.targetShift = aims.drawer;
   if (s.aim === 'drawer-front') {
@@ -326,7 +390,8 @@ export function fitShot(spec, box, view, interior, aims = {}) {
     else { delete s.distMm; s.fill = 1.2; }
   }
   const cam = clampToInterior(shotCamera(s, box, view), interior);
-  return cam.position.y < FLOOR_MM ? { ...cam, position: { ...cam.position, y: FLOOR_MM }, floored: true } : cam;
+  const floor = floorY + FLOOR_MM;
+  return cam.position.y < floor ? { ...cam, position: { ...cam.position, y: floor }, floored: true } : cam;
 }
 
 /* The baked contact shadow's footprint for the Fast tier: a disc-ish plane under the build, a little wider than it. */
@@ -357,8 +422,9 @@ export function maskQuad(mask, anchor, wallZ, dx, lift = 0.5, clip = null) {
       if (c1 <= c0) return null;
       u0 = (c0 - x0) / full; u1 = (c1 - x0) / full; x0 = c0; x1 = c1;
     }
-    return { surface: 'desk', w: x1 - x0, h: mask.zFront - mask.zBack, x: anchor.x + (x0 + x1) / 2, y: lift, z: anchor.z + (mask.zBack + mask.zFront) / 2, u0, u1, visible };
+    return { surface: 'desk', w: x1 - x0, h: mask.zFront - mask.zBack, x: anchor.x + (x0 + x1) / 2, y: (anchor.y || 0) + lift, z: anchor.z + (mask.zBack + mask.zFront) / 2, u0, u1, visible };
   }
-  if (mask.surface === 'wall') return wallZ == null ? null : { surface: 'wall', w: x1 - x0, h: mask.y1 - mask.y0, x: anchor.x + (x0 + x1) / 2, y: (mask.y0 + mask.y1) / 2, z: wallZ + lift, u0, u1, visible };
+  // (anchor.y: the desk top's height, 0 for a build on it; a wall or under-table build moves the room, roomAnchor)
+  if (mask.surface === 'wall') return wallZ == null ? null : { surface: 'wall', w: x1 - x0, h: mask.y1 - mask.y0, x: anchor.x + (x0 + x1) / 2, y: (anchor.y || 0) + (mask.y0 + mask.y1) / 2, z: wallZ + lift, u0, u1, visible };
   return null;
 }

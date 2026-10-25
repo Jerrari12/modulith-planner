@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -326,4 +326,74 @@ test('lensFor: a still shot holds the whole build sharp to LENS.maxPx at its nea
   close(lensFor(cam, box, { width: 1280, height: 360 }).aperture, 2 * l.aperture, 1e-9, 'half the height, twice the aperture');
   assert.equal(lensFor({ ...cam, target: { ...cam.position } }, box, view), null, 'no view axis, no lens');
   assert.equal(lensFor({ position: { x: 0, y: 100, z: 0 }, target: { x: 0, y: 100, z: -1 }, fov: 30 }, box, view), null, 'a camera inside the box: no lens');
+});
+
+/* THE MOUNTS (2026-10-25): where the room goes for a wall and an under-table build, and the shots each gets. The anchors
+   and the desk are room.json's; the left leg's inner face is the GLB's desk_leg_l as the scene measures it. */
+const ROOM_ANCHORS = { tabletop: [-220, 740, -755], wall: [-220, 1290, -799], 'under-table': [-220, 715, -755] };
+const ROOM_DESK = { x0: -680, x1: 1120, zFront: 381.4, zBack: -25 };
+
+test('roomAnchor: a tabletop build stands on the desk; a wall build hangs on the wall over it; an under-table build hangs under its front edge, left-justified at any width', () => {
+  const box = { min: { x: -90.5, y: 112, z: -92.9 }, max: { x: 90.5, y: 178, z: 121.8 } };
+  assert.deepEqual(roomAnchor('tabletop', box, {}, ROOM_ANCHORS, ROOM_DESK), { x: 0, y: 0, z: -92.9 }, 'on the desk top, its back at the anchor, as before');
+  // on the wall: its face (1 mm behind the wall anchor) 0.5 mm behind the case backs, the bottom 550 mm over the desk top
+  const w = roomAnchor('wall', box, { backZ: -92.9 }, ROOM_ANCHORS, ROOM_DESK);
+  close(w.z + (ROOM_ANCHORS.wall[2] - 1 - ROOM_ANCHORS.tabletop[2]), -92.9 - 0.5, 1e-9, 'the wall\'s face just behind the case backs');
+  close(box.min.y - w.y, 550, 1e-9, 'the build\'s bottom 550 mm over the desk top');
+  assert.equal(w.x, 0, 'centred on the build zone');
+  assert.deepEqual(roomAnchor('wall', box, { backZ: -92.9 }, {}, ROOM_DESK), w, 'room.json\'s anchors or not, the same offsets');
+  // under the desk: the underside on the rail tops, the front edge on the rail fronts, and the build's left edge
+  // UNDER_LEFT_GAP from the left leg's inner face whatever its width (Joey: "always left justify them")
+  const frame = { underY: 174.9, frontZ: 92.5 };
+  for (const width of [93, 533, 1061]) {   // 1W, 6W, 12W
+    const b = { min: { x: -width / 2, y: 0, z: -108.5 }, max: { x: width / 2, y: 174.9, z: 121.8 } };
+    const u = roomAnchor('under-table', b, frame, ROOM_ANCHORS, { ...ROOM_DESK, legInnerL: -585 });
+    close(u.y - (ROOM_ANCHORS.tabletop[1] - ROOM_ANCHORS['under-table'][1]), 174.9, 1e-9, `${width} mm: the desk's underside on the rail tops`);
+    close(u.z + ROOM_DESK.zFront, 92.5, 1e-9, `${width} mm: its front edge on the rail fronts`);
+    close(b.min.x - (u.x - 585), UNDER_LEFT_GAP, 1e-9, `${width} mm: left-justified against the left leg`);
+  }
+  assert.equal(roomAnchor('under-table', box, frame, ROOM_ANCHORS, ROOM_DESK).x, 0, 'without the leg\'s measure, centred like the others');
+});
+
+test('slideProps with height: a desk prop under a wall build stays, one that reaches up into it slides; without it both slide, the desk\'s rule', () => {
+  const wallBuild = { min: { x: -100, y: 550, z: -90 }, max: { x: 100, y: 650, z: 120 } };
+  const props = [
+    { group: 'mug', slot: 'x+', gap: 70, box: { min: { x: 50, y: 0, z: 0 }, max: { x: 130, y: 96, z: 80 } } },
+    { group: 'plant', slot: 'x-', gap: 70, box: { min: { x: -120, y: 0, z: -60 }, max: { x: -20, y: 640, z: 40 } } },
+  ];
+  assert.deepEqual(Object.keys(slideProps(props, wallBuild, { height: true })), ['plant'], 'only the plant reaches the build');
+  close(slideProps(props, wallBuild, { height: true }).plant, -150, 1e-9, 'and it clears it by its gap');
+  assert.deepEqual(Object.keys(slideProps(props, wallBuild)).sort(), ['mug', 'plant'], 'by footprint alone both would');
+});
+
+test('maskQuad and fitShot follow the desk top\'s height when the room moves for a hanging build; an under-table build\'s shots may go below the desk', () => {
+  const desk = { group: 'mug', surface: 'desk', x0: -50, x1: 50, zBack: -20, zFront: 60 }, wall = { group: 'plant', surface: 'wall', x0: -50, x1: 50, y0: 10, y1: 210 };
+  close(maskQuad(desk, { x: 0, z: 0 }, -45, 0).y, 0.5, 1e-9, 'a desk top at 0, as before');
+  close(maskQuad(desk, { x: 0, y: -463, z: 0 }, -45, 0).y, -463 + 0.5, 1e-9, 'a desk mask on the desk top wherever it is');
+  close(maskQuad(wall, { x: 0, y: -463, z: 0 }, -45, 0).y, -463 + 110, 1e-9, 'a wall mask\'s height measured from the desk top');
+  const box = { min: { x: -530, y: 0, z: -86 }, max: { x: 530, y: 134, z: 107 } };
+  const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
+  const low = GRAMMAR.tabletop.find((s) => s.name === 'low');
+  const raw = shotCamera(mixShot(low, 0.5), box, view);
+  close(fitShot(mixShot(low, 0.5), box, view, null, {}, { floorY: -200 }).position.y, Math.max(raw.position.y, -200 + FLOOR_MM), 1e-9, 'the floor FLOOR_MM over a desk top at -200');
+  const under = fitShot(mixShot(low, 0.5), box, view, null, {}, { floorY: -Infinity });
+  close(under.position.y, raw.position.y, 1e-9, 'no desk floor under the desk'); assert.ok(!under.floored);
+});
+
+test('the grammar per mount: a wall and an under-table build get eight shots each, the hero first and still, four moving, one drawer moment, none from far above', () => {
+  const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
+  const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
+  for (const m of ['wall', 'under-table']) {
+    const shots = GRAMMAR[m];
+    assert.equal(shots.length, 8, m); assert.equal(new Set(shots.map((s) => s.name)).size, 8, `${m}: distinct`);
+    assert.equal(shots[0].name, 'hero'); assert.equal(shots[0].to, undefined, `${m}: the hero holds still (the entrance lands on it)`);
+    assert.equal(shots.filter((s) => s.to).length, 4, `${m}: four moving, so a still can sit between two moves`);
+    assert.deepEqual(shots.filter((s) => s.drawer).map((s) => s.name), ['detail'], `${m}: the drawer moment`);
+    assert.ok(!shots.some((s) => s.name === 'top'), `${m}: no top shot`);
+    const els = shots.flatMap((s) => [s.from.el, (s.to || s.from).el]);
+    assert.ok(Math.max(...els) <= (m === 'wall' ? 12 : 20), `${m}: none from far above (the highest at ${Math.max(...els)} degrees)`);
+    for (const s of shots) { const c = fitShot(mixShot(s, 0.5), box, view, null, {}); assert.ok(c.distance > 0 && Number.isFinite(c.position.x + c.position.y + c.position.z), `${m} ${s.name} fits`); }
+    const low = fitShot(mixShot(shots.find((s) => s.name === 'low'), 0.5), box, view, null, {}, { floorY: -Infinity });
+    assert.ok(low.position.y < low.target.y, `${m}: the low shot looks up`);
+  }
 });
