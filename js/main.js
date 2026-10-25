@@ -11058,6 +11058,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     moveOpt: MOVE_OPT, dimCover, shadowWatch, get cavityClones() { return cavity.clones; },   // ground.seen: see `ground`
     acc, accumFrame, accVerify, invalidateFrame, accWanted,
     get accSamples() { return acc.n; }, ACC_SAMPLES, ACC_WARMUP,
+    // the frame-by-frame film harness (tools/step-film.mjs): own the camera, pause the loop (loopTick puts it back), flag the shadow map
+    setCamOverride, loopTick, markShadowDirty,
     get sunHalfDeg() { return ACC_SUN_HALF_DEG; },
     setSunHalfDeg(v) { ACC_SUN_HALF_DEG = +v; acc.blocked = true; },
     fxDead, perf, get tweenCount() { return tweens.size; },
