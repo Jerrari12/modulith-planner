@@ -4345,3 +4345,70 @@ test('hover hints: every hinted control shows its clip on hover and hides on lea
   assert.deepEqual(clean(N.errors), [], 'narrow');
   await narrow.close();
 });
+
+/* SETTLING TOWARD THE MOUNT (Joey, 2026-10-25, the Under-Table report from tech support: "the Planner should work like gravity,
+   pulling everything toward the mount after every change"). The report's layout on an Under-Table 185: top 2 x 3W-1.5H, then
+   3 x 2W-2H, 3 x 2W-3H, 2 x 3W-1.5H at the bottom. Acceptance: removing both top 3Ws ends as three 2W-2H on top, three 2W-3H
+   below, two 3W-1.5H at the bottom, 0 issues and no manual moves; dragging the top-right 3W below the bottom row settles
+   everything up in one action (one Undo); the voids are not a standing warning. */
+test('Build: Under-Table settles up after every edit - the report\'s layout, a drop below the stack, one Undo each', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Under-Table")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.locator('#ws-setup .card.len:has-text("185 mm")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
+  await waitBoot(page);
+  const U = [[1, 0, 0, 3, 3], [2, 3, 0, 3, 3], [3, 0, 3, 2, 4], [4, 2, 3, 2, 4], [5, 4, 3, 2, 4], [6, 0, 7, 2, 6], [7, 2, 7, 2, 6], [8, 4, 7, 2, 6], [9, 0, 13, 3, 3], [10, 3, 13, 3, 3]];
+  const load = () => page.evaluate((U) => window.__GEN2_STORE__.commit((s) => { s.placed = U.map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0, closure: 'magnet' })); s.nextId = 11; s.gridW = 6; s.gridH = 8; s.spaceW = null; s.spaceH = null; }, 'edit'), U);
+  await load();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 10 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 }).catch(() => assert.fail('the report\'s build did not reach the stage'));
+  const at = async () => Object.fromEntries((await S(page)).placed.map((p) => [p.id, [p.x, p.y]]));
+  const issues = () => page.evaluate(() => window.__GEN2_BUILD__.issues().filter((i) => i.sev !== 'guide').map((i) => i.kind));
+  // 1. remove the right 3W, then the left: everything settles up, nothing is held, 0 issues, no manual move
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(2));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  let a = await at();
+  assert.deepEqual([a[5], a[8], a[4]], [[4, 0], [4, 4], [2, 3]], `the right column rose, the centre stays hooked under the left 3W: ${JSON.stringify(a)}`);
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(1));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 8, null, { timeout: 30_000 });
+  a = await at();
+  assert.deepEqual(a, { 3: [0, 0], 4: [2, 0], 5: [4, 0], 6: [0, 4], 7: [2, 4], 8: [4, 4], 9: [0, 10], 10: [3, 10] }, `three 2W-2H on top, three 2W-3H, two 3W-1.5H at the bottom: ${JSON.stringify(a)}`);
+  await settle(page, 800);
+  assert.deepEqual(await issues(), [], 'no issues after settling');
+  assert.equal(await page.locator('#ws-dock .status.issue').count(), 0, 'the Dock shows no issue');
+  assert.match(await text(page, '#ws-toast'), /Removed 3W·1\.5H · .*moved up against what is above/, 'the removal toast names what settled');
+  // one Undo per edit: the second removal comes back WITH its settle undone
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  a = await at();
+  assert.deepEqual([a[1], a[4], a[9]], [[0, 0], [2, 3], [0, 13]], `one Undo restores the removal and the settle together: ${JSON.stringify(a)}`);
+  // 2. the same starting layout: drag the top-right 3W below the bottom row - allowed (no "would leave a unit without
+  //    support"), the grid grows down for it, everything above settles up in one action
+  await load();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 10, null, { timeout: 30_000 });
+  const check = await page.evaluate(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 2); return window.__GEN2_BUILD__.moveCheck(u, 3, 16); });
+  assert.ok(check.g, `the drop below the stack is allowed: ${JSON.stringify(check)}`);
+  await page.evaluate(() => window.__GEN2_BUILD__.moveTo(2, 3, 16));
+  await page.waitForFunction(() => { const p = window.__GEN2_STORE__.state.placed.find((q) => q.id === 2); return p && p.y === 16; }, null, { timeout: 30_000 }).catch(() => assert.fail('the 3W did not move below the stack'));
+  a = await at();
+  assert.deepEqual([a[2], a[5], a[8], a[4]], [[3, 16], [4, 0], [4, 4], [2, 3]], `the dropped 3W hangs at the bottom, the right column rose: ${JSON.stringify(a)}`);
+  assert.ok((await S(page)).gridH >= 10, 'the grid grew down for the drop');
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => { const p = window.__GEN2_STORE__.state.placed.find((q) => q.id === 2); return p && p.y === 0; }, null, { timeout: 30_000 });
+  assert.deepEqual(await at(), Object.fromEntries(U.map(([id, x, y]) => [id, [x, y]])), 'one Undo puts the whole move and its settle back');
+  // 3. the voids are a drag preview only: with the centre column hooked by one end (after the first removal) the board
+  //    draws no hatched cell at rest
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(2));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-unit', { timeout: 30_000 });
+  assert.equal(await page.locator('#ws-board .b-deficit').count(), 0, 'no hatched void at rest');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
