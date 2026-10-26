@@ -10,6 +10,16 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # ⚠ DOCUMENTATION-ONLY PUSHES RUN NOTHING (2026-10-25). A push whose every changed file is under docs/ or is a
+    # Markdown file at the repo root changes nothing that is served or tested: Assemble the site copies only the served
+    # folders, and no test reads docs/ or a root .md. Nine of the 28 runs before this (287 of 1155 runner minutes) were
+    # DECISIONS.md lines. The list is deliberately NARROW: models, textures, fonts, images, kits, configuration and the
+    # README files inside served folders are NOT on it - each can change what a visitor gets, or is published. A push
+    # mixing a docs file with anything else runs everything. The deploy job's freshness check reads the SAME two
+    # patterns; change them together. workflow_dispatch ignores this filter, so a manual run always tests and deploys.
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
   workflow_dispatch:
 
 permissions:
@@ -17,15 +27,26 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
+# ⚠ NO WORKFLOW-LEVEL CONCURRENCY (2026-10-25). Until then the whole run sat in group `pages` with cancel-in-progress, so
+# a newer push cancelled an older run at whatever step it had reached - publishing included. Now each TEST job has a
+# group of its own per ref (and per shard), so a newer push cancels the older run's testing at once, while the deploy job
+# queues in `pages-deploy` WITHOUT cancel-in-progress: a deployment already publishing finishes, and a deploy still
+# waiting there is replaced by the newer one (GitHub keeps one pending run per group). An older run whose tests were
+# cancelled never deploys (the deploy needs every test job). The deploy's freshness check covers the rest: a re-run of
+# an old run, or one whose tests finished just before a newer push, publishes only if main's tip serves the same files.
+# Only a run's FIRST attempt cancels (cancel-in-progress is `run_attempt == '1'`): a manual re-run of an older run would
+# otherwise cancel a newer run's tests and then fail the freshness check, leaving the newest code unpublished (Sol
+# 01a1762e). A re-run waits for the group instead; a newer push still cancels it.
+#
+# The jobs: unit (npm test), build (the stamping, the module-graph guard, the site artifact - minutes, so a forgotten
+# sed line fails fast instead of after the browser suites), browser (smoke, profile-lands, relief-tier), e2e (the end-to-
+# end suite in shards, e2e/shard.mjs), e2e-coverage (every case ran exactly once across the shards), deploy (main only).
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  unit:
+    concurrency:
+      group: unit-${{ github.ref }}
+      cancel-in-progress: ${{ github.run_attempt == '1' }}
     # ubuntu-24.04, not ubuntu-latest: GitHub began moving ubuntu-latest to Ubuntu 26.04 on 2026-10-19 (runner-images
     # issue 14748), and on the 26.04 image this job's browser e2e step runs about twice as slow (33-35 min against 18 on
     # 24.04, the same Chrome for Testing 153 build) and dies on its waits: runs 39429860751 and 39433302069 were 26.04 and
@@ -64,56 +85,17 @@ jobs:
       - name: Test (blocks the deploy)
         run: npm test
 
-      # ⚠ THE SUITE ABOVE CANNOT SEE A PIXEL. It runs without a browser, so it passes on a build
-      # whose viewer throws at boot and shows a black canvas forever — every protection in this
-      # repo was blind to the one failure a visitor actually experiences. This opens the two routes
-      # that reach users in a real headless Chrome and asserts they draw: no console errors, a
-      # canvas that is neither black nor a flat fill, and the two cross-repo modules loaded and
-      # doing their job. Mutation-checked both ways before it landed — a planted boot throw fails
-      # all three routes on console noise, and the layer-detail kill switch fails the module check
-      # alone while the picture stays fine.
-      # It is the only step here that needs node_modules, which is why the suite above still does
-      # not, and why this is a separate step rather than folded into npm test.
-      #
-      # profile-lands is the second half and answers a different question: the unit tests prove
-      # partMaterialSpec RETURNS the authored finish, which says nothing about whether anything on
-      # screen wears it. Three things sit between the spec and the picture - activeLabel finding the
-      # label, newPartMaterial passing it, and applyPalette carrying the FINISH and not only the
-      # colour - and the third was missing until it was written. It drives the picker's own sequence
-      # with no rebuild, and is mutation-checked: reverting applyPalette to colour-only fails it.
-      #
-      # relief-tier is the third and guards a number. The printed relief is a per-fragment cost that
-      # the quality ladder did not reach, so `fast` - the tier a struggling device settles on - paid
-      # it in full while paying for nothing else: measured at 0.452x the deployed frame rate on a
-      # software rasteriser, against 0.739x at `high`. Putting relief on the ladder took `fast` back
-      # to 0.973x. The test asserts the material a mesh is WEARING carries no layer program at fast
-      # and does at high, because a flag only the next rebuild would honour saves nothing on the
-      # materials a struggling device already has. Mutation-checked: dropping the rebuild from
-      # applyQuality fails it.
-      - name: Smoke test the deployed routes in a browser (blocks the deploy)
-        run: |
-          npm ci --no-audit --no-fund
-          npx playwright install --with-deps chromium
-          # a failure NAMES ITSELF in the run's annotations, which the API serves without signing in (2026-10-16: three
-          # runs failed here and the log - sign-in only - could not be read): the failing tests, then their messages,
-          # with workflow-command escaping for % and carriage returns (Terra 01a146f2)
-          named() {
-            npm run "$1" 2>&1 | tee "/tmp/$1.log"; local s=${PIPESTATUS[0]}
-            if [ "$s" -ne 0 ]; then
-              # without a terminal node --test reports in TAP ("not ok N - name", "error: ..."), not the spec reporter's
-              # "✖" (f10b245's run matched nothing); and anything else ends with the log's last lines
-              { grep -E '^\s*(not ok|✖)' "/tmp/$1.log" | sort -u | head -5; grep -E "AssertionError|TimeoutError|Timeout [0-9]+ms|Error:|error: |within|expected|actual" "/tmp/$1.log" | head -5; } > "/tmp/$1.why"
-              [ -s "/tmp/$1.why" ] || tail -n 8 "/tmp/$1.log" > "/tmp/$1.why"
-              sed -e 's/%/%25/g' -e 's/\r/%0D/g' "/tmp/$1.why" | while IFS= read -r l; do echo "::error title=$1::$l"; done
-            fi
-            return "$s"
-          }
-          named smoke
-          named profile-lands
-          named relief-tier
-          # the merged planner's five workspaces, the store and the setup sheet, driven end to end (2026-10-13)
-          named e2e
-
+  build:
+    # the stamped site, built beside the tests and uploaded as this run's Pages artifact; only the deploy job publishes it
+    concurrency:
+      group: build-${{ github.ref }}
+      cancel-in-progress: ${{ github.run_attempt == '1' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       # Stamp the app's own JS/CSS URLs with the commit SHA. GitHub Pages caches
       # assets for 10 minutes (max-age=600), so without this a visitor loading
       # right after a deploy can get NEW index.html + STALE main.js (or css) and
@@ -306,5 +288,171 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+
+  browser:
+    concurrency:
+      group: browser-${{ github.ref }}
+      cancel-in-progress: ${{ github.run_attempt == '1' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # The part pools. parts/ and img/parts/ moved to Jerrari12/gen2-parts on
+      # 2026-10-12; the tests that open GLBs read them from parts/<length>/, so
+      # the pools are checked out beside the app and linked where they used to be.
+      - uses: actions/checkout@v4
+        with:
+          repository: Jerrari12/gen2-parts
+          path: _parts
+      - name: Link the part pools where the tests read them
+        run: |
+          ln -s "$PWD/_parts/parts" parts
+          ln -s "$PWD/_parts/img/parts" img/parts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the browser-test dependencies
+        run: npm ci --no-audit --no-fund
+      # ⚠ THE BROWSER IS THE IMAGE'S OWN CHROME (2026-10-25). Every browser suite launches Google Chrome from the runner
+      # image first (channel chrome) and Playwright's Chromium only if that fails; the baseline run 40257169401 launched
+      # "channel chrome 155.0.8059.39", so `npx playwright install --with-deps chromium` - 4.78 min a job - fetched a
+      # browser nobody opened. It now runs only when the image's Chrome does not launch (tools/ci-browser.mjs), which
+      # keeps the old fallback instead of failing; either way a notice names the browser the suites got.
+      - name: Check the browser (install Playwright's Chromium only if the image's Chrome does not launch)
+        run: |
+          node tools/ci-browser.mjs || { npx playwright install --with-deps chromium && node tools/ci-browser.mjs --any; }
+      # ⚠ THE SUITE ABOVE CANNOT SEE A PIXEL. It runs without a browser, so it passes on a build
+      # whose viewer throws at boot and shows a black canvas forever — every protection in this
+      # repo was blind to the one failure a visitor actually experiences. This opens the two routes
+      # that reach users in a real headless Chrome and asserts they draw: no console errors, a
+      # canvas that is neither black nor a flat fill, and the two cross-repo modules loaded and
+      # doing their job. Mutation-checked both ways before it landed — a planted boot throw fails
+      # all three routes on console noise, and the layer-detail kill switch fails the module check
+      # alone while the picture stays fine.
+      # It is the only step here that needs node_modules, which is why the suite above still does
+      # not, and why this is a separate step rather than folded into npm test.
+      #
+      # profile-lands is the second half and answers a different question: the unit tests prove
+      # partMaterialSpec RETURNS the authored finish, which says nothing about whether anything on
+      # screen wears it. Three things sit between the spec and the picture - activeLabel finding the
+      # label, newPartMaterial passing it, and applyPalette carrying the FINISH and not only the
+      # colour - and the third was missing until it was written. It drives the picker's own sequence
+      # with no rebuild, and is mutation-checked: reverting applyPalette to colour-only fails it.
+      #
+      # relief-tier is the third and guards a number. The printed relief is a per-fragment cost that
+      # the quality ladder did not reach, so `fast` - the tier a struggling device settles on - paid
+      # it in full while paying for nothing else: measured at 0.452x the deployed frame rate on a
+      # software rasteriser, against 0.739x at `high`. Putting relief on the ladder took `fast` back
+      # to 0.973x. The test asserts the material a mesh is WEARING carries no layer program at fast
+      # and does at high, because a flag only the next rebuild would honour saves nothing on the
+      # materials a struggling device already has. Mutation-checked: dropping the rebuild from
+      # applyQuality fails it.
+      # A failure names itself in the run's annotations (tools/ci-named.sh), and each suite's slowest cases are a notice.
+      - name: Smoke test the deployed routes in a browser (blocks the deploy)
+        run: bash tools/ci-named.sh smoke
+      - name: Profile lands (blocks the deploy)
+        run: bash tools/ci-named.sh profile-lands
+      - name: Relief tier (blocks the deploy)
+        run: bash tools/ci-named.sh relief-tier
+
+  e2e:
+    # the merged planner's five workspaces, the store and the setup sheet, driven end to end (2026-10-13), split across
+    # runners by e2e/shard.mjs (2026-10-25): each shard runs a share balanced by e2e/shard-weights.json, every case in
+    # exactly one shard, and writes what it ran for the coverage job below. Every shard runs to the end (no fail-fast), so
+    # one red run names every failing case, as the serial step did. The shard count is the matrix's length.
+    # SIX, not four (2026-10-26): on run 40262875906 the four shards carried equal weighted loads (486 s each by the
+    # weights) and took 7.5 / 12.7 / 16.9 / 16.3 min, their runner/local medians 0.98 / 1.49 / 1.76 / 1.86 - the spread is
+    # the runner machines, which no weighting can fix, so the run waits on its slowest machine; smaller shards bound that.
+    # Six on run 40264684655: 5.4 / 8.5 / 10.2 / 10.7 / 5.1 / 5.1 min, the whole run 11.4 min (four: 17.8).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    name: e2e (shard ${{ matrix.shard }})
+    concurrency:
+      group: e2e-${{ github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: ${{ github.run_attempt == '1' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # The part pools. parts/ and img/parts/ moved to Jerrari12/gen2-parts on
+      # 2026-10-12; the tests that open GLBs read them from parts/<length>/, so
+      # the pools are checked out beside the app and linked where they used to be.
+      - uses: actions/checkout@v4
+        with:
+          repository: Jerrari12/gen2-parts
+          path: _parts
+      - name: Link the part pools where the tests read them
+        run: |
+          ln -s "$PWD/_parts/parts" parts
+          ln -s "$PWD/_parts/img/parts" img/parts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the browser-test dependencies
+        run: npm ci --no-audit --no-fund
+      # ⚠ THE BROWSER IS THE IMAGE'S OWN CHROME (2026-10-25). Every browser suite launches Google Chrome from the runner
+      # image first (channel chrome) and Playwright's Chromium only if that fails; the baseline run 40257169401 launched
+      # "channel chrome 155.0.8059.39", so `npx playwright install --with-deps chromium` - 4.78 min a job - fetched a
+      # browser nobody opened. It now runs only when the image's Chrome does not launch (tools/ci-browser.mjs), which
+      # keeps the old fallback instead of failing; either way a notice names the browser the suites got.
+      - name: Check the browser (install Playwright's Chromium only if the image's Chrome does not launch)
+        run: |
+          node tools/ci-browser.mjs || { npx playwright install --with-deps chromium && node tools/ci-browser.mjs --any; }
+      - name: End-to-end workspaces, this shard (blocks the deploy)
+        env:
+          E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          E2E_SHARD_REPORT: ${{ runner.temp }}/e2e-shard-${{ matrix.shard }}.json
+        run: bash tools/ci-named.sh e2e
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/e2e-shard-${{ matrix.shard }}.json
+          retention-days: 7
+
+  e2e-coverage:
+    # the shards together: the same case list in each, and every case run by exactly one (tools/e2e-shard-gate.mjs)
+    needs: e2e
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: e2e-shard-*
+          path: shard-reports
+      - name: Every e2e case ran in exactly one shard (blocks the deploy)
+        run: node tools/e2e-shard-gate.mjs shard-reports
+
+  deploy:
+    # main's alone, and only when EVERY test job passed: unit, browser, all the e2e shards and their coverage
+    needs: [unit, build, browser, e2e, e2e-coverage]
+    if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # ⚠ AN OLDER BUILD NEVER PUBLISHES OVER A NEWER ONE. If main has moved past this run, publish only when main's tip
+      # differs from this commit in documentation alone (the push filter's two patterns, which start no run of their
+      # own); otherwise the newer push's run is the one that tests and publishes, and this one stops here.
+      - name: Publish only the newest code
+        id: fresh
+        run: |
+          git fetch -q origin main
+          tip=$(git rev-parse FETCH_HEAD)
+          if [ "$tip" != "$GITHUB_SHA" ] && ! git diff --quiet "$GITHUB_SHA" "$tip" -- . ':(exclude,glob)docs/**' ':(exclude,glob)*.md'; then
+            echo "::notice title=deploy skipped::main is at ${tip::8}, whose served files differ from this run's ${GITHUB_SHA::8}; that push's run publishes"
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "main is at ${tip::8}; this run (${GITHUB_SHA::8}) serves the same files: publishing"
+          fi
       - id: deployment
+        if: steps.fresh.outputs.skip != '1'
         uses: actions/deploy-pages@v4
