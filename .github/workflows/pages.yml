@@ -9,7 +9,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    # ci-speedup: TEMPORARY, the CI timing work's benchmark runs (2026-10-25). A push there runs the tests only - the
+    # deploy job below is main's alone - in a concurrency group of its own, so it can never cancel a run on main.
+    branches: [main, ci-speedup]
   workflow_dispatch:
 
 permissions:
@@ -18,14 +20,11 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: ${{ github.ref == 'refs/heads/main' && 'pages' || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  test:
     # ubuntu-24.04, not ubuntu-latest: GitHub began moving ubuntu-latest to Ubuntu 26.04 on 2026-10-19 (runner-images
     # issue 14748), and on the 26.04 image this job's browser e2e step runs about twice as slow (33-35 min against 18 on
     # 24.04, the same Chrome for Testing 153 build) and dies on its waits: runs 39429860751 and 39433302069 were 26.04 and
@@ -90,29 +89,36 @@ jobs:
       # and does at high, because a flag only the next rebuild would honour saves nothing on the
       # materials a struggling device already has. Mutation-checked: dropping the rebuild from
       # applyQuality fails it.
-      - name: Smoke test the deployed routes in a browser (blocks the deploy)
+      # The browser steps, one step each (2026-10-25) so the Actions API reports what installing costs against what
+      # testing costs; until then one step held all six and its 51-68 min could not be split. A failure names itself in
+      # the run's annotations (tools/ci-named.sh, the former inline named()), and each suite's slowest cases are a notice.
+      - name: Install the browser-test dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install the browser
         run: |
-          npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-          # a failure NAMES ITSELF in the run's annotations, which the API serves without signing in (2026-10-16: three
-          # runs failed here and the log - sign-in only - could not be read): the failing tests, then their messages,
-          # with workflow-command escaping for % and carriage returns (Terra 01a146f2)
-          named() {
-            npm run "$1" 2>&1 | tee "/tmp/$1.log"; local s=${PIPESTATUS[0]}
-            if [ "$s" -ne 0 ]; then
-              # without a terminal node --test reports in TAP ("not ok N - name", "error: ..."), not the spec reporter's
-              # "✖" (f10b245's run matched nothing); and anything else ends with the log's last lines
-              { grep -E '^\s*(not ok|✖)' "/tmp/$1.log" | sort -u | head -5; grep -E "AssertionError|TimeoutError|Timeout [0-9]+ms|Error:|error: |within|expected|actual" "/tmp/$1.log" | head -5; } > "/tmp/$1.why"
-              [ -s "/tmp/$1.why" ] || tail -n 8 "/tmp/$1.log" > "/tmp/$1.why"
-              sed -e 's/%/%25/g' -e 's/\r/%0D/g' "/tmp/$1.why" | while IFS= read -r l; do echo "::error title=$1::$l"; done
-            fi
-            return "$s"
-          }
-          named smoke
-          named profile-lands
-          named relief-tier
-          # the merged planner's five workspaces, the store and the setup sheet, driven end to end (2026-10-13)
-          named e2e
+          # which browser the suites actually get: each tries the image's own Chrome first, Playwright's Chromium after
+          node -e "import('playwright').then(async ({ chromium }) => { for (const o of [{ channel: 'chrome' }, {}]) { try { const b = await chromium.launch(o); console.log('::notice title=browser::' + (o.channel ? 'channel chrome ' : 'bundled chromium ') + b.version()); await b.close(); return; } catch (e) { console.log('::notice title=browser::' + (o.channel || 'bundled') + ' failed: ' + String(e.message).split('\n')[0]); } } })"
+      - name: Smoke test the deployed routes in a browser (blocks the deploy)
+        run: bash tools/ci-named.sh smoke
+      - name: Profile lands (blocks the deploy)
+        run: bash tools/ci-named.sh profile-lands
+      - name: Relief tier (blocks the deploy)
+        run: bash tools/ci-named.sh relief-tier
+      # the merged planner's five workspaces, the store and the setup sheet, driven end to end (2026-10-13)
+      - name: End-to-end workspaces (blocks the deploy)
+        run: bash tools/ci-named.sh e2e
+
+  deploy:
+    # main's alone: a benchmark branch's push runs the tests above and stops
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
 
       # Stamp the app's own JS/CSS URLs with the commit SHA. GitHub Pages caches
       # assets for 10 minutes (max-age=600), so without this a visitor loading
