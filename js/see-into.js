@@ -53,7 +53,8 @@ export const SEE_INTO_PRESETS = Object.freeze({
   }),
 });
 
-/* THE BURIED LATTICE (trial, 2026-09-21 - Joey: "i thought we had a way to fake it with parallax?"). The lab's rounds 5-33
+/* THE BURIED LATTICE (2026-09-21, a trial until it went on by default 2026-10-26 - Joey: "i thought we had a way to fake it
+   with parallax?"). The lab's rounds 5-33
    drew the part's own infill UNDER its skin, and it never came across with the see-through (Astra had deferred the infill
    question "until buried-structure testing"). This is its SINGLE-MATERIAL form (the lab's uBacking 0): the walls and infill
    are the same filament as the skin, so they cannot show as a colour - they show as LESS of what is behind, because light
@@ -89,11 +90,17 @@ export const SEE_INTO_LATTICE = Object.freeze({ pitchMm: 6.0, lineMm: 0.45, dept
   budget: 1 / 10,      // the share of the outline atlas ONE geometry's slice stack may take
   minPx: 2.5 });       // the outline may blur down to this before the SLICES are thinned (see bakeOutline)
 
-/** `?silattice=on|flat`: the trial switch - 'on' with parallax, 'flat' the pre-parallax surface pattern for comparison.
-    Off (false) unless asked for, so the shipped look is untouched. */
+/** The buried lattice: ON BY DEFAULT since 2026-10-26 (Joey: "turn the infill lattice on by default for translucent
+    parts" - a translucent part shows its own walls and infill, as the real print does). `?silattice=off` takes it away for
+    comparison, `?silattice=flat` is the pre-parallax surface pattern; anything else is 'on', with parallax.
+    MEASURED (A5000 laptop alone on its GPU, 3200x1800 drawing buffer, Very High, the camera moving, 8 paired rounds): a
+    12-unit Essential build in translucent faceplates +0.2 ms a frame (2.7 -> 2.9 ms), a 12-unit Chevron build with face
+    and body translucent at the Chevron gain +0.9 ms (4.1 -> 5.3). It only ever runs where the see-through does: Very
+    High, a translucent pick, and a
+    build under the see-through's own fallback limit (main.js SEE_INTO_DETAIL_LIMIT), which still takes it away whole. */
 export function parseSeeIntoLattice(search) {
   const v = new URLSearchParams(search || '').get('silattice');
-  return v === 'on' || v === 'flat' ? v : false;
+  return v === 'off' ? false : v === 'flat' ? 'flat' : 'on';
 }
 
 /** The preset the URL asks for, or null. Unknown values are null: an experiment never turns on by accident. */
@@ -167,6 +174,7 @@ export const FRAG_HEAD = [
   'uniform float uSILensPx, uSILatShell;',
   'uniform float uSIActive, uSIRough, uSISee, uSIBlurPx, uSIWallOpaque, uSIGraze, uSIWrap;',
   'uniform float uSIOwn;',                       // per-material: 1 = keep this part's own colour and roughness
+  'uniform float uSILatGain;',                   // per-material: how strongly this part's buried structure reads (1 = the lab's)
   'uniform float uSIOwnSee;',                    // shared: a filament-driven part's see-through, as a multiple of the preset's
   'uniform vec3 uSIAxisM;',                      // per-material: the direction this part printed in
   'uniform vec3 uSIColor, uSITint;',
@@ -298,7 +306,7 @@ export const FRAG_SURFACE = [
   /* face-on every sample agrees; at an angle a crossed wall still reads nearly full. No face gate here any more: a wall
      looks into its perimeters too, and the outline decides whether there is any infill behind them. */
   '      gSIPath = plastic + z0 / cosT;',   // plus the skin the ray came through before the first sample
-  '      gSIDens = min( mix( occS / max( occW, 1e-4 ), occM, 0.75 ), uSILatCap );',   // never enough to close the part up
+  '      gSIDens = min( mix( occS / max( occW, 1e-4 ), occM, 0.75 ) * uSILatGain, uSILatCap );',   // never enough to close the part up
   /* THE SKIN'S OWN LINES (Joey 2026-09-22: "3d prints are made of criss crossing layers ... at or below the surface"). The
      solid skin over the infill is uSILatSkinN layers of 0.45 mm beads laid at 45 degrees, each layer turned 90 from the one
      under it. Seen through clear plastic the seams between beads read as a fine crosshatch just below the surface, the
@@ -466,6 +474,7 @@ export function createSeeInto(o) {
     uSISpecTilt: { value: SEE_INTO_LATTICE.specTilt },
     uSILatFill: { value: SEE_INTO_LATTICE.fillMm },
     uSILatCap: { value: SEE_INTO_LATTICE.densityCap },
+    uSILatGain: { value: 1 },   // the default; a patched part's own value (patch's latticeGain) overrides it
     uSIClearMm: { value: SEE_INTO_LATTICE.clearMm },
     uSILatShell: { value: SEE_INTO_LATTICE.shell },
     uSILatBead: { value: SEE_INTO_LATTICE.lineMm },
@@ -869,10 +878,14 @@ export function createSeeInto(o) {
      * translucency came from the FILAMENT the user assigned: the part then keeps its own colour and roughness and only the
      * interior is mixed in. Both are PER-MATERIAL uniforms, so a patched grip cannot move a patched cover.
      */
-    patch(material, axis, { own = false } = {}) {
+    patch(material, axis, { own = false, latticeGain = 1 } = {}) {
       const perMaterial = {
         uSIAxisM: { value: new T.Vector3(...(axis && axis.length === 3 ? axis : [0, 0, 1])).normalize() },
         uSIOwn: { value: own ? 1 : 0 },
+        /* how strongly the buried structure reads on THIS part (2026-10-26): 1 is the lab's look on every part but one - a
+           Chevron face strip, 2 mm deep over its backer, crosses far fewer walls than a 6.2 mm plate and read too faint
+           (Joey: "read a little stronger on Chevron strips"); main.js passes its gain. The cap (uSILatCap) still holds */
+        uSILatGain: { value: Number.isFinite(latticeGain) && latticeGain > 0 ? latticeGain : 1 },
       };
       material.userData.seeInto = { own: !!own, axis: perMaterial.uSIAxisM.value.toArray() };
       return patchSeeIntoMaterial(material, uniforms, T.ShaderChunk.lights_physical_pars_fragment, perMaterial);

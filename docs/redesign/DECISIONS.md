@@ -3550,3 +3550,26 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   job green. `polar-prod.mjs 16dc1a15` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed on the live planner:
   the Faceplate picker's "Polar Filament PLA · 44" group with 44 swatches, Polar Squid picked into the palette, its Buy
   line linking Polar's product page plainly (not a paid link), no page errors; its screenshot sits beside it.
+
+## 2026-10-26 · The see-into infill lattice is on by default; Chevron face strips read it twice as strong
+
+- **Asked:** Joey, 2026-10-26, after Chevron faces in Panchroma Translucent Natural showed no infill: "regardless in real
+  life you would see infill still because the faces are all transparent"; then "turn the infill lattice on by default for
+  translucent parts. Measure its frame cost first, keep the performance fallback, and look at making it read a little
+  stronger on Chevron strips."
+- **What it was:** the buried lattice (js/see-into.js, 2026-09-21: a translucent part's own perimeter walls and grid infill,
+  with parallax) ran only behind `?silattice=on`, in the old viewer and the planner alike; nothing was lost in the move.
+  Chevron strips are 2 mm deep over a 4.2 mm backer at a 14 mm pitch (vault measurements.md), about 13.75 mm wide, wide
+  enough for grid infill under the pocket rule; with the switch on they did show it, faintly.
+- **Change:** on by default; `?silattice=off` takes it away for comparison, `?silattice=flat` stays. A per-material lattice
+  gain (`uSILatGain`, default 1, the cap uSILatCap still holding); main.js gives the Chevron FACE zone 2
+  (CHEVRON_FACE_LATTICE_GAIN, by eye from 1 / 2 / 3 shots in D:\Claude - Output\lattice-default-2026-10-26); every other
+  part keeps the lab's 1. The see-through's fallback (SEE_INTO_DETAIL_LIMIT, 250 visible part meshes) is unchanged and
+  still removes the whole see-through, lattice included, on a bigger build.
+- **Measured cost** (A5000 laptop, 3200 x 1800 drawing buffer, Very High, camera moving, uncapped, the lattice uniform
+  toggled in 8 paired rounds within one page load; the toggle confirmed live by a still-frame difference on 43 % of
+  pixels), on a laptop with nothing else on the GPU (the done-scene session held off; GPU 0 % before the run): a 12-unit
+  Essential build in translucent faceplates 2.7 -> 2.9 ms a frame, paired median +0.2 ms; a 12-unit Chevron build, face
+  and body translucent, strength 2, 4.1 -> 5.3 ms, paired median +0.9 ms - inside a 120 Hz frame (8.33 ms) either way.
+  ⚠ Two earlier runs overlapped GPU work in another session (Joey caught it) and read 6-8 ms frames with a 4-8 ms spread
+  inside one arm; they are not the record. Lesson: two sessions benchmarking one GPU skew each other - say so first.

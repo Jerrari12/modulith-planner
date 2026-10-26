@@ -1789,7 +1789,7 @@ if (!ENTRY.isPart) seeInto = createSeeInto({
   /* the preset's constants drive the filament-driven components too (they keep their own colour through `own`); 'frosted'
      is the one every grip/face measurement and Joey's live check ran on */
   THREE, renderer, scene, camera, presetKey: SEE_INTO_COVERS || 'frosted',
-  lattice: parseSeeIntoLattice(location.search),   // the buried-lattice TRIAL (2026-09-21), ?silattice=on only
+  lattice: parseSeeIntoLattice(location.search),   // the buried lattice (2026-09-21), on by default since 2026-10-26; ?silattice=off for comparison
   /* A FILAMENT-DRIVEN part's see-through (Joey 2026-09-21: "maybe overall for the polymaker translucent if it could be slightly
      more see-through", and "when the texture build plate is selected it's not nearly as transparent as the real thing").
      The preset's 0.20 stays the reference cover's accepted look; a picked translucent filament now shows 0.40 of what is
@@ -3284,10 +3284,16 @@ function syncSeeIntoComponents() {
   invalidateFrame();
   return true;
 }
+/* A Chevron face strip is 2 mm deep over its 4.2 mm backer (vault measurements.md, "Chevron faceplate pattern"), so the
+   buried lattice crosses far fewer walls in it than in a 6.2 mm Essential plate and read too faint; Joey 2026-10-26: "read
+   a little stronger on Chevron strips". Every other part keeps the lab's strength (1). ⚠ An artistic value, set by eye
+   against the 2026-10-26 comparison shots, not a measurement. */
+const CHEVRON_FACE_LATTICE_GAIN = 2;
+const latticeGainFor = (key) => (key === 'Faceplate:FACE' && currentFaceplateStyle()?.key === 'chevron' ? CHEVRON_FACE_LATTICE_GAIN : 1);
 function seeIntoPatched(key, m) {
   if (!seeInto) return m;
   if (key === 'BackCover' && SEE_INTO_COVERS) seeInto.patch(m, buildAxisForKey(key));   // the reference piece: preset look, switch only
-  else if (seeIntoDrivenKey(key)) seeInto.patch(m, buildAxisForKey(key), { own: true }); // filament-driven: its own colour
+  else if (seeIntoDrivenKey(key)) seeInto.patch(m, buildAxisForKey(key), { own: true, latticeGain: latticeGainFor(key) }); // filament-driven: its own colour
   return m;
 }
 function baseMatFor(type, zone = '') { // shared material per (type, zone) — zones build lazily off the active palette
