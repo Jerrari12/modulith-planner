@@ -966,6 +966,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      shadow; on a tier with no shadow map, a contact disc under each. Made before the mugs, which then keep clear of them.
      `refreshSpools` repaints them when the build's colours change (the Colors workspace's Room stage). */
   const SPOOL_FOOT = 108;   // a spool's footprint radius, mm: its 100 mm flange and a margin
+  const SPOOL_CLEAR = ['notebook', 'calipers', 'plant'];   // the props that may leave the desk for spools, in that order
   function spoolColours() {
     const f = stage.filamentsInBuild ? stage.filamentsInBuild() : { filaments: [], unpicked: [] };
     return [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)];
@@ -981,18 +982,46 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     group.updateWorldMatrix(true, true);
     const at = (o) => new THREE.Box3().setFromObject(o);
     const own = new Set(['mug', 'mug_handle', 'coffee']);
-    const obstacles = (json.props || []).filter((p) => !own.has(p.name)).map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible).map((o) => plain(at(o)));
     const mugO = group.getObjectByName('mug');
-    if (mugO && mugO.visible) obstacles.push(plain(at(mugO)));   // the coffee's home: the mugs keep clear of the spools, not the other way round, but a spool never stands on the room's own mug
     const desk = group.getObjectByName('desk_top');
     if (!desk) return [];
-    if (buildBox && !buildBox.isEmpty()) {
-      obstacles.push({ min: { x: buildBox.min.x - 28, z: buildBox.min.z - 28 }, max: { x: buildBox.max.x + 28, z: buildBox.max.z + 28 } });
-      obstacles.push({ min: { x: buildBox.min.x - 60, z: buildBox.min.z }, max: { x: buildBox.max.x + 60, z: at(desk).max.z + 100 } });
-    }
     const deskBox = plain(at(desk)), home = mugO ? at(mugO).getCenter(new THREE.Vector3()) : { z: deskBox.max.z };
-    const spots = deskSpots(obstacles, deskBox, { radius: SPOOL_FOOT, step: 30 }).filter((p) => p.z <= home.z + 10);
-    const picks = pickSpots(spots, plan.groups.map((g) => g.spot), 2 * SPOOL_FOOT + 10);
+    const obstaclesNow = () => {
+      const out = (json.props || []).filter((p) => !own.has(p.name)).map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible).map((o) => plain(at(o)));
+      if (mugO && mugO.visible) out.push(plain(at(mugO)));   // the coffee's home: the mugs keep clear of the spools, not the other way round, but a spool never stands on the room's own mug
+      if (buildBox && !buildBox.isEmpty()) {
+        out.push({ min: { x: buildBox.min.x - 28, z: buildBox.min.z - 28 }, max: { x: buildBox.max.x + 28, z: buildBox.max.z + 28 } });
+        out.push({ min: { x: buildBox.min.x - 60, z: buildBox.min.z }, max: { x: buildBox.max.x + 60, z: deskBox.max.z + 100 } });
+      }
+      return out;
+    };
+    const plan2 = () => pickSpots(deskSpots(obstaclesNow(), deskBox, { radius: SPOOL_FOOT, step: 30 }).filter((p) => p.z <= home.z + 10), plan.groups.map((g) => g.spot), 2 * SPOOL_FOOT + 10);
+    /* MAKING ROOM (Joey 2026-10-26: "when the plan has more spool groups than fit, take the notebook (or another prop) off
+       the desk to fit them"): while groups are left out, the props come off one group at a time, the least of the room's
+       composition first (SPOOL_CLEAR: never the monitor, the desk's anchor), their shadows with them; a group cleared that
+       makes no more room goes back */
+    const fits = (pk) => pk.filter(Boolean).length;
+    const made = new Set();   // the props and masks this clearing hid, so putting back never shows one something else hid (a slide past the desk's end)
+    const groupParts = (name, back = false) => back
+      ? [...made].filter((o) => (o.userData.doneShadow ? o.userData.doneShadow.group : (o.userData.group || o.name)) === name || (json.props || []).some((x) => x.group === name && x.name === o.name))
+      : [...(json.props || []).filter((x) => x.group === name).map((x) => group.getObjectByName(x.name)).filter((o) => o && o.visible),
+        ...parts.masks.filter((m) => m.userData.doneShadow && m.userData.doneShadow.group === name && m.visible)].map((o) => (made.add(o), o));
+    /* every way of clearing them (eight: none, each, each pair, all three), the one that fits the most groups kept, and of
+       those the lightest props off the desk (the notebook, then the calipers, both before the plant) (Sol 01a17823: one spot that needs two
+       props gone gains nothing from either alone; and the seeded picks are not monotonic in the spots, so more room can
+       place fewer) */
+    const setOff = (names, off) => { for (const n of names) for (const o of groupParts(n, !off)) o.visible = !off; group.updateWorldMatrix(true, true); };
+    let picks = plan2(), cleared = [];
+    const cost = (names) => names.reduce((a, n) => a + 10 ** SPOOL_CLEAR.indexOf(n), 0);   // the plant last: the notebook and the calipers both go before it does
+    if (fits(picks) < plan.groups.length) for (let m = 1; m < 1 << SPOOL_CLEAR.length; m++) {   // all of them: the cheapest that fits the most
+      const names = SPOOL_CLEAR.filter((_, i) => m & (1 << i));
+      setOff(names, true);
+      const next = plan2();
+      setOff(names, false);
+      if (fits(next) > fits(picks) || (fits(next) === fits(picks) && cleared.length && cost(names) < cost(cleared))) { picks = next; cleared = names; }
+    }
+    setOff(cleared, true);
+    parts.spools.cleared = cleared;
     const placed = [];
     plan.groups.forEach((g, i) => {
       const p = picks[i];
@@ -1013,7 +1042,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       disc.visible = !(stage.QUALITY[stage.quality] || {}).shadow;
       scene.add(disc);
       parts.spools.groups.push(root); parts.spools.discs.push(disc);
-      placed.push({ kind: g.kind, colours: g.colours, at: p, box: plain(new THREE.Box3().setFromObject(root)) });
+      root.updateWorldMatrix(true, true);
+      placed.push({ kind: g.kind, colours: g.colours, at: p, box: plain(new THREE.Box3().setFromObject(root, true)) });   // precise: a turned cylinder's own box would overstate it by a quarter
     });
     parts.spools.placed = placed;
     return placed.map((x) => x.box);
@@ -1445,7 +1475,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       },
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
-      get spools() { const p = parts.spools; return p ? { plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible) } : null; },
+      get spools() { const p = parts.spools; return p ? { cleared: p.cleared || [], plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible) } : null; },
       refreshSpools,
       get mugs() { const p = parts.mugs; return p ? { framed: subj.mug ? (subj.mug.group ? subj.mug.group.map((g) => subj.mugs.indexOf(g)) : [subj.mugs.indexOf(subj.mug)]) : null, plan: p.plan, facts: p.facts, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },
       get subjects() { return { labels: subj.labels.map((l) => l.id), label: subj.label ? subj.label.id : null, row: subj.row }; },

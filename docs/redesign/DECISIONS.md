@@ -4019,3 +4019,14 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   defaults to the GLB; the spools render in the e2e); `setColor` not updating the stored colour (it does).
 - **Checks.** Unit 36 of 36. The spools' case, the strip-and-mugs, kits, grammar, room, prop shadows, steam and Colors
   Room cases pass. Not deployed.
+- **Room made for them** (Joey, the same day: "when the plan has more spool groups than fit, take the notebook (or
+  another prop) off the desk to fit them"; and "there will always be filaments on the desk, because filament is always used
+  in the build, at least 4 or 5 filaments more than likely, unless they only select a single color"): spools on every
+  build now, five at most, stacked two or three high where the plan can (65 %). While groups are left out, the notebook,
+  the calipers and the plant may leave the desk with their shadows (never the monitor): every way of clearing them is
+  tried (eight) and the one that fits the most groups kept, of those the lightest (the notebook and the calipers both go
+  before the plant). Every subset, because the seeded picks are not monotonic in the spots: on one kit, clearing all three
+  placed two groups where the notebook and the plant placed three. The placed spools' boxes are precise (vertex) boxes: a
+  turned cylinder's own box overstated a stack by a quarter, 262 mm for a 200 mm spool.
+- **Review, rounds 2 and 3** (Sol `01a17823`): one finding, accepted (a spot that needs two props gone gained nothing from
+  either alone: the clearing then cumulative, then every subset); round 3, no findings.

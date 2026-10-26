@@ -2815,9 +2815,11 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
   await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.spools && window.__GEN2_DONE__.sequence.on, null, { timeout: 60_000 }).catch(() => assert.fail('the room never came on'));
   const sp = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, f = v.filamentsInBuild(), bb = v.assembledBox, T = v.THREE;
-    const props = []; v.scene.getObjectByName('done-room').traverse((o) => { if (o.isMesh && o.visible && o.userData.slot) props.push(new T.Box3().setFromObject(o)); });
-    const clear = d.spools.placed.map((x) => props.every((b) => { const s = new T.Box3(new T.Vector3(x.box.min.x, x.box.min.y, x.box.min.z), new T.Vector3(x.box.max.x, x.box.max.y, x.box.max.z)); return !s.intersectsBox(b); }));
-    return { ...d.spools, hexes: [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)].map((h) => h.toLowerCase()), build: { x0: bb.min.x, x1: bb.max.x, z0: bb.min.z }, clear, shadowTier: !!(v.QUALITY[v.quality] || {}).shadow };
+    const props = []; v.scene.getObjectByName('done-room').traverse((o) => { if (o.isMesh && o.visible && o.userData.slot) props.push({ name: o.name, box: new T.Box3().setFromObject(o) }); });
+    const clear = d.spools.placed.map((x) => props.filter((pr) => new T.Box3(new T.Vector3(x.box.min.x, x.box.min.y, x.box.min.z), new T.Vector3(x.box.max.x, x.box.max.y, x.box.max.z)).intersectsBox(pr.box)).map((pr) => pr.name));
+    const room = v.scene.getObjectByName('done-room'), groupOf = (name) => { const out = []; room.traverse((o) => { if (o.userData.group === name || (o.userData.slot && o.name && (o.userData.group || o.name) === name)) out.push(o.visible); }); return out; };
+    const cleared = d.spools.cleared.map((name) => ({ name, props: groupOf(name), shadows: d.shadows.filter((q) => q.group === name).map((q) => q.visible) }));
+    return { ...d.spools, clearedState: cleared, monitor: groupOf('monitor'), hexes: [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)].map((h) => h.toLowerCase()), build: { x0: bb.min.x, x1: bb.max.x, z0: bb.min.z }, clear, shadowTier: !!(v.QUALITY[v.quality] || {}).shadow };
   });
   assert.ok(sp.plan.groups.length >= 1, `the kit's plan has spools (${JSON.stringify(sp.plan)})`);
   assert.ok(sp.placed.length >= 1, `at least one group stood (${sp.placed.length} of ${sp.plan.groups.length})`);
@@ -2826,7 +2828,13 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
     assert.ok(!(x.at.x > sp.build.x0 - 60 && x.at.x < sp.build.x1 + 60 && x.at.z > sp.build.z0), `not in front of the build (${JSON.stringify(x.at)})`);
     assert.ok(x.box.min.x > sp.build.x1 + 20 || x.box.max.x < sp.build.x0 - 20 || x.box.max.z < sp.build.z0, `clear of the build (${JSON.stringify(x.box)})`);
   }
-  assert.ok(sp.clear.every(Boolean), `clear of every prop (${JSON.stringify(sp.clear)})`);
+  assert.ok(sp.clear.every((hit) => !hit.length), `clear of every prop (${JSON.stringify(sp.clear)}, ${JSON.stringify(sp.placed.map((x) => x.box))})`);
+  // making room (Joey 2026-10-26: "take the notebook (or another prop) off the desk to fit them"): only the notebook, the
+  // calipers or the plant leave, in that order, each with its shadow, and only while a group was left out; never the monitor
+  assert.ok(sp.cleared.every((n) => ['notebook', 'calipers', 'plant'].includes(n)), `only those may leave (${JSON.stringify(sp.cleared)})`);
+  for (const c of sp.clearedState) { assert.ok(c.props.length && c.props.every((x) => !x), `${c.name} off the desk`); assert.ok(c.shadows.every((x) => !x), `${c.name}'s shadow with it`); }
+  assert.ok(sp.monitor.length && sp.monitor.every(Boolean), 'the monitor stays');
+  if (sp.cleared.length) assert.ok(sp.placed.length >= 2, `a cleared prop made room for more than one group (${sp.placed.length})`);
   assert.deepEqual(sp.discs, sp.placed.map(() => !sp.shadowTier), 'a contact disc under each on a tier with no shadow map (the suite\'s Fast)');
   // a new pick repaints them (the Colors workspace's Room stage calls this on each commit)
   const re = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__; v.setUseCustom(true); for (const e of v.keysInBuild()) if (!e.locked) v.setColor(e.key, { name: 'Test Teal', hex: '#11aa99' }); d.refreshSpools(); return { spools: d.spools.colours, build: v.filamentsInBuild().filaments.map((f) => f.hex) }; });
