@@ -332,10 +332,10 @@
  },
  "bounce": {
   "file": "wall-bounce.webp",
-  "bytes": 127432,
+  "bytes": 209008,
   "size": [
    1024,
-   952
+   1088
   ],
   "wallAlbedo": [
    0.76052,
@@ -347,7 +347,7 @@
    0.98731,
    0.98731
   ],
-  "note": "L(w) = L(w0) - (1 - w/w0) * D per channel; D = texture(file, rect) / scale; kind light: of the light on the surface, which its colour multiplies (a wall's: its light x wallShare, which its paint multiplies)",
+  "note": "L(w) = L(w0) - (1 - w/w0) * D per channel; D = texture(file, rect) / scale; kind light: of the light on the surface, which its colour multiplies (a wall's: its light x wallShare, which its paint multiplies). desk: the same in the desk's albedo over desk.albedo (a plain colour x desk.share, or the tint), its tiles desk.meshes",
   "meshes": {
    "desk_top": {
     "mesh": "desk_top",
@@ -641,7 +641,7 @@
     "mesh": "leaf_0",
     "kind": "bake",
     "rect": [
-     134,
+     662,
      786,
      64,
      64
@@ -653,7 +653,7 @@
     "mesh": "leaf_1",
     "kind": "bake",
     "rect": [
-     202,
+     730,
      786,
      64,
      64
@@ -665,7 +665,7 @@
     "mesh": "leaf_2",
     "kind": "bake",
     "rect": [
-     270,
+     798,
      786,
      64,
      64
@@ -677,7 +677,7 @@
     "mesh": "leaf_3",
     "kind": "bake",
     "rect": [
-     338,
+     866,
      786,
      64,
      64
@@ -689,7 +689,7 @@
     "mesh": "leaf_4",
     "kind": "bake",
     "rect": [
-     406,
+     934,
      786,
      64,
      64
@@ -701,8 +701,8 @@
     "mesh": "leaf_5",
     "kind": "bake",
     "rect": [
-     474,
-     786,
+     2,
+     918,
      64,
      64
     ],
@@ -713,8 +713,8 @@
     "mesh": "leaf_6",
     "kind": "bake",
     "rect": [
-     542,
-     786,
+     70,
+     918,
      64,
      64
     ],
@@ -725,8 +725,8 @@
     "mesh": "leaf_7",
     "kind": "bake",
     "rect": [
-     610,
-     786,
+     138,
+     918,
      64,
      64
     ],
@@ -737,8 +737,8 @@
     "mesh": "leaf_8",
     "kind": "bake",
     "rect": [
-     678,
-     786,
+     206,
+     918,
      64,
      64
     ],
@@ -749,8 +749,8 @@
     "mesh": "monitor_neck",
     "kind": "bake",
     "rect": [
-     746,
-     786,
+     274,
+     918,
      64,
      64
     ],
@@ -761,8 +761,8 @@
     "mesh": "mouse",
     "kind": "bake",
     "rect": [
-     814,
-     786,
+     342,
+     918,
      64,
      64
     ],
@@ -773,8 +773,8 @@
     "mesh": "mug_handle",
     "kind": "bake",
     "rect": [
-     882,
-     786,
+     410,
+     918,
      64,
      64
     ],
@@ -785,8 +785,8 @@
     "mesh": "coffee",
     "kind": "bake",
     "rect": [
-     950,
-     786,
+     614,
+     986,
      32,
      32
     ],
@@ -797,8 +797,8 @@
     "mesh": "pen",
     "kind": "bake",
     "rect": [
+     650,
      986,
-     786,
      32,
      32
     ],
@@ -809,8 +809,8 @@
     "mesh": "soil",
     "kind": "bake",
     "rect": [
-     2,
-     918,
+     686,
+     986,
      32,
      32
     ],
@@ -818,7 +818,437 @@
     "factor": 2
    }
   },
-  "readBack": 0.00534
+  "readBack": 0.00692,
+  "desk": {
+   "albedo": [
+    0.75414,
+    0.59246,
+    0.4403
+   ],
+   "share": [
+    0.96926,
+    0.96926,
+    0.96925
+   ],
+   "meshes": {
+    "floor": {
+     "mesh": "floor",
+     "kind": "bake",
+     "rect": [
+      134,
+      786,
+      128,
+      128
+     ],
+     "scale": 95.55703,
+     "factor": 8
+    },
+    "wall_back": {
+     "mesh": "wall_back",
+     "kind": "light",
+     "rect": [
+      266,
+      786,
+      128,
+      128
+     ],
+     "scale": 4.41619,
+     "factor": 8
+    },
+    "desk_top:light": {
+     "mesh": "desk_top",
+     "kind": "light",
+     "rect": [
+      398,
+      786,
+      128,
+      128
+     ],
+     "scale": 7.62782,
+     "factor": 8
+    },
+    "desk_top": {
+     "mesh": "desk_top",
+     "kind": "bake",
+     "rect": [
+      530,
+      786,
+      128,
+      128
+     ],
+     "scale": 10.12437,
+     "factor": 8
+    },
+    "cal_body": {
+     "mesh": "cal_body",
+     "kind": "bake",
+     "rect": [
+      478,
+      918,
+      64,
+      64
+     ],
+     "scale": 88.64859,
+     "factor": 8
+    },
+    "desk_leg_l": {
+     "mesh": "desk_leg_l",
+     "kind": "bake",
+     "rect": [
+      546,
+      918,
+      64,
+      64
+     ],
+     "scale": 404.40676,
+     "factor": 4
+    },
+    "frame": {
+     "mesh": "frame",
+     "kind": "bake",
+     "rect": [
+      614,
+      918,
+      64,
+      64
+     ],
+     "scale": 392.77685,
+     "factor": 4
+    },
+    "frame_print": {
+     "mesh": "frame_print",
+     "kind": "bake",
+     "rect": [
+      682,
+      918,
+      64,
+      64
+     ],
+     "scale": 34.26051,
+     "factor": 4
+    },
+    "keyboard": {
+     "mesh": "keyboard",
+     "kind": "bake",
+     "rect": [
+      750,
+      918,
+      64,
+      64
+     ],
+     "scale": 412.82565,
+     "factor": 4
+    },
+    "monitor_body": {
+     "mesh": "monitor_body",
+     "kind": "bake",
+     "rect": [
+      818,
+      918,
+      64,
+      64
+     ],
+     "scale": 370.6425,
+     "factor": 8
+    },
+    "mug": {
+     "mesh": "mug",
+     "kind": "bake",
+     "rect": [
+      886,
+      918,
+      64,
+      64
+     ],
+     "scale": 6.61794,
+     "factor": 4
+    },
+    "notebook": {
+     "mesh": "notebook",
+     "kind": "bake",
+     "rect": [
+      954,
+      918,
+      64,
+      64
+     ],
+     "scale": 3.32433,
+     "factor": 4
+    },
+    "pot": {
+     "mesh": "pot",
+     "kind": "bake",
+     "rect": [
+      2,
+      986,
+      64,
+      64
+     ],
+     "scale": 4.86052,
+     "factor": 4
+    },
+    "wall_left_a": {
+     "mesh": "wall_left_a",
+     "kind": "light",
+     "rect": [
+      70,
+      986,
+      64,
+      64
+     ],
+     "scale": 25.60142,
+     "factor": 8
+    },
+    "wall_left_b": {
+     "mesh": "wall_left_b",
+     "kind": "light",
+     "rect": [
+      138,
+      986,
+      64,
+      64
+     ],
+     "scale": 23.91055,
+     "factor": 8
+    },
+    "wall_left_c": {
+     "mesh": "wall_left_c",
+     "kind": "light",
+     "rect": [
+      206,
+      986,
+      64,
+      64
+     ],
+     "scale": 24.96777,
+     "factor": 8
+    },
+    "wall_left_d": {
+     "mesh": "wall_left_d",
+     "kind": "light",
+     "rect": [
+      274,
+      986,
+      64,
+      64
+     ],
+     "scale": 29.4874,
+     "factor": 8
+    },
+    "win_head": {
+     "mesh": "win_head",
+     "kind": "bake",
+     "rect": [
+      342,
+      986,
+      64,
+      64
+     ],
+     "scale": 22.96544,
+     "factor": 4
+    },
+    "win_jamb_a": {
+     "mesh": "win_jamb_a",
+     "kind": "bake",
+     "rect": [
+      410,
+      986,
+      64,
+      64
+     ],
+     "scale": 21.75942,
+     "factor": 4
+    },
+    "win_jamb_b": {
+     "mesh": "win_jamb_b",
+     "kind": "bake",
+     "rect": [
+      478,
+      986,
+      64,
+      64
+     ],
+     "scale": 14.09833,
+     "factor": 4
+    },
+    "win_sill": {
+     "mesh": "win_sill",
+     "kind": "bake",
+     "rect": [
+      546,
+      986,
+      64,
+      64
+     ],
+     "scale": 19.75856,
+     "factor": 4
+    },
+    "leaf_0": {
+     "mesh": "leaf_0",
+     "kind": "bake",
+     "rect": [
+      722,
+      986,
+      32,
+      32
+     ],
+     "scale": 23.66781,
+     "factor": 4
+    },
+    "leaf_1": {
+     "mesh": "leaf_1",
+     "kind": "bake",
+     "rect": [
+      758,
+      986,
+      32,
+      32
+     ],
+     "scale": 27.12452,
+     "factor": 4
+    },
+    "leaf_2": {
+     "mesh": "leaf_2",
+     "kind": "bake",
+     "rect": [
+      794,
+      986,
+      32,
+      32
+     ],
+     "scale": 28.51189,
+     "factor": 4
+    },
+    "leaf_3": {
+     "mesh": "leaf_3",
+     "kind": "bake",
+     "rect": [
+      830,
+      986,
+      32,
+      32
+     ],
+     "scale": 47.99788,
+     "factor": 4
+    },
+    "leaf_4": {
+     "mesh": "leaf_4",
+     "kind": "bake",
+     "rect": [
+      866,
+      986,
+      32,
+      32
+     ],
+     "scale": 24.83512,
+     "factor": 4
+    },
+    "leaf_5": {
+     "mesh": "leaf_5",
+     "kind": "bake",
+     "rect": [
+      902,
+      986,
+      32,
+      32
+     ],
+     "scale": 29.08307,
+     "factor": 4
+    },
+    "leaf_6": {
+     "mesh": "leaf_6",
+     "kind": "bake",
+     "rect": [
+      938,
+      986,
+      32,
+      32
+     ],
+     "scale": 23.59005,
+     "factor": 4
+    },
+    "leaf_7": {
+     "mesh": "leaf_7",
+     "kind": "bake",
+     "rect": [
+      974,
+      986,
+      32,
+      32
+     ],
+     "scale": 34.04787,
+     "factor": 4
+    },
+    "leaf_8": {
+     "mesh": "leaf_8",
+     "kind": "bake",
+     "rect": [
+      2,
+      1054,
+      32,
+      32
+     ],
+     "scale": 30.74087,
+     "factor": 4
+    },
+    "mouse": {
+     "mesh": "mouse",
+     "kind": "bake",
+     "rect": [
+      38,
+      1054,
+      32,
+      32
+     ],
+     "scale": 394.83938,
+     "factor": 4
+    },
+    "mug_handle": {
+     "mesh": "mug_handle",
+     "kind": "bake",
+     "rect": [
+      74,
+      1054,
+      32,
+      32
+     ],
+     "scale": 9.37736,
+     "factor": 4
+    },
+    "pen": {
+     "mesh": "pen",
+     "kind": "bake",
+     "rect": [
+      110,
+      1054,
+      16,
+      16
+     ],
+     "scale": 292.48498,
+     "factor": 4
+    },
+    "soil": {
+     "mesh": "soil",
+     "kind": "bake",
+     "rect": [
+      130,
+      1054,
+      16,
+      16
+     ],
+     "scale": 430.50548,
+     "factor": 4
+    }
+   },
+   "leftOut": {
+    "coffee": 0.00064,
+    "desk_leg_r": 0.00127,
+    "monitor_base": 0.00155,
+    "monitor_neck": 0.00152,
+    "monitor_screen": 0.00156
+   },
+   "minPeak": 0.002
+  }
  },
  "smoothed": {
   "meshes": [
@@ -917,6 +1347,8 @@
     12.997,
     8.358
    ]
-  }
+  },
+  "source": "e4126044aeb0e44065963f680e6c8ff18fb242050393e9810294e0a8c6c985c0",
+  "output": "6d370a6e4336309ab131dae753d97539eb334c9bc056e671bc125fc5fe1de9dc"
  }
 }

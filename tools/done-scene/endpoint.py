@@ -1,7 +1,8 @@
 """THE WALLS' BOUNCE (2026-10-25; Joey: "Yes dark wall should also darken the rest of the room"): the light the walls bounce
 onto every other surface, as one small atlas the planner blends by the visitor's wall colour.
 
-    python tools/done-scene/endpoint.py <shipped bake dir> <black-wall bake dir> --share <share bake dir> [--factor 4] [--quality 90]
+    python tools/done-scene/endpoint.py <shipped bake dir> <black-wall bake dir> --share <share bake dir> \
+        [--desk <black-desk bake dir> --desk-share <plain-desk bake dir>] [--factor 4] [--quality 90]
 
 The shipped bake has the walls in their paint (room.json colours.wall, albedo w0 per channel) and the desk top's
 light-only map (room.py --light-maps desk_top); the dark bake is the same room with near-black walls that bounce nothing
@@ -23,6 +24,17 @@ the full-resolution bake, where L(w0) already has them). Kinds of entry:
     wall_left_b, against 4 to 6 % with it (bake5, 2026-10-25). The bake reaches its 8-bit top only on faces outside the
     room, which no camera sees: the back wall's stretch past the left wall, and the left wall's outer face. No inner
     face or window reveal does (2026-10-25).
+THE DESK'S BOUNCE (--desk, --desk-share; Joey 2026-10-25, shown a plain desk leaving the room lit by the oak: "Yes, model
+the desk's own bounce next"): the same line in the DESK's albedo d, from the shipped bake (the oak, d0 = its albedo as
+baked, room.json light.desk_top.albedo: the diffuse share times the veneer's colour, the median over its texels) to a
+near-black desk (--desk, jobs/bake5-darkdesk.txt: the desk top #010101, its light-only map). A second set of tiles,
+`bounce.desk.meshes`, which the planner blends by the desk colour's weight u = d / d0 (d the plain colour times the
+desk's diffuse share, or the tint's): every mesh but the desk top as above (bake, or light over w0 for the walls), and
+the desk top twice: 'desk_top:light', the desk's own light less its light with a black desk (the light it gets back from
+the room by its own bounce), for a plain colour; 'desk_top', that times d0, for the oak's bake under a tint. The desk's
+diffuse share comes from --desk-share, a bake with a plain desk in a known colour and its light-only map
+(jobs/bake5-whiteshare.txt): its desk's baked albedo over that colour. The light that meets both the walls and the desk
+on its way is in neither line (the two bounces are blended as if independent): bake5-navywhite measures what that costs.
 Each entry is averaged over its own covered texels only and pushed out into the gutters around its islands, so a
 seam's bilinear sample never reads the empty space between islands. What is below 0 after the average is the two
 bakes' noise, dropped there and not before, where it would have been summed into the bounce. Then packed (shelves, 2 px
@@ -37,6 +49,11 @@ ap = argparse.ArgumentParser()
 ap.add_argument('shipped')
 ap.add_argument('dark')
 ap.add_argument('--share', required=True, help='a bake of the same room in the shipped paint with light-only maps of the walls (jobs/bake5-share.txt): their baked albedo over w0 is c, the share of the paint the bake draws as diffuse')
+ap.add_argument('--desk', help='the near-black-desk bake (jobs/bake5-darkdesk.txt: the desk top #010101 with its light-only map), the dark end of the DESK\'s bounce: with it the atlas gains the desk\'s tiles (bounce.desk)')
+ap.add_argument('--desk-share', help='a bake with a plain desk in a known colour and the desk\'s light-only map (jobs/bake5-whiteshare.txt): its desk\'s baked albedo over that colour is the desk\'s diffuse share')
+ap.add_argument('--desk-factor', type=int, default=8, help='the reduction of the desk\'s tiles (--desk): its bounce is smaller and smoother than the walls\', and at the walls\' factor the tiles were mostly the two bakes\' noise (the atlas tripled, 2026-10-25)')
+ap.add_argument('--desk-small-factor', type=int, default=4)
+ap.add_argument('--desk-min', type=float, default=0.002, help='a desk tile whose brightest 0.1 %% (linear) is under this is left out: a surface the desk\'s bounce does not reach keeps dk 0 in the planner')
 ap.add_argument('--factor', type=int, default=4)
 ap.add_argument('--small-factor', type=int, default=2, help='the reduction for lightmaps of --small px and under: thin islands (a window jamb, a leaf) blur into their neighbours at the factor of the big maps')
 ap.add_argument('--small', type=int, default=256)
@@ -146,17 +163,61 @@ if 'desk_top' in shipped_json.get('light', {}):
     E0 = light_map(args.dark, dark_json['light']['desk_top'])
     cover = E1.sum(axis=2) > 1e-5
     entries.append(('desk_top:light', 'desk_top', 'light', E1 - E0, cover))
+entries = [(k, m, kind, D, cov, 'wall') for k, m, kind, D, cov in entries]
+
+# THE DESK'S BOUNCE: the second set of entries, against the near-black-desk bake
+desk = None
+if bool(args.desk) != bool(args.desk_share):
+    raise SystemExit('--desk and --desk-share go together')
+if args.desk:
+    dd_json = json.load(open(os.path.join(args.desk, 'room.json'), encoding='utf-8'))
+    assert dd_json['colours']['wall'] == shipped_json['colours']['wall'], 'the dark-desk bake must have the shipped wall paint'
+    assert dd_json['colours']['desk'].startswith('#') and max(hexlin(dd_json['colours']['desk'])) < 0.002, 'the dark-desk bake must have a (near-)black plain desk: #010101'
+    ds_json = json.load(open(os.path.join(args.desk_share, 'room.json'), encoding='utf-8'))
+    assert ds_json['colours']['wall'] == shipped_json['colours']['wall'], 'the desk-share bake must have the shipped wall paint'
+    assert ds_json['colours']['desk'].startswith('#'), 'the desk-share bake must have a plain desk in a known colour'
+    cd = np.array(ds_json['light']['desk_top']['albedo']) / hexlin(ds_json['colours']['desk'])   # the desk's diffuse share, per channel
+    assert np.all((cd > 0.9) & (cd < 1.001)), 'a diffuse share of %s is no specular layer over a plain desk' % cd.tolist()
+    d0 = np.array(shipped_json['light']['desk_top']['albedo'])   # the oak as baked, the weight's unit
+    L2 = glb_textures(os.path.join(args.desk, 'room.glb'))
+    assert set(L2) == set(L1), 'the dark-desk bake must hold the same meshes'
+    for name in sorted(L1):
+        if name == 'desk_top':
+            continue
+        a, b = L1[name], L2[name]
+        assert a.shape == b.shape, name
+        cover = (a.sum(axis=2) > 1e-5) | (b.sum(axis=2) > 1e-5)
+        if name.startswith('wall_'):
+            entries.append((name, name, 'light', (a - b) / w0, cover, 'desk'))   # the wall's light times its diffuse share, less the same with a black desk
+        else:
+            entries.append((name, name, 'bake', a - b, cover, 'desk'))
+    E1 = light_map(args.shipped, shipped_json['light']['desk_top'])
+    E2 = light_map(args.desk, dd_json['light']['desk_top'])
+    cover = E1.sum(axis=2) > 1e-5
+    entries.append(('desk_top:light', 'desk_top', 'light', E1 - E2, cover, 'desk'))   # the light the desk gets back from the room by its own bounce
+    # ... and the same under the oak's colour as baked, texel by texel (its bake over its light: the veneer's grain, so a
+    # tint's correction keeps the grain's contrast; d0, the median, took too much off the dark grain and too little off
+    # the bright: Sol 01a1757b), for a tint of the oak
+    oak = L1['desk_top']
+    lit = E1.sum(axis=2) > 1e-3
+    alb = np.where(lit[:, :, None], oak / np.maximum(E1, 1e-3), d0)
+    entries.append(('desk_top', 'desk_top', 'bake', alb * (E1 - E2), cover, 'desk'))
+    desk = dict(albedo=[round(float(v), 5) for v in d0], share=[round(float(v), 5) for v in cd])
 
 # reduce, then pack on shelves (tallest first), each tile padded by its own edge values
-tiles = []
-for key, mesh, kind, D, cover in entries:
-    f = args.small_factor if D.shape[0] <= args.small else args.factor
+tiles, left_out = [], []
+for key, mesh, kind, D, cover, group in entries:
+    big, little = (args.desk_factor, args.desk_small_factor) if group == 'desk' else (args.factor, args.small_factor)
+    f = little if D.shape[0] <= args.small else big
     f = max(1, min(f, D.shape[0] // 16))   # no tile under 16 px
     small, filled, total = reduce(D, cover, f)
     small = np.maximum(small, 0.0)   # more bounce never darkens: below 0 after the average is the two bakes' noise
     peak = float(np.percentile(small, 99.9)) if small.size else 0.0
+    if group == 'desk' and peak < args.desk_min:
+        left_out.append((key, peak))
+        continue
     scale = 0.9 / peak if peak > 1e-6 else 1.0
-    tiles.append(dict(key=key, mesh=mesh, kind=kind, arr=small, scale=scale, f=f, src=D.shape[0], filled=filled, total=total))
+    tiles.append(dict(key=key, mesh=mesh, kind=kind, group=group, arr=small, scale=scale, f=f, src=D.shape[0], filled=filled, total=total))
 tiles.sort(key=lambda t: -t['arr'].shape[0])
 P, W = args.pad, args.width
 x = y = shelf = 0
@@ -181,10 +242,14 @@ err = float(np.abs(back - np.clip(atlas, 0, 1)).mean())
 shipped_json['bounce'] = dict(
     file=fname, bytes=os.path.getsize(path), size=[W, H], wallAlbedo=[round(float(v), 5) for v in w0],
     wallShare=[round(float(v), 5) for v in c],
-    note='L(w) = L(w0) - (1 - w/w0) * D per channel; D = texture(file, rect) / scale; kind light: of the light on the surface, which its colour multiplies (a wall\'s: its light x wallShare, which its paint multiplies)',
-    meshes={t['key']: dict(mesh=t['mesh'], kind=t['kind'], rect=list(t['rect']), scale=round(t['scale'], 5), factor=t['f']) for t in tiles},
+    note='L(w) = L(w0) - (1 - w/w0) * D per channel; D = texture(file, rect) / scale; kind light: of the light on the surface, which its colour multiplies (a wall\'s: its light x wallShare, which its paint multiplies). desk: the same in the desk\'s albedo over desk.albedo (a plain colour x desk.share, or the tint), its tiles desk.meshes',
+    meshes={t['key']: dict(mesh=t['mesh'], kind=t['kind'], rect=list(t['rect']), scale=round(t['scale'], 5), factor=t['f']) for t in tiles if t['group'] == 'wall'},
     readBack=round(err, 5))
+if desk:
+    shipped_json['bounce']['desk'] = dict(desk, meshes={t['key']: dict(mesh=t['mesh'], kind=t['kind'], rect=list(t['rect']), scale=round(t['scale'], 5), factor=t['f']) for t in tiles if t['group'] == 'desk'},
+                                          leftOut={k: round(p, 5) for k, p in left_out}, minPeak=args.desk_min)
 json.dump(shipped_json, open(os.path.join(args.shipped, 'room.json'), 'w', newline='\n'), indent=1)
-print('wrote %s: %dx%d, %d entries, %d bytes, read-back error %.5f' % (path, W, H, len(tiles), os.path.getsize(path), err))
+print('wrote %s: %dx%d, %d entries (%d the desk\'s; %d left out under %.4f: %s), %d bytes, read-back error %.5f' % (
+    path, W, H, len(tiles), sum(1 for t in tiles if t['group'] == 'desk'), len(left_out), args.desk_min, ', '.join(k for k, _ in left_out) or 'none', os.path.getsize(path), err))
 for t in tiles:
-    print('  %-16s %-5s %4d px / %d -> %3d px, filled %d of %d, scale %.3f' % (t['key'], t['kind'], t['src'], t['f'], t['arr'].shape[0], t['filled'], t['total'], t['scale']))
+    print('  %-4s %-16s %-5s %4d px / %d -> %3d px, filled %d of %d, scale %.3f' % (t['group'], t['key'], t['kind'], t['src'], t['f'], t['arr'].shape[0], t['filled'], t['total'], t['scale']))

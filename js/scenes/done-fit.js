@@ -244,10 +244,10 @@ export function roomAnchor(mount, box, frame = {}, anchors = {}, desk = {}) {
  *   walls bounce onto the rest of the room, and onto each other, follows the new paint too: the walls' bounce, below.
  * - The desk, a plain colour: the colour times the desk top's light-only map (room.json light.desk_top, the diffuse light
  *   with no colour, the file over its `scale`), so no oak grain shows through. A wood finish: the bake's own oak, tinted
- *   by the finish over the oak's colour as baked (light.desk_top.albedo), its grain kept. The light the DESK bounces onto
- *   the room stays the oak's: there is no dark-desk endpoint. Measured against a true re-bake with a white desk
- *   (#f2f1ec, 2026-10-25): the rest of the room 1.3 to 2.1 display levels too dark (blue 1.9 to 3.2), the desk top
- *   itself 1.6 to 2.3 too bright (Sol 01a17447: stated, not corrected).
+ *   by the finish over the oak's colour as baked (light.desk_top.albedo), its grain kept. Both times the desk's diffuse
+ *   share (room.json bounce.desk.share, the part of a plain colour the bake draws as diffuse; the coat takes the rest).
+ *   The light the DESK bounces onto the room, and back onto itself, follows its colour too: the desk's bounce, below
+ *   (before it, a white desk left the rest of the room 1.3 to 2.1 display levels too dark against a true re-bake).
  * A choice is a preset's id or a '#rrggbb' of the visitor's own. */
 export const WALL_PAINTS = [
   { id: 'white', name: 'White', hex: null },   // the bake's own paint
@@ -297,15 +297,28 @@ export function wallWeight(choice, bakedHex) {
 export function bounceK(bounceFactor, weight, scale) {
   return [0, 1, 2].map((i) => (scale > 0 ? (bounceFactor[i] * (1 - weight[i])) / scale : 0));
 }
-/* the desk top's look for a choice: which texture it draws (`bake`, its own lightmap; `light`, the light-only map) and the
-   factor on it. Null when the choice cannot be drawn: a plain colour or a tint on a bake with no light-only map. */
-export function deskLook(choice, light) {
+/* THE DESK'S BOUNCE (room.json bounce.desk, endpoint.py --desk; Joey 2026-10-25, shown a plain desk leaving the room lit
+ * by the oak: "Yes, model the desk's own bounce next"): the same line in the desk's albedo d, from the oak as baked (d0,
+ * light.desk_top.albedo: its diffuse share times the veneer's colour) to a black desk. The desk's WEIGHT is d / d0 per
+ * channel, d the plain colour times the desk's diffuse share, or the tint's; 1 for the oak. Every surface takes
+ * k = bounceFactor x (1 - weight) / scale of its desk tile off as well (bounceK), the desk top its own: the light it gets
+ * back from the room by its own bounce ('desk_top:light' for a plain colour; 'desk_top', under the oak's colour as
+ * baked, for a tint). A colour brighter than the oak gives a negative k: it adds the bounce the oak did not have.
+ *
+ * The desk top's look for a choice: which texture it draws (`bake`, its own lightmap; `light`, the light-only map), the
+ * factor on it, its weight in the desk's bounce, and for a plain colour the colour (times the share) its bounce tiles
+ * multiply. `share` is the desk's diffuse share per channel (none: 1). Null when the choice cannot be drawn: a plain
+ * colour or a tint on a bake with no light-only map. */
+export function deskLook(choice, light, share = null) {
   const preset = DESK_FINISHES.find((p) => p.id === choice) || (HEX.test(choice || '') ? { kind: 'plain', hex: choice } : null);
-  if (!preset || preset.kind === 'bake') return { use: 'bake', factor: [1, 1, 1] };
+  if (!preset || preset.kind === 'bake') return { use: 'bake', factor: [1, 1, 1], weight: [1, 1, 1] };
   const lin = hexToLinear(preset.hex);
   if (!lin || !light) return null;
-  if (preset.kind === 'tint') return Array.isArray(light.albedo) && light.albedo.every((v) => v > 0) ? { use: 'bake', factor: lin.map((v, i) => v / light.albedo[i]) } : null;
-  return light.scale > 0 ? { use: 'light', factor: lin.map((v) => v / light.scale), colour: lin } : null;
+  const c = Array.isArray(share) && share.length === 3 && share.every((v) => v > 0) ? share : [1, 1, 1];
+  const albedo = Array.isArray(light.albedo) && light.albedo.every((v) => v > 0) ? light.albedo : null;
+  const d = lin.map((v, i) => v * c[i]);   // the diffuse albedo the bake would draw this colour at
+  if (preset.kind === 'tint') return albedo ? { use: 'bake', factor: d.map((v, i) => v / albedo[i]), weight: d.map((v, i) => v / albedo[i]) } : null;
+  return light.scale > 0 ? { use: 'light', factor: d.map((v) => v / light.scale), colour: d, weight: albedo ? d.map((v, i) => v / albedo[i]) : [1, 1, 1] } : null;
 }
 /* A shot's beat: the black fades out (dipIn), the shot holds, the black fades back in (dipOut), a moment of black in which
  * the camera cuts to the next shot (blackMs). Slow on purpose: about 13 s a shot. A move's frame budget for the device's

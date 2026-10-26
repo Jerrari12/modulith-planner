@@ -1,0 +1,3 @@
+# bake5-blackdesk (2026-10-25): a REFERENCE, not shipped: bake5 with the Black preset's desk (#2a2b2d, plain), to measure
+# the planner's black desk against the truth at the dark end of the desk's bounce (a white desk is the bright end).
+--out-dir renders/bake5-blackdesk --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-hex #2a2b2d

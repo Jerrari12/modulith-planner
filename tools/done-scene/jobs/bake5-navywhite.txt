@@ -1,0 +1,4 @@
+# bake5-navywhite (2026-10-25): a REFERENCE, not shipped: bake5 with a navy wall (#3b4b5e) AND a plain white desk
+# (#f2f1ec), to measure the planner's two bounces together: the walls' and the desk's are each a straight line in their
+# own albedo, and the light that meets both (desk -> wall -> room and back) is the term the two lines leave out.
+--out-dir renders/bake5-navywhite --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --wall-hex #3b4b5e --desk-hex #f2f1ec

@@ -1,0 +1,7 @@
+# bake5-darkdesk (2026-10-25): bake5 with the desk top near-BLACK (#010101, the veneer off; Cycles bakes no light pass on
+# a pure black colour), the dark end of the DESK'S bounce (Joey, on a plain desk leaving the room lit by the oak: "Yes,
+# model the desk's own bounce next"). Not shipped as a room: tools/done-scene/endpoint.py takes its maps and bake5's and
+# writes the difference (the light the desk bounces onto every other surface, and back onto itself via the room) as
+# tiles the planner blends by the visitor's desk colour. Its light-only map of the desk gives the desk's light with no
+# desk bounce. The walls stay in the shipped paint.
+--out-dir renders/bake5-darkdesk --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3 --desk-hex #010101 --light-maps desk_top

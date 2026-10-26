@@ -3701,3 +3701,52 @@ Dated calls made while building, with who made them. The brief and the inventory
   drift strength looks right, keep it at 4.5%." (2026-10-25). 1.045 stays.
 - **Not done.** Not deployed: behind `?done=room`. A low-end device's cost is not measured: the A5000 laptop shows that
   the drift does not depend on the scene's drawing, not what a weak GPU pays to composite it.
+
+## 2026-10-25 (the Done scene: the desk's own bounce, so a recoloured desk lights the room as it would)
+
+- **The ask.** Shown that a plain desk colour left the rest of the room lit by the oak (a white desk 1.3 to 2.1 display
+  levels too dark against a true re-bake: the entry "the visitor's wall and desk colours"), Joey: "Yes, model the desk's own bounce next: a dark-desk
+  bake on node0 and its atlas tiles." (2026-10-25).
+- **The model.** The same straight line as the walls', in the desk's albedo d: a second bake with the desk top near-black
+  (bake5-darkdesk, `--desk-hex #010101 --light-maps desk_top`; Cycles bakes no light pass on #000000) gives every
+  surface's D_d = L(oak desk) - L(black desk), a second set of tiles in the same atlas (`bounce.desk.meshes`), which the
+  planner blends by the desk's WEIGHT u = d / d0: d the plain colour times the desk's diffuse share, or the tint's; d0
+  the oak as baked (room.json light.desk_top.albedo, the median of its bake over its light). The desk top takes its own
+  bounce back from the room: 'desk_top:light' (its light with the oak less its light with a black desk) under a plain
+  colour, and 'desk_top' (that times the veneer's albedo, texel by texel: Sol `01a1757b`, round 1) under a tint. A colour
+  brighter than the oak weighs more than 1 and ADDS the bounce the oak did not have (white: 1.12 / 1.43 / 1.85 in r/g/b).
+  The oak weighs 1: the bake exactly.
+- **The desk's diffuse share.** A plain desk draws colour x share x light: the share is 0.9693 (bake5-whiteshare, a plain
+  #f2f1ec desk with its light-only map: its baked albedo over the colour; the Principled BSDF's coat at spec 0.4 takes
+  3.07 %, against the walls' 1.27 % at spec 0.3). Walnut carries it too, as its weight does.
+- **The atlas.** The desk's tiles at a quarter of the walls' texels (8 x 8 blocks, 4 x 4 for maps of 256 px and under;
+  at the walls' factors they tripled the file to 412,708 bytes, mostly the two bakes' noise), and a tile whose brightest
+  0.1 % is under 0.002 linear left out (coffee, desk_leg_r, monitor_base, monitor_neck, monitor_screen: 6 KB). 1024 x 952,
+  127,432 bytes -> 1024 x 1088, 209,002 bytes; 39 + 34 tiles. Built at the walls' factors instead (398,724 bytes) every
+  statistic against the truth below agrees to 0.1 level, so the quarter stays.
+- **Measured against true re-bakes** (drawn by the planner as it draws the shipped room; 1600 x 900, High; the mean
+  signed difference in display levels, planner minus truth, hero / low / top; then the rest of the frame outside the
+  desk top; `colours/truth3/` and `colours/scripts/` in the Done scene's output folder):
+  - A #f2f1ec desk (bake5-whiteshare): the rest of the room -0.1 / -0.1 / -0.1 (before: -1.3 / -2.1 / -1.3, blue -1.9
+    to -3.2). Its top +1.7 / +0.2 / +0.1.
+  - The Black desk, #2a2b2d (bake5-blackdesk): the rest -0.1 / +0.5 / -0.1. Its top +20.5 / +24.6 / +9.1: the sheen
+    (the entry "the shadows on down the wall, smoother walls, a plain desk's sheen", 074abae), which the diffuse-only truth has not; the truth's black desk is a matte void.
+  - A navy wall AND the #f2f1ec desk (bake5-navywhite): the rest -0.7 / -1.6 / -0.0. The two bounces are blended as
+    independent lines; the light that meets both the desk and the walls is in neither. Stated as the limit; a fourth
+    bake (black walls and black desk) would give the cross term, not worth it at these magnitudes (Sol `01a1757b`).
+  - The default colours against the shipped room: 0.0 / 0.0 / 0.0.
+- **Cost.** +82 KB (the atlas); the room.json +6 KB. The entry over a throttled line (80 ms, 10 Mbit/s; 4 runs each,
+  the same worktree, one after the other): 1678 ms with the walls' atlas alone, 1895 ms with the desk's tiles in it.
+- **Review.** Sol `01a1757b`. Round 1: one finding, held: the tint tile under the oak used the median albedo, which
+  took too much off the dark grain and too little off the bright where the desk gets light back; the tile carries the veneer's albedo
+  texel by texel now. From its answers: a frame check that bounds the desk term's magnitude (a doubled term passed every
+  uniform check and the direction), and the factor-4 against factor-8 comparison. Round 2: no findings; the comment that recorded the
+  median's error had its direction reversed, corrected.
+- **Checks.** The colours case passes with its new bounds (22 s). Desk mutants against it: D2 to D7 and D9 killed,
+  each at its own assertion; D8 (dk not multiplied by the material's base) equivalent on this room, every baked
+  material's emissive factor being white, as the wall set's k. The whole e2e suite 95 of 95. npm test 656: 650 pass, 5
+  skipped, 1 fail in test/adhesive-foot.test.mjs (parts/skin/Tabletop-Kit-Foot.lib.glb missing: another session's
+  untracked gen2-parts/parts/skin/ folder reads as a parts pool, the failure the 18:30 entry records; it fails on the
+  done-scene worktree the same way, 2026-10-25).
+- **Not deployed:** the branch is desk-bounce from done-scene 91c39f8 (the done-scene worktree held another session's
+  uncommitted work in the same files), behind `?done=room`.

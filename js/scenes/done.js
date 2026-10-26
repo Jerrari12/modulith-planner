@@ -88,18 +88,22 @@ function loadBounce(json) {
     .then((t) => { t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; return { ...json.bounce, tex: t }; })
     .catch((e) => { console.warn('[done scene] the walls\' bounce', json.bounce.file, e); return null; });
 }
-/* a room material that draws its bake less a share of the walls' bounce: diffuse = colour x map - k x bounce(rect), never
-   below black; `rect` and `k` live in userData.bounce, so paintRoom moves them (the desk's rect follows its map) */
+/* a room material that draws its bake less a share of the walls' bounce and a share of the desk's (bounce.desk, the
+   second set of tiles in the same atlas, 2026-10-25): diffuse = colour x map - k x bounce(rect) - dk x bounce(drect),
+   never below black; the rects and the shares live in userData.bounce, and paintRoom sets them all (the desk's rects
+   follow its map; a room with no desk tiles leaves dk at 0). */
 function addBounce(m, bounce, rect) {
   const s = bounce.size;
   const toUv = (r) => new THREE.Vector4(r[0] / s[0], r[1] / s[1], r[2] / s[0], r[3] / s[1]);
-  m.userData.bounce = { k: new THREE.Vector3(), rect: toUv(rect), toUv };
+  m.userData.bounce = { k: new THREE.Vector3(), rect: toUv(rect), dk: new THREE.Vector3(), drect: toUv(rect), toUv };
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uBounce = { value: bounce.tex };
     sh.uniforms.uBounceK = { value: m.userData.bounce.k };
     sh.uniforms.uBounceRect = { value: m.userData.bounce.rect };
-    sh.fragmentShader = 'uniform sampler2D uBounce;\nuniform vec3 uBounceK;\nuniform vec4 uBounceRect;\n' + sh.fragmentShader.replace('#include <map_fragment>',
-      '#include <map_fragment>\n\tdiffuseColor.rgb = max(diffuseColor.rgb - uBounceK * texture2D(uBounce, uBounceRect.xy + vMapUv * uBounceRect.zw).rgb, 0.0);');
+    sh.uniforms.uDeskK = { value: m.userData.bounce.dk };
+    sh.uniforms.uDeskRect = { value: m.userData.bounce.drect };
+    sh.fragmentShader = 'uniform sampler2D uBounce;\nuniform vec3 uBounceK;\nuniform vec4 uBounceRect;\nuniform vec3 uDeskK;\nuniform vec4 uDeskRect;\n' + sh.fragmentShader.replace('#include <map_fragment>',
+      '#include <map_fragment>\n\tdiffuseColor.rgb = max(diffuseColor.rgb - uBounceK * texture2D(uBounce, uBounceRect.xy + vMapUv * uBounceRect.zw).rgb - uDeskK * texture2D(uBounce, uDeskRect.xy + vMapUv * uDeskRect.zw).rgb, 0.0);');
   };
   m.customProgramCacheKey = () => 'done-bounce';
   m.needsUpdate = true;
@@ -597,8 +601,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      from its baked base (userData doneBase / doneMap, unlit). The walls take the new paint over the baked one; the desk
      top a tint of its oak or, for a plain colour, the colour over its light-only map; and every surface with a tile in the
      walls' bounce loses the share of it the new paint does not bounce (k, per channel: Joey, "dark wall should also darken
-     the rest of the room"). The desk's own bounce onto the room stays the oak's (done-fit.js, the measured limit). A
-     choice the bake cannot draw (no light-only map, a bad value) keeps the bake's own look. */
+     the rest of the room"), and the share of the DESK's bounce the new desk colour does not give (dk, by the desk's
+     weight over the oak as baked: bounce.desk, 2026-10-25; a colour brighter than the oak adds what the oak did not
+     bounce). A choice the bake cannot draw (no light-only map, a bad value) keeps the bake's own look. */
   function paintRoom(c) {
     const g = parts.group;
     if (!g || !json) return;
@@ -606,16 +611,28 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const wf = wallFactor(c.wall, baked), weight = wallWeight(c.wall, baked);
     const rho0 = hexToLinear(baked) || [1, 1, 1], rho = weight.map((v, i) => v * rho0[i]);   // the new paint, linear
     const lt = roomLight.desk_top && roomLight.desk_top.tex ? roomLight.desk_top : null;
-    const dl = deskLook(c.desk, lt) || deskLook('oak');
+    const deskSet = roomBounce && roomBounce.desk && roomBounce.desk.meshes ? roomBounce.desk : null;
+    const dl = deskLook(c.desk, lt, deskSet ? deskSet.share : null) || deskLook('oak');
+    const dw = dl.weight;   // the desk's weight: its diffuse albedo over the oak's as baked, 1 for the oak
     const tile = (key) => roomBounce && roomBounce.meshes[key];
-    const set = (m, colour, bounceFactor, key) => {
+    const dtile = (key) => deskSet && deskSet.meshes[key];
+    const base = (m) => new THREE.Vector3(m.userData.doneBase.r, m.userData.doneBase.g, m.userData.doneBase.b);
+    const set = (m, colour, bounceFactor, key, deskFactor = bounceFactor) => {
       m.color.copy(m.userData.doneBase).multiply(new THREE.Color(colour[0], colour[1], colour[2]));
-      const b = m.userData.bounce, rec = tile(key);
+      const b = m.userData.bounce, rec = tile(key), drec = dtile(key);
       if (!b) return;
-      if (!rec) { b.k.set(0, 0, 0); return; }
-      const k = bounceK(bounceFactor, weight, rec.scale);
-      b.k.set(k[0], k[1], k[2]).multiply(new THREE.Vector3(m.userData.doneBase.r, m.userData.doneBase.g, m.userData.doneBase.b));
-      b.rect.copy(b.toUv(rec.rect));
+      if (!rec) b.k.set(0, 0, 0);
+      else {
+        const k = bounceK(bounceFactor, weight, rec.scale);
+        b.k.set(k[0], k[1], k[2]).multiply(base(m));
+        b.rect.copy(b.toUv(rec.rect));
+      }
+      if (!drec) b.dk.set(0, 0, 0);
+      else {
+        const dk = bounceK(deskFactor, dw, drec.scale);
+        b.dk.set(dk[0], dk[1], dk[2]).multiply(base(m));
+        b.drect.copy(b.toUv(drec.rect));
+      }
     };
     g.traverse((o) => {
       if (!o.isMesh) return;
@@ -641,6 +658,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     });
     colours.wall = wf ? c.wall : 'white';
     colours.desk = dl.use === 'light' || dl.factor.some((v) => v !== 1) ? c.desk : 'oak';
+    colours.deskWeight = dw;
   }
   /* the room as the build's environment, captured from the build's centre; again after a colour change, so the build's
      reflections and its light from the room follow the new wall and desk */
@@ -835,7 +853,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // the room, scaled to millimetres, its anchor on the build's back-centre at desk height
     const group = gltf.scene.clone(true);
     parts.mats = unlit(group);
-    // every baked mesh with a tile in the walls' bounce draws its bake less its share (paintRoom sets the share)
+    // every baked mesh with a tile in the walls' bounce draws its bake less its share, and less its share of the desk's
+    // where the room has those tiles (paintRoom sets the shares and the desk tile's rect)
     if (roomBounce) group.traverse((o) => {
       const rec = o.isMesh && roomBounce.meshes[o.name];
       if (!rec) return;
@@ -994,14 +1013,18 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       get colours() {
         const g = parts.group, first = (n) => { const o = g && g.getObjectByName(n); return o ? [].concat(o.material)[0] : null; }, w = first('wall_back'), t = first('desk_top');
         const lt = roomLight.desk_top && roomLight.desk_top.tex;
-        const k = (m) => (m && m.userData.bounce ? m.userData.bounce.k.toArray() : null);
+        const k = (m) => (m && m.userData.bounce ? m.userData.bounce.k.toArray() : null), dk = (m) => (m && m.userData.bounce ? m.userData.bounce.dk.toArray() : null);
         return { wall: colours.wall, desk: colours.desk, envs: colours.envs, env: parts.env ? parts.env.uuid : null, wallColor: w && w.color.toArray(), wallBase: w && w.userData.doneBase.toArray(),
           wallMap: w ? (w.map === w.userData.doneMap ? 'bake' : 'other') : null,
           deskColor: t && t.color.toArray(), deskBase: t && t.userData.doneBase.toArray(), deskMap: t ? (lt && t.map === lt ? 'light' : t.map === t.userData.doneMap ? 'bake' : 'other') : null, plainDesk: !!lt,
           // the desk's sheen (addSheen): on for a plain colour, its environment the one captured last
           deskSheen: t && t.userData.sheen ? { on: t.userData.sheen.on.value, rough: t.userData.sheen.rough.value, env: !!t.envMap, current: !!t.envMap && t.envMap === parts.env } : null,
           // the walls' bounce each surface loses (its k, per channel), and the atlas rect it reads, off the materials
-          bounce: roomBounce ? { wall: k(w), desk: k(t), floor: k(first('floor')), deskRect: t && t.userData.bounce ? t.userData.bounce.rect.toArray() : null } : null };
+          bounce: roomBounce ? { wall: k(w), desk: k(t), floor: k(first('floor')), deskRect: t && t.userData.bounce ? t.userData.bounce.rect.toArray() : null } : null,
+          // and the desk's bounce each loses (its dk; negative where the new desk colour adds light the oak did not), its
+          // rect, the desk's weight and the room's record of the desk's albedo as baked and its diffuse share
+          deskBounce: roomBounce && roomBounce.desk ? { wall: dk(w), desk: dk(t), floor: dk(first('floor')), deskRect: t && t.userData.bounce ? t.userData.bounce.drect.toArray() : null,
+            weight: colours.deskWeight || null, albedo: roomBounce.desk.albedo, share: roomBounce.desk.share } : null };
       },
       // the still shot's drift (driftStart): its plan, its animation's state, and the canvas's transform as the page has it
       get drift() {

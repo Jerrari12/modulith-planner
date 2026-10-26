@@ -1,0 +1,6 @@
+# bake5-whiteshare (2026-10-25): bake5 with a plain white desk top (#f2f1ec, the veneer off) AND the desk's light-only
+# map. Not shipped: tools/done-scene/endpoint.py reads its desk's baked albedo (room.json light.desk_top.albedo, the
+# median of bake over light) over #f2f1ec as the desk's diffuse share, the share of a plain desk colour the bake draws
+# as diffuse (the Principled BSDF's specular layer, spec 0.4, takes the rest), as bake5-share gave the walls'. It is
+# also a second white-desk truth beside bake5-white.
+--out-dir renders/bake5-whiteshare --mode bake --name room --exposure 0.15686 --bake-samples 192 --mask-px 2 --mask-samples 1024 --mask-quality 90 --props full --palette neutral --soft-light 500 --sun-el 35 --sun-strength 0.12 --sun-size 2.0 --cam-az 28 --cam-el 20 --lens 45 --fill 0.5 --desk-wood --desk-contrast 0.6 --desk-bump 0.3 --desk-hex #f2f1ec --light-maps desk_top

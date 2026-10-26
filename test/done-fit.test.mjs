@@ -456,8 +456,8 @@ test('room colours: a surface loses (1 - weight) of its bounce, scaled by what m
 });
 
 test('room colours: the desk is its oak, a tint of it over its baked albedo, or a plain colour over its light-only map', () => {
-  assert.deepEqual(deskLook('oak', DESK_LIGHT), { use: 'bake', factor: [1, 1, 1] });
-  assert.deepEqual(deskLook(undefined, DESK_LIGHT), { use: 'bake', factor: [1, 1, 1] }, 'no choice: the oak');
+  assert.deepEqual(deskLook('oak', DESK_LIGHT), { use: 'bake', factor: [1, 1, 1], weight: [1, 1, 1] });
+  assert.deepEqual(deskLook(undefined, DESK_LIGHT), { use: 'bake', factor: [1, 1, 1], weight: [1, 1, 1] }, 'no choice: the oak');
   const walnut = deskLook('walnut', DESK_LIGHT), wl = hexToLinear('#6b4a35');
   assert.equal(walnut.use, 'bake');
   for (let i = 0; i < 3; i++) close(walnut.factor[i], wl[i] / DESK_LIGHT.albedo[i], 1e-12, 'walnut over the oak as baked');
@@ -467,6 +467,29 @@ test('room colours: the desk is its oak, a tint of it over its baked albedo, or 
   assert.deepEqual(deskLook('#336699', DESK_LIGHT).colour, hexToLinear('#336699'), 'a hex of the visitor\'s own is a plain colour');
   assert.equal(deskLook('white', null), null, 'no light-only map: no plain colour');
   assert.equal(deskLook('walnut', { scale: 1 }), null, 'no baked albedo: no tint');
+});
+
+/* THE DESK'S BOUNCE (2026-10-25): the desk's weight in it is its diffuse albedo over the oak's as baked, the diffuse share
+   on both a plain colour and a tint, 1 for the oak; a colour brighter than the oak weighs more than 1 (it adds bounce) */
+test('room colours: the desk\'s weight in its own bounce, its diffuse share on a plain colour and a tint', () => {
+  const share = [0.98, 0.97, 0.96];
+  assert.deepEqual(deskLook('oak', DESK_LIGHT, share).weight, [1, 1, 1], 'the oak weighs 1: the bake');
+  const white = deskLook('white', DESK_LIGHT, share), wh = hexToLinear('#f0efea');
+  for (let i = 0; i < 3; i++) {
+    close(white.factor[i], wh[i] * share[i] / DESK_LIGHT.scale, 1e-12, 'a plain colour draws its diffuse share over the light');
+    close(white.colour[i], wh[i] * share[i], 1e-12, 'and its bounce tiles multiply that');
+    close(white.weight[i], wh[i] * share[i] / DESK_LIGHT.albedo[i], 1e-12, 'its weight: that over the oak as baked');
+  }
+  assert.ok(white.weight.every((v) => v > 1), 'white weighs more than the oak: it adds bounce');
+  assert.ok(white.weight[2] > white.weight[0], 'most in blue, where the oak is darkest');
+  const black = deskLook('black', DESK_LIGHT, share);
+  assert.ok(black.weight.every((v) => v > 0 && v < 0.1), `black weighs almost nothing (${black.weight})`);
+  const walnut = deskLook('walnut', DESK_LIGHT, share), wl = hexToLinear('#6b4a35');
+  for (let i = 0; i < 3; i++) { close(walnut.factor[i], wl[i] * share[i] / DESK_LIGHT.albedo[i], 1e-12, 'the tint carries the share'); close(walnut.weight[i], walnut.factor[i], 1e-12, 'and weighs what it tints'); }
+  assert.deepEqual(deskLook('white', DESK_LIGHT, null).weight, deskLook('white', DESK_LIGHT, [1, 1, 1]).weight, 'no share: 1');
+  assert.deepEqual(deskLook('white', { scale: 0.9 }, share).weight, [1, 1, 1], 'no baked albedo: no weight to blend by');
+  for (let i = 0; i < 3; i++) close(bounceK(white.colour, white.weight, 2)[i], white.colour[i] * (1 - white.weight[i]) / 2, 1e-12, 'its share of a tile, negative: added');
+  assert.ok(bounceK(white.colour, white.weight, 2).every((v) => v < 0));
 });
 
 test('the coffee\'s steam: it rises with the camera\'s moves on Very High, at the tier\'s frame rate on High and Balanced, not at all on Fast or with reduced motion; its column sized off the mug', () => {

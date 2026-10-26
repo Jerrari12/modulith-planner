@@ -2172,13 +2172,15 @@ test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark
     window.__diff = (a, b) => { let darker = 0, lighter = 0, sum = 0; for (let i = 0; i < a.length; i += 4) { const d = (b[i] + b[i + 1] + b[i + 2]) - (a[i] + a[i + 1] + a[i + 2]); sum += d; if (d > 24) lighter++; else if (d < -24) darker++; } return { darker, lighter, mean: +(sum / (a.length / 4) / 3).toFixed(3), px: a.length / 4 }; };
     // every room material's share of the walls' bounce, off (kept) and back
     window.__bounceOff = (off) => v.scene.getObjectByName('done-room').traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { const b = m.userData.bounce; if (!b) continue; if (off) { b.saved = b.k.clone(); b.k.set(0, 0, 0); } else if (b.saved) { b.k.copy(b.saved); delete b.saved; } } });
+    // ... and of the desk's bounce (its second set of tiles), the same way
+    window.__deskOff = (off) => v.scene.getObjectByName('done-room').traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { const b = m.userData.bounce; if (!b) continue; if (off) { b.dsaved = b.dk.clone(); b.dk.set(0, 0, 0); } else if (b.dsaved) { b.dk.copy(b.dsaved); delete b.dsaved; } } });
     // the coffee's steam keeps rising on High: out of these frames, which compare colours (its own case reads it)
     for (const n of ['done-steam', 'done-steam-mist']) { const o = v.scene.getObjectByName(n); if (o) o.visible = false; }
   });
   // THE BAKE'S OWN COLOURS draw the bake itself: every surface its own lightmap at its baked colour, no bounce taken off
   const def = await page.evaluate(async () => {
     const out = { read: window.__GEN2_DONE__.colours, saved: localStorage.getItem('gen2-room-colours'), off: [] };
-    window.__GEN2_VIEWER__.scene.getObjectByName('done-room').traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { if (!m.userData.doneBase) continue; if (m.map !== m.userData.doneMap || !m.color.equals(m.userData.doneBase) || (m.userData.bounce && m.userData.bounce.k.lengthSq() > 0)) out.off.push(o.name); } });
+    window.__GEN2_VIEWER__.scene.getObjectByName('done-room').traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { if (!m.userData.doneBase) continue; if (m.map !== m.userData.doneMap || !m.color.equals(m.userData.doneBase) || (m.userData.bounce && (m.userData.bounce.k.lengthSq() > 0 || m.userData.bounce.dk.lengthSq() > 0))) out.off.push(o.name); } });
     window.__white = await window.__frame();
     return out;
   });
@@ -2227,20 +2229,51 @@ test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark
   // oak (Sol 01a17447: no check here could tell a Walnut drawn as the oak)
   await page.locator('#ws-scene-colours button[aria-label="Desk: Walnut"]').click();
   await settle(page, 600);
-  const walnut = await page.evaluate(async () => { const read = window.__GEN2_DONE__.colours; const lit = await window.__frame(); return { read, diff: window.__diff(window.__navy, lit) }; });
+  const walnut = await page.evaluate(async () => {
+    const read = window.__GEN2_DONE__.colours;
+    const lit = await window.__frame();
+    window.__deskOff(true); const flat = await window.__frame(); window.__deskOff(false);
+    return { read, diff: window.__diff(window.__navy, lit), bounce: window.__diff(flat, lit) };
+  });
   assert.deepEqual([walnut.read.desk, walnut.read.deskMap], ['walnut', 'bake'], 'walnut: the oak\'s own bake');
-  const tint = lin('#6b4a35').map((v, i) => v / rec.light.desk_top.albedo[i]);
-  for (let i = 0; i < 3; i++) near(walnut.read.deskColor[i], walnut.read.deskBase[i] * tint[i], 1e-6, `the oak tinted to walnut (${'rgb'[i]})`);
+  /* THE DESK'S BOUNCE (bounce.desk, 2026-10-25): a tint and a plain colour both carry the desk's diffuse share, and weigh
+     their diffuse albedo over the oak's as baked; walnut, darker than the oak, takes the share of the desk's bounce it
+     does not give off the floor and the walls (dk > 0, the frame darker with it), white adds what the oak did not */
+  const dshare = rec.bounce.desk.share, dalb = rec.bounce.desk.albedo;
+  const tint = lin('#6b4a35').map((v, i) => v * dshare[i] / dalb[i]);
+  for (let i = 0; i < 3; i++) {
+    near(walnut.read.deskColor[i], walnut.read.deskBase[i] * tint[i], 1e-6, `the oak tinted to walnut, the share in it (${'rgb'[i]})`);
+    near(walnut.read.deskBounce.weight[i], tint[i], 1e-9, `walnut weighs what it tints (${'rgb'[i]})`);
+    near(walnut.read.deskBounce.floor[i], (1 - tint[i]) / rec.bounce.desk.meshes.floor.scale, 1e-6, `the floor's share of the desk's bounce (${'rgb'[i]})`);
+    near(walnut.read.deskBounce.wall[i], rho[i] * (1 - tint[i]) / rec.bounce.desk.meshes.wall_back.scale, 1e-6, `the wall's, its paint's (${'rgb'[i]})`);
+  }
   assert.ok(walnut.diff.darker > walnut.diff.px * 0.02 && walnut.diff.lighter * 10 < walnut.diff.darker, `the desk goes walnut, darker than the oak (${JSON.stringify(walnut.diff)})`);
-  // A WHITE DESK: drawn from its light-only map, its bounce tile the light's
+  assert.ok(walnut.bounce.darker > walnut.bounce.px * 0.005 && walnut.bounce.lighter * 10 < walnut.bounce.darker, `and the room loses the oak's bounce in the frame (${JSON.stringify(walnut.bounce)})`);
+  // ... by about the measured amount (the frame's mean -1.93 levels at 1280 x 720, 2026-10-25; a doubled desk term would
+  // pass every uniform check and the direction: Sol 01a1757b): half to one and a half times it
+  assert.ok(walnut.bounce.mean < -0.96 && walnut.bounce.mean > -2.9, `and by about the measured amount (${JSON.stringify(walnut.bounce)})`);
+  // A WHITE DESK: drawn from its light-only map, its bounce tiles the light's; brighter than the oak, it adds bounce
   await page.locator('#ws-scene-colours button[aria-label="Desk: White"]').click();
   await settle(page, 600);
-  const desk = await page.evaluate(async () => { const read = window.__GEN2_DONE__.colours; const lit = await window.__frame(); return { read, diff: window.__diff(window.__navy, lit) }; });
+  const desk = await page.evaluate(async () => {
+    const read = window.__GEN2_DONE__.colours;
+    const lit = await window.__frame();
+    window.__deskOff(true); const flat = await window.__frame(); window.__deskOff(false);
+    return { read, diff: window.__diff(window.__navy, lit), bounce: window.__diff(flat, lit) };
+  });
   assert.deepEqual([desk.read.desk, desk.read.deskMap], ['white', 'light'], 'the desk from its light-only map');
   assert.notDeepEqual(desk.read.bounce.deskRect, navy.read.bounce.deskRect, 'its bounce tile the light\'s, not the oak\'s');
-  const white = lin('#f0efea');
-  for (let i = 0; i < 3; i++) near(desk.read.bounce.desk[i], white[i] * (1 - wgt[i]) / rec.bounce.meshes['desk_top:light'].scale, 1e-6, `the white desk's share, its colour's (${'rgb'[i]})`);
+  assert.notDeepEqual(desk.read.deskBounce.deskRect, walnut.read.deskBounce.deskRect, 'and its desk tile the light\'s too');
+  const white = lin('#f0efea').map((v, i) => v * dshare[i]), uw = white.map((v, i) => v / dalb[i]);
+  for (let i = 0; i < 3; i++) {
+    near(desk.read.bounce.desk[i], white[i] * (1 - wgt[i]) / rec.bounce.meshes['desk_top:light'].scale, 1e-6, `the white desk's share of the walls' bounce, its diffuse colour's (${'rgb'[i]})`);
+    near(desk.read.deskBounce.desk[i], white[i] * (1 - uw[i]) / rec.bounce.desk.meshes['desk_top:light'].scale, 1e-6, `and of its own (${'rgb'[i]})`);
+    near(desk.read.deskBounce.floor[i], (1 - uw[i]) / rec.bounce.desk.meshes.floor.scale, 1e-6, `the floor gains the desk's bounce (${'rgb'[i]})`);
+  }
+  assert.ok(uw.every((v) => v > 1) && desk.read.deskBounce.floor.every((v) => v < 0) && desk.read.deskBounce.wall.every((v) => v < 0), `white weighs more than the oak, so the room gains (${JSON.stringify(desk.read.deskBounce)})`);
   assert.ok(desk.diff.lighter > desk.diff.px * 0.05, `the desk goes white (${JSON.stringify(desk.diff)})`);
+  // (a gain of a few levels across the wall and the floor: read as the frame's mean, which the 24-level count misses)
+  assert.ok(desk.bounce.mean > 0.65 && desk.bounce.mean < 1.95 && desk.bounce.darker * 10 <= desk.bounce.lighter, `and the room is lighter for it in the frame, by about the measured amount (+1.30 at 1280 x 720) (${JSON.stringify(desk.bounce)})`);
   // THE VISITOR'S OWN COLOUR, then navy again
   await page.locator('#ws-scene-colours label.own input').first().fill('#336699');
   await settle(page, 400);
