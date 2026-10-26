@@ -1090,6 +1090,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      room has no ceiling), and a sky-coloured lid closes the space above the opening, so a look up through the window ends
      in sky, not the void. Unlit like the room's bakes, out of the shadows, the AO (ghosts) and every ray; a pale sky until
      the photo loads. */
+  const OUTSIDE_FAR = 40000;   // mm, the camera's far plane while the room is on (the outside's farthest grazing look)
   const OUTSIDE = { file: 'scenes/home-office/outside.webp', out: 1500, px: [2022, 1624], mmPerPx: 2.8, ground: 0.367, eye: 1550, W: 24000, sky: 0x89a8d2 };   // W: a grazing look along the wall, through the frame, still lands on it (9 m did not)
   function makeOutside(group) {
     const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
@@ -1105,11 +1106,23 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const at = c.clone(); at[axis] += out * OUTSIDE.out; at.y = (topY + bottomY) / 2;
     plane.position.copy(at);
     plane.lookAt(at.x - (axis === 'x' ? out : 0), at.y, at.z - (axis === 'z' ? out : 0));   // facing back into the room
-    // the lid: from the wall's outer face to the backdrop, at the backdrop's top, facing down
-    const depth = OUTSIDE.out - size[axis] / 2, lid = ghost(new THREE.Mesh(new THREE.PlaneGeometry(axis === 'x' ? depth : OUTSIDE.W, axis === 'x' ? OUTSIDE.W : depth).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false })), 'done-outside-lid');
-    const lidAt = c.clone(); lidAt[axis] += out * (size[axis] / 2 + depth / 2); lidAt.y = topY;
+    /* the lid: at the backdrop's top, facing down, from the window's middle (inside the wall's thickness, where the wall
+       hides it from the room) to the backdrop. Not from the frame's outer edge: the frame stands 50 mm proud of the wall,
+       and a steep look past the far jamb rose through that gap into the void (a dark sliver by the jamb) */
+    const depth = OUTSIDE.out, lid = ghost(new THREE.Mesh(new THREE.PlaneGeometry(axis === 'x' ? depth : OUTSIDE.W, axis === 'x' ? OUTSIDE.W : depth).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false })), 'done-outside-lid');
+    const lidAt = c.clone(); lidAt[axis] += out * (depth / 2); lidAt.y = topY;
     lid.position.copy(lidAt);
-    parts.outside = [plane, lid];
+    /* and its two ends closed, the photo on them too: a look along the wall, skimming the far jamb, travels further along
+       than the backdrop is long before it gets out to it (a sliver of the void by the jamb, 24 m was not enough) */
+    const along = axis === 'x' ? 'z' : 'x', ends = [-1, 1].map((side) => {
+      const endMat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false });
+      const end = ghost(new THREE.Mesh(new THREE.PlaneGeometry(OUTSIDE.out, H), endMat), 'done-outside-end');
+      const e = c.clone(); e[along] += side * OUTSIDE.W / 2; e[axis] += out * OUTSIDE.out / 2; e.y = (topY + bottomY) / 2;
+      end.position.copy(e);
+      const look = e.clone(); look[along] -= side; end.lookAt(look);   // facing back along the wall, toward the window
+      return end;
+    });
+    parts.outside = [plane, lid, ...ends];
     /* what of the room runs on past the window's wall (the back wall's end, 1.4 m of it, the floor) is cut off there, so
        the garden is not seen with a wall standing in it: a clipping plane on the outer face of the window's own wall */
     const own = [];
@@ -1136,6 +1149,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       tex.repeat.set(OUTSIDE.W / tileW, H / tileH);
       tex.offset.set(0.5 - OUTSIDE.W / tileW / 2, (bottomY - tileBottom) / tileH);   // a tile centred on the window, its lawn line at eye height
       mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
+      for (const end of ends) {   // the ends: the same photo at the same scale and height, a backdrop's depth of it
+        const t = tex.clone();
+        t.repeat.set(OUTSIDE.out / tileW, H / tileH); t.offset.set(0, tex.offset.y); t.needsUpdate = true;
+        end.material.map = t; end.material.color.set(0xffffff); end.material.needsUpdate = true;
+      }
       stage.invalidateFrame();
     }, undefined, () => {});   // no photo: the pale sky stays
   }
@@ -1463,6 +1481,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     group.updateMatrixWorld(true);
     interior = roomInterior(group);   // the walls do not slide: the shots' clamp is fixed from here
     makeOutside(group);
+    /* the camera sees as far as the view out of the window lies: a look along the wall skims the far jamb and meets the
+       backdrop 8 m off and more, past the stage's own far plane (main.js: 8000 mm), where it showed the clear colour (the
+       dark sliver by the jamb). Depth precision is set by the near plane (1 mm), not the far one, so nothing near loses */
+    parts.farWas = camera.far;
+    if (parts.outside && camera.far < OUTSIDE_FAR) { camera.far = OUTSIDE_FAR; camera.updateProjectionMatrix(); }
     // props slide clear of the build along their slots, by group; a group that cannot clear it INSIDE the desk's extent
     // hides rather than hanging past the edge (a build wider than the desk's free run: done-fit.js fitSlides)
     const props = [];
@@ -1747,6 +1770,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     cancelAnimationFrame(parts.steamRaf);
     if (parts.steam && parts.steam.overlay) stage.removeAccOverlay(parts.steam.overlay);   // off the still picture before its meshes go
     if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
+    if (parts.farWas != null) { camera.far = parts.farWas; camera.updateProjectionMatrix(); parts.farWas = null; }
     if (parts.clipped) { for (const m of parts.clipped) { m.clippingPlanes = null; m.needsUpdate = true; } parts.clipped = null; renderer.localClippingEnabled = !!parts.clipWas; }
     if (parts.outside) { for (const m of parts.outside) { m.removeFromParent(); m.geometry.dispose(); if (m.material.map) m.material.map.dispose(); m.material.dispose(); } parts.outside = null; }
     if (parts.spools) { for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays

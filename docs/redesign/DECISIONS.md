@@ -4207,3 +4207,13 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   a straight horizon, nothing man-made, used whole (`outside-photo.py panorama`: toned, blurred 2.2 px, the lawn carried
   on below, its edges cross-faded); at 2.8 mm a pixel it repeats every 5.7 m, so the window shows it once. Known: a thin
   dark sliver by the far jamb in a grazing side view along the wall, not yet traced.
+- **The sliver traced and fixed** (Joey: "Proceed"): with the clear colour red it was the clear colour, at the camera's
+  far plane (main.js: 8000 mm); a look along the wall skims the far jamb and meets the backdrop 8 m off and more. The room
+  sets the far plane to 40 m while it is on and puts it back on leave (precision rests on the 1 mm near plane). Also, on
+  the way: the sky lid starts inside the wall's thickness (it began at the frame's edge, 50 mm proud of the wall), and the
+  backdrop's two ends are closed with the photo. Sol `01a17823` round 19, no findings.
+- **Open: a flat backdrop foreshortens** (Joey: "Wouldn't a scene like that typically be more spherical to compensate for
+  angles like that, like a sky map?", "Why do the trees looks squished though from that extreme angle?"): seen nearly
+  edge-on, a flat picture squeezes. The standard answer, a dome or cylinder round the room, is blocked by the room having
+  no ceiling: anything tall and far shows over its walls, which is why the backdrop stops at the walls' top. A ceiling
+  first, then a cylinder, is the proposal.
