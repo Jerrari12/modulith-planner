@@ -362,10 +362,13 @@ jobs:
     # runners by e2e/shard.mjs (2026-10-25): each shard runs a share balanced by e2e/shard-weights.json, every case in
     # exactly one shard, and writes what it ran for the coverage job below. Every shard runs to the end (no fail-fast), so
     # one red run names every failing case, as the serial step did. The shard count is the matrix's length.
+    # SIX, not four (2026-10-26): on run 40262875906 the four shards carried equal weighted loads (486 s each by the
+    # weights) and took 7.5 / 12.7 / 16.9 / 16.3 min, their runner/local medians 0.98 / 1.49 / 1.76 / 1.86 - the spread is
+    # the runner machines, which no weighting can fix, so the run waits on its slowest machine; smaller shards bound that.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     name: e2e (shard ${{ matrix.shard }})
     concurrency:
       group: e2e-${{ github.ref }}-${{ matrix.shard }}
