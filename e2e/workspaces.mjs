@@ -2919,11 +2919,9 @@ test('Colors: the Studio / Room toggle is absent without the flag; with it, Room
   await off.ctx.close();
   const { ctx, page, errors } = await open('colors', { query: '&done=room' });
   const seg = (t) => page.locator(`#ws-colors .head .stage button:has-text("${t}")`);
-  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true', 'Studio by default');
-  const s0 = await state(page);
-  assert.equal(s0.held, false); assert.equal(s0.room, false);
-  await seg('Room').click();
-  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
+  // Room first (Joey 2026-10-26: "What if when you select color it goes to this view instead"): no click, the room comes on
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('Colors did not open on the room within 60 s'));
+  assert.equal(await seg('Room').getAttribute('aria-pressed'), 'true', 'Room by default');
   await settle(page, 1500);
   const s1 = await state(page);
   assert.equal(s1.room, true, 'the room is in the scene'); assert.equal(s1.held, true, 'the stage is held'); assert.equal(s1.bg, null);
@@ -2973,6 +2971,12 @@ test('Colors: the Studio / Room toggle is absent without the flag; with it, Room
   const s2 = await state(page);
   assert.equal(s2.room, false, 'the room is gone'); assert.equal(s2.held, false); assert.equal(s2.done, null); assert.equal(s2.bg, 'color', 'the stage background is back'); assert.equal(s2.controls, true);
   assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true');
+  // "toggle back to the builder-like view if desired": a visitor who picked Studio keeps it on the next visit
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.querySelector('#ws-colors .head .stage'), null, { timeout: 60_000 });
+  await settle(page, 1500);
+  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true', 'Studio, as picked, after a reload');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'and no room loaded');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -2980,12 +2984,15 @@ test('Colors: the Studio / Room toggle is absent without the flag; with it, Room
 /* a room that cannot load (its module request fails) falls back to Studio AND forgets the choice, so a remount does not
    retry it (Terra 01a16b56: the import's failure path cleared the panel's state but left the memo set) */
 test('Colors: the Studio / Room toggle when the room fails to load: Studio comes back, the choice is forgotten, a remount does not bring Room back', async () => {
-  const { ctx, page, errors } = await open('colors', { query: '&done=room' });
+  // the room comes on by itself now (Room first), so its module fails from the first request
+  const fctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await fctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  await fctx.route('**/scenes/done.js*', (r) => r.abort());
+  const { ctx, page, errors } = await open('colors', { query: '&done=room', context: fctx });
   const seg = (t) => page.locator(`#ws-colors .head .stage button:has-text("${t}")`);
-  await page.route('**/scenes/done.js*', (r) => r.abort());
-  await seg('Room').click();
   await page.waitForFunction(() => { const on = document.querySelector('#ws-colors .head .stage button[aria-pressed="true"]'); return on && on.textContent === 'Studio'; }, null, { timeout: 30_000 }).catch(() => assert.fail('Studio did not come back after the failed load'));
   assert.equal(await page.evaluate(() => window.__GEN2_CTX__().memo.colorsRoom), false, 'the choice is forgotten, not only the panel state');
+  assert.equal(await page.evaluate(() => localStorage.getItem('gen2-colors-stage')), null, 'and nothing stored: a failed load is not a visitor\'s pick');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'no room');
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
   await page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 60_000 });

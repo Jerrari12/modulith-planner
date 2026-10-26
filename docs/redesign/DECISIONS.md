@@ -4057,3 +4057,17 @@ analytic in the shader, not meshes). He copied the spool into its own file.
 - **Review, round 7** (Sol `01a17823`): one finding, accepted: at 8 mm slip a leaned spool reached 108.8 mm, past the
   spot's 108 (`SPOOL_FOOT`); the slip is 7 mm now (107.8) rather than a bigger spot, which would move every build's spools.
   Round 8, no findings. Unit 37 of 37; the spools' and the strip-and-mugs cases pass. Not deployed.
+
+## 2026-10-26 — Colors opens on the Room stage
+
+- **Room first** (Joey, after trying the branch on his phone: "most people arent going to find this. What if when you
+  select color it goes to this view instead, and then maybe there is a way to toggle back to the builder-like view if
+  desired?"): with the room's flag on, Colors opens on Room; the Studio / Room toggle in the panel's head is the way back.
+  A visitor who picks Studio keeps Studio in that browser (`gen2-colors-stage`, written only by the toggle); within a
+  session the workspace memo still wins, so a room that fails to load falls back to Studio for the session and stores
+  nothing. The studio stays the colour-accurate reference.
+- **Still behind `?done=room`.** Visitors without the flag see neither the toggle nor the room; whether the flag comes off
+  at deploy is Joey's call.
+- **Checks.** The toggle's case now expects Room with no click and Studio kept across a reload; the failed-load case fails
+  the module from the first request and checks nothing is stored. Mutants (the old default, no store) both fail it. The
+  wall-and-desk and spools cases pass. Review: Sol `01a17823` round 9, no findings. Not deployed.

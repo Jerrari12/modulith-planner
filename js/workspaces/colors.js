@@ -180,10 +180,16 @@ export function mountColors(stage, ctx) {
      the Colors workspace, still hero, orbit allowed, no sequence"; the style brief's own "later: offer the same rooms as
      a stage option in Colors, for judging colors in context"). The Done scene's room (js/scenes/done.js) behind the same
      `?done=room` flag: the build on the desk in daylight, so a filament is judged under a room's light and bounce as well
-     as the studio's. The studio stays the colour-accurate reference. The choice is remembered across a remount. */
+     as the studio's. The studio stays the colour-accurate reference. The choice is remembered across a remount.
+     ROOM FIRST (Joey 2026-10-26: "most people arent going to find this. What if when you select color it goes to this view
+     instead, and then maybe there is a way to toggle back to the builder-like view if desired?"): Colors opens on Room, and
+     a visitor who picks Studio keeps Studio in this browser (STAGE_KEY); a room that fails to load falls back to Studio for
+     the session (the memo) without storing anything. */
   const ROOM_FLAG = new URLSearchParams(location.search).get('done') === 'room';
+  const STAGE_KEY = 'gen2-colors-stage';   // 'studio' | 'room', written only by the toggle
   let room = null;   // { leaveFn, handle } while the room is on or loading
-  st.room = ROOM_FLAG && !!(ctx.memo && ctx.memo.colorsRoom);
+  const storedStage = (() => { try { return storage()?.getItem(STAGE_KEY); } catch { return null; } })();
+  st.room = ROOM_FLAG && (ctx.memo && ctx.memo.colorsRoom != null ? !!ctx.memo.colorsRoom : storedStage !== 'studio');
   function enterRoom() {
     if (!ROOM_FLAG || room) return;
     const h = { leaveFn: null, handle: null };
@@ -196,7 +202,11 @@ export function mountColors(stage, ctx) {
     }).catch((e) => { console.warn('[colors] the room did not load', e); if (room === h) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; renderPanel(); } });   // forgotten too, so a remount does not retry (Terra 01a16b56)
   }
   function leaveRoom() { if (!room) return; const h = room; room = null; if (h.leaveFn) h.leaveFn(); }
-  function setRoom(on) { st.room = !!on; if (ctx.memo) ctx.memo.colorsRoom = st.room; if (st.room) enterRoom(); else leaveRoom(); renderPanel(); }
+  function setRoom(on) {
+    st.room = !!on; if (ctx.memo) ctx.memo.colorsRoom = st.room;
+    try { storage()?.setItem(STAGE_KEY, st.room ? 'room' : 'studio'); } catch { /* private mode: the session's memo still holds it */ }
+    if (st.room) enterRoom(); else leaveRoom(); renderPanel();
+  }
 
   /* ---------------- the palette, as one undo step each ---------------- */
   const pal = () => stage.palette();
