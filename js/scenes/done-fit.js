@@ -538,7 +538,7 @@ export function fitShot(spec, box, view, interior, aims = {}, { floorY = 0 } = {
   if (s.aim === 'label' && aims.label) { const b = aims.label.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: b.max.z }; }
   // the fronts' top row (`aims.row`: { x0, x1, y, z }), the aim `shiftX` of its width from its middle
   // a mug (`aims.mugs`: { box, faceAz }): aimed at its middle, fitted to it, the arc turned about the face the room sees
-  if (s.aim === 'mugs' && aims.mugs) { const b = aims.mugs.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 }; if (aims.mugs.faceAz != null) s.az = (s.az || 0) + Math.max(-50, Math.min(50, aims.mugs.faceAz)); }
+  if (s.aim === 'mugs' && aims.mugs) { const b = aims.mugs.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 }; if (aims.mugs.faceAz != null) s.az = (s.az || 0) + Math.max(-70, Math.min(70, aims.mugs.faceAz)); }
   if (s.aim === 'row' && aims.row) { const r = aims.row; s.targetAt = { x: r.x0 + (r.x1 - r.x0) * (0.5 + (s.shiftX || 0)), y: r.y, z: r.z }; }
   const cam = clampToInterior(shotCamera(s, box, view), interior);
   const floor = floorY + FLOOR_MM;
@@ -721,12 +721,17 @@ export const MUGS = {
     { lines: ['DO NOT', 'DISTURB.', 'FIXING THINGS', 'THAT WORK.'], accent: [0, 1] },
     { lines: ['I MADE A THING', 'TO HOLD', 'THE THINGS', 'I MAKE', 'THINGS WITH.'], accent: [0] },
     { lines: ['I WAS LEFT', 'UNSUPERVISED', 'WITH CALIPERS'], accent: [1], scale: [1, 1.4, 1] },   // Astra: the middle line largest, in orange
-    { lines: ['DESIGN A DRAWER,', 'THEY SAID.', '', 'I MAY HAVE', 'MISUNDERSTOOD', 'THE SCOPE.'], accent: [4, 5], scale: [1, 1, 0.45, 0.8, 1.3, 1.5] },   // Astra: three levels after a gap (the empty line), THE SCOPE. the biggest
+    { lines: ['IN MY DEFENSE,', 'I HAD ACCESS', 'TO CAD.'], type: 'mono', accent: [2], scale: [1, 1, 1.6] },   // Astra (2026-10-26): technical monospace, CAD. the point
+    { lines: ['I WAS NORMAL', 'BEFORE I OWNED', 'A 3D PRINTER.'], accent: [2], scale: [1, 1, 1.15] },
+    { lines: ['THIS IS WHAT', 'HAPPENS WHEN', 'THE PROTOTYPE', 'WORKS.'], accent: [3], scale: [1, 1, 1, 1.5] },
+    { lines: ['GOT FILAMENT?', '', 'I HAVE PLANS.'], type: 'wide', accent: [2], scale: [1, 0.6, 1] },   // two blocks, room between them
   ] },
   modulith: { voice: 'modulith', body: '#4a4c54', ink: '#ececee', accent: '#ff6a1a', logo: { src: 'img/modulith-square.svg', aspect: 908.3 / 715.5, hMm: 54 }, sayings: [
     { lines: ['NEED DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER'], accent: [0] },
     { lines: ['NEEDED A DRAWER.', 'PRINTED A DRAWER.', 'NEEDED A CASE.', 'PRINTED A CASE.', 'ANYWAY,', 'THIS IS A WALL NOW.'], accent: [5] },
-    { lines: ['I ♥', 'MODULAR', 'STORAGE', 'SYSTEMS'], type: 'wide' },
+    { lines: ['I ♥', 'MODULAR', 'STORAGE', 'SYSTEMS'], type: 'wide' },   // Astra: the benchmark for readability
+    { lines: ['I CAME.', 'I SAW.', 'I PRINT DRAWER.'], type: 'wide', accent: [2], scale: [1, 1, 1.1] },
+    { lines: ['THOSE SPOOLS', 'AREN’T GOING TO', 'BECOME DRAWERS', 'THEMSELVES.'], accent: [2] },
     { lines: ['A PLACE FOR', 'EVERYTHING.', 'AND PARTS', 'FOR MORE', 'PLACES.'], accent: [2, 3, 4] },
     { lines: ['I CAN STOP', 'ANY TIME.', 'ONE MORE', 'DRAWER.'], accent: [2, 3] },
     { lines: ['THIS WAS SUPPOSED', 'TO SAVE SPACE.'], accent: [1] },
@@ -737,6 +742,30 @@ export const MUGS = {
   paper: { voice: 'modulith', body: null, ink: '#2c2d31', accent: '#ff6a1a', logo: { src: 'img/modulith-square.svg', aspect: 908.3 / 715.5, hMm: 54 } },
 };
 export const MUG_LOOKS = ['jerrari', 'modulith', 'paper'];
+/* MILESTONE SAYINGS (Astra 2026-10-26: "Milestones unlock sayings into the eligible pool; they don't force the same joke
+ * every time. Use actual drawer count for {N}, overall dimensions for tall or wide builds, and occupied grid units for
+ * build size"): each joins its voice's pool when the build meets it (`facts`: buildFacts). `{N}` is the drawer count. */
+export const MUG_MILESTONES = [
+  { id: 'small', voice: 'modulith', when: (f) => f.cells <= 4, saying: { lines: ['SMALL BUILD.', '', 'BIG PLANS.'], accent: [2], scale: [1, 0.5, 1.2] } },
+  { id: 'medium', voice: 'modulith', when: (f) => f.cells >= 5 && f.cells <= 12, saying: { lines: ['LOOK WHAT', 'ONE DRAWER', 'STARTED.'], accent: [1] } },
+  { id: 'large', voice: 'modulith', when: (f) => f.cells >= 13, saying: { lines: ['WE’RE GONNA', 'NEED A', 'BIGGER SPOOL.'], accent: [2], scale: [1, 1, 1.2] } },
+  { id: 'huge', voice: 'modulith', when: (f) => f.cells >= 30 || f.widthMm >= 900, saying: { lines: ['AT THIS POINT', 'IT’S FURNITURE.'], accent: [1], scale: [1, 1.2] } },
+  { id: 'tall', voice: 'modulith', when: (f) => f.heightMm >= 350, saying: { lines: ['TAKING', 'ORGANIZATION', 'TO NEW HEIGHTS.'], accent: [2] } },
+  { id: 'drawers', voice: 'modulith', when: (f) => f.drawers >= 8, saying: { lines: ['{N} DRAWERS.', '', 'SO MANY', 'POSSIBILITIES.'], accent: [0], scale: [1.4, 0.4, 1, 1] } },
+  { id: 'labelled', voice: 'modulith', when: (f) => f.drawers >= 2 && f.labelled >= f.drawers, saying: { lines: ['A PLACE FOR', 'EVERYTHING.', 'AND NOW', 'IT HAS A NAME.'], accent: [2, 3] } },
+  { id: 'scope', voice: 'jerrari', when: (f) => f.cells >= 13 || f.drawers >= 8, saying: { lines: ['DESIGN A DRAWER,', 'THEY SAID.', '', 'I MAY HAVE', 'MISUNDERSTOOD', 'THE SCOPE.'], accent: [4, 5], scale: [1, 1, 0.45, 0.8, 1.3, 1.5] } },   // Astra: three levels after a gap, THE SCOPE. the biggest
+];
+/* The facts the milestones read, from the build: `units` = [{ w, hh, drawer, label }] (grid columns, half-rows), `size` the
+ * assembled box's { x, y } in mm */
+export function buildFacts(units, size) {
+  const drawers = units.filter((u) => u.drawer);
+  return { cells: units.reduce((a, u) => a + (u.w || 1) * (u.hh || 2) / 2, 0), drawers: drawers.length, labelled: drawers.filter((u) => u.label && String(u.label).trim()).length, widthMm: size.x, heightMm: size.y };
+}
+export function unlockedSayings(facts) {
+  const out = { jerrari: [], modulith: [] };
+  for (const m of MUG_MILESTONES) if (m.when(facts)) out[m.voice].push({ ...m.saying, lines: m.saying.lines.map((l) => l.replace('{N}', String(facts.drawers))), milestone: m.id });
+  return out;
+}
 export const sayingsOf = (look) => MUGS[MUGS[look].voice].sayings;
 /* Astra's pairs, for when the camera catches two mugs: JERRARI's line, then MODULITH's answer */
 export const MUG_PAIRS = [
@@ -761,8 +790,9 @@ export function hashSeed(text) {
  * mug holds the coffee. `count` forces how many (the debug ?mugs=). */
 export const MUG_COUNTS = [0.15, 0.3, 0.35, 0.2];
 export const NOTEBOOK_OFF_SHARE = 0.35;
-export function mugPlan(rng, { count = null } = {}) {
+export function mugPlan(rng, { count = null, extra = null } = {}) {
   const pick = (list) => list[Math.floor(rng() * list.length) % list.length];
+  const pool = (look) => sayingsOf(look).concat((extra && extra[MUGS[look].voice]) || []);   // a look's voice, its milestones with it
   let n = 0, u = rng();
   while (n < MUG_COUNTS.length - 1 && u >= MUG_COUNTS[n]) { u -= MUG_COUNTS[n]; n++; }
   if (count != null) n = Math.max(0, Math.min(MUG_COUNTS.length - 1, count));
@@ -772,8 +802,8 @@ export function mugPlan(rng, { count = null } = {}) {
   for (let i = 0; i < n; i++) {
     // a pair's two lines on JERRARI's white and a MODULITH look; otherwise any look, no saying twice
     const look = pair && i < 2 ? (i === 0 ? 'jerrari' : (rng() < 0.5 ? 'modulith' : 'paper')) : pick(MUG_LOOKS);
-    let back = pair && i < 2 ? pair[i] : pick(sayingsOf(look));
-    for (let t = 0; t < 4 && mugs.some((m) => m.back === back); t++) back = pick(sayingsOf(look));
+    let back = pair && i < 2 ? pair[i] : pick(pool(look));
+    for (let t = 0; t < 4 && mugs.some((m) => m.back === back || (m.back.milestone && m.back.milestone === back.milestone)); t++) back = pick(pool(look));
     mugs.push({ look, back, turnDeg: Math.round(rng() * 360), spot: rng() });
   }
   return { count: n, notebookOff, mugs };
@@ -790,15 +820,14 @@ export function apartFrom(cam, a, b, { radius = 70, share = 1.15 } = {}) {
   return d > share * (half(a) + half(b));
 }
 /* Which face of a mug turned `turnDeg` a shot should look at, and from where: its saying (the back, half a turn from the
- * logo) where that faces the room's front within `within` degrees, else its logo, else neither (null: its side, the
- * handle); `az` the face's direction, degrees from the room's front, as the shots' azimuths count (Astra: "Frame the
- * punchline on the visible face") */
+ * logo) where that faces the room's front within `within` degrees, else the nearer of the two (a side view, the handle
+ * and a seam of nothing, was the 2026-10-26 shot of a mug turned 75 deg); `az` the face's direction, degrees from the
+ * room's front, as the shots' azimuths count (Astra: "Frame the punchline on the visible face") */
 export function mugFace(turnDeg, within = 65) {
   const norm = (a) => { let x = ((a % 360) + 360) % 360; if (x > 180) x -= 360; return x; };
   const saying = norm(turnDeg + 180), logo = norm(turnDeg);
-  if (Math.abs(saying) <= within) return { side: 'saying', az: saying };
-  if (Math.abs(logo) <= within) return { side: 'logo', az: logo };
-  return null;
+  if (Math.abs(saying) <= within || Math.abs(saying) <= Math.abs(logo)) return { side: 'saying', az: saying };
+  return { side: 'logo', az: logo };
 }
 export function pickSpots(spots, picks, apart = 170, clear = () => true) {
   const out = [];

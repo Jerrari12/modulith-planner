@@ -3947,3 +3947,37 @@ and "For the joke shots, let the camera settle briefly with the text sharp".
   moves once (the shots show it in the cup after a move).
 - **Checks.** Unit 34 of 34. The Done scene's e2e cases, 15 of 15 (the strip-and-mugs case at ?mugs=3; the kits' own
   plans: three on the 165 3W kit with the notebook off, none on the 115 3W kit). Not deployed.
+
+## 2026-10-26 — The Done scene's mugs: Astra's new sayings and milestones, the glaze lit, no cropped mug in the close-up
+
+Astra, on the sheet of 2026-10-25: "I ♥ MODULAR STORAGE SYSTEMS has the best readability ... Use that as the benchmark";
+"The white mug texture is a little heavy in close-up. It reads more like rough stoneware than glazed ceramic"; "The cropped
+mug behind the foreground mug is distracting ... Fix this through the close-up framing or target selection"; "don't use
+one automatic text layout for all of them. Give each a small, deliberate composition"; and a list of sayings by voice, with
+milestones: "Milestones unlock sayings into the eligible pool; they don't force the same joke every time. Use actual drawer
+count for {N}, overall dimensions for tall or wide builds, and occupied grid units for build size". Joey passed them on.
+
+- **New sayings**, each with its own composition (face, emphasis, sizes, gaps): JERRARI's "IN MY DEFENSE, / I HAD ACCESS /
+  TO CAD." (mono, CAD. large and orange), "I WAS NORMAL / BEFORE I OWNED / A 3D PRINTER.", "THIS IS WHAT / HAPPENS WHEN /
+  THE PROTOTYPE / WORKS.", "GOT FILAMENT? / I HAVE PLANS." (two blocks with a gap); MODULITH's "I CAME. / I SAW. / I PRINT
+  DRAWER." and "THOSE SPOOLS / AREN'T GOING TO / BECOME DRAWERS / THEMSELVES.".
+- **Milestones** (done-fit.js MUG_MILESTONES, buildFacts, unlockedSayings): from the build's units (grid cells = width x
+  half-rows / 2), its drawers, its labels and its size. Small (4 cells or fewer), medium (5-12), large (13+), very large
+  (30+ cells or 900 mm wide), tall (350 mm+), "{N} DRAWERS." (8+, the real count), every drawer named (2+), and DESIGN A
+  DRAWER ... THE SCOPE. moved from the open pool to large or elaborate builds. They join the voice's pool; no milestone
+  twice on a desk. Many colours is not one: the build has no simple colour count to read yet.
+- **The glaze lit, not read from the bake** (done.js MUG_LIGHT_GLSL): the bake's speckle and the dark lines at its four UV
+  seams (measured at -7.5, 82.5, 172.5 and -97.5 deg; a turned mug swings them into view) made it stoneware. The outer wall
+  and the handle take the bake's mean (its last mip) times MUG_GAIN 2.0 for the level, a wrap of the room's sun across the
+  world normal for the shape, and a darker foot; lit from the right side however the mug is turned. The inside keeps its
+  bake. A mip-biased blur of the bake was tried first: it softened the speckle and kept the seams.
+- **The close-up never crops another mug**: the mugs' shot ranks each mug by whether any other one enters its frame (box
+  against frustum, at nine points along the move) and by its saying facing the room; where none is alone, it frames the mug
+  with the ones that would crop into it, and widens again until no further one enters. It faces the nearer of the saying
+  and the logo (a side view was the shot of a mug turned 75 deg), the camera turned up to 70 deg toward it.
+- **Review.** Sol `01a177c8`. Round 1, four findings: the fragment's `vMugP` undeclared discarded (the prefix declares
+  it; the e2e renders the print); a centre in a cone instead of the frame, only the move's middle checked, and a grouped
+  frame admitting a third mug accepted. Round 2, two: corners alone missing a straddling box accepted (box against
+  frustum); three points along the move partly accepted (nine; not a proof over the continuous path, a mug's width spans
+  several steps of the 36 deg arc).
+- **Checks.** Unit 35 of 35. The strip-and-mugs, kits, grammar, relief, room and steam cases pass. Not deployed.

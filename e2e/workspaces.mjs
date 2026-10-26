@@ -2767,10 +2767,10 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
     const off = await read();
     mats.forEach((m, i) => { m.userData.mug.uMugPrint.value = was[i]; }); steam.forEach((o) => { o.visible = true; }); blank.dispose();
     let changed = 0; for (let i = 0; i < on.length; i += 4) if (Math.abs((on[i] + on[i + 1] + on[i + 2]) - (off[i] + off[i + 1] + off[i + 2])) > 30) changed++;
-    return { prints: mats.length, changed, shot: d.sequence.shot, subject: d.mugs.subject };
+    return { prints: mats.length, changed, shot: d.sequence.shot, framed: d.mugs.framed };
   });
   assert.equal(inked.shot, 'mugs'); assert.equal(inked.prints, mp.count, 'a printed glaze on every mug');
-  assert.ok(inked.subject != null && inked.subject >= 0, `the shot looks at one of them (${inked.subject})`);
+  assert.ok(inked.framed && inked.framed.length >= 1 && inked.framed.every((i) => i >= 0), `the shot frames a mug, or one with the mugs that would crop into it (${JSON.stringify(inked.framed)})`);
   assert.ok(inked.changed > 300, `the prints draw in the mugs' shot (${JSON.stringify(inked)})`);
   // and a view of the whole build after the mugs' shot, in every plan that has it (Astra: "build -> detail -> mug joke -> build")
   const after = await page.evaluate(async () => {
@@ -2791,7 +2791,7 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
   const again = await page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-mug-more') n++; }); return { n, count: window.__GEN2_DONE__.mugs.count, plan: window.__GEN2_DONE__.mugs.plan }; });
   assert.equal(again.n, 2 * (again.count - 1), 'a second visit stands its further mugs once: none left from the first visit');
   // the plan is the build link's own (the words above changed the link between the visits, so it is read again, not compared)
-  const linked = await page.evaluate(async () => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(location.hash || new URLSearchParams(location.search).get('build') || 'room')), { count: 3 }); });
+  const linked = await page.evaluate(async () => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(location.hash || new URLSearchParams(location.search).get('build') || 'room')), { count: 3, extra: f.unlockedSayings(window.__GEN2_DONE__.mugs.facts) }); });   // the build's milestones with it
   assert.deepEqual(again.plan, linked, 'the mugs follow the build\'s link');
   assert.deepEqual(clean(errors), [], 'no errors');
   await ctx.close();
@@ -2804,8 +2804,8 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
 test('Assemble: the Done scene\'s mugs follow the build\'s link: three on one kit with the notebook off the desk, none on another', async () => {
   for (const [kit, want] of [['165-tabletop-3w2h', { count: 3, notebookOff: true }], ['115-tabletop-3w2h', { count: 0, notebookOff: false }]]) {
     const { ctx, page, errors } = await open('assemble', { query: `&build=${kit}&done=room&mugs=plan` });
-    const plan = await page.evaluate(async (k) => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(k))); }, kit);
-    assert.deepEqual([plan.count, plan.notebookOff], [want.count, want.notebookOff], `${kit}: its link's plan`);
+    const plan0 = await page.evaluate(async (k) => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(k))); }, kit);
+    assert.deepEqual([plan0.count, plan0.notebookOff], [want.count, want.notebookOff], `${kit}: its link's plan (how many, the notebook: before any saying is drawn)`);
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
     await btn(page, 'Next', '#ws-player').click();
@@ -2817,7 +2817,8 @@ test('Assemble: the Done scene\'s mugs follow the build\'s link: three on one ki
       return { plan: d.mugs.plan, count: d.mugs.count, notebook: [vis('notebook'), vis('pen')], notebookShadow: d.shadows.filter((q) => q.group === 'notebook').map((q) => q.visible),
         mug: [vis('mug'), vis('coffee')], mugShadow: d.shadows.filter((q) => q.group === 'mug').map((q) => q.visible), names: d.sequence.names };
     });
-    assert.deepEqual(st.plan, plan, `${kit}: the scene's plan is the link's`);
+    const plan = await page.evaluate(async (k) => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(k)), { extra: f.unlockedSayings(window.__GEN2_DONE__.mugs.facts) }); }, kit);
+    assert.deepEqual(st.plan, plan, `${kit}: the scene's plan is the link's, with the build's milestones`);
     if (want.notebookOff) { assert.deepEqual(st.notebook, [false, false], `${kit}: the notebook and its pen off the desk`); assert.ok(st.notebookShadow.every((x) => !x), 'and their shadow'); }
     else { assert.deepEqual(st.notebook, [true, true], `${kit}: the notebook on the desk`); }
     if (want.count === 0) {

@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -497,7 +497,7 @@ test('the mugs: a build\'s own seed picks how many (none to three), their looks,
   assert.deepEqual(pickSpots([{ x: 0, z: 0 }], [0.5, 0.5]), [{ x: 0, z: 0 }, null], 'a mug with nowhere left stands nowhere');
   // the face a shot looks at: the saying where it faces the room, else the logo, else neither
   assert.deepEqual(mugFace(180), { side: 'saying', az: 0 }); assert.deepEqual(mugFace(0), { side: 'logo', az: 0 });
-  assert.deepEqual(mugFace(200), { side: 'saying', az: 20 }); assert.equal(mugFace(90), null, 'side on: the handle or its other side');
+  assert.deepEqual(mugFace(200), { side: 'saying', az: 20 }); assert.deepEqual(mugFace(75), { side: 'logo', az: 75 }, 'side on: the nearer face'); assert.deepEqual(mugFace(100), { side: 'saying', az: -80 });
   // a saying's layout: one size for its lines, the largest that fits, the small line a third of it, a larger line counted
   const fit = (line, s) => line.length * 0.7 * s;
   const lay = sayingLayout({ lines: ['ONE MORE DRAWER.', 'THEN I’M DONE.'], small: 'Last updated: one drawer ago.' }, 50, 60, fit);
@@ -510,6 +510,29 @@ test('the mugs: a build\'s own seed picks how many (none to three), their looks,
   assert.ok(ul.size * ul.lead * ul.scales.reduce((a, b) => a + b, 0) <= 60 + 1e-9 && fit('UNSUPERVISED', ul.size * 1.4) <= 80 + 1e-9, 'a larger line fits too');
   // Astra: the long ones broken short
   for (const look of ['jerrari', 'modulith']) for (const sy of MUGS[look].sayings) assert.ok(sy.lines.every((l) => l.length <= 20), `no line over 20 characters (${sy.lines.join(' / ')})`);
+});
+
+test('the milestone sayings: a build\'s size, height, drawers and labels unlock their sayings into its voices\' pools, the drawer count in its own', () => {
+  const unit = (w, hh, drawer = true, label = '') => ({ w, hh, drawer, label });
+  const small = buildFacts([unit(1, 2), unit(1, 2)], { x: 180, y: 120 });
+  assert.deepEqual([small.cells, small.drawers, small.labelled], [2, 2, 0]);
+  const ids = (f) => { const u = unlockedSayings(f); return [...u.jerrari, ...u.modulith].map((x) => x.milestone).sort(); };
+  assert.deepEqual(ids(small), ['small'], 'a small build: SMALL BUILD. BIG PLANS.');
+  const named = buildFacts([unit(1, 2, true, 'SCREWS'), unit(1, 2, true, 'NUTS')], { x: 180, y: 120 });
+  assert.deepEqual(ids(named), ['labelled', 'small'], 'every drawer named: A PLACE FOR EVERYTHING ... IT HAS A NAME');
+  const big = buildFacts(Array.from({ length: 10 }, () => unit(2, 2)), { x: 1000, y: 400 });
+  assert.deepEqual(ids(big), ['drawers', 'huge', 'large', 'scope', 'tall'], 'a big, tall, many-drawered build');
+  const n = unlockedSayings(big).modulith.find((x) => x.milestone === 'drawers');
+  assert.equal(n.lines[0], '10 DRAWERS.', 'the real count in it');
+  assert.ok(unlockedSayings(big).jerrari.some((x) => x.lines.includes('MISUNDERSTOOD')), 'DESIGN A DRAWER for the large or elaborate build');
+  assert.ok(!sayingsOf('jerrari').some((x) => x.lines.includes('MISUNDERSTOOD')), 'and only there');
+  for (const m of MUG_MILESTONES) assert.ok(m.saying.lines.every((l) => l.replace('{N}', '000').length <= 20), `${m.id}: short lines`);
+  // they join the pool, they do not force it: across seeds a big build draws its milestones sometimes and the others too
+  const extra = unlockedSayings(big), backs = [];
+  for (let i = 0; i < 300; i++) backs.push(...mugPlan(rngFrom(hashSeed('#b' + i)), { count: 3, extra }).mugs.map((m) => m.back));
+  const share = backs.filter((b) => b.milestone).length / backs.length;
+  assert.ok(share > 0.1 && share < 0.6, `milestones now and then (${(share * 100).toFixed(0)} % of the mugs)`);
+  for (let i = 0; i < 300; i++) { const ms = mugPlan(rngFrom(hashSeed('#c' + i)), { count: 3, extra }).mugs.map((m) => m.back.milestone).filter(Boolean); assert.equal(new Set(ms).size, ms.length, 'no milestone twice on one desk'); }
 });
 
 /* THE VISITOR'S ROOM COLOURS (2026-10-25): the colour maths the room is repainted by. The bake's paint is room.json's

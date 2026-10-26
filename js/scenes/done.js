@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -482,9 +482,41 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        order is the same whatever the turns) and its label (a different drawer's each time round, where there are several) */
     if (shot.reversible && shot.to && seq.turn && seq.turn() < 0.5) [shot.from, shot.to] = [shot.to, shot.from];
     if (shot.name === 'label' && subj.labels.length) subj.label = subj.labels[Math.floor((seq.turn ? seq.turn() : 0) * subj.labels.length) % subj.labels.length];
-    if (shot.name === 'mugs' && subj.mugs && subj.mugs.length) {   // one mug each time round, one whose saying faces the room where there is one
-      const pool = subj.mugs.filter((m) => m.face === 'saying').length ? subj.mugs.filter((m) => m.face === 'saying') : subj.mugs;
-      subj.mug = pool[Math.floor((seq.turn ? seq.turn() : 0) * pool.length) % pool.length];
+    if (shot.name === 'mugs' && subj.mugs && subj.mugs.length) {
+      /* one mug each time round: one with no other mug in its frame (Astra: "The cropped mug behind the foreground mug is
+         distracting ... fix this through the close-up framing or target selection"), its saying toward the room where one
+         is, else its logo */
+      /* the other mugs the frame takes in, box against frustum, at nine points along the move (Sol 01a177c8: a centre in a
+         cone missed a mug cropped at the edge, corners alone miss a box that straddles the frame, three points the move
+         between them; the arc is 36 deg, a mug's width several of the nine steps) */
+      const v = view(), aspect = v.width / v.height, probe = new THREE.PerspectiveCamera(30, aspect, 1, 1e6), frustum = new THREE.Frustum(), pv = new THREE.Matrix4();
+      const boxOf = (m) => new THREE.Box3(new THREE.Vector3(m.box.min.x, m.box.min.y, m.box.min.z), new THREE.Vector3(m.box.max.x, m.box.max.y, m.box.max.z));
+      const inFrame = (subject, inside) => {
+        const was = subj.mug, seen = new Set();
+        subj.mug = subject;
+        for (let i = 0; i <= 8; i++) {
+          const k = i / 8;
+          const cam = fitAt(shot, k);
+          probe.fov = cam.fov; probe.position.set(cam.position.x, cam.position.y, cam.position.z); probe.lookAt(cam.target.x, cam.target.y, cam.target.z);
+          probe.updateMatrixWorld(); probe.updateProjectionMatrix();
+          frustum.setFromProjectionMatrix(pv.multiplyMatrices(probe.projectionMatrix, probe.matrixWorldInverse));
+          for (const o of subj.mugs) if (!inside.includes(o) && frustum.intersectsBox(boxOf(o))) seen.add(o);
+        }
+        subj.mug = was;
+        return [...seen];
+      };
+      const rank = (m) => (inFrame(m, [m]).length ? 2 : 0) + (m.face === 'saying' ? 0 : 1);
+      const best = Math.min(...subj.mugs.map(rank)), pool = subj.mugs.filter((m) => rank(m) === best);
+      const m = pool[Math.floor((seq.turn ? seq.turn() : 0) * pool.length) % pool.length];
+      /* none alone in its frame: the mug and the ones its frame shows, framed together about its own face, and again until
+         the widened frame shows no further one (Sol 01a177c8) */
+      let group = [m], subject = m;
+      for (let more = inFrame(m, group); more.length && group.length < subj.mugs.length; more = inFrame(subject, group)) {
+        group = group.concat(more);
+        const b = boxOf(m); for (const o of group) b.union(boxOf(o));
+        subject = { box: plain(b), face: m.face, faceAz: m.faceAz, group };
+      }
+      subj.mug = subject;
     }
     seq.shot = shot.name; seq.skipIn = skipIn; seq.cutAt = null; seq.cutK = null; seq.phase = null;
     seq.moving = moves() && !!shot.to && !seq.timing.hold;
@@ -824,6 +856,22 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      axis, the coffee mug's shadow mask again under it. Made after the environment capture (the room it reflects has no mug
      of its own), on every visit, in the visit's own clone of the room; its prints' textures disposed on leave. */
   const MUG_GLAZE_ROUGH = 0.12;
+  /* THE GLAZE'S LIGHT (Astra 2026-10-26: "The white mug texture is a little heavy in close-up. It reads more like rough
+     stoneware than glazed ceramic"). The bake carries a speckle of its sampling noise and a dark line at each of its four
+     UV seams (measured: the seams at -7.5, 82.5, 172.5 and -97.5 deg about the axis), and a turned mug swings them into
+     view. So the outer wall (and the handle) are lit here instead of read from the bake: the bake's mean (its last mip) for
+     the level, the room's sun across the normal for the shape (a wrap of 0.55 + 0.9 Lambert about the horizontal, its mean
+     round the cylinder 1), and a darker foot where the desk shades it. Lit from the right side however the mug is turned;
+     the inside keeps its bake. `uMugFoot` 0 for the handle. */
+  const MUG_LIGHT_GLSL = '#if defined( USE_MAP ) && defined( USE_ENVMAP )\n'
+    + '\tif ( dot( vMugP.xz, vMugP.xz ) >= uMugR2 ) {\n'
+    + '\t\tvec3 mugN = normalize( vSheenN );\n'
+    + '\t\tfloat mugNl = length( mugN.xz ), mugLam = mugNl > 1e-4 ? max( dot( mugN.xz / mugNl, uMugSun ), 0.0 ) * mugNl : 0.0;\n'
+    + '\t\tfloat mugL = ( 0.55 + 0.9 * mugLam + 0.25 * max( mugN.y, 0.0 ) ) / ( 0.55 + 0.9 / 3.14159265 );\n'
+    + '\t\tfloat mugFootK = mix( 1.0, mix( 0.8, 1.0, smoothstep( 0.0, 0.3, ( vMugP.y - uMugY0 ) / uMugH ) ), uMugFoot );\n'
+    + '\t\tdiffuseColor.rgb = diffuse * textureLod( map, vMapUv, 12.0 ).rgb * uMugGain * mugL * mugFootK;\n'
+    + '\t}\n#endif\n';
+  const MUG_GAIN = 2.0;   // the bake's mean takes in its dark inside and foot: the outer wall's level over it (1.12, 1.4, then 1.6 drew the white mugs grey)
   const MUG_PRINT_GLSL = '\tfloat mugTh = atan( vMugP.x, vMugP.z ) - uMugTurn;\n'
     + '\tfloat mugR2 = max( dot( vMugP.xz, vMugP.xz ), 1e-12 );\n'
     + '\tvec3 mugPx = dFdx( vMugP ), mugPy = dFdy( vMugP );\n'
@@ -833,19 +881,21 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     + '\tvec2 mugDy = vec2( ( vMugP.z * mugPy.x - vMugP.x * mugPy.z ) / mugR2 / 6.28318530718, mugPy.y / uMugH );\n'
     + '\tvec4 mugInk = ( mugUv.y < 0.0 || mugUv.y > 1.0 || mugR2 < uMugR2 ) ? vec4( 0.0 ) : textureGrad( uMugPrint, mugUv, mugDx, mugDy );\n'
     + '\tdiffuseColor.rgb *= mix( uMugBody, mugInk.rgb, mugInk.a );\n';
-  function glaze(m, { body, tex = null, turn = 0, y0 = 0, h = 1, r = 0, bounce = !!m.userData.bounce }) {
+  function glaze(m, { body, tex = null, turn = 0, y0 = 0, h = 1, r = 0, foot = 1, bounce = !!m.userData.bounce }) {
     addSheen(m);
     m.userData.sheen.on.value = 1; m.userData.sheen.rough.value = MUG_GLAZE_ROUGH;
     m.envMap = parts.env || null;
     const prev = m.onBeforeCompile;
-    const u = { uMugBody: { value: body }, uMugPrint: { value: tex }, uMugTurn: { value: turn }, uMugY0: { value: y0 }, uMugH: { value: h }, uMugR2: { value: (r * 0.97) ** 2 } };
+    const sd = (json && json.sun && json.sun.dir) || [-1, 1, 1], sl = Math.hypot(sd[0], sd[2]) || 1;   // the room's sun, about the horizontal (the room is not turned)
+    const u = { uMugBody: { value: body }, uMugPrint: { value: tex }, uMugTurn: { value: turn }, uMugY0: { value: y0 }, uMugH: { value: h }, uMugR2: { value: (r * 0.97) ** 2 },
+      uMugSun: { value: new THREE.Vector2(sd[0] / sl, sd[2] / sl) }, uMugGain: { value: MUG_GAIN }, uMugFoot: { value: foot } };
     m.userData.mug = u;
     m.onBeforeCompile = (sh, rr) => {
       if (prev) prev.call(m, sh, rr);
       Object.assign(sh.uniforms, u);
       sh.vertexShader = 'varying vec3 vMugP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvMugP = position;');
-      sh.fragmentShader = 'uniform vec3 uMugBody;\nuniform sampler2D uMugPrint;\nuniform float uMugTurn;\nuniform float uMugY0;\nuniform float uMugH;\nuniform float uMugR2;\nvarying vec3 vMugP;\n'
-        + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + (tex ? MUG_PRINT_GLSL : '\tdiffuseColor.rgb *= uMugBody;\n'));
+      sh.fragmentShader = 'uniform vec3 uMugBody;\nuniform sampler2D uMugPrint;\nuniform float uMugTurn;\nuniform float uMugY0;\nuniform float uMugH;\nuniform float uMugR2;\nuniform vec2 uMugSun;\nuniform float uMugGain;\nuniform float uMugFoot;\nvarying vec3 vMugP;\n'
+        + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + MUG_LIGHT_GLSL + (tex ? MUG_PRINT_GLSL : '\tdiffuseColor.rgb *= uMugBody;\n'));
     };
     const key = 'done-mug|' + (bounce ? 'bounce|' : '') + (tex ? 'print' : 'glaze');
     m.customProgramCacheKey = () => key;
@@ -906,6 +956,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     img.src = new URL('../../' + look.logo.src, import.meta.url).href;
     return tex;
   }
+  /* the build's facts the milestone sayings read (done-fit.js buildFacts): its units, which carry a drawer and a label, and
+     its overall size */
+  function facts() {
+    const units = ((stage.build && stage.build.placed) || []).map((u) => ({ w: u.w, hh: u.hh, label: u.label, drawer: !!(stage.unitHasDrawer && stage.unitHasDrawer(u.id)) }));
+    const s = buildBox && !buildBox.isEmpty() ? buildBox.getSize(new THREE.Vector3()) : { x: 0, y: 0 };
+    return buildFacts(units, { x: s.x, y: s.y });
+  }
   function makeMugs(group) {
     const mug = group.getObjectByName('mug'), handle = group.getObjectByName('mug_handle'), coffee = group.getObjectByName('coffee');
     if (!mug || !mug.geometry) return;
@@ -913,10 +970,10 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const bb = mug.geometry.boundingBox, r = (bb.max.x - bb.min.x) / 2, h = bb.max.y - bb.min.y, rMm = r * SCALE, hMm = h * SCALE;   // the GLB's metres
     /* the build's link (its #build=, or a kit's ?build=), not the page's other parameters. With ?debug, ?mugs=N sets how many,
        and ?mugs=home the room as it was composed: one JERRARI mug at its home, the notebook on the desk (the e2e's default) */
-    const q = new URLSearchParams(location.search), m0 = debug ? q.get('mugs') : null;
+    const q = new URLSearchParams(location.search), m0 = debug ? q.get('mugs') : null, bf = facts();
     const plan = m0 === 'home' ? { count: 1, notebookOff: false, mugs: [{ look: 'jerrari', back: MUGS.jerrari.sayings[0], turnDeg: 0, spot: 0, home: true }] }
-      : mugPlan(rngFrom(hashSeed(location.hash || q.get('build') || 'room')), { count: m0 != null && /^\d+$/.test(m0) ? +m0 : null });
-    const made = { mats: [], meshes: [], masks: [], texs: [], plan, placed: [] };
+      : mugPlan(rngFrom(hashSeed(location.hash || q.get('build') || 'room')), { count: m0 != null && /^\d+$/.test(m0) ? +m0 : null, extra: unlockedSayings(bf) });
+    const made = { mats: [], meshes: [], masks: [], texs: [], plan, placed: [], facts: bf };
     parts.mugs = made;
     subj.mugs = [];
     const gone = () => parts.mugs !== made;
@@ -989,7 +1046,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         b = mug; hd = handle;
         glaze(src.body, { body: linear(look.body), tex, y0: bb.min.y, h, r });
         mug.quaternion.copy(turnQ(turn));
-        if (src.handle) glaze(src.handle, { body: linear(look.body) });
+        if (src.handle) glaze(src.handle, { body: linear(look.body), foot: 0 });
         for (const o of [mug, coffee]) if (o) o.position.add(d);
         if (handle) place(handle, turn, d);
         if (q0 && (d.x || d.z)) { q0.position.add({ x: p.x - home.x, y: 0, z: p.z - home.z }); q0.userData.doneShadow.moved = { x: p.x - home.x, z: p.z - home.z }; }   // the move, for a reader of the quads
@@ -1001,7 +1058,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         const meshes = [b];
         if (handle && src.handle) {
           const mh = copyOf(src.handle, fn.handle);
-          glaze(mh, { body: linear(look.body), bounce: bounce.handle });
+          glaze(mh, { body: linear(look.body), foot: 0, bounce: bounce.handle });
           hd = new THREE.Mesh(handle.geometry, mh); hd.scale.copy(handle.scale); place(hd, turn, d);
           meshes.push(hd);
         }
@@ -1312,7 +1369,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       },
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
-      get mugs() { const p = parts.mugs; return p ? { plan: p.plan, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },
+      get mugs() { const p = parts.mugs; return p ? { framed: subj.mug ? (subj.mug.group ? subj.mug.group.map((g) => subj.mugs.indexOf(g)) : [subj.mugs.indexOf(subj.mug)]) : null, plan: p.plan, facts: p.facts, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },
       get subjects() { return { labels: subj.labels.map((l) => l.id), label: subj.label ? subj.label.id : null, row: subj.row }; },
       get focus() { return { state: focus.anim ? focus.anim.playState : null, filter: getComputedStyle(renderer.domElement).filter }; },
       setRoomColours,
