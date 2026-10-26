@@ -137,6 +137,7 @@ const shifted = (b, d) => ({ min: [b.min[0] + d[0], b.min[1] + d[1], b.min[2] + 
 const union = (...bs) => ({ min: [0, 1, 2].map((i) => Math.min(...bs.map((b) => b.min[i]))), max: [0, 1, 2].map((i) => Math.max(...bs.map((b) => b.max[i]))) });
 const centre = (b) => [0, 1, 2].map((i) => (b.min[i] + b.max[i]) / 2);
 const at = (S, id, d = [0, 0, 0]) => [S.bases[id][0] + d[0], S.bases[id][1] + d[1], S.bases[id][2] + d[2]];
+const lerp3 = (a, b, k) => [0, 1, 2].map((i) => a[i] + (b[i] - a[i]) * k);
 /* the under-table stand-off (UT.fwd = DEPTH + 40) and the drawer pop-out (depth + 5) for the 185 collection */
 const UT_FWD = 225, DRW_POP = 190;
 const MARGIN = 0.08;   // the whole-path fit: every keyframe box of every moving part inside 8 % of the frame on all four sides (Joey 2026-10-25)
@@ -261,6 +262,180 @@ const CLIPS = {
   },
 };
 
+/* ---- the engine replayed on the film clock (the wall and tabletop clips, 2026-10-25) ------------------------------
+   A clip names a build record and a run of manifest steps. SETUP_ENGINE pages the stage to the before-state of the first
+   step and hands over the steps' phases as the generator wrote them; engineTimeline() turns them into ops on the film
+   clock with the engine's own rules (js/main.js playStep): phases run back to back, a phase lasts as long as its longest
+   job; `enter` places the part at pos+at+from the moment its phase starts and glides it to pos+at over DUR.enter (+ 300
+   per `via` point), the n-th item DUR.stagger later unless `sync`, x1.6 when two or more tiled parts land together;
+   `move` carries a part by `by` over DUR.move (detent 900, raw); `settle` brings a staged group from its stage offset to
+   rest over DUR.settle; `fade` materialises a part over DUR.fade, 80 ms apart; `ghost`/`solid` take a part to 15 % and
+   back over DUR.fade; `dip` presses the named tabs 3 mm over the phase's span and holds them, `pop` releases them 45 ms
+   apart; `land` un-stages without motion; a `camera` phase keeps its 750 ms as a beat, the camera itself is the film's.
+   Every tween is eased with the engine's easeInOutCubic except a detent move. vanish/appear/room/spin (the faceplate
+   step) are not replayed: a clip that reaches one aborts. */
+const ENG = { enter: 750, settle: 850, move: 600, fade: 650, stagger: 130, camera: 750, via: 300, detent: 900, pop: 320, popStagger: 45 };
+const TILED = /^FR-[LU]_|^C[LU]-|^WallMount|^UnderTableRail/;
+const detent = (k) => k + (0.85 / (2 * Math.PI)) * Math.sin(2 * Math.PI * k);
+const STEP_GAP = 0.3;   // the beat between two steps of one clip (the engine pages with a camera tween there)
+const MIN_DUR = 4.0;    // a clip is at least this long: a short step rests longer at the end
+const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const worldBox = (local, pos) => ({ min: add3(local.min, pos), max: add3(local.max, pos) });
+
+function engineTimeline(S, clip) {
+  const stages = { ...S.stages, ...(clip.stages || {}) };   // a clip may restage (the tabletop cases, see ENGINE_CLIPS)
+  const hiddenRe = clip.hide.map((re) => (re instanceof RegExp ? re : new RegExp(re)));
+  const skipped = new Set();   // parts the clip leaves out that one of its phases would have placed
+  const isHidden = (id) => { const h = hiddenRe.some((re) => re.test(id)); if (h) skipped.add(id); return h; };
+  const basePos = (id, staged) => { const c = S.cfg[id]; return staged && c.stage && stages[c.stage] ? add3(c.pos, stages[c.stage]) : c.pos.slice(); };
+  /* the state at t: every op applied in creation order (an op before its start leaves the state alone) */
+  const ops = [], log = [], keyBoxes = [], touched = new Set();
+  const init = () => { const st = {}; for (const id of S.ids) st[id] = { visible: S.before.visible.includes(id), pos: S.before.pos[id].slice(), staged: S.before.staged[id], childY: 0, opacity: 1 }; return st; };
+  const stateAt = (t) => { const st = init(); for (const op of ops) if (t >= op.t0) op.apply(st, Math.max(0, Math.min(1, op.dur > 0 ? (t - op.t0) / op.dur : 1)), t - op.t0); return st; };
+  const keyBox = (id, pos) => { if (S.local[id]) keyBoxes.push(worldBox(S.local[id], pos)); };
+  let T = REST;
+  S.steps.forEach((step, si) => {
+    if (si) T += STEP_GAP;
+    const stepStart = T;
+    for (const ph of step.phases) {
+      for (const k of ['vanish', 'appear', 'room']) if (ph[k] !== undefined) throw new Error(`step "${step.title}": a ${k} phase is not replayed`);
+      const pre = stateAt(T);
+      let end = T;
+      const job = (t0, dur) => { end = Math.max(end, t0 + dur); };
+      if (ph.camera) job(T, ENG.camera / 1000);
+      for (const g of ph.ghost || []) if (!isHidden(g.id)) { const id = g.id; ops.push({ t0: T, dur: ENG.fade / 1000, apply: (st, k) => { st[id].opacity = 1 - 0.85 * easeInOut(k); } }); job(T, ENG.fade / 1000); touched.add(id); }
+      for (const g of ph.solid || []) if (!isHidden(g.id)) { const id = g.id; ops.push({ t0: T, dur: ENG.fade / 1000, apply: (st, k) => { st[id].opacity = 0.15 + 0.85 * easeInOut(k); } }); job(T, ENG.fade / 1000); }
+      const enters = (ph.enter || []).filter((e) => !isHidden(e.id));
+      const tiles = enters.filter((e) => TILED.test(S.cfg[e.id].node)).length;
+      const pace = ph.pace || (tiles >= 2 ? 1.6 : 1);
+      enters.forEach((e, n) => {
+        const id = e.id, at = e.at || [0, 0, 0];
+        const to = add3(basePos(id, pre[id].staged), at), from = add3(to, e.from);
+        const pts = [from, to, ...(e.via || []).map((d) => add3(to, d))];
+        const legs = []; let total = 0; for (let s = 1; s < pts.length; s++) { total += dist3(pts[s], pts[s - 1]); legs.push(total); }
+        const delay = ph.sync ? 0 : n * ENG.stagger * pace / 1000, dur = (ENG.enter + ENG.via * (e.via?.length || 0)) * pace / 1000;
+        if (e.spin) throw new Error('spin is not replayed (' + id + ')');
+        const op = { t0: T, dur: delay + dur, firstEnter: T === REST, lead: 0, apply: (st, k, el) => {
+          st[id].visible = true;
+          el -= op.lead;
+          if (el < delay || !total) { st[id].pos = (el < delay ? pts[0] : pts[pts.length - 1]).slice(); return; }
+          const d = easeInOut(Math.min(1, (el - delay) / dur)) * total;
+          let s = legs.findIndex((L) => d <= L); if (s === -1) s = legs.length - 1;
+          const prev = s === 0 ? 0 : legs[s - 1], f = legs[s] === prev ? 1 : (d - prev) / (legs[s] - prev);
+          st[id].pos = lerp3(pts[s], pts[s + 1], f);
+        } };
+        ops.push(op);
+        pts.forEach((p) => keyBox(id, p)); touched.add(id); job(T, delay + dur);
+        log.push({ t: +T.toFixed(3), step: step.title, enter: id, from: pts[0].map((v) => +v.toFixed(1)), to: to.map((v) => +v.toFixed(1)), dur: +(delay + dur).toFixed(3) });
+      });
+      if (ph.dip && ph.dip.length) {
+        const nEnter = enters.length, maxVia = Math.max(0, ...enters.map((e) => e.via?.length || 0));
+        const span = (nEnter ? (ENG.enter + ENG.via * maxVia) * pace + (ph.sync ? 0 : (nEnter - 1) * ENG.stagger * pace) : ph.settle ? ENG.settle : ENG.move) / 1000;
+        for (const dp of ph.dip) if (!isHidden(dp.id)) { const id = dp.id, f0 = clip.dipFrom ? clip.dipFrom(dp, S, stages) : (dp.from ?? 0.7); ops.push({ t0: T, dur: span, apply: (st, k) => { st[id].childY = dipY(easeInOut(k), f0); } }); job(T, span); }
+      }
+      (ph.pop || []).forEach((p, n) => { if (isHidden(p.id)) return; const id = p.id, t0 = T + n * ENG.popStagger / 1000; ops.push({ t0, dur: ENG.pop / 1000, apply: (st, k) => { st[id].childY = popY(easeInOut(k)); } }); job(t0, ENG.pop / 1000); });
+      for (const m of ph.move || []) {
+        if (isHidden(m.id)) continue;
+        const id = m.id, from = pre[id].pos.slice(), to = add3(from, m.by), dur = (m.ease ? ENG.detent : ENG.move) / 1000, delay = (m.hold || 0) / 1000, eased = m.ease === 'detent';
+        ops.push({ t0: T + delay, dur, apply: (st, k) => { st[id].pos = lerp3(from, to, eased ? detent(k) : easeInOut(k)); } });
+        keyBox(id, from); keyBox(id, to); touched.add(id); job(T + delay, dur);
+        log.push({ t: +(T + delay).toFixed(3), step: step.title, move: id, by: m.by, dur: +dur.toFixed(3) });
+      }
+      (ph.fade || []).forEach((f, n) => {
+        if (isHidden(f.id)) return;
+        /* the engine shows the part at opacity 0 the moment the phase starts and begins its fade n * 80 ms later */
+        const id = f.id, pos = basePos(id, pre[id].staged), delay = n * 0.08, fd = ENG.fade / 1000;
+        ops.push({ t0: T, dur: delay + fd, apply: (st, k, el) => { st[id].visible = true; st[id].pos = pos.slice(); st[id].opacity = el < delay ? 0 : Math.min(1, easeInOut(Math.min(1, (el - delay) / fd))); } });
+        keyBox(id, pos); touched.add(id); job(T, delay + fd);
+        log.push({ t: +T.toFixed(3), step: step.title, fade: id, delay });
+      });
+      if (ph.settle) {
+        for (const id of S.ids) {
+          if (S.cfg[id].stage !== ph.settle || !pre[id].staged || isHidden(id)) continue;
+          const from = basePos(id, true), to = basePos(id, false), dur = ENG.settle / 1000;
+          ops.push({ t0: T, dur, apply: (st, k) => { st[id].pos = lerp3(from, to, easeInOut(k)); if (k >= 1) st[id].staged = false; } });
+          if (pre[id].visible) { keyBox(id, from); keyBox(id, to); }
+          touched.add(id); job(T, dur);
+          log.push({ t: +T.toFixed(3), step: step.title, settle: id, from: from.map((v) => +v.toFixed(1)), to: to.map((v) => +v.toFixed(1)), dur });
+        }
+      }
+      if (ph.land) for (const id of S.ids) if (S.cfg[id].stage === ph.land) { const pos = basePos(id, false); ops.push({ t0: end, dur: 0, apply: (st) => { st[id].staged = false; st[id].pos = pos.slice(); } }); }
+      T = end;
+    }
+    log.push({ t: +stepStart.toFixed(3), stepEnd: +T.toFixed(3), step: step.title });
+  });
+  const dur = Math.max(MIN_DUR, Math.ceil((T + 1.0) * 10) / 10);   // rest >= 1.0 s at the end, and a clip no shorter than MIN_DUR
+  /* the parts that enter in the clip's very first phase wait at their start pose through the opening rest (the engine shows
+     them only as the phase starts; a loop that opened on an empty stage read as a cut - the under-table rail, 2026-10-25) */
+  for (const op of ops) { if (op.t0 > REST) break; if (op.firstEnter) op.t0 = 0, op.dur += REST, op.lead = REST; }
+  /* every visible part at the start and at the end is fitted too */
+  const st0 = stateAt(0), st1 = stateAt(dur);
+  for (const id of S.ids) { if (st0[id].visible) keyBox(id, st0[id].pos); if (st1[id].visible) keyBox(id, st1[id].pos); }
+  /* the staged-case clearance: a part that enters onto its stage must not overlap anything visible when it lands there
+     (the tabletop's -170 staging put a case's front 15 mm over the parts below it) */
+  const clearance = [];
+  for (const e of log) if (e.enter && S.cfg[e.enter].stage && /_Case$/.test(S.cfg[e.enter].node)) {
+    const tEnd = e.t + e.dur, st = stateAt(tEnd), me = worldBox(S.local[e.enter], st[e.enter].pos);
+    let worst = { gap: Infinity, other: null };
+    for (const id of S.ids) {
+      if (id === e.enter || !st[id].visible || isHidden(id) || !S.local[id]) continue;   // what is drawn, not what the state says (Sol 01a1757e)
+      const o = worldBox(S.local[id], st[id].pos);
+      const gap = Math.max(...[0, 1, 2].map((i) => Math.max(o.min[i] - me.max[i], me.min[i] - o.max[i])));   // > 0 = separated on some axis
+      if (gap < worst.gap) worst = { gap: +gap.toFixed(2), other: id };
+    }
+    clearance.push({ id: e.enter, at: +tEnd.toFixed(3), pos: st[e.enter].pos.map((v) => +v.toFixed(1)), ...worst });
+    if (worst.gap < 0) throw new Error(`${e.enter} lands on its stage overlapping ${worst.other} by ${-worst.gap} mm`);
+  }
+  const frames = (t) => { const st = stateAt(t); return S.ids.map((id) => ({ id, visible: st[id].visible && !isHidden(id), pos: st[id].pos, childY: st[id].childY, opacity: st[id].opacity })); };
+  return { dur, frames, keyBoxes, touched, log, stages, clearance, skipped: [...skipped].map((id) => id + ' (' + S.cfg[id].node + ')') };
+}
+/* the mount rule, per frame: on the wall the smallest distance of any visible part's box to the wall plane (a wood screw's
+   shank is meant to be in the wall and is left out), on the tabletop the smallest height of any box above the table top */
+function mountClearance(S, placements, record) {
+  let worst = { worst: Infinity, id: null };
+  for (const p of placements) {
+    if (!p.visible || !S.local[p.id]) continue;
+    const b = worldBox(S.local[p.id], p.pos);
+    if (p.childY) b.min[1] += Math.min(0, p.childY);   // a pressed tab rides 3 mm below its part (Sol 01a1757e)
+    const d = record === 'wall' ? (/WoodScrew/.test(S.cfg[p.id].node) ? Infinity : b.min[2] - S.wallZ) : record === 'ttk' ? b.min[1] - S.tableY : Infinity;
+    if (d < worst.worst) worst = { worst: +d.toFixed(2), id: p.id };
+  }
+  return worst;
+}
+
+/* the builds the wall and tabletop clips are filmed on: the wall record is tools/film/wall-hash.txt in the site repo decoded
+   (the 2W two-row wall build the 2026-09-01 clips used), the tabletop one is the planner's own 185-tabletop-2w2h kit; both
+   with the side covers off (RECORDS.ttk is read from builds/ at start) */
+const RECORDS = {
+  wall: { mount: 'wall', length: 185, faceStyle: 'classic', handleStyle: 'deco', wallStagger: false, backCover: false, feet: 'tpu', removedStoppers: [], gridW: 6, gridH: 4, nextId: 3, printer: 'any', sideCovers: false,
+    placed: [{ id: 1, x: 0, y: 6, w: 2, hh: 2, fill: 'decor', shelves: 0, closure: 'none' }, { id: 2, x: 0, y: 4, w: 2, hh: 2, fill: 'decor', shelves: 0, closure: 'none' }] },
+  ttk: null,
+};
+/* the tabletop cases stage 25 mm further back than the generator's slideBack (-170 = -max(170, depth - 15)): at -170 a 185
+   case lands with its front 15 mm over the parts below it and its drop cuts through them; at -(185 + 10) it clears them by
+   10 mm (the QuickLock explainer's fix, tools/film/README.md), and the dip's start fraction is recomputed with the
+   generator's own dipFrom for the longer settle */
+const TTK_STAGE = [0, 0, -(185 + 10)];
+const ttkDip = (dp, S, stages) => { const travel = Math.abs(stages[S.cfg['case2'] ? 'c2' : 'c0'][2]); return dipFrom(travel); };
+const ENGINE_CLIPS = {
+  /* the wall: bracket + 4 screws; the bench assembly of the top case (case, locks, cover lower with the dip and pop, the
+     top-row drawer's stoppers, cover upper); the hang (covers ghosted, 200 mm back onto the pegs, 16 mm drop, solid);
+     the lower case sliding in from 225 mm out front */
+  bracket: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [1], hide: [], az: 16, el: 10 },
+  cover: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [2], hide: [], az: 26, el: 24 },
+  hang: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [3], hide: [/^st\d/], az: 20, el: 36 },
+  rows: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [4], hide: [/^st\d|^tst/], az: 18, el: 6 },
+  /* the tabletop (the 185 2W-2H kit): the lower rail lands and the six feet slide in, the base sets down; the upper rail
+     slides on from the back; the three cases (restaged, see TTK_STAGE) with their locks, the dips and pops; the two cover
+     layers with the top drawer's stoppers; the three drawers with their magnet clips */
+  base: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [1, 2, 3], hide: [], az: 28, el: 30 },
+  upper: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [4], hide: [], az: 22, el: 22 },
+  cases: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [5, 6, 7], hide: [/^mc|^mg|^st\d/], az: 20, el: 20, stages: { c0: TTK_STAGE, c1: TTK_STAGE, c2: TTK_STAGE }, dipFrom: ttkDip },
+  covers: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [8, 9], hide: [/^mc|^mg|^st0|^st1/], az: 22, el: 26 },
+  drawers3: { engine: true, record: 'ttk', prefix: 'ttk-step-', file: 'drawers', steps: [10], hide: [/^mc|^mg/], az: 18, el: 8 },
+};
+
 /* ---- the repo served locally, Chrome launched the way the other harnesses do --------------------------------------- */
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webp': 'image/webp' };
 function serve() {
@@ -370,6 +545,16 @@ const FRAME = ({ placements, stale }) => {
     if (p.pos) g.position.set(p.pos[0], p.pos[1], p.pos[2]);
     g.rotation.x = p.rotX || 0;
     if (p.childY != null) { const ch = g.children[0]; if (!ch) throw new Error('no inner child on ' + p.id); ch.position.y = p.childY; }
+    /* opacity (the engine's ghost / solid / fade): the meshes take a transparent clone of their material while it is below
+       1 and get their own back at 1; a ghosted mesh is flagged the way the engine flags one, so the AO pass leaves it
+       out (updateAO skips o.userData.ghost) */
+    if (p.opacity != null) g.traverse((o) => {
+      if (!o.isMesh) return;
+      if (p.opacity < 1) {
+        if (!o.userData.filmMat) { o.userData.filmMat = o.material; const m = o.material.clone(); m.transparent = true; o.material = m; }
+        o.material.opacity = p.opacity; o.userData.ghost = true;
+      } else if (o.userData.filmMat) { o.material.dispose(); o.material = o.userData.filmMat; delete o.userData.filmMat; delete o.userData.ghost; }
+    });
     g.updateMatrixWorld(true);
   }
   const read = () => HTMLCanvasElement.prototype.toDataURL.call(c, 'image/png');   // the page's own toDataURL re-enters the loop
@@ -402,7 +587,42 @@ const PROJECT = ({ box }) => {
   return { corners: out, outside: out.every((c) => c.behind || Math.abs(c.ndc[0]) > 1 || Math.abs(c.ndc[1]) > 1) };
 };
 
-async function openStage(browser, base) {
+/* the step's phases, the stages and every instance, read from the page for the engine replay: the local boxes are taken on
+   the clip's LAST page (everything the clip places is visible there), the start state on the page BEFORE its first step */
+const SETUP_ENGINE = ({ first, last, hide }) => {
+  const h = window.__GEN2_VIEWER__, T = h.THREE;
+  h.setCamOverride(true);
+  h.goTo(last + 1, { animate: false });
+  /* the wall backdrop is sized to the build (fitWall: ~10 R wide); a bench shot from above looks past its edge into the
+     void, so it is stretched in its own plane for the film - its z, the plane every check measures against, is unchanged */
+  if (h.wall && h.wall.visible) h.wall.scale.set(5, 5, 1);
+  const local = {}, cfg = {};
+  for (const x of h.instances.values()) {
+    cfg[x.cfg.id] = { pos: x.cfg.pos, stage: x.cfg.stage || null, node: x.cfg.node, rides: x.cfg.rides || null, yaw: x.cfg.yaw || 0 };
+    if (!x.group.visible) continue;
+    x.group.updateMatrixWorld(true);
+    const b = new T.Box3().setFromObject(x.group), p = x.group.position;
+    local[x.cfg.id] = { min: [b.min.x - p.x, b.min.y - p.y, b.min.z - p.z], max: [b.max.x - p.x, b.max.y - p.y, b.max.z - p.z] };
+  }
+  /* page `first` = the after-state of step first-1 = the before-state of step `first`. Before the FIRST real step (first
+     = 1) the page is the exploded overview, which shows every part flung out; the state before that step is nothing
+     placed, every staged group still on its stage - set by hand */
+  h.goTo(first === 1 ? 2 : first, { animate: false });
+  const before = { visible: [], pos: {}, staged: {} }, hidden = [];
+  for (const x of h.instances.values()) {
+    if (first === 1) { x.group.visible = false; x.staged = !!x.cfg.stage; x.group.position.set(...x.cfg.pos); if (x.staged && h.manifest.stages[x.cfg.stage]) { const o = h.manifest.stages[x.cfg.stage]; x.group.position.x += o[0]; x.group.position.y += o[1]; x.group.position.z += o[2]; } }
+    before.pos[x.cfg.id] = x.group.position.toArray(); before.staged[x.cfg.id] = !!x.staged;
+    if (hide.some((re) => new RegExp(re).test(x.cfg.id))) { if (x.group.visible) hidden.push(x.cfg.id + ' (' + x.cfg.node + ')'); x.group.visible = false; continue; }
+    if (x.group.visible) before.visible.push(x.cfg.id);
+  }
+  const steps = h.manifest.steps.slice(first, last + 1).map((s) => ({ title: s.title, phases: s.phases || [] }));
+  const sideCovers = [...h.instances.values()].filter((x) => /SideCover/.test(x.cfg.node)).map((x) => x.cfg.id);
+  return { first, last, steps, stages: h.manifest.stages || {}, cfg, local, before, hidden, sideCovers, page: h.cur,
+    wallZ: h.wall && h.wall.visible ? h.wall.position.z : null, tableY: h.table && h.table.visible ? h.table.position.y : null,
+    shadowMap: h.renderer.shadowMap.enabled, ids: Object.keys(cfg) };
+};
+
+async function openStage(browser, base, record = RECORD) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
   await ctx.route(/goatcounter|gc\.zgo/, (r) => r.abort());
   await ctx.addInitScript((theme) => { try {
@@ -411,7 +631,7 @@ async function openStage(browser, base) {
   } catch {} window.__FILM_AO_DURING_TWEENS = true; }, THEME);
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-  const hash = Buffer.from(JSON.stringify(RECORD), 'utf8').toString('base64');
+  const hash = Buffer.from(JSON.stringify(record), 'utf8').toString('base64');
   await page.goto(`${base}/index.html?ws=assemble&debug=1&idle=off&new=1#build=${hash}`, { waitUntil: 'load', timeout: 120_000 });
   await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && window.__GEN2_STORE__ && document.querySelector('#ws-player'), null, { timeout: 150_000 });
   await page.waitForTimeout(2000);
@@ -422,19 +642,31 @@ async function openStage(browser, base) {
 }
 
 async function film(name, clip, browser, base, pose) {
-  const dir = join(OUT, name), framesDir = join(dir, 'frames');
+  const dir = join(OUT, name), framesDir = join(dir, 'frames'), prefix = clip.prefix || 'ut-step-', file = clip.file || name;
   await mkdir(framesDir, { recursive: true });
-  const N = Math.round(FPS * clip.dur);
-  const { ctx, page, errors, quality } = await openStage(browser, base);   // a fresh page per clip: the stage's state is the step's own
-  const run = { name, startedAt: new Date().toISOString(), W, H, FPS, dur: clip.dur, N, START, THEME, record: RECORD, quality, frames: [], proof: [] };
+  const record = clip.record ? RECORDS[clip.record] : RECORD;
+  const { ctx, page, errors, quality } = await openStage(browser, base, record);   // a fresh page per clip: the stage's state is the step's own
+  const run = { name, startedAt: new Date().toISOString(), W, H, FPS, START, THEME, record, quality, frames: [], proof: [] };
   const tStart = Date.now();
+  let N, S, frames, cameraSpec, plan = null;
   try {
-    const S = await page.evaluate(SETUP, { title: clip.title, hide: clip.hide.map((re) => (re instanceof RegExp ? re.source : re)) });
-    if (S.sideCovers.length) throw new Error('side covers instanced: ' + S.sideCovers.join(','));
-    S.pose = pose; S.riders = (id) => S.rides[id] || [];
-    /* how far a QuickLock can start above its seat without entering the slab: the engine's 45 mm, or 3 mm under the underside */
-    S.dropOf = (id) => Math.min(45, S.surfaceUnderY - 3 - box(S, id).max[1]);
-    run.setup = { step: S.step, title: S.title, page: S.page, hidden: S.hidden, notShown: S.notShown, ids: S.ids, caseFront: S.caseFront, surfaceUnderY: S.surfaceUnderY, boxes: S.boxes, drops: Object.fromEntries(S.ids.filter((i) => /^ql/.test(i)).map((i) => [i, S.dropOf(i)])) };
+    if (clip.engine) {
+      S = await page.evaluate(SETUP_ENGINE, { first: clip.steps[0], last: clip.steps[clip.steps.length - 1], hide: clip.hide.map((re) => (re instanceof RegExp ? re.source : re)) });
+      if (S.sideCovers.length) throw new Error('side covers instanced: ' + S.sideCovers.join(','));
+      plan = engineTimeline(S, clip);
+      run.dur = plan.dur; N = Math.round(FPS * plan.dur); frames = plan.frames;
+      run.setup = { steps: S.steps.map((s) => s.title), first: S.first, last: S.last, page: S.page, hidden: S.hidden, notShown: S.ids.filter((id) => !S.before.visible.includes(id) && !plan.touched.has(id)).map((id) => id + ' (' + S.cfg[id].node + ')'), skipped: plan.skipped, stages: plan.stages, wallZ: S.wallZ, tableY: S.tableY, shadowMap: S.shadowMap, timeline: plan.log, clearance: plan.clearance };
+      cameraSpec = { az: clip.az, el: clip.el, fov: 34, target: clip.target ? clip.target(plan, S) : centre(union(...plan.keyBoxes)), toward: 0, fitBoxes: plan.keyBoxes, margin: MARGIN };
+    } else {
+      S = await page.evaluate(SETUP, { title: clip.title, hide: clip.hide.map((re) => (re instanceof RegExp ? re.source : re)) });
+      if (S.sideCovers.length) throw new Error('side covers instanced: ' + S.sideCovers.join(','));
+      S.pose = pose; S.riders = (id) => S.rides[id] || [];
+      /* how far a QuickLock can start above its seat without entering the slab: the engine's 45 mm, or 3 mm under the underside */
+      S.dropOf = (id) => Math.min(45, S.surfaceUnderY - 3 - box(S, id).max[1]);
+      run.dur = clip.dur; N = Math.round(FPS * clip.dur); frames = (t) => clip.frames(t, S);
+      run.setup = { step: S.step, title: S.title, page: S.page, hidden: S.hidden, notShown: S.notShown, ids: S.ids, caseFront: S.caseFront, surfaceUnderY: S.surfaceUnderY, boxes: S.boxes, drops: Object.fromEntries(S.ids.filter((i) => /^ql/.test(i)).map((i) => [i, S.dropOf(i)])) };
+    }
+    run.N = N;
     /* the workspace pans the projection clear of its player card (setSafeArea -> setViewOffset), and re-asks on every page
        event - so it is cleared AFTER goTo's onPage microtask has run, then the loop lerps the pan back to zero and snaps it
        to clearViewOffset. No tween left either. */
@@ -445,7 +677,7 @@ async function film(name, clip, browser, base, pose) {
        camera is re-fitted at every step, since the lowered start pose is part of the fit */
     S.hold = clip.minHold ? Math.ceil(clip.minHold(S)) : 0;
     for (let i = 0; ; i++) {
-      run.camera = await page.evaluate(CAMERA, { ...clip.camera(S), W, H });
+      run.camera = await page.evaluate(CAMERA, { ...(cameraSpec || clip.camera(S)), W, H });
       if (!clip.slabCheck) break;
       run.slab = await page.evaluate(SLABLINE, { boxes: clip.slabCheck(S), underY: S.surfaceUnderY, frontZ: S.slabFrontZ, halfW: S.slabHalfW, clear: 0.02 });
       run.slab.hold = S.hold; run.slab.minHold = clip.minHold(S);
@@ -464,10 +696,11 @@ async function film(name, clip, browser, base, pose) {
       const pr = r.getPixelRatio();
       if (h.camera.view && h.camera.view.enabled) h.camera.clearViewOffset();
       r.setSize((W + 0.5) / pr, (H + 0.5) / pr, false); h.camera.aspect = W / H; h.camera.updateProjectionMatrix();
-      return { buffer: [r.domElement.width, r.domElement.height], pr, surfaceVisible: h.surface.visible, cameraY: h.camera.position.y, viewOffset: !!(h.camera.view && h.camera.view.enabled), accWanted: h.accWanted(), aoWanted: h.aoWanted(), ACC: h.ACC_SAMPLES, AO: h.ao.accumMax };
+      return { buffer: [r.domElement.width, r.domElement.height], pr, surfaceVisible: h.surface.visible, wallVisible: h.wall.visible, tableVisible: h.table.visible, cameraY: h.camera.position.y, cameraZ: h.camera.position.z, viewOffset: !!(h.camera.view && h.camera.view.enabled), accWanted: h.accWanted(), aoWanted: h.aoWanted(), ACC: h.ACC_SAMPLES, AO: h.ao.accumMax, shadowMap: h.renderer.shadowMap.enabled, sunShadow: !!h.scene.children.find((o) => o.isDirectionalLight && o.castShadow) };
     }, [W, H]);
     if (run.paused.buffer[0] !== W || run.paused.buffer[1] !== H) throw new Error('drawing buffer ' + run.paused.buffer.join('x') + ', wanted ' + W + 'x' + H);
-    if (run.paused.viewOffset || !run.paused.surfaceVisible || !run.paused.accWanted) throw new Error('not ready to film: ' + JSON.stringify(run.paused));
+    const backdropOk = clip.record === 'wall' ? run.paused.wallVisible : clip.record === 'ttk' ? run.paused.tableVisible : run.paused.surfaceVisible;
+    if (run.paused.viewOffset || !backdropOk || !run.paused.accWanted) throw new Error('not ready to film: ' + JSON.stringify(run.paused));
     const { ACC, AO } = run.paused;
     const converged = (r) => r.drew && r.accN >= ACC && r.aoPasses >= AO;
     /* the clip's own checks, against the scene and the camera as they will film */
@@ -483,8 +716,14 @@ async function film(name, clip, browser, base, pose) {
       if (!run.offFrame.outside) throw new Error('the hide pose is still in the frame: ' + JSON.stringify(run.offFrame));
     }
     /* the film */
+    run.mount = plan ? { worst: Infinity, frame: null } : null;   // the mount rule: the smallest clearance to the backdrop plane over the film
     for (let f = 0; f < N; f++) {
-      const t = f / FPS, placements = clip.frames(t, S), t0 = Date.now();
+      const t = f / FPS, placements = frames(t), t0 = Date.now();
+      if (plan) {   // nothing through or behind the wall, nothing below the table top - per frame, from the placements and the local boxes
+        const m = mountClearance(S, placements, clip.record);
+        if (m.worst < run.mount.worst) run.mount = { ...m, frame: f, t: +t.toFixed(3) };
+        if (m.worst < -0.5) throw new Error(`${name} frame ${f} (t ${t.toFixed(2)}): ${m.id} is ${(-m.worst).toFixed(1)} mm ${clip.record === 'wall' ? 'behind the wall' : 'below the table top'}`);
+      }
       const r = await page.evaluate(FRAME, { placements });
       const wallMs = Date.now() - t0;
       await writeFile(join(framesDir, `frame_${String(f).padStart(3, '0')}.png`), pngOf(r.png));
@@ -519,15 +758,15 @@ async function film(name, clip, browser, base, pose) {
   if (flag('--frames-only')) return run;
 
   /* ffmpeg: the clip, the poster, the contact sheet, the proof */
-  const mp4 = join(OUT, `ut-step-${name}.mp4`);
+  const mp4 = join(OUT, `${prefix}${file}.mp4`);
   ff(['-framerate', String(FPS), '-i', posix(join(framesDir, 'frame_%03d.png')), '-vf', `scale=${W}:${H}:flags=lanczos,format=yuv420p`, '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-movflags', '+faststart', posix(mp4)]);
-  ff(['-i', posix(join(framesDir, 'frame_000.png')), '-q:v', '3', posix(join(OUT, `ut-step-${name}-poster.jpg`))]);   // q:v 3 ~ JPEG quality 85
+  ff(['-i', posix(join(framesDir, 'frame_000.png')), '-q:v', '3', posix(join(OUT, `${prefix}${file}-poster.jpg`))]);   // q:v 3 ~ JPEG quality 85
   const every = Math.max(1, Math.floor((N - 1) / 7));   // 8 frames: 0, every, ..., 7*every
-  ff(['-i', posix(join(framesDir, 'frame_%03d.png')), '-vf', `select='not(mod(n\\,${every}))*lte(n\\,${7 * every})',scale=600:-1,tile=4x2:padding=4:margin=4:color=0x202020`, '-frames:v', '1', '-fps_mode', 'vfr', posix(join(OUT, `ut-step-${name}-sheet.png`))]);
+  ff(['-i', posix(join(framesDir, 'frame_%03d.png')), '-vf', `select='not(mod(n\\,${every}))*lte(n\\,${7 * every})',scale=600:-1,tile=4x2:padding=4:margin=4:color=0x202020`, '-frames:v', '1', '-fps_mode', 'vfr', posix(join(OUT, `${prefix}${file}-sheet.png`))]);
   if (clip.proof && !flag('--no-proof')) {
     const ins = [...clip.proof.map((t) => `proof-stale-t${t.toFixed(1)}.png`), ...clip.proof.map((t) => `proof-converged-t${t.toFixed(1)}.png`)].flatMap((n) => ['-i', posix(join(dir, n))]);
     const sc = [0, 1, 2, 3, 4, 5].map((i) => `[${i}:v]scale=600:-1,pad=iw+8:ih+8:4:4:${i < 3 ? 'red' : 'green'}[v${i}]`).join(';');
-    ff([...ins, '-filter_complex', `${sc};[v0][v1][v2]hstack=3[top];[v3][v4][v5]hstack=3[bot];[top][bot]vstack=2`, '-frames:v', '1', posix(join(OUT, `ut-step-${name}-proof-stale-vs-converged.png`))]);
+    ff([...ins, '-filter_complex', `${sc};[v0][v1][v2]hstack=3[top];[v3][v4][v5]hstack=3[bot];[top][bot]vstack=2`, '-frames:v', '1', posix(join(OUT, `${prefix}${file}-proof-stale-vs-converged.png`))]);
   }
   run.mp4Bytes = (await stat(mp4)).size;
   console.log(`${name}: ${N} frames in ${(run.filmMs / 1000).toFixed(1)} s (${(run.filmMs / N / 1000).toFixed(2)} s per frame); ${mp4} ${(run.mp4Bytes / 1024).toFixed(0)} KB; total ${(run.totalMs / 1000).toFixed(1)} s`);
@@ -539,8 +778,10 @@ async function film(name, clip, browser, base, pose) {
 async function main() {
   const { chromium } = await import('playwright');
   const pose = opt('--curve', null) ? sampled(JSON.parse(await readFile(opt('--curve'), 'utf8'))) : motion(START);
+  const ALL = { ...CLIPS, ...ENGINE_CLIPS };
   const names = WANTED.length ? WANTED : Object.keys(CLIPS);
-  for (const n of names) if (!CLIPS[n]) throw new Error('no clip ' + n + '; clips: ' + Object.keys(CLIPS).join(' '));
+  for (const n of names) if (!ALL[n]) throw new Error('no clip ' + n + '; clips: ' + Object.keys(ALL).join(' '));
+  RECORDS.ttk = { ...JSON.parse(await readFile(join(root, 'builds', '185-tabletop-2w2h.json'), 'utf8')).build, sideCovers: false };   // the planner's tabletop-185 starter kit, side covers off
   await mkdir(OUT, { recursive: true });
   const summary = { startedAt: new Date().toISOString(), START, THEME, clips: {} };
   /* --check-curve <curve.json>: the embedded curve against node0's 120 Hz samples (the largest difference in mm / deg) */
@@ -554,8 +795,8 @@ async function main() {
   const browser = await launch(chromium);
   try {
     for (const n of names) {
-      const r = await film(n, CLIPS[n], browser, base, pose);
-      summary.clips[n] = { title: r.setup.title, page: r.setup.page, dur: r.dur, N: r.N, mp4Bytes: r.mp4Bytes, filmMs: r.filmMs, totalMs: r.totalMs, camera: r.camera, cameraY: r.paused.cameraY, hidden: r.setup.hidden, notShown: r.setup.notShown, drops: r.setup.drops, errors: r.errors, unconverged: r.unconverged || [] };
+      const r = await film(n, ALL[n], browser, base, pose);
+      summary.clips[n] = { title: r.setup.title || r.setup.steps, page: r.setup.page, dur: r.dur, N: r.N, mp4Bytes: r.mp4Bytes, filmMs: r.filmMs, totalMs: r.totalMs, camera: r.camera, cameraY: r.paused.cameraY, hidden: r.setup.hidden, notShown: r.setup.notShown, drops: r.setup.drops, mount: r.mount, clearance: r.setup.clearance, shadowMap: r.paused.shadowMap, errors: r.errors, unconverged: r.unconverged || [] };
     }
   } finally {
     await browser.close(); server.close();
