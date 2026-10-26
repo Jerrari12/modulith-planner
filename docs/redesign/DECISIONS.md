@@ -3702,6 +3702,39 @@ Dated calls made while building, with who made them. The brief and the inventory
 - **Not done.** Not deployed: behind `?done=room`. A low-end device's cost is not measured: the A5000 laptop shows that
   the drift does not depend on the scene's drawing, not what a weak GPU pays to composite it.
 
+## 2026-10-25 (the Done scene: the drift doubled, none on Very High, no frozen steam over it)
+
+- **The ask.** Joey, having kept 1.045: "actually yeah maybe try double that, also another thing that feels odd on the
+  zoomed shots like this, maybe we omit the steam from the coffee on those because it's the obvious dead giveaway that
+  it's a static image, but on very high we never use this static image zoom feature, what do you think?"
+- **Doubled.** DRIFT.scale 1.09. The edge guarantee holds at any scale (a slide uses 0.7 of the reach the scale covers).
+- **None on Very High** (done-fit.js `driftWanted`). Its still shots are its converged pictures, the lens's bokeh among
+  them, which a zoom of the finished frame would only soften; it has the moving shots for motion; and its steam holds
+  still through a still shot. A change to Very High mid-shot ends the drift on screen (onQuality).
+- **The steam, only where it moves** (done-fit.js `steamShown`). Not drawn on Fast, where it cannot move and every shot
+  drifts: a frozen wisp in a zooming picture gave the picture away. It is hidden from the entrance on, so it does not
+  vanish on screen when the first drift begins. On High and Balanced it keeps rising inside the zooming picture, which
+  reads as live, not as a still. Under reduced motion nothing drifts and the still wisp stays. Colors' Room stage, which
+  runs no grammar and never drifts, keeps it on Fast too. Its visibility is set when the steam is made, so Fast's first
+  frame has none. It is set again only on a tier change that flips the answer, from the tier hook before the new tier's
+  first frame; never every frame, since the e2e hides the steam by hand for its frame comparisons.
+- **Review.** Terra `01a1755a`, four rounds.
+  - Round 1: one finding, the steam hidden on Fast where nothing drifts. It held for Colors' Room stage, now drawn there.
+    Kept as designed: Assemble's 3 s entrance on Fast (see above), and a device judged slow, whose still shots do drift.
+  - Round 2: a hand hide before the steam's first frame would be undone. That state is not reached, but its root, the
+    first frame on Fast drawing the steam, was fixed.
+  - Round 3: a High -> Fast change could draw one frame with the old steam. The tier hook now applies it.
+  - Round 4: no findings.
+- **Checks.** Clips `drift/clip-v2/` (Fast with no steam, High with the steam rising through the zoom) and the sheet
+  `drift/clip-v2/drift-9pct-sheet.png`.
+  - Mutants: the drift list, now 22, all killed, each at its own assertion. That includes the new ones: drift on Very
+    High, a change to it keeping the drift, the steam on Fast, the steam nowhere, the scene's grammar ignored, Colors
+    told it drifts, and the visibility not applied on a tier change. That last one survived the drift case: the steam's
+    visibility is set when it is made. The steam case now checks it after its High -> Fast -> Very High changes.
+  - The steam and sheen list, 33 of 33.
+  - The whole e2e suite: 95 of 95. The done-fit unit tests: 31 of 31.
+- **Not done.** Not deployed: behind `?done=room`.
+
 ## 2026-10-25 (the Done scene: the desk's own bounce, so a recoloured desk lights the room as it would)
 
 - **The ask.** Shown that a plain desk colour left the rest of the room lit by the oak (a white desk 1.3 to 2.1 display

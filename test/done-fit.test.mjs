@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -555,8 +555,9 @@ test('the still shots\' drift: a push in, a pull out or a slide, about the build
       assert.ok(land(0, oy, { s: at.s, x: at.y }) <= 1e-12 && land(1, oy, { s: at.s, x: at.y }) >= 1 - 1e-12, `${kind}: and the top and bottom`);
     }
   }
-  const r = driftReach(0.5, 1.045);
-  close(r.hi, 0.5 * 0.045 / 1.045, 1e-12, 'about the middle a slide may reach (s - 1) / 2s either way');
+  assert.equal(DRIFT.scale, 1.09, 'at most 9 % (Joey: "maybe try double that", of 4.5 %)');
+  const r = driftReach(0.5, 1.09);
+  close(r.hi, 0.5 * 0.09 / 1.09, 1e-12, 'about the middle a slide may reach (s - 1) / 2s either way');
   close(r.lo, -r.hi, 1e-12, 'the same on both sides');
   assert.deepEqual([driftFor('in', { x: 0.5, y: 0.5 }).from.s, driftFor('in', { x: 0.5, y: 0.5 }).to.s], [1, DRIFT.scale], 'a push in from the shot as framed');
   assert.deepEqual([driftFor('out', { x: 0.5, y: 0.5 }).from.s, driftFor('out', { x: 0.5, y: 0.5 }).to.s], [DRIFT.scale, 1], 'a pull out to it');
@@ -566,4 +567,12 @@ test('the still shots\' drift: a push in, a pull out or a slide, about the build
   assert.equal(driftKind('hero', 7), 'in', 'the hero pushes in');
   assert.deepEqual([0, 1, 2, 3, 4, -1].map((i) => driftKind('low', i)), ['in', 'left', 'out', 'right', 'in', 'right'], 'the others turn through the kinds');
   assert.equal(driftCss({ s: 1.045, x: -0.015, y: 0 }), 'scale(1.0450) translate(-1.500%, 0.000%)');
+});
+
+test('where the drift runs and the steam is drawn: no drift on Very High or under reduced motion; no steam where it cannot move in a drifting picture', () => {
+  assert.deepEqual(['fast', 'balanced', 'high', 'veryhigh'].map((t) => driftWanted(t, false)), [true, true, true, false], 'every tier but Very High drifts');
+  assert.deepEqual(['fast', 'balanced', 'high', 'veryhigh'].map((t) => driftWanted(t, true)), [false, false, false, false], 'none under reduced motion');
+  assert.deepEqual(['fast', 'balanced', 'high', 'veryhigh'].map((t) => steamShown(t, false)), [false, true, true, true], 'Fast: a frozen wisp would give the zoom away, so none');
+  assert.deepEqual(['fast', 'balanced', 'high', 'veryhigh'].map((t) => steamShown(t, true)), [true, true, true, true], 'under reduced motion nothing drifts: a still wisp belongs to a still scene');
+  assert.deepEqual(['fast', 'balanced', 'high', 'veryhigh'].map((t) => steamShown(t, false, false)), [true, true, true, true], 'a scene with no grammar (Colors’ Room stage) never drifts: the steam stays');
 });

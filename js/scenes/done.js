@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, driftFor, driftKind, driftCss, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -378,16 +378,17 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   /* THE STILL SHOTS' DRIFT (done-fit.js driftFor; Joey 2026-10-25: "slowly zoom in or out slightly, like without it
      rerendering the scene"): a shot that does not move (every shot of the still grammar, the still shots of the moving
-     one) has its finished picture slowly pushed in, pulled out or slid across while it is on screen, from its clock's
-     start to the end of its dip-out, by a CSS transform on the canvas the compositor animates (the Web Animations API on
-     `transform` only). Nothing is drawn again for it: the idle gate, Very High's mean and the steam are as they were. About
-     the build's place in the frame; the canvas's box clips it, so the cinema bars and the strip stay put. Cleared in the
-     black, paused with the tab, never under reduced motion. */
+     one on High) has its finished picture slowly pushed in, pulled out or slid across while it is on screen, from its
+     clock's start to the end of its dip-out, by a CSS transform on the canvas the compositor animates (the Web Animations
+     API on `transform` only). Nothing is drawn again for it: the idle gate and the steam are as they were. About the
+     build's place in the frame; the canvas's box clips it, so the cinema bars and the strip stay put. Cleared in the
+     black, paused with the tab; never on Very High or under reduced motion (done-fit.js driftWanted), and a change to
+     Very High ends it (onQuality). */
   const drift = { anim: null, plan: null, clip: null, origin: null, n: 0 };   // clip, origin: the box's overflow and the canvas's own origin, as they were
   function driftStart() {
     driftStop();
     const el = renderer.domElement, box = el.parentElement;
-    if (reduced || seq.moving || !el.animate || !box || !buildBox || buildBox.isEmpty()) return;
+    if (!driftWanted(stage.quality, reduced) || seq.moving || !el.animate || !box || !buildBox || buildBox.isEmpty()) return;
     const ctr = buildBox.getCenter(new THREE.Vector3()).project(camera);
     const origin = { x: Math.min(0.8, Math.max(0.2, (ctr.x + 1) / 2)), y: Math.min(0.8, Math.max(0.2, (1 - ctr.y) / 2)) };
     const plan = driftFor(driftKind(seq.shot, drift.n++), origin);
@@ -684,7 +685,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      move (steamRate): ticked at the tier's frame rate on High and Balanced while the steam is in view (drawNextFrame: one
      frame a tick, nothing invalidated, so the idle gate does not stay open after it and their AO's accumulation is left
      alone), carried by the camera's own moves on Very High (a still shot's accumulation converges on still steam), still
-     on Fast and with reduced motion. */
+     with reduced motion, and not drawn on Fast, where it could not move in a picture that drifts (done-fit.js steamShown). */
   function makeSteam(group) {
     const coffee = group.getObjectByName('coffee');
     if (!coffee || !coffee.geometry) return;
@@ -719,12 +720,22 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     coffee.add(mesh);
     coffee.add(mist);
     const foot = new THREE.Vector3(), sphere = new THREE.Sphere(), frustum = new THREE.Frustum(), pv = new THREE.Matrix4();
-    const s = parts.steam = { mesh, mist, size, slices: slices.length, t: 7.3, at: 0, dueAt: 0, sig: '', ticks: 0 };
+    // drawn or not from the start (done-fit.js steamShown), so its first frame on Fast has none either (Terra 01a1755a)
+    const shown0 = steamShown(stage.quality, reduced, sequence);
+    mesh.visible = mist.visible = shown0;
+    const s = parts.steam = { mesh, mist, size, slices: slices.length, t: 7.3, at: 0, dueAt: 0, sig: '', ticks: 0, shown: shown0 };
+    /* ... and again when the tier changes: from onQuality, before the new tier's first frame, and from the tick should a
+       tier come by another way (only when the answer flips, never every frame: the e2e hides it by hand) */
+    s.follow = (tier) => {
+      const shown = steamShown(tier, reduced, sequence);
+      if (shown !== s.shown) { s.shown = shown; mesh.visible = mist.visible = shown; stage.invalidateFrame(); }
+    };
     const tick = (now) => {
       if (!on || parts.steam !== s) return;
       parts.steamRaf = requestAnimationFrame(tick);
       const rate = steamRate(stage.quality, reduced), dt = s.at ? Math.min(0.1, (now - s.at) / 1000) : 0;
       s.at = now;
+      s.follow(stage.quality);
       if (rate === 'motion') {   // Very High: on the frames the camera's own move draws
         const c = stage.camera, sig = c.position.toArray().concat(c.quaternion.toArray(), [c.fov, c.zoom]).map((v) => v.toFixed(3)).join();
         if (sig !== s.sig) { s.sig = sig; s.t += dt; mat.uniforms.uTime.value = s.t; }
@@ -1037,7 +1048,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       get steam() {
         const s = parts.steam; if (!s) return null;
         const m = s.mist;
-        return { t: s.t, ticks: s.ticks, rate: steamRate(stage.quality, reduced), shown: !!s.mesh.parent && s.mesh.parent.visible, foot: s.mesh.getWorldPosition(new THREE.Vector3()).toArray(), w: s.size.w, h: s.size.h, ghost: !!s.mesh.userData.ghost, uTime: s.mesh.material.uniforms.uTime.value,
+        return { t: s.t, ticks: s.ticks, rate: steamRate(stage.quality, reduced), shown: !!s.mesh.parent && s.mesh.parent.visible, foot: s.mesh.getWorldPosition(new THREE.Vector3()).toArray(), w: s.size.w, h: s.size.h, ghost: !!s.mesh.userData.ghost, uTime: s.mesh.material.uniforms.uTime.value, visible: s.mesh.visible && s.mist.visible,
           sheets: s.mesh.geometry.attributes.aSlice.count / 4, mist: { on: m.parent === s.mesh.parent, ghost: !!m.userData.ghost, at: m.getWorldPosition(new THREE.Vector3()).toArray(), clock: m.material.uniforms.uTime === s.mesh.material.uniforms.uTime } };
       },
       /* the grammar as it stands: `names` the shots in GRAMMAR order, `fits` each one's camera at the middle of its move
@@ -1128,6 +1139,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function onQuality(tier) {
     if (!on) return;
     applyLights(tier);
+    if (parts.steam) parts.steam.follow(tier);   // the steam drawn or not before the new tier's first frame (Terra 01a1755a)
     /* a drop below High mid-shot: a moving shot locks off where it is, and the drawer's timers would outlive the drop (the
        still grammar has no drawer moment: Terra 01a16b6b) */
     if (sequenceWanted(tier)) {
@@ -1136,6 +1148,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         if (!moves(tier)) { freeze({ resched: true }); drawerCancel(); }
         warmAhead(tier);
         if (seq.shot && seq.cutAt == null) setLensFor(currentShot(), fitAt(currentShot(), seq.k));   // a lens only where the new tier accumulates
+        if (!driftWanted(tier, reduced)) driftStop();   // a change to Very High: its still shots are not zoomed
       }
     }
     else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a)
