@@ -490,7 +490,7 @@ const ENGINE_CLIPS = {
        beat from the side and slightly below (az 45, el -10; camUp at 26 deg below looks at the case floor) over the last
        60 mm of the slide and the click, then the planner's camUp returns for the end pose */
     extraBeats: ({ log, dur }) => { const e = log.find((x) => x.enter === 'case0'); const tJ = e.t + 0.62 * e.dur, tR = log.filter((x) => x.enter || x.move).reduce((a, x) => Math.max(a, x.t + (x.dur || 0)), 0) + 0.37; return [{ t: tJ - 0.4, dur: 0.4, preset: { t: 45, p: 100 }, step: 'the click' }, { t: tR, dur: 0.75, preset: { t: 30, p: 116 }, step: 'camUp back' }]; },
-    joints: { 1: (S, st, bx) => strip(bx, st, ['case0'], 30, 20, 32.5, 92.5) },
+    joints: { 1: (S, st, bx) => ({ box: strip(bx, st, ['case0'], 30, 20, 32.5, 92.5), scale: 1.6 }) },   // Joey: 2.5x "feels zoomed in too far" - 1.6x, the whole lower case and the top case's underside in frame, the seam in the middle third
     slow: (plan) => { const b = plan.beats[1]; return [{ from: b.t + b.dur, to: plan.beats[2].t, scale: 0.5, hold: 0.4 }]; } },
   /* the tabletop (the 185 2W-2H kit): the lower rail lands and the six feet slide in, the base sets down; the upper rail
      slides on from the back; the three cases (restaged, see TTK_STAGE) with their locks, the dips and pops; the two cover
@@ -519,7 +519,9 @@ const ENGINE_CLIPS = {
   /* the drawers: the first drawer's rear meeting the lower-left case's mouth - that case's opening and the drawer at its
      190 mm pop-out; the drawer's slide home at half speed */
   drawers3: { engine: true, record: 'ttk', prefix: 'ttk-step-', file: 'drawers', steps: [10], hide: [/^mc|^mg/], az: 18, el: 8,
-    joints: { 0: (S, st, bx) => { const c = bx('case0', st); return { min: [c.min[0], c.min[1], 40], max: [c.max[0], c.max[1], c.max[2] + DRW_POP] }; } },
+    /* Joey: "aim the camera a bit higher" - the END pose, the whole stack with its three drawers in, its front 60 mm,
+       aimed at the stack's mid-height, spanning ~75 % of the frame (margin 0.125); the drawer entering may be cut */
+    joints: { 0: (S, st, bx) => { const u = union(bx('frl0', st), bx('case2', st), bx('cl0', st), bx('cu0', st)); return { box: { min: [u.min[0], u.min[1], 35], max: [u.max[0], u.max[1], u.max[2] + 2.5] }, margin: 0.125 }; } },
     slow: (plan) => slowOn(plan, 'move', ['drw0']) },
   /* the under-table steps as the planner plays them (the second pass, sheets only): the rail, the first case with the
      overhead QuickLock beat (the slab hides above the camera, the planner's own rule), the lower case */
@@ -596,13 +598,13 @@ const SLABLINE = ({ boxes, underY, frontZ, halfW, clear }) => {
 /* the fixed camera: azimuth az off the front normal toward +X, elevation el (negative = below level), the target pushed
    `toward` mm toward the camera; the distance is the largest of: the height boxes filling (1 - headroom) of the frame,
    every corner of the fit boxes inside the side margin on both sides, and inside the headroom vertically */
-const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin, endBoxes, span = 0.45, edge = 0.02, clearBoxes, near = 120, centreFit = false }) => {
+const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin, endBoxes, span = 0.45, edge = 0.02, clearBoxes, near = 120, centreFit = false, fixedR = null }) => {
   /* the end-fit mode (Joey 2026-10-25): the resting subject (endBoxes) spans `span` of the frame height, and every keyframe
      box (fitBoxes) must still be inside the `edge` margin - the distance is the larger of the two, and `pulledBack` says
      when the keyframes, not the subject, set it */
   if (endBoxes) { heightBoxes = endBoxes; headroom = 1 - span; allBoxes = fitBoxes; side = edge; softBoxes = null; fitBoxes = null; }
   /* the whole-path mode: every fit box inside the same margin on all four sides, nothing else */
-  if (fitBoxes) { heightBoxes = []; allBoxes = fitBoxes; side = margin; headroom = 2 * margin; }   // softBoxes, when given, stay: the path may run past the frame by `over`, no further
+  if (fitBoxes) { heightBoxes = []; allBoxes = fitBoxes.length ? fitBoxes : [{ min: target, max: target }]; side = margin; headroom = 2 * margin; }   // softBoxes, when given, stay: the path may run past the frame by `over`, no further
   const h = window.__GEN2_VIEWER__, T = h.THREE, cam = h.camera;
   const t = T.MathUtils.degToRad(az), p = T.MathUtils.degToRad(90 - el);
   const dir = new T.Vector3(Math.sin(p) * Math.sin(t), Math.cos(p), Math.sin(p) * Math.cos(t));
@@ -624,7 +626,7 @@ const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, soft
   const soft = (r) => { const all = (softBoxes || []).flatMap(corners).map((v) => { cam.position.copy(tgt).addScaledVector(dir, r); cam.lookAt(tgt); cam.updateMatrixWorld(true); return v.clone().project(cam); });
     return all.every((v) => Math.abs(v.x) <= 1 + over && Math.abs(v.y) <= 1 + over); };
   const rS = softBoxes && softBoxes.length ? (() => { let lo = 100, hi = 5000; for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (soft(mid)) hi = mid; else lo = mid; } return hi; })() : 0;
-  let r = Math.max(rH, rW, rV, rS), pulledForPath = 0;
+  let r = fixedR != null ? fixedR : Math.max(rH, rW, rV, rS), pulledForPath = 0;
   /* the path clearance: a part that passes between the subject and the camera (a case pushed 200 mm toward the wall from a
      bench nearer the lens, a drawer out front) must stay at least `near` mm in front of the camera - the camera backs off
      along its own axis by exactly the shortfall, which moves every point back by the same amount */
@@ -800,10 +802,13 @@ async function film(name, clip, browser, base, pose) {
            name, per beat, the contact region - the bracket with the case's top rear edge, a lock with its slot - grown by
            JOINT_GROW and fitted at JOINT_MARGIN; the rest of the part may fall outside the frame, so the path's frame
            guard is off for such a beat (the 120 mm lens clearance stays) */
-        const joint = clip.joints && clip.joints[i] ? clip.joints[i](S, plan.stateAt(b.tEnd), (id, st) => worldBox(S.local[id], st[id].pos)) : null;
+        /* a joint may carry its own margin (how much of the frame it spans) and a distance scale (1.6x instead of 2.5x) */
+        const jr = clip.joints && clip.joints[i] ? clip.joints[i](S, plan.stateAt(b.tEnd), (id, st) => worldBox(S.local[id], st[id].pos)) : null;
+        const joint = jr && jr.box ? jr.box : jr, jMargin = jr && jr.margin != null ? jr.margin : JOINT_MARGIN, jScale = jr && jr.scale ? jr.scale : 1;
         if (joint) { b.joint = { min: joint.min.map((v) => v - JOINT_GROW), max: joint.max.map((v) => v + JOINT_GROW) }; b.subject = [b.joint]; b.subjectBox = b.joint; b.subjectIds = ['joint']; }
-        const c = await page.evaluate(CAMERA, { az: b.preset.t, el: 90 - b.preset.p, fov: b.preset.fov || 40, target: centre(b.subjectBox), toward: 0, fitBoxes: b.subject, margin: joint ? JOINT_MARGIN : MARGIN, clearBoxes: b.path, near: NEAR, softBoxes: joint ? null : b.path, over: PATH_OVER, centreFit: true, W, H });
-        b.cam = { pos: c.pos, target: c.target, fov: b.preset.fov || 40, r: c.r, extents: c.extents, pulledForPath: c.pulledForPath, joint: !!joint };
+        let c = await page.evaluate(CAMERA, { az: b.preset.t, el: 90 - b.preset.p, fov: b.preset.fov || 40, target: centre(b.subjectBox), toward: 0, fitBoxes: b.subject, margin: joint ? jMargin : MARGIN, clearBoxes: b.path, near: NEAR, softBoxes: joint ? null : b.path, over: PATH_OVER, centreFit: true, W, H });
+        if (jScale !== 1) c = await page.evaluate(CAMERA, { az: b.preset.t, el: 90 - b.preset.p, fov: b.preset.fov || 40, target: c.target, toward: 0, fitBoxes: [b.joint], margin: 0, W, H, fixedR: c.r * jScale });   // the same aim, the distance scaled; the extents reported are the joint's
+        b.cam = { pos: c.pos, target: c.target, fov: b.preset.fov || 40, r: c.r, extents: c.extents, pulledForPath: c.pulledForPath, joint: !!joint, margin: joint ? jMargin : MARGIN, scale: jScale };
       }
       for (let i = 0; i < plan.beats.length; i++) if (!plan.beats[i].cam) plan.beats[i].cam = i ? plan.beats[i - 1].cam : null;
       /* holdCamera: { beat: earlierBeat } keeps an earlier beat's camera through a later one (the base: the rail with its feet
