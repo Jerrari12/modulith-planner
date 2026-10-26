@@ -752,11 +752,12 @@ export function hashSeed(text) {
  * from the room's front; its handle a quarter turn on; the coffee's the same way) and a pick among the spots beside the
  * coffee (mugSpots, from 170 mm out: the handles reach 84 mm from their axes, Sol 01a17612) */
 export const MUG_HOME_SHARE = 0.4;
+export const MUG_LEFT_SHARE = 0.4;   // of the builds whose coffee moves, those whose mugs stand left of the build, where the notebook was
 export function mugPlan(rng) {
   const pick = (list) => list[Math.floor(rng() * list.length) % list.length];
   const pair = rng() < MUG_PAIR_SHARE ? pick(MUG_PAIRS) : null;
   return {
-    coffee: { back: pair ? pair[0] : pick(MUGS.jerrari.sayings), home: rng() < MUG_HOME_SHARE, spot: rng(), turnDeg: Math.round(rng() * 360) },   // the coffee turned too (Joey: "randomize the rotation of the Jerrari mug as well")
+    coffee: { back: pair ? pair[0] : pick(MUGS.jerrari.sayings), home: rng() < MUG_HOME_SHARE, spot: rng(), turnDeg: Math.round(rng() * 360), left: rng() < MUG_LEFT_SHARE },   // the coffee turned too (Joey: "randomize the rotation of the Jerrari mug as well")
     empty: { back: pair ? pair[1] : pick(MUGS.modulith.sayings), turnDeg: Math.round(rng() * 360), spot: rng() },
   };
 }

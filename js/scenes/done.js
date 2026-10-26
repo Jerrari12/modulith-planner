@@ -844,12 +844,15 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // `font` is reset by it)
     const type = back.type || 'condensed';
     const font = (s) => (type === 'mono' ? `600 ${s}px "IBM Plex Mono", monospace` : `900 ${type === 'condensed' ? 'ultra-condensed ' : ''}${s}px Archivo, "Arial Black", sans-serif`);
+    // the face at a size, with word spaces a condensed face keeps open (at its narrowest Archivo all but closes them:
+    // "IMADEATHING" in the 2026-10-25 shots); measureText counts them too
+    const setFont = (sz) => { g.font = font(sz); g.wordSpacing = type === 'condensed' ? `${(0.2 * sz).toFixed(1)}px` : '0px'; };
     // its block, as large as a real mug's print (Joey: "scaling them up to use a decent amount of space like a real mug"):
     // over a quarter of the way round (100 deg, what a front view reads without the curve squeezing it) and 80 % of the height
     const w = 0.28 * 2 * Math.PI * rMm, hh = 0.8 * hMm;
     g.textBaseline = 'middle'; g.textAlign = 'center';
     const drawLine = (line, x, y, s, ink) => {   // centred, a heart drawn red
-      g.font = font(s * px);
+      setFont(s * px);
       const parts2 = line.split('♥'), widths = parts2.map((t) => g.measureText(t).width), heart = g.measureText('♥').width;
       let at = x - (widths.reduce((a, b) => a + b, 0) + heart * (parts2.length - 1)) / 2;
       g.textAlign = 'left';
@@ -863,13 +866,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // have been yet): measured and drawn then, the texture told so
     const drawSaying = () => {
       if (!on || done()) return;
-      const lay = sayingLayout(back, w, hh, (line, s) => { g.font = font(s * px); return g.measureText(line).width / px; });
+      const lay = sayingLayout(back, w, hh, (line, s) => { setFont(s * px); return g.measureText(line).width / px; });
       const total = (lay.scales.reduce((a, b) => a + b, 0) + (back.small ? 0.42 / lay.lead : 0)) * lay.size * lay.lead;
       for (const x of [0, W]) {
         let y = (cv.height - total * px) / 2;
         back.lines.forEach((line, i) => { const s = lay.size * lay.scales[i]; y += (s * lay.lead * px) / 2; drawLine(line, x, y, s, (back.accent || []).includes(i) ? look.accent : look.ink); y += (s * lay.lead * px) / 2; });
         y += (lay.size * lay.lead * px) / 2;
-        if (back.small) { g.font = `600 ${lay.small * px}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`; g.fillStyle = look.ink; g.fillText(back.small, x, y - (lay.size * lay.lead * px) / 2 + lay.small * px); }
+        if (back.small) { g.wordSpacing = '0px'; g.font = `600 ${lay.small * px}px "Segoe UI", "Helvetica Neue", Arial, sans-serif`; g.fillStyle = look.ink; g.fillText(back.small, x, y - (lay.size * lay.lead * px) / 2 + lay.small * px); }
       }
       tex.needsUpdate = true; tex.userData.saying = true; stage.invalidateFrame();
     };
@@ -892,7 +895,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     mug.geometry.computeBoundingBox();
     const bb = mug.geometry.boundingBox, r = (bb.max.x - bb.min.x) / 2, h = bb.max.y - bb.min.y, rMm = r * SCALE, hMm = h * SCALE;   // the GLB's metres
     const plan = mugPlan(rngFrom(hashSeed(location.hash || new URLSearchParams(location.search).get('build') || 'room')));   // the build's link (its #build=, or a kit's ?build=), not the page's other parameters
-    const made = { mats: [], meshes: [], masks: [], texs: [], plan, spot: null, coffeeAt: null };
+    const made = { mats: [], meshes: [], masks: [], texs: [], plan, spot: null, coffeeAt: null, left: false };
     parts.mugs = made;
     const gone = () => parts.mugs !== made;
     const linear = (hex) => (hex ? new THREE.Color(hex) : new THREE.Color(1, 1, 1));   // THREE.Color takes sRGB hex to linear
@@ -915,6 +918,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     group.updateWorldMatrix(true, true);
     const at = (o) => new THREE.Box3().setFromObject(o);
     const own = new Set(['mug', 'mug_handle', 'coffee']);
+    /* THE LEFT SIDE (Joey: "the mug could randomly be placed by the plan on the left side sometimes"): the plant and the
+       notebook leave no mug-sized room left of the build (measured: no free spot there), so a build whose mugs go left
+       takes the notebook and its pen off the desk, their shadow with them, and the mugs stand in their place */
+    const goLeft = !plan.coffee.home && plan.coffee.left && mount !== 'under-table';
+    const notebook = goLeft ? (json.props || []).filter((p) => p.group === 'notebook').map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible) : [];
+    const notebookMasks = goLeft ? parts.masks.filter((q) => q.userData.doneShadow && q.userData.doneShadow.group === 'notebook' && q.visible) : [];
+    for (const o of [...notebook, ...notebookMasks]) o.visible = false;
     const obstacles = (json.props || []).filter((p) => !own.has(p.name)).map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible).map((o) => plain(at(o)));
     const desk = group.getObjectByName('desk_top');
     if (buildBox && !buildBox.isEmpty()) {
@@ -933,9 +943,19 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const sh = q0 && q0.userData.doneShadow, cut = !!(sh && (sh.u0 > 0 || sh.u1 < 1));
     const reach = q0 ? { x0: q0.position.x - q0.geometry.parameters.width / 2 - home.x, x1: q0.position.x + q0.geometry.parameters.width / 2 - home.x, z0: q0.position.z - q0.geometry.parameters.height / 2 - home.z, z1: q0.position.z + q0.geometry.parameters.height / 2 - home.z } : null;
     const onDesk = (deskBox) => (p) => !reach || (p.x + reach.x0 >= deskBox.min.x && p.x + reach.x1 <= deskBox.max.x && p.z + reach.z0 >= deskBox.min.z && p.z + reach.z1 <= deskBox.max.z);   // its back edge too (Sol 01a17612 R2)
+    // the notebook back where the mugs do not go left after all, and back among the obstacles (Sol 01a17612 R3)
+    const notebookBack = () => { if (!notebook.length || notebook[0].visible) return; for (const o of [...notebook, ...notebookMasks]) o.visible = true; group.updateWorldMatrix(true, true); for (const o of notebook) obstacles.push(plain(at(o))); };
+    if (plan.coffee.home || !desk || cut) notebookBack();
     if (!plan.coffee.home && desk && !cut) {
       const deskBox = plain(at(desk)), fits = onDesk(deskBox);
-      const free = deskSpots(obstacles, deskBox).filter((p) => fits(p) && mugSpots(p, obstacles, deskBox).filter(fits).length);   // only where the second mug can stand beside it, both shadows on the desk
+      // no nearer the front than its home (where the room's shots were composed round it: a mug in front of that leaves the
+      // hero's frame), only where the second mug can stand beside it, both shadows on the desk
+      const all = deskSpots(obstacles, deskBox).filter((p) => p.z <= home.z + 10 && fits(p) && mugSpots(p, obstacles, deskBox).filter(fits).length);
+      const mid = buildBox && !buildBox.isEmpty() ? (buildBox.min.x + buildBox.max.x) / 2 : home.x;
+      const left = all.filter((p) => p.x < mid);
+      const free = goLeft && left.length ? left : all.filter((p) => p.x >= mid || !goLeft);
+      if (!(goLeft && left.length)) notebookBack();   // no room on the left after all
+      else made.left = true;
       if (free.length) {
         const p = free[Math.floor(plan.coffee.spot * free.length) % free.length];
         const toLocal = (wx, wz) => group.worldToLocal(new THREE.Vector3(wx, home.y, wz));
@@ -1275,7 +1295,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       },
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
-      get mugs() { const p = parts.mugs; return p ? { plan: p.plan, spot: p.spot, coffeeAt: p.coffeeAt, logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), empty: p.meshes.map((o) => ({ name: o.name, visible: o.visible, parent: o.parent && o.parent.name, pos: o.getWorldPosition(new THREE.Vector3()).toArray() })), masks: p.masks.length } : null; },
+      get mugs() { const p = parts.mugs; return p ? { plan: p.plan, spot: p.spot, coffeeAt: p.coffeeAt, left: p.left, logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), empty: p.meshes.map((o) => ({ name: o.name, visible: o.visible, parent: o.parent && o.parent.name, pos: o.getWorldPosition(new THREE.Vector3()).toArray() })), masks: p.masks.length } : null; },
       get subjects() { return { labels: subj.labels.map((l) => l.id), label: subj.label ? subj.label.id : null, row: subj.row }; },
       get focus() { return { state: focus.anim ? focus.anim.playState : null, filter: getComputedStyle(renderer.domElement).filter }; },
       setRoomColours,

@@ -2782,6 +2782,42 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
   await ctx.close();
 });
 
+/* THE MUGS ON THE LEFT (Joey 2026-10-25: "the mug could randomly be placed by the plan on the left side sometimes"). The
+   115 2W kit's link plans its coffee away from home and to the left (done-fit.js mugPlan, its seed), where the plant and the
+   notebook leave no room: the notebook and its pen leave the desk, their shadow with them, and both mugs stand left of the
+   build, their shadows under them; leaving and coming back plans the same, and the room the visit hands back is whole. */
+test('Assemble: the Done scene\'s mugs on the left: a build planned there takes the notebook off the desk and stands both mugs in its place', async () => {
+  const { ctx, page, errors } = await open('assemble', { query: '&build=115-tabletop-2w2h&done=room' });
+  const plan = await page.evaluate(async () => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed('115-tabletop-2w2h'))); });
+  assert.deepEqual([plan.coffee.home, plan.coffee.left], [false, true], 'this kit\'s plan: away from home, to the left');
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugs, null, { timeout: 60_000 }).catch(() => assert.fail('the room never came on'));
+  const left = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, d = window.__GEN2_DONE__, room = v.scene.getObjectByName('done-room');
+    const bb = v.assembledBox, mid = (bb.min.x + bb.max.x) / 2, c = new T.Box3().setFromObject(room.getObjectByName('mug')).getCenter(new T.Vector3());
+    return { left: d.mugs.left, mid, coffee: [c.x, c.z], at: d.mugs.coffeeAt, spot: d.mugs.spot, notebook: ['notebook', 'pen'].map((n) => room.getObjectByName(n).visible),
+      shadows: d.shadows.filter((q) => q.group === 'notebook').map((q) => q.visible), plan: d.mugs.plan };
+  });
+  assert.equal(left.left, true, `the mugs stood left (${JSON.stringify(left)})`);
+  assert.ok(left.coffee[0] < left.mid && left.spot && left.spot.x < left.mid, `both left of the build (coffee ${left.coffee[0].toFixed(0)}, the second ${left.spot && left.spot.x.toFixed(0)}, the build's middle ${left.mid.toFixed(0)})`);
+  assert.ok(Math.abs(left.coffee[0] - left.at.x) < 0.5 && Math.abs(left.coffee[1] - left.at.z) < 0.5, 'the coffee at its spot');
+  assert.deepEqual(left.notebook, [false, false], 'the notebook and its pen off the desk');
+  assert.ok(left.shadows.length > 0 && left.shadows.every((v) => !v), 'and their shadow with them');
+  assert.deepEqual(left.plan, plan, 'the plan the link gives');
+  // leaving: the stage's own build back, and the notebook in the next visit's room again (each visit clones the room)
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 15_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugs, null, { timeout: 60_000 });
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_DONE__.mugs.plan), plan, 'the next visit plans the same');
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
+});
+
 /* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty
    stage with a strip that does nothing (Sol 01a16c20). Back to the End page, HUD and all. */
 test('Assemble: the Done scene\'s final scene returns to the End page when the room fails to load', async () => {

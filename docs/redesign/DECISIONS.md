@@ -3881,6 +3881,10 @@ like a real mug". Astra supplied sayings and pairs, and fonts (Anton, Barlow Con
   cached load never.
 - **Astra's saying** "I WAS LEFT / UNSUPERVISED / WITH CALIPERS" joins the coffee mug, UNSUPERVISED orange and 1.4 times
   the others (`scale`, a line's size against the others; sayingLayout counts it in the height and the width).
+- **The left side** (Joey: "the mug could randomly be placed by the plan on the left side sometimes"): the plant and the
+  notebook leave no room left of the build, so 40 % of the builds whose coffee moves (MUG_LEFT_SHARE) take the notebook
+  and its pen off the desk, their shadow with them, and both mugs stand left of the build. A moved mug stands no nearer
+  the front than its home (one placed there left the hero's frame). The condensed face keeps its word spaces open (0.2 em).
 - **Both mugs turn** (Joey: "randomize the rotation of the Jerrari mug as well"): each by the plan's turn, the handle
   about the mug's axis and the print with it; only for an upright mug (the room's is). Astra's "DESIGN A DRAWER, / THEY
   SAID. / I MAY HAVE / MISUNDERSTOOD / THE SCOPE." joins the coffee mug: three levels after a gap (an empty line), the last
@@ -3890,7 +3894,9 @@ like a real mug". Astra supplied sayings and pairs, and fonts (Anton, Barlow Con
   handles reach 84 mm from their axes); a tilted mug's handle turning about the wrong axis partly accepted (the room's mug
   is upright; turns only for an upright mug); the mugs' shot without a subject when the second mug found no room
   accepted (the coffee alone). Round 2, two findings, both accepted: the mask's back edge unchecked; a mask cut by the
-  slide cloned under the second mug (no second mug then). Found by the e2e, not the review: a moved coffee carried a mask
+  slide cloned under the second mug (no second mug then). Round 3, on the left side (the notebook taken off the desk for
+  a build whose mugs go left: the desk's left has no free spot otherwise), one finding, accepted: a notebook put back
+  (no left spot after all) was not put back among the obstacles. Found by the e2e, not the review: a moved coffee carried a mask
   the slide had cut 140 mm past the desk's end (the 12W build).
 - **Checks.** Unit 34 of 34. The e2e cases the change touches: the room's entry, the prop shadows, the grammar (three
   runs), the relief, the mounts, the colours, the steam, the strip and mugs case; all pass. Once, before the mask fix, the
