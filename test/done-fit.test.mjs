@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -545,9 +545,12 @@ test('the spools: one per colour the build is printed in (five at most), stacks 
     assert.ok(all.length <= SPOOL_MAX, 'five at most');
     assert.equal(new Set(all).size, all.length, 'no colour twice (the hex case ignored)');
     assert.equal(all.length, Math.min(SPOOL_MAX, new Set(cols.map((c) => c.toLowerCase())).size), 'every colour up to the most');
-    for (const g of p.groups) { assert.ok(g.kind === 'stack' || g.kind === 'stand'); assert.ok(g.kind === 'stack' ? g.colours.length <= 3 : g.colours.length === 1); assert.ok(g.spot >= 0 && g.spot < 1 && g.turnDeg >= 0 && g.turnDeg <= 360); }
+    for (const g of p.groups) { assert.ok(g.kind === 'stack' || g.kind === 'stand'); assert.ok(g.kind === 'stack' ? g.colours.length <= SPOOL_MAX : g.colours.length === 1); assert.ok(g.spot >= 0 && g.spot < 1 && g.turnDeg >= 0 && g.turnDeg <= 360); }
   }
-  assert.ok(plans.some((p) => p.groups.some((g) => g.kind === 'stack' && g.colours.length >= 2)) && plans.some((p) => p.groups.some((g) => g.kind === 'stand')), 'stacks and standing spools both');
+  const tall = plans.filter((p) => p.groups.length === 1 && p.groups[0].colours.length === 5).length / plans.length;
+  assert.ok(Math.abs(tall - SPOOL_TALL) < 0.07, `one tall stack of all five in about ${SPOOL_TALL * 100} % (${(tall * 100).toFixed(0)} %)`);
+  const groups = plans.flatMap((p) => p.groups), stacked = groups.filter((g) => g.kind === 'stack').reduce((a, g) => a + g.colours.length, 0), standing = groups.filter((g) => g.kind === 'stand').length;
+  assert.ok(stacked > 4 * standing && standing > 0, `mostly stacked (${stacked} spools stacked, ${standing} standing: Joey, "just keep them stacked like this")`);
   assert.deepEqual(spoolPlan(rngFrom(1), []), { groups: [] }, 'no colours, no spools');
   assert.equal(spoolPlan(rngFrom(hashSeed('spools|3')), ['#abc']).groups.flatMap((g) => g.colours).length <= 1, true);
 });

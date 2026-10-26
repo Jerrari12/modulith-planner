@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool } from './spool.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_HIGH, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -966,7 +966,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      shadow; on a tier with no shadow map, a contact disc under each. Made before the mugs, which then keep clear of them.
      `refreshSpools` repaints them when the build's colours change (the Colors workspace's Room stage). */
   const SPOOL_FOOT = 108;   // a spool's footprint radius, mm: its 100 mm flange and a margin
-  const SPOOL_CLEAR = ['notebook', 'calipers', 'plant'];   // the props that may leave the desk for spools, in that order
+  const SPOOL_CLEAR = ['notebook', 'calipers'];   // the props that may leave the desk for spools (the plant only where nothing fits without it: Joey, "I'd like to keep the plant in there when we can")
   function spoolColours() {
     const f = stage.filamentsInBuild ? stage.filamentsInBuild() : { filaments: [], unpicked: [] };
     return [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)];
@@ -1006,26 +1006,43 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       ? [...made].filter((o) => (o.userData.doneShadow ? o.userData.doneShadow.group : (o.userData.group || o.name)) === name || (json.props || []).some((x) => x.group === name && x.name === o.name))
       : [...(json.props || []).filter((x) => x.group === name).map((x) => group.getObjectByName(x.name)).filter((o) => o && o.visible),
         ...parts.masks.filter((m) => m.userData.doneShadow && m.userData.doneShadow.group === name && m.visible)].map((o) => (made.add(o), o));
-    /* every way of clearing them (eight: none, each, each pair, all three), the one that fits the most groups kept, and of
-       those the lightest props off the desk (the notebook, then the calipers, both before the plant) (Sol 01a17823: one spot that needs two
-       props gone gains nothing from either alone; and the seeded picks are not monotonic in the spots, so more room can
-       place fewer) */
+    /* every way of clearing them (none, each, both), the one that fits the most groups kept, and of those the lightest
+       props off the desk (Sol 01a17823: one spot that needs two props gone gains nothing from either alone; and the seeded
+       picks are not monotonic in the spots, so more room can place fewer) */
     const setOff = (names, off) => { for (const n of names) for (const o of groupParts(n, !off)) o.visible = !off; group.updateWorldMatrix(true, true); };
-    let picks = plan2(), cleared = [];
-    const cost = (names) => names.reduce((a, n) => a + 10 ** SPOOL_CLEAR.indexOf(n), 0);   // the plant last: the notebook and the calipers both go before it does
-    if (fits(picks) < plan.groups.length) for (let m = 1; m < 1 << SPOOL_CLEAR.length; m++) {   // all of them: the cheapest that fits the most
-      const names = SPOOL_CLEAR.filter((_, i) => m & (1 << i));
-      setOff(names, true);
-      const next = plan2();
-      setOff(names, false);
-      if (fits(next) > fits(picks) || (fits(next) === fits(picks) && cleared.length && cost(names) < cost(cleared))) { picks = next; cleared = names; }
-    }
+    const cost = (names) => names.reduce((a, n) => a + 10 ** SPOOL_CLEAR.indexOf(n), 0);   // the notebook before the calipers
+    const search = (held) => {   // every subset of SPOOL_CLEAR with `held` off too: the cheapest that fits the most
+      let best = null, off = null;
+      for (let m = 0; m < 1 << SPOOL_CLEAR.length; m++) {
+        const names = [...SPOOL_CLEAR.filter((_, i) => m & (1 << i)), ...held];
+        setOff(names, true);
+        const next = plan2();
+        setOff(names, false);
+        if (!best || fits(next) > fits(best) || (fits(next) === fits(best) && cost(names) < cost(off))) { best = next; off = names; }
+        if (!m && fits(best) === plan.groups.length) break;   // all of them with nothing off
+      }
+      return [best, off];
+    };
+    let [picks, cleared] = search([]);
+    /* the plant only where no group fits without it, and then with every subset again (Sol 01a17823: a spot behind both the
+       notebook and the plant fits nothing with either alone off) */
+    if (!fits(picks)) { const [next, off] = search(['plant']); if (fits(next)) { picks = next; cleared = off; } }
     setOff(cleared, true);
     parts.spools.cleared = cleared;
-    const placed = [];
+    /* a group with no room joins a stack that has it, up to SPOOL_HIGH, so every colour of the build is on the desk where it
+       can be (Joey: "you can even stack them in a single tall stack") */
+    const room = plan.groups.map((g, i) => (picks[i] ? { ...g, colours: [...g.colours] } : null));
     plan.groups.forEach((g, i) => {
+      if (picks[i]) return;
+      for (const c of g.colours) {
+        const host = room.find((r) => r && r.kind === 'stack' && r.colours.length < SPOOL_HIGH) || (() => { const r = room.find((x) => x && x.kind === 'stand'); if (r) { r.kind = 'stack'; } return r; })();
+        if (host && host.colours.length < SPOOL_HIGH) host.colours.push(c);
+      }
+    });
+    const placed = [];
+    room.forEach((g, i) => {
       const p = picks[i];
-      if (!p) return;
+      if (!p || !g) return;
       const turn = (g.turnDeg * Math.PI) / 180, root = new THREE.Group();
       root.name = 'done-spools'; root.position.set(p.x, deskY, p.z); root.rotation.y = turn;
       g.colours.forEach((c, k) => {
@@ -1057,7 +1074,12 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const worn = new Set(spools.map((s) => String(s.userData.spool.color).toLowerCase()));
     const fresh = now.filter((c) => !worn.has(c));
     let k = 0;
-    for (const s of spools) if (!now.includes(String(s.userData.spool.color).toLowerCase()) && now.length) s.userData.setColor(fresh.length ? fresh.shift() : now[k++ % now.length]);   // none new left: one the build wears
+    const seen = new Set();   // a second spool of one colour takes a new one too (Sol 01a17823: A/B to A paints B as A, and back to A/B must part them)
+    for (const s of spools) {
+      const c = String(s.userData.spool.color).toLowerCase();
+      if (now.length && (!now.includes(c) || (seen.has(c) && fresh.length))) s.userData.setColor(fresh.length ? fresh.shift() : now[k++ % now.length]);   // none new left: one the build wears
+      seen.add(String(s.userData.spool.color).toLowerCase());
+    }
     stage.invalidateFrame();
   }
   /* the build's facts the milestone sayings read (done-fit.js buildFacts): its units, which carry a drawer and a label, and

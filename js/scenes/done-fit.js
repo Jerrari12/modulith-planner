@@ -864,20 +864,28 @@ export function sayingLayout(saying, w, h, fit) {
  * on the desk, because filament is always used in the build, at least 4 or 5 filaments more than likely, unless they only
  * select a single color"). Each group's `spot` is a pick in [0, 1) among the free spots big enough for a spool. */
 export const SPOOL_MAX = 5;
+export const SPOOL_TALL = 0.25;   // one stack of every colour
+export const SPOOL_STAND = 0.15;   // a spool on its own, now and then: standing on its rim, mostly
+export const SPOOL_HIGH = 5;   // the tallest stack (326 mm)
 export function spoolPlan(rng, colours) {
   const list = [...new Set((colours || []).map((c) => String(c).toLowerCase()))].sort().slice(0, SPOOL_MAX);   // sorted: the stage lists them in no fixed order
   if (!list.length) return { groups: [] };
   for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  /* mostly stacked (Joey, the same day, of two stacks of two: "just keep them stacked like this, you can even stack them in
+     a single tall stack here and there"; of a stack and one standing: "or even this one is fine"): one tall stack of every
+     colour in SPOOL_TALL of builds, else stacks of two or three, a spool standing on its rim now and then (SPOOL_STAND) */
   const groups = [];
+  const turn = () => Math.round(rng() * 360);
+  if (list.length >= 2 && rng() < SPOOL_TALL) return { groups: [{ kind: 'stack', colours: list, turnDeg: turn(), spot: rng() }] };
   let rest = list;
-  while (rest.length) {   // stacks of two or three where there are colours for one (most of the time), the others standing or flat alone
-    if (rest.length >= 2 && rng() < 0.65) {
-      const n = Math.min(rest.length, rng() < 0.5 ? 2 : 3);
-      groups.push({ kind: 'stack', colours: rest.slice(0, n), turnDeg: Math.round(rng() * 360), spot: rng() });
-      rest = rest.slice(n);
-    } else {
-      groups.push({ kind: rng() < 0.75 ? 'stand' : 'stack', colours: [rest[0]], turnDeg: Math.round(rng() * 360), spot: rng() });
+  while (rest.length) {
+    if (rest.length === 1 || rng() < SPOOL_STAND) {
+      groups.push({ kind: rng() < 0.7 ? 'stand' : 'stack', colours: [rest[0]], turnDeg: turn(), spot: rng() });   // alone: standing, or flat
       rest = rest.slice(1);
+    } else {
+      const n = Math.min(rest.length, rest.length === 4 || rng() < 0.5 ? 2 : 3);
+      groups.push({ kind: 'stack', colours: rest.slice(0, n), turnDeg: turn(), spot: rng() });
+      rest = rest.slice(n);
     }
   }
   return { groups };

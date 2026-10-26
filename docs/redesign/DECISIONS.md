@@ -4030,3 +4030,18 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   turned cylinder's own box overstated a stack by a quarter, 262 mm for a 200 mm spool.
 - **Review, rounds 2 and 3** (Sol `01a17823`): one finding, accepted (a spot that needs two props gone gained nothing from
   either alone: the clearing then cumulative, then every subset); round 3, no findings.
+- **Mostly stacked, the plant kept** (Joey, the same day, of two stacks of two and of a stack with one standing: "i'd say
+  just keep them stacked like this, you can even stack them in a single tall stack here and there, I'd like to keep the
+  plant in there when we can, or even this one is fine."): one tall stack of every colour (up to five, 326 mm) in a
+  quarter of builds (`SPOOL_TALL`), otherwise stacks of two or three, a single spool now and then (`SPOOL_STAND` 0.15,
+  standing on its rim seven times in ten). Only the notebook and the calipers may leave for the spools now (every subset,
+  the lightest that fits the most); the plant leaves only where no group fits at all, and then every subset is tried
+  again with it off. A group left without room joins a placed stack (or turns a standing spool into one) up to five high,
+  so the build's colours stay on the desk. Six kits shot (`D:\Claude - Output\done-scene-spools-2026-10-26\kits5`): the
+  plant on every desk, the notebook off in three.
+- **Repainting** now also parts two spools one colour had joined: a pick of one colour over the whole build paints every
+  spool that colour, and a second colour after it takes one of them back (before, none was absent from the build, so none
+  changed). The spools' case covers it and fails without the fix.
+- **Review, rounds 4 to 6** (Sol `01a17823`): two findings, both accepted (the plant fallback hid the plant alone, missing
+  a spot behind both the plant and the notebook; repainting never parted duplicates); round 6, no findings. Unit 36 of
+  36; the spools' and the strip-and-mugs cases pass. Not deployed.

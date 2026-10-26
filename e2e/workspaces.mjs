@@ -2832,15 +2832,21 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
   // making room (Joey 2026-10-26: "take the notebook (or another prop) off the desk to fit them"): only the notebook, the
   // calipers or the plant leave, in that order, each with its shadow, and only while a group was left out; never the monitor
   assert.ok(sp.cleared.every((n) => ['notebook', 'calipers', 'plant'].includes(n)), `only those may leave (${JSON.stringify(sp.cleared)})`);
+  if (sp.cleared.includes('plant')) assert.deepEqual(sp.cleared.slice(0, -1).every((n) => n !== 'plant'), true, 'the plant last, and only where nothing fitted without it (Joey: "keep the plant in there when we can")');
   for (const c of sp.clearedState) { assert.ok(c.props.length && c.props.every((x) => !x), `${c.name} off the desk`); assert.ok(c.shadows.every((x) => !x), `${c.name}'s shadow with it`); }
   assert.ok(sp.monitor.length && sp.monitor.every(Boolean), 'the monitor stays');
-  if (sp.cleared.length) assert.ok(sp.placed.length >= 2, `a cleared prop made room for more than one group (${sp.placed.length})`);
+  const onDesk = sp.placed.reduce((a, x) => a + x.colours.length, 0);
+  assert.ok(onDesk <= 5 && sp.placed.every((x) => x.colours.length <= 5), `no stack over five (${JSON.stringify(sp.placed.map((x) => x.colours.length))})`);
   assert.deepEqual(sp.discs, sp.placed.map(() => !sp.shadowTier), 'a contact disc under each on a tier with no shadow map (the suite\'s Fast)');
   // a new pick repaints them (the Colors workspace's Room stage calls this on each commit)
   const re = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__; v.setUseCustom(true); for (const e of v.keysInBuild()) if (!e.locked) v.setColor(e.key, { name: 'Test Teal', hex: '#11aa99' }); d.refreshSpools(); return { spools: d.spools.colours, build: v.filamentsInBuild().filaments.map((f) => f.hex) }; });
   // (the feet keep their TPU: the stage takes no other filament on a foot)
   const now = re.build.map((h) => h.toLowerCase());
   assert.ok(re.spools.every((c) => now.includes(String(c).toLowerCase())) && re.spools.some((c) => String(c).toLowerCase() === '#11aa99'), `the build repainted: every spool in a colour it now wears, the new one among them (${JSON.stringify(re)})`);
+  // and a second colour again parts two spools the one colour joined (Sol 01a17823)
+  const two = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__; const k = v.keysInBuild().find((e) => !e.locked && !e.zone); v.setColor(k.key, { name: 'Test Red', hex: '#cc3311' }); d.refreshSpools(); return d.spools.colours.map((c) => String(c).toLowerCase()); });
+  assert.ok(re.spools.filter((c) => String(c).toLowerCase() === '#11aa99').length >= 2, `the control: the teal pick joined two spools (${JSON.stringify(re.spools)})`);
+  assert.ok(two.includes('#cc3311') && two.includes('#11aa99'), `the red pick takes one of the teal spools (${JSON.stringify(two)})`);
   // leaving: none left in the scene
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 15_000 });
