@@ -15,7 +15,7 @@
  * a gesture would need the 3D hit test (the markers are raycast against the live scene, which a synthetic pointer cannot
  * reach reliably headless); everything else is the real DOM.
  */
-import { test, afterEach } from 'node:test';
+import { test as nodeTest, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -23,6 +23,13 @@ import { existsSync } from 'node:fs';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localParts } from '../test/lib/local-parts.mjs';
+import { parseShard, registerShare } from './shard.mjs';
+/* THE SHARDS (2026-10-25, e2e/shard.mjs): every test(...) below is COLLECTED, and the file's last line registers this
+   process's share - all of them unless E2E_SHARD=k/n asks for one shard. Read before the browser launches, so a malformed
+   value fails at once rather than after the boot. */
+const SHARD = parseShard(process.env.E2E_SHARD);
+const CASES = [];
+const test = Object.assign((...args) => { CASES.push(args); }, { after: nodeTest.after });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');   // e2e/ sits beside test/
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
@@ -4512,3 +4519,6 @@ test('the baked top layers: Fast fetches no map and holds none; the switch and t
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
+
+/* the shards (see the top of the file): this process's share of the cases above, in file order */
+registerShare(nodeTest, CASES, SHARD, { weightsFile: join(root, 'e2e', 'shard-weights.json'), reportFile: process.env.E2E_SHARD_REPORT });

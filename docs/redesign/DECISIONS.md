@@ -3395,3 +3395,57 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
 - **Review:** Terra `01a175a2`: 2 of 5 taken (restore only while `st.peeking` is still the peeked unit; the pills
   round-trip confirmed), 1 discarded (stale `st.stageErrors` - syncStage clears it before the update on every pass).
 - **Deploy:** a bug Joey reported, so it deploys once the suites pass.
+
+## 2026-10-26 · The deploy workflow in parallel jobs: docs-only pushes run nothing, the e2e in four shards, the image's own Chrome
+
+- **Asked:** Joey, 2026-10-25, decided with Astra's review: a four-line fix and a docs paragraph each cost an hour on the
+  runner. One bounded task, in order: report the measured baseline first; skip documentation-only changes (a NARROW list);
+  cancel superseded testing without ever interrupting a publish or letting an older build publish over a newer one; shard
+  the e2e with verified coverage and isolation; move interaction cases to Fast only case by case; cache nothing without
+  evidence; benchmark on real runs. The stamping and the module-graph guard stay as they are.
+- **The baseline (measured before any change).** Actions API, nine runs on main: npm test 0.1-0.2 min; the one browser
+  step (npm ci, `playwright install --with-deps chromium`, smoke, profile-lands, relief-tier, all of the e2e) 30.5-68.0 min;
+  deploy-pages 0.12 min; queue 0.1 min. Split into one step each on branch run 40257169401 (4470c7b, otherwise unchanged):
+  npm test 0.13, npm ci 0.07, the Playwright install 4.78, smoke 0.65, profile-lands 0.42, relief-tier 0.27, e2e 42.93 min
+  (84 ran, 5 skipped). Its notice: every suite launched the image's own Google Chrome ("channel chrome 155.0.8059.39"),
+  never Playwright's Chromium. The slowest cases on the runner: the stale-tab guard 135.8 s, hover hints 133.9 s, the
+  Studio's Add to planner 127.9 s, Joey's wall build switched to Tabletop 125.6 s, Labels: EdgeLabel 107.2 s, the top bar
+  at every desktop width 102.4 s. Nine of the 28 runs before this were pushes of docs/redesign/*.md alone: 287 of 1155
+  runner minutes.
+- **Documentation-only pushes run nothing:** `paths-ignore: docs/**, *.md` (the root's Markdown only). Not models, fonts,
+  images, kits, configuration or the README files inside served folders: each changes what is published or what a visitor
+  gets. workflow_dispatch ignores the filter.
+- **Jobs:** unit (npm test), build (the stamping, the guard and the site artifact, byte-identical to before and now minutes
+  in, so a forgotten sed line fails before the browser suites finish), browser (the three short suites), e2e x4, e2e-coverage,
+  deploy. **Concurrency is per job, not per workflow:** each test job has a group per ref (and per shard) whose
+  cancel-in-progress is the run's FIRST attempt only; the deploy queues in `pages-deploy` without cancel-in-progress, so a
+  publish in progress always finishes and a waiting deploy is replaced by a newer one. The old workflow-level
+  `pages` + cancel-in-progress could cancel a run mid-publish. **The freshness check:** the deploy publishes only if main's
+  tip is this commit, or differs from it in docs/** and root *.md alone (the same two patterns); otherwise the newer push's
+  run publishes. The deploy needs unit, build, browser, every e2e shard and the coverage job.
+- **The shards** (e2e/shard.mjs): workspaces.mjs collects its 89 `test(...)` calls and registers this process's share at
+  the end of the file. Each case is identified by its position; the split puts the longest case first onto the least-loaded
+  shard, weighted by e2e/shard-weights.json (a whole soft-render run's durations; a case without a weight counts as the
+  median, so stale weights only unbalance). Each shard writes a report (the case list's hash, the weights' hash, its
+  positions); `tools/e2e-shard-gate.mjs` fails unless all n shards agree and every position ran exactly once.
+  test/e2e-shard.test.mjs proves the partition on 300 random lists. **Isolation:** each shard is its own runner; the file
+  serves the app on port 0, opens fresh contexts per case and writes nothing to disk. **Locally, soft render (E2E_SOFT=1,
+  no Studio, as the runner):** serial 1864 s; the four shards one after another 441 / 407 / 379 / 433 s, 22 / 22 / 22 / 23
+  cases, all passing, the gate: 89 cases each run exactly once.
+- **Fast tier:** already done case by case since 2026-10-13 (the harness pins `fast`): 86 of the 89 cases run on Fast.
+  The other three keep their tiers because the tier is what they test: Colors step 2 and the product-preview case
+  (Balanced, a tone-mapped tier's match to the screen) and the Quality pill (the tier switch). Nothing moved.
+- **The browser and caching:** no cache of either kind. npm ci costs 4 s, so dependency caching would save nothing; the
+  Playwright install cost 4.78 min a job for a browser no suite opened. `tools/ci-browser.mjs` launches the image's Chrome
+  first and installs Playwright's Chromium (with its system packages) only if that fails; either way a notice names the
+  browser the suites got.
+- **Failure text and timings:** `tools/ci-named.sh` is the former inline named() (a failure names itself in the
+  annotations), plus one notice per suite with its slowest cases (`tools/tap-durations.mjs`), readable through the API
+  without signing in.
+- **Review:** Sol `01a1762e` (substantial): 2 findings, both confirmed and fixed - a manual re-run of an older main run would
+  cancel the newer run's tests through the ref-only groups and then fail the freshness check, leaving the newest code
+  unpublished (cancel is now first-attempt only); the deploy's docs pathspec differed from the push filter for a root file
+  named `docs` (now `:(exclude,glob)docs/**`, checked in a scratch repo). Four questions answered "holds": no older build
+  publishes over a newer one, no deploy without every shard and the gate, unsharded registration unchanged, a missing
+  system package fails a required job rather than passing a deploy.
+- **After (benchmark):** pending - the first run of this workflow on the branch.

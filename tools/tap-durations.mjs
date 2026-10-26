@@ -25,7 +25,7 @@ for (let i = 0; i < lines.length; i++) {
     const d = /^ {2}duration_ms: ([\d.]+)/.exec(lines[j]);
     if (d) { ms = +d[1]; break; }
   }
-  cases.push({ name: m[2], ok: m[1] === 'ok', skip: !!m[3], ms });
+  cases.push({ name: m[2].replace(/\\([#\\])/g, '$1'), ok: m[1] === 'ok', skip: !!m[3], ms });   // TAP escapes # and \ in a name
 }
 if (!cases.length) process.exit(0);
 writeFileSync(file.replace(/(\.\w+)?$/, '.durations.json'), JSON.stringify(cases, null, 1));
