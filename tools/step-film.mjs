@@ -141,7 +141,7 @@ const lerp3 = (a, b, k) => [0, 1, 2].map((i) => a[i] + (b[i] - a[i]) * k);
 /* the under-table stand-off (UT.fwd = DEPTH + 40) and the drawer pop-out (depth + 5) for the 185 collection */
 const UT_FWD = 225, DRW_POP = 190;
 const MARGIN = 0.08;   // the whole-path fit: every keyframe box of every moving part inside 8 % of the frame on all four sides (Joey 2026-10-25)
-const JOINT_GROW = 15, JOINT_MARGIN = 0.06;   // a joint beat: the contact region grown by this, inside this margin (the hang's pegs at ~2x closer than the part fit)
+const JOINT_GROW = 6, JOINT_MARGIN = 0.035;   // a joint beat: the contact region grown by this, inside this margin, centred (~2.5x closer than the part fit)
 const PATH_OVER = 0.5;  // a beat's path may run past the frame's edge by half its half-size, no further (a part passing close under the lens filled the frame)
 const NEAR = 120;
 const CAP_BYTES = 600 * 1024;   // the site's clip budget      // mm: no part on a beat's path comes nearer the camera than this (the camera backs off by the shortfall)
@@ -453,26 +453,66 @@ const RECORDS = {
    generator's own dipFrom for the longer settle */
 const TTK_STAGE = [0, 0, -(185 + 10)];
 const ttkDip = (dp, S, stages) => { const travel = Math.abs(stages[S.cfg['case2'] ? 'c2' : 'c0'][2]); return dipFrom(travel); };
+/* the joints of the wall and tabletop clips (Joey 2026-10-25: "the subject of a beat is the joint, not the part"), each
+   built at its beat's end state; `strip(ids, yTop, zFrom, zTo)` = the full width of the named parts, a band of height
+   under their top, a depth range - the lock-and-slot band at a case's front corners, the cover rim, the rail front */
+const strip = (bx, st, ids, below, above, zFrom, zTo) => { const u = union(...ids.map((id) => bx(id, st))); return { min: [u.min[0], u.max[1] - below, zFrom ?? u.min[2]], max: [u.max[0], u.max[1] + above, zTo ?? u.max[2]] }; };
+/* a slow window over an engine-time span found in the plan's log: the first `key` entry for any of the ids, from a fraction
+   of its run to its end, then the hold */
+const slowOn = (plan, key, ids, fromK = 0, hold = 0.4, scale = 0.5) => { const e = plan.log.find((x) => x[key] && ids.includes(x[key])); if (!e) return []; const end = plan.log.filter((x) => x[key] && ids.includes(x[key])).reduce((a, x) => Math.max(a, x.t + (x.dur || 0)), 0); return [{ from: e.t + fromK * ((e.dur || 0)), to: end, scale, hold }]; };
 const ENGINE_CLIPS = {
   /* the wall: bracket + 4 screws; the bench assembly of the top case (case, locks, cover lower with the dip and pop, the
      top-row drawer's stoppers, cover upper); the hang (covers ghosted, 200 mm back onto the pegs, 16 mm drop, solid);
      the lower case sliding in from 225 mm out front */
-  bracket: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [1], hide: [], az: 16, el: 10 },
-  cover: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [2], hide: [], az: 26, el: 24 },
+  /* the bracket: the screw heads and the bracket's holes = the bracket's front face (the heads seat at its face); the screws'
+     drive at half speed */
+  bracket: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [1], hide: [], az: 16, el: 10,
+    joints: { 0: (S, st, bx) => { const br = bx('br0', st); return { min: [br.min[0], br.min[1], br.min[2]], max: [br.max[0], br.max[1], br.max[2] + 2] }; } },
+    slow: (plan) => slowOn(plan, 'enter', ['sc0', 'sc1', 'sc2', 'sc3']) },
+  /* the bench: the case's top rim with the covers and the stoppers' slots (the top 20 mm of the case up to the cover upper),
+     the stoppers' drop and the cover upper's slide at half speed */
+  cover: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [2], hide: [], az: 26, el: 24,
+    joints: { 0: (S, st, bx) => strip(bx, st, ['case1'], 20, bx('cu0', st).max[1] - bx('case1', st).max[1]) },
+    slow: (plan) => slowOn(plan, 'enter', ['tst1c0L', 'tst1c0R', 'tst1c1L', 'tst1c1R', 'cu0']) },
   hang: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [3], hide: [/^st\d/], az: 20, el: 36, fit: 'end',
     /* the pegCam beat's joint: the bracket, and the case's top rear edge (its back wall's upper 40 mm with the peg slots, 30 mm
        deep, up to the cover on top) as they stand at the beat's end - hung on the pegs */
     joints: { 1: (S, st, bx) => { const br = bx('br0', st), c = bx('case1', st), cu = bx('cu0', st); return union(br, { min: [c.min[0], c.max[1] - 40, c.min[2]], max: [c.max[0], cu.max[1], c.min[2] + 30] }); } },
     slow: (plan) => { const b = plan.beats[1]; return [{ from: b.t + b.dur, to: b.tEnd, scale: 0.5, hold: 0.4 }]; } },
-  rows: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [4], hide: [/^st\d|^tst/], az: 18, el: 6, fit: 'end' },
+  /* the lower case: its QuickLocks and the slots in the case above - the band from 25 mm under the lower case's top to 15 mm
+     into the upper case, the front 45 mm where the locks sit; the last fifth of the slide, the click, at half speed */
+  rows: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [4], hide: [/^st\d|^tst/], az: 18, el: 6, fit: 'end',
+    /* a travelling beat (the whole case slides in from 225 mm out): the part subject stays - a joint box here put the camUp
+       camera (26 deg below) under the case, looking at its floor; the click at half speed */
+    slow: (plan) => slowOn(plan, 'enter', ['case0'], 0.8) },
   /* the tabletop (the 185 2W-2H kit): the lower rail lands and the six feet slide in, the base sets down; the upper rail
      slides on from the back; the three cases (restaged, see TTK_STAGE) with their locks, the dips and pops; the two cover
      layers with the top drawer's stoppers; the three drawers with their magnet clips */
-  base: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [1, 2, 3], hide: [], az: 28, el: 30, fit: 'end' },
-  upper: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [4], hide: [], az: 22, el: 22 },
-  cases: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [5, 6, 7], hide: [/^mc|^mg|^st\d/], az: 20, el: 20, stages: { c0: TTK_STAGE, c1: TTK_STAGE, c2: TTK_STAGE }, dipFrom: ttkDip },
-  covers: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [8, 9], hide: [/^mc|^mg|^st0|^st1/], az: 22, el: 26 },
-  drawers3: { engine: true, record: 'ttk', prefix: 'ttk-step-', file: 'drawers', steps: [10], hide: [/^mc|^mg/], az: 18, el: 8 },
+  /* the base: beat 1 (the feet) = the rail with its feet; the second row of feet at half speed. Beats 0 and 2 (the rail
+     landing, the settle) keep the part subject */
+  base: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [1, 2, 3], hide: [], az: 28, el: 30, fit: 'end',
+    joints: { 1: (S, st, bx) => union(bx('frl0', st), ...['f1', 'f2', 'f3', 'f4', 'f5', 'f6'].map((id) => bx(id, st))) },
+    slow: (plan) => slowOn(plan, 'enter', ['f2', 'f4', 'f6']) },
+  /* the upper rail: both rails' front half, where the upper slides onto the lower's dovetails; the last third at half speed */
+  upper: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [4], hide: [], az: 22, el: 22,
+    joints: { 0: (S, st, bx) => { const u = union(bx('frl0', st), bx('fru0', st)); return { min: [u.min[0], u.min[1], 0], max: [u.max[0], u.max[1], u.max[2]] }; } },
+    slow: (plan) => slowOn(plan, 'enter', ['fru0'], 0.66) },
+  /* the cases: each beat's joint = the lock-and-slot band of that case (its top 30 mm, the front 45 mm where the locks sit)
+     from the stage, where the locks drop in, to the seat, where they click - the band the settle travels; the locks' drop
+     at half speed */
+  cases: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [5, 6, 7], hide: [/^mc|^mg|^st\d/], az: 20, el: 20, stages: { c0: TTK_STAGE, c1: TTK_STAGE, c2: TTK_STAGE }, dipFrom: ttkDip,
+    joints: Object.fromEntries([0, 1, 2].map((i) => [i, (S, st, bx) => { const c = bx('case' + i, st); return { min: [c.min[0], c.max[1] - 30, 47 + TTK_STAGE[2]], max: [c.max[0], c.max[1] + 2, 92.5] }; }])),
+    slow: (plan) => [...slowOn(plan, 'enter', ['ql0L', 'ql0R']), ...slowOn(plan, 'enter', ['ql1L', 'ql1R']), ...slowOn(plan, 'enter', ['ql2L', 'ql2R'])] },
+  /* the covers: beat 0 = the top case's rim with the cover lower and the stoppers' slots, beat 1 = the two covers' rim; the
+     stoppers' drop and the cover upper's slide at half speed */
+  covers: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [8, 9], hide: [/^mc|^mg|^st0|^st1/], az: 22, el: 26,
+    joints: { 0: (S, st, bx) => strip(bx, st, ['case2'], 15, bx('cl0', st).max[1] - bx('case2', st).max[1]), 1: (S, st, bx) => strip(bx, st, ['cl0'], 8, bx('cu0', st).max[1] - bx('cl0', st).max[1]) },
+    slow: (plan) => [...slowOn(plan, 'enter', ['st2L', 'st2R', 'st3L', 'st3R']), ...slowOn(plan, 'enter', ['cu0'], 0.5)] },
+  /* the drawers: the first drawer's rear meeting the lower-left case's mouth - that case's opening and the drawer at its
+     190 mm pop-out; the drawer's slide home at half speed */
+  drawers3: { engine: true, record: 'ttk', prefix: 'ttk-step-', file: 'drawers', steps: [10], hide: [/^mc|^mg/], az: 18, el: 8,
+    joints: { 0: (S, st, bx) => { const c = bx('case0', st); return { min: [c.min[0], c.min[1], 40], max: [c.max[0], c.max[1], c.max[2] + DRW_POP] }; } },
+    slow: (plan) => slowOn(plan, 'move', ['drw0']) },
   /* the under-table steps as the planner plays them (the second pass, sheets only): the rail, the first case with the
      overhead QuickLock beat (the slab hides above the camera, the planner's own rule), the lower case */
   'ut-rail': { engine: true, record: 'ut', prefix: 'ut-step-', file: 'rail', steps: [1], hide: [/^mc|^mg|^st/] },
@@ -548,7 +588,7 @@ const SLABLINE = ({ boxes, underY, frontZ, halfW, clear }) => {
 /* the fixed camera: azimuth az off the front normal toward +X, elevation el (negative = below level), the target pushed
    `toward` mm toward the camera; the distance is the largest of: the height boxes filling (1 - headroom) of the frame,
    every corner of the fit boxes inside the side margin on both sides, and inside the headroom vertically */
-const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin, endBoxes, span = 0.45, edge = 0.02, clearBoxes, near = 120 }) => {
+const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin, endBoxes, span = 0.45, edge = 0.02, clearBoxes, near = 120, centreFit = false }) => {
   /* the end-fit mode (Joey 2026-10-25): the resting subject (endBoxes) spans `span` of the frame height, and every keyframe
      box (fitBoxes) must still be inside the `edge` margin - the distance is the larger of the two, and `pulledBack` says
      when the keyframes, not the subject, set it */
@@ -594,7 +634,19 @@ const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, soft
     }
     if (minForward < near) { pulledForPath = near - minForward; r += pulledForPath; }
   }
-  const m = probe(r);
+  let m = probe(r);
+  /* centre the fit: an oblique box aimed at its centre still projects off-centre, so the target slides across the view
+     (camera right / up at the fitted distance) until the projected box is centred, and the distance is re-solved; three
+     passes settle it (Joey 2026-10-25: "centre the joint box in the frame") */
+  if (centreFit) for (let pass = 0; pass < 3; pass++) {
+    const dx = (m.left + m.right) / 2, dy = (m.top + m.bottom) / 2;
+    if (Math.abs(dx) < 0.005 && Math.abs(dy) < 0.005) break;
+    const half = r * Math.tan(T.MathUtils.degToRad(fov) / 2);
+    const right = new T.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).normalize(), up = new T.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).normalize();
+    tgt.addScaledVector(right, dx * half * (W / H)).addScaledVector(up, dy * half);
+    const rH2 = heightBoxes.length ? solve((q) => q.hgt <= 2 * (1 - headroom)) : 0, rW2 = solve((q) => q.right <= 1 - 2 * side && q.left >= -(1 - 2 * side)), rV2 = solve((q) => q.top <= 1 - vlim && q.bottom >= -(1 - vlim));
+    r = Math.max(rH2, rW2, rV2, rS) + pulledForPath; m = probe(r);
+  }
   const endSpan = endBoxes ? m.hgt / 2 : null;   // the subject's share of the frame height at the chosen distance
   h.controls.target.copy(tgt); h.controls.update();
   cam.position.copy(tgt).addScaledVector(dir, r); cam.lookAt(tgt); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
@@ -742,14 +794,14 @@ async function film(name, clip, browser, base, pose) {
            guard is off for such a beat (the 120 mm lens clearance stays) */
         const joint = clip.joints && clip.joints[i] ? clip.joints[i](S, plan.stateAt(b.tEnd), (id, st) => worldBox(S.local[id], st[id].pos)) : null;
         if (joint) { b.joint = { min: joint.min.map((v) => v - JOINT_GROW), max: joint.max.map((v) => v + JOINT_GROW) }; b.subject = [b.joint]; b.subjectBox = b.joint; b.subjectIds = ['joint']; }
-        const c = await page.evaluate(CAMERA, { az: b.preset.t, el: 90 - b.preset.p, fov: b.preset.fov || 40, target: centre(b.subjectBox), toward: 0, fitBoxes: b.subject, margin: joint ? JOINT_MARGIN : MARGIN, clearBoxes: b.path, near: NEAR, softBoxes: joint ? null : b.path, over: PATH_OVER, W, H });
+        const c = await page.evaluate(CAMERA, { az: b.preset.t, el: 90 - b.preset.p, fov: b.preset.fov || 40, target: centre(b.subjectBox), toward: 0, fitBoxes: b.subject, margin: joint ? JOINT_MARGIN : MARGIN, clearBoxes: b.path, near: NEAR, softBoxes: joint ? null : b.path, over: PATH_OVER, centreFit: true, W, H });
         b.cam = { pos: c.pos, target: c.target, fov: b.preset.fov || 40, r: c.r, extents: c.extents, pulledForPath: c.pulledForPath, joint: !!joint };
       }
       for (let i = 0; i < plan.beats.length; i++) if (!plan.beats[i].cam) plan.beats[i].cam = i ? plan.beats[i - 1].cam : null;
       if (!plan.beats[0].cam) throw new Error('the first step has no camera preset');
       run.beats = plan.beats.map((b) => ({ t: b.t, dur: b.dur, tEnd: b.tEnd, kind: b.kind, step: b.step, preset: b.preset, actors: b.actorIds, subject: b.subjectIds, joint: b.joint || null, subjectBox: { min: b.subjectBox.min.map((v) => +v.toFixed(1)), max: b.subjectBox.max.map((v) => +v.toFixed(1)) }, cam: { az: b.preset ? b.preset.t : null, el: b.preset ? 90 - b.preset.p : null, fov: b.cam.fov, r: +b.cam.r.toFixed(1), pos: b.cam.pos.map((v) => +v.toFixed(1)), target: b.cam.target.map((v) => +v.toFixed(1)), extents: b.cam.extents, pulledForPath: b.cam.pulledForPath } }));
       cameraSpec = null;
-      run.camera = await page.evaluate(CAMERA, { az: plan.beats[0].preset.t, el: 90 - plan.beats[0].preset.p, fov: plan.beats[0].preset.fov || 40, target: centre(plan.beats[0].subjectBox), toward: 0, fitBoxes: plan.beats[0].subject, margin: plan.beats[0].joint ? JOINT_MARGIN : MARGIN, clearBoxes: plan.beats[0].path, near: NEAR, softBoxes: plan.beats[0].joint ? null : plan.beats[0].path, over: PATH_OVER, W, H });   // the page opens on beat 0
+      run.camera = await page.evaluate(CAMERA, { az: plan.beats[0].preset.t, el: 90 - plan.beats[0].preset.p, fov: plan.beats[0].preset.fov || 40, target: centre(plan.beats[0].subjectBox), toward: 0, fitBoxes: plan.beats[0].subject, margin: plan.beats[0].joint ? JOINT_MARGIN : MARGIN, clearBoxes: plan.beats[0].path, near: NEAR, softBoxes: plan.beats[0].joint ? null : plan.beats[0].path, over: PATH_OVER, centreFit: true, W, H });   // the page opens on beat 0
     } else {
       S = await page.evaluate(SETUP, { title: clip.title, hide: clip.hide.map((re) => (re instanceof RegExp ? re.source : re)) });
       if (S.sideCovers.length) throw new Error('side covers instanced: ' + S.sideCovers.join(','));
@@ -908,7 +960,7 @@ async function film(name, clip, browser, base, pose) {
   for (let crf = 20; ; crf++) {
     ff(['-framerate', String(FPS), '-i', posix(join(framesDir, 'frame_%03d.png')), '-vf', `scale=${W}:${H}:flags=lanczos,format=yuv420p`, '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf), '-movflags', '+faststart', posix(mp4)]);
     run.crf = crf;
-    if ((await stat(mp4)).size <= CAP_BYTES || crf >= 26) break;
+    if ((await stat(mp4)).size <= CAP_BYTES || crf >= 30) break;   // a joint-framed clip is powder grain edge to edge: 26-28 is what the bench clips need
   }
   ff(['-i', posix(join(framesDir, 'frame_000.png')), '-q:v', '3', posix(join(OUT, `${prefix}${file}-poster.jpg`))]);   // q:v 3 ~ JPEG quality 85
   const every = Math.max(1, Math.floor((N - 1) / 7));   // 8 frames: 0, every, ..., 7*every
