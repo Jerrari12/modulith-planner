@@ -141,6 +141,9 @@ const lerp3 = (a, b, k) => [0, 1, 2].map((i) => a[i] + (b[i] - a[i]) * k);
 /* the under-table stand-off (UT.fwd = DEPTH + 40) and the drawer pop-out (depth + 5) for the 185 collection */
 const UT_FWD = 225, DRW_POP = 190;
 const MARGIN = 0.08;   // the whole-path fit: every keyframe box of every moving part inside 8 % of the frame on all four sides (Joey 2026-10-25)
+const PATH_OVER = 0.5;  // a beat's path may run past the frame's edge by half its half-size, no further (a part passing close under the lens filled the frame)
+const NEAR = 120;
+const CAP_BYTES = 600 * 1024;   // the site's clip budget      // mm: no part on a beat's path comes nearer the camera than this (the camera backs off by the shortfall)
 
 const CLIPS = {
   /* step 1: the rail rises 70 mm to its seat 2 mm under the slab, then the six screws rise 45 mm into it, staggered */
@@ -233,6 +236,8 @@ const CLIPS = {
       const q = S.pose(t), d = box(S, 'drw0'), pivot = [(d.min[0] + d.max[0]) / 2, d.min[1], d.min[2]];
       return ['drw0', ...S.riders('drw0')].map((id) => { const p = pitched(S.bases[id], pivot, q); return { id, visible: true, pos: p.pos, rotX: p.rotX, meta: q }; });
     },
+    subject: (S) => [box(S, 'drw0'), ...S.riders('drw0').map((id) => box(S, id)), box(S, 'case0'), box(S, 'ql0L'), box(S, 'ql0R'), ...['st0L', 'st0R', 'st1L', 'st1R'].filter((id) => S.boxes[id]).map((id) => box(S, id))],
+    path: (S) => { const d = box(S, 'drw0'), pivot = [(d.min[0] + d.max[0]) / 2, d.min[1], d.min[2]], out = []; for (let t = 0; t <= 4.5; t += 0.05) out.push(pitchedBox(d, pivot, S.pose(t))); return out; },
     /* the pivot, measured: at full pitch the drawer's lowest point must be its rear-bottom edge at pivot.y + dy */
     check: (S) => { const d = box(S, 'drw0'), q = S.pose(1.5); return { t: 1.5, id: 'drw0', expectMinY: d.min[1] + q.dy, expectMaxY: pitchedBox(d, [0, d.min[1], d.min[2]], q).max[1] }; },
   },
@@ -244,6 +249,9 @@ const CLIPS = {
        frame on purpose, so its exit path is not fitted) */
     camera: (S) => { const seat = union(...['utr0', 'case1', 'case0', 'ql0L', 'ql0R'].map((i) => box(S, i))), end = shifted(union(box(S, 'case0'), box(S, 'ql0L'), box(S, 'ql0R')), [0, 0, 230]), drw = shifted(box(S, 'drw0'), [0, 0, DRW_POP]);
       return { az: 18, el: -3, fov: 34, target: centre(union(seat, end)), toward: 0, fitBoxes: [seat, end, drw], margin: MARGIN }; },
+    subject: (S) => [box(S, 'case0'), box(S, 'ql0L'), box(S, 'ql0R'), box(S, 'case1'), box(S, 'utr0')],
+    path: (S) => [shifted(box(S, 'case0'), [0, 0, 230]), shifted(box(S, 'drw0'), [0, 0, DRW_POP])],   // the drawer's exit beyond its pop-out passes the camera on purpose (cullNear hides it first)
+    cullNear: ['drw0'],
     /* the drawer is hidden once it has travelled DRW_POP + 700 mm: that pose must already be out of the frame (Terra 01a17549) */
     offFrame: (S) => shifted(box(S, 'drw0'), [0, 0, DRW_POP + 700]),
     frames: (t, S) => {
@@ -274,7 +282,7 @@ const CLIPS = {
    apart; `land` un-stages without motion; a `camera` phase keeps its 750 ms as a beat, the camera itself is the film's.
    Every tween is eased with the engine's easeInOutCubic except a detent move. vanish/appear/room/spin (the faceplate
    step) are not replayed: a clip that reaches one aborts. */
-const ENG = { enter: 750, settle: 850, move: 600, fade: 650, stagger: 130, camera: 750, via: 300, detent: 900, pop: 320, popStagger: 45 };
+const ENG = { enter: 750, settle: 850, move: 600, fade: 650, stagger: 130, camera: 750, camera900: 900, via: 300, detent: 900, pop: 320, popStagger: 45 };   // camera900: tweenCamera's default, the step's own camera
 const TILED = /^FR-[LU]_|^C[LU]-|^WallMount|^UnderTableRail/;
 const detent = (k) => k + (0.85 / (2 * Math.PI)) * Math.sin(2 * Math.PI * k);
 const STEP_GAP = 0.3;   // the beat between two steps of one clip (the engine pages with a camera tween there)
@@ -291,19 +299,26 @@ function engineTimeline(S, clip) {
   const basePos = (id, staged) => { const c = S.cfg[id]; return staged && c.stage && stages[c.stage] ? add3(c.pos, stages[c.stage]) : c.pos.slice(); };
   /* the state at t: every op applied in creation order (an op before its start leaves the state alone) */
   const ops = [], log = [], keyBoxes = [], touched = new Set();
+  /* the planner's own camera beats: the step's camera at the step start (tweened over 900 ms, concurrently with the first
+     phase - except the clip's first, which the film opens on), and every `camera` phase (750 ms). Each beat's SUBJECT is
+     what its phases place (its actors, at their end pose) plus whatever they come to rest against; the camera is fitted
+     to that, not to the path (Joey 2026-10-25: "frame the subject, not the path") */
+  const beats = [];
+  const beat = () => beats[beats.length - 1];
   const init = () => { const st = {}; for (const id of S.ids) st[id] = { visible: S.before.visible.includes(id), pos: S.before.pos[id].slice(), staged: S.before.staged[id], childY: 0, opacity: 1 }; return st; };
   const stateAt = (t) => { const st = init(); for (const op of ops) if (t >= op.t0) op.apply(st, Math.max(0, Math.min(1, op.dur > 0 ? (t - op.t0) / op.dur : 1)), t - op.t0); return st; };
-  const keyBox = (id, pos) => { if (S.local[id]) keyBoxes.push(worldBox(S.local[id], pos)); };
+  const keyBox = (id, pos) => { if (S.local[id]) { const b = worldBox(S.local[id], pos); keyBoxes.push(b); if (beats.length) beat().path.push(b); } };
   let T = REST;
   S.steps.forEach((step, si) => {
     if (si) T += STEP_GAP;
     const stepStart = T;
+    beats.push({ t: T, dur: si === 0 ? 0 : ENG.camera900 / 1000, preset: step.camera || null, step: step.title, kind: 'step', actors: new Set(), path: [] });
     for (const ph of step.phases) {
       for (const k of ['vanish', 'appear', 'room']) if (ph[k] !== undefined) throw new Error(`step "${step.title}": a ${k} phase is not replayed`);
       const pre = stateAt(T);
       let end = T;
       const job = (t0, dur) => { end = Math.max(end, t0 + dur); };
-      if (ph.camera) job(T, ENG.camera / 1000);
+      if (ph.camera) { job(T, ENG.camera / 1000); beats.push({ t: T, dur: ENG.camera / 1000, preset: ph.camera, step: step.title, kind: 'phase', actors: new Set(), path: [] }); }
       for (const g of ph.ghost || []) if (!isHidden(g.id)) { const id = g.id; ops.push({ t0: T, dur: ENG.fade / 1000, apply: (st, k) => { st[id].opacity = 1 - 0.85 * easeInOut(k); } }); job(T, ENG.fade / 1000); touched.add(id); }
       for (const g of ph.solid || []) if (!isHidden(g.id)) { const id = g.id; ops.push({ t0: T, dur: ENG.fade / 1000, apply: (st, k) => { st[id].opacity = 0.15 + 0.85 * easeInOut(k); } }); job(T, ENG.fade / 1000); }
       const enters = (ph.enter || []).filter((e) => !isHidden(e.id));
@@ -325,7 +340,7 @@ function engineTimeline(S, clip) {
           const prev = s === 0 ? 0 : legs[s - 1], f = legs[s] === prev ? 1 : (d - prev) / (legs[s] - prev);
           st[id].pos = lerp3(pts[s], pts[s + 1], f);
         } };
-        ops.push(op);
+        ops.push(op); beat().actors.add(id);
         pts.forEach((p) => keyBox(id, p)); touched.add(id); job(T, delay + dur);
         log.push({ t: +T.toFixed(3), step: step.title, enter: id, from: pts[0].map((v) => +v.toFixed(1)), to: to.map((v) => +v.toFixed(1)), dur: +(delay + dur).toFixed(3) });
       });
@@ -338,7 +353,7 @@ function engineTimeline(S, clip) {
       for (const m of ph.move || []) {
         if (isHidden(m.id)) continue;
         const id = m.id, from = pre[id].pos.slice(), to = add3(from, m.by), dur = (m.ease ? ENG.detent : ENG.move) / 1000, delay = (m.hold || 0) / 1000, eased = m.ease === 'detent';
-        ops.push({ t0: T + delay, dur, apply: (st, k) => { st[id].pos = lerp3(from, to, eased ? detent(k) : easeInOut(k)); } });
+        ops.push({ t0: T + delay, dur, apply: (st, k) => { st[id].pos = lerp3(from, to, eased ? detent(k) : easeInOut(k)); } }); beat().actors.add(id);
         keyBox(id, from); keyBox(id, to); touched.add(id); job(T + delay, dur);
         log.push({ t: +(T + delay).toFixed(3), step: step.title, move: id, by: m.by, dur: +dur.toFixed(3) });
       }
@@ -347,7 +362,7 @@ function engineTimeline(S, clip) {
         /* the engine shows the part at opacity 0 the moment the phase starts and begins its fade n * 80 ms later */
         const id = f.id, pos = basePos(id, pre[id].staged), delay = n * 0.08, fd = ENG.fade / 1000;
         ops.push({ t0: T, dur: delay + fd, apply: (st, k, el) => { st[id].visible = true; st[id].pos = pos.slice(); st[id].opacity = el < delay ? 0 : Math.min(1, easeInOut(Math.min(1, (el - delay) / fd))); } });
-        keyBox(id, pos); touched.add(id); job(T, delay + fd);
+        keyBox(id, pos); touched.add(id); job(T, delay + fd); beat().actors.add(id);
         log.push({ t: +T.toFixed(3), step: step.title, fade: id, delay });
       });
       if (ph.settle) {
@@ -356,7 +371,7 @@ function engineTimeline(S, clip) {
           const from = basePos(id, true), to = basePos(id, false), dur = ENG.settle / 1000;
           ops.push({ t0: T, dur, apply: (st, k) => { st[id].pos = lerp3(from, to, easeInOut(k)); if (k >= 1) st[id].staged = false; } });
           if (pre[id].visible) { keyBox(id, from); keyBox(id, to); }
-          touched.add(id); job(T, dur);
+          touched.add(id); job(T, dur); beat().actors.add(id);
           log.push({ t: +T.toFixed(3), step: step.title, settle: id, from: from.map((v) => +v.toFixed(1)), to: to.map((v) => +v.toFixed(1)), dur });
         }
       }
@@ -371,6 +386,7 @@ function engineTimeline(S, clip) {
   for (const op of ops) { if (op.t0 > REST) break; if (op.firstEnter) op.t0 = 0, op.dur += REST, op.lead = REST; }
   /* every visible part at the start and at the end is fitted too */
   const st0 = stateAt(0), st1 = stateAt(dur), endBoxes = [];
+  for (const id of S.ids) if (st0[id].visible && S.local[id] && beats.length) beats[0].path.push(worldBox(S.local[id], st0[id].pos));
   for (const id of S.ids) { if (st0[id].visible) keyBox(id, st0[id].pos); if (st1[id].visible && !isHidden(id)) { keyBox(id, st1[id].pos); if (S.local[id]) endBoxes.push(worldBox(S.local[id], st1[id].pos)); } }
   /* the staged-case clearance: a part that enters onto its stage must not overlap anything visible when it lands there
      (the tabletop's -170 staging put a case's front 15 mm over the parts below it) */
@@ -387,8 +403,25 @@ function engineTimeline(S, clip) {
     clearance.push({ id: e.enter, at: +tEnd.toFixed(3), pos: st[e.enter].pos.map((v) => +v.toFixed(1)), ...worst });
     if (worst.gap < 0) throw new Error(`${e.enter} lands on its stage overlapping ${worst.other} by ${-worst.gap} mm`);
   }
+  /* each beat's subject, at the beat's end: the actors' boxes, plus every visible box that touches their union (grown by
+     5 mm) - the thing they attach to; a beat with no actors (a camera return, a solid) frames the whole visible build */
+  for (let i = 0; i < beats.length; i++) {
+    const b = beats[i], tEnd = beats[i + 1] ? beats[i + 1].t : dur, st = stateAt(tEnd);
+    const vis = S.ids.filter((id) => st[id].visible && !isHidden(id) && S.local[id]);
+    const actors = [...b.actors].filter((id) => vis.includes(id));
+    const boxOf = (id) => worldBox(S.local[id], st[id].pos);
+    let ids;
+    if (!actors.length) ids = vis;
+    else {
+      const u = union(...actors.map(boxOf)), grown = { min: u.min.map((v) => v - 5), max: u.max.map((v) => v + 5) };
+      const touches = (bx) => [0, 1, 2].every((k) => bx.min[k] <= grown.max[k] && grown.min[k] <= bx.max[k]);
+      ids = vis.filter((id) => actors.includes(id) || touches(boxOf(id)));
+    }
+    b.tEnd = +tEnd.toFixed(3); b.actorIds = actors; b.subjectIds = ids; b.subject = ids.map(boxOf); b.subjectBox = union(...b.subject);
+    delete b.actors;
+  }
   const frames = (t) => { const st = stateAt(t); return S.ids.map((id) => ({ id, visible: st[id].visible && !isHidden(id), pos: st[id].pos, childY: st[id].childY, opacity: st[id].opacity })); };
-  return { dur, frames, keyBoxes, endBoxes, touched, log, stages, clearance, skipped: [...skipped].map((id) => id + ' (' + S.cfg[id].node + ')') };
+  return { dur, frames, keyBoxes, endBoxes, beats, touched, log, stages, clearance, skipped: [...skipped].map((id) => id + ' (' + S.cfg[id].node + ')') };
 }
 /* the mount rule, per frame: on the wall the smallest distance of any visible part's box to the wall plane (a wood screw's
    shank is meant to be in the wall and is left out), on the tabletop the smallest height of any box above the table top */
@@ -411,6 +444,7 @@ const RECORDS = {
   wall: { mount: 'wall', length: 185, faceStyle: 'classic', handleStyle: 'deco', wallStagger: false, backCover: false, feet: 'tpu', removedStoppers: [], gridW: 6, gridH: 4, nextId: 3, printer: 'any', sideCovers: false,
     placed: [{ id: 1, x: 0, y: 6, w: 2, hh: 2, fill: 'decor', shelves: 0, closure: 'none' }, { id: 2, x: 0, y: 4, w: 2, hh: 2, fill: 'decor', shelves: 0, closure: 'none' }] },
   ttk: null,
+  ut: null,   // set in main(): the under-table record is declared below
 };
 /* the tabletop cases stage 25 mm further back than the generator's slideBack (-170 = -max(170, depth - 15)): at -170 a 185
    case lands with its front 15 mm over the parts below it and its drop cuts through them; at -(185 + 10) it clears them by
@@ -434,6 +468,11 @@ const ENGINE_CLIPS = {
   cases: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [5, 6, 7], hide: [/^mc|^mg|^st\d/], az: 20, el: 20, stages: { c0: TTK_STAGE, c1: TTK_STAGE, c2: TTK_STAGE }, dipFrom: ttkDip },
   covers: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [8, 9], hide: [/^mc|^mg|^st0|^st1/], az: 22, el: 26 },
   drawers3: { engine: true, record: 'ttk', prefix: 'ttk-step-', file: 'drawers', steps: [10], hide: [/^mc|^mg/], az: 18, el: 8 },
+  /* the under-table steps as the planner plays them (the second pass, sheets only): the rail, the first case with the
+     overhead QuickLock beat (the slab hides above the camera, the planner's own rule), the lower case */
+  'ut-rail': { engine: true, record: 'ut', prefix: 'ut-step-', file: 'rail', steps: [1], hide: [/^mc|^mg|^st/] },
+  'ut-first': { engine: true, record: 'ut', prefix: 'ut-step-', file: 'first', steps: [2], hide: [/^mc|^mg|^st/] },
+  'ut-under': { engine: true, record: 'ut', prefix: 'ut-step-', file: 'under', steps: [3], hide: [/^mc|^mg|^st/] },
 };
 
 /* ---- the repo served locally, Chrome launched the way the other harnesses do --------------------------------------- */
@@ -485,7 +524,7 @@ const SETUP = ({ title, hide }) => {
   const sideCovers = [...h.instances.values()].filter((x) => /SideCover/.test(x.cfg.node)).map((x) => x.cfg.id);
   const notShown = [...h.instances.values()].filter((x) => !x.group.visible && !hidden.some((s) => s.startsWith(x.cfg.id + ' '))).map((x) => x.cfg.id + ' (' + x.cfg.node + ')');
   const sp = h.surface.geometry.parameters;   // the slab: a box 25 tall, its underside at surfaceUnderY, its front face flush with the rail fronts (fitSurface)
-  return { step: idx, title: h.manifest.steps[idx].title, page: h.cur, hidden, notShown, bases, boxes, child, nodes, rides, caseFront, sideCovers,
+  return { step: idx, title: h.manifest.steps[idx].title, page: h.cur, hidden, notShown, bases, boxes, child, nodes, rides, caseFront, sideCovers, stepCamera: h.manifest.steps[idx].camera || null,
     surfaceUnderY: h.surface.position.y - sp.height / 2, slabFrontZ: h.surface.position.z + sp.depth / 2, slabHalfW: sp.width / 2, ids: Object.keys(bases) };
 };
 /* the slab's front-bottom edge on screen, and every corner of the given boxes against it: `worst` is the largest amount
@@ -504,13 +543,13 @@ const SLABLINE = ({ boxes, underY, frontZ, halfW, clear }) => {
 /* the fixed camera: azimuth az off the front normal toward +X, elevation el (negative = below level), the target pushed
    `toward` mm toward the camera; the distance is the largest of: the height boxes filling (1 - headroom) of the frame,
    every corner of the fit boxes inside the side margin on both sides, and inside the headroom vertically */
-const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin, endBoxes, span = 0.45, edge = 0.02 }) => {
+const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin, endBoxes, span = 0.45, edge = 0.02, clearBoxes, near = 120 }) => {
   /* the end-fit mode (Joey 2026-10-25): the resting subject (endBoxes) spans `span` of the frame height, and every keyframe
      box (fitBoxes) must still be inside the `edge` margin - the distance is the larger of the two, and `pulledBack` says
      when the keyframes, not the subject, set it */
   if (endBoxes) { heightBoxes = endBoxes; headroom = 1 - span; allBoxes = fitBoxes; side = edge; softBoxes = null; fitBoxes = null; }
   /* the whole-path mode: every fit box inside the same margin on all four sides, nothing else */
-  if (fitBoxes) { heightBoxes = []; allBoxes = fitBoxes; side = margin; headroom = 2 * margin; softBoxes = null; }
+  if (fitBoxes) { heightBoxes = []; allBoxes = fitBoxes; side = margin; headroom = 2 * margin; }   // softBoxes, when given, stay: the path may run past the frame by `over`, no further
   const h = window.__GEN2_VIEWER__, T = h.THREE, cam = h.camera;
   const t = T.MathUtils.degToRad(az), p = T.MathUtils.degToRad(90 - el);
   const dir = new T.Vector3(Math.sin(p) * Math.sin(t), Math.cos(p), Math.sin(p) * Math.cos(t));
@@ -532,18 +571,35 @@ const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, soft
   const soft = (r) => { const all = (softBoxes || []).flatMap(corners).map((v) => { cam.position.copy(tgt).addScaledVector(dir, r); cam.lookAt(tgt); cam.updateMatrixWorld(true); return v.clone().project(cam); });
     return all.every((v) => Math.abs(v.x) <= 1 + over && Math.abs(v.y) <= 1 + over); };
   const rS = softBoxes && softBoxes.length ? (() => { let lo = 100, hi = 5000; for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (soft(mid)) hi = mid; else lo = mid; } return hi; })() : 0;
-  const r = Math.max(rH, rW, rV, rS), m = probe(r);
+  let r = Math.max(rH, rW, rV, rS), pulledForPath = 0;
+  /* the path clearance: a part that passes between the subject and the camera (a case pushed 200 mm toward the wall from a
+     bench nearer the lens, a drawer out front) must stay at least `near` mm in front of the camera - the camera backs off
+     along its own axis by exactly the shortfall, which moves every point back by the same amount */
+  if (clearBoxes && clearBoxes.length) {
+    cam.position.copy(tgt).addScaledVector(dir, r);
+    const view = dir.clone().negate();
+    let minForward = Infinity;
+    for (const b of clearBoxes) for (const c of corners(b)) minForward = Math.min(minForward, c.sub(cam.position).dot(view));
+    if (minForward < near) { pulledForPath = near - minForward; r += pulledForPath; }
+  }
+  const m = probe(r);
   const endSpan = endBoxes ? m.hgt / 2 : null;   // the subject's share of the frame height at the chosen distance
   h.controls.target.copy(tgt); h.controls.update();
   cam.position.copy(tgt).addScaledVector(dir, r); cam.lookAt(tgt); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
-  return { az, el, fov, target: tgt.toArray(), pos: cam.position.toArray(), r, rH, rW, rV, rS, extents: m, endSpan, pulledBack: endBoxes ? r > rH * 1.001 : false };
+  return { az, el, fov, target: tgt.toArray(), pos: cam.position.toArray(), r, rH, rW, rV, rS, extents: m, endSpan, pulledBack: endBoxes ? r > rH * 1.001 : false, pulledForPath: +pulledForPath.toFixed(1) };
 };
 /* one frame: the placements applied (group position, an X rotation, the inner child's y - the QuickLock tab), then the
    loop's own order (grounding, cavity, reflection, AO, accumulation, composite) with the scene told it changed and every
    progressive pass run to its end, read in the same task. `stale` draws the frame the engine's way for a part in motion
    with AO held on - updateAO() unforced keeps the buffer it has - for the proof. */
-const FRAME = ({ placements, stale }) => {
+const FRAME = ({ placements, stale, camera, mount }) => {
   const h = window.__GEN2_VIEWER__, r = h.renderer, c = r.domElement, t0 = performance.now();
+  if (camera) {   // the planner's camera on the film clock: position, target and fov as tweenCamera lerps them
+    h.camera.position.set(...camera.pos); h.controls.target.set(...camera.target); h.camera.fov = camera.fov; h.camera.updateProjectionMatrix(); h.camera.lookAt(h.controls.target); h.camera.updateMatrixWorld(true);
+    /* the render loop is paused, so its two backdrop rules run here: the wall hides behind the camera, the slab above it */
+    if (mount === 'wall') h.wall.visible = h.camera.position.z > h.wall.position.z;
+    if (mount === 'under-table') h.surface.visible = h.camera.position.y < h.surface.position.y - h.surface.geometry.parameters.height / 2;
+  }
   for (const p of placements) {
     const inst = h.instances.get(p.id); if (!inst) throw new Error('no instance ' + p.id);
     const g = inst.group;
@@ -621,7 +677,7 @@ const SETUP_ENGINE = ({ first, last, hide }) => {
     if (hide.some((re) => new RegExp(re).test(x.cfg.id))) { if (x.group.visible) hidden.push(x.cfg.id + ' (' + x.cfg.node + ')'); x.group.visible = false; continue; }
     if (x.group.visible) before.visible.push(x.cfg.id);
   }
-  const steps = h.manifest.steps.slice(first, last + 1).map((s) => ({ title: s.title, phases: s.phases || [] }));
+  const steps = h.manifest.steps.slice(first, last + 1).map((s) => ({ title: s.title, camera: s.camera || null, phases: s.phases || [] }));
   const sideCovers = [...h.instances.values()].filter((x) => /SideCover/.test(x.cfg.node)).map((x) => x.cfg.id);
   return { first, last, steps, stages: h.manifest.stages || {}, cfg, local, before, hidden, sideCovers, page: h.cur,
     wallZ: h.wall && h.wall.visible ? h.wall.position.z : null, tableY: h.table && h.table.visible ? h.table.position.y : null,
@@ -662,8 +718,19 @@ async function film(name, clip, browser, base, pose) {
       plan = engineTimeline(S, clip);
       run.dur = plan.dur; N = Math.round(FPS * plan.dur); frames = plan.frames;
       run.setup = { steps: S.steps.map((s) => s.title), first: S.first, last: S.last, page: S.page, hidden: S.hidden, notShown: S.ids.filter((id) => !S.before.visible.includes(id) && !plan.touched.has(id)).map((id) => id + ' (' + S.cfg[id].node + ')'), skipped: plan.skipped, stages: plan.stages, wallZ: S.wallZ, tableY: S.tableY, shadowMap: S.shadowMap, timeline: plan.log, clearance: plan.clearance };
-      cameraSpec = { az: clip.az, el: clip.el, fov: 34, target: clip.target ? clip.target(plan, S) : centre(union(...plan.keyBoxes)), toward: 0, fitBoxes: plan.keyBoxes, margin: MARGIN };
-      if (clip.fit === 'end' || opt('--fit', null) === 'end') cameraSpec = { ...cameraSpec, endBoxes: plan.endBoxes, span: 0.45, edge: 0.02 };   // aimed at the whole path's centre, sized by the end pose
+      /* the planner's own camera beats, each fitted to its subject with the 8 % margin: the preset's direction (t = azimuth,
+         p = polar -> elevation 90 - p) and fov, the distance and target from the subject box. A preset without a camera (a
+         step with none) keeps the previous beat's */
+      for (const b of plan.beats) {
+        if (!b.preset) { b.cam = null; continue; }
+        const c = await page.evaluate(CAMERA, { az: b.preset.t, el: 90 - b.preset.p, fov: b.preset.fov || 40, target: centre(b.subjectBox), toward: 0, fitBoxes: b.subject, margin: MARGIN, clearBoxes: b.path, near: NEAR, softBoxes: b.path, over: PATH_OVER, W, H });
+        b.cam = { pos: c.pos, target: c.target, fov: b.preset.fov || 40, r: c.r, extents: c.extents, pulledForPath: c.pulledForPath };
+      }
+      for (let i = 0; i < plan.beats.length; i++) if (!plan.beats[i].cam) plan.beats[i].cam = i ? plan.beats[i - 1].cam : null;
+      if (!plan.beats[0].cam) throw new Error('the first step has no camera preset');
+      run.beats = plan.beats.map((b) => ({ t: b.t, dur: b.dur, tEnd: b.tEnd, kind: b.kind, step: b.step, preset: b.preset, actors: b.actorIds, subject: b.subjectIds, subjectBox: { min: b.subjectBox.min.map((v) => +v.toFixed(1)), max: b.subjectBox.max.map((v) => +v.toFixed(1)) }, cam: { az: b.preset ? b.preset.t : null, el: b.preset ? 90 - b.preset.p : null, fov: b.cam.fov, r: +b.cam.r.toFixed(1), pos: b.cam.pos.map((v) => +v.toFixed(1)), target: b.cam.target.map((v) => +v.toFixed(1)), extents: b.cam.extents, pulledForPath: b.cam.pulledForPath } }));
+      cameraSpec = null;
+      run.camera = await page.evaluate(CAMERA, { az: plan.beats[0].preset.t, el: 90 - plan.beats[0].preset.p, fov: plan.beats[0].preset.fov || 40, target: centre(plan.beats[0].subjectBox), toward: 0, fitBoxes: plan.beats[0].subject, margin: MARGIN, clearBoxes: plan.beats[0].path, near: NEAR, softBoxes: plan.beats[0].path, over: PATH_OVER, W, H });   // the page opens on beat 0
     } else {
       S = await page.evaluate(SETUP, { title: clip.title, hide: clip.hide.map((re) => (re instanceof RegExp ? re.source : re)) });
       if (S.sideCovers.length) throw new Error('side covers instanced: ' + S.sideCovers.join(','));
@@ -671,6 +738,14 @@ async function film(name, clip, browser, base, pose) {
       /* how far a QuickLock can start above its seat without entering the slab: the engine's 45 mm, or 3 mm under the underside */
       S.dropOf = (id) => Math.min(45, S.surfaceUnderY - 3 - box(S, id).max[1]);
       run.dur = clip.dur; N = Math.round(FPS * clip.dur); frames = (t) => clip.frames(t, S);
+      /* --planner-camera: the step's own camera direction and fov, fitted to the clip's subject at rest (the under-table
+         drawers and release, second pass); the hold / slab machinery is skipped */
+      if (flag('--planner-camera') && clip.subject) {
+        const sub = clip.subject(S), pc = S.stepCamera || { t: 12, p: 97 };
+        cameraSpec = { az: pc.t, el: 90 - pc.p, fov: pc.fov || 40, target: centre(union(...sub)), toward: 0, fitBoxes: sub, margin: MARGIN, clearBoxes: clip.path ? clip.path(S) : sub, near: NEAR, softBoxes: clip.path ? clip.path(S) : sub, over: PATH_OVER };
+        clip = { ...clip, minHold: null, slabCheck: null };
+        run.subject = { preset: pc, boxes: sub };
+      }
       run.setup = { step: S.step, title: S.title, page: S.page, hidden: S.hidden, notShown: S.notShown, ids: S.ids, caseFront: S.caseFront, surfaceUnderY: S.surfaceUnderY, boxes: S.boxes, drops: Object.fromEntries(S.ids.filter((i) => /^ql/.test(i)).map((i) => [i, S.dropOf(i)])) };
     }
     run.N = N;
@@ -683,7 +758,7 @@ async function film(name, clip, browser, base, pose) {
        5 mm steps until the locks' start boxes project under the slab's front edge with 2 % of the frame to spare - the
        camera is re-fitted at every step, since the lowered start pose is part of the fit */
     S.hold = clip.minHold ? Math.ceil(clip.minHold(S)) : 0;
-    for (let i = 0; ; i++) {
+    for (let i = 0; cameraSpec || !plan; i++) {
       if (cameraSpec && cameraSpec.endBoxes) {
         /* the end fit: the subject at its span first; when the keyframes do not fit the 2 % edge from the clip's own angle,
            the elevation steps toward +10 and the azimuth toward 32 (the travel then changes the apparent size less); only
@@ -742,6 +817,16 @@ async function film(name, clip, browser, base, pose) {
     }
     /* the film */
     run.mount = plan ? { worst: Infinity, frame: null } : null;   // the mount rule: the smallest clearance to the backdrop plane over the film
+    /* the camera at t: the beat in force, tweened from the one before over its duration with the engine's ease */
+    const camAt = (t) => {
+      if (!plan) return null;
+      const bs = plan.beats; let i = 0; for (let j = 0; j < bs.length; j++) if (bs[j].t <= t + 1e-9) i = j;
+      const b = bs[i], prev = i ? bs[i - 1].cam : null;
+      if (!prev || b.dur <= 0 || t >= b.t + b.dur) return { pos: b.cam.pos, target: b.cam.target, fov: b.cam.fov };
+      const k = easeInOut((t - b.t) / b.dur);
+      return { pos: lerp3(prev.pos, b.cam.pos, k), target: lerp3(prev.target, b.cam.target, k), fov: prev.fov + (b.cam.fov - prev.fov) * k };
+    };
+    const mountName = record.mount;
     for (let f = 0; f < N; f++) {
       const t = f / FPS, placements = frames(t), t0 = Date.now();
       if (plan) {   // nothing through or behind the wall, nothing below the table top - per frame, from the placements and the local boxes
@@ -749,7 +834,16 @@ async function film(name, clip, browser, base, pose) {
         if (m.worst < run.mount.worst) run.mount = { ...m, frame: f, t: +t.toFixed(3) };
         if (m.worst < -0.5) throw new Error(`${name} frame ${f} (t ${t.toFixed(2)}): ${m.id} is ${(-m.worst).toFixed(1)} mm ${clip.record === 'wall' ? 'behind the wall' : 'below the table top'}`);
       }
-      const r = await page.evaluate(FRAME, { placements });
+      const camNow = camAt(t) || (run.camera ? { pos: run.camera.pos, target: run.camera.target } : null);
+      /* a part that leaves the frame through the camera (the release clip's drawer) is hidden once its box comes within 30 mm
+         of the lens or passes behind it */
+      if (clip.cullNear && camNow) for (const p of placements) if (clip.cullNear.includes(p.id) && p.visible && S.boxes && S.boxes[p.id]) {
+        const lb = S.boxes[p.id], base = S.bases[p.id], b = { min: [lb.min[0] - base[0] + p.pos[0], lb.min[1] - base[1] + p.pos[1], lb.min[2] - base[2] + p.pos[2]], max: [lb.max[0] - base[0] + p.pos[0], lb.max[1] - base[1] + p.pos[1], lb.max[2] - base[2] + p.pos[2]] };
+        const v = [camNow.target[0] - camNow.pos[0], camNow.target[1] - camNow.pos[1], camNow.target[2] - camNow.pos[2]], vl = Math.hypot(...v), view = v.map((x) => x / vl);
+        let minF = Infinity; for (const x of [b.min[0], b.max[0]]) for (const y of [b.min[1], b.max[1]]) for (const z of [b.min[2], b.max[2]]) minF = Math.min(minF, (x - camNow.pos[0]) * view[0] + (y - camNow.pos[1]) * view[1] + (z - camNow.pos[2]) * view[2]);
+        if (minF < 30) { p.visible = false; run.culled = run.culled || {}; run.culled[p.id] = run.culled[p.id] ?? +t.toFixed(3); }
+      }
+      const r = await page.evaluate(FRAME, { placements, camera: camAt(t), mount: mountName });
       const wallMs = Date.now() - t0;
       await writeFile(join(framesDir, `frame_${String(f).padStart(3, '0')}.png`), pngOf(r.png));
       delete r.png;
@@ -784,7 +878,12 @@ async function film(name, clip, browser, base, pose) {
 
   /* ffmpeg: the clip, the poster, the contact sheet, the proof */
   const mp4 = join(OUT, `${prefix}${file}.mp4`);
-  ff(['-framerate', String(FPS), '-i', posix(join(framesDir, 'frame_%03d.png')), '-vf', `scale=${W}:${H}:flags=lanczos,format=yuv420p`, '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-movflags', '+faststart', posix(mp4)]);
+  /* crf 20, and one step coarser at a time while the file is over the cap (a tight frame full of powder grain costs bits) */
+  for (let crf = 20; ; crf++) {
+    ff(['-framerate', String(FPS), '-i', posix(join(framesDir, 'frame_%03d.png')), '-vf', `scale=${W}:${H}:flags=lanczos,format=yuv420p`, '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf), '-movflags', '+faststart', posix(mp4)]);
+    run.crf = crf;
+    if ((await stat(mp4)).size <= CAP_BYTES || crf >= 26) break;
+  }
   ff(['-i', posix(join(framesDir, 'frame_000.png')), '-q:v', '3', posix(join(OUT, `${prefix}${file}-poster.jpg`))]);   // q:v 3 ~ JPEG quality 85
   const every = Math.max(1, Math.floor((N - 1) / 7));   // 8 frames: 0, every, ..., 7*every
   ff(['-i', posix(join(framesDir, 'frame_%03d.png')), '-vf', `select='not(mod(n\\,${every}))*lte(n\\,${7 * every})',scale=600:-1,tile=4x2:padding=4:margin=4:color=0x202020`, '-frames:v', '1', '-fps_mode', 'vfr', posix(join(OUT, `${prefix}${file}-sheet.png`))]);
@@ -807,6 +906,7 @@ async function main() {
   const names = WANTED.length ? WANTED : Object.keys(CLIPS);
   for (const n of names) if (!ALL[n]) throw new Error('no clip ' + n + '; clips: ' + Object.keys(ALL).join(' '));
   RECORDS.ttk = { ...JSON.parse(await readFile(join(root, 'builds', '185-tabletop-2w2h.json'), 'utf8')).build, sideCovers: false };   // the planner's tabletop-185 starter kit, side covers off
+  RECORDS.ut = RECORD;
   await mkdir(OUT, { recursive: true });
   const summary = { startedAt: new Date().toISOString(), START, THEME, clips: {} };
   /* --check-curve <curve.json>: the embedded curve against node0's 120 Hz samples (the largest difference in mm / deg) */
