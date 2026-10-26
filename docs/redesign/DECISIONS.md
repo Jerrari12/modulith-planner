@@ -3546,3 +3546,7 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   lists gained Polar's line); the picker shows "Polar
   Filament PLA · 44" with its PLA tag, and a pick's Buy line links Polar's product page (no commission line: not a paid
   link). Terra `01a179ef`: one finding (the reroll could starve a roll), measured and discarded - 0 short rolls in 1,000.
+- **Live 2026-10-26 at `16dc1a15`** (Joey's go; main fast-forwarded to the branch). Main run 40402177138: 12.9 min, every
+  job green. `polar-prod.mjs 16dc1a15` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed on the live planner:
+  the Faceplate picker's "Polar Filament PLA · 44" group with 44 swatches, Polar Squid picked into the palette, its Buy
+  line linking Polar's product page plainly (not a paid link), no page errors; its screenshot sits beside it.
