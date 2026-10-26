@@ -71,7 +71,7 @@ test('a chip narrows the groups: brand groups stay with the colours of that mate
   assert.equal(petg[1].url, FILAMENT_DB.find((b) => b.brand === 'Elegoo').url, 'a group keeps its other fields');
   for (const g of petg) for (const c of g.colors) assert.equal(colorMaterial(g.line, c), 'PETG');
   const pla = filterByMaterial(CASE, 'PLA');
-  assert.deepEqual(pla.map((g) => g.line), ['Panchroma™ PLA', 'Panchroma™ Silk PLA', 'Panchroma™ Translucent PLA', 'PLA / PETG', 'PLA', 'Burnt Titanium PLA'], 'PLA drops the Polymaker PETG line and keeps the order');
+  assert.deepEqual(pla.map((g) => g.line), ['Panchroma™ PLA', 'Panchroma™ Silk PLA', 'Panchroma™ Translucent PLA', 'PLA / PETG', 'PLA', 'Burnt Titanium PLA', 'PLA'], 'PLA drops the Polymaker PETG line and keeps the order (the last PLA is Polar Filament, 2026-10-26)');
   assert.deepEqual(pla.find((g) => g.brand === 'Elegoo').colors.map((c) => c.label), ['Elegoo PLA Black', 'Elegoo PLA Grey']);
   assert.deepEqual(filterByMaterial(CASE, 'TPU'), [], 'no TPU outside the feet');
   assert.deepEqual(filterByMaterial(FEET, 'TPU').map((g) => g.line), ['PolyFlex™ TPU95', 'PolyFlex™ TPU90']);

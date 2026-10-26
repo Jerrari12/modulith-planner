@@ -160,7 +160,7 @@ function writeOut(r, hardware, feet) {
 /* the share of the visible area carrying a colour, by the role weights */
 export const areaOf = (roles, name) => +Object.entries(roles).reduce((s, [role, c]) => s + ((c.name || c) === name ? AREA[role] || 0 : 0), 0).toFixed(3);
 /* a filament's short name (the brand and line dropped, the finish kept): the tooltip and the toast; titles use colour words */
-export const shortName = (name) => String(name).replace(/^(Panchroma|Polymaker PETG|Polymaker|Printed Solid|Elegoo PLA|Elegoo PETG|ERYONE) /, '');
+export const shortName = (name) => String(name).replace(/^(Panchroma|Polymaker PETG|Polymaker|Printed Solid|Elegoo PLA|Elegoo PETG|ERYONE|Polar) /, '');
 /* "<the two colours with the most visible area>", as colour words (Astra: "Sand & charcoal"; "derive titles from the prominent
    visible colours - including locked colours"); a quiet look names its touch of accent; a bold one puts the accent first */
 function nameOf(r, A, slot) {
@@ -238,7 +238,11 @@ export function surprise({ style = 'workshop', cap = 3, owned = null, locks = {}
       if (checkLook(colors, { cap, owned: ownedSet, locks: fixed, db }).length) continue;
       const share = areaOf(r, A.name);
       if (!like && share <= lastShare) continue;   // the interpretations must read apart: more accent than the one before
-      seen.add(sig); got = { name: nameOf(r, A, slot), colors, roles: Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.name])), accent: A.name, slot, share, style: st.id, cap, seed };
+      /* a title the roll already used, on a look with no third colour to tell it apart (two shells' worth of "Lime & wine"
+         once Polar's colours joined, 2026-10-26): the repair below has no word to add, so roll again instead */
+      const name = nameOf(r, A, slot);
+      if (looks.some((l) => l.name === name) && !Object.values(r).some((c) => c.name !== r.shell.name && c.name !== A.name)) continue;
+      seen.add(sig); got = { name, colors, roles: Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.name])), accent: A.name, slot, share, style: st.id, cap, seed };
     }
     if (got) { looks.push(got); if (!like) lastShare = got.share; }
   }

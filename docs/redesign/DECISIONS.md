@@ -3523,3 +3523,26 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   passed on the live planner: the Faceplate row's Printed on row, Holographic set for the faceplates on a Powder-coated
   build, the record `{ Faceplate: 'holographic' }`, the faceplates wearing their own Holographic and the 10 other part
   types Powder-coated, no page errors; its screenshot sits beside it.
+
+## 2026-10-26 · Polar Filament PLA joins the filament catalog (44 colours)
+
+- **Asked:** Joey, 2026-10-26: Polar Filament is his local maker (Troy, Michigan); add their colours, skipping what
+  cannot be drawn accurately (marble, no colour code). "We can just put them in with their published hex"; and a
+  filamentcolors.xyz spectrophotometer scan of printed material "is probably more true than even if i bought a NIX".
+- **The list:** every 1 kg 1.75 mm PLA spool Polar's shop sells (polarfilament.com, collections/pla-1-75mm) that has a
+  colour code in their colour list (pfil.us/colors.php), joined by SKU; each colour links to its own product page (all
+  44 answered 200). The hex is the filamentcolors.xyz scan where one exists (11; CC BY 4.0; Rust and Teal there are
+  Chestnut and Squid now, as the product addresses still say), else Polar's published hex (33), their target colour:
+  the 10 compared differ by a median dE76 of 27 (Spaceship Steel published #D1D1D1, measured #787E82). No TD: opaque PLA
+  never reads one. Left out: Arctic White and Robotic White (on sale, no colour code), the Mystery Spool, and 25
+  colours the shop no longer sells. The missing list is kept for Joey to source.
+- **What moved with it:** the looks generator's pools gained Polar colours (each style's shells and accents, checked
+  as additions only); `shortName` drops the "Polar " prefix; a second brand line named "PLA" is told apart by brand in
+  the label test. A Surprise me bug the bigger catalog exposed: two candidates of one roll could share a title when
+  neither had a third colour to tell them apart (style any, seed 42: "Lime & wine" twice); such a candidate is now
+  rolled again. Over 1,000 rolls (every style, seeds 1-200) the old generator gave 2 duplicate titles, the new one 0,
+  and neither returned a roll with fewer than three looks.
+- **Tests:** npm test 645 pass / 5 skipped / 0 fail; the 30 Colors, Parts and buy-link e2e cases (two pinned picker line
+  lists gained Polar's line); the picker shows "Polar
+  Filament PLA · 44" with its PLA tag, and a pick's Buy line links Polar's product page (no commission line: not a paid
+  link). Terra `01a179ef`: one finding (the reroll could starve a roll), measured and discarded - 0 short rolls in 1,000.

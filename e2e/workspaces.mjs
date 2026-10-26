@@ -3922,7 +3922,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-colors .crow').first().click();
   await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   const caseHeads = await heads();
-  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'every line but TPU, each tagged');
+  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26)');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
   // THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a case's lines sell PLA and
   // PETG, so a row of All · PLA · PETG stands above the list, All pressed, 8 px between the chips (the planner's floor)
@@ -3955,7 +3955,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).focus();
   await page.keyboard.press('Space');
   assert.deepEqual(await page.evaluate(() => [document.activeElement.textContent.trim(), document.activeElement.getAttribute('aria-pressed')]), ['PLA', 'true'], 'Space presses the focused chip and keeps the focus on it');
-  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one');
+  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26)');
   // a shared or uploaded palette can name a filament the catalogue does not know: its own words place it under a chip (Terra 01a16a51)
   await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const p = v.palette(); v.setPalette({ on: true, colors: { ...p.colors, Accent: { name: 'PETG Blue (custom)', hex: '#2f66b8' } }, over: p.over || {} }); });
   await page.locator('#ws-colors .crow').first().click();   // the case picker opened again: it reads the palette afresh and starts at All
