@@ -370,8 +370,8 @@ function engineTimeline(S, clip) {
      them only as the phase starts; a loop that opened on an empty stage read as a cut - the under-table rail, 2026-10-25) */
   for (const op of ops) { if (op.t0 > REST) break; if (op.firstEnter) op.t0 = 0, op.dur += REST, op.lead = REST; }
   /* every visible part at the start and at the end is fitted too */
-  const st0 = stateAt(0), st1 = stateAt(dur);
-  for (const id of S.ids) { if (st0[id].visible) keyBox(id, st0[id].pos); if (st1[id].visible) keyBox(id, st1[id].pos); }
+  const st0 = stateAt(0), st1 = stateAt(dur), endBoxes = [];
+  for (const id of S.ids) { if (st0[id].visible) keyBox(id, st0[id].pos); if (st1[id].visible && !isHidden(id)) { keyBox(id, st1[id].pos); if (S.local[id]) endBoxes.push(worldBox(S.local[id], st1[id].pos)); } }
   /* the staged-case clearance: a part that enters onto its stage must not overlap anything visible when it lands there
      (the tabletop's -170 staging put a case's front 15 mm over the parts below it) */
   const clearance = [];
@@ -388,7 +388,7 @@ function engineTimeline(S, clip) {
     if (worst.gap < 0) throw new Error(`${e.enter} lands on its stage overlapping ${worst.other} by ${-worst.gap} mm`);
   }
   const frames = (t) => { const st = stateAt(t); return S.ids.map((id) => ({ id, visible: st[id].visible && !isHidden(id), pos: st[id].pos, childY: st[id].childY, opacity: st[id].opacity })); };
-  return { dur, frames, keyBoxes, touched, log, stages, clearance, skipped: [...skipped].map((id) => id + ' (' + S.cfg[id].node + ')') };
+  return { dur, frames, keyBoxes, endBoxes, touched, log, stages, clearance, skipped: [...skipped].map((id) => id + ' (' + S.cfg[id].node + ')') };
 }
 /* the mount rule, per frame: on the wall the smallest distance of any visible part's box to the wall plane (a wood screw's
    shank is meant to be in the wall and is left out), on the tabletop the smallest height of any box above the table top */
@@ -424,12 +424,12 @@ const ENGINE_CLIPS = {
      the lower case sliding in from 225 mm out front */
   bracket: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [1], hide: [], az: 16, el: 10 },
   cover: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [2], hide: [], az: 26, el: 24 },
-  hang: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [3], hide: [/^st\d/], az: 20, el: 36 },
-  rows: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [4], hide: [/^st\d|^tst/], az: 18, el: 6 },
+  hang: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [3], hide: [/^st\d/], az: 20, el: 36, fit: 'end' },
+  rows: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [4], hide: [/^st\d|^tst/], az: 18, el: 6, fit: 'end' },
   /* the tabletop (the 185 2W-2H kit): the lower rail lands and the six feet slide in, the base sets down; the upper rail
      slides on from the back; the three cases (restaged, see TTK_STAGE) with their locks, the dips and pops; the two cover
      layers with the top drawer's stoppers; the three drawers with their magnet clips */
-  base: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [1, 2, 3], hide: [], az: 28, el: 30 },
+  base: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [1, 2, 3], hide: [], az: 28, el: 30, fit: 'end' },
   upper: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [4], hide: [], az: 22, el: 22 },
   cases: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [5, 6, 7], hide: [/^mc|^mg|^st\d/], az: 20, el: 20, stages: { c0: TTK_STAGE, c1: TTK_STAGE, c2: TTK_STAGE }, dipFrom: ttkDip },
   covers: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [8, 9], hide: [/^mc|^mg|^st0|^st1/], az: 22, el: 26 },
@@ -504,7 +504,11 @@ const SLABLINE = ({ boxes, underY, frontZ, halfW, clear }) => {
 /* the fixed camera: azimuth az off the front normal toward +X, elevation el (negative = below level), the target pushed
    `toward` mm toward the camera; the distance is the largest of: the height boxes filling (1 - headroom) of the frame,
    every corner of the fit boxes inside the side margin on both sides, and inside the headroom vertically */
-const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin }) => {
+const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, softBoxes, over = 0.2, headroom, side, fitBoxes, margin, endBoxes, span = 0.45, edge = 0.02 }) => {
+  /* the end-fit mode (Joey 2026-10-25): the resting subject (endBoxes) spans `span` of the frame height, and every keyframe
+     box (fitBoxes) must still be inside the `edge` margin - the distance is the larger of the two, and `pulledBack` says
+     when the keyframes, not the subject, set it */
+  if (endBoxes) { heightBoxes = endBoxes; headroom = 1 - span; allBoxes = fitBoxes; side = edge; softBoxes = null; fitBoxes = null; }
   /* the whole-path mode: every fit box inside the same margin on all four sides, nothing else */
   if (fitBoxes) { heightBoxes = []; allBoxes = fitBoxes; side = margin; headroom = 2 * margin; softBoxes = null; }
   const h = window.__GEN2_VIEWER__, T = h.THREE, cam = h.camera;
@@ -522,15 +526,17 @@ const CAMERA = ({ az, el, fov, W, H, target, toward, heightBoxes, allBoxes, soft
   const solve = (ok) => { let lo = 100, hi = 5000; for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (ok(probe(mid))) hi = mid; else lo = mid; } return hi; };
   const rH = heightBoxes.length ? solve((m) => m.hgt <= 2 * (1 - headroom)) : 0;
   const rW = solve((m) => m.right <= 1 - 2 * side && m.left >= -(1 - 2 * side));
-  const rV = solve((m) => m.top <= 1 - headroom && m.bottom >= -(1 - headroom));
+  const vlim = endBoxes ? 2 * edge : headroom;   // the keyframes' vertical margin: the edge in the end-fit mode, the headroom otherwise
+  const rV = solve((m) => m.top <= 1 - vlim && m.bottom >= -(1 - vlim));
   /* the soft boxes (a start or end pose) may run past the frame's edge by `over` of its half-width, no further */
   const soft = (r) => { const all = (softBoxes || []).flatMap(corners).map((v) => { cam.position.copy(tgt).addScaledVector(dir, r); cam.lookAt(tgt); cam.updateMatrixWorld(true); return v.clone().project(cam); });
     return all.every((v) => Math.abs(v.x) <= 1 + over && Math.abs(v.y) <= 1 + over); };
   const rS = softBoxes && softBoxes.length ? (() => { let lo = 100, hi = 5000; for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (soft(mid)) hi = mid; else lo = mid; } return hi; })() : 0;
   const r = Math.max(rH, rW, rV, rS), m = probe(r);
+  const endSpan = endBoxes ? m.hgt / 2 : null;   // the subject's share of the frame height at the chosen distance
   h.controls.target.copy(tgt); h.controls.update();
   cam.position.copy(tgt).addScaledVector(dir, r); cam.lookAt(tgt); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
-  return { az, el, fov, target: tgt.toArray(), pos: cam.position.toArray(), r, rH, rW, rV, rS, extents: m };
+  return { az, el, fov, target: tgt.toArray(), pos: cam.position.toArray(), r, rH, rW, rV, rS, extents: m, endSpan, pulledBack: endBoxes ? r > rH * 1.001 : false };
 };
 /* one frame: the placements applied (group position, an X rotation, the inner child's y - the QuickLock tab), then the
    loop's own order (grounding, cavity, reflection, AO, accumulation, composite) with the scene told it changed and every
@@ -657,6 +663,7 @@ async function film(name, clip, browser, base, pose) {
       run.dur = plan.dur; N = Math.round(FPS * plan.dur); frames = plan.frames;
       run.setup = { steps: S.steps.map((s) => s.title), first: S.first, last: S.last, page: S.page, hidden: S.hidden, notShown: S.ids.filter((id) => !S.before.visible.includes(id) && !plan.touched.has(id)).map((id) => id + ' (' + S.cfg[id].node + ')'), skipped: plan.skipped, stages: plan.stages, wallZ: S.wallZ, tableY: S.tableY, shadowMap: S.shadowMap, timeline: plan.log, clearance: plan.clearance };
       cameraSpec = { az: clip.az, el: clip.el, fov: 34, target: clip.target ? clip.target(plan, S) : centre(union(...plan.keyBoxes)), toward: 0, fitBoxes: plan.keyBoxes, margin: MARGIN };
+      if (clip.fit === 'end' || opt('--fit', null) === 'end') cameraSpec = { ...cameraSpec, endBoxes: plan.endBoxes, span: 0.45, edge: 0.02 };   // aimed at the whole path's centre, sized by the end pose
     } else {
       S = await page.evaluate(SETUP, { title: clip.title, hide: clip.hide.map((re) => (re instanceof RegExp ? re.source : re)) });
       if (S.sideCovers.length) throw new Error('side covers instanced: ' + S.sideCovers.join(','));
@@ -677,6 +684,24 @@ async function film(name, clip, browser, base, pose) {
        camera is re-fitted at every step, since the lowered start pose is part of the fit */
     S.hold = clip.minHold ? Math.ceil(clip.minHold(S)) : 0;
     for (let i = 0; ; i++) {
+      if (cameraSpec && cameraSpec.endBoxes) {
+        /* the end fit: the subject at its span first; when the keyframes do not fit the 2 % edge from the clip's own angle,
+           the elevation steps toward +10 and the azimuth toward 32 (the travel then changes the apparent size less); only
+           when no angle fits does the last one pull back until the keyframes are inside */
+        let az = cameraSpec.az, el = cameraSpec.el; run.fitTried = [];
+        for (let k = 0; ; k++) {
+          run.camera = await page.evaluate(CAMERA, { ...cameraSpec, az, el, W, H });
+          run.fitTried.push({ az, el, r: +run.camera.r.toFixed(1), endSpan: +run.camera.endSpan.toFixed(3), pulledBack: run.camera.pulledBack });
+          if (!run.camera.pulledBack || (Math.abs(el - 10) < 0.01 && Math.abs(az - 32) < 0.01) || k > 12) break;
+          el += Math.sign(10 - el) * Math.min(4, Math.abs(10 - el)); az += Math.sign(32 - az) * Math.min(4, Math.abs(32 - az));
+        }
+        /* no angle let the subject keep its span: take the angle where the pull-back costs the least (the largest end span) */
+        if (run.camera.pulledBack) {
+          const best = run.fitTried.reduce((a, b) => (b.endSpan > a.endSpan ? b : a));
+          if (best.az !== run.camera.az || best.el !== run.camera.el) run.camera = await page.evaluate(CAMERA, { ...cameraSpec, az: best.az, el: best.el, W, H });
+        }
+        break;
+      }
       run.camera = await page.evaluate(CAMERA, { ...(cameraSpec || clip.camera(S)), W, H });
       if (!clip.slabCheck) break;
       run.slab = await page.evaluate(SLABLINE, { boxes: clip.slabCheck(S), underY: S.surfaceUnderY, frontZ: S.slabFrontZ, halfW: S.slabHalfW, clear: 0.02 });
