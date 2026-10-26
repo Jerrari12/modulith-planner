@@ -5,6 +5,7 @@
 Presets (Joey 2026-10-26; the sources stay out of the repo):
   garden   his own photo: the man-made things patched over with the trees and lawn beside them, the left 780 px.
   chatgpt  ChatGPT's clean version of it (1536 x 1024, nothing man-made): all but the leaning pine at its right edge.
+  panorama ChatGPT's level 3:1 panorama of the place (2172 x 724): all of it.
 Each: cropped, toned softer and a little brighter than the room, blurred (distant trees past a build in focus), the
 lawn carried on below as a plain gradient faded in from its own last rows, and made tileable across by cross-fading its
 right edge into its left. Prints the size and the lawn line's place from the top (done.js OUTSIDE.px and .ground)."""
@@ -15,6 +16,7 @@ PRESETS = {
     'garden': dict(patches=[((440, 875, 790, 992), 330), ((430, 995, 640, 1100), 230)], crop=(0, 300, 780, 1100), ground=965,
                    contrast=0.78, color=0.8, brightness=1.07, blur=2.2),
     'chatgpt': dict(patches=[], crop=(0, 230, 1290, 1024), ground=905, contrast=0.74, color=0.72, brightness=1.03, blur=2.5),
+    'panorama': dict(patches=[], crop=(0, 0, 2172, 724), ground=596, contrast=0.74, color=0.74, brightness=1.02, blur=2.2),
 }
 preset, src, dst = sys.argv[1:4]
 preview = sys.argv[4] if len(sys.argv) > 4 else None

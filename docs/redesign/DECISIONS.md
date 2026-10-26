@@ -4203,3 +4203,7 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   while the room is on. Checked from a front, a low, a far-corner and a grazing side view
   (`D:\Claude - Output\done-scene-spools-2026-10-26\window9`). Still Joey's to improve: a wider, level shot (he offered to
   have ChatGPT make one from it). A new e2e case; Sol `01a17823` round 18, no findings.
+- **Then ChatGPT's level panorama of the place** (Joey: "Will this work, so you need for ground or anything?"): 2172 x 724,
+  a straight horizon, nothing man-made, used whole (`outside-photo.py panorama`: toned, blurred 2.2 px, the lawn carried
+  on below, its edges cross-faded); at 2.8 mm a pixel it repeats every 5.7 m, so the window shows it once. Known: a thin
+  dark sliver by the far jamb in a grazing side view along the wall, not yet traced.
