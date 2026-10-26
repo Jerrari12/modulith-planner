@@ -4191,3 +4191,15 @@ analytic in the shader, not meshes). He copied the spool into its own file.
 - **Checks.** A new Showcase case; the spool-click case checks the glow; the spools case stacks a filament a region past
   six, under the walls' margin. The Colors room, spools, steam, strip and Done cases pass. Review: Sol `01a17823` round
   17, one finding accepted (the step), then fixed and tested. Not deployed.
+- **The view out of the window, from Joey's own photo** (the same day; he sent his garden, then: "what if we blurred it a
+  bit, the trees are at a distance and super sharp, i think that feels off"). `scenes/home-office/outside.webp` (630 x
+  1700, 108 KB) is the left of it, the lattice, house, tarps, fire pit and hoop patched over with the trees and lawn
+  beside them, toned softer and a little brighter than the room, blurred 2.2 px, the lawn carried on below, and
+  cross-faded at its edges so it repeats with no seam (a mirrored repeat read as a Rorschach blot). Made by
+  `tools/done-scene/outside-photo.py`; his original stays out of the repo. A 24 m backdrop 1.5 m beyond the window, its
+  lawn line at eye height, its top under the walls' top (the room has no ceiling: nothing of it shows over a wall), with a
+  sky-coloured lid over the opening, so a look up through the window ends in sky. The back wall's mesh ran 1.4 m past
+  the window wall, a white wall standing in the garden: what of the room passes that wall's outer face is clipped there
+  while the room is on. Checked from a front, a low, a far-corner and a grazing side view
+  (`D:\Claude - Output\done-scene-spools-2026-10-26\window9`). Still Joey's to improve: a wider, level shot (he offered to
+  have ChatGPT make one from it). A new e2e case; Sol `01a17823` round 18, no findings.

@@ -3138,6 +3138,31 @@ test('Colors: Showcase plays the final scene in these colours, and Esc comes bac
   await ctx.close();
 });
 
+/* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his own garden photo):
+   the backdrop beyond the window wears the photo, a lid closes the space above the opening, both under the walls' top;
+   what of the room runs past the window's wall is clipped there; Neutral takes all of it away and the clipping off */
+test('Colors: the room’s window looks out on the garden photo, nothing of it over the walls, the room cut at the window wall, all gone with Neutral', async () => {
+  const { ctx, page, errors } = await open('colors', { visitor: true });
+  await page.waitForFunction(() => { const o = window.__GEN2_VIEWER__.scene.getObjectByName('done-outside'); return o && o.material.map && o.material.map.image; }, null, { timeout: 60_000 }).catch(() => assert.fail('the window has no photo outside it'));
+  const on = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, o = v.scene.getObjectByName('done-outside'), lid = v.scene.getObjectByName('done-outside-lid'), b = window.__GEN2_DONE__.sequence.interior;
+    const top = (m) => new T.Box3().setFromObject(m).max.y;
+    const clipped = []; v.scene.getObjectByName('done-room').traverse((m) => { if (m.isMesh && [].concat(m.material).some((x) => x.clippingPlanes && x.clippingPlanes.length)) clipped.push(m.name); });
+    return { img: [o.material.map.image.width, o.material.map.image.height], ghost: o.userData.ghost && lid.userData.ghost, tops: [top(o), top(lid)], wallTop: b.y1, clipped, clip: v.renderer.localClippingEnabled };
+  });
+  assert.deepEqual(on.img, [630, 1700], 'the photo');
+  assert.ok(on.ghost, 'out of the AO and the outline');
+  assert.ok(on.tops.every((t) => t <= on.wallTop), `nothing of it over the walls (${JSON.stringify(on)})`);
+  assert.ok(on.clipped.includes('wall_back') && on.clip, `the back wall cut at the window wall (${JSON.stringify(on.clipped)})`);
+  assert.ok(!on.clipped.some((n) => /^wall_left|^win_/.test(n)), 'the window wall and its frame whole');
+  await page.locator('#ws-tools .backdrop button:has-text("Neutral")').click();
+  await page.waitForFunction(() => !document.documentElement.dataset.done, null, { timeout: 30_000 });
+  const off = await page.evaluate(() => ({ outside: !!window.__GEN2_VIEWER__.scene.getObjectByName('done-outside'), lid: !!window.__GEN2_VIEWER__.scene.getObjectByName('done-outside-lid'), clip: window.__GEN2_VIEWER__.renderer.localClippingEnabled }));
+  assert.deepEqual(off, { outside: false, lid: false, clip: false }, 'Neutral: none of it left, clipping off');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
    3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
 test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {

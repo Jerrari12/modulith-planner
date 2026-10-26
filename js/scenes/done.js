@@ -246,41 +246,6 @@ function roomInterior(group) {
   return { x0: left.isEmpty() ? -Infinity : left.max.x, x1: back.isEmpty() ? Infinity : back.max.x, y0: floor.isEmpty() ? -Infinity : floor.max.y, y1: top, z0: back.isEmpty() ? -Infinity : back.max.z, z1: left.isEmpty() ? Infinity : left.max.z };
 }
 
-/* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"): a painted daylight view (a sky,
-   soft clouds, a hazy tree line at eye height, a lawn) on a canvas, seeded so it is the same view each time. The room has
-   no glass, and the stage's background is off in the room, so without it the opening showed the clear colour. */
-function outsideTexture() {
-  const W = 1024, H = 576, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d');
-  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const horizon = H * 0.56;
-  const sky = g.createLinearGradient(0, 0, 0, horizon);
-  sky.addColorStop(0, '#86afd9'); sky.addColorStop(0.65, '#bcd3e8'); sky.addColorStop(1, '#e4ecf2');
-  g.fillStyle = sky; g.fillRect(0, 0, W, horizon);
-  for (let i = 0; i < 7; i++) {   // soft clouds: piles of faint discs
-    const cx = rnd() * W, cy = H * (0.08 + rnd() * 0.3), w = 60 + rnd() * 120;
-    for (let k = 0; k < 14; k++) { g.fillStyle = `rgba(255,255,255,${0.05 + rnd() * 0.07})`; g.beginPath(); g.ellipse(cx + (rnd() - 0.5) * w * 1.6, cy + (rnd() - 0.5) * w * 0.25, w * (0.3 + rnd() * 0.4), w * (0.12 + rnd() * 0.12), 0, 0, Math.PI * 2); g.fill(); }
-  }
-  const ground = g.createLinearGradient(0, horizon, 0, H);
-  ground.addColorStop(0, '#a7b394'); ground.addColorStop(1, '#8c9a76');
-  g.fillStyle = ground; g.fillRect(0, horizon, W, H - horizon);
-  g.filter = 'blur(2.5px)';   // out of focus, as a garden seen past a room in focus is (where a browser has canvas filters)
-  for (const [far, tones, rise] of [[1, [[166, 179, 172], [152, 168, 160], [175, 186, 178]], 0.1], [0, [[104, 128, 98], [118, 140, 106], [92, 116, 90], [130, 148, 112]], 0.075]]) {   // the tree line, far and hazy, then nearer
-    for (let x = -30; x < W + 30; x += 5 + rnd() * 9) {
-      const r = (far ? 9 : 12) + rnd() * (far ? 16 : 22), y = horizon - H * rise * (0.25 + rnd() * 0.75), [cr, cg, cb] = tones[Math.floor(rnd() * tones.length)];
-      g.fillStyle = `rgba(${cr},${cg},${cb},${far ? 0.5 : 0.75})`; g.beginPath(); g.ellipse(x, y + r * 0.7, r * (0.7 + rnd() * 0.4), r * (1 + rnd() * 0.5), (rnd() - 0.5) * 0.4, 0, Math.PI * 2); g.fill();
-    }
-    const [cr, cg, cb] = tones[0];
-    g.fillStyle = `rgba(${cr},${cg},${cb},${far ? 0.5 : 0.75})`; g.fillRect(0, horizon - H * rise * 0.3, W, H * rise * 0.3 + 2);
-  }
-  g.filter = 'none';
-  const haze = g.createLinearGradient(0, horizon - H * 0.12, 0, horizon + H * 0.06);   // the air between
-  haze.addColorStop(0, 'rgba(228,236,242,0)'); haze.addColorStop(0.6, 'rgba(228,236,242,0.35)'); haze.addColorStop(1, 'rgba(228,236,242,0)');
-  g.fillStyle = haze; g.fillRect(0, horizon - H * 0.12, W, H * 0.18);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return t;
-}
-
 function contactTexture() {
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const g = c.getContext('2d');
@@ -1112,26 +1077,67 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   const spoolsOf = (root) => root.children.filter((s) => s.userData.setColor);
   /* the spools' glow (spool.js setGlow): the one whose picker is open (selectSpool, from Colors) lit, the one under the
      pointer lit a little; the picture changes, so Very High starts its mean again */
-  /* the view out of the window (outsideTexture): a plane 1.8 m out from the opening, facing in, wide and tall enough that no
-     camera in the room sees its edge through the frame, its horizon at eye height (1.55 m over the floor); unlit, as the
-     room's bakes are, out of the shadows, the AO (a ghost) and every ray */
+  /* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his own photo, his
+     garden). OUTSIDE.file is the left of it (oaks, cypresses, a pine, pale sky, lawn; the lattice, the house, the tarps,
+     the fire pit and the hoop patched over with the trees and lawn beside them, the poles cropped out:
+     tools/done-scene/outside-photo.py makes it from his photo, which stays out of the repo),
+     toned softer and a little brighter than the room (Astra: "slightly brighter and lower-contrast than the interior",
+     "no prominent buildings or objects"), its lawn carried on below in the file itself (mirrored bands: a clamped edge
+     streaks). On a plane OUTSIDE.out beyond the opening, facing in, at the scale that gives its trees a distant tree's
+     angle (OUTSIDE.mmPerPx); the lawn line (OUTSIDE.ground, from the file's top) at eye height; across, it repeats, its
+     right edge cross-faded into its left in the file, so no angle finds an edge or a seam (a mirrored repeat read as a
+     Rorschach blot in the frame) and a 1.1 m window seldom shows one tree twice. Its top stops just under the walls' top, so nothing of it shows over a wall (the
+     room has no ceiling), and a sky-coloured lid closes the space above the opening, so a look up through the window ends
+     in sky, not the void. Unlit like the room's bakes, out of the shadows, the AO (ghosts) and every ray; a pale sky until
+     the photo loads. */
+  const OUTSIDE = { file: 'scenes/home-office/outside.webp', out: 1500, px: [630, 1700], mmPerPx: 2.25, ground: 665 / 1700, eye: 1550, W: 24000, sky: 0x89a8d2 };   // W: a grazing look along the wall, through the frame, still lands on it (9 m did not)
   function makeOutside(group) {
     const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
     group.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new THREE.Box3().setFromObject(o)); });
-    if (win.isEmpty() || !desk) return;
+    if (win.isEmpty() || !desk || !interior || !Number.isFinite(interior.y1)) return;
     const size = win.getSize(new THREE.Vector3()), c = win.getCenter(new THREE.Vector3()), inside = new THREE.Box3().setFromObject(desk).getCenter(new THREE.Vector3());
     const axis = size.x < size.z ? 'x' : 'z', out = Math.sign(c[axis] - inside[axis]) || -1;
-    const W = 9000, H = 5000, floorY = interior && Number.isFinite(interior.y0) ? interior.y0 : c.y - 1500;
-    const mat = new THREE.MeshBasicMaterial({ map: outsideTexture(), toneMapped: false, depthWrite: true });
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
-    const at = c.clone(); at[axis] += out * 1800;
-    at.y = floorY + 1550 + (0.5 - 0.56) * H;   // the texture's horizon (0.56 down from its top) at eye height
+    const floorY = Number.isFinite(interior.y0) ? interior.y0 : c.y - 1500, eyeY = floorY + OUTSIDE.eye;
+    const topY = interior.y1 - 10, bottomY = floorY - 500, H = topY - bottomY;
+    const ghost = (m, name) => { m.name = name; m.userData.ghost = true; m.userData.doneRoom = true; m.castShadow = false; m.receiveShadow = false; m.raycast = () => {}; scene.add(m); return m; };
+    const mat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false });
+    const plane = ghost(new THREE.Mesh(new THREE.PlaneGeometry(OUTSIDE.W, H), mat), 'done-outside');
+    const at = c.clone(); at[axis] += out * OUTSIDE.out; at.y = (topY + bottomY) / 2;
     plane.position.copy(at);
     plane.lookAt(at.x - (axis === 'x' ? out : 0), at.y, at.z - (axis === 'z' ? out : 0));   // facing back into the room
-    plane.name = 'done-outside'; plane.userData.ghost = true; plane.userData.doneRoom = true;
-    plane.castShadow = false; plane.receiveShadow = false; plane.raycast = () => {};
-    scene.add(plane);
-    parts.outside = plane;
+    // the lid: from the wall's outer face to the backdrop, at the backdrop's top, facing down
+    const depth = OUTSIDE.out - size[axis] / 2, lid = ghost(new THREE.Mesh(new THREE.PlaneGeometry(axis === 'x' ? depth : OUTSIDE.W, axis === 'x' ? OUTSIDE.W : depth).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false })), 'done-outside-lid');
+    const lidAt = c.clone(); lidAt[axis] += out * (size[axis] / 2 + depth / 2); lidAt.y = topY;
+    lid.position.copy(lidAt);
+    parts.outside = [plane, lid];
+    /* what of the room runs on past the window's wall (the back wall's end, 1.4 m of it, the floor) is cut off there, so
+       the garden is not seen with a wall standing in it: a clipping plane on the outer face of the window's own wall */
+    const own = [];
+    group.traverse((o) => { if (o.isMesh && /^wall_/.test(o.name)) { const bb = new THREE.Box3().setFromObject(o); const t = bb.max[axis] - bb.min[axis]; if (t < 60 && Math.abs((bb.min[axis] + bb.max[axis]) / 2 - c[axis]) < 120) own.push(bb); } });
+    if (own.length) {
+      const face = out < 0 ? Math.min(...own.map((bb) => bb.min[axis])) : Math.max(...own.map((bb) => bb.max[axis]));
+      const n = new THREE.Vector3(); n[axis] = -out;
+      const edge = new THREE.Vector3(); edge[axis] = face + out * 0.5;   // half a millimetre out from the face
+      const cut = new THREE.Plane(n, -n.dot(edge));   // keeps the room's side: n . p + constant >= 0
+      parts.clipWas = renderer.localClippingEnabled;
+      renderer.localClippingEnabled = true;
+      parts.clipped = [];
+      group.traverse((o) => {
+        if (!o.isMesh || /^win_/.test(o.name) || (/^wall_/.test(o.name) && own.some((bb) => new THREE.Box3().setFromObject(o).equals(bb)))) return;
+        const bb = new THREE.Box3().setFromObject(o);
+        if (out < 0 ? bb.min[axis] < face - 5 : bb.max[axis] > face + 5) for (const m of [].concat(o.material)) if (!parts.clipped.includes(m)) { m.clippingPlanes = [cut]; m.needsUpdate = true; parts.clipped.push(m); }
+      });
+    }
+    new THREE.TextureLoader().load(OUTSIDE.file, (tex) => {
+      if (!parts.outside || parts.outside[0] !== plane) { tex.dispose(); return; }   // the room left while it loaded
+      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+      tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
+      const tileW = OUTSIDE.px[0] * OUTSIDE.mmPerPx, tileH = OUTSIDE.px[1] * OUTSIDE.mmPerPx, tileBottom = eyeY - (1 - OUTSIDE.ground) * tileH;
+      tex.repeat.set(OUTSIDE.W / tileW, H / tileH);
+      tex.offset.set(0.5 - OUTSIDE.W / tileW / 2, (bottomY - tileBottom) / tileH);   // a tile centred on the window, its lawn line at eye height
+      mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
+      stage.invalidateFrame();
+    }, undefined, () => {});   // no photo: the pale sky stays
   }
   function glowSpools() {
     if (!parts.spools) return;
@@ -1741,7 +1747,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     cancelAnimationFrame(parts.steamRaf);
     if (parts.steam && parts.steam.overlay) stage.removeAccOverlay(parts.steam.overlay);   // off the still picture before its meshes go
     if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
-    if (parts.outside) { parts.outside.removeFromParent(); parts.outside.geometry.dispose(); parts.outside.material.map.dispose(); parts.outside.material.dispose(); parts.outside = null; }
+    if (parts.clipped) { for (const m of parts.clipped) { m.clippingPlanes = null; m.needsUpdate = true; } parts.clipped = null; renderer.localClippingEnabled = !!parts.clipWas; }
+    if (parts.outside) { for (const m of parts.outside) { m.removeFromParent(); m.geometry.dispose(); if (m.material.map) m.material.map.dispose(); m.material.dispose(); } parts.outside = null; }
     if (parts.spools) { for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays
     if (parts.mugs) { for (const o of [...parts.mugs.meshes, ...parts.mugs.masks]) o.removeFromParent(); for (const t of parts.mugs.texs) t.dispose(); parts.mugs = null; }   // the second mug and its shadow out (their geometry is the cached load's; their materials go with parts.mats)
     subj.mugs = null;
