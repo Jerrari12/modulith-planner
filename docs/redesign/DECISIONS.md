@@ -4141,3 +4141,28 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   look, ..., room last) and no room section under Neutral; a new phone case (nothing scrolled or off screen, every button
   at least 40 px) fails without the phone rule. The Colors room, step 6 and phone journey cases pass. Review: Sol
   `01a17823` round 15, no findings. Not deployed.
+
+## 2026-10-26 — The spools follow the filaments; a spool changes its filament everywhere; the orbit stops at the wall
+
+- **A spool a filament, kept so** (Joey, after adding a blue: "should we stack another filament on top of the stack when
+  we do that"). `refreshSpools` (each Colors commit with the room on): a spool whose filament the build still wears keeps
+  it; a spare takes one it newly wears, where it stands; a filament still without one goes on top of the lowest stack with
+  room, or lays a standing spool down to start one; a spare left over leaves the desk, and an empty group with its disc.
+  Stacks are posed from their own seed and `stackPoses` is the same spool for spool whatever the count, so a spool added
+  on top moves none under it. Six at most now (`SPOOL_MAX`, `SPOOL_HIGH`: 391 mm), since Joey's build wears six.
+- **Click a spool** (Joey: "what if i could select a spool and change it's color, and doing so would replace everything in
+  the build that used that same color, kind of a handy feature"). On the Colors stage the pointer over a spool turns to a
+  hand with a tooltip; a click opens the picker on that spool ("Spool · Black", what it prints), selecting no part; a pick
+  changes every region printed in it (each filament picked in that colour, each region still in an instruction colour of
+  it, the units' own picks too) in one undo step, and the spool follows. The feet's TPU is its own: its spool lists TPU
+  only, and no other spool reaches the feet. A spool behind a prop, the desk or the build is not clickable through it (Sol
+  `01a17823`: the stage hook now hands the owner the ray, and the room's own solid surfaces hide a spool).
+- **The orbit stops at the wall** (Joey, the same hour: "if you spin the camera into the wall, i think it automatically
+  zooms in super far like into the inside of the build"). The first bound pulled a camera past the margins in along its
+  line to the build, which a spin into a wall turned into a dive into the model. Now a move that would leave the margins
+  stops at the last place inside; the pull is kept only for a camera put outside by something else.
+- **Checks.** The spools case (one filament over the build: a spool each for it and the TPU; a red then a blue: on top of
+  a stack, each above the one under it, those under it unmoved); a new spool-click case (the pointer, the picker, no part
+  selected, nothing left in the old colour, the spool changed, one undo restores it all); the orbit case now asserts the
+  turn into the wall keeps its distance to the build (fails with the old pull). All 27 Colors cases pass. Review: Sol
+  `01a17823` round 16, one finding accepted (occlusion), then no findings. Not deployed.

@@ -871,10 +871,10 @@ export function sayingLayout(saying, w, h, fit) {
  * STANDING on their rims, each its own turn about the vertical. Always (Joey 2026-10-26: "there will always be filaments
  * on the desk, because filament is always used in the build, at least 4 or 5 filaments more than likely, unless they only
  * select a single color"). Each group's `spot` is a pick in [0, 1) among the free spots big enough for a spool. */
-export const SPOOL_MAX = 5;
+export const SPOOL_MAX = 6;   // six since Joey added a sixth filament and asked for its spool (2026-10-26)
 export const SPOOL_TALL = 0.25;   // one stack of every colour
 export const SPOOL_STAND = 0.15;   // a spool on its own, now and then: standing on its rim, mostly
-export const SPOOL_HIGH = 5;   // the tallest stack (326 mm)
+export const SPOOL_HIGH = 6;   // the tallest stack (391 mm)
 export function spoolPlan(rng, colours) {
   const list = [...new Set((colours || []).map((c) => String(c).toLowerCase()))].sort().slice(0, SPOOL_MAX);   // sorted: the stage lists them in no fixed order
   if (!list.length) return { groups: [] };

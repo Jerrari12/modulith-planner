@@ -564,8 +564,8 @@ test('a stack as hands leave it: each spool a little off, turned and leaned, eve
     ...rim(lo, 1).filter((q) => within(o, q)).map((q) => planeY(o, -1, q[0], q[2]) - q[1])];
   let slipped = 0, leaned = 0;
   for (let seed = 1; seed <= 300; seed++) {
-    const poses = stackPoses(rngFrom(seed), 5);
-    assert.equal(poses.length, 5);
+    const poses = stackPoses(rngFrom(seed), 6);
+    assert.equal(poses.length, 6);
     assert.ok(poses[0].x === 0 && poses[0].z === 0, 'the bottom one where the plan put it');
     for (const [k, o] of poses.entries()) {
       const off = Math.hypot(o.x, o.z);
@@ -585,18 +585,20 @@ test('a stack as hands leave it: each spool a little off, turned and leaned, eve
   assert.ok(slipped > SPOOL_SLIP && leaned > 0.9 * SPOOL_LEAN, `not neat: up to ${slipped.toFixed(1)} mm off the one below, ${leaned.toFixed(2)} deg`);
   assert.deepEqual(stackPoses(rngFrom(7), 3), stackPoses(rngFrom(7), 3), 'the build\'s own seed: the same stack each time');
 });
-test('the spools: one per colour the build is printed in (five at most), stacks and standing ones, the build\'s own seed, always', () => {
+test('the spools: one per colour the build is printed in (six at most), stacks and standing ones, the build\'s own seed, always', () => {
   const cols = ['#111111', '#D03A2E', '#2a6fdb', '#eeeeee', '#f2c230', '#d03a2e'];
   assert.deepEqual(spoolPlan(rngFrom(hashSeed('a')), cols), spoolPlan(rngFrom(hashSeed('a')), cols), 'a link, one plan');
   const plans = Array.from({ length: 400 }, (_, i) => spoolPlan(rngFrom(hashSeed('spools|' + i)), cols));
   assert.ok(plans.every((p) => p.groups.length), 'every build has spools (Joey: "there will always be filaments on the desk")');
   for (const p of plans) {
     const all = p.groups.flatMap((g) => g.colours);
-    assert.ok(all.length <= SPOOL_MAX, 'five at most');
+    assert.ok(all.length <= SPOOL_MAX, `${SPOOL_MAX} at most`);
     assert.equal(new Set(all).size, all.length, 'no colour twice (the hex case ignored)');
     assert.equal(all.length, Math.min(SPOOL_MAX, new Set(cols.map((c) => c.toLowerCase())).size), 'every colour up to the most');
     for (const g of p.groups) { assert.ok(g.kind === 'stack' || g.kind === 'stand'); assert.ok(g.kind === 'stack' ? g.colours.length <= SPOOL_MAX : g.colours.length === 1); assert.ok(g.spot >= 0 && g.spot < 1 && g.turnDeg >= 0 && g.turnDeg <= 360); }
   }
+  const seven = spoolPlan(rngFrom(hashSeed('seven')), [...cols, '#00ff00', '#0000ff']).groups.flatMap((g) => g.colours);
+  assert.deepEqual([SPOOL_MAX, seven.length], [6, 6], `seven filaments, six spools (Joey's sixth: "should we stack another filament on top") (${seven})`);
   const tall = plans.filter((p) => p.groups.length === 1 && p.groups[0].colours.length === 5).length / plans.length;
   assert.ok(Math.abs(tall - SPOOL_TALL) < 0.07, `one tall stack of all five in about ${SPOOL_TALL * 100} % (${(tall * 100).toFixed(0)} %)`);
   const groups = plans.flatMap((p) => p.groups), stacked = groups.filter((g) => g.kind === 'stack').reduce((a, g) => a + g.colours.length, 0), standing = groups.filter((g) => g.kind === 'stand').length;

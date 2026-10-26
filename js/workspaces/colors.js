@@ -167,7 +167,7 @@ export function mountColors(stage, ctx) {
   // tray: the compare tray is open; flip: the index of the finalist shown on the model (null = the chosen look)
   // surprise: the Surprise me panel is open; owning: its owned-filaments editor is up (oq its search); sshow: the index of
   // the candidate pinned on the model (null = none)
-  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null };   // simp: the Simplify panel is open, simpTarget its filament count
+  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null, swap: null };   // swap: the spool whose filament the picker changes everywhere (openSwap); simp: the Simplify panel is open, simpTarget its filament count
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
@@ -197,7 +197,7 @@ export function mountColors(stage, ctx) {
     room = h;
     import('../scenes/done.js').then(({ enterDoneScene }) => {
       if (room !== h) return;
-      const r = enterDoneScene(stage, { say, sequence: false });
+      const r = enterDoneScene(stage, { say, sequence: false, onSpool: (hex) => openSwap(hex) });
       h.leaveFn = r.leave;
       r.ready.then((handle) => { if (room === h) { h.handle = handle; if (!handle) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; } renderPanel(); } });   // a room that came on brings its wall and desk control
     }).catch((e) => { console.warn('[colors] the room did not load', e); if (room === h) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; renderPanel(); } });   // forgotten too, so a remount does not retry (Terra 01a16b56)
@@ -710,13 +710,39 @@ export function mountColors(stage, ctx) {
   /* ---------------- the picker (replaces the inspector) ---------------- */
   const picker = el('aside.glass.glass-edge', { id: 'ws-picker', 'aria-label': 'Filament picker', hidden: true });
   root.appendChild(picker);
-  function openPicker(key) { st.key = key; st.query = ''; renderAll(); if (phone) phone.open(picker); }
-  function closePicker() { st.key = null; renderAll(); if (phone) phone.collapse(picker); }
+  function openPicker(key) { st.key = key; st.swap = null; st.query = ''; renderAll(); if (phone) phone.open(picker); }
+  function closePicker() { st.key = null; st.swap = null; renderAll(); if (phone) phone.collapse(picker); }
+  /* THE SPOOL'S FILAMENT, EVERYWHERE (Joey 2026-10-26: "what if i could select a spool and change it's color, and doing so
+     would replace everything in the build that used that same color, kind of a handy feature"). A spool in the room is a
+     colour (done.js onSpool); what the build prints in it is every filament picked in that colour and every region still
+     in an instruction colour of it (filamentsInBuild; a label's stripe is not a region). The feet's TPU is its own: a
+     spool of it lists TPU only and changes the feet only, and no other spool reaches the feet. */
+  function swapTarget(hex) {
+    const h = String(hex).toLowerCase(), fc = stage.filamentsInBuild();
+    const fil = fc.filaments.filter((f) => f.hex.toLowerCase() === h), bare = fc.unpicked.filter((u) => !u.stripe && u.hex.toLowerCase() === h);
+    const keys = [...new Set([...fil.flatMap((f) => f.keys), ...bare.map((u) => u.key)])];
+    if (!keys.length) return null;
+    const feet = keys.every(isFeet);
+    return { hex: h, names: fil.map((f) => f.name), bare: bare.map((u) => u.key).filter((k) => isFeet(k) === feet), keys: keys.filter((k) => isFeet(k) === feet), feet, url: fil.length ? fil[0].url : null };
+  }
+  function openSwap(hex) { const t = swapTarget(hex); if (!t) return; st.swap = t; st.key = null; st.query = ''; renderAll(); if (phone) phone.open(picker); }
+  function swapTo(f) {
+    const t = st.swap; if (!t) return;
+    const fil = { name: f.label || f.name, hex: f.hex, url: f.url };
+    const mine = (k, c) => c && t.names.includes(c.name) && isFeet(k) === t.feet;
+    commitColors('color', () => {
+      const p = pal(), map = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, c]) => [k, mine(k, c) ? { ...fil } : c]));
+      stage.setPalette({ colors: { ...map(p.colors), ...Object.fromEntries(t.bare.map((k) => [k, { ...fil }])) }, over: Object.fromEntries(Object.entries(p.over || {}).map(([u, o]) => [u, map(o)])), on: true });
+    });
+    st.swap = swapTarget(fil.hex) || null;   // the picker stays on the spool, now in its new filament, for another try
+    renderAll();
+  }
   function renderPicker() {
     picker.replaceChildren();
-    const key = st.key;
-    if (!key) { picker.hidden = true; return; }
+    const key = st.key, swap = st.swap;
+    if (!key && !swap) { picker.hidden = true; return; }
     picker.hidden = false;
+    if (swap) { renderSwap(swap); return; }
     const keys = stage.keysInBuild(); const k = keys.find((x) => x.key === key); const count = k ? k.count : 0; const own = k ? k.own : 0;
     const uid = unitOfSel(); if (uid == null) st.scope = 'all';
     const unitPick = uid != null ? (pal().on && pal().over[uid] && pal().over[uid][key]) || null : null;
@@ -729,34 +755,12 @@ export function mountColors(stage, ctx) {
         el('button.seg' + (st.scope === 'unit' ? '.on' : ''), { text: uid != null ? `This ${unitWord()} only` : 'This unit only', disabled: uid == null, title: uid == null ? 'Click a part of a unit on the model first' : `Only unit ${unitNo().replace(/[() ]|unit /g, '')} keeps this pick; the other ${typePlural(key)} follow the build colour`, onclick: () => { st.scope = 'unit'; renderAll(); } }),
       ]),
       st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? short(worn(key).name) : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
-      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
+      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),   // renderBrands: below, before any input can fire
       isFeet(key) ? el('p.note.feet', { text: 'Feet print in TPU, the flexible filament, so only TPU is listed. PolyFlex TPU95 Black is the default.' }) : null,
     ].filter(Boolean));   // append(null) writes the word "null" (it showed under the scope switch, 2026-10-17)
     const brands = el('div.brands');
     picker.appendChild(brands);
-    function renderBrands() {
-      brands.replaceChildren();
-      const q2 = st.query.trim().toLowerCase();
-      const p = pal();
-      const seen = new Map(); for (const c of Object.values(p.colors)) if (c && c.name && c.hex && !seen.has(c.name)) seen.set(c.name, c);
-      const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === isFeet(key));
-      if (inBuild.length) {
-        brands.appendChild(el('div.bhead', { text: 'In this build' }));
-        brands.appendChild(el('div.swatches', {}, inBuild.map((c) => el('button.sw' + (w && w.name === c.name ? '.active' : '') + silk(c.name), { style: `background:${c.hex}`, title: `${c.name} · already in this build`, 'aria-label': c.name, onclick: () => pick(key, { label: c.name, hex: c.hex, url: c.url }) }))));
-      }
-      let any = inBuild.length > 0;
-      for (const brand of FILAMENT_DB) {
-        if (/TPU/.test(brand.line) !== isFeet(key)) continue;   // TPU for the feet, and only for the feet
-        const colors = q2 ? brand.colors.filter((f) => `${brand.brand} ${brand.line} ${f.label}`.toLowerCase().includes(q2)) : brand.colors;
-        if (q2 && !colors.length) continue;
-        any = true;
-        const id = brand.brand + '|' + brand.line;
-        const open = q2 ? true : st.expanded ? st.expanded.has(id) : true;
-        brands.appendChild(el('button.bhead.toggle', { 'aria-expanded': String(open), onclick: () => { if (!st.expanded) st.expanded = new Set(FILAMENT_DB.map((b) => b.brand + '|' + b.line)); st.expanded[st.expanded.has(id) ? 'delete' : 'add'](id); renderBrands(); } }, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${colors.length}` }), matTags(brand)]), el('span.chev', { text: open ? '▾' : '▸' })]));
-        if (open) brands.appendChild(el('div.swatches', {}, colors.map((f) => el('button.sw' + (w && w.name === f.label ? '.active' : '') + (f.pick ? '.pick' : '') + silk(f.label), { style: `background:${f.hex}`, title: f.label + (f.pick ? (f.pickNote || ' · ★ Used by Jerrari') : ''), 'aria-label': f.label, onclick: () => pick(key, f) }))));
-      }
-      if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
-    }
+    const renderBrands = () => fillBrands(brands, { tpu: isFeet(key), active: w ? w.name : null, onPick: (f) => pick(key, f) });
     renderBrands();
     const buyUrl = w ? w.url : FILAMENT_DB[0].url; const paid = isPaid(buyUrl); const poly = /polymaker/i.test(buyUrl);
     picker.appendChild(el('div.foot', {}, [
@@ -766,6 +770,53 @@ export function mountColors(stage, ctx) {
         ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]
         : [el('button.key.sm', { text: isFeet(key) ? 'Reset to TPU95 Black' : 'Reset to instruction colour', title: isFeet(key) ? 'Every foot back to PolyFlex TPU95 Black, own colours included' : `Every ${typePlural(key).replace(/s$/, '')} ${regionOf(key).toLowerCase()} back to the kit’s colour, own colours included`, disabled: isFeet(key) ? !!w && w.name === 'Polymaker PolyFlex TPU95 Black' && !own : !w && !own, onclick: () => commitColors('color', () => { stage.setColor(key, null); if (own) stage.clearOverrides(null, key); }) })]),
     ]));
+  }
+
+  /* the filaments to pick from: those already in this build, then every brand's, TPU for the feet and only for them;
+     `active` the one worn now, `onPick` what a swatch does */
+  function fillBrands(brands, { tpu, active, onPick }) {
+    brands.replaceChildren();
+    const q2 = st.query.trim().toLowerCase();
+    const p = pal();
+    const seen = new Map(); for (const c of Object.values(p.colors)) if (c && c.name && c.hex && !seen.has(c.name)) seen.set(c.name, c);
+    const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === tpu);
+    if (inBuild.length) {
+      brands.appendChild(el('div.bhead', { text: 'In this build' }));
+      brands.appendChild(el('div.swatches', {}, inBuild.map((c) => el('button.sw' + (active === c.name ? '.active' : '') + silk(c.name), { style: `background:${c.hex}`, title: `${c.name} · already in this build`, 'aria-label': c.name, onclick: () => onPick({ label: c.name, hex: c.hex, url: c.url }) }))));
+    }
+    let any = inBuild.length > 0;
+    for (const brand of FILAMENT_DB) {
+      if (/TPU/.test(brand.line) !== tpu) continue;   // TPU for the feet, and only for the feet
+      const colors = q2 ? brand.colors.filter((f) => `${brand.brand} ${brand.line} ${f.label}`.toLowerCase().includes(q2)) : brand.colors;
+      if (q2 && !colors.length) continue;
+      any = true;
+      const id = brand.brand + '|' + brand.line;
+      const open = q2 ? true : st.expanded ? st.expanded.has(id) : true;
+      brands.appendChild(el('button.bhead.toggle', { 'aria-expanded': String(open), onclick: () => { if (!st.expanded) st.expanded = new Set(FILAMENT_DB.map((b) => b.brand + '|' + b.line)); st.expanded[st.expanded.has(id) ? 'delete' : 'add'](id); fillBrands(brands, { tpu, active, onPick }); } }, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${colors.length}` }), matTags(brand)]), el('span.chev', { text: open ? '▾' : '▸' })]));
+      if (open) brands.appendChild(el('div.swatches', {}, colors.map((f) => el('button.sw' + (active === f.label ? '.active' : '') + (f.pick ? '.pick' : '') + silk(f.label), { style: `background:${f.hex}`, title: f.label + (f.pick ? (f.pickNote || ' · ★ Used by Jerrari') : ''), 'aria-label': f.label, onclick: () => onPick(f) }))));
+    }
+    if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
+  }
+  /* the picker on a spool (swapTarget): what it prints, and one pick changes all of it */
+  function renderSwap(t) {
+    const name = t.names.length === 1 ? short(t.names[0]) : t.names.length ? t.names.map(short).join(' & ') : 'Instruction colour';
+    const brands = el('div.brands');
+    const renderBrands = () => fillBrands(brands, { tpu: t.feet, active: t.names[0] || null, onPick: swapTo });
+    picker.append(...[
+      el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: 'Spool' }), ` · ${name}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
+      el('p.note.swapnote', {}, [el('i.sw', { style: `background:${t.hex}`, 'aria-hidden': 'true' }), `Prints ${regionWords(t.keys).toLowerCase()}. Pick a filament and all of it takes it, in one undo step.`]),
+      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
+      t.feet ? el('p.note.feet', { text: 'The feet print in TPU, the flexible filament, so only TPU is listed.' }) : null,
+      brands,
+    ].filter(Boolean));
+    renderBrands();
+    if (t.url) {
+      const paid = isPaid(t.url), poly = /polymaker/i.test(t.url);
+      picker.appendChild(el('div.foot', {}, [
+        el('a.buy', { href: t.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: `Buy ${name} →` + (paid ? ' · paid link' : ''), onclick: buyFilament(stage, { name: t.names[0], url: t.url }) }),
+        el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
+      ]));
+    }
   }
 
   /* ---------------- the part card on the stage ---------------- */
@@ -890,7 +941,7 @@ export function mountColors(stage, ctx) {
   return {
     onQuality(tier) { if (room && room.handle) room.handle.onQuality(tier); },   // the room re-aims its lights after the tier's rig reset
     onSelect(sel) {
-      st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) st.key = info.primaryKey; if (!info || info.owner == null) st.scope = 'all'; }
+      st.sel = sel; if (sel) { const info = stage.partInfo(sel.id); if (info && !info.locked) { st.key = info.primaryKey; st.swap = null; } if (!info || info.owner == null) st.scope = 'all'; }
       /* on a phone a tapped part answers with its card (over the collapsed handles) and the picker's handle, named after
          the region; a tap on a chip or the handle opens the picker. An open sheet covers both (13 over 12), so the sheets
          step down, as Build's inspector does - unless the picker itself is the open sheet: a visitor picking colours taps

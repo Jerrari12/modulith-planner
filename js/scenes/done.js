@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool } from './spool.js';
-import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_HIGH, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -261,7 +261,7 @@ function contactTexture() {
    the orbit free, no drifts and no drawer moment; the toolbar's camera button returns to the hero through `recenter()`. */
 /* `orbit: false` is the FINAL SCENE (Assemble, Joey 2026-10-23: "don't let them rotate the camera"): the controls are off,
    the shots are the only views, and the handle's `nextShot()` cuts to the next one. */
-export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true, orbit = true } = {}) {
+export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true, orbit = true, onSpool = null } = {}) {
   const { scene, camera, controls, renderer } = stage;
   let cancelled = false, on = false;
   const parts = { group: null, catcher: null, wall: null, sprite: null, masks: [], slid: {}, env: null, tex: null, mats: [], raf: 0, fade: null };
@@ -981,7 +981,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     return [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)];
   }
   function makeSpools(group, geo) {
-    parts.spools = { groups: [], discs: [], plan: null };
+    parts.spools = { groups: [], discs: [], plan: null, geo };
     if (!geo || mount === 'under-table') return [];
     const q = new URLSearchParams(location.search), s0 = debug ? q.get('spools') : null;
     if (s0 === 'off') return [];
@@ -1055,18 +1055,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (!p || !g) return;
       const turn = (g.turnDeg * Math.PI) / 180, root = new THREE.Group();
       root.name = 'done-spools'; root.position.set(p.x, deskY, p.z); root.rotation.y = turn;
-      const poses = g.kind === 'stack' ? stackPoses(rngFrom(hashSeed(`stack|${seedKey}|${i}`)), g.colours.length) : [];   // its own seed: the plan's picks stay as they were
-      g.colours.forEach((c, k) => {
-        const s = makeSpool(geo, c);
-        if (g.kind === 'stand') { s.rotation.z = Math.PI / 2; s.position.y = 100; }   // on its rim: the flange's 100 mm radius
-        else {   // lying flat, one on another, not quite square (spun first, then leaned: the flange's slope is the lean)
-          const o = poses[k];
-          s.position.set(o.x, o.y, o.z);
-          s.rotation.set(-Math.atan(o.lean.z), o.spin, Math.atan(o.lean.x), 'XZY');
-        }
-        s.traverse((m) => { if (m.isMesh) m.userData.doneRoom = true; });
-        root.add(s);
-      });
+      root.userData.spoolGroup = { kind: g.kind, seed: `stack|${seedKey}|${i}` };   // its own seed: the plan's picks stay as they were
+      for (const c of g.colours) root.add(newSpool(c));
+      poseGroup(root);
       scene.add(root);
       const disc = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: parts.tex || (parts.tex = contactTexture()), transparent: true, depthWrite: false, toneMapped: false }));
       const w = g.kind === 'stand' ? [90, 240] : [250, 250];
@@ -1080,20 +1071,57 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.spools.placed = placed;
     return placed.map((x) => x.box);
   }
-  /* the build's colours again on the spools that stand (the Colors workspace's Room stage, a pick made with the room on): a
-     spool whose colour the build no longer wears takes one it newly does (or, none left, one it wears), the others keep theirs */
+  const lower = (c) => String(c).toLowerCase();
+  const spoolsOf = (root) => root.children.filter((s) => s.userData.setColor);
+  function newSpool(c) {
+    const s = makeSpool(parts.spools.geo, c);
+    s.traverse((m) => { if (m.isMesh) m.userData.doneRoom = true; });
+    return s;
+  }
+  /* a group's spools posed: on its rim (the flange's 100 mm radius), or lying flat one on another as hands leave them
+     (done-fit.js stackPoses, the group's own seed; its poses are the same spool for spool whatever the count, so a spool
+     added on top moves none below it, and one taken out lets those above it down) */
+  function poseGroup(root) {
+    const g = root.userData.spoolGroup, list = spoolsOf(root);
+    if (g.kind === 'stand') { list[0].rotation.set(0, 0, Math.PI / 2); list[0].position.set(0, 100, 0); return; }
+    const poses = stackPoses(rngFrom(hashSeed(g.seed)), list.length);
+    list.forEach((s, k) => { const o = poses[k]; s.position.set(o.x, o.y, o.z); s.rotation.set(-Math.atan(o.lean.z), o.spin, Math.atan(o.lean.x), 'XZY'); });   // spun first, then leaned
+  }
+  /* THE SPOOLS FOLLOW THE BUILD (the Colors workspace's Room stage, a pick made with the room on; Joey 2026-10-26: "so i
+     added a blue filament, should we stack another filament on top of the stack when we do that"): a spool a filament,
+     SPOOL_MAX at most. A spool whose filament the build still wears keeps it (the first of a colour; a second is spare); a
+     spare takes a filament the build newly wears, where it stands; a filament still without one goes on top of the lowest
+     stack with room (SPOOL_HIGH), or lays a standing spool down to start one; a spare left over leaves the desk, and a
+     group left with none leaves with its disc */
   function refreshSpools() {
-    if (!parts.spools || !parts.spools.groups.length) return;
-    const now = [...new Set(spoolColours().map((c) => String(c).toLowerCase()))];
-    const spools = parts.spools.groups.flatMap((r) => r.children.filter((s) => s.userData.setColor));
-    const worn = new Set(spools.map((s) => String(s.userData.spool.color).toLowerCase()));
-    const fresh = now.filter((c) => !worn.has(c));
-    let k = 0;
-    const seen = new Set();   // a second spool of one colour takes a new one too (Sol 01a17823: A/B to A paints B as A, and back to A/B must part them)
-    for (const s of spools) {
-      const c = String(s.userData.spool.color).toLowerCase();
-      if (now.length && (!now.includes(c) || (seen.has(c) && fresh.length))) s.userData.setColor(fresh.length ? fresh.shift() : now[k++ % now.length]);   // none new left: one the build wears
-      seen.add(String(s.userData.spool.color).toLowerCase());
+    const sp = parts.spools;
+    if (!sp || !sp.groups.length || !sp.geo) return;
+    const now = [...new Set(spoolColours().map(lower))].sort().slice(0, SPOOL_MAX);
+    if (!now.length) return;
+    const kept = new Set(), spare = [];
+    for (const s of sp.groups.flatMap(spoolsOf)) { const c = lower(s.userData.spool.color); if (now.includes(c) && !kept.has(c)) kept.add(c); else spare.push(s); }
+    const missing = now.filter((c) => !kept.has(c));
+    while (spare.length && missing.length) spare.shift().userData.setColor(missing.shift());
+    for (const s of spare) { disposeSpool(s); s.removeFromParent(); }
+    for (const c of missing) {
+      let host = sp.groups.filter((r) => r.userData.spoolGroup.kind === 'stack' && spoolsOf(r).length && spoolsOf(r).length < SPOOL_HIGH).sort((a, b) => spoolsOf(a).length - spoolsOf(b).length)[0];
+      if (!host) {
+        host = sp.groups.find((r) => r.userData.spoolGroup.kind === 'stand' && spoolsOf(r).length);
+        if (host) { host.userData.spoolGroup.kind = 'stack'; sp.discs[sp.groups.indexOf(host)].scale.set(250, 1, 250); }   // laid down: a stack's contact disc
+      }
+      if (host) host.add(newSpool(c));
+    }
+    for (let i = sp.groups.length - 1; i >= 0; i--) {
+      const r = sp.groups[i], list = spoolsOf(r);
+      if (!list.length) {
+        const d = sp.discs[i];
+        r.removeFromParent(); d.removeFromParent(); d.geometry.dispose(); d.material.dispose();
+        sp.groups.splice(i, 1); sp.discs.splice(i, 1); sp.placed.splice(i, 1);
+        continue;
+      }
+      poseGroup(r);
+      r.updateWorldMatrix(true, true);
+      Object.assign(sp.placed[i], { kind: r.userData.spoolGroup.kind, colours: list.map((x) => x.userData.spool.color), box: plain(new THREE.Box3().setFromObject(r, true)) });
     }
     stage.invalidateFrame();
   }
@@ -1461,15 +1489,53 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!orbit) controls.maxPolarAngle = Math.PI;
     /* ... and a stage's orbit stays in the room (Joey 2026-10-26: "i can spin it around and clip through the wall or zoom
        out a mile until the viewing distance makes everything disapear, maybe they can't move our zoom out of the room?"):
-       after every orbit or zoom the camera is pulled in along its line to the build, to the shots' own margins off the
-       walls, the floor and under the walls' top (done-fit.js clampToInterior), so it turns and zooms freely inside */
+       inside the shots' own margins off the walls, the floor and under the walls' top (done-fit.js insideRoom) it turns
+       and zooms freely; a move that would take it past them STOPS where it was, the last place inside. Not pulled in
+       along its line to the build, as at first: a spin into a wall then dragged the camera into the build itself (Joey,
+       the same day: "if you spin the camera into the wall, i think it automatically zooms in super far like into the
+       inside of the build"). A camera put outside by something else (none of the shots is) is pulled in, held there. */
     if (orbit && interior) {
+      const last = new THREE.Vector3();
+      let haveLast = false;
       parts.keepIn = () => {
-        const c = clampToInterior({ position: camera.position, target: controls.target, fov: camera.fov, distance: 0 }, interior);
-        const q = insideRoom(c.position, interior);   // and held in, whatever the pull's floor left (Sol 01a17823)
-        if (q.x !== camera.position.x || q.y !== camera.position.y || q.z !== camera.position.z) camera.position.set(q.x, q.y, q.z);
+        const p = camera.position, q = insideRoom(p, interior);
+        if (q.x === p.x && q.y === p.y && q.z === p.z) { last.copy(p); haveLast = true; return; }
+        if (haveLast) p.copy(last);
+        else {
+          const c = clampToInterior({ position: p, target: controls.target, fov: camera.fov, distance: 0 }, interior);
+          const r = insideRoom(c.position, interior);   // and held in, whatever the pull's floor left (Sol 01a17823)
+          p.set(r.x, r.y, r.z); last.copy(p); haveLast = true;
+        }
+        camera.lookAt(controls.target);   // the controls aimed it from where it was refused
       };
       controls.addEventListener('change', parts.keepIn);
+    }
+    /* ... and a spool there is a filament to change everywhere (Joey 2026-10-26: "what if i could select a spool and change
+       it's color, and doing so would replace everything in the build that used that same color"): a tap on one hands its
+       colour to the stage's owner (Colors opens its picker on that filament), the pointer and a tooltip say so on hover */
+    if (orbit && onSpool && stage.setTapTargets) {
+      /* the spool a ray meets first, if what it meets first is a spool: the room's props, the desk and the walls hide one
+         (Sol 01a17823: a mug in front of a spool); what is not drawn (a prop off the desk, a room part hidden) and the
+         see-through layers (the shadow quads, the contact discs, the steam) hide nothing */
+      const shown = (o) => { for (let q = o; q; q = q.parent) if (!q.visible) return false; return true; };
+      const solid = (h) => shown(h.object) && !h.object.userData.doneShadow && !(h.object.material && h.object.material.transparent && h.object.material.depthWrite === false);
+      const spoolHit = (r, beyond = Infinity) => {
+        const h = r.intersectObjects([group, ...(parts.spools ? parts.spools.groups : [])], true).find(solid);
+        if (!h || h.distance >= beyond) return null;
+        let o = h.object; while (o && !o.userData.spool) o = o.parent;
+        return o || null;
+      };
+      stage.setTapTargets({ onTap: (r, buildAt) => { const s = spoolHit(r, buildAt); if (s) onSpool(s.userData.spool.color); return !!s; } });
+      const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), el = renderer.domElement;
+      parts.hover = (e) => {
+        if (e.buttons || e.pointerType === 'touch') return;
+        const r = el.getBoundingClientRect();
+        ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+        ray.setFromCamera(ndc, camera);
+        const over = !!spoolHit(ray) && !!spoolHit(ray, stage.buildHitDistance(ray));   // the build first only when a spool is in line: one cast of it, not one a move
+        if (over !== !!parts.hoverOn) { parts.hoverOn = over; el.style.cursor = over ? 'pointer' : ''; el.title = over ? 'Change this spool’s filament everywhere in the build' : ''; }
+      };
+      el.addEventListener('pointermove', parts.hover);
     }
     on = true;
     /* the dip to black (the grammar's transitions): a black layer over the canvas, in the stage's own wrapper, so the
@@ -1624,6 +1690,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
     controls.enabled = was.controls; controls.enablePan = was.pan; controls.maxPolarAngle = was.polar;
     if (parts.keepIn) { controls.removeEventListener('change', parts.keepIn); parts.keepIn = null; }
+    if (parts.hover) { stage.setTapTargets(null); renderer.domElement.removeEventListener('pointermove', parts.hover); if (parts.hoverOn) { renderer.domElement.style.cursor = ''; renderer.domElement.title = ''; } parts.hover = null; parts.hoverOn = false; }
     stage.resetView();   // the guided camera of the page the stage is on (the finished step, or the one a click chose)
     stage.invalidateFrame();
   }

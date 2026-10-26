@@ -8762,11 +8762,21 @@ canvas.addEventListener('pointerup', e => {
     else clearMeasure(); // empty tap wipes the current measurement (stay in mode)
     return;
   }
+  // a tap target nearer than the build takes the tap (setTapTargets: the Done room's spools on the Colors stage)
+  if (tapTargets && tapTargets.onTap(ray, hits.length ? hits[0].distance : Infinity, e)) return;
   if (!hits.length) { setSelected(null); return; }
   let o = hits[0].object;
   while (o && !o.userData.instanceId) o = o.parent;
   setSelected(o ? o.userData.instanceId : null);
 });
+/* THE TAP TARGETS (2026-10-26, the Done room's spools on the Colors stage; Joey: "what if i could select a spool and change
+   it's color"): { onTap(ray, buildDistance, event) } or null. The owner casts the ray against its own scene (what hides
+   its targets is its to know: Sol 01a17823, a mug in front of a spool) and returns true when the tap was its, which then
+   selects nothing; false, and the build's nearest hit selects as ever. */
+let tapTargets = null;
+function setTapTargets(t) { tapTargets = t || null; }
+// the nearest visible part of the build along a ray (Infinity: none), for an owner's hover that must not see through it
+function buildHitDistance(r) { const h = r.intersectObjects([...instances.values()].filter((i) => i.group.visible).map((i) => i.group), true); return h.length ? h[0].distance : Infinity; }
 
 /* ---- editing overlays for the Build workspace (phase 3): spots, flags, the carry, the eraser ----------------
    All of it lives in one group outside `instances`, so the BOM, the callouts, measuring, shadows, AO and the
@@ -11408,7 +11418,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     /* the moving-frame savings' switches (2026-09-14) and what they work on, so a harness can measure the viewer with
        and without each in one page and prove the image unchanged - see MOVE_OPT */
     moveOpt: MOVE_OPT, dimCover, shadowWatch, get cavityClones() { return cavity.clones; },   // ground.seen: see `ground`
-    acc, accumFrame, accVerify, invalidateFrame, drawNextFrame, accWanted, addAccOverlay, removeAccOverlay, accOverlayLive,
+    acc, accumFrame, accVerify, invalidateFrame, drawNextFrame, accWanted, addAccOverlay, removeAccOverlay, accOverlayLive, setTapTargets, buildHitDistance,
     get accSamples() { return acc.n; }, ACC_SAMPLES, ACC_WARMUP,
     get sunHalfDeg() { return ACC_SUN_HALF_DEG; },
     setSunHalfDeg(v) { ACC_SUN_HALF_DEG = +v; acc.blocked = true; },
