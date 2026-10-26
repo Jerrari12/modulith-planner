@@ -404,6 +404,9 @@ function engineTimeline(S, clip) {
     clearance.push({ id: e.enter, at: +tEnd.toFixed(3), pos: st[e.enter].pos.map((v) => +v.toFixed(1)), ...worst });
     if (worst.gap < 0) throw new Error(`${e.enter} lands on its stage overlapping ${worst.other} by ${-worst.gap} mm`);
   }
+  /* a clip may add camera beats of its own (the rows clip: a side view for the click, then the planner's camUp back);
+     they carry a preset and a tween length, no actors, and take their place in time order */
+  if (clip.extraBeats) { for (const eb of clip.extraBeats({ beats, log, stateAt, dur })) beats.push({ ...eb, kind: 'extra', actors: new Set(), path: [] }); beats.sort((a, b) => a.t - b.t); }
   /* each beat's subject, at the beat's end: the actors' boxes, plus every visible box that touches their union (grown by
      5 mm) - the thing they attach to; a beat with no actors (a camera return, a solid) frames the whole visible build */
   for (let i = 0; i < beats.length; i++) {
@@ -482,9 +485,13 @@ const ENGINE_CLIPS = {
   /* the lower case: its QuickLocks and the slots in the case above - the band from 25 mm under the lower case's top to 15 mm
      into the upper case, the front 45 mm where the locks sit; the last fifth of the slide, the click, at half speed */
   rows: { engine: true, record: 'wall', prefix: 'wall-step-', steps: [4], hide: [/^st\d|^tst/], az: 18, el: 6, fit: 'end',
-    /* a travelling beat (the whole case slides in from 225 mm out): the part subject stays - a joint box here put the camUp
-       camera (26 deg below) under the case, looking at its floor; the click at half speed */
-    slow: (plan) => slowOn(plan, 'enter', ['case0'], 0.8) },
+    /* the opening beat is the planner's camUp on the whole slide; the JOINT - the lower case's top 30 mm (its rear top edge
+       and the lock tabs at the front corners) with the top case's bottom 20 mm, the front 60 mm, full width - gets its own
+       beat from the side and slightly below (az 45, el -10; camUp at 26 deg below looks at the case floor) over the last
+       60 mm of the slide and the click, then the planner's camUp returns for the end pose */
+    extraBeats: ({ log, dur }) => { const e = log.find((x) => x.enter === 'case0'); const tJ = e.t + 0.62 * e.dur, tR = log.filter((x) => x.enter || x.move).reduce((a, x) => Math.max(a, x.t + (x.dur || 0)), 0) + 0.37; return [{ t: tJ - 0.4, dur: 0.4, preset: { t: 45, p: 100 }, step: 'the click' }, { t: tR, dur: 0.75, preset: { t: 30, p: 116 }, step: 'camUp back' }]; },
+    joints: { 1: (S, st, bx) => strip(bx, st, ['case0'], 30, 20, 32.5, 92.5) },
+    slow: (plan) => { const b = plan.beats[1]; return [{ from: b.t + b.dur, to: plan.beats[2].t, scale: 0.5, hold: 0.4 }]; } },
   /* the tabletop (the 185 2W-2H kit): the lower rail lands and the six feet slide in, the base sets down; the upper rail
      slides on from the back; the three cases (restaged, see TTK_STAGE) with their locks, the dips and pops; the two cover
      layers with the top drawer's stoppers; the three drawers with their magnet clips */
@@ -492,7 +499,8 @@ const ENGINE_CLIPS = {
      landing, the settle) keep the part subject */
   base: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [1, 2, 3], hide: [], az: 28, el: 30, fit: 'end',
     joints: { 1: (S, st, bx) => union(bx('frl0', st), ...['f1', 'f2', 'f3', 'f4', 'f5', 'f6'].map((id) => bx(id, st))) },
-    slow: (plan) => slowOn(plan, 'enter', ['f2', 'f4', 'f6']) },
+    holdCamera: { 2: 1 },   // the settle onto the table is the joint moment (the feet meeting the table): no pull-back
+    slow: (plan) => [...slowOn(plan, 'enter', ['f2', 'f4', 'f6']), ...slowOn(plan, 'settle', ['frl0'])] },
   /* the upper rail: both rails' front half, where the upper slides onto the lower's dovetails; the last third at half speed */
   upper: { engine: true, record: 'ttk', prefix: 'ttk-step-', steps: [4], hide: [], az: 22, el: 22,
     joints: { 0: (S, st, bx) => { const u = union(bx('frl0', st), bx('fru0', st)); return { min: [u.min[0], u.min[1], 0], max: [u.max[0], u.max[1], u.max[2]] }; } },
@@ -798,8 +806,11 @@ async function film(name, clip, browser, base, pose) {
         b.cam = { pos: c.pos, target: c.target, fov: b.preset.fov || 40, r: c.r, extents: c.extents, pulledForPath: c.pulledForPath, joint: !!joint };
       }
       for (let i = 0; i < plan.beats.length; i++) if (!plan.beats[i].cam) plan.beats[i].cam = i ? plan.beats[i - 1].cam : null;
+      /* holdCamera: { beat: earlierBeat } keeps an earlier beat's camera through a later one (the base: the rail with its feet
+         stays framed through the settle onto the table) */
+      if (clip.holdCamera) for (const [k, v] of Object.entries(clip.holdCamera)) { plan.beats[+k].cam = plan.beats[+v].cam; plan.beats[+k].held = +v; }
       if (!plan.beats[0].cam) throw new Error('the first step has no camera preset');
-      run.beats = plan.beats.map((b) => ({ t: b.t, dur: b.dur, tEnd: b.tEnd, kind: b.kind, step: b.step, preset: b.preset, actors: b.actorIds, subject: b.subjectIds, joint: b.joint || null, subjectBox: { min: b.subjectBox.min.map((v) => +v.toFixed(1)), max: b.subjectBox.max.map((v) => +v.toFixed(1)) }, cam: { az: b.preset ? b.preset.t : null, el: b.preset ? 90 - b.preset.p : null, fov: b.cam.fov, r: +b.cam.r.toFixed(1), pos: b.cam.pos.map((v) => +v.toFixed(1)), target: b.cam.target.map((v) => +v.toFixed(1)), extents: b.cam.extents, pulledForPath: b.cam.pulledForPath } }));
+      run.beats = plan.beats.map((b) => ({ t: b.t, dur: b.dur, tEnd: b.tEnd, kind: b.kind, step: b.step, preset: b.preset, actors: b.actorIds, subject: b.subjectIds, joint: b.joint || null, subjectBox: { min: b.subjectBox.min.map((v) => +v.toFixed(1)), max: b.subjectBox.max.map((v) => +v.toFixed(1)) }, held: b.held ?? null, cam: { az: b.preset ? b.preset.t : null, el: b.preset ? 90 - b.preset.p : null, fov: b.cam.fov, r: +b.cam.r.toFixed(1), pos: b.cam.pos.map((v) => +v.toFixed(1)), target: b.cam.target.map((v) => +v.toFixed(1)), extents: b.cam.extents, pulledForPath: b.cam.pulledForPath } }));
       cameraSpec = null;
       run.camera = await page.evaluate(CAMERA, { az: plan.beats[0].preset.t, el: 90 - plan.beats[0].preset.p, fov: plan.beats[0].preset.fov || 40, target: centre(plan.beats[0].subjectBox), toward: 0, fitBoxes: plan.beats[0].subject, margin: plan.beats[0].joint ? JOINT_MARGIN : MARGIN, clearBoxes: plan.beats[0].path, near: NEAR, softBoxes: plan.beats[0].joint ? null : plan.beats[0].path, over: PATH_OVER, centreFit: true, W, H });   // the page opens on beat 0
     } else {
