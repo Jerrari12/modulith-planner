@@ -1424,13 +1424,13 @@ function masksPlaced(masks, roomJson, f) {
   for (const m of masks) {
     const rec = roomJson.shadows.masks.find((r) => r.group === m.group && r.surface === m.surface);
     assert.ok(rec, `${m.group}'s ${m.surface} mask is one room.json lists`);
-    const dx = m.dx || 0;
+    const dx = (m.dx || 0) + (m.moved ? m.moved.x : 0), dz = m.moved ? m.moved.z : 0;   // the coffee's own move on a build that stands it elsewhere (done.js makeMugs)
     if (m.surface === 'desk') {
       // a desk quad is the mask's extent slid, CUT at the desk's ends (a mask reaching the edge and sliding outward would float past it)
       const lo = Math.max(rec.x0 + dx, desk.x0), hi = Math.min(rec.x1 + dx, desk.x1), ex = f.anchorX + (lo + hi) / 2;
       assert.ok(Math.abs(m.x - ex) < 0.01 && Math.abs(m.w - (hi - lo)) < 0.01, `${m.group}'s desk quad is the mask's extent slid and cut at the desk's ends (${m.x.toFixed(1)} vs ${ex.toFixed(1)}, ${m.w.toFixed(1)} vs ${(hi - lo).toFixed(1)}, slide ${m.dx})`);
       assert.ok(m.x - m.w / 2 >= f.anchorX + desk.x0 - 0.01 && m.x + m.w / 2 <= f.anchorX + desk.x1 + 0.01, `${m.group}'s desk quad lies within the desk`);
-      assert.ok(Math.abs(m.z - (f.anchorZ + (rec.zBack + rec.zFront) / 2)) < 0.01 && m.y > 0 && m.y < 2, `${m.group}'s desk quad lies on the desk (${m.y.toFixed(2)}, ${m.z.toFixed(1)})`);
+      assert.ok(Math.abs(m.z - (f.anchorZ + (rec.zBack + rec.zFront) / 2 + dz)) < 0.01 && m.y > 0 && m.y < 2, `${m.group}'s desk quad lies on the desk (${m.y.toFixed(2)}, ${m.z.toFixed(1)})`);
     } else {
       const ex = f.anchorX + (rec.x0 + rec.x1) / 2 + dx;
       assert.ok(Math.abs(m.x - ex) < 0.01 && Math.abs(m.w - (rec.x1 - rec.x0)) < 0.01, `${m.group}'s wall quad sits at the mask's extent about the anchor plus its slide (${m.x.toFixed(1)} vs ${ex.toFixed(1)}, slide ${m.dx})`);
@@ -1477,7 +1477,7 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
   assert.ok(d0.cam[1] <= d0.interior.y1 - 450 + 1, `the hero sits the top margin below the wall tops (${d0.cam[1].toFixed(0)} of ${d0.interior.y1})`);
   assert.ok(d0.cam[0] >= d0.interior.x0 + 150 - 1 && d0.cam[0] <= d0.interior.x1 - 150 + 1, `and between the walls (${d0.cam[0].toFixed(0)})`);
   const heroFit = d0.fits.find((f) => f.name === 'hero');
-  assert.equal(heroFit.clamped, true, 'the hero was clamped for this build'); assert.equal(d0.fits.length, 11, 'the grammar\'s eleven shots (no label shot: this build carries no words)');
+  assert.equal(heroFit.clamped, true, 'the hero was clamped for this build'); assert.equal(d0.fits.filter((f) => f.name !== 'mugs').length, 11, 'the grammar\'s eleven shots (no label shot: this build carries no words; the mugs\' only where the second mug found room)');
   // EVERY shot of the grammar, still or at the middle of its move, inside the walls, under the tops, above the desk
   for (const f of d0.fits) {
     assert.ok(f.pos[0] >= d0.interior.x0 + 150 - 1 && f.pos[0] <= d0.interior.x1 - 150 + 1, `${f.name} between the walls (${f.pos[0].toFixed(0)})`);
@@ -1583,7 +1583,7 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
     await settle(early.page, 300);
     const es = await seqOf(early.page), ec = await cam(early.page);
     assert.equal(es.shot, es.order[1], `${when}: the plan's second shot`); assert.equal(es.entering, false, `${when}: no entrance running`);
-    assert.ok(near(ec.slice(0, 3), fitOf(es, es.shot).pos), `${when}: the camera on it, not drawn back toward the hero (${ec.slice(0, 3)} vs ${fitOf(es, es.shot).pos.map((n) => n.toFixed(1))})`);
+    assert.ok(near(ec.slice(0, 3), fitOf(es, es.shot).pos), `${when}: the camera on it (${es.shot}), not drawn back toward the hero (${ec.slice(0, 3)} vs ${fitOf(es, es.shot).pos.map((n) => n.toFixed(1))})`);
     await settle(early.page, 1200);
     assert.deepEqual(await cam(early.page), ec, `${when}: and nothing moves it after`);
     assert.deepEqual(clean(early.errors), []);
@@ -1592,11 +1592,11 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
   const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
   await toDone(page);
   await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence.on, null, { timeout: 15_000 }).catch(() => assert.fail('the grammar never began'));
-  // FAST (the suite's pin): the still grammar, eleven distinct shots (no label shot: this build carries no words), the hero first, the black layer over the canvas only
+  // FAST (the suite's pin): the still grammar, twelve distinct shots (no label shot: this build carries no words), the hero first, the black layer over the canvas only
   const f0 = await seqOf(page);
   assert.equal(f0.mode, 'still', 'Fast: locked-off views (static first)');
-  assert.deepEqual(f0.names, ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side', 'glide', 'pullback', 'dolly'], 'eleven distinct shots');
-  assert.equal(f0.order[0], 'hero', 'the first cycle opens on the hero (the entrance lands on it)'); assert.deepEqual([...f0.order].sort(), [...f0.names].sort(), 'every shot once a cycle');
+  assert.deepEqual(f0.names, ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side', 'glide', 'pullback', 'dolly', 'mugs'], 'twelve distinct shots (the mugs\' among them)');
+  assert.equal(f0.order[0], 'hero', 'the first cycle opens on the hero (the entrance lands on it)'); assert.deepEqual([...f0.order].sort(), f0.names.filter((n) => n !== 'mugs' || f0.order.includes('mugs')).sort(), 'every shot once a cycle (the mugs shot in about half of them)');
   assert.equal(new Set(f0.fits.map((f) => f.pos.map((n) => n.toFixed(0)).join())).size, f0.names.length, 'as many different camera positions');
   assert.ok(new Set(f0.fits.map((f) => f.fov.toFixed(1))).size >= 5, `and lenses (${f0.fits.map((f) => f.fov.toFixed(1))})`);
   const layer = await page.evaluate(() => { const f = document.getElementById('done-fade'), c = document.getElementById('stage'); if (!f) return null; const r = f.getBoundingClientRect(), rc = c.getBoundingClientRect(); return { beside: f.parentElement === c.parentElement, pe: getComputedStyle(f).pointerEvents, cover: Math.abs(r.width - rc.width) < 2 && Math.abs(r.height - rc.height) < 2, inWs: document.getElementById('ws').contains(f) }; });
@@ -1793,10 +1793,10 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
     await btn(page, 'Watch the final scene', '#ws-player').click();
     await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 }).catch(async () => assert.fail('the grammar never began: ' + JSON.stringify(await look(page))));
   };
-  /* the macro next (seed 253: hero, macro, low, ...; seed 1 was, until the grammar grew to eleven shots on 2026-10-25) after a short hold: the programs counted in the black, once the hero's
+  /* the macro next (seed 86: hero, macro, low, ...; seed 1, then 253, until the grammar grew to its mugs' shot on 2026-10-25) after a short hold: the programs counted in the black, once the hero's
      last frames are drawn, and again in the macro's hold */
   const intoMacro = async (page, label) => {
-    await page.evaluate(() => window.__GEN2_DONE__.setTiming({ seed: 253, holdMs: 1500, dipOutMs: 300, blackMs: 600, dipInMs: 300, maxFrameMs: 1e9, hold: false }));
+    await page.evaluate(() => window.__GEN2_DONE__.setTiming({ seed: 86, holdMs: 1500, dipOutMs: 300, blackMs: 600, dipInMs: 300, maxFrameMs: 1e9, hold: false }));
     await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return s.shot === 'hero' && s.phase === 'black'; }, null, { timeout: 20_000 }).catch(async () => assert.fail(`${label}: the hero never dipped: ` + JSON.stringify(await look(page))));
     const b = await look(page);
     await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return s.shot === 'macro' && s.phase === 'hold'; }, null, { timeout: 20_000 }).catch(async () => assert.fail(`${label}: the macro never came in: ` + JSON.stringify(await look(page))));
@@ -2065,7 +2065,7 @@ test('Assemble: the Done scene hangs a wall build on its wall and an under-table
     assert.equal(g.frame.mount, mount); assert.equal(g.placement.mount, mount, `${mount}: the scene read the mount`);
     assert.deepEqual(g.backdrops, { wall: false, surface: false }, `${mount}: the builder's wall and slab stay out of the room`);
     assert.equal(g.shadows, true, `${mount}: the build casts its shadow in the room`);
-    assert.deepEqual(g.names, ['hero', 'push', 'low', 'detail', 'slide', 'wide', 'macro', 'side', 'glide', 'pullback', 'dolly'], `${mount}: its own shots, a wide one for the top`);
+    assert.deepEqual(g.names.filter((n) => n !== 'mugs'), ['hero', 'push', 'low', 'detail', 'slide', 'wide', 'macro', 'side', 'glide', 'pullback', 'dolly'], `${mount}: its own shots, a wide one for the top (and the mugs' where the second mug stood)`);
     for (const f of g.fits) assert.ok(f.finite, `${mount} ${f.name}: fitted`);
     const deskY = g.placement.deskY;
     near(g.desk.max[1], deskY, 0.01, `${mount}: the desk top where the scene says`);
@@ -2686,7 +2686,7 @@ test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed i
    focus as it fades in ("focusing on specific things, like if they add a custom label ... starting a stationary scene
    out of focus and ending with it focused on a part of the build"), and the mug wears the logo and, on its back, the
    words ("as if it were print on it like a real coffee mug"). At High, where the shots move. */
-test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'s words get the label shot that comes into focus, and the mug wears the logo and the words', async () => {
+test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'s words get the label shot that comes into focus, and the build\'s mugs stand printed, the second at a free spot', async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 1500 }; });
   const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
@@ -2729,27 +2729,42 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
   assert.ok(Math.abs(f0.target[0] - c[0]) < 1 && Math.abs(f0.target[1] - c[1]) < 1, `aimed at the label (${f0.target.map((n) => n.toFixed(1))} vs ${c.map((n) => n.toFixed(1))})`);
   await page.waitForFunction(() => window.__GEN2_DONE__.focus.state !== 'running', null, { timeout: 6000 }).catch(() => assert.fail('the focus-in never ended'));
   assert.equal(blur((await page.evaluate(() => window.__GEN2_DONE__.focus)).filter), 0, 'and sharp once it has');
-  // THE MUG: the logo facing the room, the words on its back, both on the mug
-  await page.waitForFunction(() => window.__GEN2_DONE__.mugPrint && window.__GEN2_DONE__.mugPrint.logo, null, { timeout: 10_000 }).catch(() => assert.fail('the logo never loaded onto the mug'));
-  const mp = await page.evaluate(() => window.__GEN2_DONE__.mugPrint);
-  assert.equal(mp.words, 'WORLD’S BEST 3D PRINTED STORAGE SYSTEM');
-  assert.deepEqual(mp.bands.map((b) => [b.parent, b.visible]), [['mug', true], ['mug', true]], 'two bands on the mug');
-  const mid = (b) => b.theta[0] + b.theta[1] / 2;
-  assert.ok(Math.abs(mid(mp.bands[0])) < 1e-9 && Math.abs(mid(mp.bands[1]) - Math.PI) < 1e-9, `the logo toward the room, the words toward the wall (${mp.bands.map(mid)})`);
-  // the print darkens the mug where it is drawn (a multiply, white no print): the hero's frame against the same frame without it
+  // THE MUGS: the build's own plan, both prints drawn (the logo's SVG and the saying's face loaded), the second mug at a
+  // free spot with its handle and its shadow, the mugs' shot in the grammar
+  await page.waitForFunction(() => { const m = window.__GEN2_DONE__.mugs; return m && m.logos.every(Boolean) && m.sayings.every(Boolean); }, null, { timeout: 15_000 }).catch(async () => assert.fail('the mugs\' prints never drew: ' + JSON.stringify(await page.evaluate(() => window.__GEN2_DONE__.mugs))));
+  const mp = await page.evaluate(() => { const d = window.__GEN2_DONE__, v = window.__GEN2_VIEWER__, T = v.THREE, c = new T.Box3().setFromObject(v.scene.getObjectByName('mug')).getCenter(new T.Vector3()); return { ...d.mugs, coffee: [c.x, c.z], names: d.sequence.names }; });
+  assert.ok(mp.plan.coffee.back.lines.length > 0 && mp.plan.empty.back.lines.length > 0, `a saying on each mug (${JSON.stringify(mp.plan)})`);
+  assert.deepEqual(mp.logos, [true, true], 'both logos drawn');
+  assert.deepEqual(mp.empty.map((o) => [o.name, o.visible, o.parent]), [['done-mug-empty', true, 'done-room'], ['done-mug-empty', true, 'done-room']], 'the second mug and its handle, in the room');
+  assert.equal(mp.masks, 1, 'its shadow on the desk');
+  assert.ok(Math.abs(mp.empty[0].pos[0] - mp.spot.x) < 0.5 && Math.abs(mp.empty[0].pos[2] - mp.spot.z) < 0.5, `at its spot (${mp.empty[0].pos.map((n) => n.toFixed(1))} vs ${JSON.stringify(mp.spot)})`);
+  assert.ok(Math.hypot(mp.spot.x - mp.coffee[0], mp.spot.z - mp.coffee[1]) >= 169 && mp.spot.z <= mp.coffee[1] + 0.5, 'beside or behind the coffee, not in front of it');
+  if (mp.coffeeAt) assert.ok(Math.abs(mp.coffee[0] - mp.coffeeAt.x) < 0.5 && Math.abs(mp.coffee[1] - mp.coffeeAt.z) < 0.5, `the coffee moved to its spot (${mp.coffee} vs ${JSON.stringify(mp.coffeeAt)})`);
+  assert.ok(mp.names.includes('mugs'), 'the mugs\' shot in the grammar');
+  // the prints are drawn: the mugs' shot held, its frame against the same frame with both prints blank (the glaze's own colour
+  // everywhere), the steam hidden for both (it moves between them); the charcoal glaze darker than the coffee's white
   const inked = await page.evaluate(async () => {
-    const v = window.__GEN2_VIEWER__, mug = v.scene.getObjectByName('mug'), bands = mug.children.filter((o) => o.isMesh && o.material.map && o.material.map.isCanvasTexture);
+    const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, T = v.THREE;
+    for (let sd = 1; sd < 60; sd++) { d.setTiming({ holdMs: 1e9, dipInMs: 0, maxFrameMs: 1e9, seed: sd, hold: true }); if (d.sequence.order.includes('mugs')) break; }
+    d.jump('mugs');
+    await new Promise((r) => setTimeout(r, 600));
+    v.renderer.domElement.getAnimations().forEach((a) => a.finish());
     const read = async () => { v.invalidateFrame(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); const img = new Image(); img.src = v.renderer.domElement.toDataURL('image/png'); await img.decode(); const cv = document.createElement('canvas'); cv.width = img.width; cv.height = img.height; const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0); return g.getImageData(0, 0, cv.width, cv.height).data; };
-    window.__GEN2_DONE__.setTiming({ holdMs: 1e9, maxFrameMs: 1e9, seed: 1, hold: true });
-    await new Promise((r) => setTimeout(r, 400));
-    const steam = ['done-steam', 'done-steam-mist'].map((n) => v.scene.getObjectByName(n)).filter(Boolean); steam.forEach((o) => { o.visible = false; });   // the wisp moves between the two frames
-    const on = await read(); bands.forEach((b) => { b.visible = false; }); const off = await read(); bands.forEach((b) => { b.visible = true; });
-    steam.forEach((o) => { o.visible = true; });
-    let darker = 0, lighter = 0; for (let i = 0; i < on.length; i += 4) { const d = (on[i] + on[i + 1] + on[i + 2]) - (off[i] + off[i + 1] + off[i + 2]); if (d < -30) darker++; else if (d > 30) lighter++; }
-    return { darker, lighter, bands: bands.length };
+    const mats = []; v.scene.traverse((o) => { if (o.isMesh && o.material && o.material.userData && o.material.userData.mug && o.material.userData.mug.uMugPrint.value) mats.push(o.material); });
+    const steam = ['done-steam', 'done-steam-mist'].map((n) => v.scene.getObjectByName(n)).filter(Boolean); steam.forEach((o) => { o.visible = false; });
+    const on = await read();
+    const blank = new T.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1); blank.needsUpdate = true;
+    const was = mats.map((m) => m.userData.mug.uMugPrint.value); mats.forEach((m) => { m.userData.mug.uMugPrint.value = blank; });
+    const off = await read();
+    mats.forEach((m, i) => { m.userData.mug.uMugPrint.value = was[i]; }); steam.forEach((o) => { o.visible = true; }); blank.dispose();
+    let darker = 0, lighter = 0; for (let i = 0; i < on.length; i += 4) { const dd = (on[i] + on[i + 1] + on[i + 2]) - (off[i] + off[i + 1] + off[i + 2]); if (dd < -30) darker++; else if (dd > 30) lighter++; }
+    const bodies = [v.scene.getObjectByName('mug'), v.scene.getObjectByName('done-mug-empty')].map((o) => o.material.userData.mug.uMugBody.value.toArray());
+    return { prints: mats.length, darker, lighter, shot: d.sequence.shot, bodies };
   });
-  assert.ok(inked.bands === 2 && inked.darker > 40 && inked.lighter === 0, `the logo darkens the mug in the hero's frame, nothing lighter (${JSON.stringify(inked)})`);
-  // LEAVING: the strip's rest with it, the print off the cached mug
+  assert.equal(inked.shot, 'mugs'); assert.equal(inked.prints, 2, 'two printed glazes');
+  assert.ok(inked.darker + inked.lighter > 300, `the prints draw in the mugs' shot (${JSON.stringify(inked)})`);
+  assert.ok(inked.bodies[1].every((c, i) => c < 0.2 && c < inked.bodies[0][i]), `the second mug's glaze charcoal, the coffee's white (${JSON.stringify(inked.bodies)})`);
+  // LEAVING: the strip's rest with it, the second mug off the cached room
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 15_000 });
   const gone = await page.evaluate(() => ({ cls: document.documentElement.className, title: document.querySelector('#ws-player .title')?.textContent }));
@@ -2757,8 +2772,12 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
   await settle(page, 3000);
   assert.equal(await page.evaluate(() => document.documentElement.classList.contains('scene-idle')), false, 'and the rest does not come back outside the scene');
   await btn(page, 'Watch the final scene', '#ws-player').click();
-  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugPrint && window.__GEN2_DONE__.mugPrint.logo, null, { timeout: 60_000 });
-  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.scene.getObjectByName('mug').children.filter((o) => o.isMesh && o.material.map && o.material.map.isCanvasTexture).length), 2, 'a second visit prints the mug once, not twice');
+  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugs && window.__GEN2_DONE__.mugs.logos.every(Boolean), null, { timeout: 60_000 });
+  const again = await page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-mug-empty') n++; }); return { n, plan: window.__GEN2_DONE__.mugs.plan }; });
+  assert.equal(again.n, 2, 'a second visit stands the second mug once, not twice');
+  // the plan is the build link's own (the words above changed the link between the visits, so it is read again, not compared)
+  const linked = await page.evaluate(async () => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(location.hash || new URLSearchParams(location.search).get('build') || 'room'))); });
+  assert.deepEqual(again.plan, linked, 'the mugs follow the build\'s link');
   assert.deepEqual(clean(errors), [], 'no errors');
   await ctx.close();
 });

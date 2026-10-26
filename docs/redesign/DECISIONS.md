@@ -3837,3 +3837,62 @@ see, like 'WORLDS BEST 3D PRINTED STORAGE SYSTEM'", and "can we make my logo muc
 - **Not done:** a focus that picks a depth (a rack focus from one drawer to another) needs the live depth of field
   above. The development read-out Astra suggested (render mode, shot name, frame time) is `?debug=1`'s
   `__GEN2_DONE__.sequence` and not drawn on screen.
+
+## 2026-10-25 — The Done scene's mugs: the print in the glaze, a second mug, the build's own sayings, gloss, thinner steam
+
+Joey, after the first print: "this steam against that dark background feels a bit overpowering"; "maybe a second empty mug
+next to it, kind of turned so you might catch one side or the other at certain angles, make it grey like our website
+background, with the square modulith logo, on the other side text that is stacked" ("NEED DRAWER / PRINT DRAWER" x6);
+"It would be fun to randomize the mugs a bit, maybe they are randomly in different spots each new build with different
+sayings or slogans. and every so often the camera focuses on them"; "or like the I<3NY ... 'I<3 MODULAR STORAGE SYSTEMS'";
+"a mug is usually very glossy"; "for the text on the mugs, make sure we are scaling them up to use a decent amount of space
+like a real mug". Astra supplied sayings and pairs, and fonts (Anton, Barlow Condensed, Space Mono).
+
+- **The print is in the glaze** (done.js glaze, MUG_PRINT_GLSL), replacing the two multiplied bands of the morning: the
+  mug's own material reads a wrap-round print (2048 px round the circumference) by the angle about its axis and the height,
+  and multiplies the bake by the glaze's colour, or the ink's where there is ink. So light ink on a dark glaze works, which
+  a multiply over the bake cannot do. The angle's derivatives are taken from the position, not from atan, so the print's
+  seam at the back picks no wrong mip.
+- **Gloss:** both mugs get the desk's sheen (addSheen: Schlick, F0 0.04, the room's environment) at roughness 0.12.
+- **The second mug** (makeMugs): the coffee mug's mesh again (its bake fits anywhere on the desk), the handle turned about
+  the axis by the plan's turn and the print turned with it, the coffee mug's own shadow mask again under it. It stands at
+  a spot on rings 170 to 260 mm round the coffee (the handles reach 84 mm from their axes: Sol 01a17612) (done-fit.js mugSpots): clear of every prop and of the build, off the
+  desk's edge, never in front of the coffee. With no spot free, no second mug and no mugs' shot.
+- **The build's own mugs** (done-fit.js MUGS, mugPlan, hashSeed): the build link's FNV-1a seed picks each mug's saying (a
+  pair from Astra's list a quarter of the time), the second mug's turn and its spot. The same build always shows the same
+  mugs; another build shows others. JERRARI's coffee mug (white, the logo 70 mm tall) carries 8 sayings, MODULITH's
+  (glaze #4A4C54, a little lighter than the site's #2C2D31 since it multiplies the bake; paper ink; the square logo 54 mm
+  tall, img/modulith-square.svg from the site) carries 9, Joey's NEED DRAWER and the I ♥ MODULAR STORAGE SYSTEMS among
+  them. `accent` lines draw in the brand orange.
+- **Type:** the planner's own faces, so no download: Archivo Black at its narrowest (for Barlow Condensed and Anton's
+  role), at its own width, or IBM Plex Mono 600 (for Space Mono's). The block takes 28 % of the way round (about 100 deg)
+  and 80 % of the height, one size for its lines, the largest that fits; stacks of five lines or more are set tight.
+  The saying draws once its face has loaded.
+- **The mugs' shot:** a slow arc on both mugs, fitted to them, coming into focus, in about half the cycles
+  (MUG_SHOT_SHARE).
+- **Steam:** sheets 0.6 to 0.38 alpha, mist 0.16 to 0.11.
+- **The coffee moves too** (Joey: "the mug could randomly be placed by the plan on the left side sometimes, also can the
+  white Jerrari Mug randomly be placed sometimes too, even though it has steaming coffee in it?"): in 60 % of builds
+  (MUG_HOME_SHARE 0.4 stay home, where the room was composed round them) the coffee mug, its handle and its coffee (the
+  steam with it) stand at a free spot anywhere on the desk (done-fit.js deskSpots: a 30 mm grid, the props and the build
+  cleared, and the desk in front of the build kept clear so no mug stands between the shots and the build), its shadow
+  mask moved with it; only a spot with room for the second mug beside it, and where both masks stay on the desk (its
+  ends, front and back). A mask the slide already cut at a desk end keeps the coffee home and makes no second mug. The visit's own clone of the room is moved, the
+  cached load never.
+- **Astra's saying** "I WAS LEFT / UNSUPERVISED / WITH CALIPERS" joins the coffee mug, UNSUPERVISED orange and 1.4 times
+  the others (`scale`, a line's size against the others; sayingLayout counts it in the height and the width).
+- **Both mugs turn** (Joey: "randomize the rotation of the Jerrari mug as well"): each by the plan's turn, the handle
+  about the mug's axis and the print with it; only for an upright mug (the room's is). Astra's "DESIGN A DRAWER, / THEY
+  SAID. / I MAY HAVE / MISUNDERSTOOD / THE SCOPE." joins the coffee mug: three levels after a gap (an empty line), the last
+  two orange, THE SCOPE. the biggest.
+- **Review.** Sol `01a17612`. Round 1, four findings: the cloned mask losing its rotation discarded (the quads lie flat
+  by their geometry's rotation, which the clone shares); the two mugs able to meet accepted (the rings from 170 mm: the
+  handles reach 84 mm from their axes); a tilted mug's handle turning about the wrong axis partly accepted (the room's mug
+  is upright; turns only for an upright mug); the mugs' shot without a subject when the second mug found no room
+  accepted (the coffee alone). Round 2, two findings, both accepted: the mask's back edge unchecked; a mask cut by the
+  slide cloned under the second mug (no second mug then). Found by the e2e, not the review: a moved coffee carried a mask
+  the slide had cut 140 mm past the desk's end (the 12W build).
+- **Checks.** Unit 34 of 34. The e2e cases the change touches: the room's entry, the prop shadows, the grammar (three
+  runs), the relief, the mounts, the colours, the steam, the strip and mugs case; all pass. Once, before the mask fix, the
+  grammar case's Next-view-during-the-entrance check found the camera 33 mm off the shot's pose; not seen in three runs
+  since. Not deployed.

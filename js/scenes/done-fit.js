@@ -173,6 +173,8 @@ export function lensFor(cam, box, view, { maxPx = LENS.maxPx, samples = LENS.sam
  *   fitted ends (`blend`: blendShot);
  * - dolly: the dolly zoom, the lens narrowing while the camera backs off so the build keeps its size and the room behind
  *   it closes in.
+ * - mugs: a slow arc on the mugs (done.js makeMugs; Joey: "every so often the camera focuses on them or catches them
+ *   at the right angle"), coming into focus; in about half the cycles (MUG_SHOT_SHARE).
  * `reversible`: each showing runs the move one way or the other, by the visit's random source. */
 export function around(centre, swing) {
   const from = { ...centre }, to = { ...centre };
@@ -180,6 +182,7 @@ export function around(centre, swing) {
   return { from, to };
 }
 const HERO_SWING = { az: -6, el: -2, fill: 0.04 };
+export const MUG_SHOT_SHARE = 0.5;   // the cycles the mugs' shot is in
 export const GRAMMAR = {
   tabletop: [
     { name: 'hero', ...around({ az: 28, el: 20, fovV: 29.9, fill: 0.5, targetLift: -0.08 }, HERO_SWING), swing: HERO_SWING },   // room.json's own hero is the centre (shotsFor)
@@ -200,6 +203,7 @@ export const GRAMMAR = {
     { name: 'glide', from: { az: -30, el: 5, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 5, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
     { name: 'pullback', from: { az: -34, el: 9, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 16, fovV: 28, fill: 0.5, targetLift: -0.08 }, blend: true },
     { name: 'dolly', from: { az: 20, el: 12, fovV: 40, fill: 0.5, targetLift: -0.06 }, to: { az: 20, el: 12, fovV: 22, fill: 0.5, targetLift: -0.06 }, reversible: true },
+    { name: 'mugs', from: { az: -26, el: 16, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 24, el: 11, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true },
   ],
   /* A WALL BUILD hangs on the back wall over the desk (roomAnchor), so it is seen standing in front of the desk or from
      its chair: the shots keep near the build's own height, none looks down on it from over the wall's top, and the top
@@ -217,6 +221,7 @@ export const GRAMMAR = {
     { name: 'glide', from: { az: -30, el: 2, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 2, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
     { name: 'pullback', from: { az: -34, el: 4, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 6, fovV: 28, fill: 0.5, targetLift: -0.04 }, blend: true },
     { name: 'dolly', from: { az: 20, el: 4, fovV: 40, fill: 0.5, targetLift: -0.04 }, to: { az: 20, el: 4, fovV: 22, fill: 0.5, targetLift: -0.04 }, reversible: true },
+    { name: 'mugs', from: { az: -26, el: 12, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 24, el: 8, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true },
   ],
   /* AN UNDER-TABLE BUILD hangs under the desk's front edge (roomAnchor; Joey 2026-10-25: "align the under-table build to
      be installed under this scenes table"), so it is seen from in front of the desk, from about its top or below:
@@ -235,6 +240,7 @@ export const GRAMMAR = {
     { name: 'glide', from: { az: -30, el: 1, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 1, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
     { name: 'pullback', from: { az: -34, el: 3, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 4, fovV: 28, fill: 0.5 }, blend: true },
     { name: 'dolly', from: { az: 20, el: 3, fovV: 40, fill: 0.5 }, to: { az: 20, el: 3, fovV: 22, fill: 0.5 }, reversible: true },
+    { name: 'mugs', from: { az: -26, el: 16, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 24, el: 11, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true },
   ],
 };
 
@@ -527,6 +533,8 @@ export function fitShot(spec, box, view, interior, aims = {}, { floorY = 0 } = {
   // a label: aimed at its centre and fitted to its own box (`aims.label`: { box }; done.js drops the shot without one)
   if (s.aim === 'label' && aims.label) { const b = aims.label.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: b.max.z }; }
   // the fronts' top row (`aims.row`: { x0, x1, y, z }), the aim `shiftX` of its width from its middle
+  // the mugs (`aims.mugs`: { box }, both of them): aimed at their middle, fitted to them
+  if (s.aim === 'mugs' && aims.mugs) { const b = aims.mugs.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 }; }
   if (s.aim === 'row' && aims.row) { const r = aims.row; s.targetAt = { x: r.x0 + (r.x1 - r.x0) * (0.5 + (s.shiftX || 0)), y: r.y, z: r.z }; }
   const cam = clampToInterior(shotCamera(s, box, view), interior);
   const floor = floorY + FLOOR_MM;
@@ -614,7 +622,7 @@ export function gapDrop(sunDir, gap, margin = 3) {
  * circle in the center?"; one column from the middle, it was): `slices` camera-facing sheets stood across the coffee at
  * these depths, in radii along the view (+ toward the camera), each as wide at its foot as the coffee's chord there
  * (steamSlices), and a thin mist lying on the surface (`mist`, its alpha). `alpha` is a sheet's. */
-export const STEAM = { fps: { high: 24, balanced: 15 }, width: 2.8, height: 4.6, alpha: 0.6, mist: 0.16, slices: [-0.75, -0.25, 0.25, 0.75] };
+export const STEAM = { fps: { high: 24, balanced: 15 }, width: 2.8, height: 4.6, alpha: 0.38, mist: 0.11, slices: [-0.75, -0.25, 0.25, 0.75] };
 export function steamSlices(depths = STEAM.slices) {
   return depths.map((d, i) => ({ d, half: Math.sqrt(Math.max(0, 1 - d * d)), seed: i }));
 }
@@ -681,4 +689,111 @@ export function steamBeat(now, dueAt, rate) {
   const iv = 1000 / rate;
   if (now < dueAt - 4) return { tick: false, dueAt };
   return { tick: true, dueAt: now - dueAt > iv ? now + iv : dueAt + iv };
+}
+
+/* THE MUGS (Joey 2026-10-25: "can the coffee mug feature my jerrari logo, as if it were print on it like a real coffee
+ * mug", "maybe a second empty mug next to it, kind of turned so you might catch one side or the other at certain angles,
+ * make it grey like our website background, with the square modulith logo, on the other side text that is stacked",
+ * "It would be fun to randomize the mugs a bit, maybe they are randomly in different spots each new build with different
+ * sayings or slogans", "or like the I<3NY ... 'I<3 MODULAR STORAGE SYSTEMS' in a goofy cliche way", "a mug is usually very
+ * glossy"; the sayings also Astra's, that day). Each mug's look: its glaze (`body`, an sRGB hex, null for the bake's own
+ * white), its ink, its logo (an SVG beside the planner's, its aspect, its height on the mug in mm) and the sayings its back
+ * may carry: `lines` stacked big, `small` a line under them in small type, a '♥' in a line drawn red, `accent` the lines
+ * drawn in the brand's orange (the punchline), `scale` each line's size against the others (1 by default), `type` the face: 'condensed' (Archivo Black at its narrowest, a workshop
+ * sign; the default), 'wide' (Archivo Black at its own width) or 'mono' (IBM Plex Mono, a log's deadpan). Both faces are
+ * the planner's own (fonts/), so a saying costs no download (Astra's picks that day were Anton, Barlow Condensed and
+ * Space Mono, for the same three voices). The coffee is
+ * JERRARI's (the designer who cannot stop improving things), the empty one MODULITH's (organisation, obsessed), in the
+ * site's charcoal (--ml-charcoal #2C2D31) with its paper ink (#ECECEE): the glaze a little lighter than it (#4A4C54), since
+ * it multiplies the bake's light, and at #2C2D31 the mug drew all but black on its lit side (2026-10-25, the first look). */
+export const MUGS = {
+  jerrari: { body: null, ink: '#3b3b3e', accent: '#f06a35', logo: { src: 'img/jerrari-logo.svg', aspect: 798.74 / 1365.44, hMm: 70 }, sayings: [
+    { lines: ['WORLD’S BEST', '3D PRINTED', 'STORAGE SYSTEM'] },
+    { lines: ['JUST ONE', 'SMALL CHANGE.'], small: 'Six prototypes later.', type: 'wide' },
+    { lines: ['COFFEE IN.', 'PARTS OUT.'], type: 'wide', accent: [1] },
+    { lines: ['IT WORKED', 'IN FUSION.'], type: 'mono' },
+    { lines: ['FINAL VERSION', 'FINAL VERSION 2', 'FINAL VERSION 2 FIXED', 'FINAL VERSION 3'], type: 'mono', accent: [3] },
+    { lines: ['I HAD A', 'FIVE-MINUTE IDEA.', 'THREE PRINTERS', 'ARE WORKING ON IT.'] },
+    { lines: ['DO NOT DISTURB.', 'I’M FIXING SOMETHING', 'THAT ALREADY WORKS.'] },
+    { lines: ['I MADE A THING', 'TO HOLD THE THINGS', 'I MAKE THINGS WITH.'] },
+    { lines: ['I WAS LEFT', 'UNSUPERVISED', 'WITH CALIPERS'], accent: [1], scale: [1, 1.4, 1] },   // Astra: the middle line largest, in orange
+    { lines: ['DESIGN A DRAWER,', 'THEY SAID.', '', 'I MAY HAVE', 'MISUNDERSTOOD', 'THE SCOPE.'], accent: [4, 5], scale: [1, 1, 0.45, 0.8, 1.3, 1.5] },   // Astra: three levels after a gap (the empty line), THE SCOPE. the biggest
+  ] },
+  modulith: { body: '#4a4c54', ink: '#ececee', accent: '#ff6a1a', logo: { src: 'img/modulith-square.svg', aspect: 908.3 / 715.5, hMm: 54 }, sayings: [
+    { lines: ['NEED DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER'], accent: [0] },
+    { lines: ['NEEDED A DRAWER.', 'PRINTED A DRAWER.', 'NEEDED A CASE.', 'PRINTED A CASE.', 'ANYWAY,', 'THIS IS A WALL NOW.'], accent: [5] },
+    { lines: ['I ♥', 'MODULAR', 'STORAGE', 'SYSTEMS'], type: 'wide' },
+    { lines: ['A PLACE FOR EVERYTHING.', 'INCLUDING THE PARTS', 'FOR MORE PLACES', 'FOR EVERYTHING.'] },
+    { lines: ['I CAN STOP', 'ADDING DRAWERS', 'WHENEVER', 'I HAVE ENOUGH', 'DRAWERS.'] },
+    { lines: ['THIS WAS SUPPOSED', 'TO SAVE SPACE.'], accent: [1] },
+    { lines: ['EMPTY DRAWER?', 'THAT’S EXPANSION', 'CAPACITY.'] },
+    { lines: ['ORGANIZED CHAOS.', 'NOW WITH LABELS.'] },
+    { lines: ['ONE MORE DRAWER.', 'THEN I’M DONE.'], small: 'Last updated: one drawer ago.', accent: [1] },
+  ] },
+};
+/* Astra's pairs, for when the camera catches both: the coffee's line, then the empty one's answer */
+export const MUG_PAIRS = [
+  [{ lines: ['I MADE', 'MORE PARTS.'] }, { lines: ['I MADE', 'MORE ROOM.'] }],
+  [{ lines: ['JUST ONE MORE', 'PROTOTYPE.'] }, { lines: ['JUST ONE MORE', 'DRAWER.'] }],
+  [{ lines: ['THIS IS THE', 'FINAL VERSION.'] }, { lines: ['WE’VE HEARD', 'THAT BEFORE.'] }],
+];
+export const MUG_PAIR_SHARE = 0.25;   // a pair this often, else a saying each
+/* A build's own seed: FNV-1a over its link's text, so a build shows the same mugs every time it is opened, and another
+ * build other ones */
+export function hashSeed(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < String(text).length; i++) { h ^= String(text).charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h >>> 0;
+}
+/* The mugs a build gets: each mug's back (a pair now and then); whether the coffee stays at its home on the desk (where the
+ * room was composed round it, MUG_HOME_SHARE of builds) or stands elsewhere, and a pick in [0, 1) among the desk's free
+ * spots (deskSpots; Joey 2026-10-25: "the mug could randomly be placed by the plan on the left side sometimes, also can the
+ * white Jerrari Mug randomly be placed sometimes too"); the empty mug's turn about its axis (its logo's facing, in degrees
+ * from the room's front; its handle a quarter turn on; the coffee's the same way) and a pick among the spots beside the
+ * coffee (mugSpots, from 170 mm out: the handles reach 84 mm from their axes, Sol 01a17612) */
+export const MUG_HOME_SHARE = 0.4;
+export function mugPlan(rng) {
+  const pick = (list) => list[Math.floor(rng() * list.length) % list.length];
+  const pair = rng() < MUG_PAIR_SHARE ? pick(MUG_PAIRS) : null;
+  return {
+    coffee: { back: pair ? pair[0] : pick(MUGS.jerrari.sayings), home: rng() < MUG_HOME_SHARE, spot: rng(), turnDeg: Math.round(rng() * 360) },   // the coffee turned too (Joey: "randomize the rotation of the Jerrari mug as well")
+    empty: { back: pair ? pair[1] : pick(MUGS.modulith.sayings), turnDeg: Math.round(rng() * 360), spot: rng() },
+  };
+}
+/* Where the empty mug may stand: points on rings round the coffee mug's centre `c` ({ x, z }, mm, the stage's), each a
+ * circle of `radius` (the body and its handle) clear of every box in `obstacles` (props, the build: { min, max } in x and
+ * z, grown by `gap`), inside `desk` by `edge`, and not in front of the coffee mug (z no more than its own), so it never
+ * stands between the camera and the build or the coffee. In ring order, nearest first. */
+export function mugSpots(c, obstacles, desk, { radius = 70, gap = 12, edge = 25, rings = [170, 200, 230, 260], step = 20 } = {}) {
+  const out = [];
+  const clear = (p) => obstacles.every((b) => {
+    const dx = Math.max(b.min.x - gap - p.x, 0, p.x - b.max.x - gap), dz = Math.max(b.min.z - gap - p.z, 0, p.z - b.max.z - gap);
+    return Math.hypot(dx, dz) > radius;
+  });
+  for (const d of rings) for (let a = 0; a < 360; a += step) {
+    const t = (a * Math.PI) / 180, p = { x: c.x + d * Math.sin(t), z: c.z - d * Math.cos(t) };
+    if (p.z > c.z) continue;
+    if (p.x - radius < desk.min.x + edge || p.x + radius > desk.max.x - edge || p.z - radius < desk.min.z + edge || p.z + radius > desk.max.z - edge) continue;
+    if (clear(p)) out.push(p);
+  }
+  return out;
+}
+/* Where a mug may stand anywhere on the desk: a grid of `step` over `desk`, each a circle of `radius` clear of every box in
+ * `obstacles` grown by `gap` and inside the desk by `edge`. In rows from the back, left to right. */
+export function deskSpots(obstacles, desk, { radius = 70, gap = 12, edge = 25, step = 30 } = {}) {
+  const out = [];
+  const clear = (p) => obstacles.every((b) => Math.hypot(Math.max(b.min.x - gap - p.x, 0, p.x - b.max.x - gap), Math.max(b.min.z - gap - p.z, 0, p.z - b.max.z - gap)) > radius);
+  for (let z = desk.min.z + edge + radius; z <= desk.max.z - edge - radius; z += step) for (let x = desk.min.x + edge + radius; x <= desk.max.x - edge - radius; x += step) if (clear({ x, z })) out.push({ x, z });
+  return out;
+}
+
+/* A saying's layout on a mug's back, in mm: the big lines one size, the largest that fits `w` wide and `h` tall (`fit(line,
+ * size)` measures a line's width at a size), the small line a third of it; returns { size, small, lead } */
+export function sayingLayout(saying, w, h, fit) {
+  const n = saying.lines.length, smallShare = saying.small ? 0.42 : 0, lead = n >= 5 ? 1.02 : 1.12;   // a long stack set tight, as a mug's is
+  const scales = saying.lines.map((_, i) => (saying.scale && saying.scale[i]) || 1);
+  let size = h / ((scales.reduce((a, b) => a + b, 0) + smallShare) * lead);
+  saying.lines.forEach((line, i) => { size = Math.min(size, w / Math.max(1e-6, fit(line, 1) * scales[i])); });
+  for (const line of saying.small ? [saying.small] : []) size = Math.min(size, w / Math.max(1e-6, fit(line, 1)) / 0.36);
+  return { size, small: size * 0.36, lead, scales };
 }

@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, MUG_PAIRS, MUG_HOME_SHARE, hashSeed, mugPlan, mugSpots, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -79,11 +79,11 @@ test('shotCamera: targetShift aims by fractions of the box\'s width and depth (t
   close(c.target.x, -0.25 * 176, 1e-9, 'a quarter of the width to -X'); close(c.target.z, 10.5 + 0.5 * 193, 1e-9, 'half the depth toward the front');
 });
 
-test('the grammar\'s shots: twelve distinct cameras, every one moving, each fittable to the build, the lenses and heights Joey asked for', () => {
+test('the grammar\'s shots: thirteen distinct cameras, every one moving, each fittable to the build, the lenses and heights Joey asked for', () => {
   const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
   const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
   const shots = GRAMMAR.tabletop;
-  assert.deepEqual(shots.map((s) => s.name), ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side', 'label', 'glide', 'pullback', 'dolly']);
+  assert.deepEqual(shots.map((s) => s.name), ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side', 'label', 'glide', 'pullback', 'dolly', 'mugs']);
   assert.equal(new Set(shots.map((s) => s.name)).size, shots.length, 'distinct');
   assert.deepEqual(shots.filter((s) => !s.to).map((s) => s.name), [], 'every shot moves (Joey 2026-10-25: "There are a lot of frozen views")');
   assert.equal(shots[0].name, 'hero');
@@ -404,13 +404,13 @@ test('maskQuad and fitShot follow the desk top\'s height when the room moves for
   close(under.position.y, raw.position.y, 1e-9, 'no desk floor under the desk'); assert.ok(!under.floored);
 });
 
-test('the grammar per mount: a wall and an under-table build get twelve shots each, the hero first, all moving, one drawer moment, none from far above', () => {
+test('the grammar per mount: a wall and an under-table build get thirteen shots each, the hero first, all moving, one drawer moment, none from far above', () => {
   const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
   const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
   for (const m of ['wall', 'under-table']) {
     const shots = GRAMMAR[m];
-    assert.equal(shots.length, 12, m); assert.equal(new Set(shots.map((s) => s.name)).size, 12, `${m}: distinct`);
-    assert.equal(shots[0].name, 'hero'); assert.equal(shots.filter((s) => s.to).length, 12, `${m}: every shot moves`);
+    assert.equal(shots.length, 13, m); assert.equal(new Set(shots.map((s) => s.name)).size, 13, `${m}: distinct`);
+    assert.equal(shots[0].name, 'hero'); assert.equal(shots.filter((s) => s.to).length, 13, `${m}: every shot moves`);
     assert.deepEqual(GRAMMAR.tabletop.slice(8).map((s) => s.name), shots.slice(8).map((s) => s.name), `${m}: the four shots of 2026-10-25`);
     assert.deepEqual(shots.filter((s) => s.drawer).map((s) => s.name), ['detail'], `${m}: the drawer moment`);
     assert.ok(!shots.some((s) => s.name === 'top'), `${m}: no top shot`);
@@ -454,6 +454,62 @@ test('the shots of 2026-10-25: the label glide fits the label, the glide trucks 
   close(d1.distance * Math.tan((d1.fov * Math.PI) / 360), d0.distance * Math.tan((d0.fov * Math.PI) / 360), 1e-6, 'the build the same size');
   for (const n of ['label', 'glide', 'slide', 'dolly']) assert.equal(shot(n).reversible, true, `${n} runs either way`);
   assert.equal(shot('label').focusIn, true, 'the label comes into focus');
+});
+
+test('the mugs: a build\'s own seed picks its sayings, the empty mug\'s turn and its spot, the same every time and other builds otherwise; the spots clear of the props, the build, the desk\'s edge and the coffee\'s front', () => {
+  assert.equal(hashSeed('#build=abc'), hashSeed('#build=abc'), 'a link, one seed');
+  assert.notEqual(hashSeed('#build=abc'), hashSeed('#build=abd'), 'another link, another');
+  const a = mugPlan(rngFrom(hashSeed('#build=abc'))), b = mugPlan(rngFrom(hashSeed('#build=abc')));
+  assert.deepEqual(a, b, 'the same build, the same mugs');
+  const plans = Array.from({ length: 60 }, (_, i) => mugPlan(rngFrom(hashSeed('#build=' + i))));
+  const backs = new Set(plans.map((p) => p.empty.back.lines.join('|'))), fronts = new Set(plans.map((p) => p.coffee.back.lines.join('|')));
+  assert.ok(backs.size >= 8 && fronts.size >= 6, `the sayings vary across builds (${backs.size} empty, ${fronts.size} coffee)`);
+  assert.ok(plans.some((p) => p.empty.back.lines[0] === 'NEED DRAWER'), 'Joey\'s NEED DRAWER among them');
+  assert.ok(plans.some((p) => p.empty.back.lines.join(' ').includes('♥')), 'and the I ♥ MODULAR STORAGE SYSTEMS');
+  const paired = plans.filter((p) => MUG_PAIRS.some(([x, y]) => x === p.coffee.back && y === p.empty.back)).length;
+  assert.ok(paired > 3 && paired < 30, `a pair now and then (${paired} of 60)`);
+  for (const p of plans) assert.ok(p.empty.turnDeg >= 0 && p.empty.turnDeg <= 360 && p.empty.spot >= 0 && p.empty.spot < 1);
+  assert.equal(MUGS.modulith.body, '#4a4c54', 'the empty mug in the site\'s charcoal'); assert.equal(MUGS.modulith.ink, '#ececee', 'its paper ink');
+  // the spots, on the room as it stands (stage mm): the mug at (440, 219), the monitor's body behind it to the right, the
+  // keyboard to its right, the caliper in front to its left, the build at the centre
+  const c = { x: 440, z: 219 };
+  const obstacles = [
+    { min: { x: 460, z: 10 }, max: { x: 1080, z: 55 } }, { min: { x: 640, z: -17 }, max: { x: 900, z: 183 } }, { min: { x: 550, z: 119 }, max: { x: 990, z: 259 } },
+    { min: { x: 103, z: 190 }, max: { x: 337, z: 276 } }, { min: { x: -135 - 28, z: -92 - 28 }, max: { x: 135 + 28, z: 117 + 28 } },
+  ];
+  const desk = { min: { x: -680, z: -117 }, max: { x: 1120, z: 289 } };
+  const spots = mugSpots(c, obstacles, desk);
+  assert.ok(spots.length >= 3, `somewhere to stand (${spots.length} spots)`);
+  for (const p of spots) {
+    assert.ok(p.z <= c.z, 'never in front of the coffee');
+    assert.ok(p.x - 70 >= desk.min.x + 25 && p.x + 70 <= desk.max.x - 25 && p.z - 70 >= desk.min.z + 25, 'on the desk, off its edge');
+    for (const o of obstacles) {
+      const dx = Math.max(o.min.x - 12 - p.x, 0, p.x - o.max.x - 12), dz = Math.max(o.min.z - 12 - p.z, 0, p.z - o.max.z - 12);
+      assert.ok(Math.hypot(dx, dz) > 70, `clear of every prop and the build (${JSON.stringify(p)})`);
+    }
+  }
+  const d = (p) => Math.hypot(p.x - c.x, p.z - c.z);
+  for (let i = 1; i < spots.length; i++) assert.ok(d(spots[i]) >= d(spots[i - 1]) - 1e-9, 'nearest first');
+  assert.deepEqual(mugSpots(c, [{ min: { x: -2000, z: -2000 }, max: { x: 2000, z: 2000 } }], desk), [], 'and none where nothing is free');
+  // a saying's layout: one size for its big lines, the largest that fits, the small line a third of it
+  const fit = (line, s) => line.length * 0.7 * s;
+  const lay = sayingLayout({ lines: ['ONE MORE DRAWER.', 'THEN I’M DONE.'], small: 'Last updated: one drawer ago.' }, 50, 60, fit);
+  assert.ok(Math.abs(lay.size - 50 / (16 * 0.7)) < 1e-9, `the widest line fills the width (${lay.size})`);
+  assert.ok(Math.abs(lay.small - lay.size * 0.36) < 1e-12);
+  const tall = sayingLayout(MUGS.modulith.sayings[0], 80, 60, fit);
+  assert.ok(tall.size * tall.lead * 7 <= 60 + 1e-9, 'seven lines fit the height');
+  // a line drawn larger (Astra's UNSUPERVISED): its share of the height and of the width counted at its own size
+  const unsup = MUGS.jerrari.sayings.find((x) => x.lines[1] === 'UNSUPERVISED');
+  assert.ok(unsup && unsup.accent[0] === 1 && unsup.scale[1] > 1, 'I WAS LEFT / UNSUPERVISED / WITH CALIPERS, its middle line orange and largest');
+  const ul = sayingLayout(unsup, 80, 60, fit);
+  assert.deepEqual(ul.scales, unsup.scale);
+  assert.ok(ul.size * ul.lead * ul.scales.reduce((a, b) => a + b, 0) <= 60 + 1e-9 && fit('UNSUPERVISED', ul.size * 1.4) <= 80 + 1e-9, 'the larger line fits too');
+  // the coffee's own place: at home in about MUG_HOME_SHARE of builds, elsewhere otherwise, anywhere on the desk that is free
+  const homes = plans.filter((x) => x.coffee.home).length;
+  assert.ok(homes > 60 * MUG_HOME_SHARE * 0.5 && homes < 60 * Math.min(1, MUG_HOME_SHARE * 1.6), `at home in some builds, not all (${homes} of 60)`);
+  const free = deskSpots(obstacles, desk);
+  assert.ok(free.some((p) => p.x < -200) && free.some((p) => p.x > 300), `spots on both sides of the build (${free.length})`);
+  for (const p of free) for (const o of obstacles) assert.ok(Math.hypot(Math.max(o.min.x - 12 - p.x, 0, p.x - o.max.x - 12), Math.max(o.min.z - 12 - p.z, 0, p.z - o.max.z - 12)) > 70, 'clear of every box');
 });
 
 /* THE VISITOR'S ROOM COLOURS (2026-10-25): the colour maths the room is repainted by. The bake's paint is room.json's
