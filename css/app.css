@@ -192,6 +192,10 @@ html.ws-mode-flip #ws *, html.ws-mode-flip #ws *::before, html.ws-mode-flip #ws 
 #ws-tools .view button { height: 36px; padding: 0 14px; border-radius: 10px; border: none; font-family: var(--font-mono); font-size: 13px; background: transparent; color: var(--ink-2); cursor: pointer; }
 #ws-tools .view button.on { background: var(--toggle-on); color: var(--ink); font-weight: 600; }
 #ws-tools .view button[disabled] { opacity: .45; cursor: not-allowed; }
+/* Room | Neutral (Colors): words, so the interface's own face, not the 3D/2D chip's mono; on a phone's bar it takes the
+   place of what does nothing there, the 3D-only chip and Explode's "comes later" (the bar fitted its 370 px exactly before) */
+#ws-tools .backdrop button { font-family: inherit; font-size: 12px; padding: 0 12px; }
+@media (max-width: 1023px) { #ws-tools:has(.backdrop) > .view.fixed, #ws-tools:has(.backdrop) > .explode.soon { display: none; } }
 #ws-tools .measure.on { color: var(--measure); }
 #ws-tools .quality { display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
 #ws-dock { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 20px; padding: 10px 10px 10px 12px; border-radius: 20px; white-space: nowrap; }
@@ -443,8 +447,7 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-colors h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
 #ws-colors .head .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
 /* the Studio / Room stage toggle (the Done scene's room as a stage, behind ?done=room, 2026-10-23) */
-#ws-colors .head .stage { display: flex; gap: 3px; padding: 3px; margin-top: 6px; align-self: flex-start; border-radius: 10px; background: var(--track); }
-#ws-colors .head .stage .seg { height: 30px; padding: 0 12px; border-radius: 8px; font-size: 12px; }
+/* the Room | Neutral backdrop switch is the toolbar's now (#ws-tools .backdrop, the .view chip's look) */
 #ws-colors section { display: flex; flex-direction: column; gap: 6px; }
 #ws-colors .schemes { display: flex; flex-direction: column; gap: 4px; }
 #ws-colors .scheme { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 10px; border-radius: 12px; font-size: 13px; font-weight: 600; text-align: left; }

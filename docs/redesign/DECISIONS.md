@@ -4121,3 +4121,23 @@ analytic in the shader, not meshes). He copied the spool into its own file.
 - **Checks.** A unit test (one row a filament, the same regions as the line, each row's own swatch, the control that the
   line repeats a filament); the Colors step 6 cases and the phone journey pass. Review: Sol `01a17823` round 14: one
   finding, discarded (it read the payload's shorthand, not the code); then no findings. Not deployed.
+
+## 2026-10-26 — Colors: the build's colours first, Room | Neutral in the toolbar
+
+- **Asked** (Joey, of the panel with the room on: "it also seems to default to the 'room' tab, I think users want to first
+  select their builds color, and room color would be secondary ... under the room color tab, we still show the build
+  preview and parts colors which feel like they should only be under the studio button, is studio the correct word?";
+  then, of the proposal: "Yes: panel always leads with the build's colours, room wall/desk as a small section at the
+  bottom only while the room shows, and the view switch moves to the toolbar as Room | Neutral."). The Studio | Room
+  control at the top of the panel read as the panel's tabs; it only ever changed the backdrop.
+- **Now.** The panel leads with the build's look, its filaments and its rows whatever the backdrop; the room's wall and desk
+  are its last section, only while the room shows. The switch is the toolbar's, beside 3D | 2D, as **Room | Neutral** (not
+  "Build", which is the first workspace tab's name; "Neutral" says what that view is for, judging colours on a plain,
+  colour-accurate stage). The stored choice keeps its word (`studio`), so an earlier pick means the same.
+- **Phone.** The bar fitted its 370 px exactly before; with the switch it overflowed by 14 px and squeezed the icons to
+  20 px. On a phone the 3D-only chip (2D does nothing in Colors) and Explode's "comes later" give way to it: 44 px icons
+  again, ending at 344 px. Shots: `D:\Claude - Output\done-scene-spools-2026-10-26\panel`.
+- **Checks.** The switch's case asserts the toolbar's Room | Neutral, nothing in the panel head, the panel's order (head,
+  look, ..., room last) and no room section under Neutral; a new phone case (nothing scrolled or off screen, every button
+  at least 40 px) fails without the phone rule. The Colors room, step 6 and phone journey cases pass. Review: Sol
+  `01a17823` round 15, no findings. Not deployed.

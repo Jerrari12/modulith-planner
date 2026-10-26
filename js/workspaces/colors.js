@@ -186,8 +186,9 @@ export function mountColors(stage, ctx) {
      a visitor who picks Studio keeps Studio in this browser (STAGE_KEY); a room that fails to load falls back to Studio for
      the session (the memo) without storing anything. */
   const ROOM_FLAG = (new URLSearchParams(location.search).get('done') || 'room') === 'room';   // on for everyone (Joey 2026-10-26); ?done=off turns it off
-  const STAGE_KEY = 'gen2-colors-stage';   // 'studio' | 'room', written only by the toggle
+  const STAGE_KEY = 'gen2-colors-stage';   // 'studio' | 'room', written only by the toggle (the stored word stays 'studio' for Neutral: a visitor's earlier pick keeps meaning the same)
   let room = null;   // { leaveFn, handle } while the room is on or loading
+  let syncBar = null;   // the toolbar's sync, once it is made (its Room | Neutral switch follows st.room)
   const storedStage = (() => { try { return storage()?.getItem(STAGE_KEY); } catch { return null; } })();
   st.room = ROOM_FLAG && (ctx.memo && ctx.memo.colorsRoom != null ? !!ctx.memo.colorsRoom : storedStage !== 'studio');
   function enterRoom() {
@@ -265,21 +266,12 @@ export function mountColors(stage, ctx) {
   function renderPanel() {
     const p = pal();
     panel.replaceChildren();
+    /* the panel leads with the build's colours whatever the backdrop (Joey 2026-10-26: "panel always leads with the build's
+       colours, room wall/desk as a small section at the bottom only while the room shows, and the view switch moves to the
+       toolbar as Room | Neutral"): the switch is the toolbar's (syncBar), the room's wall and desk the panel's last section */
     const head = el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]);
-    if (ROOM_FLAG) head.appendChild(el('div.stage', { role: 'group', 'aria-label': 'Stage', title: 'Studio: the colour-accurate stage. Room: the same build on a desk in daylight.' }, [
-      el('button.seg.sm' + (!st.room ? '.on' : ''), { text: 'Studio', 'aria-pressed': String(!st.room), onclick: () => setRoom(false) }),
-      el('button.seg.sm' + (st.room ? '.on' : ''), { text: 'Room', 'aria-pressed': String(st.room), onclick: () => setRoom(true) }),
-    ]));
     panel.appendChild(head);
-    /* the room's wall and desk, while the room is the stage (Joey 2026-10-25: "would it be possible for the user to maybe
-       adjust the wall and maybe desk color ... to get a better idea of how the colors look together"): the scene's own
-       control (done.js roomColoursPanel), remembered in this browser, the final scene's too */
-    if (st.room && room && room.handle && room.handle.roomColoursPanel) {
-      const rs = el('section.roomcols');
-      rs.appendChild(el('h3.h2', { text: 'The room' }));
-      rs.appendChild(room.handle.roomColoursPanel());
-      panel.appendChild(rs);
-    }
+    if (syncBar) syncBar();
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
     // 2026-10-16). Opening this tab turns the visitor's colours on (onEnter below).
     // THE CURRENT LOOK, as a card (Astra: a compact card at the top; the premade list moved into the gallery)
@@ -354,6 +346,16 @@ export function mountColors(stage, ctx) {
     plate.appendChild(el('div.track.seg3', { role: 'group', 'aria-label': 'Build plate finish' }, PLATE_FINISHES.map((k) => el('button.seg.sm' + ((store.state.buildPlate || 'powder') === k ? '.on' : ''), { text: PLATE_LABELS[k], onclick: async () => { stage.endPreview?.(); store.flush(); await stage.setBuildPlate(k); store.load(stage.build, 'adopt'); store.flush(); renderAll(); } }))));   // its own undo step; app.js hands an undone plate back to the stage
     plate.appendChild(el('p.note', { text: 'Only changes how the bed faces render · bills nothing. Screen colors are approximate; the Day Grid gives the truest read.' }));
     panel.appendChild(plate);
+    /* the room's wall and desk, last and only while the room shows (Joey 2026-10-25: "would it be possible for the user to
+       maybe adjust the wall and maybe desk color ... to get a better idea of how the colors look together"; 2026-10-26: "a
+       small section at the bottom"): the scene's own control (done.js roomColoursPanel), remembered in this browser, the
+       final scene's too */
+    if (st.room && room && room.handle && room.handle.roomColoursPanel) {
+      const rs = el('section.roomcols');
+      rs.appendChild(el('h3.h2', { text: 'The room' }));
+      rs.appendChild(room.handle.roomColoursPanel());
+      panel.appendChild(rs);
+    }
   }
   function downloadScheme() {
     const p = pal(); const data = { gen2Colors: 1, colors: p.colors, user: p.user };
@@ -802,8 +804,10 @@ export function mountColors(stage, ctx) {
 
   /* ---------------- toolbar, dock, the shopping list ---------------- */
   const bar = toolbar(stage, { soon, history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } },
-    reset: () => { if (room) { if (room.handle) room.handle.recenter(); return; } stage.resetView(); } });   // with the room on, Reset view returns to the room's shot; while it loads, nothing (its entrance places the camera; the stage's preset would fly out of the room: Terra 01a16b56)
+    reset: () => { if (room) { if (room.handle) room.handle.recenter(); return; } stage.resetView(); },
+    backdrop: ROOM_FLAG ? { get: () => (st.room ? 'room' : 'neutral'), set: (v) => setRoom(v === 'room') } : null });   // with the room on, Reset view returns to the room's shot; while it loads, nothing (its entrance places the camera; the stage's preset would fly out of the room: Terra 01a16b56)
   root.appendChild(bar.el);
+  syncBar = bar.sync;
   const dock = el('footer.glass', { id: 'ws-dock' });
   root.appendChild(dock);
   /* the one filament count (the Colors plan's decision D2): what this build prints in, from the stage, so the Dock, the

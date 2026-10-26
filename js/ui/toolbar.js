@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 
 const Q_NAME = { veryhigh: 'Very High', high: 'High', balanced: 'Balanced', fast: 'Fast' };
 
-export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode Â· comes with Assemble (phase 1)', view = null, history = null, eraser = null, camTitle = null, reset = null }) {
+export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode Â· comes with Assemble (phase 1)', view = null, history = null, eraser = null, camTitle = null, reset = null, backdrop = null }) {
   const tools = el('div', { id: 'ws-tools', role: 'toolbar', 'aria-label': 'View' });
   /* Measure = the W/H/L callouts (the inventory's "Measure | W/H/L in mm + in"). The stage turns them on by itself
      on the finished page; the button reflects the stage's state and toggles it. */
@@ -24,11 +24,17 @@ export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode Â
   // the camera button: "Reset view" everywhere; the Assemble workspace names it for the guided camera (camTitle) and it
   // lights up while the visitor has the camera (an orbit or zoom during a step), as the viewer's own Resume cam did.
   // `opts.reset` replaces what it does (Colors with the room on: back to the room's shot, not the stage's preset)
+  /* `opts.backdrop` ({ get(), set(v) }, 'room' | 'neutral'): what the build stands in, beside 3D/2D since it is a view
+     setting too (Colors; Joey 2026-10-26: the switch "moves to the toolbar as Room | Neutral", off the panel, where its
+     two buttons read as the panel's own tabs) */
+  const bRoom = backdrop ? el('button', { text: 'Room', 'aria-pressed': 'false', title: 'Your build on a desk in a room, in daylight', onclick: () => { backdrop.set('room'); sync(); } }) : null;
+  const bNeutral = backdrop ? el('button', { text: 'Neutral', 'aria-pressed': 'false', title: 'A plain, colour-accurate stage, for judging the filaments themselves', onclick: () => { backdrop.set('neutral'); sync(); } }) : null;
   const camBtn = el('button.chip.icon-btn.cam', { title: camTitle || 'Reset view', 'aria-label': camTitle ? 'Back to the step\u2019s camera' : 'Reset view', onclick: () => (reset ? reset() : stage.resetView()) }, [icon('cube-focus')]);
   tools.append(...[
-    el('div.chip.view', { role: 'group', 'aria-label': 'View' }, [b3, b2]),
+    el('div.chip.view' + (view ? '' : '.fixed'), { role: 'group', 'aria-label': 'View' }, [b3, b2]),   // .fixed: 3D only here (the phone's bar drops it for the backdrop switch)
+    backdrop ? el('div.chip.view.backdrop', { role: 'group', 'aria-label': 'Backdrop' }, [bRoom, bNeutral]) : null,
     measureBtn,
-    el('button.chip.icon-btn', { title: explode ? 'Exploded overview' : explodeTitle, 'aria-label': 'Explode', onclick: explode || soon('Explode', 'Assemble (phase 1)') }, [icon('arrows-out')]),
+    el('button.chip.icon-btn.explode' + (explode ? '' : '.soon'), { title: explode ? 'Exploded overview' : explodeTitle, 'aria-label': 'Explode', onclick: explode || soon('Explode', 'Assemble (phase 1)') }, [icon('arrows-out')]),
     camBtn,
     undoBtn, redoBtn, eraseBtn,
     qualityBtn,
@@ -43,6 +49,7 @@ export function toolbar(stage, { soon, explode = null, explodeTitle = 'Explode Â
     if (history) { undoBtn.disabled = !history.canUndo; redoBtn.disabled = !history.canRedo; }
     if (eraser) { const on2 = !!eraser.get(); eraseBtn.classList.toggle('on', on2); eraseBtn.setAttribute('aria-pressed', String(on2)); }
     if (camTitle) camBtn.classList.toggle('on', !!stage.camFree);
+    if (backdrop) { const r = backdrop.get() === 'room'; bRoom.classList.toggle('on', r); bNeutral.classList.toggle('on', !r); bRoom.setAttribute('aria-pressed', String(r)); bNeutral.setAttribute('aria-pressed', String(!r)); }
   }
   sync();
   return { el: tools, sync };

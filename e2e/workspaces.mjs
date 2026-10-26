@@ -2324,7 +2324,7 @@ test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark
   // COLORS' ROOM STAGE shows the same choice
   await page.goto(`${base}/index.html?ws=colors&debug=1&done=room`, { waitUntil: 'load', timeout: 90_000 });
   await waitBoot(page);
-  await page.locator('#ws-colors .stage button:has-text("Room")').click();
+  await page.locator('#ws-tools .backdrop button:has-text("Room")').click();
   await page.waitForFunction(() => !!document.querySelector('#ws-colors .roomc'), null, { timeout: 60_000 }).catch(() => assert.fail('the Room stage brought no wall and desk control'));
   assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ws-colors .roomc [aria-pressed="true"]')].map((b) => b.getAttribute('aria-label'))), ['Wall: Navy', 'Desk: White'], 'Colors\' Room stage shows the same choice');
   assert.deepEqual(clean(errors), [], 'no errors');
@@ -2917,18 +2917,28 @@ test('Assemble: the Done scene\'s final scene returns to the End page when the r
    allowed, no sequence"): behind the same flag, the panel head gets the toggle; Room puts the build in the room with the
    stage held, the orbit free and no sequence; a colour pick still lands; the toolbar's Reset view returns to the room's
    shot and gives the camera back; Studio restores the stage; the choice survives a trip to another workspace. */
-test('Colors: the Studio / Room toggle is absent with ?done=off; for every visitor (no flag), Room holds the stage with a free orbit and no sequence, picks land, Reset view returns to the shot, Studio restores, the choice comes back', async () => {
+test('Colors: the Room | Neutral switch is absent with ?done=off; for every visitor (no flag), Room holds the stage with a free orbit and no sequence, the panel leads with the build, picks land, Reset view returns to the shot, Neutral restores, the choice comes back', async () => {
   const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, controls: v.controls.enabled, camFree: v.camFree, seq: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.on : null, seqWanted: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.wanted : null, quality: v.quality, cam: v.camera.position.toArray().map((n) => +n.toFixed(1)) }; });
   const off = await open('colors', { query: '&done=off' });
-  assert.equal(await off.page.locator('#ws-colors .head .stage').count(), 0, 'no toggle with ?done=off');
+  assert.equal(await off.page.locator('#ws-tools .backdrop').count(), 0, 'no backdrop switch with ?done=off');
   assert.deepEqual(clean(off.errors), []);
   await off.ctx.close();
   const { ctx, page, errors } = await open('colors', { visitor: true });   // no flag: the room is on for everyone (Joey 2026-10-26)
   assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('done')), null, 'no flag in the address');
-  const seg = (t) => page.locator(`#ws-colors .head .stage button:has-text("${t}")`);
+  const seg = (t) => page.locator(`#ws-tools .backdrop button:has-text("${t}")`);
   // Room first (Joey 2026-10-26: "What if when you select color it goes to this view instead"): no click, the room comes on
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('Colors did not open on the room within 60 s'));
   assert.equal(await seg('Room').getAttribute('aria-pressed'), 'true', 'Room by default');
+  /* the panel leads with the build's colours, the room's wall and desk its last section (Joey 2026-10-26: "panel always
+     leads with the build's colours, room wall/desk as a small section at the bottom only while the room shows, and the
+     view switch moves to the toolbar as Room | Neutral") */
+  await page.waitForFunction(() => !!document.querySelector('#ws-colors .roomcols'), null, { timeout: 60_000 }).catch(() => assert.fail('the room brought no wall and desk section'));
+  const layout = () => page.evaluate(() => { const kids = [...document.querySelector('#ws-colors').querySelectorAll(':scope > .head, :scope > section, :scope .panel > .head, :scope .panel > section')];
+    const panelKids = kids.length ? kids : []; return { order: panelKids.map((k) => (k.classList.contains('head') ? 'head' : k.classList.contains('look') ? 'look' : k.classList.contains('roomcols') ? 'room' : 'other')), inHead: !!document.querySelector('#ws-colors .head button'), bar: [...document.querySelectorAll('#ws-tools .backdrop button')].map((b) => b.textContent) }; });
+  const L1 = await layout();
+  assert.deepEqual(L1.bar, ['Room', 'Neutral'], `the switch is the toolbar's: Room | Neutral (${JSON.stringify(L1)})`);
+  assert.equal(L1.inHead, false, 'and nothing of it in the panel head');
+  assert.deepEqual([L1.order[0], L1.order[1], L1.order[L1.order.length - 1]], ['head', 'look', 'room'], `the build's colours first, the room last (${L1.order.join(' > ')})`);
   await settle(page, 1500);
   const s1 = await state(page);
   assert.equal(s1.room, true, 'the room is in the scene'); assert.equal(s1.held, true, 'the stage is held'); assert.equal(s1.bg, null);
@@ -2991,16 +3001,17 @@ test('Colors: the Studio / Room toggle is absent with ?done=off; for every visit
   await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('the remembered Room did not come back with Colors'));
   assert.equal(await seg('Room').getAttribute('aria-pressed'), 'true', 'the toggle remembers Room');
   // Studio restores the stage
-  await seg('Studio').click();
+  await seg('Neutral').click();
   await settle(page, 1500);
   const s2 = await state(page);
   assert.equal(s2.room, false, 'the room is gone'); assert.equal(s2.held, false); assert.equal(s2.done, null); assert.equal(s2.bg, 'color', 'the stage background is back'); assert.equal(s2.controls, true);
-  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true');
+  assert.equal(await seg('Neutral').getAttribute('aria-pressed'), 'true');
+  assert.ok(!(await layout()).order.includes('room'), 'Neutral: no wall and desk section');
   // "toggle back to the builder-like view if desired": a visitor who picked Studio keeps it on the next visit
   await page.reload({ waitUntil: 'load' });
-  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.querySelector('#ws-colors .head .stage'), null, { timeout: 60_000 });
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.querySelector('#ws-tools .backdrop'), null, { timeout: 60_000 });
   await settle(page, 1500);
-  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true', 'Studio, as picked, after a reload');
+  assert.equal(await seg('Neutral').getAttribute('aria-pressed'), 'true', 'Neutral, as picked, after a reload');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'and no room loaded');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
@@ -3008,6 +3019,23 @@ test('Colors: the Studio / Room toggle is absent with ?done=off; for every visit
 
 /* a room that cannot load (its module request fails) falls back to Studio AND forgets the choice, so a remount does not
    retry it (Terra 01a16b56: the import's failure path cleared the panel's state but left the memo set) */
+/* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
+   3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
+test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {
+  const { ctx, page, errors } = await open('colors', { visitor: true, phone: true });
+  await page.waitForFunction(() => document.querySelector('#ws-tools .backdrop'), null, { timeout: 60_000 });
+  await settle(page, 800);
+  const bar = await page.evaluate(() => { const t = document.querySelector('#ws-tools'), r = t.getBoundingClientRect();
+    return { client: t.clientWidth, scroll: t.scrollWidth, right: Math.round(r.right), vw: innerWidth, fixed: document.querySelector('#ws-tools .view.fixed').checkVisibility(), explode: document.querySelector('#ws-tools .explode').checkVisibility(),
+      buttons: [...t.querySelectorAll(':scope > .icon-btn')].filter((b) => b.checkVisibility()).map((b) => Math.round(b.getBoundingClientRect().width)), backdrop: [...t.querySelectorAll('.backdrop button')].map((b) => b.textContent) }; });
+  assert.deepEqual(bar.backdrop, ['Room', 'Neutral']);
+  assert.equal(bar.fixed, false, 'the 3D-only chip gives way'); assert.equal(bar.explode, false, `and Explode's "comes later"`);
+  assert.ok(bar.scroll <= bar.client && bar.right <= bar.vw, `nothing scrolled or off the screen (${JSON.stringify(bar)})`);
+  assert.ok(bar.buttons.length >= 4 && bar.buttons.every((w) => w >= 40), `every button full size (${JSON.stringify(bar.buttons)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE STEAM OVER THE STILL PICTURE (Joey 2026-10-26: "after the user stop moving the camera and it switches over to the
    detailed render view ... doesn't freeze the coffee steam, maybe it becomes like a post-processing overlay"): Very High
    at rest on the Colors stage (no lens there), the mean converged. The steam ticks and asks for frames, and no sample is
@@ -3069,23 +3097,23 @@ test('Colors: on Very High at rest the steam keeps rising over the still picture
   await ctx.close();
 });
 
-test('Colors: the Studio / Room toggle when the room fails to load: Studio comes back, the choice is forgotten, a remount does not bring Room back', async () => {
+test('Colors: the Room | Neutral switch when the room fails to load: Neutral comes back, the choice is forgotten, a remount does not bring Room back', async () => {
   // the room comes on by itself now (Room first), so its module fails from the first request
   const fctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await fctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   await fctx.route('**/scenes/done.js*', (r) => r.abort());
   const { ctx, page, errors } = await open('colors', { query: '&done=room', context: fctx });
-  const seg = (t) => page.locator(`#ws-colors .head .stage button:has-text("${t}")`);
-  await page.waitForFunction(() => { const on = document.querySelector('#ws-colors .head .stage button[aria-pressed="true"]'); return on && on.textContent === 'Studio'; }, null, { timeout: 30_000 }).catch(() => assert.fail('Studio did not come back after the failed load'));
+  const seg = (t) => page.locator(`#ws-tools .backdrop button:has-text("${t}")`);
+  await page.waitForFunction(() => { const on = document.querySelector('#ws-tools .backdrop button[aria-pressed="true"]'); return on && on.textContent === 'Neutral'; }, null, { timeout: 30_000 }).catch(() => assert.fail('Studio did not come back after the failed load'));
   assert.equal(await page.evaluate(() => window.__GEN2_CTX__().memo.colorsRoom), false, 'the choice is forgotten, not only the panel state');
   assert.equal(await page.evaluate(() => localStorage.getItem('gen2-colors-stage')), null, 'and nothing stored: a failed load is not a visitor\'s pick');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'no room');
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
   await page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 60_000 });
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
-  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.querySelector('#ws-colors .head .stage'), null, { timeout: 60_000 });
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.querySelector('#ws-tools .backdrop'), null, { timeout: 60_000 });
   await settle(page, 600);
-  assert.equal(await seg('Studio').getAttribute('aria-pressed'), 'true', 'Studio on the remount: the failed Room was not retried');
+  assert.equal(await seg('Neutral').getAttribute('aria-pressed'), 'true', 'Neutral on the remount: the failed Room was not retried');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null);
   assert.deepEqual(clean(errors).filter((e) => !/net::ERR_FAILED/.test(e)), [], 'nothing but the aborted request’s own console line');   // the abort IS the test's doing
   await ctx.close();
