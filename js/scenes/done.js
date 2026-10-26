@@ -1078,9 +1078,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   /* the spools' glow (spool.js setGlow): the one whose picker is open (selectSpool, from Colors) lit, the one under the
      pointer lit a little; the picture changes, so Very High starts its mean again */
   /* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his own photo, his
-     garden). OUTSIDE.file is the left of it (oaks, cypresses, a pine, pale sky, lawn; the lattice, the house, the tarps,
-     the fire pit and the hoop patched over with the trees and lawn beside them, the poles cropped out:
-     tools/done-scene/outside-photo.py makes it from his photo, which stays out of the repo),
+     garden, and ChatGPT's clean version of it). OUTSIDE.file is that, all but the leaning pine at its right edge (oaks,
+     pines, cypresses, pale sky, lawn; nothing man-made): tools/done-scene/outside-photo.py makes it, the sources stay out
+     of the repo,
      toned softer and a little brighter than the room (Astra: "slightly brighter and lower-contrast than the interior",
      "no prominent buildings or objects"), its lawn carried on below in the file itself (mirrored bands: a clamped edge
      streaks). On a plane OUTSIDE.out beyond the opening, facing in, at the scale that gives its trees a distant tree's
@@ -1090,7 +1090,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      room has no ceiling), and a sky-coloured lid closes the space above the opening, so a look up through the window ends
      in sky, not the void. Unlit like the room's bakes, out of the shadows, the AO (ghosts) and every ray; a pale sky until
      the photo loads. */
-  const OUTSIDE = { file: 'scenes/home-office/outside.webp', out: 1500, px: [630, 1700], mmPerPx: 2.25, ground: 665 / 1700, eye: 1550, W: 24000, sky: 0x89a8d2 };   // W: a grazing look along the wall, through the frame, still lands on it (9 m did not)
+  const OUTSIDE = { file: 'scenes/home-office/outside.webp', out: 1500, px: [1140, 1694], mmPerPx: 2.0, ground: 0.3985, eye: 1550, W: 24000, sky: 0x89a8d2 };   // W: a grazing look along the wall, through the frame, still lands on it (9 m did not)
   function makeOutside(group) {
     const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
     group.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new THREE.Box3().setFromObject(o)); });

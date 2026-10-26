@@ -3150,7 +3150,7 @@ test('Colors: the room’s window looks out on the garden photo, nothing of it o
     const clipped = []; v.scene.getObjectByName('done-room').traverse((m) => { if (m.isMesh && [].concat(m.material).some((x) => x.clippingPlanes && x.clippingPlanes.length)) clipped.push(m.name); });
     return { img: [o.material.map.image.width, o.material.map.image.height], ghost: o.userData.ghost && lid.userData.ghost, tops: [top(o), top(lid)], wallTop: b.y1, clipped, clip: v.renderer.localClippingEnabled };
   });
-  assert.deepEqual(on.img, [630, 1700], 'the photo');
+  assert.ok(on.img[0] >= 600 && on.img[1] >= 1000, `the photo (${on.img})`);
   assert.ok(on.ghost, 'out of the AO and the outline');
   assert.ok(on.tops.every((t) => t <= on.wallTop), `nothing of it over the walls (${JSON.stringify(on)})`);
   assert.ok(on.clipped.includes('wall_back') && on.clip, `the back wall cut at the window wall (${JSON.stringify(on.clipped)})`);

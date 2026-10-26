@@ -1,41 +1,58 @@
-"""The window's outside from Joey's garden photo (2026-10-26): the man-made things patched over with the trees and lawn
-beside them, a crop of the left 780 px, toned softer, and the lawn carried on below as a plain gradient."""
+"""The Done room's view out of the window, scenes/home-office/outside.webp (js/scenes/done.js THE VIEW OUT OF THE WINDOW).
+
+    python tools/done-scene/outside-photo.py <preset> <source image> <out.webp> [preview.png]
+
+Presets (Joey 2026-10-26; the sources stay out of the repo):
+  garden   his own photo: the man-made things patched over with the trees and lawn beside them, the left 780 px.
+  chatgpt  ChatGPT's clean version of it (1536 x 1024, nothing man-made): all but the leaning pine at its right edge.
+Each: cropped, toned softer and a little brighter than the room, blurred (distant trees past a build in focus), the
+lawn carried on below as a plain gradient faded in from its own last rows, and made tileable across by cross-fading its
+right edge into its left. Prints the size and the lawn line's place from the top (done.js OUTSIDE.px and .ground)."""
 import sys
-from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
-src, dst, preview = sys.argv[1:4]
+from PIL import Image, ImageEnhance, ImageFilter, ImageDraw, ImageOps
+
+PRESETS = {
+    'garden': dict(patches=[((440, 875, 790, 992), 330), ((430, 995, 640, 1100), 230)], crop=(0, 300, 780, 1100), ground=965,
+                   contrast=0.78, color=0.8, brightness=1.07, blur=2.2),
+    'chatgpt': dict(patches=[], crop=(0, 230, 1290, 1024), ground=905, contrast=0.74, color=0.72, brightness=1.03, blur=2.5),
+}
+preset, src, dst = sys.argv[1:4]
+preview = sys.argv[4] if len(sys.argv) > 4 else None
+P = PRESETS[preset]
 im = Image.open(src).convert('RGB')
-from PIL import ImageOps
-def patch(box, dx, flip=False):   # copy the region dx px to the left over `box` (mirrored, so no tree repeats), feathered
+
+
+def patch(box, dx):   # the region dx px to the left, mirrored (so no tree repeats), over `box`, feathered
     x0, y0, x1, y1 = box
-    piece = im.crop((x0 - dx, y0, x1 - dx, y1))
-    if flip: piece = ImageOps.mirror(piece)
+    piece = ImageOps.mirror(im.crop((x0 - dx, y0, x1 - dx, y1)))
     mask = Image.new('L', piece.size, 0)
     ImageDraw.Draw(mask).rectangle((10, 10, piece.size[0] - 10, piece.size[1] - 10), fill=255)
     im.paste(piece, (x0, y0), mask.filter(ImageFilter.GaussianBlur(7)))
-patch((440, 875, 790, 992), 330, True)   # the lattice, the post, the house, the tarp and the woodpile: the cypresses' and small pines' feet
-patch((430, 995, 640, 1100), 230, True)  # the fire pit and its sand ring: lawn
-c = im.crop((0, 300, 780, 1100))
-c = ImageEnhance.Contrast(c).enhance(0.78); c = ImageEnhance.Color(c).enhance(0.8); c = ImageEnhance.Brightness(c).enhance(1.07)
-c = c.filter(ImageFilter.GaussianBlur(2.2))   # out of focus, as distant trees are past a build in focus (Joey: "the trees are at a distance and super sharp, i think that feels off")
+
+
+for box, dx in P['patches']:
+    patch(box, dx)
+c = im.crop(P['crop'])
+c = ImageEnhance.Contrast(c).enhance(P['contrast'])
+c = ImageEnhance.Color(c).enhance(P['color'])
+c = ImageEnhance.Brightness(c).enhance(P['brightness'])
+c = c.filter(ImageFilter.GaussianBlur(P['blur']))   # out of focus (Joey: "the trees are at a distance and super sharp, i think that feels off")
 W, H0, EXT = c.width, c.height, 900
-out = Image.new('RGB', (W, H0 + EXT)); out.paste(c, (0, 0))
+out = Image.new('RGB', (W, H0 + EXT))
+out.paste(c, (0, 0))
 base = c.crop((0, H0 - 40, W, H0)).resize((1, 1), Image.BOX).getpixel((0, 0))
-for y in range(EXT):   # the lawn on below: its own colour, a little darker nearer, faded in from the photo's last rows
+for y in range(EXT):   # the lawn on below: its own colour, a little darker nearer
     k = 1 - 0.06 * (y / EXT)
-    col = tuple(int(v * k) for v in base)
-    out.paste(col, (0, H0 + y, W, H0 + y + 1))
+    out.paste(tuple(int(v * k) for v in base), (0, H0 + y, W, H0 + y + 1))
 blend = 90   # the photo's last lawn, mirrored down and faded into the plain colour: no seam, no streaks
 tail = ImageOps.flip(c.crop((0, H0 - blend, W, H0)))
-fade = Image.linear_gradient('L').resize((W, blend)).point(lambda v: v)   # 0 at the top (all photo) to 255 (all plain)
+fade = Image.linear_gradient('L').resize((W, blend))
 out.paste(Image.composite(Image.new('RGB', (W, blend), base), tail, fade), (0, H0))
-# tileable across: its right edge cross-faded into its left over OV px, so it repeats with no seam and no mirror
-OV = 150
-A = out
-T = A.crop((0, 0, A.width - OV, A.height))
-ramp = Image.linear_gradient('L').rotate(90, expand=True).resize((OV, A.height))   # 255 at the left -> 0 at the right? (checked below)
-left, right = A.crop((0, 0, OV, A.height)), A.crop((A.width - OV, 0, A.width, A.height))
-T.paste(Image.composite(left, right, ramp), (0, 0))   # x=0 all of the right edge (continues the tile before), x=OV all of the left (continues itself)
-out = T
-out.save(dst, quality=86, method=6)
-out.save(preview)
-print(out.size, 'ground', 665 / out.height, 'ramp', ramp.getpixel((0, 0)), ramp.getpixel((OV - 1, 0)))
+OV = 150   # tileable across: its right edge cross-faded into its left
+T = out.crop((0, 0, out.width - OV, out.height))
+ramp = Image.linear_gradient('L').rotate(90, expand=True).resize((OV, out.height))   # 0 at the left, 255 at the right
+T.paste(Image.composite(out.crop((0, 0, OV, out.height)), out.crop((out.width - OV, 0, out.width, out.height)), ramp), (0, 0))
+T.save(dst, quality=86, method=6)
+if preview:
+    T.save(preview)
+print(T.size, 'ground', round((P['ground'] - P['crop'][1]) / T.height, 4))

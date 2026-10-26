@@ -4191,7 +4191,7 @@ analytic in the shader, not meshes). He copied the spool into its own file.
 - **Checks.** A new Showcase case; the spool-click case checks the glow; the spools case stacks a filament a region past
   six, under the walls' margin. The Colors room, spools, steam, strip and Done cases pass. Review: Sol `01a17823` round
   17, one finding accepted (the step), then fixed and tested. Not deployed.
-- **The view out of the window, from Joey's own photo** (the same day; he sent his garden, then: "what if we blurred it a
+- **The view out of the window, from Joey's own photo, then ChatGPT's clean version of it** (`outside-photo.py chatgpt`: 1140 x 1694, all but the leaning pine at its right edge, nothing man-made, no patches). (the same day; he sent his garden, then: "what if we blurred it a
   bit, the trees are at a distance and super sharp, i think that feels off"). `scenes/home-office/outside.webp` (630 x
   1700, 35 KB) is the left of it, the lattice, house, tarps, fire pit and hoop patched over with the trees and lawn
   beside them, toned softer and a little brighter than the room, blurred 2.2 px, the lawn carried on below, and
