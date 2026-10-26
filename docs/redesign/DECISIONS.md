@@ -3485,3 +3485,36 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   published - the first run of the deploy as its own job. The live planner serves `boot.js?v=1018463c`, and
   `peek-prod.mjs 1018463c` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed with no page errors. This Live
   line is a docs-only push: by the new filter it starts no run.
+
+## 2026-10-26 · A part's own build plate finish (Faceplates Holographic, the rest Powder-coated)
+
+- **Asked:** Joey, 2026-10-26, with two screenshots of a 165 Tabletop 3W-2H in Chevron faceplates: the plate finish is one
+  choice under Colors, but "i'd like everything except the faceplate to be printed with the powdercoated, and the faceplate
+  holographic, maybe it can be an option when selecting a certain part type". The code had reserved the model since
+  2026-09-14 ("a part inherits the build's finish unless it has its own").
+- **The record:** `plateParts`, the planner's own field like `sideCovers`: part TYPE -> one of powder / smooth /
+  holographic; a type not in it follows `buildPlate`. Per type, for every unit of it, because it is the sheet a part
+  printed on, not a colour region: a faceplate's Body and Face share it. sanitize keeps only a known finish on a plain type
+  name (at most 32) and always writes the map, `{}` for every older record, share link and file.
+- **The stage (js/main.js):** `plateFinishFor(key)` is what a material wears, `plateProfile()` stays the build's. A part
+  with its own finish gets its own uniforms object, sharing every entry with the build's except the two that say which
+  finish (uPC, uBfHoloOp), so the build's Powder <-> Smooth write passes it by while every settle sample's grain and layer
+  lines still reach it. Holographic picks the holographic program per part; the face-down Essential and Chevron transfer
+  follows the Faceplate's own-or-build finish. `syncBedFinish` purges every material registry when the map changes, from
+  the one place every path reaches (a pick, Undo, a reload, a share link). Preview thumbnails key on the map.
+- **The UI (Colors):** the filament picker gains "Printed on": the three finishes for all of that part type, with "Use the
+  build's finish". Clicking the inherited finish pins it (it then stays when the build's changes). The left panel lists
+  the parts with their own finish, each with "Use the build's". Each change is one undo step; app.js hands an undone map
+  back to the stage, as it does the build plate.
+- **Tests:** test/plate-parts.test.mjs (the record's rules, 2/2); store and parity tests carry the new field. e2e "Colors:
+  a part's own build plate finish": Faceplates own Holographic on a Powder build; the build to Smooth moves the rest and
+  leaves them; Case own Powder-coated on a Smooth build (a uniforms-only difference); Undo x3, Redo; a reload keeps it;
+  "Use the build's" from the list; the pin. Read off the live materials (`bedFinish.wearing()`). Five mutants each fail
+  it (own uniforms ignored, the purge ignoring the map, the holographic program from the build only, the undo hand-back
+  removed, sanitize dropping the field). A Playwright run on a decor + Chevron build at Very High: the faceplates wear the
+  face-down holographic transfer, every other type Powder-coated, no page errors, 8 px between the row's pieces; shots in
+  D:\Claude - Output\plate-per-part-2026-10-26.
+- **Review:** Sol `01a178a5` (substantial): 1 finding, confirmed and fixed - clicking the inherited finish did nothing, so
+  it could not be pinned. Five questions answered "holds".
+- **Not done:** the old planner's relay does not carry the map (the old planner forwards since the cutover); the old
+  viewer's own Build plate row stays build-wide.

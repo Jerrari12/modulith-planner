@@ -1795,7 +1795,7 @@ if (!ENTRY.isPart) seeInto = createSeeInto({
      The preset's 0.20 stays the reference cover's accepted look; a picked translucent filament now shows 0.40 of what is
      behind it, and 0.52 when its VISIBLE FRONT printed on the textured (Powder) sheet - the face-down Essential and Chevron
      families - where the grain otherwise reads as extra frost. ARTISTIC values from Joey's look, not measured optics. */
-  ownSee: () => (PLATE_FAMILIES.has(currentFaceplateStyle()?.key) && plateFinishOf(build) === 'powder') ? SEE_OWN_TEXTURED : SEE_OWN,
+  ownSee: () => (PLATE_FAMILIES.has(currentFaceplateStyle()?.key) && plateFinishFor('Faceplate') === 'powder') ? SEE_OWN_TEXTURED : SEE_OWN,
   // every back cover (only behind the switch), one part per instance (hidden meshes draw nothing in the passes)
   parts: () => {
     const out = [];
@@ -3437,12 +3437,25 @@ const skinMaps = (() => {
 // ⚠ It is a FINISH, not a paint: the material's colour still comes from
 // activeHex(), so the user's filament pick drives it and the transfer rides on
 // top. Never hardcode a colour here.
-// ⚠ PER-PART FINISHES ARE A LATER STEP (Joey 2026-09-14: "it could be an option
-// to any part"). The intended model is "a part inherits the build's finish
-// unless it has its own"; nothing stores an override yet, and `plateProfile` is
-// where one would be consulted.
+// ⚠ PER-PART FINISHES (2026-10-26; Joey 2026-09-14 "it could be an option to any
+// part", and 2026-10-26 "everything except the faceplate powder-coated, the
+// faceplate holographic"): a part TYPE may carry its own finish in
+// `build.plateParts` ({ Faceplate: 'holographic' }); every type without one
+// inherits `build.buildPlate`. One finish per type, for every unit of it - the
+// sheet a part was printed on, not a colour region, so a faceplate's Body and
+// Face zones always share it. `plateProfile()` stays the BUILD's finish;
+// `plateFinishFor(key)` is what a part's material actually wears.
 const PLATE_PROFILES = PLATE_FINISHES.map(key =>
   ({ key, label: PLATE_LABELS[key], holo: key === 'holographic' ? HOLO_OPACITY : 0 }));
+const partPlates = () => (build && build.plateParts && typeof build.plateParts === 'object' && !Array.isArray(build.plateParts)) ? build.plateParts : {};
+/** the finish a part TYPE stores for itself, or null when it follows the build */
+const ownPlateOf = (type) => { const f = Object.hasOwn(partPlates(), type) ? partPlates()[type] : null; return PLATE_FINISHES.includes(f) ? f : null; };
+/** the finish a material key (a type, or type:ZONE) is printed with */
+const plateFinishFor = (key) => ownPlateOf(String(key).split(':')[0]) || plateFinishOf(build);
+const plateProfileFor = (key) => PLATE_PROFILES.find(p => p.key === plateFinishFor(key));
+/* what decides which materials are valid: the build's finish lives in the shared uniforms, but an override decides a
+   material's uniforms object (and, for Holographic, its program), so any change of the map rebuilds them (syncBedFinish) */
+const partPlatesSig = () => JSON.stringify(Object.keys(partPlates()).sort().map(t => [t, ownPlateOf(t)]).filter(e => e[1]));
 // The face-down faceplate families keep the holographic transfer they have had
 // since 2026-08-10, UNCHANGED (Astra 2026-09-14, "preserve existing holographic
 // behaviour"): their whole material takes the plate's polished spec and
@@ -3453,8 +3466,23 @@ const plateProfile = () => PLATE_PROFILES.find(p => p.key === plateFinishOf(buil
 /* One set of finish uniforms for every part material that carries the finish, so Powder <-> Smooth
    is a uniform write and every clone of every material follows it. */
 const bedFinishU = createBedFinishUniforms();
+/* A part with a finish of its OWN draws from its own uniforms object, so the build's Powder <-> Smooth write never
+   reaches it. It SHARES every other entry with bedFinishU (the same {value} objects): the grain's representation and the
+   layer lines are switched for each settle sample on bedFinishU, and an overridden part must follow them exactly as
+   every other part does. Only uPC and uBfHoloOp - the two that say WHICH finish - are its own. One per finish, made on
+   first use. */
+const ownFinishUs = {};
+const bedFinishUOf = new WeakMap();   // material -> the uniforms object withBedFinish gave it; a clone shares its source's
+function ownFinishUniforms(f) {
+  if (!ownFinishUs[f]) ownFinishUs[f] = Object.assign({}, bedFinishU, {
+    uPC: { value: f === 'powder' ? 1 : 0 },
+    uBfHoloOp: { value: f === 'holographic' ? HOLO_OPACITY : 0 },
+  });
+  return ownFinishUs[f];
+}
 const plateSupported = () => !!build && PLATE_FAMILIES.has(currentFaceplateStyle()?.key);
-const plateActive = () => plateSupported() && plateProfile().holo > 0;
+// the face-down faceplate transfer follows the FACEPLATE's finish, its own or the build's
+const plateActive = () => plateSupported() && plateProfileFor('Faceplate').holo > 0;
 // which key carries the CONTACT face: Chevron's raised strips are its FACE zone
 // (the recessed backer never touched the plate — its grooves stay dark, as on
 // the real print); Essential is a single-zone plate, so its base key is the face.
@@ -3501,7 +3529,7 @@ function ensurePlateUVs() {
 function attachHolo(m, diffracts) {
   m.onBeforeCompile = sh => {
     sh.uniforms.holoTex = { value: holoTexture() };
-    sh.uniforms.uHoloOp = { value: plateProfile().holo };
+    sh.uniforms.uHoloOp = { value: plateProfileFor('Faceplate').holo };   // the face-down faceplates' transfer: the faceplate's finish
     holoUniforms.push(sh.uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vHUv;\nvarying vec3 vON;')
@@ -3770,12 +3798,17 @@ function recordAxis(m, key) {
  * reaches it: the Build options row, the planner's option relay, a planner layout (which replaces
  * `build` wholesale), Reset to original, and boot.
  */
-let bedFinishProgram = null;
+let bedFinishProgram = null, bedFinishParts = null;
 function syncBedFinish() {
   const finish = setBedFinish(bedFinishU, plateFinishOf(build));
   const program = finish === 'holographic' ? 'holographic' : 'profile';
-  if (bedFinishProgram !== null && program !== bedFinishProgram) purgePartMaterials();
+  /* ...and when the per-part finishes change (setPartPlate, an Undo, a loaded or shared build): an overridden part's
+     material holds its own uniforms object and, for Holographic, its own program, so every registry is rebuilt -
+     the same purge, from the same one place every path reaches */
+  const parts = partPlatesSig();
+  if ((bedFinishProgram !== null && program !== bedFinishProgram) || (bedFinishParts !== null && parts !== bedFinishParts)) purgePartMaterials();
   bedFinishProgram = program;
+  bedFinishParts = parts;
 }
 /* Debug-hook handles for the finish (?debug=1 only): the shared uniforms - the readback views
    (uBFDbg), the no-profile diagnostic (uBFPlain 0) and the representation hook - and a check that
@@ -3795,6 +3828,26 @@ const bedFinishDebug = {
       const stamped = o.geometry.userData.bedAxis, want = buildAxisForKey(zoneKey(type, o.userData.zone || ''));
       if (!o.geometry.attributes.aBfMm) out.noAttribute.push(inst.cfg.node);
       else if (!stamped || !want || stamped.some((v, i) => v !== want[i])) out.axisMismatch.push(inst.cfg.node);
+    });
+    return out;
+  },
+  /* What every part TYPE on the stage is wearing (2026-10-26, the per-part finishes), read off the live meshes'
+     materials: per type, the set of finishes they draw - 'holographic' for the face-down faceplate transfer or the
+     holographic program, otherwise the finish its uniforms object holds (its own, or the build's shared one) - and
+     whether any carries a finish of its own. A type whose meshes carry no finish is absent. */
+  wearing() {
+    const out = {};
+    for (const inst of instances.values()) inst.group.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      const ud = o.material.userData || {};
+      if (!ud.faceHolo && !ud.bedFinish) return;
+      const type = typeByNode[inst.cfg.node];
+      // the object the material was GIVEN; a per-unit clone (not in the map) shares its source's, named by its stamp
+      const u = bedFinishUOf.get(o.material) || (ud.plateOwn ? ownFinishUniforms(ud.plateOwn) : bedFinishU);
+      const f = ud.faceHolo || ud.bedFinish === 'holographic' ? 'holographic' : u.uPC.value === 1 ? 'powder' : 'smooth';
+      const t = out[type] || (out[type] = { finishes: [], own: false });
+      if (!t.finishes.includes(f)) t.finishes.push(f);
+      if (ud.plateOwn) t.own = true;
     });
     return out;
   },
@@ -3833,7 +3886,11 @@ function newPartMaterial(key) {
        way it evaluates — which is a bad way to write a constraint whose failure is invisible, and
        it defeats a source-order gate as well. Each mutates and returns the same material, so
        dropping a return changes nothing but the reading order. */
-    if (spec.holographic) attachHolo(m, plateContact);
+    if (spec.holographic) {
+      attachHolo(m, plateContact);
+      // the face-down transfer, for bedFinishDebug.wearing: plain strings, so a per-unit clone carries them too
+      m.userData = Object.assign({}, m.userData, { faceHolo: true, plateOwn: ownPlateOf(String(key).split(':')[0]) });
+    }
     withLayerDetail(m, key);
     recordAxis(m, key);   // withBedFinish merges userData, so the record survives it
     return withBedFinish(m, key, spec);
@@ -3869,7 +3926,9 @@ function withBedFinish(m, key, spec) {
   const axis = buildAxisForKey(key);
   if (!axis) return m;
   let holo = null;
-  if (plateProfile().key === 'holographic') {
+  const own = ownPlateOf(String(key).split(':')[0]);   // this part's own finish, or null: it follows the build
+  m.userData = Object.assign({}, m.userData, { plateOwn: own });   // read by bedFinishDebug.wearing; a plain string, so a per-unit clone carries it
+  if ((own || plateProfile().key) === 'holographic') {
     holo = { texture: bedHoloTexture(), roughness: HOLO_CONTACT.roughness };
     /* the clearcoat lobe has to be COMPILED for contact to wear it; the patch multiplies it by the
        contact weight, so every face that never touched the plate keeps none, as before */
@@ -3878,7 +3937,9 @@ function withBedFinish(m, key, spec) {
       m.clearcoatRoughness = HOLO_CONTACT.clearcoatRoughness;
     }
   }
-  return applyBedFinish(m, { axis, uniforms: bedFinishU, holo });
+  const u = own ? ownFinishUniforms(own) : bedFinishU;
+  bedFinishUOf.set(m, u);   // the uniforms object this material really draws from (bedFinishDebug.wearing)
+  return applyBedFinish(m, { axis, uniforms: u, holo });
 }
 /* A material's RESTING opacity. Every fade in this engine used to drive
    opacity from/to a hardcoded 1, which is only true while every part is
@@ -3942,6 +4003,32 @@ async function setBuildPlate(key, opts = {}) {
   if (!opts.quiet) track('opt:buildplate:' + key);   // `quiet`: an Undo putting the plate back is not a visitor's pick
   build.buildPlate = key;
   resetPlateMaterials();
+  await regenerate();
+}
+/**
+ * Give one part TYPE a finish of its own (`finish` one of PLATE_FINISHES), or hand it back to the build's (`finish`
+ * null). Every unit of that type follows; the record's `plateParts` holds only the types that differ from following.
+ * A NEW object each time, never an edit in place: the store's undo history keeps the old one.
+ * The materials are rebuilt by mountManifest's syncBedFinish, which sees the map change.
+ */
+async function setPartPlate(type, finish, opts = {}) {
+  if (!build || typeof type !== 'string' || !type) return;
+  if (finish !== null && !PLATE_FINISHES.includes(finish)) return;
+  const next = { ...partPlates() };
+  if (finish === null) delete next[type]; else next[type] = finish;
+  if (JSON.stringify(next) === JSON.stringify(partPlates())) return;
+  if (!opts.quiet) track('opt:partplate:' + type + ':' + (finish || 'build'));   // `quiet`: an Undo is not a visitor's pick
+  build.plateParts = next;
+  await regenerate();
+}
+/* the whole map at once, for an Undo or a Redo that moves it (app.js): unknown finishes dropped, as sanitizeBuild does */
+async function setPartPlates(map, opts = {}) {
+  if (!build) return;
+  const next = {};
+  if (map && typeof map === 'object' && !Array.isArray(map)) for (const [t, f] of Object.entries(map)) if (PLATE_FINISHES.includes(f)) next[t] = f;
+  if (JSON.stringify(next) === JSON.stringify(partPlates())) return;
+  if (!opts.quiet) track('opt:partplates');
+  build.plateParts = next;
   await regenerate();
 }
 /* the plate's materials, for a plate that just changed (setBuildPlate, or a record swap that carries another plate) */
@@ -8901,7 +8988,7 @@ function thumbSpec(opts = {}) {
   const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08, unitId = null } = opts;
   const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
   const sig = paletteSig(), tier = quality;
-  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, sig, tier]);
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, partPlatesSig(), sig, tier]);
   return { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier, key };
 }
 async function renderThumb(opts = {}) {
@@ -11278,7 +11365,10 @@ for (const m of ['toDataURL', 'toBlob']) {
     // and, for the check that they match the model (PREVIEW-FIDELITY.md): one drawn uncached, and the live unit from its camera
     thumbDraw: (o, x) => drawThumb(thumbSpec(o), x), thumbModel,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
-    palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
+    palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, setPartPlate, setPartPlates, colorLocked,
+    // a part's build plate finish (2026-10-26): the one it wears, its own (null = follows the build), and whether it has a
+    // printed bed face at all (no known build axis, no finish - withBedFinish's rule)
+    plateFinishFor, ownPlateOf, hasBedFace: (key) => !!build && !!buildAxisForKey(String(key)),
     setOverride, clearOverrides, overrideFor, setColorStoreKey, holdColors: (on) => { colorsHeld = !!on; },
     // a look shown and not chosen, and the filament count (the Colors plan's step 1, 2026-10-18)
     previewPalette, endPreview, get previewing() { return !!previewLook; }, filamentsInBuild,

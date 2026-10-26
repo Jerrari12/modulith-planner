@@ -25,7 +25,7 @@ export function createStore(GEN2, opts = {}) {
     faceStyle: GEN2.faceplateStyles[0].id, doorStyle: GEN2.doorStyles[0].id, handleStyle: GEN2.handleStyles[0].id,
     spaceW: null, spaceH: null, printer: 'any', customBed: { x: null, y: null },
     gridW: 6, gridH: 4, placed: [], selected: { w: 1, h: 1 }, selectedUnit: null, nextId: 1,
-    wallStagger: false, removedStoppers: [], backCover: false, feet: 'tpu', buildPlate: 'powder',
+    wallStagger: false, removedStoppers: [], backCover: false, feet: 'tpu', buildPlate: 'powder', plateParts: {},
     labelStyle: null, buildId: newBuildId(), labelList: null, labelAssign: null,
   };
   const rules = () => layoutRules(state, GEN2, { tabletop });

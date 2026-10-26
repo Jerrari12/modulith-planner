@@ -673,6 +673,15 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 /* ---- Colors, the per-unit layer ---- */
 #ws-picker .head .region { font-size: 13px; color: var(--orange); }
 #ws-picker .resets { display: flex; gap: 6px; }
+/* a part's own build plate finish (2026-10-26): the picker's "Printed on" row, above the foot, and the left panel's list of
+   the parts that have one. 8 px between the row's pieces, the planner's spacing (memory: spacing-between-controls) */
+#ws-picker .platerow { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--hair); }
+#ws-picker .platerow .prh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
+#ws-picker .platerow .prh span { color: var(--ink-3); font-size: 11px; text-align: right; }
+#ws-picker .platerow .plateback { align-self: flex-start; }
+#ws-colors .plateown { list-style: none; margin: 8px 2px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+#ws-colors .plateown li { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+#ws-colors .plateown .link, #ws-picker .platerow .plateback { padding: 0; border: none; background: transparent; color: var(--orange); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; flex: none; }
 #ws-colors .crow .own, #ws-partcard .zchip .tag { margin-left: 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; background: var(--orange); color: var(--on-orange); font-weight: 700; }
 #ws-partcard .zchip.own { border-color: var(--orange); }
 

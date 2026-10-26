@@ -55,6 +55,7 @@ export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' :
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
 const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', SideCover: 'side covers', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
 const typePlural = (key) => TYPE_PLURAL[key.split(':')[0]] || (key.split(':')[0].toLowerCase() + 's');
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const regionOf = (key) => key.includes(':') ? ZONE_LABEL(key.split(':')[1]) : 'Body';
 const FILL_WORD = { classic: 'drawer', decor: 'drawer', shelf: 'shelf', cabinet: 'cabinet' };
 const hostOf = (href) => { try { return new URL(href).hostname.toLowerCase(); } catch { return ''; } };
@@ -331,8 +332,34 @@ export function mountColors(stage, ctx) {
     const plate = el('section');
     plate.appendChild(el('h3.h2', { text: 'Build plate finish' }));
     plate.appendChild(el('div.track.seg3', { role: 'group', 'aria-label': 'Build plate finish' }, PLATE_FINISHES.map((k) => el('button.seg.sm' + ((store.state.buildPlate || 'powder') === k ? '.on' : ''), { text: PLATE_LABELS[k], onclick: async () => { stage.endPreview?.(); store.flush(); await stage.setBuildPlate(k); store.load(stage.build, 'adopt'); store.flush(); renderAll(); } }))));   // its own undo step; app.js hands an undone plate back to the stage
-    plate.appendChild(el('p.note', { text: 'Only changes how the bed faces render · bills nothing. Screen colors are approximate; the Day Grid gives the truest read.' }));
+    // the parts with a finish of their own (2026-10-26), each with its way back to the build's
+    const owns = Object.entries(store.state.plateParts || {}).filter(([, f]) => PLATE_FINISHES.includes(f));
+    if (owns.length) plate.appendChild(el('ul.plateown', { 'aria-label': 'Parts with their own finish' }, owns.map(([t, f]) => el('li', {}, [
+      el('span', {}, [el('b', { text: cap(typePlural(t)) }), ` · ${PLATE_LABELS[f]}`]),
+      el('button.link', { text: 'Use the build’s', title: `Every ${typePlural(t).replace(/s$/, '')} back to the build’s finish, ${PLATE_LABELS[store.state.buildPlate || 'powder']}`, onclick: () => setOwnPlate(t, null) }),
+    ]))));
+    plate.appendChild(el('p.note', { text: 'Only changes how the bed faces render · bills nothing. A part can print on its own finish: pick it, then Printed on. Screen colors are approximate; the Day Grid gives the truest read.' }));
     panel.appendChild(plate);
+  }
+  /* A part type's own build plate finish (Joey, 2026-10-26: "everything except the faceplate powder-coated, and the
+     faceplate holographic"). One undo step, like the build's plate; app.js hands an undone map back to the stage. */
+  async function setOwnPlate(type, finish) { stage.endPreview?.(); store.flush(); await stage.setPartPlate(type, finish); store.load(stage.build, 'adopt'); store.flush(); renderAll(); }
+  /* the picker's "Printed on" row: the finish this region's part prints on, for every unit of the type (the sheet a part
+     printed on, not a colour region: a faceplate's Body and Face share it). Only for a part with a known bed face. */
+  function plateRow(key) {
+    const type = String(key).split(':')[0];
+    if (!stage.hasBedFace?.(key)) return null;
+    const own = stage.ownPlateOf(type), wears = stage.plateFinishFor(key), buildF = store.state.buildPlate || 'powder';
+    const every = typePlural(key);
+    return el('div.platerow', {}, [
+      el('div.prh', {}, [el('b', { text: 'Printed on' }), el('span', { text: own ? `own finish · all ${every}` : `the build’s · all ${every}` })]),
+      el('div.track.seg3', { role: 'group', 'aria-label': `Build plate finish for all ${every}` }, PLATE_FINISHES.map((f) => el('button.seg.sm' + (wears === f ? '.on' : ''), {
+        text: PLATE_LABELS[f], 'aria-pressed': String(wears === f),
+        title: f === wears ? (own ? `All ${every} print on ${PLATE_LABELS[f]}, their own finish` : `All ${every} follow the build’s ${PLATE_LABELS[f]} · click to keep it whatever the build’s finish`) : `All ${every} on ${PLATE_LABELS[f]}; the rest of the build stays on ${PLATE_LABELS[buildF]}`,
+        onclick: () => { if (own && f === own) return; setOwnPlate(type, f); },   // the inherited finish, clicked, PINS it (Sol 01a178a5): it then stays when the build's changes
+      }))),
+      own ? el('button.link.plateback', { text: `Use the build’s finish (${PLATE_LABELS[buildF]})`, onclick: () => setOwnPlate(type, null) }) : null,
+    ].filter(Boolean));
   }
   function downloadScheme() {
     const p = pal(); const data = { gen2Colors: 1, colors: p.colors, user: p.user };
@@ -747,6 +774,8 @@ export function mountColors(stage, ctx) {
       if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
     }
     renderBrands();
+    const pr = plateRow(key);
+    if (pr) picker.appendChild(pr);
     const buyUrl = w ? w.url : FILAMENT_DB[0].url;
     picker.appendChild(el('div.foot', {}, [
       el('a.buy', { href: buyUrl, target: '_blank', rel: isPaid(buyUrl) ? 'noopener sponsored' : 'noopener', text: w ? `Buy ${short(w.name)} →` : 'Shop filament →', onclick: buyFilament(stage, w) }),

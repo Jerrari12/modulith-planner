@@ -2656,6 +2656,98 @@ test('Colors: Undo of a plate finish puts the stage back on the old plate, and R
   await ctx.close();
 });
 
+/* A PART'S OWN BUILD PLATE FINISH (Joey, 2026-10-26: "everything except the faceplate powder-coated, and the faceplate
+   holographic"). The picker's Printed on row gives every faceplate its own finish while the rest follow the build; the
+   build's own switch then moves the rest and leaves the faceplates; each change is one undo step; the record carries it
+   through a reload; "Use the build's finish" hands the faceplates back. Read off the live materials (bedFinish.wearing). */
+test('Colors: a part\'s own build plate finish - faceplates Holographic while the rest follow the build, undo, a reload, and back', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 600);
+  const wear = () => page.evaluate(() => window.__GEN2_VIEWER__.bedFinish.wearing());
+  const rec = () => page.evaluate(() => ({ build: window.__GEN2_STORE__.state.buildPlate, parts: window.__GEN2_STORE__.state.plateParts, stage: window.__GEN2_VIEWER__.build.plateParts || {} }));
+  const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 30_000 });
+  // the control: before anything, every finished part wears the build's Powder-coated and none has its own
+  if ((await rec()).build !== 'powder') { await page.locator('#ws-colors .seg3 .seg', { hasText: 'Powder-coated' }).click(); await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'powder'); await settle(page, 800); }
+  const w0 = await wear();
+  assert.ok(w0.Faceplate && w0.Case, `faceplates and cases carry a finish: ${JSON.stringify(w0)}`);
+  for (const [t, v] of Object.entries(w0)) assert.deepEqual(v, { finishes: ['powder'], own: false }, `${t} follows the build's Powder-coated`);
+  // the faceplate's row, then Printed on: Holographic
+  await page.locator('#ws-colors .crow', { has: page.locator('b', { hasText: /^Faceplate$/ }) }).click();
+  const row = page.locator('#ws-picker .platerow');
+  await row.waitFor({ timeout: 10_000 });
+  assert.match(await row.textContent(), /the build’s · all faceplates/, 'the row says the faceplates follow the build');
+  await row.locator('.seg', { hasText: 'Holographic' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Faceplate === 'holographic');
+  await settle(page, 800);
+  assert.deepEqual(await rec(), { build: 'powder', parts: { Faceplate: 'holographic' }, stage: { Faceplate: 'holographic' } }, 'the record: the build stays Powder, the faceplates have their own');
+  let w = await wear();
+  assert.deepEqual(w.Faceplate, { finishes: ['holographic'], own: true }, `every faceplate wears Holographic: ${JSON.stringify(w.Faceplate)}`);
+  for (const [t, v] of Object.entries(w)) if (t !== 'Faceplate') assert.deepEqual(v, { finishes: ['powder'], own: false }, `${t} stays on the build's Powder-coated`);
+  assert.match(await page.locator('#ws-picker .platerow').textContent(), /own finish · all faceplates/);
+  assert.match(await page.locator('#ws-colors .plateown').textContent(), /Faceplates · Holographic/, 'the left panel lists it');
+  // the build's switch moves the rest and leaves the faceplates
+  await page.locator('#ws-colors .seg3 .seg', { hasText: 'Smooth' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'smooth');
+  await settle(page, 800);
+  w = await wear();
+  assert.deepEqual(w.Faceplate, { finishes: ['holographic'], own: true }, 'the faceplates keep their own finish');
+  assert.deepEqual(w.Case, { finishes: ['smooth'], own: false }, 'the cases follow the build to Smooth');
+  // an own finish that differs from the build only in its uniforms (no program change): the cases on Powder-coated
+  await page.locator('#ws-colors .crow', { has: page.locator('b', { hasText: /^Case$/ }) }).click();
+  await page.locator('#ws-picker .platerow .seg', { hasText: 'Powder-coated' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Case === 'powder');
+  await settle(page, 800);
+  w = await wear();
+  assert.deepEqual(w.Case, { finishes: ['powder'], own: true }, 'the cases wear their own Powder-coated on a Smooth build');
+  assert.deepEqual(w.Faceplate, { finishes: ['holographic'], own: true }, 'the faceplates keep theirs');
+  for (const [t, v] of Object.entries(w)) if (t !== 'Faceplate' && t !== 'Case') assert.deepEqual(v, { finishes: ['smooth'], own: false }, `${t} follows the build's Smooth`);
+  await page.keyboard.press('Control+Z');
+  await until(() => !(window.__GEN2_VIEWER__.build.plateParts || {}).Case);
+  await settle(page, 800);
+  assert.deepEqual((await wear()).Case, { finishes: ['smooth'], own: false }, 'Undo: the cases follow the build again');
+  // Undo: the build back to Powder; Undo again: the faceplates follow the build; Redo: their own again
+  await page.keyboard.press('Control+Z');
+  await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'powder');
+  await settle(page, 800);
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['holographic'], own: true }, 'Undo of the build plate leaves the faceplates');
+  await page.keyboard.press('Control+Z');
+  await until(() => !(window.__GEN2_VIEWER__.build.plateParts || {}).Faceplate);
+  await settle(page, 800);
+  assert.deepEqual(await rec(), { build: 'powder', parts: {}, stage: {} }, 'Undo: no part has its own finish');
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['powder'], own: false }, 'the faceplates follow the build again');
+  await page.keyboard.press('Control+Y');
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Faceplate === 'holographic');
+  await settle(page, 800);
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['holographic'], own: true }, 'Redo: their own again');
+  // the record carries it: a reload of the address keeps it, and the faceplates still wear it
+  await page.reload({ waitUntil: 'load' });
+  await waitBoot(page);
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 1200);
+  assert.deepEqual((await rec()).parts, { Faceplate: 'holographic' }, 'a reload keeps the faceplates\' own finish');
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['holographic'], own: true });
+  // and the way back, from the left panel's list
+  await page.locator('#ws-colors .plateown .link').first().click();
+  await until(() => !(window.__GEN2_VIEWER__.build.plateParts || {}).Faceplate);
+  await settle(page, 800);
+  assert.deepEqual((await rec()).parts, {}, 'Use the build’s: the faceplates follow the build');
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['powder'], own: false });
+  assert.equal(await page.locator('#ws-colors .plateown').count(), 0, 'the list is gone with the last own finish');
+  // the inherited finish, clicked, is PINNED (Sol 01a178a5): the faceplates then keep Powder-coated when the build moves
+  await page.locator('#ws-colors .crow', { has: page.locator('b', { hasText: /^Faceplate$/ }) }).click();
+  await page.locator('#ws-picker .platerow .seg', { hasText: 'Powder-coated' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Faceplate === 'powder');
+  await page.locator('#ws-colors .seg3 .seg', { hasText: 'Smooth' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'smooth');
+  await settle(page, 800);
+  w = await wear();
+  assert.deepEqual(w.Faceplate, { finishes: ['powder'], own: true }, 'pinned Powder-coated stays on a Smooth build');
+  assert.deepEqual(w.Case, { finishes: ['smooth'], own: false });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });

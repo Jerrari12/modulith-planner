@@ -133,6 +133,8 @@ export async function boot() {
     if (why !== 'undo' && why !== 'redo') return;
     const want = state.buildPlate || 'powder';
     if (stage.build && (stage.build.buildPlate || 'powder') !== want) stage.setBuildPlate(want, { quiet: true });
+    // and the per-part finishes (2026-10-26), the same kind of field: the generator never reads them either
+    if (stage.build && JSON.stringify(state.plateParts || {}) !== JSON.stringify(stage.build.plateParts || {})) stage.setPartPlates(state.plateParts || {}, { quiet: true });
   });
   /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
      silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
