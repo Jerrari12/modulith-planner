@@ -9,9 +9,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    # ci-speedup: TEMPORARY, the CI timing work's benchmark runs (2026-10-25); a push there runs every test job and never
-    # the deploy (main's alone). Remove before the merge.
-    branches: [main, ci-speedup]
+    branches: [main]
     # ⚠ DOCUMENTATION-ONLY PUSHES RUN NOTHING (2026-10-25). A push whose every changed file is under docs/ or is a
     # Markdown file at the repo root changes nothing that is served or tested: Assemble the site copies only the served
     # folders, and no test reads docs/ or a root .md. Nine of the 28 runs before this (287 of 1155 runner minutes) were
@@ -365,6 +363,7 @@ jobs:
     # SIX, not four (2026-10-26): on run 40262875906 the four shards carried equal weighted loads (486 s each by the
     # weights) and took 7.5 / 12.7 / 16.9 / 16.3 min, their runner/local medians 0.98 / 1.49 / 1.76 / 1.86 - the spread is
     # the runner machines, which no weighting can fix, so the run waits on its slowest machine; smaller shards bound that.
+    # Six on run 40264684655: 5.4 / 8.5 / 10.2 / 10.7 / 5.1 / 5.1 min, the whole run 11.4 min (four: 17.8).
     strategy:
       fail-fast: false
       matrix:

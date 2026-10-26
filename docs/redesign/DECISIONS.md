@@ -3396,7 +3396,7 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   round-trip confirmed), 1 discarded (stale `st.stageErrors` - syncStage clears it before the update on every pass).
 - **Deploy:** a bug Joey reported, so it deploys once the suites pass.
 
-## 2026-10-26 · The deploy workflow in parallel jobs: docs-only pushes run nothing, the e2e in four shards, the image's own Chrome
+## 2026-10-26 · The deploy workflow in parallel jobs: docs-only pushes run nothing, the e2e in six shards, the image's own Chrome
 
 - **Asked:** Joey, 2026-10-25, decided with Astra's review: a four-line fix and a docs paragraph each cost an hour on the
   runner. One bounded task, in order: report the measured baseline first; skip documentation-only changes (a NARROW list);
@@ -3416,7 +3416,7 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   images, kits, configuration or the README files inside served folders: each changes what is published or what a visitor
   gets. workflow_dispatch ignores the filter.
 - **Jobs:** unit (npm test), build (the stamping, the guard and the site artifact, byte-identical to before and now minutes
-  in, so a forgotten sed line fails before the browser suites finish), browser (the three short suites), e2e x4, e2e-coverage,
+  in, so a forgotten sed line fails before the browser suites finish), browser (the three short suites), e2e x6, e2e-coverage,
   deploy. **Concurrency is per job, not per workflow:** each test job has a group per ref (and per shard) whose
   cancel-in-progress is the run's FIRST attempt only; the deploy queues in `pages-deploy` without cancel-in-progress, so a
   publish in progress always finishes and a waiting deploy is replaced by a newer one. The old workflow-level
@@ -3448,4 +3448,21 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   named `docs` (now `:(exclude,glob)docs/**`, checked in a scratch repo). Four questions answered "holds": no older build
   publishes over a newer one, no deploy without every shard and the gate, unsharded registration unchanged, a missing
   system package fails a required job rather than passing a deploy.
-- **After (benchmark):** pending - the first run of this workflow on the branch.
+- **After (benchmark, branch runs; the deploy job skipped there, being main's alone):**
+
+  | run | wall clock | e2e shard steps (min) | the rest |
+  |---|---|---|---|
+  | 40257169401, the baseline (old steps, split) | 49.6 min | one serial step, 42.93 | install 4.78, short suites 1.34 |
+  | 40262875906, four shards (d3edeaa) | 17.8 min | 7.52 / 12.73 / 16.92 / 16.28 | browser job 1.4, unit 0.4, build 0.2 |
+  | 40264684655, six shards (2a10d49) | 11.4 min | 5.43 / 8.47 / 10.27 / 10.68 / 5.07 / 5.12 | browser job 2.1, unit 0.4, build 0.1 |
+
+  Every test job passed on both (the deploy job skipped, as on any branch), all on the image's Chrome 155.0.8059.39 (the
+  browser check 6-14 s a job on the four-shard run), the coverage gate
+  green (89 cases, each once: 22/22/22/23 and 14/14/14/16/15/16). **The shard count is six, and the spread is the
+  machines:** the four shards carried equal weighted loads (486 s each by the weights) and their runner/local medians were
+  0.98 / 1.49 / 1.76 / 1.86, so re-weighting cannot fix it; the run waits on its slowest runner, and smaller shards bound
+  that. Two runs are two samples of the runner pool, not a distribution: expect roughly 10-18 min, not a promise of 11.
+  Summed, the shards' e2e steps took 53.5 min (four) and 45.0 min (six) against 42.9 serial - the same machine spread,
+  plus a boot per shard. A docs-only push now runs nothing; before, 50-66 min.
+- **Not done here:** the weights stay the local soft-render run's (within one machine the runner's proportions follow
+  them); the runs-on 26.04 note is untouched.
