@@ -3089,6 +3089,16 @@ test('Colors: a spool clicked in the room opens the picker on its filament, and 
     const meshes = s.children.filter((m) => m.isMesh), cs = meshes.filter((m) => m.name === 'spool-caster'), fl = meshes.filter((m) => m.name !== 'spool-caster' && !(m.material.userData && m.material.userData.coil));
     out.push({ casters: cs.length, castersCast: cs.every((m) => m.castShadow && !m.material.colorWrite && m.userData.ghost && (() => { const h = []; m.raycast(new window.__GEN2_VIEWER__.THREE.Raycaster(), h); return !h.length; })()), flangeCasts: fl.some((m) => m.castShadow) }); }); return out; });
   assert.ok(casts.length && casts.every((c) => c.casters === 2 && c.castersCast && !c.flangeCasts), `each spool's shadow from its two discs, not its flange (${JSON.stringify(casts.slice(0, 3))})`);
+  const shadowCover = () => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, cam = v.sun.shadow.camera; cam.updateMatrixWorld(true);
+    const L = new T.Vector3().subVectors(v.sun.position, v.sun.target.position).normalize(), out = [];
+    // inside across and in depth (Sol 01a17823: only the far plane was refitted; the near one must hold every caster too)
+    let near = Infinity; const inside = (w) => { const p = w.clone().applyMatrix4(cam.matrixWorldInverse); near = Math.min(near, -p.z); return p.x >= cam.left && p.x <= cam.right && p.y >= cam.bottom && p.y <= cam.top && -p.z >= cam.near && -p.z <= cam.far; };
+    v.scene.traverse((g) => { if (g.name !== 'done-spools') return; const b = new T.Box3().setFromObject(g, true); let n = 0, k = 0;
+      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) { const w = new T.Vector3(x, y, z); n++; if (inside(w)) k++; n++; if (inside(w.addScaledVector(L, -(y - b.min.y) / L.y))) k++; }
+      out.push(`${k}/${n}`); });
+    return { out, map: v.sun.shadow.mapSize.x, cast: v.sun.castShadow, nearest: Math.round(near), planes: [cam.near, cam.far] };
+  });
   const wearing = (hex) => page.evaluate((h) => { const f = window.__GEN2_VIEWER__.filamentsInBuild(); return [...f.filaments.filter((x) => x.hex.toLowerCase() === h).flatMap((x) => x.keys), ...f.unpicked.filter((u) => !u.stripe && u.hex.toLowerCase() === h).map((u) => u.key)].sort(); }, hex);
   const keys0 = await wearing(at.hex);
   assert.ok(keys0.length, `the spool's colour is printed somewhere (${at.hex})`);
@@ -3126,6 +3136,12 @@ test('Colors: a spool clicked in the room opens the picker on its filament, and 
   await settle(page, 600);
   assert.deepEqual(await wearing(at.hex), keys0, 'one undo: every region in the old colour again');
   assert.equal(undo0, await page.evaluate(() => window.__GEN2_STORE__.canUndo), 'and the history as it was');
+  /* at a tier with the sun's shadow: each group and where its shadow falls on the desk inside its camera (main.js THE
+     SHADOW BEYOND THE BUILD): fitted to the build alone, a stack caught and cast its shadow only partly, cut on a line */
+  await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('high', { user: true }));
+  await settle(page, 600);
+  const cover = await shadowCover();
+  assert.ok(cover.cast && cover.out.length && cover.out.every((s) => s.split('/')[0] === s.split('/')[1]), `every spool group and its shadow inside the sun's shadow camera (${JSON.stringify(cover)})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

@@ -1194,7 +1194,14 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     if (parts.hovered && !parts.hovered.parent) parts.hovered = null;   // a spool taken off the desk is under no pointer
     glowSpools();
+    fitShadowToSpools();   // a stack grown or one gone: the sun's shadow refitted round them
     stage.invalidateFrame();
+  }
+  /* the sun's shadow camera round the build AND the spools and their shadows on the desk (main.js THE SHADOW BEYOND THE
+     BUILD): fitted to the build alone, a stack beside it caught and cast its shadow only partly, cut on a straight line */
+  function fitShadowToSpools() {
+    if (!stage.setShadowExtent) return;
+    stage.setShadowExtent(parts.spools ? parts.spools.groups.map((g) => new THREE.Box3().setFromObject(g, true)) : []);
   }
   /* the build's facts the milestone sayings read (done-fit.js buildFacts): its units, which carry a drawer and a label, and
      its overall size */
@@ -1554,6 +1561,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     applyLights(stage.quality);
     // the hero never looks at the window: its pane compiled now, under the hold's shadow, not on the first shot that does
     if (parts.pane && stage.compileAhead) stage.compileAhead(parts.pane);
+    fitShadowToSpools();   // after the room's sun is placed: the fit is taken in its view
     // the scene has no orbit (Joey: "don't let them rotate the camera"); a stage (Colors) keeps it; never a pan, the shots own the aim
     controls.enabled = !!orbit; controls.enablePan = false;
     /* ... nor the stage's floor on the orbit (maxPolarAngle 0.52 pi on a desk build: "don't go under the table"), which
@@ -1765,6 +1773,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     stage.table.visible = was.table; stage.grid.visible = was.grid;
     stage.holdScene(false);   // and the callouts back as the page last asked for them
     if (stage.setSupersample) stage.setSupersample(false);
+    if (stage.setShadowExtent) stage.setShadowExtent([]);   // the stage's shadow round its build alone again
     if (parts.env) { parts.env.dispose(); parts.env = null; }
     parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
     controls.enabled = was.controls; controls.enablePan = was.pan; controls.maxPolarAngle = was.polar;
@@ -1777,6 +1786,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!on) return;
     applyLights(tier);
     if (parts.pane && stage.compileAhead) stage.compileAhead(parts.pane);   // the new tier's shadow state is in its program
+    fitShadowToSpools();   // the new tier's map size and Very High's tilt
     if (parts.steam) parts.steam.follow(tier);   // the steam drawn or not before the new tier's first frame (Terra 01a1755a)
     /* a drop below High mid-shot: a moving shot locks off where it is, and the drawer's timers would outlive the drop (the
        still grammar has no drawer moment: Terra 01a16b6b) */

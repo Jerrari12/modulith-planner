@@ -824,6 +824,7 @@ function markShadowDirty() {
 function setPartShadows(root, on) {
   root.traverse(o => { if (o.isMesh) { o.castShadow = on; o.receiveShadow = on; } });
 }
+const shadowExtra = [], _fitCam = new THREE.OrthographicCamera();   // THE SHADOW BEYOND THE BUILD (below); declared before any fit can run
 function fitShadowCamera() {
   if (!sun.castShadow || typeof assembledBox === 'undefined' || assembledBox.isEmpty()) return;
   const size = new THREE.Vector3(), c = new THREE.Vector3();
@@ -840,23 +841,59 @@ function fitShadowCamera() {
   const cam = sun.shadow.camera;
   cam.left = -r; cam.right = r; cam.top = r; cam.bottom = -r;
   cam.near = 1; cam.far = 3000;
-  cam.updateProjectionMatrix();
   sun.target.position.copy(c);
   if (!sun.target.parent) scene.add(sun.target);
   sun.target.updateMatrixWorld();
   /* Texel density is the FLOOR on the contact sharpness the accumulation can
      deliver: no number of light samples makes a shadow edge finer than one
      shadow-map texel plus the PCF tap. Very High spends the memory. */
-  const sm = QUALITY[quality].accum ? 2048 : 1024;
+  let sm = QUALITY[quality].accum ? 2048 : 1024;
+  if (shadowExtra.length) {   // casters beyond the build (THE SHADOW BEYOND THE BUILD, below)
+    const f = shadowFit([assembledBox, ...shadowExtra], sun.position, c, QUALITY[quality].accum ? ACC_SUN_HALF_DEG : 0);
+    cam.left = f.x0; cam.right = f.x1; cam.bottom = f.y0; cam.top = f.y1; cam.far = Math.max(3000, f.far);
+    cam.near = Math.min(1, f.near);   // a stack tall enough toward the sun reaches past the light (Sol 01a17823): an orthographic near may be negative
+    const texel = (2 * r) / sm, cap = Math.min(2 * sm, renderer.capabilities.maxTextureSize || 4096);
+    sm = Math.max(sm, Math.min(cap, Math.ceil(Math.max(f.x1 - f.x0, f.y1 - f.y0) / texel / 512) * 512));
+  }
+  cam.updateProjectionMatrix();
   if (sun.shadow.mapSize.x !== sm) {
     sun.shadow.mapSize.set(sm, sm);
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }   // three only allocates once
   }
   // world units are MILLIMETRES and parts are 2-3mm thick — normalBias has to be a
   // fraction of a mm, not the ~0.02 a tutorial suggests
-  sun.shadow.bias = -0.0004;
+  sun.shadow.bias = (-0.0004 * 2999) / (cam.far - cam.near);   // the same 1.2 mm whatever the depth range (exactly -0.0004 at 1..3000; Sol 01a17823)
   sun.shadow.normalBias = 0.6;
   renderer.shadowMap.needsUpdate = true;   // THE flag that matters (see above)
+}
+/* THE SHADOW BEYOND THE BUILD (2026-10-26, Joey of the Done room's spools: "the shadow is odd and wrong, casted from the
+   spools onto the table, also there's a weird shadow on the spools"). The shadow camera is a square round the build, and
+   what stands outside it casts and catches nothing, cut off on a straight line: MEASURED, 3 of the spool stack's 8
+   corners inside it at High (it reached 1.6 of the square's half-width) and its shadow on the desk 2.6. So a scene that
+   puts casters beside the build (setShadowExtent, done.js: the spool groups) has the camera fitted, in the light's own
+   view, round the build and those boxes AND where their shadows fall: each corner carried along the light down to the
+   level its box stands on. Very High's samples tilt the light by up to ACC_SUN_HALF_DEG, so each point is given room for
+   that tilt about the target. The map grows with the area, to keep the square's own texel, up to twice the tier's size. */
+function setShadowExtent(boxes) {
+  shadowExtra.length = 0;
+  for (const b of boxes || []) if (b && !b.isEmpty()) shadowExtra.push(b.clone());
+  fitShadowCamera();
+}
+function shadowFit(boxes, from, at, tiltDeg) {
+  _fitCam.position.copy(from); _fitCam.lookAt(at); _fitCam.updateMatrixWorld(true);   // as three aims a directional light's shadow camera
+  const inv = _fitCam.matrixWorldInverse, L = from.clone().sub(at).normalize(), tilt = Math.sin((tiltDeg * Math.PI) / 180);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, far = 0, near = Infinity;
+  const p = new THREE.Vector3(), q = new THREE.Vector3();
+  const take = (w) => {
+    const room = w.distanceTo(at) * tilt + 20;   // mm: the light's tilt about the target, and a margin
+    q.copy(w).applyMatrix4(inv);
+    x0 = Math.min(x0, q.x - room); x1 = Math.max(x1, q.x + room); y0 = Math.min(y0, q.y - room); y1 = Math.max(y1, q.y + room); far = Math.max(far, -q.z + 200); near = Math.min(near, -q.z - 200);
+  };
+  for (const b of boxes) for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+    p.set(x, y, z); take(p);
+    if (L.y > 0.05) take(p.clone().addScaledVector(L, -(y - b.min.y) / L.y));   // where that corner's shadow falls on its box's base
+  }
+  return { x0, x1, y0, y1, far, near };
 }
 
 /* THE SHADOW MAP RE-RENDERS WHEN WHAT IT SHOWS CHANGED (MOVE_OPT.shadow, Joey and Astra 2026-09-14).
@@ -11428,7 +11465,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
     mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
     // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
-    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn; }, compileAhead, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
+    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn; }, compileAhead, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
     // reflector, so a rendering question can be answered by reading state instead

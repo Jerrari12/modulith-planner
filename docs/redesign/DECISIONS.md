@@ -4339,3 +4339,31 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   - Compile-ahead is covered: the relief case counts programs through the macro cut, a tier change included, and passed
     with the casters in.
 - **Not deployed.**
+
+## 2026-10-26 - Done scene: the sun's shadow fitted round the spools too
+
+- **Why.** Joey: "the shadow is odd and wrong, casted from the spools onto the table, also there's a weird shadow on the
+  spools". It was Sol's round-25 risk. The sun's shadow camera was a square round the build alone, and what stands
+  outside it casts and catches nothing, cut on a straight line. MEASURED in the final scene: 3 of the spool stack's 8
+  box corners inside it, the box reaching 1.6 (High) to 1.8 (Very High) of its half-width. An earlier "2.6-3" for the
+  stack's shadow on the desk was a broken probe: a point carried along the light keeps its place in the light's view,
+  so a shadow lies wherever its caster does (Sol round 26).
+- **Now** (main.js THE SHADOW BEYOND THE BUILD; done.js fitShadowToSpools).
+  - A scene may name casters beside the build (setShadowExtent: the spool groups' boxes; on entry once the room's sun is
+    placed, after the spools change, on a tier change, cleared on leave).
+  - The camera is then fitted, in the light's own view, round the build and those boxes, with room for Very High's light
+    tilt about its target.
+  - The map grows to keep the old texel, up to twice the tier's size: High 1536 (0.34-0.41 mm a texel, from 0.53), Very
+    High 3072.
+  - The near plane may go negative: a stack up to the ceiling toward the sun reaches past the light (a 2.5 m test tower:
+    its top 607 mm behind it; near -807, every corner covered).
+  - The depth bias scales with the depth range, to keep its 1.2 mm in the world (exactly -0.0004 at the stage's own
+    1..3000, so the planner is unchanged).
+  - With no casters named, the fit is the one before.
+- **Seen.** The stack's shadow on the desk and the wall is whole, its rounded top on the wall, no straight cut
+  (`D:\Claude - Output\done-scene-spools-2026-10-26\aa\cover2`).
+- **Checks.** The spool-click case ends at High and asserts every group's corners, and the points carried down to its
+  base, inside the shadow camera across and in depth. A mutant with the refit off fails it (12/16, 10/16). 11 touched
+  cases pass. Sol `01a17823` round 26: the near plane (fixed); the bias (fixed). Not deployed.
+- **Seen in passing, not this change.** The dashed seam across a build's side cover, the same before and after: the
+  cover-seam bevel, next to trace.
