@@ -2865,14 +2865,19 @@ function logQuality(line) {
    The canvas HAS 4x MSAA (measured: SAMPLES 4, the full device ratio, no resolution drop). What crawls is detail under a
    pixel that MSAA does not touch: the flanges' notches, a cover's 0.2 mm seam bevel, the label inserts' edges, specular
    on thin faces. Very High's accumulation resolves them only once the camera rests, and the final scene's every shot
-   moves. So while it is on (setSupersample, done.js), a tier that draws at 2 draws at up to twice the screen's own ratio,
-   inside the pixel count a 4K screen at ratio 2 already gets (and Very High's targets already size for): measured
-   2.2 ms a main pass at 2000x991, 3.6 at 4000x1982. The resolution drop still wins on a device that proved slow. */
+   moves. So while it is on (setSupersample, done.js), Very High draws at up to twice the screen's own ratio, inside the
+   pixel count a 4K screen at ratio 2 already gets (and its targets already size for). The resolution drop still wins on
+   a device that proved slow.
+   ⚠ VERY HIGH ONLY, AND NOT THE FIX. Joey: "I'm not sure if that's the ideal solution to improve this if it requires
+   greatly raising performance". Measured on the A5000 at 2000x991 vs 4000x1982, a held shot at High: 3.8-4.2 ms a
+   frame against 7.6-10.2 (noisy, vsync off). The worst crawl had causes of its own, fixed where they are (spool.js THE
+   FLANGES' SHADOW, done-fit.js SPOOL_LEAN, spool.js COIL_FADE); after them a frame at the screen's ratio drew the
+   spools' rims as cleanly as one at twice it. What is left for this is finer detail, on the tier that spends for it. */
 const SUPER_PIXELS = 3840 * 2160;
 let superOn = false;
 function setSupersample(on) { if (superOn === !!on) return; superOn = !!on; invalidateFrame(); }
 function superCap(q, cap) {
-  if (!superOn || q.dpr < 2) return cap;
+  if (!superOn || !q.accum) return cap;
   const css = Math.max(1, canvas.clientWidth * canvas.clientHeight);
   return Math.max(cap, Math.min(2 * devicePixelRatio, Math.sqrt(SUPER_PIXELS / css)));
 }

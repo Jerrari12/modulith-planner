@@ -4307,3 +4307,35 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   pass. Sol `01a17823` round 23 (two findings: one discarded, the idle gate's key carries accRev; one premise wrong, as
   `cinema.on` is the old outro, but its risk accepted, so supersampling waits for the verdict) and round 24 (none). Not
   deployed.
+
+## 2026-10-26 - Done scene: the spools' crawl fixed at its sources; supersampling on Very High only
+
+- **Why.** Joey, zoomed into the supersampled frame: the jaggies were still there, and "I'm not sure if that's the ideal
+  solution ... if it requires greatly raising performance". Astra (relayed): isolate each source at unchanged resolution
+  before choosing an AA method. Measured on the A5000, a held shot at High, vsync off (noisy, +-50 %): 3.8-4.2 ms a frame
+  at 2000 x 991 against 7.6-10.2 at 4000 x 1982.
+- **What the sources were** (real-pipeline frames at 2000 x 991, supersampling off, one thing off at a time; close-ups
+  at 2.5x): Joey named two as the ones he saw.
+  - The dashed seams between stacked spools survived the winding off, the spools' shadows off, the AO retired and the
+    spools unlit, so they were geometry. The flange mesh is closed (no open or non-manifold edges). The seam was the
+    wedge-shaped gap a leaned spool leaves on the one below, 0 at the touch and about 2.6 mm across, broken into dashes
+    where it narrows under a pixel. Level, the seams draw whole; a level 1 mm gap brings some back.
+    **Fix:** `SPOOL_LEAN = 0` (done-fit.js). Each stack keeps its slip (up to 7 mm off the one below) and its turn, and
+    the rng draws are unchanged, so every stack is the same otherwise.
+  - The blocky dark shapes on a coil under its flange are not shadow-map resolution: the same at 1024, 2048 and 4096.
+    They go with the flanges not casting. The lightened flange's rim is long flat facets, each throwing a straight-edged
+    shadow. **Fix:** the flange casts nothing, and two invisible 256-sided discs of its size cast for it (spool.js THE
+    FLANGES' SHADOW): depth only, never hit, out of the AO and the reflection.
+  - The coil's band limit (COIL_FADE) stays.
+- **Supersampling on Very High only** (main.js superCap: `q.accum`). After the two fixes a frame at the screen's ratio
+  drew the spools' rims as cleanly as one at twice it (`D:\Claude - Output\done-scene-spools-2026-10-26\aa\fixed`).
+- **Checks.** The spool-click case asserts the casters (a mutant with the flange casting again fails it). The lens case
+  asserts High at the screen's ratio. 9 touched cases pass; unit 658/664 (the failure is a foot GLB missing from the
+  worktree's parts junction).
+- **Sol `01a17823` round 25.** No correctness findings. Risks recorded:
+  - The sun's shadow frustum is fitted to the build only, so the spools are not guaranteed inside it (predates this).
+  - The discs shadow through the flanges' slots, which the real flanges would not.
+  - 32 spools means 64 caster meshes.
+  - Compile-ahead is covered: the relief case counts programs through the macro cut, a tier change included, and passed
+    with the casters in.
+- **Not deployed.**

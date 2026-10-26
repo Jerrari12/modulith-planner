@@ -2009,6 +2009,7 @@ test('Assemble: the Done scene\'s lens: a held shot of the moving grammar on Ver
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
   await settle(page, 400);
   assert.equal((await L(page)).lens, null, 'High: no lens (nothing accumulates)');
+  assert.equal((await L(page)).pr, 1, 'and High draws at the screen\'s own ratio (supersampling is Very High\'s only)');
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }); });
   await settle(page, 400);
   const back = await L(page);
@@ -3082,6 +3083,12 @@ test('Colors: a spool clicked in the room opens the picker on its filament, and 
     return null;
   });
   assert.ok(at, 'a PLA spool in view, nearest at its middle');
+  /* the flanges' shadow from two smooth discs (spool.js THE FLANGES' SHADOW): the lightened flange's facets threw blocks
+     of shadow on the coil; the flange casts nothing, its discs cast, unseen, never hit, out of the AO */
+  const casts = await page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((s) => { if (!(s.userData.spool && s.userData.setColor)) return;
+    const meshes = s.children.filter((m) => m.isMesh), cs = meshes.filter((m) => m.name === 'spool-caster'), fl = meshes.filter((m) => m.name !== 'spool-caster' && !(m.material.userData && m.material.userData.coil));
+    out.push({ casters: cs.length, castersCast: cs.every((m) => m.castShadow && !m.material.colorWrite && m.userData.ghost && (() => { const h = []; m.raycast(new window.__GEN2_VIEWER__.THREE.Raycaster(), h); return !h.length; })()), flangeCasts: fl.some((m) => m.castShadow) }); }); return out; });
+  assert.ok(casts.length && casts.every((c) => c.casters === 2 && c.castersCast && !c.flangeCasts), `each spool's shadow from its two discs, not its flange (${JSON.stringify(casts.slice(0, 3))})`);
   const wearing = (hex) => page.evaluate((h) => { const f = window.__GEN2_VIEWER__.filamentsInBuild(); return [...f.filaments.filter((x) => x.hex.toLowerCase() === h).flatMap((x) => x.keys), ...f.unpicked.filter((u) => !u.stripe && u.hex.toLowerCase() === h).map((u) => u.key)].sort(); }, hex);
   const keys0 = await wearing(at.hex);
   assert.ok(keys0.length, `the spool's colour is printed somewhere (${at.hex})`);

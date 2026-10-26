@@ -909,13 +909,18 @@ export function spoolPlan(rng, colours) {
 }
 /* A STACK AS HANDS LEAVE IT (Joey 2026-10-26: "make the stacked filament positioning slightly random and imperfect, like
  * it's impossible to stack it that neatly"): each spool lying flat sits up to SPOOL_SLIP off the stack's axis, at its own
- * turn, leaned a little (up to SPOOL_LEAN, a warped flange's worth), and raised by what the lean takes so its flange rests on
+ * turn, leaned up to SPOOL_LEAN (none now: see it), and raised by what the lean takes so its flange rests on
  * the one below (or the desk) without sinking into it. A flange is a plane, its height `lean` dotted with the point from
  * its centre; the two flanges' difference is linear, so its most, over where they overlap, is on that overlap's edge: on
  * one rim or the other (both sampled, a degree apart). Returns, per spool from the bottom, its centre {x, y, z} (mm, y from
  * the desk), `spin` (rad, about its own axis) and `lean` {x, z} (the slopes of its flanges, dy/dx and dy/dz). */
 export const SPOOL_SLIP = 7;   // mm, never under a third of it: a stack never comes out square. Its reach, leaned, 7 + 100 cos 1.5° + 32.6 sin 1.5° = 107.8, inside done.js SPOOL_FOOT's 108 (Sol 01a17823: 8 reached 108.8)
-export const SPOOL_LEAN = 1.5;   // degrees
+/* degrees. 0 since 2026-10-26 (Joey, of the final scene: the dashed seams between stacked spools "are the main ones i'm
+   noticing"): a leaned flange on a level one leaves a wedge of a gap, 0 at the touch and 2.6 mm across, and where it
+   narrows under a pixel its dark line breaks into dashes that crawl as the camera moves (measured: level, the seams
+   draw whole; a level 1 mm gap brings some back). The slip and the turn keep a stack from coming out square. The lean's
+   draw from the rng stays, so every stack keeps its slip and turn as before. */
+export const SPOOL_LEAN = 0;
 export function stackPoses(rng, n, { half = 32.6, radius = 100 } = {}) {
   const out = [];
   let below = { x: 0, z: 0, lean: { x: 0, z: 0 }, top: 0, r: Infinity };   // the desk: level, and everywhere

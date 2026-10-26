@@ -544,7 +544,7 @@ test('the milestone sayings: a build\'s size, height, drawers and labels unlock 
   for (let i = 0; i < 300; i++) { const ms = mugPlan(rngFrom(hashSeed('#c' + i)), { count: 3, extra }).mugs.map((m) => m.back.milestone).filter(Boolean); assert.equal(new Set(ms).size, ms.length, 'no milestone twice on one desk'); }
 });
 
-test('a stack as hands leave it: each spool a little off, turned and leaned, every flange resting on the one below, none sunk into it', () => {
+test('a stack as hands leave it: each spool a little off and turned, level, every flange resting on the one below, none sunk into it', () => {
   // the spool as done.js poses it: rotation order XZY (spun about its axis, then leaned), a point's world place = centre + Rx Rz Ry p
   const place = (o, p) => {
     const ax = -Math.atan(o.lean.z), az = Math.atan(o.lean.x), s = o.spin;
@@ -571,7 +571,7 @@ test('a stack as hands leave it: each spool a little off, turned and leaned, eve
       const off = Math.hypot(o.x, o.z);
       assert.ok(off <= SPOOL_SLIP + 1e-9 && (!k || off >= 0.35 * SPOOL_SLIP - 1e-9), `off the axis by a little, never none above the bottom (${off.toFixed(1)} mm)`);
       const lean = (Math.atan(Math.hypot(o.lean.x, o.lean.z)) * 180) / Math.PI;
-      assert.ok(lean <= SPOOL_LEAN + 1e-9 && lean >= 0.3 * SPOOL_LEAN - 1e-9, `leaned a little (${lean.toFixed(2)} deg)`);
+      assert.ok(lean <= SPOOL_LEAN + 1e-9 && lean >= 0.3 * SPOOL_LEAN - 1e-9, `leaned no more than SPOOL_LEAN (${lean.toFixed(2)} deg)`);
       const gaps = k ? gapsOver(poses[k - 1], o) : rim(o, -1).map((q) => q[1]);   // on the one below (or the desk)
       const low = Math.min(...gaps);
       assert.ok(low > -0.15,`seed ${seed}, spool ${k}: not sunk into what it rests on (${low.toFixed(2)} mm)`);
@@ -582,7 +582,9 @@ test('a stack as hands leave it: each spool a little off, turned and leaned, eve
       leaned = Math.max(leaned, lean);
     }
   }
-  assert.ok(slipped > SPOOL_SLIP && leaned > 0.9 * SPOOL_LEAN, `not neat: up to ${slipped.toFixed(1)} mm off the one below, ${leaned.toFixed(2)} deg`);
+  assert.ok(slipped > SPOOL_SLIP, `not neat: up to ${slipped.toFixed(1)} mm off the one below`);
+  // level since 2026-10-26: a leaned flange's wedge of a gap drew as crawling dashes (done-fit.js SPOOL_LEAN)
+  assert.equal(SPOOL_LEAN, 0); assert.equal(leaned, 0, 'every spool level, its flanges flat on the one below');
   assert.deepEqual(stackPoses(rngFrom(7), 3), stackPoses(rngFrom(7), 3), 'the build\'s own seed: the same stack each time');
 });
 test('the spools: one per colour the build is printed in (thirty-two at most), stacks as high as the room allows, stacks and standing ones, the build\'s own seed, always', () => {

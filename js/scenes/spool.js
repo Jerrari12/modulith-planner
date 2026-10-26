@@ -103,6 +103,15 @@ function drumGeometry() {
   return drum;
 }
 
+/* THE FLANGES' SHADOW (Joey 2026-10-26, of the final scene's spools: stair-stepped shadows "are the main ones i'm
+   noticing"): the lightened flange's rim is long flat slivers, and each straight facet threw a straight-edged shadow onto
+   the coil under it, a curve come out in blocks; measured, it is no shadow-map texel (1024, 2048 and 4096 drew the same
+   blocks) and it goes with the flange not casting. So the flange casts nothing and two discs of its size do: depth only,
+   256 round, never drawn, never hit, out of the AO. (Their slots let no light through; at this scale none showed.) */
+let caster = null;
+const casterGeometry = () => caster || (caster = new THREE.CylinderGeometry(100, 100, 5, 256));   // a flange: 100 mm round, its faces at 27.5 and 32.5
+const CASTER = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+
 /* one spool of `color` (a hex): the flanges (`geo`, from loadSpool) in the spool's plastic, the wound drum in the colour.
    Returns the group (its axis along +Y) and a `setColor`. */
 export function makeSpool(geo, color, { plastic = SPOOL.plastic } = {}) {
@@ -114,6 +123,13 @@ export function makeSpool(geo, color, { plastic = SPOOL.plastic } = {}) {
   const o = new THREE.Mesh(d.outer, outer);
   const s = d.sides.map((sg) => new THREE.Mesh(sg, sides));
   for (const m of [f, o, ...s]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  f.castShadow = false;   // its discs cast for it (THE FLANGES' SHADOW)
+  for (const y of [30, -30]) {
+    const c = new THREE.Mesh(casterGeometry(), CASTER);
+    c.name = 'spool-caster'; c.position.y = y; c.castShadow = true; c.receiveShadow = false;
+    c.userData.ghost = true; c.raycast = () => {};
+    g.add(c);
+  }
   g.userData.spool = { color, materials: [fm, outer, sides] };
   /* the glow a spool takes on the Colors stage (Joey 2026-10-26: "when you hover over a filament and select a filament we
      should highlight it in some way so you know you can click it and when it is selected"): 0 none, 1 under the pointer
