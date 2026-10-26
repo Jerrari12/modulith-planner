@@ -890,3 +890,33 @@ export function spoolPlan(rng, colours) {
   }
   return { groups };
 }
+/* A STACK AS HANDS LEAVE IT (Joey 2026-10-26: "make the stacked filament positioning slightly random and imperfect, like
+ * it's impossible to stack it that neatly"): each spool lying flat sits up to SPOOL_SLIP off the stack's axis, at its own
+ * turn, leaned a little (up to SPOOL_LEAN, a warped flange's worth), and raised by what the lean takes so its flange rests on
+ * the one below (or the desk) without sinking into it. A flange is a plane, its height `lean` dotted with the point from
+ * its centre; the two flanges' difference is linear, so its most, over where they overlap, is on that overlap's edge: on
+ * one rim or the other (both sampled, a degree apart). Returns, per spool from the bottom, its centre {x, y, z} (mm, y from
+ * the desk), `spin` (rad, about its own axis) and `lean` {x, z} (the slopes of its flanges, dy/dx and dy/dz). */
+export const SPOOL_SLIP = 7;   // mm, never under a third of it: a stack never comes out square. Its reach, leaned, 7 + 100 cos 1.5° + 32.6 sin 1.5° = 107.8, inside done.js SPOOL_FOOT's 108 (Sol 01a17823: 8 reached 108.8)
+export const SPOOL_LEAN = 1.5;   // degrees
+export function stackPoses(rng, n, { half = 32.6, radius = 100 } = {}) {
+  const out = [];
+  let below = { x: 0, z: 0, lean: { x: 0, z: 0 }, top: 0, r: Infinity };   // the desk: level, and everywhere
+  for (let k = 0; k < n; k++) {
+    const a = rng() * 2 * Math.PI, r = k ? SPOOL_SLIP * (0.35 + 0.65 * rng()) : 0;   // the bottom one is where the plan put it
+    const d = rng() * 2 * Math.PI, m = Math.tan(((0.3 + 0.7 * rng()) * SPOOL_LEAN * Math.PI) / 180);
+    const lean = { x: m * Math.cos(d), z: m * Math.sin(d) }, x = r * Math.cos(a), z = r * Math.sin(a);
+    const rise = (px, pz) => below.lean.x * (px - below.x) + below.lean.z * (pz - below.z) - lean.x * (px - x) - lean.z * (pz - z);   // the one below's top over this one's bottom
+    let gap = -Infinity;
+    for (let i = 0; i < 360; i++) {
+      const cu = Math.cos((i * Math.PI) / 180), su = Math.sin((i * Math.PI) / 180);
+      const px = x + radius * cu, pz = z + radius * su, qx = below.x + radius * cu, qz = below.z + radius * su;
+      if (Math.hypot(px - below.x, pz - below.z) <= below.r) gap = Math.max(gap, rise(px, pz));     // this one's rim, over the one below
+      if (k && Math.hypot(qx - x, qz - z) <= radius) gap = Math.max(gap, rise(qx, qz));            // the one below's rim, under this one
+    }
+    const y = below.top + gap + half;
+    out.push({ x, y, z, spin: rng() * 2 * Math.PI, lean });
+    below = { x, z, lean, top: y + half, r: radius };
+  }
+  return out;
+}

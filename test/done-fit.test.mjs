@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -535,6 +535,47 @@ test('the milestone sayings: a build\'s size, height, drawers and labels unlock 
   for (let i = 0; i < 300; i++) { const ms = mugPlan(rngFrom(hashSeed('#c' + i)), { count: 3, extra }).mugs.map((m) => m.back.milestone).filter(Boolean); assert.equal(new Set(ms).size, ms.length, 'no milestone twice on one desk'); }
 });
 
+test('a stack as hands leave it: each spool a little off, turned and leaned, every flange resting on the one below, none sunk into it', () => {
+  // the spool as done.js poses it: rotation order XZY (spun about its axis, then leaned), a point's world place = centre + Rx Rz Ry p
+  const place = (o, p) => {
+    const ax = -Math.atan(o.lean.z), az = Math.atan(o.lean.x), s = o.spin;
+    let [x, y, z] = [p[0] * Math.cos(s) + p[2] * Math.sin(s), p[1], -p[0] * Math.sin(s) + p[2] * Math.cos(s)];   // Ry
+    [x, y] = [x * Math.cos(az) - y * Math.sin(az), x * Math.sin(az) + y * Math.cos(az)];                           // Rz
+    [y, z] = [y * Math.cos(ax) - z * Math.sin(ax), y * Math.sin(ax) + z * Math.cos(ax)];                           // Rx
+    return [o.x + x, o.y + y, o.z + z];
+  };
+  const rim = (o, face) => Array.from({ length: 720 }, (_, i) => place(o, [100 * Math.cos(i * Math.PI / 360), face * 32.6, 100 * Math.sin(i * Math.PI / 360)]));
+  const planeY = (o, face, x, z) => {   // the height of spool `o`'s flange face (1 its top, -1 its bottom) over a point of the desk
+    const t = place(o, [0, face * 32.6, 0]), n = place({ ...o, x: 0, y: 0, z: 0 }, [0, 1, 0]);
+    return t[1] - (n[0] * (x - t[0]) + n[2] * (z - t[2])) / n[1];
+  };
+  const within = (o, q) => Math.hypot(q[0] - o.x, q[2] - o.z) <= 100;
+  const gapsOver = (lo, o) => [   // where the two flanges overlap: this one's bottom rim over the one below, and its top rim under this one
+    ...rim(o, -1).filter((q) => within(lo, q)).map((q) => q[1] - planeY(lo, 1, q[0], q[2])),
+    ...rim(lo, 1).filter((q) => within(o, q)).map((q) => planeY(o, -1, q[0], q[2]) - q[1])];
+  let slipped = 0, leaned = 0;
+  for (let seed = 1; seed <= 300; seed++) {
+    const poses = stackPoses(rngFrom(seed), 5);
+    assert.equal(poses.length, 5);
+    assert.ok(poses[0].x === 0 && poses[0].z === 0, 'the bottom one where the plan put it');
+    for (const [k, o] of poses.entries()) {
+      const off = Math.hypot(o.x, o.z);
+      assert.ok(off <= SPOOL_SLIP + 1e-9 && (!k || off >= 0.35 * SPOOL_SLIP - 1e-9), `off the axis by a little, never none above the bottom (${off.toFixed(1)} mm)`);
+      const lean = (Math.atan(Math.hypot(o.lean.x, o.lean.z)) * 180) / Math.PI;
+      assert.ok(lean <= SPOOL_LEAN + 1e-9 && lean >= 0.3 * SPOOL_LEAN - 1e-9, `leaned a little (${lean.toFixed(2)} deg)`);
+      const gaps = k ? gapsOver(poses[k - 1], o) : rim(o, -1).map((q) => q[1]);   // on the one below (or the desk)
+      const low = Math.min(...gaps);
+      assert.ok(low > -0.15,`seed ${seed}, spool ${k}: not sunk into what it rests on (${low.toFixed(2)} mm)`);
+      assert.ok(low < 0.6, `seed ${seed}, spool ${k}: resting on it, not floating (${low.toFixed(2)} mm)`);
+      const reach = Math.max(...[...rim(o, -1), ...rim(o, 1)].map((q) => Math.hypot(q[0], q[2])));
+      assert.ok(reach <= 108, `inside the spot's 108 mm (done.js SPOOL_FOOT), leaned and off the axis (${reach.toFixed(2)} mm)`);
+      if (k) slipped = Math.max(slipped, Math.hypot(o.x - poses[k - 1].x, o.z - poses[k - 1].z));
+      leaned = Math.max(leaned, lean);
+    }
+  }
+  assert.ok(slipped > SPOOL_SLIP && leaned > 0.9 * SPOOL_LEAN, `not neat: up to ${slipped.toFixed(1)} mm off the one below, ${leaned.toFixed(2)} deg`);
+  assert.deepEqual(stackPoses(rngFrom(7), 3), stackPoses(rngFrom(7), 3), 'the build\'s own seed: the same stack each time');
+});
 test('the spools: one per colour the build is printed in (five at most), stacks and standing ones, the build\'s own seed, always', () => {
   const cols = ['#111111', '#D03A2E', '#2a6fdb', '#eeeeee', '#f2c230', '#d03a2e'];
   assert.deepEqual(spoolPlan(rngFrom(hashSeed('a')), cols), spoolPlan(rngFrom(hashSeed('a')), cols), 'a link, one plan');

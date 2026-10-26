@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool } from './spool.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_HIGH, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_HIGH, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -976,7 +976,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!geo || mount === 'under-table') return [];
     const q = new URLSearchParams(location.search), s0 = debug ? q.get('spools') : null;
     if (s0 === 'off') return [];
-    const plan = spoolPlan(rngFrom(hashSeed('spools|' + (location.hash || q.get('build') || 'room'))), spoolColours());
+    const seedKey = location.hash || q.get('build') || 'room';
+    const plan = spoolPlan(rngFrom(hashSeed('spools|' + seedKey)), spoolColours());
     parts.spools.plan = plan;
     if (!plan.groups.length) return [];
     group.updateWorldMatrix(true, true);
@@ -1045,10 +1046,15 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (!p || !g) return;
       const turn = (g.turnDeg * Math.PI) / 180, root = new THREE.Group();
       root.name = 'done-spools'; root.position.set(p.x, deskY, p.z); root.rotation.y = turn;
+      const poses = g.kind === 'stack' ? stackPoses(rngFrom(hashSeed(`stack|${seedKey}|${i}`)), g.colours.length) : [];   // its own seed: the plan's picks stay as they were
       g.colours.forEach((c, k) => {
         const s = makeSpool(geo, c);
         if (g.kind === 'stand') { s.rotation.z = Math.PI / 2; s.position.y = 100; }   // on its rim: the flange's 100 mm radius
-        else { s.position.y = 32.6 + k * 65.2; s.rotation.y = k * 0.9; }              // lying flat, one on another
+        else {   // lying flat, one on another, not quite square (spun first, then leaned: the flange's slope is the lean)
+          const o = poses[k];
+          s.position.set(o.x, o.y, o.z);
+          s.rotation.set(-Math.atan(o.lean.z), o.spin, Math.atan(o.lean.x), 'XZY');
+        }
         s.traverse((m) => { if (m.isMesh) m.userData.doneRoom = true; });
         root.add(s);
       });

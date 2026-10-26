@@ -4045,3 +4045,15 @@ analytic in the shader, not meshes). He copied the spool into its own file.
 - **Review, rounds 4 to 6** (Sol `01a17823`): two findings, both accepted (the plant fallback hid the plant alone, missing
   a spot behind both the plant and the notebook; repainting never parted duplicates); round 6, no findings. Unit 36 of
   36; the spools' and the strip-and-mugs cases pass. Not deployed.
+- **Stacks as hands leave them** (Joey, the same day: "can you make the stacked filament positioning slightly random and
+  imperfect, like it's impossible to stack it that neatly"): `stackPoses` (done-fit.js) sets each spool lying flat in a
+  stack 2.5 to 7 mm off the stack's axis (`SPOOL_SLIP`), at its own turn, leaned 0.45 to 1.5 degrees (`SPOOL_LEAN`, a
+  warped flange's worth), and raised by exactly what the lean takes: each flange a plane, the most the one below rises over
+  it found on the edge of where the two overlap (both rims sampled a degree apart), so every flange rests on the one below
+  and none sinks into it. Its own seed per stack (`stack|<build>|<group>`), so the plan's spots and groups are as they were.
+  The unit test checks it with exact rotations, independent of the linear model: resting within -0.15 to 0.6 mm over 300
+  seeds of five, and every rim inside the spot's 108 mm; mutants (no second rim, no lift, twice the lift, no slip, an 8 mm
+  slip) all fail it. Shots: `D:\Claude - Output\done-scene-spools-2026-10-26\stacks-imperfect`.
+- **Review, round 7** (Sol `01a17823`): one finding, accepted: at 8 mm slip a leaned spool reached 108.8 mm, past the
+  spot's 108 (`SPOOL_FOOT`); the slip is 7 mm now (107.8) rather than a bigger spot, which would move every build's spools.
+  Round 8, no findings. Unit 37 of 37; the spools' and the strip-and-mugs cases pass. Not deployed.
