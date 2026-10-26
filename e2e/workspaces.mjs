@@ -3768,6 +3768,46 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   await ctx.close();
 });
 
+/* AN OPEN DRAWER STAYS OPEN ACROSS A REBUILD (Joey, 2026-10-25: he peeked a drawer, switched it from Standard to Gridfinity,
+   and the new drawer loaded closed under a "Close it" button that did nothing; a second press said Peek inside and only
+   then opened it). The rebuild replaces every instance, so Build lets the stage's open drawer go before the update and
+   peeks the same unit again on the new one; the button keeps saying Close it, and Close it closes it. */
+test('Build: a peeked drawer stays open when its type changes to Gridfinity, and Close it still closes it', async () => {
+  const { ctx, page, errors } = await open('build');
+  // a decor drawer whose size has a Gridfinity variant (the inspector shows the Drawer row only for those)
+  const drawer = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, S = window.__GEN2_STORE__, R = S.rules();
+    for (const x of v.manifest.instances) {
+      if (!/DecorDrawer/.test(x.node)) continue;
+      const owner = v.partInfo(x.id).owner, u = S.state.placed.find((p) => p.id === owner);
+      if (u && u.fill === 'decor' && !u.variant && R.gridfinityOk(u)) return { id: x.id, owner, z0: v.instances.get(x.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 };
+    }
+    return null;
+  });
+  assert.ok(drawer, 'a decor drawer with a Gridfinity variant in the default build');
+  const stop = drawer.collection - 13.5;
+  // the unit's drawer BODY by its part type (a node-name match would take Drawer_Stoppers_L first)
+  const zOf = (owner) => page.evaluate((owner) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d ? v.instances.get(d.id).group.position.z : null; }, owner);
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
+  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
+  // the type change rebuilds the stage with a new drawer instance for the same unit
+  await btn(page, 'Gridfinity', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction((owner) => { const v = window.__GEN2_VIEWER__; const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === owner); return u && u.variant === 'gridfinity' && !v.regenBusy && v.manifest.instances.some((x) => /Gridfinity/.test(x.node) && v.partInfo(x.id).owner === owner); }, drawer.owner, { timeout: 90_000 }).catch(() => assert.fail('the Gridfinity drawer did not reach the stage'));
+  // the new drawer's own rest position differs from the old one's (another GLB), so the proof is its travel: open now,
+  // and Close it brings it back by the stopper distance
+  await settle(page, 1200);   // the re-peek's 380 ms slide, with margin
+  const zOpen = await zOf(drawer.owner);
+  assert.equal(await btn(page, 'Close it', '#ws-insp').count(), 1, 'the button still says Close it');
+  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(([owner, z, stop]) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d && Math.abs(v.instances.get(d.id).group.position.z - (z - stop)) < 1; }, [drawer.owner, zOpen, stop], { timeout: 30_000 })
+    .catch(async () => assert.fail(`the new drawer was not open by the stopper distance: open z ${zOpen}, now ${await zOf(drawer.owner)} (expected ${zOpen - stop})`));
+  assert.equal(await btn(page, 'Peek inside', '#ws-insp').count(), 1, 'the button says Peek inside again');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE FEET ARE TPU (Joey, 2026-10-21: "when selecting the feet, i feel like we should only list TPU filaments as an option ...
    default for feet should always be TPU black"; "maybe we need to make PETG and PLA and TPU, like colored tags in the menu").
    The stage keeps a palette's feet TPU (main.js tpuFeet): the boot preset, a whole palette or a saved one that names PLA

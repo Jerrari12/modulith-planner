@@ -3374,3 +3374,24 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   medians are 34 ms apart, not 25), the 6-bit comparison counting only differences over 8 levels, "moves no pixel" claiming
   more than the goldens' tolerance proves, and the 1.0 Mpx figure lacking its precision.
 - **Deploy:** not yet. Joey's go is needed for both pushes (gen2-parts `skin-maps` first, then the planner).
+
+## 2026-10-25 · A peeked drawer stays open across a rebuild
+
+- **Asked:** Joey, 2026-10-25, with four screenshots: Peek inside on a 3W-1.5H Decor drawer, then Drawer Standard ->
+  Gridfinity in the inspector; the new drawer loaded closed under a button still saying "Close it"; pressing it did
+  nothing visible, the button flipped to "Peek inside", and only then did it open. "I'd rather if the drawer is opened
+  and the type is changed, it remains open."
+- **Cause:** `js/workspaces/build.js` syncStage() rebuilds the stage (`stage.update`) on every manifest change, which
+  replaces every instance; the stage's open carrier and the Build workspace's `st.peeking` both pointed at the old
+  drawer. The button read `st.peeking`; its press ran `stage.unpeek()` on the dead instance.
+- **Change:** syncStage() lets the stage's open drawer go before the update (`stage.unpeek()`, so its dims pills come
+  back) and peeks the same unit again on the new stage after it (`stage.peekUnit`), only if the unit is still the peeked
+  one (a select or a removal during the await may have let it go) and the update succeeded; a unit with no drawer any
+  more (a shelf) leaves the button at Peek inside. Any rebuild keeps a peeked drawer open, not only the drawer's own.
+- **Tests:** e2e `Build: a peeked drawer stays open when its type changes to Gridfinity, and Close it still closes it`
+  (the drawer found by part type: a node-name match takes Drawer_Stoppers_L first; the proof is the new drawer's travel
+  on Close it, since the Gridfinity drawer rests at another z than the standard one). Run against the unfixed build.js
+  it fails on that travel.
+- **Review:** Terra `01a175a2`: 2 of 5 taken (restore only while `st.peeking` is still the peeked unit; the pills
+  round-trip confirmed), 1 discarded (stale `st.stageErrors` - syncStage clears it before the update on every pass).
+- **Deploy:** a bug Joey reported, so it deploys once the suites pass.

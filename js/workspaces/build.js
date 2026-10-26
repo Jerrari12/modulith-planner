@@ -135,9 +135,17 @@ export function mountBuild(stage, ctx) {
       const sig = sigOf(gen.manifest);
       if (sig !== lastSig) {
         lastSig = sig; syncing = true;
+        /* a peeked drawer stays open across the rebuild (Joey 2026-10-25: Standard -> Gridfinity on an open drawer loaded it
+           closed under a "Close it" button that did nothing). The rebuild replaces every instance, so the stage's open
+           drawer is let go first (its dims pills come back) and the same unit is peeked again on the new one */
+        const peeked = st.peeking;
+        if (peeked != null) stage.unpeek();
         try { const r = await stage.update(rec, gen); if (!r.ok) st.stageErrors = r.errors; else { stage.skipToEnd(); stage.setDims(measureOn); } }
         finally { syncing = false; }
         if (st.selId != null && !stage.selectUnit(st.selId)) { st.selId = null; st.sel = null; }
+        // still the peeked unit (a select or a removal during the await may have let it go - Terra 01a175a2); gone, or a
+        // shelf now: the button says Peek inside again
+        if (peeked != null && st.peeking === peeked) st.peeking = !st.stageErrors && stage.peekUnit(peeked) ? peeked : null;
       }
       renderAll();
       if (st.pulse && st.pulse.length) { if (st.view !== '2d') stage.pulseUnits(st.pulse); brd.flash(st.pulse); st.pulse = null; }
