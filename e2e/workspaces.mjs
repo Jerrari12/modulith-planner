@@ -3008,6 +3008,67 @@ test('Colors: the Studio / Room toggle is absent with ?done=off; for every visit
 
 /* a room that cannot load (its module request fails) falls back to Studio AND forgets the choice, so a remount does not
    retry it (Terra 01a16b56: the import's failure path cleared the panel's state but left the memo set) */
+/* THE STEAM OVER THE STILL PICTURE (Joey 2026-10-26: "after the user stop moving the camera and it switches over to the
+   detailed render view ... doesn't freeze the coffee steam, maybe it becomes like a post-processing overlay"): Very High
+   at rest on the Colors stage (no lens there), the mean converged. The steam ticks and asks for frames, and no sample is
+   rendered for them; two frames 400 ms apart differ only round the steam; and the steam is not baked into the mean: with
+   it hidden, the same frame loses it round its column and nowhere else. */
+test('Colors: on Very High at rest the steam keeps rising over the still picture, left out of its samples, and nothing else in the frame changes', async () => {
+  const vctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await vctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const { ctx, page, errors } = await open('colors', { visitor: true, context: vctx });
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__ && window.__GEN2_DONE__.steam, null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
+  const conv = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, t0 = performance.now();
+    while (performance.now() - t0 < 90_000 && !(v.acc.ok && v.acc.n >= v.accTotal())) await new Promise((r) => setTimeout(r, 100));
+    return { ok: v.acc.ok, n: v.acc.n, total: v.accTotal(), quality: v.quality, lens: v.lens() };
+  });
+  assert.equal(conv.quality, 'veryhigh');
+  assert.equal(conv.lens, null, 'no lens on the Colors stage');
+  if (!conv.ok) { assert.equal((await page.evaluate(() => window.__GEN2_DONE__.steam)).overlay, false, 'no accumulator on this runner: no overlay either'); await ctx.close(); return; }
+  assert.ok(conv.n >= conv.total, `the still picture converged (${JSON.stringify(conv)})`);
+  const r = await page.evaluate(async () => {
+    const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, T = v.THREE, el = v.renderer.domElement;
+    const a0 = d.steam, s0 = v.acc.sampleCount, o0 = v.acc.overlayDraws, next = v.drawNextFrame;
+    let calls = 0; v.drawNextFrame = () => { calls++; next(); };
+    try { await new Promise((ok) => setTimeout(ok, 1500)); } finally { v.drawNextFrame = next; }
+    const a1 = d.steam, s1 = v.acc.sampleCount, o1 = v.acc.overlayDraws, n1 = v.acc.n;   // the window's own, before the frames below
+    // a frame without starting the mean over: one more frame asked for, read in its own animation frame
+    const grab = async () => { v.drawNextFrame(); await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+      const img = new Image(); img.src = el.toDataURL('image/png'); await img.decode();
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, c.width, c.height).data; };
+    const f = new T.Vector3(...a1.foot), cam = v.camera;
+    const scr = (p) => { const q = p.clone().project(cam); return [(q.x + 1) / 2 * el.width, (1 - q.y) / 2 * el.height]; };
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const dx of [-a1.w / 2, a1.w / 2]) for (const dz of [-a1.w / 2, a1.w / 2]) for (const dy of [0, a1.h]) { const [px, py] = scr(f.clone().add(new T.Vector3(dx, dy, dz))); x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py); }
+    const split = (p, q) => { let inside = 0, outside = 0; for (let y = 0; y < el.height; y++) for (let x = 0; x < el.width; x++) { const i = (y * el.width + x) * 4; if (Math.abs((p[i] + p[i + 1] + p[i + 2]) - (q[i] + q[i + 1] + q[i + 2])) <= 6) continue; if (x >= x0 - 3 && x <= x1 + 3 && y >= y0 - 3 && y <= y1 + 3) inside++; else outside++; } return { inside, outside }; };
+    const A = await grab(); await new Promise((ok) => setTimeout(ok, 400)); const B = await grab();
+    const moved = split(A, B);
+    const steam = ['done-steam', 'done-steam-mist'].map((n) => v.scene.getObjectByName(n));
+    for (const o of steam) o.visible = false;
+    const C = await grab();
+    // the reference: the mean built again from nothing with the steam hidden; the held mean, its overlay hidden, must be it
+    v.invalidateFrame();
+    const t1 = performance.now();
+    await new Promise((ok) => setTimeout(ok, 300));
+    while (performance.now() - t1 < 90_000 && v.acc.n < v.accTotal()) await new Promise((ok) => setTimeout(ok, 100));
+    const D = await grab();
+    for (const o of steam) o.visible = true;
+    const gone = split(B, C), clean = split(C, D);
+    return { clean, overlay: a1.overlay, ticks: a1.ticks - a0.ticks, calls, uTime: +(a1.uTime - a0.uTime).toFixed(3), samples: s1 - s0, draws: o1 - o0, n: n1, total: v.accTotal(), moved, gone };
+  });
+  assert.equal(r.overlay, true, 'the steam is a rest overlay here');
+  assert.ok(r.ticks >= 1 && r.calls >= r.ticks && r.uTime > 0, `at rest the steam ticks and asks for its frames (${JSON.stringify(r)})`);
+  assert.ok(r.draws >= 1, `drawn over the still picture (${JSON.stringify(r)})`);
+  assert.ok(r.samples === 0 && r.n >= r.total, `and no sample rendered for it: the mean holds (${JSON.stringify(r)})`);
+  assert.ok(r.moved.inside > 50 && r.moved.outside === 0, `400 ms apart, the steam moved and nothing else in the frame changed (${JSON.stringify(r.moved)})`);
+  assert.ok(r.gone.inside > 50 && r.gone.outside === 0, `hidden, the steam leaves the frame round its column only (${JSON.stringify(r.gone)})`);
+  assert.ok(r.clean.inside + r.clean.outside <= 20, `and what is left is the mean built without it: the steam is not in the samples (${JSON.stringify(r.clean)})`);
+  console.log('steam overlay', JSON.stringify(r));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Colors: the Studio / Room toggle when the room fails to load: Studio comes back, the choice is forgotten, a remount does not bring Room back', async () => {
   // the room comes on by itself now (Room first), so its module fails from the first request
   const fctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });

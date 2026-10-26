@@ -4088,3 +4088,24 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   (`insideRoom`, Sol `01a17823`: the pull's 0.05 floor could leave a far jump outside). The e2e zooms out 25 steps and
   turns half round behind the back wall: inside both times; without the listener it fails.
 - **Review** Sol `01a17823` rounds 10 to 12: one finding, accepted (the floor); then no findings. Not deployed.
+
+## 2026-10-26 — The steam keeps rising over Very High's still picture
+
+- **Asked** (Joey: "is there any way after the user stop moving the camera and it switches over to the detailed render
+  view that it doesn't freeze the coffee steam, maybe it becomes like a post-processing overlay or something?"). Before,
+  Very High's steam moved only on the frames the camera's own move drew, so the accumulated picture held it still.
+- **Rest overlays** (main.js THE REST OVERLAYS): `addAccOverlay({ objects, shown })`. On Very High an overlay is left out
+  of every sample, so the mean holds only what is still, and drawn fresh over the blitted mean on each canvas frame,
+  depth-tested against sample 0's depth (the pinhole, unjittered: copied once a burst into its own small target), so the
+  mug and the build still hide it. The steam registers itself and, at rest on Very High, ticks at High's 24 frames a
+  second, each tick one blit, one depth quad and the wisps, never a new sample. The depth target is made only once an
+  overlay exists (no cost to a page without one) and its two shader variants are compiled then, so a cut never compiles
+  them (the relief case's "the cut compiled nothing" caught 46 -> 48 without that).
+- **Not under a lens.** A held shot with bokeh (the Done scene's still shots on Very High) keeps the steam in its samples
+  and still, as before: a sharp wisp over a blurred mug would read wrong. The Colors stage has no lens, which is where
+  Joey saw it.
+- **Checks.** A new Colors case on Very High, converged: 36 ticks and 36 overlay draws in 1.5 s with no sample rendered;
+  two frames 400 ms apart differ only round the steam; with the steam hidden the frame equals a mean rebuilt from scratch
+  without it (0 px), so the steam is not in the samples. Mutants (no hiding in samples, overlay never live) fail it. The
+  relief compile-ahead, lens, steam-rate, drift, spools, strip and Colors cases and smoke pass. Review: Sol `01a17823`
+  round 13, no findings. Not deployed.

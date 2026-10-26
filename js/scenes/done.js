@@ -823,10 +823,19 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       const shown = steamShown(tier, reduced, sequence);
       if (shown !== s.shown) { s.shown = shown; mesh.visible = mist.visible = shown; stage.invalidateFrame(); }
     };
+    /* ... and on Very High, a rest overlay (main.js THE REST OVERLAYS; Joey 2026-10-26: "after the user stop moving the
+       camera and it switches over to the detailed render view ... doesn't freeze the coffee steam"): left out of the still
+       picture's samples and drawn over it, so at rest it ticks at High's rate there too, a blit and the wisps a frame */
+    if (stage.addAccOverlay) {
+      s.overlay = { objects: [mist, mesh], shown: () => { for (let o = mesh; o; o = o.parent) if (!o.visible) return false; return true; } };
+      stage.addAccOverlay(s.overlay);
+    }
     const tick = (now) => {
       if (!on || parts.steam !== s) return;
       parts.steamRaf = requestAnimationFrame(tick);
-      const rate = steamRate(stage.quality, reduced), dt = s.at ? Math.min(0.1, (now - s.at) / 1000) : 0;
+      let rate = steamRate(stage.quality, reduced);
+      if (rate === 'motion' && s.overlay && stage.accOverlayLive()) rate = steamRate('high', reduced);   // resting on Very High: over the still picture
+      const dt = s.at ? Math.min(0.1, (now - s.at) / 1000) : 0;
       s.at = now;
       s.follow(stage.quality);
       if (rate === 'motion') {   // Very High: on the frames the camera's own move draws
@@ -1526,7 +1535,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       get steam() {
         const s = parts.steam; if (!s) return null;
         const m = s.mist;
-        return { t: s.t, ticks: s.ticks, rate: steamRate(stage.quality, reduced), shown: !!s.mesh.parent && s.mesh.parent.visible, foot: s.mesh.getWorldPosition(new THREE.Vector3()).toArray(), w: s.size.w, h: s.size.h, ghost: !!s.mesh.userData.ghost, uTime: s.mesh.material.uniforms.uTime.value, visible: s.mesh.visible && s.mist.visible,
+        return { t: s.t, ticks: s.ticks, rate: steamRate(stage.quality, reduced), overlay: !!s.overlay && stage.accOverlayLive(), shown: !!s.mesh.parent && s.mesh.parent.visible, foot: s.mesh.getWorldPosition(new THREE.Vector3()).toArray(), w: s.size.w, h: s.size.h, ghost: !!s.mesh.userData.ghost, uTime: s.mesh.material.uniforms.uTime.value, visible: s.mesh.visible && s.mist.visible,
           sheets: s.mesh.geometry.attributes.aSlice.count / 4, mist: { on: m.parent === s.mesh.parent, ghost: !!m.userData.ghost, at: m.getWorldPosition(new THREE.Vector3()).toArray(), clock: m.material.uniforms.uTime === s.mesh.material.uniforms.uTime } };
       },
       /* the grammar as it stands: `names` the shots in GRAMMAR order, `fits` each one's camera at the middle of its move
@@ -1588,6 +1597,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (stage.setReliefOverride) stage.setReliefOverride(null);    // the tier has its say again
     cancelAnimationFrame(parts.raf);
     cancelAnimationFrame(parts.steamRaf);
+    if (parts.steam && parts.steam.overlay) stage.removeAccOverlay(parts.steam.overlay);   // off the still picture before its meshes go
     if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
     if (parts.spools) { for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays
     if (parts.mugs) { for (const o of [...parts.mugs.meshes, ...parts.mugs.masks]) o.removeFromParent(); for (const t of parts.mugs.texs) t.dispose(); parts.mugs = null; }   // the second mug and its shadow out (their geometry is the cached load's; their materials go with parts.mats)

@@ -1933,7 +1933,25 @@ const acc = {
   /* the light's order under a lens (lens.js lightStride): the stride, the light point accSetSun last took, and the burst's
      sums for the correlation of the lens's radius with the light's (n, x, y, xy, xx, yy; x and y the squared radii) */
   lightStride: 1, lightAt: 0, lightSums: [0, 0, 0, 0, 0, 0],
+  // the rest overlays (addAccOverlay): sample 0's depth, unjittered, kept while the mean holds; the canvas frames drawn with them
+  rtDepth: null, depthMat: null, depthReady: false, overlayDraws: 0,
 };
+/* THE REST OVERLAYS (the Done scene's steam; Joey 2026-10-26: "is there any way after the user stop moving the camera and it
+   switches over to the detailed render view that it doesn't freeze the coffee steam, maybe it becomes like a post-processing
+   overlay or something?"). An overlay is { objects, shown() }: things that move on their own while the camera rests. On
+   Very High they are left out of every sample, so the mean holds only what is still, and drawn fresh over the blitted mean
+   on each canvas frame, depth-tested against sample 0's depth (the pinhole, unjittered), so the mug and the build still
+   hide them. A caller ticking one asks drawNextFrame(): a blit, a depth quad and the overlay, never a new sample. Not under
+   a lens: the overlay would be sharp over a blurred picture, so there it stays in the samples, as before. */
+const accOverlays = new Set();
+function addAccOverlay(o) { accOverlays.add(o); ensureAccDepth(); accRev++; }   // the mean starts over without it
+function removeAccOverlay(o) { if (accOverlays.delete(o)) accRev++; }
+function accOverlayLive() { return accOverlays.size > 0 && !lens && accWanted() && (!acc.probed || acc.ok); }
+function hideOverlays() {
+  const was = [];
+  for (const o of accOverlays) for (const m of o.objects) { was.push([m, m.visible]); m.visible = false; }
+  return was;
+}
 /* ⚠ Float64Array, NOT Float32. Matrix4.elements are doubles; a Float32 copy
    rounds, and the comparison then reports a moved camera on EVERY frame. That
    exact mistake silently disabled the AO composite in production for two weeks
@@ -2008,6 +2026,7 @@ function ensureAcc() {
   // No MSAA - see ACC_WARMUP for what replaces it and why.
   acc.rtScene = new THREE.WebGLRenderTarget(w, h, {
     type: THREE.HalfFloatType, depthBuffer: true, stencilBuffer: false,
+    depthTexture: new THREE.DepthTexture(w, h),   // read once a burst, by the rest overlays' depth copy
   });
   acc.rtAcc = new THREE.WebGLRenderTarget(w, h, {
     type: THREE.HalfFloatType, depthBuffer: false, stencilBuffer: false,
@@ -2052,13 +2071,40 @@ function ensureAcc() {
   acc.qCam = new THREE.Camera();
   acc.disk = accDisk(ACC_SAMPLES);
   acc.sunHome.copy(sun.position);
+  if (accOverlays.size) ensureAccDepth();
+}
+/* The rest overlays' depth (THE REST OVERLAYS), made only once there is one: sample 0's depth in a target with the smallest
+   colour attachment three allows (a 4K drawing buffer's depth is ~33 MB, not paid by a page with no overlay), and the quad
+   that writes it into a depth buffer. Compiled here, both of its variants (into rtDepth, and onto the canvas, which three
+   compiles apart: a render target's colour space is not the canvas's), so its first use is never a cut's frame (the relief
+   e2e's "the cut compiled nothing": 46 -> 48 without it). From ensureAcc, or from addAccOverlay once the accumulator is up. */
+function ensureAccDepth() {
+  if (acc.rtDepth || !acc.rtScene) return;
+  const w = acc.rtScene.width, h = acc.rtScene.height;
+  acc.rtDepth = new THREE.WebGLRenderTarget(w, h, {
+    type: THREE.UnsignedByteType, format: THREE.RedFormat, depthBuffer: true, stencilBuffer: false,
+    depthTexture: new THREE.DepthTexture(w, h),
+  });
+  acc.depthMat = new THREE.ShaderMaterial({
+    uniforms: { tDepth: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform sampler2D tDepth; varying vec2 vUv; void main() { gl_FragDepth = texture2D(tDepth, vUv).x; gl_FragColor = vec4(0.0); }',
+    depthTest: true, depthFunc: THREE.AlwaysDepth, depthWrite: true, colorWrite: false,
+  });
+  const prevRT = renderer.getRenderTarget(), prevMat = acc.quad.material;
+  acc.quad.material = acc.depthMat;
+  renderer.setRenderTarget(acc.rtDepth); renderer.compile(acc.qScene, acc.qCam);
+  renderer.setRenderTarget(null); renderer.compile(acc.qScene, acc.qCam);
+  renderer.setRenderTarget(prevRT);
+  acc.quad.material = prevMat;
+  acc.depthReady = false;
 }
 function accResize() {
   if (!acc.rtScene) return;
   const w = Math.max(1, renderer.domElement.width), h = Math.max(1, renderer.domElement.height);
   if (acc.rtScene.width === w && acc.rtScene.height === h) return;
-  acc.rtScene.setSize(w, h); acc.rtAcc.setSize(w, h);
-  acc.n = 0;
+  acc.rtScene.setSize(w, h); acc.rtAcc.setSize(w, h); if (acc.rtDepth) acc.rtDepth.setSize(w, h);
+  acc.n = 0; acc.depthReady = false;
 }
 /* Point the key light at disk sample i and mark its shadow for re-rendering.
    ⚠ THE SHADOW CAMERA IS FITTED TO THE BOUNDING SPHERE, NOT THE BOX, whenever
@@ -2106,7 +2152,7 @@ function accumFrame() {
   camera.updateMatrixWorld();
   const key = instances.size + '|' + cur + '|' + ao.rev + '|' + accRev + '|' + quality;
   if (acc.blocked || key !== acc.key || accCamMoved()) {
-    acc.blocked = false; acc.n = 0; acc.key = key; accCamStore();
+    acc.blocked = false; acc.n = 0; acc.key = key; accCamStore(); acc.depthReady = false;
     acc.lensError = 0; acc.lensSpread = 0; acc.lightSums.fill(0);
   }
   /* a burst's discs, sized to the samples it runs to (a lens wants more than a soft shadow), rebuilt only between bursts;
@@ -2126,7 +2172,7 @@ function accumFrame() {
     const savedProj = camera.projectionMatrix, savedInv = camera.projectionMatrixInverse;
     const jProj = new THREE.Matrix4(), jInv = new THREE.Matrix4();
     const savedClear = renderer.getClearColor(_accClear).clone(), savedAlpha = renderer.getClearAlpha();
-    let lensMoved = false;
+    let lensMoved = false, hid = null;
     try {
       accSetSun(acc.jitter ? (acc.n * acc.lightStride) % total : 0);
       // the lit scene only - see the note on outMat
@@ -2180,11 +2226,21 @@ function accumFrame() {
          unjittered samples would only repeat one aliased pattern, and accVerify('parity') compares
          them against a plain frame. */
       if (acc.jitter) setSettleDetail(bedFinishU, true, renderer.getPixelRatio());
+      if (accOverlayLive()) hid = hideOverlays();   // the rest overlays stay out of the mean (THE REST OVERLAYS)
       renderer.autoClear = true;
       renderer.setRenderTarget(acc.rtScene);
       renderer.render(scene, camera);
       if (settleDetailIsOn(bedFinishU)) acc.detailCount++;   // read after the render: the detail really drew (settle-bench.js)
+      if (hid && acc.n === 0 && acc.rtDepth) {   // sample 0 is the pinhole, unjittered: its depth is what the overlays test against
+        acc.depthMat.uniforms.tDepth.value = acc.rtScene.depthTexture;
+        acc.quad.material = acc.depthMat;
+        renderer.autoClear = false;
+        renderer.setRenderTarget(acc.rtDepth);
+        renderer.render(acc.qScene, acc.qCam);
+        acc.depthReady = true;
+      }
     } finally {
+      if (hid) for (const [m, v] of hid) m.visible = v;
       setSettleDetail(bedFinishU, false);   // every frame outside a sample: folded grain, no lines
       camera.projectionMatrix = savedProj; camera.projectionMatrixInverse = savedInv;
       if (lensMoved) { camera.position.copy(_lensHome); camera.updateMatrixWorld(); }
@@ -2231,6 +2287,16 @@ function accumFrame() {
     renderer.autoClear = false;
     renderer.clear();
     renderer.render(acc.qScene, acc.qCam);
+    /* the rest overlays over the mean: sample 0's depth into the canvas's depth buffer (a quad writing it, no colour),
+       then each overlay drawn with the camera as it stands, its own depth test against that */
+    if (acc.depthReady && accOverlayLive()) {
+      renderer.clearDepth();
+      acc.depthMat.uniforms.tDepth.value = acc.rtDepth.depthTexture;
+      acc.quad.material = acc.depthMat;
+      renderer.render(acc.qScene, acc.qCam);
+      for (const o of accOverlays) if (o.shown()) for (const m of o.objects) renderer.render(m, camera);
+      acc.overlayDraws++;
+    }
   } finally {
     renderer.setClearColor(savedClear2, savedAlpha2);
     renderer.autoClear = prevAuto;
@@ -11342,7 +11408,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     /* the moving-frame savings' switches (2026-09-14) and what they work on, so a harness can measure the viewer with
        and without each in one page and prove the image unchanged - see MOVE_OPT */
     moveOpt: MOVE_OPT, dimCover, shadowWatch, get cavityClones() { return cavity.clones; },   // ground.seen: see `ground`
-    acc, accumFrame, accVerify, invalidateFrame, drawNextFrame, accWanted,
+    acc, accumFrame, accVerify, invalidateFrame, drawNextFrame, accWanted, addAccOverlay, removeAccOverlay, accOverlayLive,
     get accSamples() { return acc.n; }, ACC_SAMPLES, ACC_WARMUP,
     get sunHalfDeg() { return ACC_SUN_HALF_DEG; },
     setSunHalfDeg(v) { ACC_SUN_HALF_DEG = +v; acc.blocked = true; },
