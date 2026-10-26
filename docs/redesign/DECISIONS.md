@@ -4193,7 +4193,7 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   17, one finding accepted (the step), then fixed and tested. Not deployed.
 - **The view out of the window, from Joey's own photo** (the same day; he sent his garden, then: "what if we blurred it a
   bit, the trees are at a distance and super sharp, i think that feels off"). `scenes/home-office/outside.webp` (630 x
-  1700, 108 KB) is the left of it, the lattice, house, tarps, fire pit and hoop patched over with the trees and lawn
+  1700, 35 KB) is the left of it, the lattice, house, tarps, fire pit and hoop patched over with the trees and lawn
   beside them, toned softer and a little brighter than the room, blurred 2.2 px, the lawn carried on below, and
   cross-faded at its edges so it repeats with no seam (a mirrored repeat read as a Rorschach blot). Made by
   `tools/done-scene/outside-photo.py`; his original stays out of the repo. A 24 m backdrop 1.5 m beyond the window, its
