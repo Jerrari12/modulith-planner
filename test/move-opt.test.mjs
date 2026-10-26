@@ -163,8 +163,8 @@ test('qualityTick: while the camera moves the shadow map no longer re-renders ev
     const shadowWatch = { moving: false };
     const tick = new Function('QUALITY', 'quality', 'devicePixelRatio', 'cinema', 'perf', 'renderer', 'setLayerDetailPixelRatio', 'canvas',
       'camera', 'controls', 'tweens', 'SETTLE_MS', 'MOVE_OPT', 'perfFeed', 'document', 'perfGraceUntil', 'qualityLocked', 'QUALITY_ORDER',
-      'shadowWatch', 'benchHold', code + '\nreturn qualityTick;')({ high: { dpr: 2 } }, 'high', 2, { on: false }, perf, renderer, () => {}, { clientWidth: 800, clientHeight: 600 },
-      camera, controls, { size: 0 }, 160, { shadow: shadowOpt }, () => null, { hidden: false }, 0, true, ['high', 'balanced', 'fast'], shadowWatch, false);
+      'shadowWatch', 'benchHold', 'superCap', code + '\nreturn qualityTick;')({ high: { dpr: 2 } }, 'high', 2, { on: false }, perf, renderer, () => {}, { clientWidth: 800, clientHeight: 600 },
+      camera, controls, { size: 0 }, 160, { shadow: shadowOpt }, () => null, { hidden: false }, 0, true, ['high', 'balanced', 'fast'], shadowWatch, false, (q, cap) => cap);   // not supersampled (main.js SUPERSAMPLING)
     const log = [];
     let t = 1000;
     for (let i = 0; i < 20; i++) {          // an orbit: the camera moves every frame

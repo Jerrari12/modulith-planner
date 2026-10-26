@@ -590,6 +590,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     drawerCancel();
     if (resched && seq.on && seq.pausedAt == null && !seq.waiting) { clearTimeout(seq.timer); tick(); }   // a shot still waiting for its first frames starts its own clock (Sol 01a16e0e)
   }
+  /* the final scene's camera never rests, so its pixels are drawn finer than the screen's (main.js SUPERSAMPLING), from
+     the entrance's verdict on: the entrance draws at the screen's own ratio, so a device near the line is judged on what
+     it drew before (Sol 01a17823: the verdict is a 50 ms median, the resolution drop needs 3 s under 30 fps), and one
+     judged slow (the still grammar) never takes it. A stage (Colors) keeps its orbit and its ratio. */
+  function superAfterVerdict() { if (!orbit && !seq.slow && stage.setSupersample) stage.setSupersample(true); }
   function seqStart() {
     if (seq.on || !on || !sequenceWanted()) return;   // the tier may have changed while the entrance timer was pending (Sol 01a16b2a)
     /* an entrance still moving (Next view during it, or a device so slow its last frame comes after the timer) ends here,
@@ -597,7 +602,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        the hero (Sol 01a16e0e) */
     if (parts.enter && !parts.enter.done) {
       cancelAnimationFrame(parts.raf); parts.enter.done = true;
-      if (!seq.judged) { seq.judged = true; if (entranceTooSlow(parts.enter.intervals, seq.timing.maxFrameMs)) seq.slow = true; }
+      if (!seq.judged) { seq.judged = true; if (entranceTooSlow(parts.enter.intervals, seq.timing.maxFrameMs)) seq.slow = true; superAfterVerdict(); }
     }
     if (!drawer.unit) pickDrawer();
     pickSubjects();
@@ -1075,105 +1080,55 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   const lower = (c) => String(c).toLowerCase();
   const spoolsOf = (root) => root.children.filter((s) => s.userData.setColor);
-  /* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his own photo, his
-     garden, then ChatGPT's level 3:1 panorama of the place). OUTSIDE.file is that panorama ONCE, at its own proportions,
-     toned only (tools/done-scene/outside-photo.py single; the sources stay out of the repo; Astra: "Use the image at its
-     original proportions, with no mirrored repetition or flat-colour extension. Adjust its vertical position and scale
-     from the actual room camera. The base of the trees is not the horizon; don't automatically align it with the
-     viewer's eye level. Check a normal desk view and both oblique window views before adding blur. Keep the backdrop's
-     edges outside those views").
-     ON AN ARC OF A CYLINDER round the desk (Joey: "Wouldn't a scene like that typically be more spherical ... like a sky
-     map?": a flat picture seen edge-on foreshortens, a cylinder round the eye faces it). Its scale and place come from the
-     room's cameras: traced through the window's opening from the desk's hero and from an oblique view either side
-     (scratchpad cover-probe.mjs, 2026-10-26), what they see of a cylinder OUTSIDE.R out spans 75 degrees across and 7.1 m
-     up and down (7.5 m with the straight view from the desk); the photo is set OUTSIDE.mmPerPx a pixel so its height spans that with a margin (8.1 m; its width then
-     155 degrees, 35 or more to spare either side), centred across on what they see (OUTSIDE.arcDeg from the window's
-     bearing), and its trees' base (OUTSIDE.treeBase, its row) on the room's floor level out there, about 8 degrees under
-     the hero's eye. A sky cap over it and a lawn under it stand in only where a look goes past the photo (a view from
-     well above or below the desk, none of the three). All of it is clipped to beyond the window's wall, so it is only ever
-     seen through the window. THE CEILING makes the height possible: the room had none, so anything tall and far showed
-     over its walls; now a look over a wall meets the ceiling first. Unlit like the room's bakes, out of the shadows, the
-     AO (ghosts) and every ray; a pale sky until the photo loads. */
-  const OUTSIDE_FAR = 40000;   // mm, the camera's far plane while the room is on (a look along the wall meets the cylinder far off)
-  /* arc: the photo's width round the cylinder, kept when the 3:1 panorama gave way to ChatGPT's 3:2 version of it (Astra:
-     "Increase the backdrop's vertical coverage while preserving its horizontal scale, then align the tree bases with
-     their previous position. Don't squeeze the new image into the old backdrop height"): 2172 px at 11.2 mm on 9 m, so
-     its height grows with its own proportions (8.1 m to 16.2 m) and its trees keep their size */
-  const OUTSIDE = { file: 'scenes/home-office/outside.webp', px: [1536, 1024], treeBase: 668, R: 9000, arc: (2172 * 11.2) / 9000, arcDeg: -25, sky: 0x5b85bf, lawn: 0x988c64, ceiling: 0xd9d7d2 };
-  function makeOutside(group) {
-    const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
-    group.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new THREE.Box3().setFromObject(o)); });
-    if (win.isEmpty() || !desk || !interior || !Number.isFinite(interior.y1)) return;
-    const size = win.getSize(new THREE.Vector3()), c = win.getCenter(new THREE.Vector3()), centre = new THREE.Box3().setFromObject(desk).getCenter(new THREE.Vector3());
-    const axis = size.x < size.z ? 'x' : 'z', out = Math.sign(c[axis] - centre[axis]) || -1;
-    const floorY = Number.isFinite(interior.y0) ? interior.y0 : c.y - 1500;
-    const ghost = (m, name) => { m.name = name; m.userData.ghost = true; m.userData.doneRoom = true; m.castShadow = false; m.receiveShadow = false; m.raycast = () => {}; scene.add(m); return m; };
-    // the window's wall: its meshes, and the plane of its outer face
-    const own = [];
-    group.traverse((o) => { if (o.isMesh && /^wall_/.test(o.name)) { const bb = new THREE.Box3().setFromObject(o); const t = bb.max[axis] - bb.min[axis]; if (t < 60 && Math.abs((bb.min[axis] + bb.max[axis]) / 2 - c[axis]) < 120) own.push(bb); } });
-    if (!own.length) return;
-    const face = out < 0 ? Math.min(...own.map((bb) => bb.min[axis])) : Math.max(...own.map((bb) => bb.max[axis]));
-    const n = new THREE.Vector3(); n[axis] = -out;
-    const edge = new THREE.Vector3(); edge[axis] = face + out * 0.5;   // half a millimetre out from the face
-    const roomSide = new THREE.Plane(n, -n.dot(edge)), outSide = roomSide.clone().negate();   // n . p + constant >= 0 is kept
-    /* ... and never seen past the window wall's open end (Sol 01a17823: a look out of the open front, past the wall's end,
-       crossed the wall's plane out there and found the garden; and a plane bounding the garden at that end cut looks
-       through the window that run on past it): at an end of the window's wall with no other wall across it between the
-       window and that end, the wall's plane carries on outward from the end as an occluder, depth and no colour, drawn
-       first. A look out of the open side crosses that plane past the end and stops on it (the void, as the room's other
-       open side); a look through the window crosses the plane in the opening, never meets it, and finds the garden at
-       any angle. The end the back wall closes needs none. */
-    const along = axis === 'x' ? 'z' : 'x', outsideCuts = [outSide], occluders = [];
-    const others = []; group.traverse((o) => { if (o.isMesh && /^wall_/.test(o.name)) { const bb = new THREE.Box3().setFromObject(o); if (!own.some((x) => x.equals(bb))) others.push(bb); } });
-    for (const [end, sign] of [[Math.min(...own.map((bb) => bb.min[along])), -1], [Math.max(...own.map((bb) => bb.max[along])), 1]]) {
-      const lo = Math.min(end, c[along]), hi = Math.max(end, c[along]);
-      if (others.some((bb) => bb.max[along] - bb.min[along] < 400 && bb.max[along] >= lo && bb.min[along] <= hi)) continue;   // a wall across it between the window and this end (the back wall, before the window wall runs on past it)
-      const len = 40000, occ = new THREE.Mesh(new THREE.PlaneGeometry(len, 20000), new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide }));
-      occ.name = 'done-outside-occluder'; occ.userData.ghost = true; occ.userData.doneRoom = true; occ.raycast = () => {}; occ.renderOrder = -10;
-      const at = new THREE.Vector3(); at[axis] = face; at[along] = end + sign * len / 2; at.y = floorY;
-      occ.position.copy(at);
-      if (axis === 'x') occ.rotation.y = Math.PI / 2;   // in the wall's plane (a plane's own is xy: turned to yz for a wall across x)
-      scene.add(occ); occluders.push(occ);
+  /* THE WINDOW: FROSTED GLASS (Joey 2026-10-26, after his garden through it in six versions, a photo on a cylinder round
+     the room at the last: "that window scene is pretty gross, maybe there is something more simple claude can do without
+     an image?"; Astra: "a softly lit, frosted window ... Pale, slightly cool daylight across the glass. A very subtle
+     brightness gradient—brighter toward the upper portion ... No visible trees, grass, horizon or cloud shapes.
+     Restrained surface variation so it reads as glass rather than a glowing white rectangle"). One pane in the opening,
+     set back FROST.inset of the jambs' depth from the room's face, so the jambs, sill and head show their recess, and
+     FROST.lap mm into them all round, so no angle finds its edge. Its picture is drawn here (frostTexture): the gradient
+     from FROST.bottom to FROST.top, and a soft mottle FROST.mottle of its brightness. Unlit like the room's bakes, out of
+     the shadows (it casts none: the sun stays as the room had it), the AO (a ghost) and every ray. */
+  const FROST = { top: [0.9, 0.925, 0.945], bottom: [0.78, 0.815, 0.85], mottle: 0.03, inset: 0.6, lap: 12, px: 128 };
+  function frostTexture() {
+    const N = FROST.px, cv = document.createElement('canvas'); cv.width = cv.height = N;
+    const g = cv.getContext('2d'), img = g.createImageData(N, N), rng = rngFrom(hashSeed('frost'));
+    // value noise, two octaves: a coarse grid of random values, smoothly interpolated
+    const octave = (G) => { const v = Array.from({ length: (G + 1) * (G + 1) }, () => rng() * 2 - 1); return (x, y) => {
+      const fx = x * G, fy = y * G, i = Math.min(G - 1, Math.floor(fx)), j = Math.min(G - 1, Math.floor(fy)), s = fx - i, t = fy - j;
+      const u = s * s * (3 - 2 * s), w = t * t * (3 - 2 * t), at = (a, b) => v[b * (G + 1) + a];
+      return (at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - w) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * w; }; };
+    const big = octave(3), small = octave(9);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const up = 1 - y / (N - 1), k = 1 + FROST.mottle * (0.7 * big(x / N, y / N) + 0.3 * small(x / N, y / N)), p = (y * N + x) * 4;   // canvas rows run down
+      for (let ch = 0; ch < 3; ch++) img.data[p + ch] = Math.round(255 * Math.min(1, (FROST.bottom[ch] + (FROST.top[ch] - FROST.bottom[ch]) * up) * k));
+      img.data[p + 3] = 255;
     }
-    parts.clipWas = renderer.localClippingEnabled;
-    renderer.localClippingEnabled = true;
-    // the photo's arc, the sky over it and the lawn under it, beyond the wall only
-    const R = OUTSIDE.R, arc = OUTSIDE.arc, mmPerPx = (arc * R) / OUTSIDE.px[0], Hm = OUTSIDE.px[1] * mmPerPx;
-    const bottom = floorY - (OUTSIDE.px[1] - OUTSIDE.treeBase) * mmPerPx, top = bottom + Hm;   // its trees' base on the floor's level
-    const bearing = Math.atan2(c.x - centre.x, c.z - centre.z) + (OUTSIDE.arcDeg * Math.PI) / 180;   // three's cylinder: x = R sin(theta), z = R cos(theta)
-    const mat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false, side: THREE.BackSide, clippingPlanes: outsideCuts });
-    const geo = new THREE.CylinderGeometry(R, R, Hm, 160, 1, true, bearing - arc / 2, arc);
-    const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));   // seen from inside, it would read mirrored
-    const cyl = ghost(new THREE.Mesh(geo, mat), 'done-outside');
-    cyl.position.set(centre.x, (top + bottom) / 2, centre.z);
-    parts.outsideArc = { bearing, arc, bottom, top, R, centre: [centre.x, centre.z] };   // the debug read-out's
-    const disc = (y, colour, name, down) => {
-      const d = ghost(new THREE.Mesh(new THREE.CircleGeometry(R * 1.01, 96).rotateX(down ? Math.PI / 2 : -Math.PI / 2), new THREE.MeshBasicMaterial({ color: colour, toneMapped: false, clippingPlanes: outsideCuts })), name);
-      d.position.set(centre.x, y, centre.z);
-      return d;
-    };
-    const cap = disc(top - 1, OUTSIDE.sky, 'done-outside-sky', true), lawn = disc(bottom + 1, OUTSIDE.lawn, 'done-outside-lawn', false);
-    // the ceiling: the room's footprint at the walls' top, facing down
-    const fx0 = Number.isFinite(interior.x0) ? interior.x0 : centre.x - 6000, fx1 = Number.isFinite(interior.x1) ? interior.x1 : centre.x + 6000;
-    const fz0 = Number.isFinite(interior.z0) ? interior.z0 : centre.z - 6000, fz1 = Number.isFinite(interior.z1) ? interior.z1 : centre.z + 6000;
-    const ceiling = ghost(new THREE.Mesh(new THREE.PlaneGeometry(fx1 - fx0 + 40, fz1 - fz0 + 40).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: OUTSIDE.ceiling, toneMapped: false })), 'done-ceiling');
-    ceiling.position.set((fx0 + fx1) / 2, interior.y1, (fz0 + fz1) / 2);
-    parts.outside = [cyl, cap, lawn, ceiling, ...occluders];
-    /* what of the room runs on past the window's wall (the back wall's end, 1.4 m of it, the floor) is cut off there, so
-       the garden is not seen with a wall standing in it */
-    parts.clipped = [];
-    group.traverse((o) => {
-      if (!o.isMesh || /^win_/.test(o.name) || (/^wall_/.test(o.name) && own.some((bb) => new THREE.Box3().setFromObject(o).equals(bb)))) return;
-      const bb = new THREE.Box3().setFromObject(o);
-      if (out < 0 ? bb.min[axis] < face - 5 : bb.max[axis] > face + 5) for (const m of [].concat(o.material)) if (!parts.clipped.includes(m)) { m.clippingPlanes = [roomSide]; m.needsUpdate = true; parts.clipped.push(m); }
-    });
-    new THREE.TextureLoader().load(OUTSIDE.file, (tex) => {
-      if (!parts.outside || parts.outside[0] !== cyl) { tex.dispose(); return; }   // the room left while it loaded
-      tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-      tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;   // once, 1:1 on its arc
-      mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
-      stage.invalidateFrame();
-    }, undefined, () => {});   // no photo: the pale sky stays
+    g.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  function makeWindowPane(group) {
+    const box = (n) => { const o = group.getObjectByName(n); return o ? new THREE.Box3().setFromObject(o) : null; };
+    const jambs = [box('win_jamb_a'), box('win_jamb_b')], sill = box('win_sill'), head = box('win_head'), desk = box('desk_top');
+    if (!jambs[0] || !jambs[1] || !sill || !head || !desk) return;
+    const win = jambs[0].clone().union(jambs[1]).union(sill).union(head), size = win.getSize(new THREE.Vector3());
+    const axis = size.x < size.z ? 'x' : 'z', along = axis === 'x' ? 'z' : 'x';
+    const inward = Math.sign(desk.getCenter(new THREE.Vector3())[axis] - win.getCenter(new THREE.Vector3())[axis]) || 1;
+    jambs.sort((p, q) => p.min[along] - q.min[along]);
+    const a0 = jambs[0].max[along], a1 = jambs[1].min[along], y0 = sill.max.y, y1 = head.min.y;   // the opening, between the frame's inner faces
+    const d0 = Math.min(jambs[0].min[axis], jambs[1].min[axis]), d1 = Math.max(jambs[0].max[axis], jambs[1].max[axis]);
+    const roomFace = inward > 0 ? d1 : d0, depth = roomFace - inward * FROST.inset * (d1 - d0);
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(a1 - a0 + 2 * FROST.lap, y1 - y0 + 2 * FROST.lap), new THREE.MeshBasicMaterial({ map: frostTexture(), toneMapped: false }));
+    const at = new THREE.Vector3(); at[axis] = depth; at[along] = (a0 + a1) / 2; at.y = (y0 + y1) / 2;
+    pane.position.copy(at);
+    // a plane faces +z: turned to face into the room
+    if (axis === 'x') pane.rotation.y = inward > 0 ? Math.PI / 2 : -Math.PI / 2; else if (inward < 0) pane.rotation.y = Math.PI;
+    pane.name = 'done-window-pane'; pane.userData.ghost = true; pane.userData.doneRoom = true;
+    pane.castShadow = false; pane.receiveShadow = false; pane.raycast = () => {};
+    scene.add(pane);
+    parts.pane = pane;
   }
   /* the spools' glow (spool.js setGlow): the one whose picker is open (selectSpool, from Colors) lit, the one under the
      pointer lit a little; the picture changes, so Very High starts its mean again */
@@ -1457,7 +1412,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
          from the start. Once a visit. (The scene's own setup stalls are drawn before the move begins: the entry waits
          two frames for them.) */
       parts.enter.done = true;
-      if (sequence && !seq.judged) { seq.judged = true; if (entranceTooSlow(intervals, seq.timing.maxFrameMs)) seq.slow = true; }
+      if (sequence && !seq.judged) { seq.judged = true; if (entranceTooSlow(intervals, seq.timing.maxFrameMs)) seq.slow = true; superAfterVerdict(); }
     };
     parts.raf = requestAnimationFrame(step);
   }
@@ -1500,12 +1455,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     group.position.set(anchorWorld.x - a.x * SCALE, anchorWorld.y - a.y * SCALE, anchorWorld.z - a.z * SCALE);
     group.updateMatrixWorld(true);
     interior = roomInterior(group);   // the walls do not slide: the shots' clamp is fixed from here
-    makeOutside(group);
-    /* the camera sees as far as the view out of the window lies: a look along the wall skims the far jamb and meets the
-       backdrop 8 m off and more, past the stage's own far plane (main.js: 8000 mm), where it showed the clear colour (the
-       dark sliver by the jamb). Depth precision is set by the near plane (1 mm), not the far one, so nothing near loses */
-    parts.farWas = camera.far;
-    if (parts.outside && camera.far < OUTSIDE_FAR) { camera.far = OUTSIDE_FAR; camera.updateProjectionMatrix(); }
+    makeWindowPane(group);
     // props slide clear of the build along their slots, by group; a group that cannot clear it INSIDE the desk's extent
     // hides rather than hanging past the edge (a build wider than the desk's free run: done-fit.js fitSlides)
     const props = [];
@@ -1602,6 +1552,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     stage.table.visible = false; stage.grid.visible = false;
     stage.holdScene(true, { environment: parts.env });   // the hold also keeps every dimension callout off, whatever sets them, until it ends (main.js holdScene)
     applyLights(stage.quality);
+    // the hero never looks at the window: its pane compiled now, under the hold's shadow, not on the first shot that does
+    if (parts.pane && stage.compileAhead) stage.compileAhead(parts.pane);
     // the scene has no orbit (Joey: "don't let them rotate the camera"); a stage (Colors) keeps it; never a pan, the shots own the aim
     controls.enabled = !!orbit; controls.enablePan = false;
     /* ... nor the stage's floor on the orbit (maxPolarAngle 0.52 pi on a desk build: "don't go under the table"), which
@@ -1790,9 +1742,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     cancelAnimationFrame(parts.steamRaf);
     if (parts.steam && parts.steam.overlay) stage.removeAccOverlay(parts.steam.overlay);   // off the still picture before its meshes go
     if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
-    if (parts.farWas != null) { camera.far = parts.farWas; camera.updateProjectionMatrix(); parts.farWas = null; }
-    if (parts.clipped) { for (const m of parts.clipped) { m.clippingPlanes = null; m.needsUpdate = true; } parts.clipped = null; renderer.localClippingEnabled = !!parts.clipWas; }
-    if (parts.outside) { for (const m of parts.outside) { m.removeFromParent(); m.geometry.dispose(); if (m.material.map) m.material.map.dispose(); m.material.dispose(); } parts.outside = null; }
+    if (parts.pane) { const m = parts.pane; m.removeFromParent(); m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); parts.pane = null; }
     if (parts.spools) { for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays
     if (parts.mugs) { for (const o of [...parts.mugs.meshes, ...parts.mugs.masks]) o.removeFromParent(); for (const t of parts.mugs.texs) t.dispose(); parts.mugs = null; }   // the second mug and its shadow out (their geometry is the cached load's; their materials go with parts.mats)
     subj.mugs = null;
@@ -1814,6 +1764,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     stage.fill.intensity = was.fill.intensity; stage.fill.color.copy(was.fill.color);
     stage.table.visible = was.table; stage.grid.visible = was.grid;
     stage.holdScene(false);   // and the callouts back as the page last asked for them
+    if (stage.setSupersample) stage.setSupersample(false);
     if (parts.env) { parts.env.dispose(); parts.env = null; }
     parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
     controls.enabled = was.controls; controls.enablePan = was.pan; controls.maxPolarAngle = was.polar;
@@ -1825,6 +1776,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function onQuality(tier) {
     if (!on) return;
     applyLights(tier);
+    if (parts.pane && stage.compileAhead) stage.compileAhead(parts.pane);   // the new tier's shadow state is in its program
     if (parts.steam) parts.steam.follow(tier);   // the steam drawn or not before the new tier's first frame (Terra 01a1755a)
     /* a drop below High mid-shot: a moving shot locks off where it is, and the drawer's timers would outlive the drop (the
        still grammar has no drawer moment: Terra 01a16b6b) */

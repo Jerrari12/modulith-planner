@@ -4267,3 +4267,43 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   nearly straight down at the ground outside, which no upright photo can show. Either the orbit is restricted (a lower
   height limit and a least distance from the window) or real ground outside is added (lawn from the photo's own grass,
   at its scale, from the wall to the photo's foot); asked.
+- **Real ground was chosen and built** (a textured lawn disc at the floor's level from the photo's grass), **then the
+  whole photographic exterior dropped** (Joey: "that window scene is pretty gross, maybe there is something more simple
+  claude can do without an image?"; Astra: "the grass looks like a raised ledge immediately outside, while the trees look
+  enormous and blurry ... I'd replace the exterior with a softly lit, frosted window"). The ground never landed.
+
+## 2026-10-26 - Done scene: a frosted window; the final scene drawn at twice the screen
+
+- **The window is frosted glass.** Astra's direction, as Joey passed it on: "Keep the existing frame and sill. Fill the
+  opening with a pale, subtly cool translucent-looking pane, with a gentle daylight gradient and very restrained surface
+  variation. No landscape, horizon, tree silhouettes, cloud blobs or image texture. Avoid a pure-white glowing
+  rectangle." One unlit pane (`done.js` FROST, makeWindowPane) set back 0.6 of the jambs' depth, so the recess shows,
+  lapped 12 mm into the frame all round; its picture drawn in code (a 128 px canvas: a cool gradient brighter at the
+  top, a 3 % two-octave mottle). Out of the AO, the shadows and the rays. Gone with it: the cylinder, sky cap, lawn,
+  occluders, ceiling, the back wall's clipping, the 40 m far plane, `outside.webp` and `outside-photo.py`. Checked from
+  eight views (straight on, the hero, both obliques, high straight on and high near the window, low straight on and low
+  oblique: `D:\Claude - Output\done-scene-spools-2026-10-26\frost2\sheet.png`). It is compiled ahead on entry and on a
+  tier change (main.js compileAhead): the only unlit textured material in the room, it compiled on the cut into the
+  macro otherwise (measured at High).
+- **OPEN: the sun.** room.json's sun comes in through this window (dir -718, 578, 387; the window is in the left wall), so
+  the sharp sun patches and the plant's shadows on the walls are sunlight through what is now frosted glass, which
+  would scatter it. They are baked (`tools/done-scene/room.py`, Blender); softening them is a re-bake. Asked.
+- **The final scene is drawn at up to twice the screen's ratio** (main.js SUPERSAMPLING). Joey, on the A5000 laptop in
+  Brave: "I just notice a lot of harsh pixels"; "its very obvious during camera movement because the pixel pop and
+  crawl". MEASURED, in Chrome and Brave on that GPU at his 2000 x 991 frame: 4x MSAA on, the full device ratio, no
+  resolution drop, so antialiasing was not being traded for speed. A 1 to 40 mm near plane changed under 700 pixels of
+  2 M (not depth precision). What crawled was detail under a pixel that MSAA does not reach: the coil's shaded strands,
+  the flanges' notches, the covers' speckle. Very High's accumulation resolves those only at rest, and every shot moves.
+  A main pass measured 2.2 ms at 2000 x 991 and 3.6 at 4000 x 1982. High and Very High draw at up to twice the screen's
+  ratio, inside the pixel count a 4K screen at ratio 2 already gets; from the entrance's verdict on, never when judged
+  slow, never in Colors' orbit; the resolution drop still wins on a device that proves slow. The relief's band limit is
+  in CSS pixels, so it does not move.
+- **The coil fades before it aliases** (spool.js COIL_FADE): its strands drawn at 8 px a strand or more and gone by 5,
+  where they had been drawn to 4 px and gone at 2. The crease is a fifth of a strand, so at half strength it was sub-pixel
+  and made moire.
+- **Checks.** The window case is replaced (the seat; every look through the opening from 11 views meets the pane, the
+  frame or the window's wall; the picture; far plane and clipping untouched; gone with Neutral; a lap -3 mutant fails).
+  The lens case now also checks [supersampled, ratio] = [true, 2] in the scene and [false, 1] after. 11 touched cases
+  pass. Sol `01a17823` round 23 (two findings: one discarded, the idle gate's key carries accRev; one premise wrong, as
+  `cinema.on` is the old outro, but its risk accepted, so supersampling waits for the verdict) and round 24 (none). Not
+  deployed.

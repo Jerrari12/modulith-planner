@@ -44,7 +44,12 @@ export function loadSpool(url = SPOOL.glb) {
   return flanges;
 }
 
-/* the winding's shader, for the drum's outer face (SIDE 0) and its two side faces (SIDE 1, the strands' ends in rings) */
+/* the winding's shader, for the drum's outer face (SIDE 0) and its two side faces (SIDE 1, the strands' ends in rings).
+   COIL_FADE: the strands are drawn where one spans 8 px or more and fade out by 5 (Joey 2026-10-26, of the final scene:
+   "I just notice a lot of harsh pixels"; "I can see it really bad around the bottom of the first spool"). The crease
+   between two strands is a fifth of one, and a normal that turns over within a pixel is specular aliasing MSAA never
+   touches: the old window, drawn to 4 px and gone at 2, left a sub-pixel crease drawn at half strength, and moire */
+const COIL_FADE = 'clamp( ( 0.2 - fwidth( %s ) ) / 0.075, 0.0, 1.0 )';
 const COIL_VERT_PARS = 'varying vec3 vCoilP;\nvarying vec3 vCoilR;\nvarying vec3 vCoilA;\n';
 const COIL_VERT = '#include <begin_vertex>\n'
   + '\tvCoilP = position;\n'
@@ -60,7 +65,7 @@ const COIL_FRAG_PARS = 'uniform float uPitch;\nuniform float uR0;\nvarying vec3 
   + '}\n';
 const COIL_NORMAL = '#include <normal_fragment_maps>\n'
   + '\tfloat coilS = coilU();\n'
-  + '\tfloat coilW = clamp( 2.0 - 4.0 * fwidth( coilS ), 0.0, 1.0 );   // the pattern where a strand spans 4 px or more, flat under 2 (moire between)\n'
+  + '\tfloat coilW = ' + COIL_FADE.replace('%s', 'coilS') + ';\n'
   + '\tfloat coilT = 2.0 * fract( coilS ) - 1.0;\n'
   + '\tfloat coilC = sqrt( max( 1.0 - coilT * coilT, 0.0 ) );\n'
   + '#if COIL_SIDE == 0\n'
@@ -70,7 +75,7 @@ const COIL_NORMAL = '#include <normal_fragment_maps>\n'
   + '#endif\n'
   + '\tnormal = normalize( mix( normal, coilN, coilW ) );\n';
 const COIL_COLOR = '#include <color_fragment>\n'
-  + '\t{ float s = coilU(), w = clamp( 2.0 - 4.0 * fwidth( s ), 0.0, 1.0 ), t = abs( 2.0 * fract( s ) - 1.0 );\n'
+  + '\t{ float s = coilU(), w = ' + COIL_FADE.replace('%s', 's') + ', t = abs( 2.0 * fract( s ) - 1.0 );\n'
   + '\t  diffuseColor.rgb *= mix( 0.9, mix( 1.0, 0.55, smoothstep( 0.6, 1.0, t ) ), w ); }   // the crease between strands\n';
 
 function coilMaterial(side, color) {

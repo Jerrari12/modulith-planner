@@ -2860,9 +2860,25 @@ function logQuality(line) {
   console.info('[gen2] ' + line);
 }
 
+/* SUPERSAMPLING, FOR A SCENE WHOSE CAMERA NEVER STOPS (2026-10-26, Joey of the final scene in Brave on the A5000 laptop:
+   "I just notice a lot of harsh pixels"; "its very obvious during camera movement because the pixel pop and crawl").
+   The canvas HAS 4x MSAA (measured: SAMPLES 4, the full device ratio, no resolution drop). What crawls is detail under a
+   pixel that MSAA does not touch: the flanges' notches, a cover's 0.2 mm seam bevel, the label inserts' edges, specular
+   on thin faces. Very High's accumulation resolves them only once the camera rests, and the final scene's every shot
+   moves. So while it is on (setSupersample, done.js), a tier that draws at 2 draws at up to twice the screen's own ratio,
+   inside the pixel count a 4K screen at ratio 2 already gets (and Very High's targets already size for): measured
+   2.2 ms a main pass at 2000x991, 3.6 at 4000x1982. The resolution drop still wins on a device that proved slow. */
+const SUPER_PIXELS = 3840 * 2160;
+let superOn = false;
+function setSupersample(on) { if (superOn === !!on) return; superOn = !!on; invalidateFrame(); }
+function superCap(q, cap) {
+  if (!superOn || q.dpr < 2) return cap;
+  const css = Math.max(1, canvas.clientWidth * canvas.clientHeight);
+  return Math.max(cap, Math.min(2 * devicePixelRatio, Math.sqrt(SUPER_PIXELS / css)));
+}
 function qualityTick(now) {
   const q = QUALITY[quality];
-  const cap = Math.min(q.dpr, devicePixelRatio);
+  const cap = superCap(q, Math.min(q.dpr, devicePixelRatio));
   if (cinema.on) {                       // the outro drives its own camera constantly
     if (perf.dpr !== cap) { perf.dpr = cap; renderer.setPixelRatio(cap); setLayerDetailPixelRatio(cap); renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); }
     perf.cameraMoving = false;           // and keeps its reflection (motionLite excludes it anyway)
@@ -3809,6 +3825,17 @@ function warmRelief() {
     reliefOverride = false; syncRelief();
   }
   return { programs: (renderer.info.programs || []).length - before, targets: into ? 2 : 1, ms: +(performance.now() - t0).toFixed(1) };
+}
+/* one mesh's programs ahead of its first draw, both variants (the canvas pass and a pass into a target, as above): for a
+   material the hero never shows, which would otherwise compile on the first shot that looks at it (done.js's frosted
+   pane, the only unlit textured material in the room: measured at High, one program at the cut into the macro). Both
+   always, whatever the tier now; the shadow map's state is part of every program, so the scene calls it again on a
+   change of tier. */
+function compileAhead(obj) {
+  if (!warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
+  const prev = renderer.getRenderTarget();
+  try { for (const rt of [null, warmTarget]) { renderer.setRenderTarget(rt); renderer.compile(obj, camera, scene); } }
+  finally { renderer.setRenderTarget(prev); }
 }
 
 /**
@@ -11396,7 +11423,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
     mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
     // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
-    sun, hemi, fill, holdScene, setSunHome, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
+    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn; }, compileAhead, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
     // reflector, so a rendering question can be answered by reading state instead
