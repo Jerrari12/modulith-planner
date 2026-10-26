@@ -3373,7 +3373,18 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   vault's copy - an npm total quoted without re-running the suite after the two fixes, the settle overhead understated (the
   medians are 34 ms apart, not 25), the 6-bit comparison counting only differences over 8 levels, "moves no pixel" claiming
   more than the goldens' tolerance proves, and the 1.0 Mpx figure lacking its precision.
-- **Deploy:** not yet. Joey's go is needed for both pushes (gen2-parts `skin-maps` first, then the planner).
+- **Deploy:** **Live 2026-10-25 at `720be857`** (Joey's go 19:30 local: gen2-parts master `d0b7999` pushed first, live
+  index 554 nodes; the planner's merge `720be85` pushed 19:57, the run succeeded 20:46; main had moved twice during the
+  tests - the settle rule `dbf76ba`, then its Live line `323ee5d` - both merged into the branch first, so the pushed tree
+  equals the tested one). On the merged tree: e2e 88 of 88; npm test 643 (637 pass, 5 skipped, 1 fail: `surprise.test.mjs`
+  M13's timing gate at 2.3 s while a 555-STL pass loaded the CPU - alone it reads median 0.41 ms, 11 of 11). The live check
+  (`live-check.mjs` and its result `live-check-720be857.json`, both in the work folder): the 185 tabletop kit
+  at Very High, `?debug=1`, settled 24 of 24 samples with 10 maps on the stage in a 4096 px atlas, every `parts/skin/`
+  request 200, no failed map, 0 console errors; 8 warnings, none from the maps - GoatCounter's skipgc notice and ANGLE's
+  HLSL notes on three.js's 255/256 packing constant (X4122) and gradients inside the Very High passes' loops (X3595);
+  skin-map.js's GLSL has no loop and reads the atlas with textureGrad and texelFetch only. The github.io address now
+  answers 301 to `planner.modulith.systems`, so a stamp watcher must follow redirects. The bake's completeness guard
+  was strengthened the same evening (vault `9997f06`, Terra `01a1755f`; the race paragraph above).
 
 ## 2026-10-25 · A peeked drawer stays open across a rebuild
 
