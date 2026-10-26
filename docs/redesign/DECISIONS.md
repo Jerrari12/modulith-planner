@@ -3518,3 +3518,8 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   it could not be pinned. Five questions answered "holds".
 - **Not done:** the old planner's relay does not carry the map (the old planner forwards since the cutover); the old
   viewer's own Build plate row stays build-wide.
+- **Live 2026-10-26 at `7e54f4a1`** (Joey's go; main fast-forwarded to the branch). Main run 40346580980: 13.1 min, every
+  job green, the deploy job published. `plate-parts-prod.mjs 7e54f4a1` (D:\Claude - Output\planner-prod-checks-2026-10-18)
+  passed on the live planner: the Faceplate row's Printed on row, Holographic set for the faceplates on a Powder-coated
+  build, the record `{ Faceplate: 'holographic' }`, the faceplates wearing their own Holographic and the 10 other part
+  types Powder-coated, no page errors; its screenshot sits beside it.
