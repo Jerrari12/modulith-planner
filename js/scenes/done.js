@@ -1076,29 +1076,33 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   const lower = (c) => String(c).toLowerCase();
   const spoolsOf = (root) => root.children.filter((s) => s.userData.setColor);
   /* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his own photo, his
-     garden, then ChatGPT's level 3:1 panorama of the place). OUTSIDE.file is that panorama (pines, live oaks with moss,
-     cedars, pale sky, lawn; nothing man-made): tools/done-scene/outside-photo.py makes it, the sources stay out of the
-     repo, toned softer and a little brighter than the room (Astra: "slightly brighter and lower-contrast than the
-     interior", "no prominent buildings or objects"), blurred as distance is past a build in focus, its lawn carried on
-     below and its sky above (the cap over the cylinder is then far over any look through the window), its right edge
-     cross-faded into its left so it repeats with no seam.
-     ON A CYLINDER round the room (Joey: "Wouldn't a scene like that typically be more spherical to compensate for angles
-     like that, like a sky map?", of a flat backdrop's squeezed trees in a look along the wall): OUTSIDE.R from the desk,
-     the photo OUTSIDE.repeats times round it, at the scale its own field of view gives (its horizon row, OUTSIDE.horizon,
-     at eye height; a flat picture seen edge-on foreshortens, a cylinder round the eye faces it whichever way it looks).
-     A sky cap over it and a lawn under it; all of it clipped to beyond the window's wall, so it is only ever seen through
-     the window, never in the room or past its open sides. THE CEILING makes the height possible: the room had none, so
-     anything tall and far showed over its walls; now a look over a wall meets the ceiling first. Unlit like the room's
-     bakes, out of the shadows, the AO (ghosts) and every ray; a pale sky until the photo loads. */
+     garden, then ChatGPT's level 3:1 panorama of the place). OUTSIDE.file is that panorama ONCE, at its own proportions,
+     toned only (tools/done-scene/outside-photo.py single; the sources stay out of the repo; Astra: "Use the image at its
+     original proportions, with no mirrored repetition or flat-colour extension. Adjust its vertical position and scale
+     from the actual room camera. The base of the trees is not the horizon; don't automatically align it with the
+     viewer's eye level. Check a normal desk view and both oblique window views before adding blur. Keep the backdrop's
+     edges outside those views").
+     ON AN ARC OF A CYLINDER round the desk (Joey: "Wouldn't a scene like that typically be more spherical ... like a sky
+     map?": a flat picture seen edge-on foreshortens, a cylinder round the eye faces it). Its scale and place come from the
+     room's cameras: traced through the window's opening from the desk's hero and from an oblique view either side
+     (scratchpad cover-probe.mjs, 2026-10-26), what they see of a cylinder OUTSIDE.R out spans 75 degrees across and 7.1 m
+     up and down (7.5 m with the straight view from the desk); the photo is set OUTSIDE.mmPerPx a pixel so its height spans that with a margin (8.1 m; its width then
+     155 degrees, 35 or more to spare either side), centred across on what they see (OUTSIDE.arcDeg from the window's
+     bearing), and its trees' base (OUTSIDE.treeBase, its row) on the room's floor level out there, about 8 degrees under
+     the hero's eye. A sky cap over it and a lawn under it stand in only where a look goes past the photo (a view from
+     well above or below the desk, none of the three). All of it is clipped to beyond the window's wall, so it is only ever
+     seen through the window. THE CEILING makes the height possible: the room had none, so anything tall and far showed
+     over its walls; now a look over a wall meets the ceiling first. Unlit like the room's bakes, out of the shadows, the
+     AO (ghosts) and every ray; a pale sky until the photo loads. */
   const OUTSIDE_FAR = 40000;   // mm, the camera's far plane while the room is on (a look along the wall meets the cylinder far off)
-  const OUTSIDE = { file: 'scenes/home-office/outside.webp', px: [2022, 2224], horizon: 962, R: 9000, repeats: 4, eye: 1550, sky: 0x6e90bd, lawn: 0xa99c77, ceiling: 0xd9d7d2 };
+  const OUTSIDE = { file: 'scenes/home-office/outside.webp', px: [2172, 724], treeBase: 596, R: 9000, mmPerPx: 11.2, arcDeg: -25, sky: 0x6890c4, lawn: 0xad9e74, ceiling: 0xd9d7d2 };
   function makeOutside(group) {
     const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
     group.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new THREE.Box3().setFromObject(o)); });
     if (win.isEmpty() || !desk || !interior || !Number.isFinite(interior.y1)) return;
     const size = win.getSize(new THREE.Vector3()), c = win.getCenter(new THREE.Vector3()), centre = new THREE.Box3().setFromObject(desk).getCenter(new THREE.Vector3());
     const axis = size.x < size.z ? 'x' : 'z', out = Math.sign(c[axis] - centre[axis]) || -1;
-    const floorY = Number.isFinite(interior.y0) ? interior.y0 : c.y - 1500, eyeY = floorY + OUTSIDE.eye;
+    const floorY = Number.isFinite(interior.y0) ? interior.y0 : c.y - 1500;
     const ghost = (m, name) => { m.name = name; m.userData.ghost = true; m.userData.doneRoom = true; m.castShadow = false; m.receiveShadow = false; m.raycast = () => {}; scene.add(m); return m; };
     // the window's wall: its meshes, and the plane of its outer face
     const own = [];
@@ -1129,14 +1133,16 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     parts.clipWas = renderer.localClippingEnabled;
     renderer.localClippingEnabled = true;
-    // the cylinder, the sky over it and the lawn under it, beyond the wall only
-    const R = OUTSIDE.R, mmPerPx = (2 * Math.PI * R) / (OUTSIDE.repeats * OUTSIDE.px[0]), tileH = OUTSIDE.px[1] * mmPerPx;
-    const top = eyeY + OUTSIDE.horizon * mmPerPx, bottom = floorY - 10, Hc = top - bottom;
+    // the photo's arc, the sky over it and the lawn under it, beyond the wall only
+    const R = OUTSIDE.R, mmPerPx = OUTSIDE.mmPerPx, Wm = OUTSIDE.px[0] * mmPerPx, Hm = OUTSIDE.px[1] * mmPerPx, arc = Wm / R;
+    const bottom = floorY - (OUTSIDE.px[1] - OUTSIDE.treeBase) * mmPerPx, top = bottom + Hm;   // its trees' base on the floor's level
+    const bearing = Math.atan2(c.x - centre.x, c.z - centre.z) + (OUTSIDE.arcDeg * Math.PI) / 180;   // three's cylinder: x = R sin(theta), z = R cos(theta)
     const mat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false, side: THREE.BackSide, clippingPlanes: outsideCuts });
-    const geo = new THREE.CylinderGeometry(R, R, Hc, 192, 1, true);
+    const geo = new THREE.CylinderGeometry(R, R, Hm, 160, 1, true, bearing - arc / 2, arc);
     const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));   // seen from inside, it would read mirrored
     const cyl = ghost(new THREE.Mesh(geo, mat), 'done-outside');
     cyl.position.set(centre.x, (top + bottom) / 2, centre.z);
+    parts.outsideArc = { bearing, arc, bottom, top, R, centre: [centre.x, centre.z] };   // the debug read-out's
     const disc = (y, colour, name, down) => {
       const d = ghost(new THREE.Mesh(new THREE.CircleGeometry(R * 1.01, 96).rotateX(down ? Math.PI / 2 : -Math.PI / 2), new THREE.MeshBasicMaterial({ color: colour, toneMapped: false, clippingPlanes: outsideCuts })), name);
       d.position.set(centre.x, y, centre.z);
@@ -1160,12 +1166,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     new THREE.TextureLoader().load(OUTSIDE.file, (tex) => {
       if (!parts.outside || parts.outside[0] !== cyl) { tex.dispose(); return; }   // the room left while it loaded
       tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-      tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
-      // the photo's horizon row at eye height; a tile centred on the window, as seen from the desk
-      const tileBottom = eyeY - (OUTSIDE.px[1] - OUTSIDE.horizon) * mmPerPx;
-      const a = Math.atan2(c.x - centre.x, c.z - centre.z), u = 1 - (((a / (2 * Math.PI)) % 1) + 1) % 1;   // the window's u (flipped, as the uvs)
-      tex.repeat.set(OUTSIDE.repeats, Hc / tileH);
-      tex.offset.set(0.5 - u * OUTSIDE.repeats, (bottom - tileBottom) / tileH);
+      tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;   // once, 1:1 on its arc
       mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
       stage.invalidateFrame();
     }, undefined, () => {});   // no photo: the pale sky stays

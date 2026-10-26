@@ -4238,3 +4238,20 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   ceiling over the whole footprint, and rays: out of the open front the occluder, through the window both ways the garden.
   16 room and scene cases pass. Sol `01a17823` round 20: two findings accepted (the open end, then its first fix), then no
   findings. Not deployed.
+
+## 2026-10-26 — The panorama once, placed from the room's cameras
+
+- **Asked** (Astra, via Joey: "Use the image at its original proportions, with no mirrored repetition or flat-colour
+  extension. Adjust its vertical position and scale from the actual room camera. The base of the trees is not the
+  horizon; don't automatically align it with the viewer's eye level. Check a normal desk view and both oblique window
+  views before adding blur. Keep the backdrop's edges outside those views.").
+- **Now.** The 2172 x 724 panorama once, toned only (`outside-photo.py single`), on an arc of the 9 m cylinder exactly
+  its own proportions (155 degrees x 8.1 m at 11.2 mm a pixel), no repeat, no added sky or lawn. Placed by rays traced
+  through the window's opening from four views (straight on from the desk, the hero, an oblique either side): they need
+  -62 to +13 degrees from the window's bearing and -1.9 to 5.6 m; the arc is centred at -25 degrees and its trees' base
+  sits on the floor's level out there, about 8 degrees under the hero's eye. Checked sharp, then softened 1.8 px
+  (`D:\Claude - Output\done-scene-spools-2026-10-26\single-sharp`, `single-soft`). The sky cap and lawn disc stay only as
+  the fallback for views well above or below the desk, outside those four; out of the room's open front, still nothing.
+- **Checks.** The window case: the photo whole, clamped, repeat 1, the arc at 3:1; every ray of an 11 x 11 grid through
+  the opening from the four views lands inside the photo (fails at 8 mm a pixel); 16 room and scene cases pass. Sol
+  `01a17823` round 21, no findings. Not deployed.

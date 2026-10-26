@@ -3165,14 +3165,31 @@ test('Colors: the room’s window looks out on a panorama round the room, clippe
     const outFront = first(new T.Vector3(desk.x, 800, b.z1 - 200), new T.Vector3(out3.x, 800, b.z1 + 3000));
     const throughWin = first(new T.Vector3(desk.x + 300, wc.y, win.min.z + 40), new T.Vector3(wc.x, wc.y, wz1 - 20));
     const behindBack = first(new T.Vector3(desk.x + 300, wc.y, wz1 - 40), new T.Vector3(wc.x, wc.y, win.min.z + 20));
+    /* the photo once, at its own proportions (Astra: "no mirrored repetition or flat-colour extension"), and every look
+       through the opening from the reference views (the desk straight on, the hero, an oblique either side) lands on it,
+       inside its arc and its height: its edges outside them */
+    const cyl = m['done-outside'], gp = cyl.geometry.parameters, tex = cyl.material.map, C = cyl.position;
+    const jb = new T.Box3().setFromObject(room.getObjectByName('win_jamb_b')), ja = new T.Box3().setFromObject(room.getObjectByName('win_jamb_a')), sill = new T.Box3().setFromObject(room.getObjectByName('win_sill')), head = new T.Box3().setFromObject(room.getObjectByName('win_head'));
+    const eye = 692, views = { straight: [300, eye, 522], hero: [854, eye, 1436], front: [150, eye, 2300], back: [400, eye, 120] }, missed = [];
+    for (const [name, pc] of Object.entries(views)) for (let i = 0; i <= 10; i++) for (let j = 0; j <= 10; j++) {
+      const from = new T.Vector3(...pc), q = new T.Vector3(-1400, sill.max.y + (head.min.y - sill.max.y) * j / 10, jb.max.z + (ja.min.z - jb.max.z) * i / 10), d = q.sub(from).normalize();
+      const ox = from.x - C.x, oz = from.z - C.z, A = d.x * d.x + d.z * d.z, B = 2 * (ox * d.x + oz * d.z), Cc = ox * ox + oz * oz - gp.radiusTop ** 2;
+      const h = from.clone().addScaledVector(d, (-B + Math.sqrt(B * B - 4 * A * Cc)) / (2 * A));
+      let th = Math.atan2(h.x - C.x, h.z - C.z) - gp.thetaStart; th = ((th % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      const inArc = th > 0.02 && th < gp.thetaLength - 0.02, inHeight = h.y > C.y - gp.height / 2 + 50 && h.y < C.y + gp.height / 2 - 50;
+      if (!inArc || !inHeight) missed.push(`${name} ${i},${j}: ${inArc ? '' : 'arc '}${inHeight ? '' : 'height ' + Math.round(h.y)}`);
+    }
+    const once = { wrap: [tex.wrapS, tex.wrapT].every((w) => w === T.ClampToEdgeWrapping), repeat: tex.repeat.toArray(), arcDeg: Math.round(gp.thetaLength * 180 / Math.PI), aspect: +((gp.radiusTop * gp.thetaLength) / gp.height).toFixed(3) };
     const cbox = new T.Box3().setFromObject(m['done-ceiling']);
     const clipped = []; room.traverse((o) => { if (o.isMesh && [].concat(o.material).some((x) => x.clippingPlanes && x.clippingPlanes.length)) clipped.push(o.name); });
-    return { all: names.every((n) => m[n] && m[n].userData.ghost), outsideClipped: ['done-outside', 'done-outside-sky', 'done-outside-lawn'].every((n) => m[n].material.clippingPlanes && m[n].material.clippingPlanes.length),
+    return { missed, once, return_: 0, all: names.every((n) => m[n] && m[n].userData.ghost), outsideClipped: ['done-outside', 'done-outside-sky', 'done-outside-lawn'].every((n) => m[n].material.clippingPlanes && m[n].material.clippingPlanes.length),
       deskKept: kept(desk), outKept: kept(out3), occluders: occ.length, outFront, throughWin, behindBack, img: [m['done-outside'].material.map.image.width, m['done-outside'].material.map.image.height],
       ceiling: { y: Math.round(cbox.max.y), x: [Math.round(cbox.min.x), Math.round(cbox.max.x)], z: [Math.round(cbox.min.z), Math.round(cbox.max.z)] }, b, far: v.camera.far, clipped, clip: v.renderer.localClippingEnabled };
   });
   assert.ok(on.all, 'the cylinder, its sky, its lawn and the ceiling, out of the AO and the outline');
-  assert.ok(on.img[0] >= 1000 && on.img[1] >= 1000, `the panorama (${on.img})`);
+  assert.deepEqual(on.img, [2172, 724], 'the panorama, whole');
+  assert.ok(on.once.wrap && on.once.repeat.every((r) => r === 1) && Math.abs(on.once.aspect - 2172 / 724) < 0.01, `once, at its own proportions (${JSON.stringify(on.once)})`);
+  assert.deepEqual(on.missed, [], `every look through the opening from the reference views lands on the photo (${on.missed.slice(0, 6).join(' | ')})`);
   assert.ok(on.outsideClipped && !on.deskKept && on.outKept, `the outside only beyond the window's wall (${JSON.stringify(on)})`);
   assert.ok(on.occluders >= 1 && on.outFront === 'done-outside-occluder', `out of the open front past the wall's end: the occluder, not the garden (${JSON.stringify(on)})`);
   assert.ok(on.throughWin === 'done-outside' && on.behindBack === 'done-outside', `through the window toward the front, and toward the back wall: the garden (${on.throughWin}, ${on.behindBack})`);

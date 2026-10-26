@@ -5,7 +5,10 @@
 Presets (Joey 2026-10-26; the sources stay out of the repo):
   garden   his own photo: the man-made things patched over with the trees and lawn beside them, the left 780 px.
   chatgpt  ChatGPT's clean version of it (1536 x 1024, nothing man-made): all but the leaning pine at its right edge.
-  panorama ChatGPT's level 3:1 panorama of the place (2172 x 724): all of it.
+  panorama ChatGPT's level 3:1 panorama of the place (2172 x 724): all of it, tiled and extended (superseded).
+  single   the same panorama ONCE, at its own proportions: toned only, no repeat, no extension (Astra 2026-10-26:
+           "Use the image at its original proportions, with no mirrored repetition or flat-colour extension").
+           An optional blur in px as a fifth argument (checked sharp first, then softened).
 Each: cropped, toned softer and a little brighter than the room, blurred (distant trees past a build in focus), the
 lawn carried on below as a plain gradient faded in from its own last rows, and made tileable across by cross-fading its
 right edge into its left. Prints the size and the lawn line's place from the top (done.js OUTSIDE.px and .ground)."""
@@ -17,10 +20,12 @@ PRESETS = {
                    contrast=0.78, color=0.8, brightness=1.07, blur=2.2),
     'chatgpt': dict(patches=[], crop=(0, 230, 1290, 1024), ground=905, contrast=0.74, color=0.72, brightness=1.03, blur=2.5),
     'panorama': dict(patches=[], crop=(0, 0, 2172, 724), ground=596, contrast=0.74, color=0.74, brightness=1.02, blur=2.2),
+    'single': dict(patches=[], crop=(0, 0, 2172, 724), ground=596, contrast=0.8, color=0.78, brightness=1.02, blur=0, only=True),
 }
 preset, src, dst = sys.argv[1:4]
-preview = sys.argv[4] if len(sys.argv) > 4 else None
-P = PRESETS[preset]
+preview = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '-' else None
+P = dict(PRESETS[preset])
+if len(sys.argv) > 5: P['blur'] = float(sys.argv[5])
 im = Image.open(src).convert('RGB')
 
 
@@ -38,7 +43,12 @@ c = im.crop(P['crop'])
 c = ImageEnhance.Contrast(c).enhance(P['contrast'])
 c = ImageEnhance.Color(c).enhance(P['color'])
 c = ImageEnhance.Brightness(c).enhance(P['brightness'])
-c = c.filter(ImageFilter.GaussianBlur(P['blur']))   # out of focus (Joey: "the trees are at a distance and super sharp, i think that feels off")
+if P['blur']: c = c.filter(ImageFilter.GaussianBlur(P['blur']))
+if P.get('only'):
+    c.save(dst, quality=88, method=6)
+    if preview: c.save(preview)
+    print(c.size, 'tree base row', P['ground'] - P['crop'][1], 'sky', '#%02x%02x%02x' % c.crop((0, 0, c.width, 20)).resize((1, 1), Image.BOX).getpixel((0, 0)), 'lawn', '#%02x%02x%02x' % c.crop((0, c.height - 20, c.width, c.height)).resize((1, 1), Image.BOX).getpixel((0, 0)))
+    sys.exit(0)   # out of focus (Joey: "the trees are at a distance and super sharp, i think that feels off")
 W, H0, EXT, SKY = c.width, c.height, 900, 600
 # the sky carried on above as its own top colour, faded in from its top rows mirrored up (a cylinder's top is then far
 # above any look through the window: its cap, a flat colour, showed as a band where the photo ended)
