@@ -1075,88 +1075,103 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   const lower = (c) => String(c).toLowerCase();
   const spoolsOf = (root) => root.children.filter((s) => s.userData.setColor);
-  /* the spools' glow (spool.js setGlow): the one whose picker is open (selectSpool, from Colors) lit, the one under the
-     pointer lit a little; the picture changes, so Very High starts its mean again */
   /* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his own photo, his
      garden, then ChatGPT's level 3:1 panorama of the place). OUTSIDE.file is that panorama (pines, live oaks with moss,
-     cedars, pale sky, lawn; nothing man-made; 5.7 m a repeat): tools/done-scene/outside-photo.py makes it, the sources
-     stay out of the repo,
-     toned softer and a little brighter than the room (Astra: "slightly brighter and lower-contrast than the interior",
-     "no prominent buildings or objects"), its lawn carried on below in the file itself (mirrored bands: a clamped edge
-     streaks). On a plane OUTSIDE.out beyond the opening, facing in, at the scale that gives its trees a distant tree's
-     angle (OUTSIDE.mmPerPx); the lawn line (OUTSIDE.ground, from the file's top) at eye height; across, it repeats, its
-     right edge cross-faded into its left in the file, so no angle finds an edge or a seam (a mirrored repeat read as a
-     Rorschach blot in the frame) and a 1.1 m window seldom shows one tree twice. Its top stops just under the walls' top, so nothing of it shows over a wall (the
-     room has no ceiling), and a sky-coloured lid closes the space above the opening, so a look up through the window ends
-     in sky, not the void. Unlit like the room's bakes, out of the shadows, the AO (ghosts) and every ray; a pale sky until
-     the photo loads. */
-  const OUTSIDE_FAR = 40000;   // mm, the camera's far plane while the room is on (the outside's farthest grazing look)
-  const OUTSIDE = { file: 'scenes/home-office/outside.webp', out: 1500, px: [2022, 1624], mmPerPx: 2.8, ground: 0.367, eye: 1550, W: 24000, sky: 0x89a8d2 };   // W: a grazing look along the wall, through the frame, still lands on it (9 m did not)
+     cedars, pale sky, lawn; nothing man-made): tools/done-scene/outside-photo.py makes it, the sources stay out of the
+     repo, toned softer and a little brighter than the room (Astra: "slightly brighter and lower-contrast than the
+     interior", "no prominent buildings or objects"), blurred as distance is past a build in focus, its lawn carried on
+     below and its sky above (the cap over the cylinder is then far over any look through the window), its right edge
+     cross-faded into its left so it repeats with no seam.
+     ON A CYLINDER round the room (Joey: "Wouldn't a scene like that typically be more spherical to compensate for angles
+     like that, like a sky map?", of a flat backdrop's squeezed trees in a look along the wall): OUTSIDE.R from the desk,
+     the photo OUTSIDE.repeats times round it, at the scale its own field of view gives (its horizon row, OUTSIDE.horizon,
+     at eye height; a flat picture seen edge-on foreshortens, a cylinder round the eye faces it whichever way it looks).
+     A sky cap over it and a lawn under it; all of it clipped to beyond the window's wall, so it is only ever seen through
+     the window, never in the room or past its open sides. THE CEILING makes the height possible: the room had none, so
+     anything tall and far showed over its walls; now a look over a wall meets the ceiling first. Unlit like the room's
+     bakes, out of the shadows, the AO (ghosts) and every ray; a pale sky until the photo loads. */
+  const OUTSIDE_FAR = 40000;   // mm, the camera's far plane while the room is on (a look along the wall meets the cylinder far off)
+  const OUTSIDE = { file: 'scenes/home-office/outside.webp', px: [2022, 2224], horizon: 962, R: 9000, repeats: 4, eye: 1550, sky: 0x6e90bd, lawn: 0xa99c77, ceiling: 0xd9d7d2 };
   function makeOutside(group) {
     const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
     group.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new THREE.Box3().setFromObject(o)); });
     if (win.isEmpty() || !desk || !interior || !Number.isFinite(interior.y1)) return;
-    const size = win.getSize(new THREE.Vector3()), c = win.getCenter(new THREE.Vector3()), inside = new THREE.Box3().setFromObject(desk).getCenter(new THREE.Vector3());
-    const axis = size.x < size.z ? 'x' : 'z', out = Math.sign(c[axis] - inside[axis]) || -1;
+    const size = win.getSize(new THREE.Vector3()), c = win.getCenter(new THREE.Vector3()), centre = new THREE.Box3().setFromObject(desk).getCenter(new THREE.Vector3());
+    const axis = size.x < size.z ? 'x' : 'z', out = Math.sign(c[axis] - centre[axis]) || -1;
     const floorY = Number.isFinite(interior.y0) ? interior.y0 : c.y - 1500, eyeY = floorY + OUTSIDE.eye;
-    const topY = interior.y1 - 10, bottomY = floorY - 500, H = topY - bottomY;
     const ghost = (m, name) => { m.name = name; m.userData.ghost = true; m.userData.doneRoom = true; m.castShadow = false; m.receiveShadow = false; m.raycast = () => {}; scene.add(m); return m; };
-    const mat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false });
-    const plane = ghost(new THREE.Mesh(new THREE.PlaneGeometry(OUTSIDE.W, H), mat), 'done-outside');
-    const at = c.clone(); at[axis] += out * OUTSIDE.out; at.y = (topY + bottomY) / 2;
-    plane.position.copy(at);
-    plane.lookAt(at.x - (axis === 'x' ? out : 0), at.y, at.z - (axis === 'z' ? out : 0));   // facing back into the room
-    /* the lid: at the backdrop's top, facing down, from the window's middle (inside the wall's thickness, where the wall
-       hides it from the room) to the backdrop. Not from the frame's outer edge: the frame stands 50 mm proud of the wall,
-       and a steep look past the far jamb rose through that gap into the void (a dark sliver by the jamb) */
-    const depth = OUTSIDE.out, lid = ghost(new THREE.Mesh(new THREE.PlaneGeometry(axis === 'x' ? depth : OUTSIDE.W, axis === 'x' ? OUTSIDE.W : depth).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false })), 'done-outside-lid');
-    const lidAt = c.clone(); lidAt[axis] += out * (depth / 2); lidAt.y = topY;
-    lid.position.copy(lidAt);
-    /* and its two ends closed, the photo on them too: a look along the wall, skimming the far jamb, travels further along
-       than the backdrop is long before it gets out to it (a sliver of the void by the jamb, 24 m was not enough) */
-    const along = axis === 'x' ? 'z' : 'x', ends = [-1, 1].map((side) => {
-      const endMat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false });
-      const end = ghost(new THREE.Mesh(new THREE.PlaneGeometry(OUTSIDE.out, H), endMat), 'done-outside-end');
-      const e = c.clone(); e[along] += side * OUTSIDE.W / 2; e[axis] += out * OUTSIDE.out / 2; e.y = (topY + bottomY) / 2;
-      end.position.copy(e);
-      const look = e.clone(); look[along] -= side; end.lookAt(look);   // facing back along the wall, toward the window
-      return end;
-    });
-    parts.outside = [plane, lid, ...ends];
-    /* what of the room runs on past the window's wall (the back wall's end, 1.4 m of it, the floor) is cut off there, so
-       the garden is not seen with a wall standing in it: a clipping plane on the outer face of the window's own wall */
+    // the window's wall: its meshes, and the plane of its outer face
     const own = [];
     group.traverse((o) => { if (o.isMesh && /^wall_/.test(o.name)) { const bb = new THREE.Box3().setFromObject(o); const t = bb.max[axis] - bb.min[axis]; if (t < 60 && Math.abs((bb.min[axis] + bb.max[axis]) / 2 - c[axis]) < 120) own.push(bb); } });
-    if (own.length) {
-      const face = out < 0 ? Math.min(...own.map((bb) => bb.min[axis])) : Math.max(...own.map((bb) => bb.max[axis]));
-      const n = new THREE.Vector3(); n[axis] = -out;
-      const edge = new THREE.Vector3(); edge[axis] = face + out * 0.5;   // half a millimetre out from the face
-      const cut = new THREE.Plane(n, -n.dot(edge));   // keeps the room's side: n . p + constant >= 0
-      parts.clipWas = renderer.localClippingEnabled;
-      renderer.localClippingEnabled = true;
-      parts.clipped = [];
-      group.traverse((o) => {
-        if (!o.isMesh || /^win_/.test(o.name) || (/^wall_/.test(o.name) && own.some((bb) => new THREE.Box3().setFromObject(o).equals(bb)))) return;
-        const bb = new THREE.Box3().setFromObject(o);
-        if (out < 0 ? bb.min[axis] < face - 5 : bb.max[axis] > face + 5) for (const m of [].concat(o.material)) if (!parts.clipped.includes(m)) { m.clippingPlanes = [cut]; m.needsUpdate = true; parts.clipped.push(m); }
-      });
+    if (!own.length) return;
+    const face = out < 0 ? Math.min(...own.map((bb) => bb.min[axis])) : Math.max(...own.map((bb) => bb.max[axis]));
+    const n = new THREE.Vector3(); n[axis] = -out;
+    const edge = new THREE.Vector3(); edge[axis] = face + out * 0.5;   // half a millimetre out from the face
+    const roomSide = new THREE.Plane(n, -n.dot(edge)), outSide = roomSide.clone().negate();   // n . p + constant >= 0 is kept
+    /* ... and never seen past the window wall's open end (Sol 01a17823: a look out of the open front, past the wall's end,
+       crossed the wall's plane out there and found the garden; and a plane bounding the garden at that end cut looks
+       through the window that run on past it): at an end of the window's wall with no other wall across it between the
+       window and that end, the wall's plane carries on outward from the end as an occluder, depth and no colour, drawn
+       first. A look out of the open side crosses that plane past the end and stops on it (the void, as the room's other
+       open side); a look through the window crosses the plane in the opening, never meets it, and finds the garden at
+       any angle. The end the back wall closes needs none. */
+    const along = axis === 'x' ? 'z' : 'x', outsideCuts = [outSide], occluders = [];
+    const others = []; group.traverse((o) => { if (o.isMesh && /^wall_/.test(o.name)) { const bb = new THREE.Box3().setFromObject(o); if (!own.some((x) => x.equals(bb))) others.push(bb); } });
+    for (const [end, sign] of [[Math.min(...own.map((bb) => bb.min[along])), -1], [Math.max(...own.map((bb) => bb.max[along])), 1]]) {
+      const lo = Math.min(end, c[along]), hi = Math.max(end, c[along]);
+      if (others.some((bb) => bb.max[along] - bb.min[along] < 400 && bb.max[along] >= lo && bb.min[along] <= hi)) continue;   // a wall across it between the window and this end (the back wall, before the window wall runs on past it)
+      const len = 40000, occ = new THREE.Mesh(new THREE.PlaneGeometry(len, 20000), new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide }));
+      occ.name = 'done-outside-occluder'; occ.userData.ghost = true; occ.userData.doneRoom = true; occ.raycast = () => {}; occ.renderOrder = -10;
+      const at = new THREE.Vector3(); at[axis] = face; at[along] = end + sign * len / 2; at.y = floorY;
+      occ.position.copy(at);
+      if (axis === 'x') occ.rotation.y = Math.PI / 2;   // in the wall's plane (a plane's own is xy: turned to yz for a wall across x)
+      scene.add(occ); occluders.push(occ);
     }
+    parts.clipWas = renderer.localClippingEnabled;
+    renderer.localClippingEnabled = true;
+    // the cylinder, the sky over it and the lawn under it, beyond the wall only
+    const R = OUTSIDE.R, mmPerPx = (2 * Math.PI * R) / (OUTSIDE.repeats * OUTSIDE.px[0]), tileH = OUTSIDE.px[1] * mmPerPx;
+    const top = eyeY + OUTSIDE.horizon * mmPerPx, bottom = floorY - 10, Hc = top - bottom;
+    const mat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false, side: THREE.BackSide, clippingPlanes: outsideCuts });
+    const geo = new THREE.CylinderGeometry(R, R, Hc, 192, 1, true);
+    const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));   // seen from inside, it would read mirrored
+    const cyl = ghost(new THREE.Mesh(geo, mat), 'done-outside');
+    cyl.position.set(centre.x, (top + bottom) / 2, centre.z);
+    const disc = (y, colour, name, down) => {
+      const d = ghost(new THREE.Mesh(new THREE.CircleGeometry(R * 1.01, 96).rotateX(down ? Math.PI / 2 : -Math.PI / 2), new THREE.MeshBasicMaterial({ color: colour, toneMapped: false, clippingPlanes: outsideCuts })), name);
+      d.position.set(centre.x, y, centre.z);
+      return d;
+    };
+    const cap = disc(top - 1, OUTSIDE.sky, 'done-outside-sky', true), lawn = disc(bottom + 1, OUTSIDE.lawn, 'done-outside-lawn', false);
+    // the ceiling: the room's footprint at the walls' top, facing down
+    const fx0 = Number.isFinite(interior.x0) ? interior.x0 : centre.x - 6000, fx1 = Number.isFinite(interior.x1) ? interior.x1 : centre.x + 6000;
+    const fz0 = Number.isFinite(interior.z0) ? interior.z0 : centre.z - 6000, fz1 = Number.isFinite(interior.z1) ? interior.z1 : centre.z + 6000;
+    const ceiling = ghost(new THREE.Mesh(new THREE.PlaneGeometry(fx1 - fx0 + 40, fz1 - fz0 + 40).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: OUTSIDE.ceiling, toneMapped: false })), 'done-ceiling');
+    ceiling.position.set((fx0 + fx1) / 2, interior.y1, (fz0 + fz1) / 2);
+    parts.outside = [cyl, cap, lawn, ceiling, ...occluders];
+    /* what of the room runs on past the window's wall (the back wall's end, 1.4 m of it, the floor) is cut off there, so
+       the garden is not seen with a wall standing in it */
+    parts.clipped = [];
+    group.traverse((o) => {
+      if (!o.isMesh || /^win_/.test(o.name) || (/^wall_/.test(o.name) && own.some((bb) => new THREE.Box3().setFromObject(o).equals(bb)))) return;
+      const bb = new THREE.Box3().setFromObject(o);
+      if (out < 0 ? bb.min[axis] < face - 5 : bb.max[axis] > face + 5) for (const m of [].concat(o.material)) if (!parts.clipped.includes(m)) { m.clippingPlanes = [roomSide]; m.needsUpdate = true; parts.clipped.push(m); }
+    });
     new THREE.TextureLoader().load(OUTSIDE.file, (tex) => {
-      if (!parts.outside || parts.outside[0] !== plane) { tex.dispose(); return; }   // the room left while it loaded
+      if (!parts.outside || parts.outside[0] !== cyl) { tex.dispose(); return; }   // the room left while it loaded
       tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
       tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
-      const tileW = OUTSIDE.px[0] * OUTSIDE.mmPerPx, tileH = OUTSIDE.px[1] * OUTSIDE.mmPerPx, tileBottom = eyeY - (1 - OUTSIDE.ground) * tileH;
-      tex.repeat.set(OUTSIDE.W / tileW, H / tileH);
-      tex.offset.set(0.5 - OUTSIDE.W / tileW / 2, (bottomY - tileBottom) / tileH);   // a tile centred on the window, its lawn line at eye height
+      // the photo's horizon row at eye height; a tile centred on the window, as seen from the desk
+      const tileBottom = eyeY - (OUTSIDE.px[1] - OUTSIDE.horizon) * mmPerPx;
+      const a = Math.atan2(c.x - centre.x, c.z - centre.z), u = 1 - (((a / (2 * Math.PI)) % 1) + 1) % 1;   // the window's u (flipped, as the uvs)
+      tex.repeat.set(OUTSIDE.repeats, Hc / tileH);
+      tex.offset.set(0.5 - u * OUTSIDE.repeats, (bottom - tileBottom) / tileH);
       mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
-      for (const end of ends) {   // the ends: the same photo at the same scale and height, a backdrop's depth of it
-        const t = tex.clone();
-        t.repeat.set(OUTSIDE.out / tileW, H / tileH); t.offset.set(0, tex.offset.y); t.needsUpdate = true;
-        end.material.map = t; end.material.color.set(0xffffff); end.material.needsUpdate = true;
-      }
       stage.invalidateFrame();
     }, undefined, () => {});   // no photo: the pale sky stays
   }
+  /* the spools' glow (spool.js setGlow): the one whose picker is open (selectSpool, from Colors) lit, the one under the
+     pointer lit a little; the picture changes, so Very High starts its mean again */
   function glowSpools() {
     if (!parts.spools) return;
     let changed = false;

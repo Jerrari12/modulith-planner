@@ -4217,3 +4217,24 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   edge-on, a flat picture squeezes. The standard answer, a dome or cylinder round the room, is blocked by the room having
   no ceiling: anything tall and far shows over its walls, which is why the backdrop stops at the walls' top. A ceiling
   first, then a cylinder, is the proposal.
+
+## 2026-10-26 — The garden on a cylinder round the room, under a ceiling
+
+- **Asked** (Joey: "Wouldn't a scene like that typically be more spherical to compensate for angles like that, like a sky
+  map?", "Why do the trees looks squished though from that extreme angle?", then of the proposal: "Let's try it").
+- **A ceiling** over the room's footprint at the walls' top (plain, facing down, not clipped). The room had none, so
+  anything tall and far showed over its walls; a look over a wall now meets the ceiling first, and the high corner views
+  see a ceiling, not the void.
+- **The panorama on a cylinder** 9 m round the desk, four times round (2 pi R / (4 x 2022) = 7 mm a pixel, the scale its
+  own field of view gives), its horizon row (the source's middle) at eye height, with a sky cap over it and a lawn under
+  it; the file now carries 600 px more sky above (a flat cap had shown as a band where the photo ended). A cylinder round
+  the eye faces it whichever way it looks: no foreshortened trees in a look along the wall.
+- **Only through the window.** All of it is clipped to beyond the window wall's outer face; and where that wall's end
+  is open (the room's front), the wall's plane carries on outward as a depth-only occluder (Sol `01a17823`: without it a
+  look out of the open front past the wall's end found the garden; a clipping plane at that end instead cut looks through
+  the window that ran on past it). Looks out of the open sides stay as they were.
+- **Checks.** Shots from the front, low, far corner, high, grazing side, upward and out of the open front
+  (`D:\Claude - Output\done-scene-spools-2026-10-26\cyl4`). The window case now tests the pieces, the clipping, the
+  ceiling over the whole footprint, and rays: out of the open front the occluder, through the window both ways the garden.
+  16 room and scene cases pass. Sol `01a17823` round 20: two findings accepted (the open end, then its first fix), then no
+  findings. Not deployed.

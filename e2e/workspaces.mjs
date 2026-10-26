@@ -3138,28 +3138,52 @@ test('Colors: Showcase plays the final scene in these colours, and Esc comes bac
   await ctx.close();
 });
 
-/* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his own garden photo):
-   the backdrop beyond the window wears the photo, a lid closes the space above the opening, both under the walls' top;
-   what of the room runs past the window's wall is clipped there; Neutral takes all of it away and the clipping off */
-test('Colors: the room’s window looks out on the garden photo, nothing of it over the walls, the room cut at the window wall, all gone with Neutral', async () => {
+/* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"; then his garden, as
+   ChatGPT's panorama of it; then "Wouldn't a scene like that typically be more spherical ... like a sky map?"): the
+   panorama on a cylinder round the room, a sky cap over it and a lawn under it, all clipped to beyond the window's wall
+   (never in the room); a ceiling over the room at the walls' top, so nothing far shows over a wall; what of the room
+   runs past the window's wall is clipped there; Neutral takes all of it away, the clipping off and the far plane back */
+test('Colors: the room’s window looks out on a panorama round the room, clipped to beyond its wall, a ceiling over the room, all gone with Neutral', async () => {
   const { ctx, page, errors } = await open('colors', { visitor: true });
   await page.waitForFunction(() => { const o = window.__GEN2_VIEWER__.scene.getObjectByName('done-outside'); return o && o.material.map && o.material.map.image; }, null, { timeout: 60_000 }).catch(() => assert.fail('the window has no photo outside it'));
   const on = await page.evaluate(() => {
-    const v = window.__GEN2_VIEWER__, T = v.THREE, o = v.scene.getObjectByName('done-outside'), lid = v.scene.getObjectByName('done-outside-lid'), b = window.__GEN2_DONE__.sequence.interior;
-    const top = (m) => new T.Box3().setFromObject(m).max.y;
-    const clipped = []; v.scene.getObjectByName('done-room').traverse((m) => { if (m.isMesh && [].concat(m.material).some((x) => x.clippingPlanes && x.clippingPlanes.length)) clipped.push(m.name); });
-    return { far: v.camera.far, ends: v.scene.children.filter((m) => m.name === 'done-outside-end').length, img: [o.material.map.image.width, o.material.map.image.height], ghost: o.userData.ghost && lid.userData.ghost, tops: [top(o), top(lid)], wallTop: b.y1, clipped, clip: v.renderer.localClippingEnabled };
+    const v = window.__GEN2_VIEWER__, T = v.THREE, s = v.scene, b = window.__GEN2_DONE__.sequence.interior, room = s.getObjectByName('done-room');
+    const names = ['done-outside', 'done-outside-sky', 'done-outside-lawn', 'done-ceiling'], m = Object.fromEntries(names.map((n) => [n, s.getObjectByName(n)]));
+    const desk = new T.Box3().setFromObject(room.getObjectByName('desk_top')).getCenter(new T.Vector3());
+    // the outside's clipping keeps nothing at the desk (inside) and keeps a point 3 m out past the window
+    const cut = m['done-outside'].material.clippingPlanes[0], win = new T.Box3(); room.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new T.Box3().setFromObject(o)); });
+    const out3 = win.getCenter(new T.Vector3()); out3.x -= Math.sign(desk.x - out3.x) * 3000;
+    const cuts = m['done-outside'].material.clippingPlanes, kept = (p) => cuts.every((q) => q.distanceToPoint(p) >= 0);
+    /* the first thing a ray meets among the garden and the occluders, the garden's clipping taken into account: out of the
+       open front past the window wall's end (Sol 01a17823) it must be an occluder; out through the window toward the
+       front, past where the wall ends, the garden */
+    const occ = []; s.traverse((o) => { if (o.name === 'done-outside-occluder') occ.push(o); });
+    const first = (from, to) => { const r = new T.Raycaster(from, to.clone().sub(from).normalize(), 1, 1e6), hits = [];
+      for (const o of [m['done-outside'], ...occ]) T.Mesh.prototype.raycast.call(o, r, hits);
+      return hits.filter((h) => h.object !== m['done-outside'] || kept(h.point)).sort((x, y) => x.distance - y.distance).map((h) => h.object.name)[0] || null; };
+    const wc = win.getCenter(new T.Vector3()), wz1 = win.max.z;
+    const outFront = first(new T.Vector3(desk.x, 800, b.z1 - 200), new T.Vector3(out3.x, 800, b.z1 + 3000));
+    const throughWin = first(new T.Vector3(desk.x + 300, wc.y, win.min.z + 40), new T.Vector3(wc.x, wc.y, wz1 - 20));
+    const behindBack = first(new T.Vector3(desk.x + 300, wc.y, wz1 - 40), new T.Vector3(wc.x, wc.y, win.min.z + 20));
+    const cbox = new T.Box3().setFromObject(m['done-ceiling']);
+    const clipped = []; room.traverse((o) => { if (o.isMesh && [].concat(o.material).some((x) => x.clippingPlanes && x.clippingPlanes.length)) clipped.push(o.name); });
+    return { all: names.every((n) => m[n] && m[n].userData.ghost), outsideClipped: ['done-outside', 'done-outside-sky', 'done-outside-lawn'].every((n) => m[n].material.clippingPlanes && m[n].material.clippingPlanes.length),
+      deskKept: kept(desk), outKept: kept(out3), occluders: occ.length, outFront, throughWin, behindBack, img: [m['done-outside'].material.map.image.width, m['done-outside'].material.map.image.height],
+      ceiling: { y: Math.round(cbox.max.y), x: [Math.round(cbox.min.x), Math.round(cbox.max.x)], z: [Math.round(cbox.min.z), Math.round(cbox.max.z)] }, b, far: v.camera.far, clipped, clip: v.renderer.localClippingEnabled };
   });
-  assert.ok(on.img[0] >= 600 && on.img[1] >= 1000, `the photo (${on.img})`);
-  assert.ok(on.ghost, 'out of the AO and the outline');
-  assert.ok(on.far >= 40000 && on.ends === 2, `the camera sees as far as the outside lies, its ends closed (${on.far}, ${on.ends})`);
-  assert.ok(on.tops.every((t) => t <= on.wallTop), `nothing of it over the walls (${JSON.stringify(on)})`);
+  assert.ok(on.all, 'the cylinder, its sky, its lawn and the ceiling, out of the AO and the outline');
+  assert.ok(on.img[0] >= 1000 && on.img[1] >= 1000, `the panorama (${on.img})`);
+  assert.ok(on.outsideClipped && !on.deskKept && on.outKept, `the outside only beyond the window's wall (${JSON.stringify(on)})`);
+  assert.ok(on.occluders >= 1 && on.outFront === 'done-outside-occluder', `out of the open front past the wall's end: the occluder, not the garden (${JSON.stringify(on)})`);
+  assert.ok(on.throughWin === 'done-outside' && on.behindBack === 'done-outside', `through the window toward the front, and toward the back wall: the garden (${on.throughWin}, ${on.behindBack})`);
+  assert.ok(Math.abs(on.ceiling.y - on.b.y1) < 2 && on.ceiling.x[0] <= on.b.x0 && on.ceiling.x[1] >= on.b.x1 && on.ceiling.z[0] <= on.b.z0 && on.ceiling.z[1] >= on.b.z1, `a ceiling over the whole room at the walls' top (${JSON.stringify(on.ceiling)} vs ${JSON.stringify(on.b)})`);
+  assert.ok(on.far >= 40000, `the camera sees as far as the outside lies (${on.far})`);
   assert.ok(on.clipped.includes('wall_back') && on.clip, `the back wall cut at the window wall (${JSON.stringify(on.clipped)})`);
   assert.ok(!on.clipped.some((n) => /^wall_left|^win_/.test(n)), 'the window wall and its frame whole');
   await page.locator('#ws-tools .backdrop button:has-text("Neutral")').click();
   await page.waitForFunction(() => !document.documentElement.dataset.done, null, { timeout: 30_000 });
-  const off = await page.evaluate(() => ({ far: window.__GEN2_VIEWER__.camera.far, outside: !!window.__GEN2_VIEWER__.scene.getObjectByName('done-outside'), lid: !!window.__GEN2_VIEWER__.scene.getObjectByName('done-outside-lid'), clip: window.__GEN2_VIEWER__.renderer.localClippingEnabled }));
-  assert.deepEqual(off, { far: 8000, outside: false, lid: false, clip: false }, 'Neutral: none of it left, clipping off, the far plane back');
+  const off = await page.evaluate(() => { const s = window.__GEN2_VIEWER__.scene; return { far: window.__GEN2_VIEWER__.camera.far, left: ['done-outside', 'done-outside-sky', 'done-outside-lawn', 'done-ceiling', 'done-outside-occluder'].filter((n) => s.getObjectByName(n)), clip: window.__GEN2_VIEWER__.renderer.localClippingEnabled }; });
+  assert.deepEqual(off, { far: 8000, left: [], clip: false }, 'Neutral: none of it left, clipping off, the far plane back');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

@@ -39,7 +39,17 @@ c = ImageEnhance.Contrast(c).enhance(P['contrast'])
 c = ImageEnhance.Color(c).enhance(P['color'])
 c = ImageEnhance.Brightness(c).enhance(P['brightness'])
 c = c.filter(ImageFilter.GaussianBlur(P['blur']))   # out of focus (Joey: "the trees are at a distance and super sharp, i think that feels off")
-W, H0, EXT = c.width, c.height, 900
+W, H0, EXT, SKY = c.width, c.height, 900, 600
+# the sky carried on above as its own top colour, faded in from its top rows mirrored up (a cylinder's top is then far
+# above any look through the window: its cap, a flat colour, showed as a band where the photo ended)
+skycol = c.crop((0, 0, W, 30)).resize((1, 1), Image.BOX).getpixel((0, 0))
+up = Image.new('RGB', (W, SKY), skycol)
+sb = 120
+head = ImageOps.flip(c.crop((0, 0, W, sb)))
+upfade = ImageOps.flip(Image.linear_gradient('L').resize((W, sb)))   # 255 far from the photo (plain), 0 at its edge
+up.paste(Image.composite(Image.new('RGB', (W, sb), skycol), head, upfade), (0, SKY - sb))
+joined = Image.new('RGB', (W, SKY + c.height)); joined.paste(up, (0, 0)); joined.paste(c, (0, SKY)); c = joined
+H0 = c.height
 out = Image.new('RGB', (W, H0 + EXT))
 out.paste(c, (0, 0))
 base = c.crop((0, H0 - 40, W, H0)).resize((1, 1), Image.BOX).getpixel((0, 0))
@@ -57,4 +67,4 @@ T.paste(Image.composite(out.crop((0, 0, OV, out.height)), out.crop((out.width - 
 T.save(dst, quality=86, method=6)
 if preview:
     T.save(preview)
-print(T.size, 'ground', round((P['ground'] - P['crop'][1]) / T.height, 4))
+print(T.size, 'horizon row (the middle of the source)', SKY + (P['crop'][3] - P['crop'][1]) // 2, 'sky', '#%02x%02x%02x' % skycol, 'lawn', '#%02x%02x%02x' % base)
