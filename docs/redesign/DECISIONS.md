@@ -3394,7 +3394,10 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   it fails on that travel.
 - **Review:** Terra `01a175a2`: 2 of 5 taken (restore only while `st.peeking` is still the peeked unit; the pills
   round-trip confirmed), 1 discarded (stale `st.stageErrors` - syncStage clears it before the update on every pass).
-- **Deploy:** a bug Joey reported, so it deploys once the suites pass.
+- **Deploy:** a bug Joey reported, so it deploys once the suites pass. **Live 2026-10-25 at `2bf7cad1`** (20:40 push,
+  live 22:05 local, queued behind the skin-map deploy). The live check `peek-prod.mjs 2bf7cad1` (D:\Claude - Output\
+  planner-prod-checks-2026-10-18) passed: Peek inside opens the drawer to base + 171.5, the switch to Gridfinity leaves
+  the new drawer open under a button still saying Close it, Close it brings it back by 171.5, the button says Peek inside.
 
 ## 2026-10-26 · The deploy workflow in parallel jobs: docs-only pushes run nothing, the e2e in six shards, the image's own Chrome
 
