@@ -446,6 +446,9 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-colors .head { display: flex; flex-direction: column; gap: 4px; }
 #ws-colors h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; font-stretch: 108%; }
 #ws-colors .head .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
+/* the Showcase (the final scene from Colors), beside the panel's title */
+#ws-colors .head { position: relative; }
+#ws-colors .head .showcase { position: absolute; top: -2px; right: 0; display: inline-flex; align-items: center; gap: 6px; }
 /* the Studio / Room stage toggle (the Done scene's room as a stage, behind ?done=room, 2026-10-23) */
 /* the Room | Neutral backdrop switch is the toolbar's now (#ws-tools .backdrop, the .view chip's look) */
 #ws-colors section { display: flex; flex-direction: column; gap: 6px; }

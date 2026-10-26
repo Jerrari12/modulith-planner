@@ -85,6 +85,14 @@ export function mountAssemble(stage, ctx) {
      once the room has loaded; a leave before that cancels the load. */
   let room = null;   // { leaveFn, handle, mineWas } while the room is on or loading
   let inScene = false;
+  /* THE SHOWCASE (Joey 2026-10-26: "in the color tab, we should somehow also work in the final scene but call it something
+     else, like that way after selecting your colors and stuff you can also view it in this way"): Colors' Showcase button
+     asks for this scene through ctx.memo.showcase ({ from }), and it opens straight in it; its Back (Esc) goes back where it
+     came from, and Assemble's own place (the step a visitor left on) is kept as it was, not moved to Done */
+  const showcase = ctx.memo && ctx.memo.showcase ? ctx.memo.showcase : null;
+  if (showcase) ctx.memo.showcase = null;
+  const keptPlace = showcase ? { page: ctx.memo.assemblePage, done: ctx.memo.assembleDone } : null;
+  const backWord = showcase && showcase.from === 'colors' ? 'Colors' : null;
   const bars = el('div', { id: 'cinema-bars', 'aria-hidden': 'true' });   // the black bars, in the workspace's own layer so the strip paints over them
   /* the room's wall and desk colours (Joey 2026-10-25): the scene's own control (done.js roomColoursPanel) in a panel over
      the strip, opened by its button once the room is on; Esc closes it before it leaves the scene */
@@ -98,7 +106,7 @@ export function mountAssemble(stage, ctx) {
     if (want) pop.replaceChildren(room.handle.roomColoursPanel()); else pop.replaceChildren();
   }
   const strip = el('div.glass', { id: 'ws-scene', role: 'toolbar', 'aria-label': 'Final scene' }, [
-    el('button.key', { text: '← Back', title: 'Back to the instructions · Esc', onclick: () => leaveScene() }),
+    el('button.key', { text: backWord ? `← Back to ${backWord}` : '← Back', title: backWord ? `Back to ${backWord} · Esc` : 'Back to the instructions · Esc', onclick: () => leaveScene() }),
     colBtn,
     el('button.key.on', { text: 'Next view →', title: 'The next camera view', onclick: () => { if (room && room.handle) room.handle.nextShot(); } }),
   ]);
@@ -140,7 +148,9 @@ export function mountAssemble(stage, ctx) {
     bars.remove(); strip.remove(); pop.remove();
     leaveRoom();
     renderPlayer(); safe();
+    if (showcase && showcase.from && !leaving) { leaving = true; ctx.switchTo(showcase.from); }   // the showcase's Back: where it came from
   }
+  let leaving = false;   // a showcase's switch back is under way (its unmount leaves the scene again)
   function enterRoom() {
     if (DONE_SCENE !== 'room' || room) return;
     const h = { leaveFn: null, handle: null, mineWas: mine };
@@ -251,15 +261,17 @@ export function mountAssemble(stage, ctx) {
   if (back != null) { done = !!ctx.memo.assembleDone; stage.goTo(back, { animate: false }); }   // a remembered Done comes back as the End page, not the scene
   else if (stage.cur !== pageOf.overview) stage.goTo(pageOf.overview);
   renderList(); renderPlayer(); tb.sync(); safe();
+  if (showcase) { finish(); enterScene(); }   // straight into the scene
 
   return {
     onPage(i) { if (i !== pageOf.finished) { done = false; leaveScene(); } renderList(); renderPlayer(); tb.sync(); safe(); },   // a remount's goTo lands on the finished page, so a remembered Done survives it
     onCamFree() { tb.sync(); },   // the camera taken (an orbit) or given back: the toolbar's camera button lights up or not
     onQuality(tier) { if (room && room.handle) room.handle.onQuality(tier); },   // the room re-aims its lights after the tier's rig reset
     unmount() {
+      leaving = true;
       leaveScene();
       ac.abort();
-      if (ctx.memo) { ctx.memo.assemblePage = stage.cur; ctx.memo.assembleDone = done; }
+      if (ctx.memo) { ctx.memo.assemblePage = keptPlace ? keptPlace.page : stage.cur; ctx.memo.assembleDone = keptPlace ? keptPlace.done : done; }   // a showcase keeps Assemble's own place
       stage.setPaused(false);
       if (stage.useCustom !== hadOwnColors) { stage.useCustom = hadOwnColors; stage.applyPalette(); }
       stage.setSafeArea(null);

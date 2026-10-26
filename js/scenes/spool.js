@@ -110,7 +110,17 @@ export function makeSpool(geo, color, { plastic = SPOOL.plastic } = {}) {
   const s = d.sides.map((sg) => new THREE.Mesh(sg, sides));
   for (const m of [f, o, ...s]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
   g.userData.spool = { color, materials: [fm, outer, sides] };
-  g.userData.setColor = (hex) => { outer.color.set(hex); sides.color.set(hex); g.userData.spool.color = hex; };
+  /* the glow a spool takes on the Colors stage (Joey 2026-10-26: "when you hover over a filament and select a filament we
+     should highlight it in some way so you know you can click it and when it is selected"): 0 none, 1 under the pointer
+     (its filament a little lit), 2 its picker open (lit more, the flanges warmed toward the picker's orange) */
+  const glow = (lv) => {
+    const k = [0, 0.22, 0.4][lv] || 0;
+    outer.emissive.set(g.userData.spool.color).multiplyScalar(k); sides.emissive.copy(outer.emissive);
+    fm.emissive.set(lv === 2 ? 0x5a2400 : lv === 1 ? 0x1a1a1a : 0x000000);
+    g.userData.glow = lv;
+  };
+  g.userData.setGlow = glow;
+  g.userData.setColor = (hex) => { outer.color.set(hex); sides.color.set(hex); g.userData.spool.color = hex; glow(g.userData.glow || 0); };
   return g;
 }
 

@@ -4166,3 +4166,28 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   selected, nothing left in the old colour, the spool changed, one undo restores it all); the orbit case now asserts the
   turn into the wall keeps its distance to the build (fails with the old pull). All 27 Colors cases pass. Review: Sol
   `01a17823` round 16, one finding accepted (occlusion), then no findings. Not deployed.
+
+## 2026-10-26 — Showcase from Colors; spools glow; stacks to the ceiling; a stand-in view out of the window
+
+- **Showcase** (Joey: "in the color tab, we should somehow also work in the final scene but call it something else, like
+  that way after selecting your colors and stuff you can also view it in this way, or maybe if they let the screen sit
+  for like 30 seconds?"). A Showcase button by the Colors panel's title plays the final scene in the colours just picked
+  (Assemble's own scene, asked for through `ctx.memo.showcase`); its Back reads "← Back to Colors" and Esc goes there, to
+  the room; Assemble's own place (the step a visitor left on) is kept. Starting it after 30 idle seconds is Joey's call,
+  asked, not built.
+- **Spools glow** (Joey: "when you hover over a filament and select a filament we should highlight it in some way so you
+  know you can click it and when it is selected"): under the pointer a spool's filament is lit a little; with its picker
+  open, lit more and its flanges warmed toward the picker's orange; the others not.
+- **Stacks to the ceiling** (Joey, of ten filaments and six spools: "can we maybe just keep stacking them? like maybe a
+  crazy limit of the ceiling?"): a spool for every filament, 32 at most; a stack grows to 150 mm under the walls' top, a
+  spool every 72 mm (`stackCap`; Sol `01a17823`: 67 let opposing leans of 70.4 a spool carry a stack past the margin;
+  unit-tested over 400 seeds and with every lean at its most, alternating).
+- **The view out of the window** (Joey: "when i look outside i just see a dark void"): a painted daylight view on a plane
+  1.8 m beyond the opening, facing in, horizon at eye height. A STAND-IN: Astra, on seeing it: "it looks like a blurred
+  illustration stuck to the window"; replace it with a properly licensed photographic exterior (a restrained daylight
+  garden or distant treeline, pale sky, slightly brighter and lower-contrast than the room, mostly sharp, no sun disc),
+  covering every supported angle, checked from the cinematic paths and a sideways view; no automatic shot of an empty
+  window; no exterior focus pull unless the photo holds up to it. Waiting on Joey for the photo (his own, or a CC0 one).
+- **Checks.** A new Showcase case; the spool-click case checks the glow; the spools case stacks a filament a region past
+  six, under the walls' margin. The Colors room, spools, steam, strip and Done cases pass. Review: Sol `01a17823` round
+  17, one finding accepted (the step), then fixed and tested. Not deployed.

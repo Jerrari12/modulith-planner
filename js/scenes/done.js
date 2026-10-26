@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool } from './spool.js';
-import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -244,6 +244,41 @@ function roomInterior(group) {
   if (back.isEmpty() && left.isEmpty()) return null;
   const top = Math.min(back.isEmpty() ? Infinity : back.max.y, left.isEmpty() ? Infinity : left.max.y);
   return { x0: left.isEmpty() ? -Infinity : left.max.x, x1: back.isEmpty() ? Infinity : back.max.x, y0: floor.isEmpty() ? -Infinity : floor.max.y, y1: top, z0: back.isEmpty() ? -Infinity : back.max.z, z1: left.isEmpty() ? Infinity : left.max.z };
+}
+
+/* THE VIEW OUT OF THE WINDOW (Joey 2026-10-26: "when i look outside i just see a dark void"): a painted daylight view (a sky,
+   soft clouds, a hazy tree line at eye height, a lawn) on a canvas, seeded so it is the same view each time. The room has
+   no glass, and the stage's background is off in the room, so without it the opening showed the clear colour. */
+function outsideTexture() {
+  const W = 1024, H = 576, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const horizon = H * 0.56;
+  const sky = g.createLinearGradient(0, 0, 0, horizon);
+  sky.addColorStop(0, '#86afd9'); sky.addColorStop(0.65, '#bcd3e8'); sky.addColorStop(1, '#e4ecf2');
+  g.fillStyle = sky; g.fillRect(0, 0, W, horizon);
+  for (let i = 0; i < 7; i++) {   // soft clouds: piles of faint discs
+    const cx = rnd() * W, cy = H * (0.08 + rnd() * 0.3), w = 60 + rnd() * 120;
+    for (let k = 0; k < 14; k++) { g.fillStyle = `rgba(255,255,255,${0.05 + rnd() * 0.07})`; g.beginPath(); g.ellipse(cx + (rnd() - 0.5) * w * 1.6, cy + (rnd() - 0.5) * w * 0.25, w * (0.3 + rnd() * 0.4), w * (0.12 + rnd() * 0.12), 0, 0, Math.PI * 2); g.fill(); }
+  }
+  const ground = g.createLinearGradient(0, horizon, 0, H);
+  ground.addColorStop(0, '#a7b394'); ground.addColorStop(1, '#8c9a76');
+  g.fillStyle = ground; g.fillRect(0, horizon, W, H - horizon);
+  g.filter = 'blur(2.5px)';   // out of focus, as a garden seen past a room in focus is (where a browser has canvas filters)
+  for (const [far, tones, rise] of [[1, [[166, 179, 172], [152, 168, 160], [175, 186, 178]], 0.1], [0, [[104, 128, 98], [118, 140, 106], [92, 116, 90], [130, 148, 112]], 0.075]]) {   // the tree line, far and hazy, then nearer
+    for (let x = -30; x < W + 30; x += 5 + rnd() * 9) {
+      const r = (far ? 9 : 12) + rnd() * (far ? 16 : 22), y = horizon - H * rise * (0.25 + rnd() * 0.75), [cr, cg, cb] = tones[Math.floor(rnd() * tones.length)];
+      g.fillStyle = `rgba(${cr},${cg},${cb},${far ? 0.5 : 0.75})`; g.beginPath(); g.ellipse(x, y + r * 0.7, r * (0.7 + rnd() * 0.4), r * (1 + rnd() * 0.5), (rnd() - 0.5) * 0.4, 0, Math.PI * 2); g.fill();
+    }
+    const [cr, cg, cb] = tones[0];
+    g.fillStyle = `rgba(${cr},${cg},${cb},${far ? 0.5 : 0.75})`; g.fillRect(0, horizon - H * rise * 0.3, W, H * rise * 0.3 + 2);
+  }
+  g.filter = 'none';
+  const haze = g.createLinearGradient(0, horizon - H * 0.12, 0, horizon + H * 0.06);   // the air between
+  haze.addColorStop(0, 'rgba(228,236,242,0)'); haze.addColorStop(0.6, 'rgba(228,236,242,0.35)'); haze.addColorStop(1, 'rgba(228,236,242,0)');
+  g.fillStyle = haze; g.fillRect(0, horizon - H * 0.12, W, H * 0.18);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
 }
 
 function contactTexture() {
@@ -1039,14 +1074,16 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!fits(picks)) { const [next, off] = search(['plant']); if (fits(next)) { picks = next; cleared = off; } }
     setOff(cleared, true);
     parts.spools.cleared = cleared;
-    /* a group with no room joins a stack that has it, up to SPOOL_HIGH, so every colour of the build is on the desk where it
+    const cap = stackCap(interior ? interior.y1 : NaN, deskY);   // up to the ceiling, near enough (Joey: "maybe a crazy limit of the ceiling?")
+    parts.spools.cap = cap;
+    /* a group with no room joins a stack that has it, up to the room's cap, so every colour of the build is on the desk where it
        can be (Joey: "you can even stack them in a single tall stack") */
     const room = plan.groups.map((g, i) => (picks[i] ? { ...g, colours: [...g.colours] } : null));
     plan.groups.forEach((g, i) => {
       if (picks[i]) return;
       for (const c of g.colours) {
-        const host = room.find((r) => r && r.kind === 'stack' && r.colours.length < SPOOL_HIGH) || (() => { const r = room.find((x) => x && x.kind === 'stand'); if (r) { r.kind = 'stack'; } return r; })();
-        if (host && host.colours.length < SPOOL_HIGH) host.colours.push(c);
+        const host = room.filter((r) => r && r.kind === 'stack' && r.colours.length < cap).sort((a, b) => a.colours.length - b.colours.length)[0] || (() => { const r = room.find((x) => x && x.kind === 'stand'); if (r) { r.kind = 'stack'; } return r; })();
+        if (host && host.colours.length < cap) host.colours.push(c);
       }
     });
     const placed = [];
@@ -1073,6 +1110,39 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   const lower = (c) => String(c).toLowerCase();
   const spoolsOf = (root) => root.children.filter((s) => s.userData.setColor);
+  /* the spools' glow (spool.js setGlow): the one whose picker is open (selectSpool, from Colors) lit, the one under the
+     pointer lit a little; the picture changes, so Very High starts its mean again */
+  /* the view out of the window (outsideTexture): a plane 1.8 m out from the opening, facing in, wide and tall enough that no
+     camera in the room sees its edge through the frame, its horizon at eye height (1.55 m over the floor); unlit, as the
+     room's bakes are, out of the shadows, the AO (a ghost) and every ray */
+  function makeOutside(group) {
+    const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
+    group.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new THREE.Box3().setFromObject(o)); });
+    if (win.isEmpty() || !desk) return;
+    const size = win.getSize(new THREE.Vector3()), c = win.getCenter(new THREE.Vector3()), inside = new THREE.Box3().setFromObject(desk).getCenter(new THREE.Vector3());
+    const axis = size.x < size.z ? 'x' : 'z', out = Math.sign(c[axis] - inside[axis]) || -1;
+    const W = 9000, H = 5000, floorY = interior && Number.isFinite(interior.y0) ? interior.y0 : c.y - 1500;
+    const mat = new THREE.MeshBasicMaterial({ map: outsideTexture(), toneMapped: false, depthWrite: true });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+    const at = c.clone(); at[axis] += out * 1800;
+    at.y = floorY + 1550 + (0.5 - 0.56) * H;   // the texture's horizon (0.56 down from its top) at eye height
+    plane.position.copy(at);
+    plane.lookAt(at.x - (axis === 'x' ? out : 0), at.y, at.z - (axis === 'z' ? out : 0));   // facing back into the room
+    plane.name = 'done-outside'; plane.userData.ghost = true; plane.userData.doneRoom = true;
+    plane.castShadow = false; plane.receiveShadow = false; plane.raycast = () => {};
+    scene.add(plane);
+    parts.outside = plane;
+  }
+  function glowSpools() {
+    if (!parts.spools) return;
+    let changed = false;
+    for (const s of parts.spools.groups.flatMap(spoolsOf)) {
+      const lv = parts.selectedHex && lower(s.userData.spool.color) === parts.selectedHex ? 2 : s === parts.hovered ? 1 : 0;
+      if ((s.userData.glow || 0) !== lv) { s.userData.setGlow(lv); changed = true; }
+    }
+    if (changed) stage.invalidateFrame();
+  }
+  function selectSpool(hex) { parts.selectedHex = hex ? lower(hex) : null; glowSpools(); }
   function newSpool(c) {
     const s = makeSpool(parts.spools.geo, c);
     s.traverse((m) => { if (m.isMesh) m.userData.doneRoom = true; });
@@ -1091,7 +1161,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      added a blue filament, should we stack another filament on top of the stack when we do that"): a spool a filament,
      SPOOL_MAX at most. A spool whose filament the build still wears keeps it (the first of a colour; a second is spare); a
      spare takes a filament the build newly wears, where it stands; a filament still without one goes on top of the lowest
-     stack with room (SPOOL_HIGH), or lays a standing spool down to start one; a spare left over leaves the desk, and a
+     stack with room (up to the room's cap, stackCap), or lays a standing spool down to start one; a spare left over leaves the desk, and a
      group left with none leaves with its disc */
   function refreshSpools() {
     const sp = parts.spools;
@@ -1104,7 +1174,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     while (spare.length && missing.length) spare.shift().userData.setColor(missing.shift());
     for (const s of spare) { disposeSpool(s); s.removeFromParent(); }
     for (const c of missing) {
-      let host = sp.groups.filter((r) => r.userData.spoolGroup.kind === 'stack' && spoolsOf(r).length && spoolsOf(r).length < SPOOL_HIGH).sort((a, b) => spoolsOf(a).length - spoolsOf(b).length)[0];
+      let host = sp.groups.filter((r) => r.userData.spoolGroup.kind === 'stack' && spoolsOf(r).length && spoolsOf(r).length < (sp.cap || SPOOL_HIGH)).sort((a, b) => spoolsOf(a).length - spoolsOf(b).length)[0];
       if (!host) {
         host = sp.groups.find((r) => r.userData.spoolGroup.kind === 'stand' && spoolsOf(r).length);
         if (host) { host.userData.spoolGroup.kind = 'stack'; sp.discs[sp.groups.indexOf(host)].scale.set(250, 1, 250); }   // laid down: a stack's contact disc
@@ -1123,6 +1193,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       r.updateWorldMatrix(true, true);
       Object.assign(sp.placed[i], { kind: r.userData.spoolGroup.kind, colours: list.map((x) => x.userData.spool.color), box: plain(new THREE.Box3().setFromObject(r, true)) });
     }
+    if (parts.hovered && !parts.hovered.parent) parts.hovered = null;   // a spool taken off the desk is under no pointer
+    glowSpools();
     stage.invalidateFrame();
   }
   /* the build's facts the milestone sayings read (done-fit.js buildFacts): its units, which carry a drawer and a label, and
@@ -1384,6 +1456,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     group.position.set(anchorWorld.x - a.x * SCALE, anchorWorld.y - a.y * SCALE, anchorWorld.z - a.z * SCALE);
     group.updateMatrixWorld(true);
     interior = roomInterior(group);   // the walls do not slide: the shots' clamp is fixed from here
+    makeOutside(group);
     // props slide clear of the build along their slots, by group; a group that cannot clear it INSIDE the desk's extent
     // hides rather than hanging past the edge (a build wider than the desk's free run: done-fit.js fitSlides)
     const props = [];
@@ -1532,8 +1605,10 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         const r = el.getBoundingClientRect();
         ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
         ray.setFromCamera(ndc, camera);
-        const over = !!spoolHit(ray) && !!spoolHit(ray, stage.buildHitDistance(ray));   // the build first only when a spool is in line: one cast of it, not one a move
+        const s0 = spoolHit(ray), s = s0 && spoolHit(ray, stage.buildHitDistance(ray));   // the build first only when a spool is in line: one cast of it, not one a move
+        const over = !!s;
         if (over !== !!parts.hoverOn) { parts.hoverOn = over; el.style.cursor = over ? 'pointer' : ''; el.title = over ? 'Change this spool’s filament everywhere in the build' : ''; }
+        if ((s || null) !== (parts.hovered || null)) { parts.hovered = s || null; glowSpools(); }
       };
       el.addEventListener('pointermove', parts.hover);
     }
@@ -1591,7 +1666,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
       get spools() { const p = parts.spools; return p ? { cleared: p.cleared || [], plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible) } : null; },
-      refreshSpools,
+      refreshSpools, selectSpool,
+      get spoolGlow() { return parts.spools ? parts.spools.groups.flatMap(spoolsOf).map((s) => [lower(s.userData.spool.color), s.userData.glow || 0]) : []; },
       get mugs() { const p = parts.mugs; return p ? { framed: subj.mug ? (subj.mug.group ? subj.mug.group.map((g) => subj.mugs.indexOf(g)) : [subj.mugs.indexOf(subj.mug)]) : null, plan: p.plan, facts: p.facts, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },
       get subjects() { return { labels: subj.labels.map((l) => l.id), label: subj.label ? subj.label.id : null, row: subj.row }; },
       get focus() { return { state: focus.anim ? focus.anim.playState : null, filter: getComputedStyle(renderer.domElement).filter }; },
@@ -1665,6 +1741,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     cancelAnimationFrame(parts.steamRaf);
     if (parts.steam && parts.steam.overlay) stage.removeAccOverlay(parts.steam.overlay);   // off the still picture before its meshes go
     if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
+    if (parts.outside) { parts.outside.removeFromParent(); parts.outside.geometry.dispose(); parts.outside.material.map.dispose(); parts.outside.material.dispose(); parts.outside = null; }
     if (parts.spools) { for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays
     if (parts.mugs) { for (const o of [...parts.mugs.meshes, ...parts.mugs.masks]) o.removeFromParent(); for (const t of parts.mugs.texs) t.dispose(); parts.mugs = null; }   // the second mug and its shadow out (their geometry is the cached load's; their materials go with parts.mats)
     subj.mugs = null;
@@ -1690,7 +1767,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
     controls.enabled = was.controls; controls.enablePan = was.pan; controls.maxPolarAngle = was.polar;
     if (parts.keepIn) { controls.removeEventListener('change', parts.keepIn); parts.keepIn = null; }
-    if (parts.hover) { stage.setTapTargets(null); renderer.domElement.removeEventListener('pointermove', parts.hover); if (parts.hoverOn) { renderer.domElement.style.cursor = ''; renderer.domElement.title = ''; } parts.hover = null; parts.hoverOn = false; }
+    if (parts.hover) { parts.hovered = null; parts.selectedHex = null; stage.setTapTargets(null); renderer.domElement.removeEventListener('pointermove', parts.hover); if (parts.hoverOn) { renderer.domElement.style.cursor = ''; renderer.domElement.title = ''; } parts.hover = null; parts.hoverOn = false; }
     stage.resetView();   // the guided camera of the page the stage is on (the finished step, or the one a click chose)
     stage.invalidateFrame();
   }
@@ -1711,6 +1788,6 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a)
   }
-  const handle = { leave, onQuality, refit, recenter, nextShot, setRoomColours, roomColoursPanel, refreshSpools, get roomColours() { return { wall: colours.wall, desk: colours.desk, plainDesk: !!(roomLight.desk_top && roomLight.desk_top.tex) }; }, get on() { return on; } };
+  const handle = { leave, onQuality, refit, recenter, nextShot, setRoomColours, roomColoursPanel, refreshSpools, selectSpool, get roomColours() { return { wall: colours.wall, desk: colours.desk, plainDesk: !!(roomLight.desk_top && roomLight.desk_top.tex) }; }, get on() { return on; } };
   return { ready, leave };
 }

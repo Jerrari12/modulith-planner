@@ -270,6 +270,10 @@ export function mountColors(stage, ctx) {
        colours, room wall/desk as a small section at the bottom only while the room shows, and the view switch moves to the
        toolbar as Room | Neutral"): the switch is the toolbar's (syncBar), the room's wall and desk the panel's last section */
     const head = el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]);
+    /* THE SHOWCASE (Joey 2026-10-26: "in the color tab, we should somehow also work in the final scene but call it
+       something else, like that way after selecting your colors and stuff you can also view it in this way"): the final
+       scene, in these colours, opened from here and back here on its Back (assemble.js THE SHOWCASE) */
+    if (ROOM_FLAG) head.appendChild(el('button.key.sm.showcase', { title: 'Watch your build in its colours, in the room, the way the final scene shows it · Esc comes back here', onclick: () => { if (ctx.memo) ctx.memo.showcase = { from: 'colors' }; ctx.switchTo('assemble'); } }, [icon('play', { size: 14, fill: true }), 'Showcase']));
     panel.appendChild(head);
     if (syncBar) syncBar();
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
@@ -740,6 +744,7 @@ export function mountColors(stage, ctx) {
   function renderPicker() {
     picker.replaceChildren();
     const key = st.key, swap = st.swap;
+    if (room && room.handle && room.handle.selectSpool) room.handle.selectSpool(swap ? swap.hex : null);   // the spool whose picker this is, lit in the room
     if (!key && !swap) { picker.hidden = true; return; }
     picker.hidden = false;
     if (swap) { renderSwap(swap); return; }

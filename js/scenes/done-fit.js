@@ -871,10 +871,19 @@ export function sayingLayout(saying, w, h, fit) {
  * STANDING on their rims, each its own turn about the vertical. Always (Joey 2026-10-26: "there will always be filaments
  * on the desk, because filament is always used in the build, at least 4 or 5 filaments more than likely, unless they only
  * select a single color"). Each group's `spot` is a pick in [0, 1) among the free spots big enough for a spool. */
-export const SPOOL_MAX = 6;   // six since Joey added a sixth filament and asked for its spool (2026-10-26)
+export const SPOOL_MAX = 32;   // a spool for every filament a build can wear (Joey 2026-10-26, of ten filaments and six spools: "can we maybe just keep stacking them? like maybe a crazy limit of the ceiling?")
 export const SPOOL_TALL = 0.25;   // one stack of every colour
 export const SPOOL_STAND = 0.15;   // a spool on its own, now and then: standing on its rim, mostly
-export const SPOOL_HIGH = 6;   // the tallest stack (391 mm)
+export const SPOOL_HIGH = 6;   // a stack's height before the next colour starts another (391 mm), where the desk has a spot for one
+/* how high a stack may go in a room: up to SPOOL_HEADROOM under the walls' top (the camera's own margin there), a spool a
+   SPOOL_STEP, never under SPOOL_HIGH; `roomTop` and `deskY` in mm. The step is the worst a spool can take: its 65.2 mm,
+   two flanges leaned the most and opposite (100 mm x 2 tan 1.5 deg = 5.2) and the slip's share of the lean (under 1), 72
+   (Sol 01a17823: 67 let opposing leans of 70.4 a spool carry a stack past the margin) */
+export const SPOOL_STEP = 72, SPOOL_HEADROOM = 150;
+export function stackCap(roomTop, deskY) {
+  if (!Number.isFinite(roomTop) || !Number.isFinite(deskY)) return SPOOL_HIGH;
+  return Math.max(SPOOL_HIGH, Math.floor((roomTop - deskY - SPOOL_HEADROOM) / SPOOL_STEP));
+}
 export function spoolPlan(rng, colours) {
   const list = [...new Set((colours || []).map((c) => String(c).toLowerCase()))].sort().slice(0, SPOOL_MAX);   // sorted: the stage lists them in no fixed order
   if (!list.length) return { groups: [] };

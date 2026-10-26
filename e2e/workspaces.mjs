@@ -2842,13 +2842,13 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
   for (const c of sp.clearedState) { assert.ok(c.props.length && c.props.every((x) => !x), `${c.name} off the desk`); assert.ok(c.shadows.every((x) => !x), `${c.name}'s shadow with it`); }
   assert.ok(sp.monitor.length && sp.monitor.every(Boolean), 'the monitor stays');
   const onDesk = sp.placed.reduce((a, x) => a + x.colours.length, 0);
-  assert.ok(onDesk <= 6 && sp.placed.every((x) => x.colours.length <= 6), `no stack over six (${JSON.stringify(sp.placed.map((x) => x.colours.length))})`);
+  assert.ok(onDesk <= 32 && sp.placed.every((x) => x.colours.length <= 32), `no more than a spool a filament, thirty-two at most (${JSON.stringify(sp.placed.map((x) => x.colours.length))})`);
   assert.deepEqual(sp.discs, sp.placed.map(() => !sp.shadowTier), 'a contact disc under each on a tier with no shadow map (the suite\'s Fast)');
   /* THE SPOOLS FOLLOW THE BUILD (the Colors workspace's Room stage calls refreshSpools on each commit; Joey 2026-10-26: "so
      i added a blue filament, should we stack another filament on top of the stack when we do that"): a spool a filament */
   const groupsNow = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-spools') out.push({ kind: o.userData.spoolGroup.kind, colours: o.children.filter((s) => s.userData.setColor).map((s) => String(s.userData.spool.color).toLowerCase()), ys: o.children.filter((s) => s.userData.setColor).map((s) => +s.position.y.toFixed(1)) }); }); return out; });
   const wears = () => page.evaluate(() => { const f = window.__GEN2_VIEWER__.filamentsInBuild(); return [...new Set([...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)].map((h) => h.toLowerCase()))].sort(); });
-  const onePer = (gs, w, label) => { const all = gs.flatMap((g) => g.colours).sort(); assert.deepEqual(all, w.slice(0, 6), `${label}: a spool for each filament the build wears, each once (${JSON.stringify(gs)})`); };
+  const onePer = (gs, w, label) => { const all = gs.flatMap((g) => g.colours).sort(); assert.deepEqual(all, w.slice(0, 32), `${label}: a spool for each filament the build wears, each once (${JSON.stringify(gs)})`); };
   const g0 = await groupsNow();
   // one filament over the whole build (the feet keep their TPU): one spool each for it and the TPU, the spares off the desk
   await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setUseCustom(true); for (const e of v.keysInBuild()) if (!e.locked) v.setColor(e.key, { name: 'Test Teal', hex: '#11aa99' }); window.__GEN2_DONE__.refreshSpools(); });
@@ -2870,6 +2870,20 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
   };
   await top('#cc3311', 'Test Red');
   await top('#2a6fdb', 'Test Blue');
+  /* and more and more (Joey: "can we maybe just keep stacking them? like maybe a crazy limit of the ceiling?"): a filament
+     a region, each its own spool, the stacks growing past six, their tops under the walls' margin */
+  const many = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, keys = v.keysInBuild().filter((e) => !e.locked && e.key.split(':')[0] !== 'Foot');
+    keys.forEach((e, i) => v.setColor(e.key, { name: `Test ${i}`, hex: '#' + (0x203040 + i * 0x0b1d07).toString(16).slice(-6) }));
+    window.__GEN2_DONE__.refreshSpools();
+    const d = window.__GEN2_DONE__, room = v.scene.getObjectByName('done-room'), T = v.THREE;
+    const tops = []; v.scene.traverse((o) => { if (o.name === 'done-spools') tops.push(new T.Box3().setFromObject(o, true).max.y); });
+    return { keys: keys.length, spools: d.spools.colours.length, stacks: d.spools.placed.map((x) => x.colours.length), top: Math.max(...tops), wallTop: d.sequence.interior.y1 };
+  });
+  const wm = await wears();
+  onePer(await groupsNow(), wm, 'a filament a region');
+  assert.ok(many.spools > 6, `more than six spools on the desk (${JSON.stringify(many)})`);
+  assert.ok(many.top <= many.wallTop - 140, `every stack under the walls' margin (${JSON.stringify(many)})`);
   // leaving: none left in the scene
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 15_000 });
@@ -2951,7 +2965,7 @@ test('Colors: the Room | Neutral switch is absent with ?done=off; for every visi
      view switch moves to the toolbar as Room | Neutral") */
   await page.waitForFunction(() => !!document.querySelector('#ws-colors .roomcols'), null, { timeout: 60_000 }).catch(() => assert.fail('the room brought no wall and desk section'));
   const layout = () => page.evaluate(() => { const kids = [...document.querySelector('#ws-colors').querySelectorAll(':scope > .head, :scope > section, :scope .panel > .head, :scope .panel > section')];
-    const panelKids = kids.length ? kids : []; return { order: panelKids.map((k) => (k.classList.contains('head') ? 'head' : k.classList.contains('look') ? 'look' : k.classList.contains('roomcols') ? 'room' : 'other')), inHead: !!document.querySelector('#ws-colors .head button'), bar: [...document.querySelectorAll('#ws-tools .backdrop button')].map((b) => b.textContent) }; });
+    const panelKids = kids.length ? kids : []; return { order: panelKids.map((k) => (k.classList.contains('head') ? 'head' : k.classList.contains('look') ? 'look' : k.classList.contains('roomcols') ? 'room' : 'other')), inHead: [...document.querySelectorAll('#ws-colors .head button')].some((b) => /^(Room|Neutral|Studio)$/.test(b.textContent.trim())), bar: [...document.querySelectorAll('#ws-tools .backdrop button')].map((b) => b.textContent) }; });
   const L1 = await layout();
   assert.deepEqual(L1.bar, ['Room', 'Neutral'], `the switch is the toolbar's: Room | Neutral (${JSON.stringify(L1)})`);
   assert.equal(L1.inHead, false, 'and nothing of it in the panel head');
@@ -3068,10 +3082,18 @@ test('Colors: a spool clicked in the room opens the picker on its filament, and 
   assert.ok(keys0.length, `the spool's colour is printed somewhere (${at.hex})`);
   await page.mouse.move(at.x, at.y);
   await page.waitForFunction(() => window.__GEN2_VIEWER__.renderer.domElement.style.cursor === 'pointer', null, { timeout: 5000 }).catch(() => assert.fail('the pointer over a spool does not say it can be clicked'));
+  // lit a little under the pointer, the others not (Joey: "when you hover over a filament and select a filament we should highlight it")
+  const glow = () => page.evaluate(() => Object.fromEntries(window.__GEN2_DONE__.spoolGlow));
+  const g1 = await glow();
+  assert.ok(g1[at.hex] === 1 && Object.entries(g1).every(([h, l]) => h === at.hex || l === 0), `hovered: that spool lit a little (${JSON.stringify(g1)})`);
   await page.mouse.click(at.x, at.y);
   await page.waitForFunction(() => !document.querySelector('#ws-picker').hidden && /Spool/.test(document.querySelector('#ws-picker .region')?.textContent || ''), null, { timeout: 5000 }).catch(() => assert.fail('a click on the spool did not open its picker'));
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.selectedId ?? null), null, 'and selected no part');
   assert.ok(await page.locator('#ws-partcard').isHidden(), 'no part card');
+  await page.mouse.move(5, 400);   // the pointer off it: the picker's spool stays lit
+  await settle(page, 300);
+  const g2 = await glow();
+  assert.ok(g2[at.hex] === 2 && Object.entries(g2).every(([h, l]) => h === at.hex || l === 0), `its picker open: that spool lit, the others not (${JSON.stringify(g2)})`);
   // a filament the build does not wear yet, from the first brand's list
   const to = await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-picker .brands .swatches')].pop().querySelector('button.sw:not(.active)'); return { name: b.getAttribute('aria-label'), hex: getComputedStyle(b).backgroundColor }; });
   const undo0 = await page.evaluate(() => window.__GEN2_STORE__.canUndo);
@@ -3082,11 +3104,36 @@ test('Colors: a spool clicked in the room opens the picker on its filament, and 
   assert.ok(after.now.every((n) => n === to.name), `every region it printed wears ${to.name} (${JSON.stringify(after.now)})`);
   assert.ok(!after.spools.includes(at.hex), `the spool changed with it (${JSON.stringify(after.spools)})`);
   assert.equal(after.title, 'Spool', 'the picker stays on the spool');
+  const g3 = await glow();
+  assert.ok(Object.values(g3).filter((l) => l === 2).length === 1 && g3[at.hex] === undefined, `the changed spool stays the lit one (${JSON.stringify(g3)})`);
+  await page.locator('#ws-picker button.x').click();
+  await settle(page, 300);
+  assert.ok(Object.values(await glow()).every((l) => l === 0), 'the picker closed: none lit');
   // one undo step puts it all back
   await page.evaluate(() => window.__GEN2_STORE__.undo());
   await settle(page, 600);
   assert.deepEqual(await wearing(at.hex), keys0, 'one undo: every region in the old colour again');
   assert.equal(undo0, await page.evaluate(() => window.__GEN2_STORE__.canUndo), 'and the history as it was');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE SHOWCASE (Joey 2026-10-26: "in the color tab, we should somehow also work in the final scene but call it something
+   else"): Colors' Showcase button opens the final scene in these colours, its Back says where it goes and Esc goes there,
+   Colors comes back on the room, and Assemble's own place is left as it was */
+test('Colors: Showcase plays the final scene in these colours, and Esc comes back to Colors on the room, Assemble’s own place kept', async () => {
+  const { ctx, page, errors } = await open('colors', { visitor: true });
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-colors .showcase'), null, { timeout: 60_000 });
+  const before = await page.evaluate(() => { const m = window.__GEN2_CTX__().memo; return { page: m.assemblePage ?? null, done: m.assembleDone ?? null, hex: window.__GEN2_VIEWER__.activeHex('Faceplate') }; });
+  await page.locator('#ws-colors .showcase').click();
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'assemble' && document.documentElement.classList.contains('cinema') && window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence, null, { timeout: 60_000 }).catch(() => assert.fail('Showcase did not open the final scene'));
+  const inScene = await page.evaluate(() => ({ back: document.querySelector('#ws-scene button').textContent, hex: window.__GEN2_VIEWER__.activeHex('Faceplate'), mine: window.__GEN2_VIEWER__.useCustom }));
+  assert.equal(inScene.back, '← Back to Colors', 'its Back says where it goes');
+  assert.equal(inScene.hex, before.hex, 'in the colours just picked');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.documentElement.dataset.done === 'room' && !document.documentElement.classList.contains('cinema'), null, { timeout: 60_000 }).catch(() => assert.fail('Esc did not come back to Colors on the room'));
+  const after = await page.evaluate(() => { const m = window.__GEN2_CTX__().memo; return { page: m.assemblePage ?? null, done: m.assembleDone ?? null }; });
+  assert.deepEqual(after, { page: before.page, done: before.done }, 'Assemble’s own place as it was');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
