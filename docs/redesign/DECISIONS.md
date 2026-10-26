@@ -4366,4 +4366,35 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   base, inside the shadow camera across and in depth. A mutant with the refit off fails it (12/16, 10/16). 11 touched
   cases pass. Sol `01a17823` round 26: the near plane (fixed); the bias (fixed). Not deployed.
 - **Seen in passing, not this change.** The dashed seam across a build's side cover, the same before and after: the
-  cover-seam bevel, next to trace.
+  cover-seam bevel, next to trace. (It was not the bevel: see the next entry.)
+
+## 2026-10-26 - The AO's moving frames: a gap under a texel takes no occlusion of its own
+
+- **Why.** The three build-side jaggies in Joey's first screenshot of the final scene, traced as the spools were (real
+  GPU at his 2000 x 991, High, the default kit on EdgeLabel faceplates, one moving moment re-sought per variant):
+  - **The dashed cover seam.** The beads survived the seam bevel square, the plate finish Smooth, the shadows off and
+    every part unlit; they went with the AO off (twice). A clean "Smooth" frame in the first sweep did not reproduce.
+  - **The label lips' beads.** The same.
+  - **The cover speckle.** Not an artifact: in the detail shot the powder face's pixel-to-pixel variation equals
+    Smooth's at High and at Very High. It is the approved powder grain, drawn only where a grain cell spans several
+    pixels: very close views. Left alone.
+- **The cause.** The cover tiles butt with a hairline gap. The colour pass draws it, multisampled, as a faint even
+  line. The AO's half-resolution depth has one sample a texel, so it holds the gap only where it crosses a texel's
+  centre, and those texels, deep in the gap, come out fully occluded: dark beads, locked to the screen, crawling.
+  Full-resolution AO only shrank them, and four SSAO passes a moving frame changed nothing (not noise); both reverted.
+- **Now** (main.js THE CRACK). In a moving frame's single AO pass, a texel deeper than both of its neighbours across,
+  on either axis, by 1.5 mm takes no occlusion of its own. At rest the settle's jittered passes run as before, so the
+  resting look is unchanged: the planner's 60 golden shots, Very High and Fast, at rest, 0 differ. The settle
+  transition, captured: from the first pass to rest the seam turns one even, slightly darker line, no beads.
+- **Seen.** The seam's beads mostly gone (a faint even darkening left), the label lip an even line, the AO's real
+  contact shading (under drawer lips, between drawers) as before (`D:\Claude - Output\done-scene-spools-2026-10-26\aa\crack`).
+- **Checks.** A new e2e case: at one moving moment of the low shot, fewer dark AO texels with the check than without
+  (under 0.97 of them), and with the shot held the settle accumulates with the check off. A mutant with the shader's
+  check disabled fails it (1978 vs 1981).
+- **Sol `01a17823` round 27.** No defect. Accepted trade-offs, as the check reads a depth shape, not an artefact:
+  - a real recess one AO texel wide loses its darkening in motion;
+  - so can a narrow strip of wall seen behind foreground edges;
+  - 1.5 mm is a depth contrast, not a slot width: one texel is about 1.5 mm at 1 m and 4.4 mm at 3 m.
+  - OPEN: the e2e measures suppression overall, not that it is the seam's alone; selectivity rests on the visual
+    comparison.
+- **Not deployed.**

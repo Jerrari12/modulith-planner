@@ -3224,6 +3224,47 @@ test('Colors: the room’s window is frosted glass seated in its frame, met by e
   await ctx.close();
 });
 
+/* THE CRACK (main.js, the AO's moving frames; Joey 2026-10-26: a cover's seam dashed, the label lips beaded): a gap
+   between two parts that is under a texel takes no occlusion of its own in a moving frame's single AO pass - measured,
+   about a tenth of the dark texels of a moving shot, the beads - and at rest the settle's passes run as before */
+test('Assemble: the Done scene\'s moving AO leaves a gap under a texel unoccluded, and at rest runs as before', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 1500 }; });
+  const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 }).catch(() => assert.fail('the grammar never began'));
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 11000, maxFrameMs: 1e9, seed: 1 }));
+  // the AO's dark texels at one moment of a moving shot, the crack check on and off
+  const dark = async (on) => {
+    await page.evaluate((on) => window.__GEN2_VIEWER__.aoCrack.set(on), on);
+    await page.evaluate(() => window.__GEN2_DONE__.jump('low'));
+    await settle(page, 300);
+    await page.evaluate(() => window.__GEN2_DONE__.seek(2500));
+    await settle(page, 400);
+    return page.evaluate(() => {
+      const v = window.__GEN2_VIEWER__, a = v.ao, rt = a.rtBlur, w = rt.width, h = rt.height, px = new Uint8Array(w * h * 4);
+      v.renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
+      let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] < 0.7 * 255) n++;
+      return { n, moving: window.__GEN2_DONE__.sequence.moving, crack: a.aoMat.uniforms.uCrack.value, wanted: v.aoWanted() };
+    });
+  };
+  const on = await dark(true), off = await dark(false);
+  await page.evaluate(() => window.__GEN2_VIEWER__.aoCrack.set(true));
+  assert.ok(on.moving && on.wanted && on.crack > 0 && off.crack === 0, `a moving frame's AO, the check on and then off (${JSON.stringify({ on, off })})`);
+  assert.ok(off.n > 0 && on.n < 0.97 * off.n, `the gaps under a texel unoccluded: fewer dark texels with the check (${on.n} vs ${off.n})`);
+  // at rest: the shot held, the settle's passes accumulate with the check off
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1e9, maxFrameMs: 1e9, seed: 1, hold: true }));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.ao.passes > 2, null, { timeout: 30_000 }).catch(() => {});
+  const rest = await page.evaluate(() => ({ passes: window.__GEN2_VIEWER__.ao.passes, crack: window.__GEN2_VIEWER__.ao.aoMat.uniforms.uCrack.value }));
+  assert.ok(rest.passes > 2 && rest.crack === 0, `at rest the passes accumulate with the check off (${JSON.stringify(rest)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
    3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
 test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {

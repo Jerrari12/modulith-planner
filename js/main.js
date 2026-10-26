@@ -1337,6 +1337,16 @@ function aoBlendProbe() {
   }
 }
 
+/* THE CRACK (2026-10-26, Joey of the final scene: a cover's seam "dashed", the label inserts' lips beaded). Two parts
+   that butt leave a hairline gap the colour pass draws, multisampled, as a faint even line; the AO's depth has one sample
+   a texel and holds the gap only where it crosses a texel's centre, and each of those texels, deep in the gap, comes out
+   fully occluded: a row of dark beads along the seam that crawls as the camera moves. MEASURED: they go with the AO off
+   and stay with the seam bevel square, the plate finish Smooth, the shadows off; full-resolution AO only shrinks them,
+   four passes a frame change nothing (they are not noise). So a texel deeper than both of its neighbours across, on
+   either axis, by AO_CRACK_MM is a crack under a texel and takes no occlusion of its own. Only in a moving frame's single
+   pass: at rest the settle's jittered passes average the gap properly, and the resting look is as it was. */
+const AO_CRACK_MM = 1.5;
+const aoCrack = { on: true };   // the debug hook's aoCrack.set(false) draws the cracks occluded again, for comparison
 function ensureAO() {
   if (ao.rtN) return;
   const w = Math.max(2, Math.floor(canvas.width * 0.5)), h = Math.max(2, Math.floor(canvas.height * 0.5));
@@ -1384,12 +1394,13 @@ function ensureAO() {
       uRadius: { value: AO_RADIUS }, uBias: { value: 0.6 },
       uRes: { value: new THREE.Vector2(w, h) },
       uNoiseOff: { value: new THREE.Vector2(0, 0) }, uJitter: { value: 0 },
+      uCrack: { value: 0 },   // THE CRACK: mm, 0 off
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4( position.xy, 0.0, 1.0 ); }`,
     fragmentShader: `
       uniform sampler2D tNormal; uniform sampler2D tDepth;
       uniform mat4 uProj, uProjInv; uniform vec3 uKernel[N];
-      uniform float uRadius, uBias, uJitter; uniform vec2 uRes, uNoiseOff;
+      uniform float uRadius, uBias, uJitter, uCrack; uniform vec2 uRes, uNoiseOff;
       varying vec2 vUv;
       vec3 viewPos( vec2 uv ){
         float d = texture2D( tDepth, uv ).x;
@@ -1400,6 +1411,13 @@ function ensureAO() {
         float d = texture2D( tDepth, vUv ).x;
         if ( d >= 1.0 ) { gl_FragColor = vec4( 1.0 ); return; }   // background: no AO
         vec3 p = viewPos( vUv );
+        // THE CRACK (main.js): deeper than both neighbours across, on either axis - a gap under a texel, no occlusion of its own
+        if ( uCrack > 0.0 ) {
+          vec2 tx = 1.0 / uRes;
+          float zl = viewPos( vUv - vec2( tx.x, 0.0 ) ).z, zr = viewPos( vUv + vec2( tx.x, 0.0 ) ).z;
+          float zd = viewPos( vUv - vec2( 0.0, tx.y ) ).z, zu = viewPos( vUv + vec2( 0.0, tx.y ) ).z;
+          if ( ( min( zl, zr ) - p.z > uCrack ) || ( min( zd, zu ) - p.z > uCrack ) ) { gl_FragColor = vec4( 1.0 ); return; }
+        }
         vec3 n = normalize( texture2D( tNormal, vUv ).xyz * 2.0 - 1.0 );
         // Interleaved gradient noise (Jimenez) over PIXEL coords - even error
         // distribution where the old white-noise hash clumped into speckle.
@@ -1641,6 +1659,7 @@ function updateAO(force = false) {
     u.uJitter.value = (ao.passes * 0.754877666) % 1;
     u.uProj.value.copy(_aoProj);
     u.uProjInv.value.copy(_aoProjInv);
+    u.uCrack.value = changed && aoCrack.on ? AO_CRACK_MM : 0;   // THE CRACK: a moving frame's single pass only
     if (ao.passes === 0) {
       ao.aoMat.blending = THREE.NoBlending;
     } else {
@@ -11456,6 +11475,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     // everything else on this object.
     layerHandles,
     bedFinish: bedFinishDebug,   // the build plate's finish, see bedFinishDebug
+    /* THE CRACK (the AO's moving frames): aoCrack.set(false) lets a gap under a texel take its own occlusion again */
+    aoCrack: { get on() { return aoCrack.on; }, set(on) { aoCrack.on = !!on; invalidateFrame(); return aoCrack.on; } },
     /* the cover edges (js/cover-seam.js): seams.set(false) draws them square, set(true) puts the edge back */
     seams: {
       uniforms: seamU, get on() { return seamU.uSeamOn.value === 1; },
