@@ -9,6 +9,9 @@ Presets (Joey 2026-10-26; the sources stay out of the repo):
   single   the same panorama ONCE, at its own proportions: toned only, no repeat, no extension (Astra 2026-10-26:
            "Use the image at its original proportions, with no mirrored repetition or flat-colour extension").
            An optional blur in px as a fifth argument (checked sharp first, then softened).
+  tall     ChatGPT's 3:2 version of it (1536 x 1024: more sky and lawn), the same way (Astra: "Increase the backdrop's
+           vertical coverage while preserving its horizontal scale, then align the tree bases with their previous
+           position").
 Each: cropped, toned softer and a little brighter than the room, blurred (distant trees past a build in focus), the
 lawn carried on below as a plain gradient faded in from its own last rows, and made tileable across by cross-fading its
 right edge into its left. Prints the size and the lawn line's place from the top (done.js OUTSIDE.px and .ground)."""
@@ -21,6 +24,7 @@ PRESETS = {
     'chatgpt': dict(patches=[], crop=(0, 230, 1290, 1024), ground=905, contrast=0.74, color=0.72, brightness=1.03, blur=2.5),
     'panorama': dict(patches=[], crop=(0, 0, 2172, 724), ground=596, contrast=0.74, color=0.74, brightness=1.02, blur=2.2),
     'single': dict(patches=[], crop=(0, 0, 2172, 724), ground=596, contrast=0.8, color=0.78, brightness=1.02, blur=0, only=True),
+    'tall': dict(patches=[], crop=(0, 0, 1536, 1024), ground=668, contrast=0.8, color=0.78, brightness=1.02, blur=0, only=True),
 }
 preset, src, dst = sys.argv[1:4]
 preview = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] != '-' else None

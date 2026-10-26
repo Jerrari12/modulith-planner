@@ -4255,3 +4255,15 @@ analytic in the shader, not meshes). He copied the spool into its own file.
 - **Checks.** The window case: the photo whole, clamped, repeat 1, the arc at 3:1; every ray of an 11 x 11 grid through
   the opening from the four views lands inside the photo (fails at 8 mm a pixel); 16 room and scene cases pass. Sol
   `01a17823` round 21, no findings. Not deployed.
+- **ChatGPT's 3:2 version** (Astra: "Increase the backdrop's vertical coverage while preserving its horizontal scale, then
+  align the tree bases with their previous position. Don't squeeze the new image into the old backdrop height—that would
+  shrink the trees. Check the highest and lowest supported camera views as well as the four existing views."): 1536 x
+  1024 on the same 155-degree arc (15.8 mm a pixel, 16.2 m tall, twice the old height), its tree base (row 668) on the
+  floor's level as before, blurred 1.3 px (the same in mm as 1.8 at 11.2). Covered by rays through the opening: the four
+  views, the highest from either side (the back one 30 mm inside the photo's foot), and the lowest the orbit allows
+  (desk level; tested lower, at -100 mm) from all three. OPEN (Sol `01a17823` round 22, accepted): the highest view
+  straight on (1810 mm, 1.7 m from the window) runs 0.36 m under the photo's foot through the sill, onto the lawn
+  fallback; at 1700 mm it is covered, but a camera nearer the window looks down more steeply still, and right by it
+  nearly straight down at the ground outside, which no upright photo can show. Either the orbit is restricted (a lower
+  height limit and a least distance from the window) or real ground outside is added (lawn from the photo's own grass,
+  at its scale, from the wall to the photo's foot); asked.

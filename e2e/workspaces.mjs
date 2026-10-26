@@ -3170,13 +3170,19 @@ test('Colors: the room’s window looks out on a panorama round the room, clippe
        inside its arc and its height: its edges outside them */
     const cyl = m['done-outside'], gp = cyl.geometry.parameters, tex = cyl.material.map, C = cyl.position;
     const jb = new T.Box3().setFromObject(room.getObjectByName('win_jamb_b')), ja = new T.Box3().setFromObject(room.getObjectByName('win_jamb_a')), sill = new T.Box3().setFromObject(room.getObjectByName('win_sill')), head = new T.Box3().setFromObject(room.getObjectByName('win_head'));
-    const eye = 692, views = { straight: [300, eye, 522], hero: [854, eye, 1436], front: [150, eye, 2300], back: [400, eye, 120] }, missed = [];
+    /* and from the highest and the lowest the orbit allows (Astra, of the 3:2 photo: "Check the highest and lowest supported
+       camera views as well as the four existing views"): 450 mm under the walls' top, and the desk's level (the orbit
+       stops 3.6 degrees under its target). The highest straight on is left out: its steepest look down, through the
+       sill, runs 0.36 m under the photo (its fallback lawn): the photo's height is its own, its scale and its trees'
+       base fixed */
+    const eye = 692, views = { straight: [300, eye, 522], hero: [854, eye, 1436], front: [150, eye, 2300], back: [400, eye, 120],
+      highFront: [150, 1810, 2300], highBack: [400, 1810, 120], lowStraight: [300, -100, 522], lowFront: [150, -100, 2300], lowBack: [400, -100, 120] }, missed = [];
     for (const [name, pc] of Object.entries(views)) for (let i = 0; i <= 10; i++) for (let j = 0; j <= 10; j++) {
       const from = new T.Vector3(...pc), q = new T.Vector3(-1400, sill.max.y + (head.min.y - sill.max.y) * j / 10, jb.max.z + (ja.min.z - jb.max.z) * i / 10), d = q.sub(from).normalize();
       const ox = from.x - C.x, oz = from.z - C.z, A = d.x * d.x + d.z * d.z, B = 2 * (ox * d.x + oz * d.z), Cc = ox * ox + oz * oz - gp.radiusTop ** 2;
       const h = from.clone().addScaledVector(d, (-B + Math.sqrt(B * B - 4 * A * Cc)) / (2 * A));
       let th = Math.atan2(h.x - C.x, h.z - C.z) - gp.thetaStart; th = ((th % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-      const inArc = th > 0.02 && th < gp.thetaLength - 0.02, inHeight = h.y > C.y - gp.height / 2 + 50 && h.y < C.y + gp.height / 2 - 50;
+      const inArc = th > 0.02 && th < gp.thetaLength - 0.02, inHeight = h.y > C.y - gp.height / 2 + 10 && h.y < C.y + gp.height / 2 - 10;   // 10 mm: the highest view from the back side clears the photo's foot by about 30
       if (!inArc || !inHeight) missed.push(`${name} ${i},${j}: ${inArc ? '' : 'arc '}${inHeight ? '' : 'height ' + Math.round(h.y)}`);
     }
     const once = { wrap: [tex.wrapS, tex.wrapT].every((w) => w === T.ClampToEdgeWrapping), repeat: tex.repeat.toArray(), arcDeg: Math.round(gp.thetaLength * 180 / Math.PI), aspect: +((gp.radiusTop * gp.thetaLength) / gp.height).toFixed(3) };
@@ -3187,8 +3193,9 @@ test('Colors: the room’s window looks out on a panorama round the room, clippe
       ceiling: { y: Math.round(cbox.max.y), x: [Math.round(cbox.min.x), Math.round(cbox.max.x)], z: [Math.round(cbox.min.z), Math.round(cbox.max.z)] }, b, far: v.camera.far, clipped, clip: v.renderer.localClippingEnabled };
   });
   assert.ok(on.all, 'the cylinder, its sky, its lawn and the ceiling, out of the AO and the outline');
-  assert.deepEqual(on.img, [2172, 724], 'the panorama, whole');
-  assert.ok(on.once.wrap && on.once.repeat.every((r) => r === 1) && Math.abs(on.once.aspect - 2172 / 724) < 0.01, `once, at its own proportions (${JSON.stringify(on.once)})`);
+  assert.deepEqual(on.img, [1536, 1024], 'the photo, whole');
+  assert.ok(on.once.wrap && on.once.repeat.every((r) => r === 1) && Math.abs(on.once.aspect - 1536 / 1024) < 0.01, `once, at its own proportions (${JSON.stringify(on.once)})`);
+  assert.equal(on.once.arcDeg, Math.round((2172 * 11.2) / 9000 * 180 / Math.PI), 'the old photo’s width round the cylinder, so its trees keep their size');
   assert.deepEqual(on.missed, [], `every look through the opening from the reference views lands on the photo (${on.missed.slice(0, 6).join(' | ')})`);
   assert.ok(on.outsideClipped && !on.deskKept && on.outKept, `the outside only beyond the window's wall (${JSON.stringify(on)})`);
   assert.ok(on.occluders >= 1 && on.outFront === 'done-outside-occluder', `out of the open front past the wall's end: the occluder, not the garden (${JSON.stringify(on)})`);

@@ -1095,7 +1095,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      over its walls; now a look over a wall meets the ceiling first. Unlit like the room's bakes, out of the shadows, the
      AO (ghosts) and every ray; a pale sky until the photo loads. */
   const OUTSIDE_FAR = 40000;   // mm, the camera's far plane while the room is on (a look along the wall meets the cylinder far off)
-  const OUTSIDE = { file: 'scenes/home-office/outside.webp', px: [2172, 724], treeBase: 596, R: 9000, mmPerPx: 11.2, arcDeg: -25, sky: 0x6890c4, lawn: 0xad9e74, ceiling: 0xd9d7d2 };
+  /* arc: the photo's width round the cylinder, kept when the 3:1 panorama gave way to ChatGPT's 3:2 version of it (Astra:
+     "Increase the backdrop's vertical coverage while preserving its horizontal scale, then align the tree bases with
+     their previous position. Don't squeeze the new image into the old backdrop height"): 2172 px at 11.2 mm on 9 m, so
+     its height grows with its own proportions (8.1 m to 16.2 m) and its trees keep their size */
+  const OUTSIDE = { file: 'scenes/home-office/outside.webp', px: [1536, 1024], treeBase: 668, R: 9000, arc: (2172 * 11.2) / 9000, arcDeg: -25, sky: 0x5b85bf, lawn: 0x988c64, ceiling: 0xd9d7d2 };
   function makeOutside(group) {
     const win = new THREE.Box3(), desk = group.getObjectByName('desk_top');
     group.traverse((o) => { if (o.isMesh && /^win_/.test(o.name)) win.union(new THREE.Box3().setFromObject(o)); });
@@ -1134,7 +1138,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.clipWas = renderer.localClippingEnabled;
     renderer.localClippingEnabled = true;
     // the photo's arc, the sky over it and the lawn under it, beyond the wall only
-    const R = OUTSIDE.R, mmPerPx = OUTSIDE.mmPerPx, Wm = OUTSIDE.px[0] * mmPerPx, Hm = OUTSIDE.px[1] * mmPerPx, arc = Wm / R;
+    const R = OUTSIDE.R, arc = OUTSIDE.arc, mmPerPx = (arc * R) / OUTSIDE.px[0], Hm = OUTSIDE.px[1] * mmPerPx;
     const bottom = floorY - (OUTSIDE.px[1] - OUTSIDE.treeBase) * mmPerPx, top = bottom + Hm;   // its trees' base on the floor's level
     const bearing = Math.atan2(c.x - centre.x, c.z - centre.z) + (OUTSIDE.arcDeg * Math.PI) / 180;   // three's cylinder: x = R sin(theta), z = R cos(theta)
     const mat = new THREE.MeshBasicMaterial({ color: OUTSIDE.sky, toneMapped: false, side: THREE.BackSide, clippingPlanes: outsideCuts });
