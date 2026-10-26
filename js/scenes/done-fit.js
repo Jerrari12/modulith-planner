@@ -68,6 +68,14 @@ export function clampToInterior(cam, interior, { wall = 150, top = 450, fillMax 
   if (share > cap) fov = Math.min(fovMax, (2 * Math.atan(Math.tan((cam.fov * Math.PI) / 360) * (share / cap)) * 180) / Math.PI);
   return { ...cam, position, fov, distance: cam.distance * k, clamped: true, k, share };
 }
+/* A point held inside the room's margins, axis by axis (the same margins as clampToInterior): the backstop for a free orbit
+ * after clampToInterior's pull along the line to the target, whose floor (k 0.05) can leave a far jump outside (Sol
+ * 01a17823: target 0, bound 1000, camera 30000). */
+export function insideRoom(p, interior, { wall = 150, top = 450 } = {}) {
+  if (!interior) return { x: p.x, y: p.y, z: p.z };
+  const c = (v, a, b) => (a > b ? (a + b) / 2 : Math.min(b, Math.max(a, v)));
+  return { x: c(p.x, interior.x0 + wall, interior.x1 - wall), y: c(p.y, interior.y0 + wall, interior.y1 - top), z: c(p.z, interior.z0 + wall, interior.z1 - wall) };
+}
 
 /* How far each prop GROUP must slide along its slot so every prop clears the build's box by its gap. `props` is
  * [{ group, slot: 'x+' | 'x-', gap, box: { min: {x,z}, max: {x,z} } }] in mm, `build` a box in mm. A prop that does not

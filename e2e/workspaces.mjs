@@ -70,11 +70,15 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
    30000ms exceeded; this suite passed locally on a real GPU every time) */
 const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} };
 async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
-async function open(ws, { query = '', phone = false, context = null } = {}) {
+async function open(ws, { query = '', phone = false, context = null, visitor = false } = {}) {
+  /* the room is on for everyone (Joey 2026-10-26): a case about something else keeps the studio it was written for
+     (?done=off); the room's own cases ask for it (?done=room), or open as a visitor does, with no flag at all */
+  const roomy = visitor || /done=room/.test(query);
+  if (!visitor && !/done=/.test(query)) query += '&done=off';
   // the final scene's mugs come from the build's link (done.js makeMugs); a case that does not ask for its own (?mugs=N, or
   // ?mugs=plan for the link's own) gets the room as it was composed: one mug at home, the notebook on the desk
-  if (/done=room/.test(query) && !/mugs=/.test(query)) query += '&mugs=home';
-  if (/done=room/.test(query) && !/spools=/.test(query)) query += '&spools=off';   // and no spools, unless it asks (?spools=plan)
+  if (roomy && !/mugs=/.test(query)) query += '&mugs=home';
+  if (roomy && !/spools=/.test(query)) query += '&spools=off';   // and no spools, unless it asks (?spools=plan)
   const ctx = context || await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
   if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
@@ -1288,7 +1292,7 @@ test('Assemble: Next steps through, Skip reaches the end, Back returns', async (
    office. Flag off, Done is what it was. Flag on: the room loads, the stage's holds are on (no background, the room's
    environment, controls off, the callouts off, grid and table hidden), a theme flip and a tier change leave the room in
    place (the shadow catcher on a tier with shadows, the baked disc on Fast), Back puts everything back. */
-test('Assemble: the Done scene is off without its flag; with ?done=room the room comes on at Done, survives a theme flip and a tier change, and Back restores the stage', async () => {
+test('Assemble: the Done scene is off with ?done=off; on for every visitor (no flag) the room comes on at Done, survives a theme flip and a tier change, and Back restores the stage', async () => {
   const toDone = async (page) => {
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
@@ -1296,20 +1300,22 @@ test('Assemble: the Done scene is off without its flag; with ?done=room the room
     await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
   };
   const state = (page) => page.evaluate(async () => { const v = window.__GEN2_VIEWER__, THREE = await import('three'); const vis = [], masks = []; let disc = null; v.scene.traverse((o) => { if (o.isMesh && o.userData.doneRoom) { if (o.material.isShadowMaterial) vis.push(o.visible); else if (o.material.map && o.material.map.isCanvasTexture) disc = o.visible; } if (o.userData.doneShadow) masks.push({ ...o.userData.doneShadow, visible: o.visible, multiply: o.material.blending === THREE.CustomBlending && o.material.blendSrc === THREE.ZeroFactor && o.material.blendDst === THREE.SrcColorFactor && o.material.blendEquation === THREE.AddEquation, transparent: o.material.transparent, depthWrite: o.material.depthWrite, toneMapped: o.material.toneMapped, order: o.renderOrder, colorSpace: o.material.map ? o.material.map.colorSpace : null, x: o.position.x, y: o.position.y, z: o.position.z, w: o.geometry.parameters.width }); }); const catcher = vis.length ? (vis.every(Boolean) ? true : vis.some(Boolean) ? 'mixed' : false) : null; const bb = v.assembledBox, rm = v.scene.getObjectByName('done-room'), wa = rm && rm.getObjectByName('anchor_wall'); return { catchers: vis.length, masks, anchorX: (bb.min.x + bb.max.x) / 2, anchorZ: bb.min.z, wallZ: wa ? wa.getWorldPosition(wa.position.clone()).z : null, held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, env: !!v.scene.environment, envIsStudio: v.scene.environment === v.studioEnv(), controls: v.controls.enabled, grid: v.grid.visible, table: v.table.visible, dims: !!v.dimsOn, shadow: v.renderer.shadowMap.enabled, catcher, disc, quality: v.quality, theme: v.stageTheme, sunHalfDeg: v.sunHalfDeg, sunMM: Math.round(v.sun.position.distanceTo(v.sun.target.position)), shadowFar: v.sun.shadow.camera.far }; });
-  // off: nothing of the room
-  const off = await open('assemble');
+  // off (?done=off, which the open helper adds for every case that does not ask for the room): nothing of the room
+  const off = await open('assemble', { query: '&done=off' });
   await toDone(off.page);
   await settle(off.page, 1500);
   const s0 = await state(off.page);
-  assert.equal(s0.room, false, 'no room without the flag'); assert.equal(s0.held, false); assert.equal(s0.done, null); assert.equal(s0.controls, true);
-  assert.equal(await off.page.locator('#ws-player button', { hasText: 'Watch the final scene' }).count(), 0, 'no way into a scene without the flag');
+  assert.equal(s0.room, false, 'no room with ?done=off'); assert.equal(s0.held, false); assert.equal(s0.done, null); assert.equal(s0.controls, true);
+  assert.equal(await off.page.locator('#ws-player button', { hasText: 'Watch the final scene' }).count(), 0, 'no way into a scene with ?done=off');
   assert.match(await text(off.page, '#ws-player .next'), /Finished/, 'the Next slot says Finished, as before');
   assert.deepEqual(clean(off.errors), []);
   await off.ctx.close();
   // on: the End page first (the HUD, the finished build on the stage, the way in), then the scene: the room, the holds,
   // the HUD faded, the bars, the strip, no orbit (THE FINAL SCENE, Joey 2026-10-23: "a final scene that you have to make
   // obvious to go into ... most of the hud disappears and black borders appear ... don't let them rotate the camera")
-  const { ctx, page, errors } = await open('assemble', { query: '&done=room' });
+  // on, as every visitor opens it since Joey's go of 2026-10-26 ("drop the ?done=room flag"): no flag in the address
+  const { ctx, page, errors } = await open('assemble', { visitor: true });
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('done')), null, 'no flag in the address');
   await toDone(page);
   await settle(page, 800);
   assert.equal((await state(page)).room, false, 'the End page: the room does not come on by itself, it is stepped into');
@@ -2911,13 +2917,14 @@ test('Assemble: the Done scene\'s final scene returns to the End page when the r
    allowed, no sequence"): behind the same flag, the panel head gets the toggle; Room puts the build in the room with the
    stage held, the orbit free and no sequence; a colour pick still lands; the toolbar's Reset view returns to the room's
    shot and gives the camera back; Studio restores the stage; the choice survives a trip to another workspace. */
-test('Colors: the Studio / Room toggle is absent without the flag; with it, Room holds the stage with a free orbit and no sequence, picks land, Reset view returns to the shot, Studio restores, the choice comes back', async () => {
+test('Colors: the Studio / Room toggle is absent with ?done=off; for every visitor (no flag), Room holds the stage with a free orbit and no sequence, picks land, Reset view returns to the shot, Studio restores, the choice comes back', async () => {
   const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, controls: v.controls.enabled, camFree: v.camFree, seq: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.on : null, seqWanted: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.wanted : null, quality: v.quality, cam: v.camera.position.toArray().map((n) => +n.toFixed(1)) }; });
-  const off = await open('colors');
-  assert.equal(await off.page.locator('#ws-colors .head .stage').count(), 0, 'no toggle without the flag');
+  const off = await open('colors', { query: '&done=off' });
+  assert.equal(await off.page.locator('#ws-colors .head .stage').count(), 0, 'no toggle with ?done=off');
   assert.deepEqual(clean(off.errors), []);
   await off.ctx.close();
-  const { ctx, page, errors } = await open('colors', { query: '&done=room' });
+  const { ctx, page, errors } = await open('colors', { visitor: true });   // no flag: the room is on for everyone (Joey 2026-10-26)
+  assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('done')), null, 'no flag in the address');
   const seg = (t) => page.locator(`#ws-colors .head .stage button:has-text("${t}")`);
   // Room first (Joey 2026-10-26: "What if when you select color it goes to this view instead"): no click, the room comes on
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 60_000 }).catch(() => assert.fail('Colors did not open on the room within 60 s'));
@@ -2957,6 +2964,24 @@ test('Colors: the Studio / Room toggle is absent without the flag; with it, Room
   const back = (await state(page)).cam;
   assert.ok(camHero.every((v, i) => Math.abs(v - back[i]) < 2), `Reset view returned to the room's shot (${back} vs ${camHero})`);
   assert.equal((await state(page)).room, true, 'the room is still on');
+  /* the orbit stays in the room (Joey 2026-10-26: "i can spin it around and clip through the wall or zoom out a mile"): a
+     long zoom out, then half a turn round behind the back wall; the camera never leaves the walls' margins */
+  const inside = () => page.evaluate(() => { const v = window.__GEN2_VIEWER__, b = window.__GEN2_DONE__.sequence.interior, p = v.camera.position;
+    return { p: p.toArray().map((n) => Math.round(n)), b, ok: p.x >= b.x0 + 149 && p.x <= b.x1 - 149 && p.y >= b.y0 + 149 && p.y <= b.y1 - 449 && p.z >= b.z0 + 149 && p.z <= b.z1 - 149 }; });
+  const far = (await state(page)).cam;
+  await page.mouse.move(640, 380);
+  for (let i = 0; i < 25; i++) await page.mouse.wheel(0, 600);
+  await settle(page, 900);
+  const zoomed = await inside();
+  assert.ok(zoomed.ok, `a long zoom out stays in the room (${JSON.stringify(zoomed)})`);
+  assert.notDeepEqual(zoomed.p, far.map(Math.round), 'the control: the zoom moved the camera');
+  await page.mouse.down(); await page.mouse.move(1240, 380, { steps: 30 }); await page.mouse.move(1270, 200, { steps: 10 }); await page.mouse.up();
+  await settle(page, 900);
+  const turned = await inside();
+  assert.ok(turned.ok, `a turn round behind the wall stays in the room (${JSON.stringify(turned)})`);
+  await page.locator('#ws-tools button.cam').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.camFree === false, null, { timeout: 15_000 });
+  await settle(page, 1300);
   // the choice survives a trip to Parts and back
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
   await page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 60_000 });

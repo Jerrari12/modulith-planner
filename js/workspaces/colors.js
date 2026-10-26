@@ -185,7 +185,7 @@ export function mountColors(stage, ctx) {
      instead, and then maybe there is a way to toggle back to the builder-like view if desired?"): Colors opens on Room, and
      a visitor who picks Studio keeps Studio in this browser (STAGE_KEY); a room that fails to load falls back to Studio for
      the session (the memo) without storing anything. */
-  const ROOM_FLAG = new URLSearchParams(location.search).get('done') === 'room';
+  const ROOM_FLAG = (new URLSearchParams(location.search).get('done') || 'room') === 'room';   // on for everyone (Joey 2026-10-26); ?done=off turns it off
   const STAGE_KEY = 'gen2-colors-stage';   // 'studio' | 'room', written only by the toggle
   let room = null;   // { leaveFn, handle } while the room is on or loading
   const storedStage = (() => { try { return storage()?.getItem(STAGE_KEY); } catch { return null; } })();

@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -180,6 +180,15 @@ test('planCycle: every shot once a cycle in a seeded random order, the hero firs
   for (let s = 0; s < 50; s++) { const r = rngFrom(s)(); assert.ok(r >= 0 && r < 1); }
 });
 
+test('insideRoom: the orbit\'s backstop holds a far jump inside the margins that the pull along the ray, floored at k 0.05, leaves outside (Sol 01a17823)', () => {
+  const interior = { x0: -1000, x1: 1000, y0: 0, y1: 2400, z0: -800, z1: 2000 };
+  const far = clampToInterior({ position: { x: 30000, y: 900, z: 500 }, target: { x: 0, y: 900, z: 500 }, fov: 30, distance: 0 }, interior);
+  assert.ok(far.position.x > 850, `the control: the pull alone leaves it out (${far.position.x})`);
+  assert.deepEqual(insideRoom(far.position, interior), { x: 850, y: 900, z: 500 }, 'held at the margin');
+  assert.deepEqual(insideRoom({ x: 10, y: 1000, z: 20 }, interior), { x: 10, y: 1000, z: 20 }, 'a camera inside: untouched');
+  assert.deepEqual(insideRoom({ x: -5000, y: 9000, z: -9000 }, interior), { x: -850, y: 1950, z: -650 }, 'every axis, the top 450 under the walls');
+  assert.deepEqual(insideRoom({ x: 1, y: 2, z: 3 }, null), { x: 1, y: 2, z: 3 }, 'no room: untouched');
+});
 test('clampToInterior: a camera inside is untouched; one above the wall tops or past a wall is pulled in along its ray, the fov widening only when the build would overflow, up to 55 degrees', () => {
   // the Home office as its walls give it: the left wall's inner face, the back wall's right end, the floor, the wall tops,
   // the back wall's inner face; open to the front

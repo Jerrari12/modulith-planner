@@ -6,7 +6,7 @@
  * ONE lighting state baked into the room's textures (tools/done-scene/room.py), a fixed hero camera fitted to the build
  * and the free region of the canvas, props that slide clear of the build, the build's own shadow on a catcher over the
  * desk (a baked contact disc on Fast, which has no shadow map), no bokeh, no time cycle. Behind
- * `?done=room` (js/workspaces/assemble.js); nothing here loads until a visitor reaches Done with the flag on.
+ * Done (js/workspaces/assemble.js) or Colors; nothing here loads until a visitor asks for the scene or the Room stage (`?done=off` keeps it off).
  * The second slice (2026-10-23) added the camera sequence: three curated shots the camera holds on and drifts between
  * (see `seq` below and done-fit.js), a grab that pauses it, the still hero under reduced motion and on Fast.
  *
@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool } from './spool.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_HIGH, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_HIGH, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -1450,6 +1450,18 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        3.6 deg below (found 2026-10-25 by the grammar e2e, the camera 33 mm over the shot's fit). The shots keep their own
        floor over the desk (FLOOR_MM). A stage with the orbit (Colors) keeps it. */
     if (!orbit) controls.maxPolarAngle = Math.PI;
+    /* ... and a stage's orbit stays in the room (Joey 2026-10-26: "i can spin it around and clip through the wall or zoom
+       out a mile until the viewing distance makes everything disapear, maybe they can't move our zoom out of the room?"):
+       after every orbit or zoom the camera is pulled in along its line to the build, to the shots' own margins off the
+       walls, the floor and under the walls' top (done-fit.js clampToInterior), so it turns and zooms freely inside */
+    if (orbit && interior) {
+      parts.keepIn = () => {
+        const c = clampToInterior({ position: camera.position, target: controls.target, fov: camera.fov, distance: 0 }, interior);
+        const q = insideRoom(c.position, interior);   // and held in, whatever the pull's floor left (Sol 01a17823)
+        if (q.x !== camera.position.x || q.y !== camera.position.y || q.z !== camera.position.z) camera.position.set(q.x, q.y, q.z);
+      };
+      controls.addEventListener('change', parts.keepIn);
+    }
     on = true;
     /* the dip to black (the grammar's transitions): a black layer over the canvas, in the stage's own wrapper, so the
        workspace above it (the cinema bars, the strip) stays drawn over the black */
@@ -1601,6 +1613,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (parts.env) { parts.env.dispose(); parts.env = null; }
     parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
     controls.enabled = was.controls; controls.enablePan = was.pan; controls.maxPolarAngle = was.polar;
+    if (parts.keepIn) { controls.removeEventListener('change', parts.keepIn); parts.keepIn = null; }
     stage.resetView();   // the guided camera of the page the stage is on (the finished step, or the one a click chose)
     stage.invalidateFrame();
   }

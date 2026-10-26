@@ -4071,3 +4071,20 @@ analytic in the shader, not meshes). He copied the spool into its own file.
 - **Checks.** The toggle's case now expects Room with no click and Studio kept across a reload; the failed-load case fails
   the module from the first request and checks nothing is stored. Mutants (the old default, no store) both fail it. The
   wall-and-desk and spools cases pass. Review: Sol `01a17823` round 9, no findings. Not deployed.
+
+## 2026-10-26 — The room on for everyone; the orbit kept in the room
+
+- **No flag** (Joey: "When it deploys, turn the room on for everyone: drop the ?done=room flag so every visitor gets the
+  room in Colors and the final scene."): assemble.js and colors.js read `?done` as `room` when it is absent; `?done=off`
+  turns the room off. done.js is still fetched only when a visitor asks for the scene at Done or Colors enters Room.
+  The e2e `open()` helper adds `&done=off` to every case that does not ask for the room, so they keep the studio they
+  were written for; the room's flag cases open as a visitor does (`{ visitor: true }`, no `done` in the address). The
+  full e2e suite ran locally with it: 98 of 98. (The one unit failure, `adhesive-foot` wanting
+  `parts/skin/Tabletop-Kit-Foot.lib.glb`, is this machine's parts junction missing the skin-map files, not this change.)
+- **The orbit stays in the room** (Joey, the same hour: "i can spin it around and clip through the wall or zoom out a
+  mile until the viewing distance makes everything disapear, maybe they can't move our zoom out of the room?"): on the
+  Colors stage, every orbit or zoom pulls the camera in along its line to the build to the shots' own margins
+  (`clampToInterior`: 150 mm off the walls and floor, 450 under the walls' top), then holds it inside them axis by axis
+  (`insideRoom`, Sol `01a17823`: the pull's 0.05 floor could leave a far jump outside). The e2e zooms out 25 steps and
+  turns half round behind the back wall: inside both times; without the listener it fails.
+- **Review** Sol `01a17823` rounds 10 to 12: one finding, accepted (the floor); then no findings. Not deployed.

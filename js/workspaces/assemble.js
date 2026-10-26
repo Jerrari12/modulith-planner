@@ -15,9 +15,11 @@ import { toolbar } from '../ui/toolbar.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 
 /* THE DONE SCENE (5b's first slice, 2026-10-23, DESIGN.md in D:/Claude - Output/done-scene-2026-10-23): with
-   `?done=room` the end of the instructions puts the finished build on a desk in a lit room. Off by default; a feature
-   ships only on Joey's go, and the module is not even fetched until a visitor with the flag reaches Done. */
-const DONE_SCENE = new URLSearchParams(location.search).get('done');
+   `?done=room` the end of the instructions puts the finished build on a desk in a lit room. ON FOR EVERYONE since Joey's
+   go of 2026-10-26 ("turn the room on for everyone: drop the ?done=room flag so every visitor gets the room in Colors and
+   the final scene"); `?done=off` turns it off (the e2e cases about other things run so). The module is still not fetched
+   until a visitor reaches Done and asks for the scene. */
+const DONE_SCENE = new URLSearchParams(location.search).get('done') || 'room';
 
 
 export function mountAssemble(stage, ctx) {
