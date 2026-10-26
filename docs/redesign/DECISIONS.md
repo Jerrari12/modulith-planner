@@ -3981,3 +3981,41 @@ count for {N}, overall dimensions for tall or wide builds, and occupied grid uni
   frustum); three points along the move partly accepted (nine; not a proof over the continuous path, a mug's width spans
   several steps of the 36 deg arc).
 - **Checks.** Unit 35 of 35. The strip-and-mugs, kits, grammar, relief, room and steam cases pass. Not deployed.
+
+## 2026-10-26 — Filament spools: Joey's spool, its coil a shader, one per colour the build is printed in
+
+Joey: "a 3d model of filament, we could even stack near or around the build and changes with the colors selected for the
+build", then "I do have a spool i already designed in blender ... the filament is made from a spring like shape and either
+might create too much geometry, or maybe there is a way you can generate that coil shape in a super efficient way like
+whatever they did in these projects using simple shapes?" (erichlof's THREE.js PathTracing Renderer, whose round shapes are
+analytic in the shader, not meshes). He copied the spool into its own file.
+
+- **His spool, measured** (`Individual Spool Holder + Spool.blend`, "Filament Spool C", 200 mm across, 65 mm wide, 172,262
+  vertices in five loose parts): the coil, one helix tube 1.76 mm thick wound once across the outside at r 89.6-91.4 mm,
+  151,588 vertices (88 %), right-handed at a 1.80 mm pitch (phase coherence 0.60 at that pitch, 0.004 for any left-handed
+  one); two flanges, 7,451 vertices each, 5 mm thick, r 30-100 with four slots; the drum under the coil, r 38.2-90 with
+  rounded edges; the hub, r 35-38.
+- **The flanges and hub kept, lightened** (`scenes/props/spool.glb`, 166 KB): the flat faces dissolved (1 deg), collapsed
+  to 0.3, shaded smooth by 30 deg so the vertices are shared (flat-shaded, the same 7,438 triangles exported at 20,295
+  vertices and 532 KB). Opaque, his material's dark grey (base 0.1 linear, roughness 0.45).
+- **The coil as a shader** (`js/scenes/spool.js`): one drum (an open cylinder, 256 x 4, and two side rings), its
+  MeshStandardMaterial's normal bent per pixel over a round strand of his winding (the outer face along the helix, the
+  side faces in rings), a crease darkening between strands, and the pattern easing to a flat average where a strand spans
+  under 4 px (at 2 px, none: the moire of the first try). Lit by the stage's lights like the build and casting a real
+  shadow; on a tier with no shadow map, a contact disc under each. Several spools share the geometry.
+- **On the desk** (done-fit.js spoolPlan, done.js makeSpools): one spool per colour the build is printed in
+  (filamentsInBuild's filaments and its unpicked regions' colours, sorted, four at most), in 80 % of builds; the build's
+  seed groups them into a stack lying flat (two or three high) and spools standing on their rims, each turned its own
+  way; each group at a free spot of a spool's footprint (108 mm), the mugs' keep-clear (props, the build, the desk in front
+  of it), 226 mm apart. Made before the mugs, which keep clear of them. With 200 mm spools and the desk's props, a desk
+  usually takes one group: the rest are left out.
+- **The Colors workspace's Room stage** runs the same scene: a committed pick repaints the spools (refreshSpools: a spool
+  whose colour the build no longer wears takes one it newly does, or one it wears).
+- **The e2e**: the helper adds ?spools=off to a scene case that asks for nothing else, as it adds ?mugs=home; the spools'
+  case asks ?spools=plan.
+- **To deploy:** `js/scenes/spool.js` is a new module, and the deploy's module-graph guard needs a stamping line for it
+  in `.github/workflows/pages.yml`, which the planner-2 CI session owns: ask it before merging to main.
+- **Review.** Sol `01a17823`, two findings, both discarded on the code: `loadSpool` called without its URL (its parameter
+  defaults to the GLB; the spools render in the e2e); `setColor` not updating the stored colour (it does).
+- **Checks.** Unit 36 of 36. The spools' case, the strip-and-mugs, kits, grammar, room, prop shadows, steam and Colors
+  Room cases pass. Not deployed.

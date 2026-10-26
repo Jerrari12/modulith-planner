@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_SHARE, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -533,6 +533,24 @@ test('the milestone sayings: a build\'s size, height, drawers and labels unlock 
   const share = backs.filter((b) => b.milestone).length / backs.length;
   assert.ok(share > 0.1 && share < 0.6, `milestones now and then (${(share * 100).toFixed(0)} % of the mugs)`);
   for (let i = 0; i < 300; i++) { const ms = mugPlan(rngFrom(hashSeed('#c' + i)), { count: 3, extra }).mugs.map((m) => m.back.milestone).filter(Boolean); assert.equal(new Set(ms).size, ms.length, 'no milestone twice on one desk'); }
+});
+
+test('the spools: one per colour the build is printed in (four at most), a stack and standing ones, the build\'s own seed, sometimes none', () => {
+  const cols = ['#111111', '#D03A2E', '#2a6fdb', '#eeeeee', '#f2c230', '#d03a2e'];
+  assert.deepEqual(spoolPlan(rngFrom(hashSeed('a')), cols), spoolPlan(rngFrom(hashSeed('a')), cols), 'a link, one plan');
+  const plans = Array.from({ length: 400 }, (_, i) => spoolPlan(rngFrom(hashSeed('spools|' + i)), cols));
+  const none = plans.filter((p) => !p.groups.length).length / plans.length;
+  assert.ok(Math.abs(none - (1 - SPOOL_SHARE)) < 0.07, `no spools in about ${((1 - SPOOL_SHARE) * 100).toFixed(0)} % of builds (${(none * 100).toFixed(0)} %)`);
+  for (const p of plans) {
+    const all = p.groups.flatMap((g) => g.colours);
+    assert.ok(all.length <= SPOOL_MAX, 'four at most');
+    assert.equal(new Set(all).size, all.length, 'no colour twice (the hex case ignored)');
+    if (p.groups.length) assert.equal(all.length, SPOOL_MAX, 'every colour up to the most');
+    for (const g of p.groups) { assert.ok(g.kind === 'stack' || g.kind === 'stand'); assert.ok(g.kind === 'stack' ? g.colours.length <= 3 : g.colours.length === 1); assert.ok(g.spot >= 0 && g.spot < 1 && g.turnDeg >= 0 && g.turnDeg <= 360); }
+  }
+  assert.ok(plans.some((p) => p.groups.some((g) => g.kind === 'stack' && g.colours.length >= 2)) && plans.some((p) => p.groups.some((g) => g.kind === 'stand')), 'stacks and standing spools both');
+  assert.deepEqual(spoolPlan(rngFrom(1), []), { groups: [] }, 'no colours, no spools');
+  assert.equal(spoolPlan(rngFrom(hashSeed('spools|3')), ['#abc']).groups.flatMap((g) => g.colours).length <= 1, true);
 });
 
 /* THE VISITOR'S ROOM COLOURS (2026-10-25): the colour maths the room is repainted by. The bake's paint is room.json's

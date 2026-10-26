@@ -211,6 +211,7 @@ export function mountColors(stage, ctx) {
     if (LOOK.has(why)) store.flush();
     fn(); store.commit(() => {}, why);
     if (LOOK.has(why)) store.flush();
+    if (room && room.handle && room.handle.refreshSpools) room.handle.refreshSpools();   // the Room stage's spools wear the new colours (done.js makeSpools)
   }
   const unsub = store.subscribe((state, why) => { if (why === 'adopt') return; renderAll(); });
   const unitOfSel = () => { const info = st.sel ? stage.partInfo(st.sel.id) : null; return info && info.owner != null ? info.owner : null; };

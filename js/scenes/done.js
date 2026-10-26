@@ -21,7 +21,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { loadSpool, makeSpool, disposeSpool } from './spool.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -44,8 +45,9 @@ function loadRoom() {
        entry on a 10 Mbit/s line). Each one catches its own failure. */
     const meta = fetch(ROOM_JSON).then((r) => { if (!r.ok) throw new Error(`${ROOM_JSON}: ${r.status}`); return r.json(); })
       .then((json) => Promise.all([loadMasks(json), loadLight(json), loadBounce(json)]).then(([masks, light, bounce]) => ({ json, masks, light, bounce })));
-    loading = Promise.all([loader.loadAsync(ROOM_GLB), meta])
-      .then(([gltf, m]) => ({ gltf, ...m }))
+    const spool = loadSpool().catch((e) => { console.warn('[done scene] the spool did not load', e); return null; });   // the spools' flanges, with the room (spool.js)
+    loading = Promise.all([loader.loadAsync(ROOM_GLB), meta, spool])
+      .then(([gltf, m, spoolGeo]) => ({ gltf, ...m, spoolGeo }))
       .catch((e) => { loading = null; throw e; });
   }
   return loading;
@@ -687,6 +689,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (parts.catcher) parts.catcher.visible = shadow;
     if (parts.wall) parts.wall.visible = shadow;
     if (parts.sprite) parts.sprite.visible = !shadow && mount === 'tabletop';   // the disc under a build that stands on the desk
+    for (const d of (parts.spools && parts.spools.discs) || []) d.visible = !shadow;   // and under each spool
   }
   /* THE VISITOR'S ROOM COLOURS (done-fit.js wallFactor, wallWeight, bounceK, deskLook; Joey 2026-10-25): every material
      from its baked base (userData doneBase / doneMap, unlit). The walls take the new paint over the baked one; the desk
@@ -956,6 +959,77 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     img.src = new URL('../../' + look.logo.src, import.meta.url).href;
     return tex;
   }
+  /* THE SPOOLS ON THE DESK (done-fit.js spoolPlan, spool.js): one per colour the build is printed in (its filaments, and the
+     identification colours of a region nothing picked), grouped by the build's seed into a stack lying flat and spools
+     standing on their rims, each group at a free spot big enough for a spool (deskSpots at a spool's footprint, the same
+     keep-clear as the mugs), never in front of the build. They take the stage's lights like the build and cast their own
+     shadow; on a tier with no shadow map, a contact disc under each. Made before the mugs, which then keep clear of them.
+     `refreshSpools` repaints them when the build's colours change (the Colors workspace's Room stage). */
+  const SPOOL_FOOT = 108;   // a spool's footprint radius, mm: its 100 mm flange and a margin
+  function spoolColours() {
+    const f = stage.filamentsInBuild ? stage.filamentsInBuild() : { filaments: [], unpicked: [] };
+    return [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)];
+  }
+  function makeSpools(group, geo) {
+    parts.spools = { groups: [], discs: [], plan: null };
+    if (!geo || mount === 'under-table') return [];
+    const q = new URLSearchParams(location.search), s0 = debug ? q.get('spools') : null;
+    if (s0 === 'off') return [];
+    const plan = spoolPlan(rngFrom(hashSeed('spools|' + (location.hash || q.get('build') || 'room'))), spoolColours());
+    parts.spools.plan = plan;
+    if (!plan.groups.length) return [];
+    group.updateWorldMatrix(true, true);
+    const at = (o) => new THREE.Box3().setFromObject(o);
+    const own = new Set(['mug', 'mug_handle', 'coffee']);
+    const obstacles = (json.props || []).filter((p) => !own.has(p.name)).map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible).map((o) => plain(at(o)));
+    const mugO = group.getObjectByName('mug');
+    if (mugO && mugO.visible) obstacles.push(plain(at(mugO)));   // the coffee's home: the mugs keep clear of the spools, not the other way round, but a spool never stands on the room's own mug
+    const desk = group.getObjectByName('desk_top');
+    if (!desk) return [];
+    if (buildBox && !buildBox.isEmpty()) {
+      obstacles.push({ min: { x: buildBox.min.x - 28, z: buildBox.min.z - 28 }, max: { x: buildBox.max.x + 28, z: buildBox.max.z + 28 } });
+      obstacles.push({ min: { x: buildBox.min.x - 60, z: buildBox.min.z }, max: { x: buildBox.max.x + 60, z: at(desk).max.z + 100 } });
+    }
+    const deskBox = plain(at(desk)), home = mugO ? at(mugO).getCenter(new THREE.Vector3()) : { z: deskBox.max.z };
+    const spots = deskSpots(obstacles, deskBox, { radius: SPOOL_FOOT, step: 30 }).filter((p) => p.z <= home.z + 10);
+    const picks = pickSpots(spots, plan.groups.map((g) => g.spot), 2 * SPOOL_FOOT + 10);
+    const placed = [];
+    plan.groups.forEach((g, i) => {
+      const p = picks[i];
+      if (!p) return;
+      const turn = (g.turnDeg * Math.PI) / 180, root = new THREE.Group();
+      root.name = 'done-spools'; root.position.set(p.x, deskY, p.z); root.rotation.y = turn;
+      g.colours.forEach((c, k) => {
+        const s = makeSpool(geo, c);
+        if (g.kind === 'stand') { s.rotation.z = Math.PI / 2; s.position.y = 100; }   // on its rim: the flange's 100 mm radius
+        else { s.position.y = 32.6 + k * 65.2; s.rotation.y = k * 0.9; }              // lying flat, one on another
+        s.traverse((m) => { if (m.isMesh) m.userData.doneRoom = true; });
+        root.add(s);
+      });
+      scene.add(root);
+      const disc = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: parts.tex || (parts.tex = contactTexture()), transparent: true, depthWrite: false, toneMapped: false }));
+      const w = g.kind === 'stand' ? [90, 240] : [250, 250];
+      disc.scale.set(w[0], 1, w[1]); disc.rotation.y = turn; disc.position.set(p.x, deskY + 0.6, p.z); disc.renderOrder = 1; disc.raycast = () => {};
+      disc.visible = !(stage.QUALITY[stage.quality] || {}).shadow;
+      scene.add(disc);
+      parts.spools.groups.push(root); parts.spools.discs.push(disc);
+      placed.push({ kind: g.kind, colours: g.colours, at: p, box: plain(new THREE.Box3().setFromObject(root)) });
+    });
+    parts.spools.placed = placed;
+    return placed.map((x) => x.box);
+  }
+  /* the build's colours again on the spools that stand (the Colors workspace's Room stage, a pick made with the room on): a
+     spool whose colour the build no longer wears takes one it newly does (or, none left, one it wears), the others keep theirs */
+  function refreshSpools() {
+    if (!parts.spools || !parts.spools.groups.length) return;
+    const now = [...new Set(spoolColours().map((c) => String(c).toLowerCase()))];
+    const spools = parts.spools.groups.flatMap((r) => r.children.filter((s) => s.userData.setColor));
+    const worn = new Set(spools.map((s) => String(s.userData.spool.color).toLowerCase()));
+    const fresh = now.filter((c) => !worn.has(c));
+    let k = 0;
+    for (const s of spools) if (!now.includes(String(s.userData.spool.color).toLowerCase()) && now.length) s.userData.setColor(fresh.length ? fresh.shift() : now[k++ % now.length]);   // none new left: one the build wears
+    stage.invalidateFrame();
+  }
   /* the build's facts the milestone sayings read (done-fit.js buildFacts): its units, which carry a drawer and a label, and
      its overall size */
   function facts() {
@@ -1000,6 +1074,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // would stand between the shots and the build)
     const own = new Set(['mug', 'mug_handle', 'coffee']);
     const obstacles = (json.props || []).filter((p) => !own.has(p.name)).map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible).map((o) => plain(at(o)));
+    for (const sp of (parts.spools && parts.spools.placed) || []) obstacles.push(sp.box);   // the spools, made first
     const desk = group.getObjectByName('desk_top');
     if (buildBox && !buildBox.isEmpty()) {
       obstacles.push({ min: { x: buildBox.min.x - 28, z: buildBox.min.z - 28 }, max: { x: buildBox.max.x + 28, z: buildBox.max.z + 28 } });
@@ -1176,7 +1251,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.raf = requestAnimationFrame(step);
   }
 
-  const ready = loadRoom().then(({ gltf, json: j, masks, light, bounce }) => {
+  const ready = loadRoom().then(({ gltf, json: j, masks, light, bounce, spoolGeo }) => {
     if (cancelled) return null;
     json = j; roomLight = light || {}; roomBounce = bounce || null;
     buildBox = stage.assembledBox.clone();
@@ -1304,6 +1379,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     paintRoom(savedRoomColours());
     captureEnv();
     makeSteam(group);   // after the capture: the room it reflects has no steam
+    makeSpools(group, spoolGeo);   // the spools first: the mugs keep clear of them
     makeMugs(group);   // nor its mugs' print, nor the second mug
     // the stage's holds: background off, our environment, the shadow on whatever the theme, the camera ours
     stage.table.visible = false; stage.grid.visible = false;
@@ -1369,6 +1445,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       },
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
+      get spools() { const p = parts.spools; return p ? { plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible) } : null; },
+      refreshSpools,
       get mugs() { const p = parts.mugs; return p ? { framed: subj.mug ? (subj.mug.group ? subj.mug.group.map((g) => subj.mugs.indexOf(g)) : [subj.mugs.indexOf(subj.mug)]) : null, plan: p.plan, facts: p.facts, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },
       get subjects() { return { labels: subj.labels.map((l) => l.id), label: subj.label ? subj.label.id : null, row: subj.row }; },
       get focus() { return { state: focus.anim ? focus.anim.playState : null, filter: getComputedStyle(renderer.domElement).filter }; },
@@ -1441,6 +1519,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     cancelAnimationFrame(parts.raf);
     cancelAnimationFrame(parts.steamRaf);
     if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
+    if (parts.spools) { for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays
     if (parts.mugs) { for (const o of [...parts.mugs.meshes, ...parts.mugs.masks]) o.removeFromParent(); for (const t of parts.mugs.texs) t.dispose(); parts.mugs = null; }   // the second mug and its shadow out (their geometry is the cached load's; their materials go with parts.mats)
     subj.mugs = null;
     removeEventListener('resize', refit);
@@ -1484,6 +1563,6 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     else { clearTimeout(seq.startTimer); if (seq.on) { seqStop(); placeCamera(false); } }   // none wanted (reduced motion; a stage): the fixed hero, and no sequence still to start (Sol 01a16b2a)
   }
-  const handle = { leave, onQuality, refit, recenter, nextShot, setRoomColours, roomColoursPanel, get roomColours() { return { wall: colours.wall, desk: colours.desk, plainDesk: !!(roomLight.desk_top && roomLight.desk_top.tex) }; }, get on() { return on; } };
+  const handle = { leave, onQuality, refit, recenter, nextShot, setRoomColours, roomColoursPanel, refreshSpools, get roomColours() { return { wall: colours.wall, desk: colours.desk, plainDesk: !!(roomLight.desk_top && roomLight.desk_top.tex) }; }, get on() { return on; } };
   return { ready, leave };
 }

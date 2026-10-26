@@ -856,3 +856,25 @@ export function sayingLayout(saying, w, h, fit) {
   for (const line of saying.small ? [saying.small] : []) size = Math.min(size, w / Math.max(1e-6, fit(line, 1)) / 0.36);
   return { size, small: size * 0.36, lead, scales };
 }
+
+/* THE SPOOLS (Joey 2026-10-26: "a 3d model of filament, we could even stack near or around the build and changes with the
+ * colors selected for the build"; spool.js draws one). A build's spools: one per colour it is printed in (`colours`, its
+ * filaments' hexes, at most SPOOL_MAX), in groups the build's seed picks: a STACK lying flat, two or three high, and the
+ * rest STANDING on their rims, each its own turn about the vertical; and whether the desk has spools at all
+ * (SPOOL_SHARE of builds). Each group's `spot` is a pick in [0, 1) among the free spots big enough for a spool. */
+export const SPOOL_MAX = 4;
+export const SPOOL_SHARE = 0.8;
+export function spoolPlan(rng, colours) {
+  const list = [...new Set((colours || []).map((c) => String(c).toLowerCase()))].sort().slice(0, SPOOL_MAX);   // sorted: the stage lists them in no fixed order
+  if (!list.length || rng() >= SPOOL_SHARE) return { groups: [] };
+  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  const groups = [];
+  let rest = list;
+  if (rest.length >= 2 && rng() < 0.7) {   // a stack first, two or three high
+    const n = Math.min(rest.length, rng() < 0.5 ? 2 : 3);
+    groups.push({ kind: 'stack', colours: rest.slice(0, n), turnDeg: Math.round(rng() * 360), spot: rng() });
+    rest = rest.slice(n);
+  }
+  for (const c of rest) groups.push({ kind: rng() < 0.75 ? 'stand' : 'stack', colours: [c], turnDeg: Math.round(rng() * 360), spot: rng() });
+  return { groups };
+}
