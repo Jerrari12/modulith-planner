@@ -126,7 +126,7 @@ const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side cov
 /* "Case, drawers: Black · Fronts, grips: Orange · Handles: Silk Silver" for a look as worn ([] when nothing is picked); a
    group whose keys wear two filaments splits by key ("Case: Black · feet: Orange"); a unit's own picks are counted by
    the caller, not listed */
-export function summarize(w) {
+function regionsOf(w) {
   const groups = [];
   for (const [word, ks] of SUMMARY) {
     const present = ks.filter((x) => w[x]);
@@ -136,6 +136,23 @@ export function summarize(w) {
     // keys that differ by their own words ("Case: Black · feet: Orange")
     names.forEach((name, i) => groups.push({ word: i === 0 ? word : present.filter((x) => w[x].name === name).map((x) => KEY_WORD[x] || x.toLowerCase()).filter((v, j, a) => a.indexOf(v) === j).join(' & '), name }));
   }
+  return groups;
+}
+const firstUp = (words) => words.map((x, i) => (i === 0 ? x.charAt(0).toUpperCase() + x.slice(1) : x)).join(', ');
+/* THE SAME REGIONS, ONE ROW A FILAMENT (Joey 2026-10-26, of the line summarize reads: "the way we list the used colors looks
+   messy"): every region a filament prints gathered on its row, the rows in the order the line first meets them (the case's
+   first), each with its swatch: [{ name, filament, hex, label }] */
+export function byFilament(w) {
+  const rows = new Map();
+  for (const g of regionsOf(w)) {
+    let r = rows.get(g.name);
+    if (!r) rows.set(g.name, r = { name: g.name, filament: shortName(g.name), hex: Object.values(w).find((f) => f.name === g.name).hex, words: [] });
+    if (!r.words.includes(g.word)) r.words.push(g.word);
+  }
+  return [...rows.values()].map((r) => ({ name: r.name, filament: r.filament, hex: r.hex, label: firstUp(r.words) }));
+}
+export function summarize(w) {
+  const groups = regionsOf(w);
   const joined = [];
   for (const g of groups) { const last = joined[joined.length - 1]; if (last && last.name === g.name) last.words.push(g.word); else joined.push({ words: [g.word], name: g.name }); }
   return joined.map((j) => ({ label: j.words.map((x, i) => (i === 0 ? x.charAt(0).toUpperCase() + x.slice(1) : x)).join(', '), filament: shortName(j.name), name: j.name }));

@@ -610,6 +610,12 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 #ws-colors .summary .sline b { color: var(--ink); font-weight: 700; }
 #ws-colors .summary .sgl { color: var(--ink-3); }
 #ws-colors .summary .sgf { color: var(--ink); font-weight: 600; }
+/* one row a filament (byFilament): the swatch, the name, the regions it prints under it, wrapping under the name */
+#ws-colors .summary .sfil { list-style: none; margin: 2px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 1.35; }
+#ws-colors .summary .sfil li { display: grid; grid-template-columns: 12px 1fr; column-gap: 8px; align-items: start; }
+#ws-colors .summary .sfil .sw { width: 12px; height: 12px; margin-top: 2px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); grid-row: span 2; }
+#ws-colors .summary .sfil .sgf { grid-column: 2; overflow-wrap: anywhere; }
+#ws-colors .summary .sfil .sgl { grid-column: 2; font-size: 11.5px; }
 #ws-colors .summary .sacts { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 #ws-colors .summary .link { padding: 0; border: none; background: transparent; color: var(--orange); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 #ws-simplify { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 480px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }

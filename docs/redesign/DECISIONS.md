@@ -4109,3 +4109,15 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   without it (0 px), so the steam is not in the samples. Mutants (no hiding in samples, overlay never live) fail it. The
   relief compile-ahead, lens, steam-rate, drift, spools, strip and Colors cases and smoke pass. Review: Sol `01a17823`
   round 13, no findings. Not deployed.
+
+## 2026-10-26 — The Colors summary: one row a filament
+
+- **Asked** (Joey, of "4 filaments used · Case, drawers: Cold White · Fronts: Dark Blue · Faceplate bodies: Cold White ·
+  Handles: Aqua Blue · Deck, small parts: Dark Blue · Feet: PolyFlex TPU95 Black": "the way we list the used colors looks
+  messy"). The run-on line named a filament once per run of neighbouring regions, so Cold White and Dark Blue came twice.
+- **Now** (simplify.js `byFilament`, the same regions as `summarize`, which stays for its other readers): the count line,
+  then one row a filament, its swatch, its short name (the full one on hover), and every region it prints under the name,
+  the case's row first. Shots: `D:\Claude - Output\done-scene-spools-2026-10-26\summary`.
+- **Checks.** A unit test (one row a filament, the same regions as the line, each row's own swatch, the control that the
+  line repeats a filament); the Colors step 6 cases and the phone journey pass. Review: Sol `01a17823` round 14: one
+  finding, discarded (it read the payload's shorthand, not the code); then no findings. Not deployed.

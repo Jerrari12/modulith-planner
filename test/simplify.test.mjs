@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { FILAMENT_DB } from '../js/filament-db.js';
 import { surprise, PALETTE_KEYS, AREA, ROLE_KEYS } from '../js/colors/surprise.js';
 import { STYLES } from '../js/colors/styles.js';
-import { simplify, worn, filamentsOf, summarize, problemsOn } from '../js/colors/simplify.js';
+import { simplify, worn, filamentsOf, summarize, byFilament, problemsOn } from '../js/colors/simplify.js';
 import { dE } from '../js/colors/colour.js';
 
 const BY_LABEL = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, c])));
@@ -135,6 +135,24 @@ test('the summary line groups the regions the build has, joins neighbours sharin
   assert.deepEqual(summarize({}), []);
   const root = summarize(worn(l.colors, ROOT)).map((x) => x.label.toLowerCase());
   assert.ok(!root.some((x) => /deck|labels|handles|(^|, )accents/.test(x)), `the root kit has no deck, labels, handles or accents: ${root.join(' | ')}`);
+});
+
+test('byFilament: one row a filament, every region it prints gathered on it, the case\'s row first, each with its swatch (Joey 2026-10-26: "the way we list the used colors looks messy")', () => {
+  const l = surprise({ style: 'workshop', cap: 3, seed: 4 }).looks[1];
+  const w = worn(l.colors, FULL);
+  const rows = byFilament(w), line = summarize(w);
+  const names = [...new Set(Object.values(w).map((f) => f.name))];
+  assert.equal(rows.length, names.length, `one row a filament (${rows.map((r) => r.filament).join(' | ')})`);
+  assert.equal(new Set(rows.map((r) => r.name)).size, rows.length, 'no filament twice');
+  assert.ok(line.length > rows.length, `the control: the line names a filament more than once (${line.map((x) => x.filament).join(' | ')})`);
+  assert.ok(rows[0].label.startsWith('Case'), rows[0].label);
+  const words = (xs) => xs.flatMap((x) => x.label.split(', ').map((v) => v.toLowerCase())).sort();
+  assert.deepEqual(words(rows), words(line), 'the same regions as the line, each once');
+  for (const r of rows) {
+    assert.equal(r.hex, Object.values(w).find((f) => f.name === r.name).hex, `${r.filament}: its own swatch`);
+    for (const g of line.filter((x) => x.name === r.name)) for (const v of g.label.split(', ')) assert.ok(r.label.toLowerCase().split(', ').includes(v.toLowerCase()), `${v} on ${r.filament}'s row`);
+  }
+  assert.deepEqual(byFilament({}), []);
 });
 
 test('M28: a 27-key look to every target, timed (the laptop mark is median ≤ 5 ms; this gate is loose for the CI runner)', () => {

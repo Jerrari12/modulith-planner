@@ -37,7 +37,7 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { surprise, LOCKS, CAPS, shortName } from '../colors/surprise.js';
 import { STYLES } from '../colors/styles.js';
 import { readOwned, writeOwned } from '../state/owned.js';
-import { simplify, worn as wornLook, summarize, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
+import { simplify, worn as wornLook, byFilament, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
@@ -295,12 +295,15 @@ export function mountColors(stage, ctx) {
         strip(fc),
       ]),
     ]));
-    // THE CONFIDENCE SUMMARY (step 6): what this build prints in, region by region, and the three things to do about it
+    /* THE CONFIDENCE SUMMARY (step 6): what this build prints in, and the three things to do about it. One row a filament,
+       its swatch, its name and the regions it prints (simplify.js byFilament; Joey 2026-10-26: "the way we list the used
+       colors looks messy", of the run-on line that named one filament as often as its regions were apart) */
     if (p.on && fc.count) {
-      const groups = summarize(wornLook(p.colors, stage.keysInBuild()));
+      const rows = byFilament(wornLook(p.colors, stage.keysInBuild()));
       const ownUnits = Object.values(p.over || {}).filter((o) => o && Object.keys(o).length).length;   // units wearing a colour of their own (listed in the picker's rows, counted here)
       look.appendChild(el('div.summary', {}, [
-        el('p.sline', {}, [el('b', { text: `${n(fc.count, 'filament')} used` }), ...groups.map((g) => el('span.sg', {}, [' · ', el('span.sgl', { text: `${g.label}: ` }), el('span.sgf', { text: g.filament, title: g.name })])), ownUnits ? el('span.sg.own', { text: ` · ${n(ownUnits, 'unit')} with ${ownUnits === 1 ? 'its' : 'their'} own colours` }) : null]),
+        el('p.sline', {}, [el('b', { text: `${n(fc.count, 'filament')} used` }), ownUnits ? el('span.sg.own', { text: ` · ${n(ownUnits, 'unit')} with ${ownUnits === 1 ? 'its' : 'their'} own colours` }) : null]),
+        el('ul.sfil', {}, rows.map((r) => el('li', {}, [el('i.sw', { style: `background:${r.hex}`, 'aria-hidden': 'true' }), el('span.sgf', { text: r.filament, title: r.name }), el('span.sgl', { text: r.label })]))),
         el('div.sacts', {}, [
           el('button.link.keeplook', { text: 'Keep this look', title: 'Save these colours as a look of your own', onclick: () => { st.saving = true; renderPanel(); } }),
           el('button.link.review', { text: 'Review filaments', title: 'Every filament this build prints in, with where to buy it', onclick: openShop }),
