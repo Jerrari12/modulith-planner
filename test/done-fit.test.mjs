@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -79,14 +79,19 @@ test('shotCamera: targetShift aims by fractions of the box\'s width and depth (t
   close(c.target.x, -0.25 * 176, 1e-9, 'a quarter of the width to -X'); close(c.target.z, 10.5 + 0.5 * 193, 1e-9, 'half the depth toward the front');
 });
 
-test('the grammar\'s shots: eight distinct cameras, four still and four moving, each fittable to the build, the lenses and heights Joey asked for', () => {
+test('the grammar\'s shots: twelve distinct cameras, every one moving, each fittable to the build, the lenses and heights Joey asked for', () => {
   const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
   const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
   const shots = GRAMMAR.tabletop;
-  assert.deepEqual(shots.map((s) => s.name), ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side']);
+  assert.deepEqual(shots.map((s) => s.name), ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side', 'label', 'glide', 'pullback', 'dolly']);
   assert.equal(new Set(shots.map((s) => s.name)).size, shots.length, 'distinct');
-  assert.deepEqual(shots.filter((s) => s.to).map((s) => s.name), ['push', 'slide', 'macro', 'side'], 'four moving shots');
-  assert.equal(shots[0].name, 'hero'); assert.equal(shots[0].to, undefined, 'the hero holds still (the entrance lands on it)');
+  assert.deepEqual(shots.filter((s) => !s.to).map((s) => s.name), [], 'every shot moves (Joey 2026-10-25: "There are a lot of frozen views")');
+  assert.equal(shots[0].name, 'hero');
+  // the shots that held still drift about the pose they held: the still grammar, at the middle of the move, shows it as before
+  for (const [n, pose] of [['hero', { az: 28, el: 20, fill: 0.5 }], ['low', { az: -34, el: -7, fill: 0.78 }], ['detail', { az: 30, el: 10, fill: 1.35 }], ['top', { az: 40, el: 50, fill: 0.58 }]]) {
+    const m = mixShot(shots.find((s) => s.name === n), 0.5);
+    for (const [key, v] of Object.entries(pose)) close(m[key], v, 1e-9, `${n}: its middle is the pose it held (${key})`);
+  }
   const unit = { min: { x: -88, y: 0, z: -86 }, max: { x: 0, y: 67, z: 107 } };
   const aims = { drawer: aimAt(box, unit), front: { x: -61.6, y: 41.5, z: 107 } };
   const cams = Object.fromEntries(shots.map((s) => [s.name, fitShot(mixShot(s, 0.5), box, view, null, aims)]));
@@ -127,7 +132,7 @@ test('fitShot keeps every camera above the desk (the low shot on a wide build wo
   close(r(cm), r(ca), 1e-6, 'the arc\'s middle is as far from the build as its ends (a straight lerp would cut the chord)'); close(r(cb), r(ca), 1e-6, 'and its end');
   const lerped = { x: (ca.position.x + cb.position.x) / 2, y: (ca.position.y + cb.position.y) / 2, z: (ca.position.z + cb.position.z) / 2 };
   assert.ok(Math.hypot(lerped.x - ca.target.x, lerped.y - ca.target.y, lerped.z - ca.target.z) < r(ca) - 1, 'where a straight line between the ends would come closer');
-  assert.deepEqual(mixShot(GRAMMAR.tabletop[0], 0.7), GRAMMAR.tabletop[0].from, 'a still shot is its from, whatever k');
+  assert.deepEqual(mixShot({ name: 'still', from: { az: 3, el: 4 } }, 0.7), { az: 3, el: 4 }, 'a still shot is its from, whatever k');
 });
 
 test('beatAt: the dip-in, the hold, the dip-out and the black, the move eased across the visible time and never at rest on screen', () => {
@@ -149,8 +154,9 @@ test('beatAt: the dip-in, the hold, the dip-out and the black, the move eased ac
 });
 
 test('planCycle: every shot once a cycle in a seeded random order, the hero first on the first, no shot ever following itself across cycles, a still between two moves where it can', () => {
-  const names = GRAMMAR.tabletop.map((s) => s.name);
-  const moving = (n) => !!GRAMMAR.tabletop.find((s) => s.name === n).to;
+  // the eight shots of 2026-10-24, four of them moving (the still grammar's mix; every shot moves since 2026-10-25)
+  const names = ['hero', 'push', 'low', 'detail', 'slide', 'top', 'macro', 'side'];
+  const moving = (n) => ['push', 'slide', 'macro', 'side'].includes(n);
   const rng = rngFrom(7);
   const c1 = planCycle(names, rng, { first: 'hero', moving });
   assert.equal(c1[0], 'hero'); assert.deepEqual([...c1].sort(), [...names].sort(), 'a permutation: every shot once');
@@ -398,14 +404,14 @@ test('maskQuad and fitShot follow the desk top\'s height when the room moves for
   close(under.position.y, raw.position.y, 1e-9, 'no desk floor under the desk'); assert.ok(!under.floored);
 });
 
-test('the grammar per mount: a wall and an under-table build get eight shots each, the hero first and still, four moving, one drawer moment, none from far above', () => {
+test('the grammar per mount: a wall and an under-table build get twelve shots each, the hero first, all moving, one drawer moment, none from far above', () => {
   const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
   const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
   for (const m of ['wall', 'under-table']) {
     const shots = GRAMMAR[m];
-    assert.equal(shots.length, 8, m); assert.equal(new Set(shots.map((s) => s.name)).size, 8, `${m}: distinct`);
-    assert.equal(shots[0].name, 'hero'); assert.equal(shots[0].to, undefined, `${m}: the hero holds still (the entrance lands on it)`);
-    assert.equal(shots.filter((s) => s.to).length, 4, `${m}: four moving, so a still can sit between two moves`);
+    assert.equal(shots.length, 12, m); assert.equal(new Set(shots.map((s) => s.name)).size, 12, `${m}: distinct`);
+    assert.equal(shots[0].name, 'hero'); assert.equal(shots.filter((s) => s.to).length, 12, `${m}: every shot moves`);
+    assert.deepEqual(GRAMMAR.tabletop.slice(8).map((s) => s.name), shots.slice(8).map((s) => s.name), `${m}: the four shots of 2026-10-25`);
     assert.deepEqual(shots.filter((s) => s.drawer).map((s) => s.name), ['detail'], `${m}: the drawer moment`);
     assert.ok(!shots.some((s) => s.name === 'top'), `${m}: no top shot`);
     const els = shots.flatMap((s) => [s.from.el, (s.to || s.from).el]);
@@ -414,6 +420,40 @@ test('the grammar per mount: a wall and an under-table build get eight shots eac
     const low = fitShot(mixShot(shots.find((s) => s.name === 'low'), 0.5), box, view, null, {}, { floorY: -Infinity });
     assert.ok(low.position.y < low.target.y, `${m}: the low shot looks up`);
   }
+});
+
+test('the shots of 2026-10-25: the label glide fits the label, the glide trucks along the top row, the pullback blends a corner into the whole build, the dolly keeps the build\'s size', () => {
+  const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
+  const view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
+  const shot = (n) => GRAMMAR.tabletop.find((s) => s.name === n);
+  assert.deepEqual(around({ az: 10, el: 2 }, { az: 4 }), { from: { az: 8, el: 2 }, to: { az: 12, el: 2 } }, 'around: either side of the pose');
+  // the label: aimed at its centre on the front, fitted to the label's box (much closer than the build's fit)
+  const label = { box: { min: { x: -80, y: 100, z: 100 }, max: { x: -10, y: 112, z: 107 } } };
+  const lc = fitShot(mixShot(shot('label'), 0.5), box, view, null, { label });
+  assert.deepEqual(lc.target, { x: -45, y: 106, z: 107 }, 'aimed at the label');
+  const whole = fitShot({ ...mixShot(shot('label'), 0.5), aim: null }, box, view, null, {});
+  assert.ok(lc.distance < whole.distance / 2, `fitted to the label (${lc.distance.toFixed(0)} mm), not the build (${whole.distance.toFixed(0)})`);
+  // the glide: the aim from near one end of the row to near the other, at the row's height, the camera's angle held
+  const row = rowOf([{ min: { x: -80, y: 120, z: 100 }, max: { x: -10, y: 126, z: 108 } }, { min: { x: 10, y: 121, z: 100 }, max: { x: 80, y: 127, z: 108 } }, { min: { x: -80, y: 50, z: 100 }, max: { x: 80, y: 56, z: 108 } }], box);
+  assert.deepEqual(row, { x0: -80, x1: 80, y: 123.5, z: 108 }, 'rowOf: the top row\'s span, height and front, the row below left out');
+  assert.deepEqual(rowOf([], box), { x0: -88 + 0.15 * 176, x1: 88 - 0.15 * 176, y: 134 - 0.2 * 134, z: 107 }, 'and the build\'s front without grips or handles');
+  const g0 = fitShot(mixShot(shot('glide'), 0), box, view, null, { row }), g1 = fitShot(mixShot(shot('glide'), 1), box, view, null, { row });
+  close(g0.target.x, -80 + 160 * 0.05, 1e-9, 'from near the row\'s left end'); close(g1.target.x, -80 + 160 * 0.95, 1e-9, 'to near its right');
+  close(g1.position.x - g0.position.x, g1.target.x - g0.target.x, 1e-9, 'a truck: the camera moves with the aim'); close(g0.position.z, g1.position.z, 1e-9);
+  // the pullback: its ends are the two fitted ends, its distance geometric between them
+  const fit = (spec) => fitShot(spec, box, view, null, { front: { x: -61.6, y: 41.5, z: 107 } });
+  const pb = shot('pullback'), p0 = blendShot(pb, 0, fit), p1 = blendShot(pb, 1, fit), pm = blendShot(pb, 0.5, fit);
+  close(p0.distance, 150, 1e-6, 'it opens on the faceplate\'s corner'); assert.deepEqual(p0.target, { x: -61.6, y: 41.5, z: 107 });
+  const e1 = fit(mixShot({ from: pb.to }, 0));
+  close(p1.distance, e1.distance, 1e-6, 'and ends on the whole build'); close(p1.position.x, e1.position.x, 1e-6);
+  const mid = mixShot(pb, 0.5), dir = { az: mid.az, el: mid.el, fovV: mid.fovV };   // both ends fitted at the move's own direction and lens
+  close(pm.distance, Math.sqrt(fit({ ...pb.from, ...dir }).distance * fit({ ...pb.to, ...dir }).distance), 1e-6, 'the distance geometric half way between the two ends fitted there');
+  // the dolly: the lens narrows and the camera backs off, the build's share of the frame the same
+  const d0 = fitShot(mixShot(shot('dolly'), 0), box, view, null, {}), d1 = fitShot(mixShot(shot('dolly'), 1), box, view, null, {});
+  assert.ok(d1.fov < d0.fov * 0.6 && d1.distance > d0.distance * 1.7, `a dolly zoom (${d0.fov} deg at ${d0.distance.toFixed(0)} mm to ${d1.fov} at ${d1.distance.toFixed(0)})`);
+  close(d1.distance * Math.tan((d1.fov * Math.PI) / 360), d0.distance * Math.tan((d0.fov * Math.PI) / 360), 1e-6, 'the build the same size');
+  for (const n of ['label', 'glide', 'slide', 'dolly']) assert.equal(shot(n).reversible, true, `${n} runs either way`);
+  assert.equal(shot('label').focusIn, true, 'the label comes into focus');
 });
 
 /* THE VISITOR'S ROOM COLOURS (2026-10-25): the colour maths the room is repainted by. The bake's paint is room.json's

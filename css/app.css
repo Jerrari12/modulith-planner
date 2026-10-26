@@ -244,6 +244,11 @@ html.cinema :is(#ws-top, #ws-steps, #ws-tools, #ws-player, #ws-dock, #ws-tabbar)
 @keyframes cinema-bar { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 #ws-scene { position: fixed; left: 50%; bottom: calc(3.5vh - 22px); transform: translateX(-50%); z-index: 61; display: flex; gap: 8px; padding: 4px; border-radius: 14px; }
 #ws-scene .key { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+/* the strip rests once nothing has moved for a while (assemble.js stripWake): faded out with the pointer, back on any
+   pointer, wheel or key; opacity only, so it keeps its place and a test's click still finds it */
+#ws-scene { transition: opacity .25s ease; }
+html.cinema.scene-idle #ws-scene { opacity: 0; transition: opacity .8s ease; }
+html.cinema.scene-idle, html.cinema.scene-idle * { cursor: none !important; }
 /* the room's wall and desk colours (2026-10-25; done.js roomColoursPanel): over the final scene's strip, 8 px above it, and
    in Colors' Room stage. Swatches 28 px, 6 px apart (the planner's control gaps), the chosen one ringed */
 #ws-scene-colours { position: fixed; left: 50%; bottom: calc(3.5vh + 32px);   /* the strip's bottom + its 46 px (36 + 2 x 4 padding + 2 x 1 border) + 8 */ transform: translateX(-50%); z-index: 61; width: max-content; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 12px 14px; border-radius: 14px; }

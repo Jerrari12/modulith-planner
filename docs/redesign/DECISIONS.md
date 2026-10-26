@@ -3783,3 +3783,57 @@ Dated calls made while building, with who made them. The brief and the inventory
   done-scene worktree the same way, 2026-10-25).
 - **Not deployed:** the branch is desk-bounce from done-scene 91c39f8 (the done-scene worktree held another session's
   uncommitted work in the same files), behind `?done=room`.
+
+## 2026-10-25 — The Done scene: every shot moves, four new shots, the strip rests, no callouts, the mug's print
+
+Joey's round, on his own build in the scene (two screenshots, both with the W / H / L callouts showing): "hide the
+buttons on the bottom of the screen until the user moves their mouse or hits a keyboard button, and if they hit esc
+maybe it goes back to the final step in the instructions"; "i don't want the measurements to ever be visible in this
+final scene, if they are on i want them to turn off for it"; "There are a lot of frozen views and the coffee steam is
+frozen because its a panning or zooming image. on this computer that is powerful i don't think it ever going to the
+still images"; "more creative camera angles and effects ... panning close up, focusing on specific things, like if they
+add a custom label, cool looking parts like an edgelabel handle, maybe zooming out while moving the camera closer or
+vise versa, or maybe starting a stationary scene out of focus and ending with it focused on a part of the build". He
+pasted Astra's notes on a shot library (signature-label reveal, handle glide, detail-to-whole pullback, gentle dolly
+zoom, focus reveal; subjects found from the build; no recent repeats). Then: "can the coffee mug feature my jerrari logo,
+as if it were print on it like a real coffee mug. It would be funny to have something on the backside that is hard to
+see, like 'WORLDS BEST 3D PRINTED STORAGE SYSTEM'", and "can we make my logo much bigger on the mug?"
+
+- **No callouts while the room holds the stage** (main.js holdScene / setDims). The scene turned them off once at entry,
+  and a later setDims on the finished step (a page's own, a drawer focus ending) put them back. Now a held scene records
+  setDims's wish and draws none; the release puts back the last wish. The scene's own setDims calls are gone.
+- **The strip rests** (assemble.js stripWake; css/app.css `html.scene-idle`): faded out with the pointer after 2.5 s
+  without a pointer, wheel or key, back on any; not while the colours panel is open, the pointer is over the strip or a
+  key has focus on one of its buttons. Opacity only, so it keeps its place. **Esc already went Back** to the End page
+  (the instructions' last page, where "Watch the final scene" is); unchanged.
+- **Every shot moves** where the device moves the camera (High and Very High; grammarMode 'full'). The four shots that
+  held (hero, low, detail, top; wide for the hanging mounts) drift about the pose they held (done-fit.js `around`), so the
+  still grammar (Balanced, Fast, a slow device), which locks every shot off at the middle of its move, shows what it
+  always did, with the CSS drift as before. On High the steam rose over a held, drifting shot; on Very High a held shot
+  converged and its steam stood still. Moving, both are live.
+  - **The cost: Very High's bokeh no longer shows in a visit.** The lens is drawn by the accumulator, which runs only
+    while the camera is still; no shot is still now. The scene's lens code is kept (a held shot still gets one: the
+    debug `hold` timing, which the lens and steam e2e use), so holding Very High's shots again is one line. A live
+    depth of field (a depth pass and a gather blur) would bring a lens to moving shots; not built.
+- **Four new shots** (done-fit.js GRAMMAR, all three mounts; tabletop 12 shots, 11 without words on any drawer):
+  - `label`: a slow glide across one of the visitor's own labels (a unit with a `label` and a Label part,
+    stage.unitPartBox), fitted to the label's box, a different worded drawer each time round, **straight after the hero
+    on the first cycle**; it opens soft and sharpens as it fades in (`focusIn`: a CSS blur on the canvas, 7 px to none
+    over the dip-in and 1.8 s; the whole frame, not a depth). Dropped from a build with no words (Joey's own build has
+    EdgeLabel label parts with no words on them, so he will not see it until a drawer is named).
+  - `glide`: a close truck (320 mm, 20 deg lens) along the fronts' top row of label parts and handles (done-fit.js
+    rowOf: the boxes within 6 mm of the highest; the build's front without any).
+  - `pullback`: from 150 mm off the drawer unit's faceplate corner out to the whole build, the two ends fitted on their
+    own terms and blended, the distance geometrically (blendShot).
+  - `dolly`: the dolly zoom, 40 deg to 22 deg with the build's share held, so the camera backs off as the lens narrows
+    and the room closes in behind it.
+  - `slide`, `label`, `glide` and `dolly` run either way (`reversible`, by a second random source, so the plan's order is
+    the seed's whatever the turns).
+- **The mug's print** (done.js makeMugPrint): two bands of the mug's cylinder 0.15 % proud of it, multiplied over the
+  baked mug (the props' masks' CustomBlending), so the bake's shading carries through the ink and white is no print.
+  The logo (img/jerrari-logo.svg, the mark) 70 mm tall on the 96 mm mug (first 40; Joey: "much bigger"), facing the
+  room; on the back, toward the wall, "WORLD'S BEST / 3D PRINTED / STORAGE SYSTEM" in a heavy face, dark grey (the
+  apostrophe added). Children of the mug; taken off it on leave (the GLB is cached).
+- **Not done:** a focus that picks a depth (a rack focus from one drawer to another) needs the live depth of field
+  above. The development read-out Astra suggested (render mode, shot name, frame time) is `?debug=1`'s
+  `__GEN2_DONE__.sequence` and not drawn on screen.

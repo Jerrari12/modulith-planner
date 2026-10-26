@@ -100,19 +100,40 @@ export function mountAssemble(stage, ctx) {
     colBtn,
     el('button.key.on', { text: 'Next view →', title: 'The next camera view', onclick: () => { if (room && room.handle) room.handle.nextShot(); } }),
   ]);
+  /* THE STRIP RESTS (Joey 2026-10-25: "hide the buttons on the bottom of the screen until the user moves their mouse or
+     hits a keyboard button"): html.scene-idle fades the strip and the pointer out once nothing has moved for STRIP_IDLE_MS,
+     and any pointer, wheel or key brings them back. Not while the colours panel is open, the pointer is over the strip,
+     or a key has focus on one of its buttons. Faded by opacity only (css/app.css), so the buttons stay where they are. */
+  const STRIP_IDLE_MS = 2500;
+  let idle = { timer: 0, ac: null };
+  function stripWake() {
+    document.documentElement.classList.remove('scene-idle');
+    clearTimeout(idle.timer);
+    idle.timer = setTimeout(stripRest, STRIP_IDLE_MS);
+  }
+  function stripRest() {
+    if (!inScene) return;
+    if (!pop.hidden || strip.matches(':hover') || strip.querySelector(':focus-visible')) { stripWake(); return; }
+    document.documentElement.classList.add('scene-idle');
+  }
   function enterScene() {
     if (DONE_SCENE !== 'room' || inScene) return;
     inScene = true;
     document.documentElement.classList.add('cinema');
     colBtn.disabled = !(room && room.handle);
     root.append(bars, strip, pop);
+    idle.ac = new AbortController();
+    for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown']) document.addEventListener(type, stripWake, { signal: idle.ac.signal, passive: true });
+    stripWake();
     enterRoom();
     safe();
   }
   function leaveScene() {
     if (!inScene) { leaveRoom(); return; }
     inScene = false;
-    document.documentElement.classList.remove('cinema');
+    if (idle.ac) { idle.ac.abort(); idle.ac = null; }
+    clearTimeout(idle.timer);
+    document.documentElement.classList.remove('cinema', 'scene-idle');
     toggleColours(false);
     bars.remove(); strip.remove(); pop.remove();
     leaveRoom();

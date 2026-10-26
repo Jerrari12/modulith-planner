@@ -153,18 +153,41 @@ export function lensFor(cam, box, view, { maxPx = LENS.maxPx, samples = LENS.sam
  * with a wider angle lens, basically like the cameras used in that Superposition Unigine benchmark"; "keep them slow ...
  * a relaxing cinematic scene, very slow pace giving the visitor time to study how their custom storage unit appears";
  * "fades to black for transition". Each shot is fitted to the build (fitShot: shotCamera, the room's walls, the desk's
- * floor): `from` is where it opens, `to` (a moving shot) where it is when the frame has gone black again, the move eased
- * across the whole visible time. `fill` sizes the build's sphere in the frame; `distMm` instead sets the camera's
- * distance from its aim (the macro); `aim` points a shot at the drawer unit ('drawer': its box centre, as the detail shot
- * always did; 'drawer-front': a spot on its faceplate). Four still, four moving, so a still can sit between two moves. */
+ * floor): `from` is where it opens, `to` where it is when the frame has gone black again, the move eased across the whole
+ * visible time. `fill` sizes the build's sphere in the frame; `distMm` instead sets the camera's distance from its aim
+ * (the macro); `aim` points a shot at a part of the build ('drawer': the drawer unit's box centre, as the detail shot
+ * always did; 'drawer-front': a spot on its faceplate; 'label': a drawer's label, the frame fitted to the label itself;
+ * 'row': along the top row of the build's fronts, `shiftX` the share of that row's width the aim has travelled).
+ *
+ * EVERY SHOT MOVES (Joey 2026-10-25: "There are a lot of frozen views ... on this computer that is powerful i don't think
+ * it ever going to the still images"): where the device moves the camera at all (grammarMode 'full'), a shot that used to
+ * hold still drifts slowly about the pose it held (`around`: its `from` and `to` either side of it, so the still grammar,
+ * which locks every shot off at the middle of its move, still shows the pose it always did). And four shots from that
+ * day's round (Joey: "more creative camera angles ... panning close up, focusing on specific things, like if they add a
+ * custom label, cool looking parts like an edgelabel handle, maybe zooming out while moving the camera closer or vise
+ * versa, or maybe starting a stationary scene out of focus and ending with it focused on a part of the build"):
+ * - label: a slow glide across one of the visitor's own labels, the frame coming into focus as it fades in (`focusIn`);
+ *   only where a drawer carries words (done.js drops it otherwise);
+ * - glide: a close truck along the top row of the fronts, the EdgeLabel grips or the handles, at a grazing angle;
+ * - pullback: from a faceplate's corner out to the whole build, the camera's distance and aim blended between the two
+ *   fitted ends (`blend`: blendShot);
+ * - dolly: the dolly zoom, the lens narrowing while the camera backs off so the build keeps its size and the room behind
+ *   it closes in.
+ * `reversible`: each showing runs the move one way or the other, by the visit's random source. */
+export function around(centre, swing) {
+  const from = { ...centre }, to = { ...centre };
+  for (const [key, d] of Object.entries(swing)) { from[key] = centre[key] - d / 2; to[key] = centre[key] + d / 2; }
+  return { from, to };
+}
+const HERO_SWING = { az: -6, el: -2, fill: 0.04 };
 export const GRAMMAR = {
   tabletop: [
-    { name: 'hero', from: { az: 28, el: 20, fovV: 29.9, fill: 0.5, targetLift: -0.08 } },   // room.json's own hero wins
+    { name: 'hero', ...around({ az: 28, el: 20, fovV: 29.9, fill: 0.5, targetLift: -0.08 }, HERO_SWING), swing: HERO_SWING },   // room.json's own hero is the centre (shotsFor)
     { name: 'push', from: { az: 13, el: 12, fovV: 20, fill: 0.56, targetLift: -0.06 }, to: { az: 6, el: 9, fovV: 20, fill: 0.76, targetLift: -0.06 } },   // a long lens pushing in on the front, drifting a few degrees
-    { name: 'low', from: { az: -34, el: -7, fovV: 46, fill: 0.78, targetLift: 0.14 } },   // down at the desk with a wide lens, looking up, locked off
-    { name: 'detail', from: { az: 30, el: 10, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },   // the drawer moment in its hold
-    { name: 'slide', from: { az: -22, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 }, to: { az: 14, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 } },   // a slow truck across the front
-    { name: 'top', from: { az: 40, el: 50, fovV: 28, fill: 0.58 } },   // high, looking down on the covers, locked off
+    { name: 'low', ...around({ az: -34, el: -7, fovV: 46, fill: 0.78, targetLift: 0.14 }, { az: 8, el: 3 }) },   // down at the desk with a wide lens, looking up, rising a little
+    { name: 'detail', ...around({ az: 30, el: 10, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, { az: -6, fill: 0.1 }), drawer: true },   // the drawer moment in its hold
+    { name: 'slide', from: { az: -22, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 }, to: { az: 14, el: 7, fovV: 22, fill: 0.7, targetLift: -0.04 }, reversible: true },   // a slow truck across the front
+    { name: 'top', ...around({ az: 40, el: 50, fovV: 28, fill: 0.58 }, { az: -12, el: -4 }) },   // high, looking down on the covers
     // pushing in on a corner of the drawer unit's faceplate, on an edge, at a grazing angle (a flat face that close was a
     // frame of plain orange, the 2026-10-24 tour). It ended at 105 mm, a frame about 26 mm tall, where a 0.2 mm layer
     // spanned 5.84 CSS px on a 720 px canvas, past the relief's cutoff of 4; Joey found it "a bit too zoomed in ... maybe
@@ -173,33 +196,45 @@ export const GRAMMAR = {
     // tall and up
     { name: 'macro', from: { az: -40, el: 12, fovV: 14, distMm: 420, aim: 'drawer-front' }, to: { az: -31, el: 8, fovV: 14, distMm: 210, aim: 'drawer-front' } },
     { name: 'side', from: { az: 66, el: 15, fovV: 26, fill: 0.62 }, to: { az: 50, el: 13, fovV: 26, fill: 0.62 } },   // a slow arc round the side
+    { name: 'label', from: { az: -16, el: 7, fovV: 18, fill: 0.42, aim: 'label' }, to: { az: 14, el: 4, fovV: 18, fill: 0.48, aim: 'label' }, focusIn: true, reversible: true },
+    { name: 'glide', from: { az: -30, el: 5, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 5, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
+    { name: 'pullback', from: { az: -34, el: 9, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 16, fovV: 28, fill: 0.5, targetLift: -0.08 }, blend: true },
+    { name: 'dolly', from: { az: 20, el: 12, fovV: 40, fill: 0.5, targetLift: -0.06 }, to: { az: 20, el: 12, fovV: 22, fill: 0.5, targetLift: -0.06 }, reversible: true },
   ],
   /* A WALL BUILD hangs on the back wall over the desk (roomAnchor), so it is seen standing in front of the desk or from
      its chair: the shots keep near the build's own height, none looks down on it from over the wall's top, and the top
      shot gives way to a wide one of the whole corner, the desk under the build (2026-10-25) */
   wall: [
-    { name: 'hero', from: { az: 24, el: 4, fovV: 30, fill: 0.5, targetLift: -0.04 } },
+    { name: 'hero', ...around({ az: 24, el: 4, fovV: 30, fill: 0.5, targetLift: -0.04 }, { az: -6, el: -1, fill: 0.04 }) },
     { name: 'push', from: { az: 12, el: 3, fovV: 20, fill: 0.56 }, to: { az: 6, el: 2, fovV: 20, fill: 0.76 } },
-    { name: 'low', from: { az: -30, el: -24, fovV: 46, fill: 0.7, targetLift: 0.1 } },   // from the desk chair, looking up at it
-    { name: 'detail', from: { az: 30, el: 3, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },
-    { name: 'slide', from: { az: -22, el: 2, fovV: 22, fill: 0.7 }, to: { az: 14, el: 2, fovV: 22, fill: 0.7 } },
-    { name: 'wide', from: { az: 30, el: 10, fovV: 34, fill: 0.3, targetLift: -0.35 } },   // the corner: the desk under the build
+    { name: 'low', ...around({ az: -30, el: -24, fovV: 46, fill: 0.7, targetLift: 0.1 }, { az: 8, el: 3 }) },   // from the desk chair, looking up at it
+    { name: 'detail', ...around({ az: 30, el: 3, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, { az: -6, fill: 0.1 }), drawer: true },
+    { name: 'slide', from: { az: -22, el: 2, fovV: 22, fill: 0.7 }, to: { az: 14, el: 2, fovV: 22, fill: 0.7 }, reversible: true },
+    { name: 'wide', ...around({ az: 30, el: 10, fovV: 34, fill: 0.3, targetLift: -0.35 }, { az: -10, fill: 0.04 }) },   // the corner: the desk under the build
     { name: 'macro', from: { az: -40, el: 6, fovV: 14, distMm: 420, aim: 'drawer-front' }, to: { az: -31, el: 4, fovV: 14, distMm: 210, aim: 'drawer-front' } },   // as the tabletop's (Joey 2026-10-25)
     { name: 'side', from: { az: 66, el: 6, fovV: 26, fill: 0.62 }, to: { az: 50, el: 5, fovV: 26, fill: 0.62 } },
+    { name: 'label', from: { az: -16, el: 3, fovV: 18, fill: 0.42, aim: 'label' }, to: { az: 14, el: 2, fovV: 18, fill: 0.48, aim: 'label' }, focusIn: true, reversible: true },
+    { name: 'glide', from: { az: -30, el: 2, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 2, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
+    { name: 'pullback', from: { az: -34, el: 4, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 6, fovV: 28, fill: 0.5, targetLift: -0.04 }, blend: true },
+    { name: 'dolly', from: { az: 20, el: 4, fovV: 40, fill: 0.5, targetLift: -0.04 }, to: { az: 20, el: 4, fovV: 22, fill: 0.5, targetLift: -0.04 }, reversible: true },
   ],
   /* AN UNDER-TABLE BUILD hangs under the desk's front edge (roomAnchor; Joey 2026-10-25: "align the under-table build to
      be installed under this scenes table"), so it is seen from in front of the desk, from about its top or below:
      nothing looks down past the edge onto it (the desk top would hide it), the low shot looks up at the rails and the
      drawers' undersides, and the top shot gives way to a wide one of the desk with the build under its edge */
   'under-table': [
-    { name: 'hero', from: { az: 26, el: 6, fovV: 30, fill: 0.5 } },
+    { name: 'hero', ...around({ az: 26, el: 6, fovV: 30, fill: 0.5 }, { az: -6, el: -1, fill: 0.04 }) },
     { name: 'push', from: { az: 12, el: 3, fovV: 20, fill: 0.56 }, to: { az: 6, el: 2, fovV: 20, fill: 0.76 } },
-    { name: 'low', from: { az: -30, el: -18, fovV: 46, fill: 0.72, targetLift: 0.1 } },   // crouched in front of the desk, looking up under it
-    { name: 'detail', from: { az: 30, el: 4, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, drawer: true },
-    { name: 'slide', from: { az: -22, el: 3, fovV: 22, fill: 0.7 }, to: { az: 14, el: 3, fovV: 22, fill: 0.7 } },
-    { name: 'wide', from: { az: 28, el: 18, fovV: 34, fill: 0.3, targetLift: 0.3 } },   // the desk, the build under its edge
+    { name: 'low', ...around({ az: -30, el: -18, fovV: 46, fill: 0.72, targetLift: 0.1 }, { az: 8, el: 3 }) },   // crouched in front of the desk, looking up under it
+    { name: 'detail', ...around({ az: 30, el: 4, fovV: 24, fill: 1.35, targetLift: -0.3, aim: 'drawer' }, { az: -6, fill: 0.1 }), drawer: true },
+    { name: 'slide', from: { az: -22, el: 3, fovV: 22, fill: 0.7 }, to: { az: 14, el: 3, fovV: 22, fill: 0.7 }, reversible: true },
+    { name: 'wide', ...around({ az: 28, el: 18, fovV: 34, fill: 0.3, targetLift: 0.3 }, { az: -10, fill: 0.04 }) },   // the desk, the build under its edge
     { name: 'macro', from: { az: -40, el: 5, fovV: 14, distMm: 420, aim: 'drawer-front' }, to: { az: -31, el: 3, fovV: 14, distMm: 210, aim: 'drawer-front' } },   // as the tabletop's (Joey 2026-10-25)
     { name: 'side', from: { az: 60, el: 2, fovV: 26, fill: 0.62 }, to: { az: 46, el: 2, fovV: 26, fill: 0.62 } },   // round the knee-space side
+    { name: 'label', from: { az: -16, el: 3, fovV: 18, fill: 0.42, aim: 'label' }, to: { az: 14, el: 1, fovV: 18, fill: 0.48, aim: 'label' }, focusIn: true, reversible: true },
+    { name: 'glide', from: { az: -30, el: 1, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 1, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
+    { name: 'pullback', from: { az: -34, el: 3, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 4, fovV: 28, fill: 0.5 }, blend: true },
+    { name: 'dolly', from: { az: 20, el: 3, fovV: 40, fill: 0.5 }, to: { az: 20, el: 3, fovV: 22, fill: 0.5 }, reversible: true },
   ],
 };
 
@@ -398,6 +433,19 @@ export function pickDrawerUnit(units, build) {
   return best;
 }
 
+/* The glide's row (2026-10-25): the top row of the fronts' grips and handles, `boxes` their boxes in mm: those whose
+ * centre lies within `tol` of the highest one, their span across, their height and the front plane. Without any, a line
+ * across the build's front a fifth of its height down from the top, inset by 15 % each side. */
+export function rowOf(boxes, build, tol = 6) {
+  const ok = (boxes || []).filter((b) => b && b.max.x > b.min.x);
+  if (!ok.length) {
+    const w = build.max.x - build.min.x;
+    return { x0: build.min.x + 0.15 * w, x1: build.max.x - 0.15 * w, y: build.max.y - 0.2 * (build.max.y - build.min.y), z: build.max.z };
+  }
+  const cy = (b) => (b.min.y + b.max.y) / 2, top = Math.max(...ok.map(cy)), row = ok.filter((b) => top - cy(b) <= tol);
+  return { x0: Math.min(...row.map((b) => b.min.x)), x1: Math.max(...row.map((b) => b.max.x)), y: row.reduce((a, b) => a + cy(b), 0) / row.length, z: Math.max(...row.map((b) => b.max.z)) };
+}
+
 /* A slow move's easing: a half cosine, gentle at both ends (a cubic's middle is too quick for a move this long). */
 export const easeSine = (k) => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, k)));
 
@@ -460,7 +508,7 @@ export function mixShot(shot, k) {
   const a = shot.from, b = shot.to;
   if (!b) return { ...a };
   const m = { ...a };
-  for (const key of ['az', 'el', 'fovV', 'fill', 'distMm', 'targetLift']) if (a[key] != null && b[key] != null) m[key] = a[key] + (b[key] - a[key]) * k;
+  for (const key of ['az', 'el', 'fovV', 'fill', 'distMm', 'targetLift', 'shiftX']) if (a[key] != null && b[key] != null) m[key] = a[key] + (b[key] - a[key]) * k;
   return m;
 }
 
@@ -476,9 +524,32 @@ export function fitShot(spec, box, view, interior, aims = {}, { floorY = 0 } = {
     if (aims.front) s.targetAt = aims.front;
     else { delete s.distMm; s.fill = 1.2; }
   }
+  // a label: aimed at its centre and fitted to its own box (`aims.label`: { box }; done.js drops the shot without one)
+  if (s.aim === 'label' && aims.label) { const b = aims.label.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: b.max.z }; }
+  // the fronts' top row (`aims.row`: { x0, x1, y, z }), the aim `shiftX` of its width from its middle
+  if (s.aim === 'row' && aims.row) { const r = aims.row; s.targetAt = { x: r.x0 + (r.x1 - r.x0) * (0.5 + (s.shiftX || 0)), y: r.y, z: r.z }; }
   const cam = clampToInterior(shotCamera(s, box, view), interior);
   const floor = floorY + FLOOR_MM;
   return cam.position.y < floor ? { ...cam, position: { ...cam.position, y: floor }, floored: true } : cam;
+}
+
+/* A BLENDED SHOT (the pullback, 2026-10-25): its two ends fitted on their own terms (a set distance on a faceplate's corner,
+ * the whole build fitted by `fill`), the direction, the lens and the aim mixed along the move, and the distance mixed
+ * GEOMETRICALLY, so the pull out reads as even all the way (an even step in distance is a lurch near the faceplate and a
+ * crawl at the end). `fit(spec)` is the scene's fitShot for this build and view. Each end is fitted at the mixed
+ * direction and lens, so the two agree on where the camera looks from and only the distance and the aim differ. */
+export function blendShot(shot, k, fit) {
+  const m = mixShot(shot, k), dir = { az: m.az, el: m.el, fovV: m.fovV };
+  return blendCams(fit({ ...shot.from, ...dir }), fit({ ...shot.to, ...dir }), k);
+}
+export function blendCams(a, b, k) {
+  const lerp = (p, q) => ({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k, z: p.z + (q.z - p.z) * k });
+  const off = (c) => ({ x: c.position.x - c.target.x, y: c.position.y - c.target.y, z: c.position.z - c.target.z });
+  const len = (v) => Math.hypot(v.x, v.y, v.z) || 1;
+  const oa = off(a), ob = off(b), da = len(oa), db = len(ob);
+  const u = lerp({ x: oa.x / da, y: oa.y / da, z: oa.z / da }, { x: ob.x / db, y: ob.y / db, z: ob.z / db }), lu = len(u);
+  const d = Math.pow(da, 1 - k) * Math.pow(db, k), target = lerp(a.target, b.target);
+  return { position: { x: target.x + (u.x / lu) * d, y: target.y + (u.y / lu) * d, z: target.z + (u.z / lu) * d }, target, fov: a.fov + (b.fov - a.fov) * k, distance: d, radius: a.radius + (b.radius - a.radius) * k, fill: b.fill };
 }
 
 /* The baked contact shadow's footprint for the Fast tier: a disc-ish plane under the build, a little wider than it. */

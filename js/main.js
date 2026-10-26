@@ -507,7 +507,13 @@ var sceneHold = { on: false, env: null, bg: null };
 function sceneEnv() { const q = QUALITY[quality]; if (!q.env) return null; return sceneHold.on ? sceneHold.env : studioEnv(); }
 function holdScene(on, { environment = null } = {}) {
   if (!!on === sceneHold.on) { if (on) { sceneHold.env = environment; if (!cinema.on) scene.environment = sceneEnv(); } return; }
+  /* ... and no W / H / L callouts while it holds (Joey 2026-10-25: "i don't want the measurements to ever be visible in
+     this final scene, if they are on i want them to turn off for it"): setDims under the hold only records the wish (a
+     step's own setDims, a drawer focus ending, a rebuild), and the release puts back the last one */
+  const dimsHad = dims.on;
   sceneHold.on = !!on; sceneHold.env = on ? environment : null;
+  if (on) { dims.want = false; if (dimsHad) setDims(true); }
+  else { const w = !!dims.want; dims.want = null; setDims(w); }
   /* ... and the camera is the scene's from here: a stage camera tween still under way (the End page's own move into its
      view) would go on writing the camera under the scene's shots and leave it on the End page's view (the 2026-10-24
      grammar e2e, a cached room entered inside that tween) */
@@ -6532,6 +6538,13 @@ function unitBox(unitId) {
   for (const i of unitInstances(unitId)) if (i.group.visible) { i.group.updateWorldMatrix(true, true); box.expandByObject(i.group); }
   return box;
 }
+/* the box of a unit's visible parts of the given types (the Done scene's subjects: a drawer's Label, its Handle), empty
+   when it has none */
+function unitPartBox(unitId, types) {
+  const want = new Set(types), box = new THREE.Box3();
+  for (const i of unitInstances(unitId)) if (i.group.visible && want.has(typeByNode[i.cfg.node])) { i.group.updateWorldMatrix(true, true); box.expandByObject(i.group); }
+  return box;
+}
 /* where a unit sits on the page (CSS px of its bounding box's centre), for harnesses that drive a pointer - the hint-clip
    recorder (tools/hint-clips.mjs) moves a cursor to a drawer the way a visitor would. null when the unit is not on screen. */
 function unitScreen(unitId) {
@@ -9619,6 +9632,7 @@ function updateMeasure() { // render-loop: constant marker screen-size + label t
 const dims = { on: false, group: null, lines: {}, choice: '', hCorner: null, lastKey: null };
 function setDims(on) {
   if (dFocus.peek) { dFocus.peek = null; exitDrawerFocus(true); }   // the ruler (or a workspace) during a peek: the pills are the build's again; the drawer stays open
+  if (sceneHold.on) { dims.want = !!on; on = false; }   // a held scene shows none: the wish waits for its release (holdScene)
   dims.on = on && !assembledBox.isEmpty();
   dims.choice = ''; dims.hCorner = null; dims.lastKey = null; invalidateFrame();
   if (dims.group) { scene.remove(dims.group); dims.group.traverse(o => o.geometry?.dispose()); dims.group = null; }
@@ -11414,7 +11428,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the finished build's overall W×H×L in mm, the number the cover's "mm · W·H·L" chip shows
     buildSize() { return assembledBox.isEmpty() ? null : assembledBox.getSize(new THREE.Vector3()); },
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
-    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, warmRelief, reliefLive: () => reliefApplied, setLens, lens: () => (lens ? { ...lens } : null), accTotal, accumulates: () => !!QUALITY[quality].accum, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
+    update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, warmRelief, reliefLive: () => reliefApplied, setLens, lens: () => (lens ? { ...lens } : null), accTotal, accumulates: () => !!QUALITY[quality].accum, unitPartBox, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
