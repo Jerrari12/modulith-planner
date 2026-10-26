@@ -3573,3 +3573,8 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   and body translucent, strength 2, 4.1 -> 5.3 ms, paired median +0.9 ms - inside a 120 Hz frame (8.33 ms) either way.
   ⚠ Two earlier runs overlapped GPU work in another session (Joey caught it) and read 6-8 ms frames with a 4-8 ms spread
   inside one arm; they are not the record. Lesson: two sessions benchmarking one GPU skew each other - say so first.
+- **Live 2026-10-26 at `64dedfa4`** (Joey's go; main fast-forwarded to the branch). Main run 40415031884: 12.7 min, every
+  job green. `lattice-prod.mjs 64dedfa4` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed on the live planner
+  with no URL switch: Very High, a Chevron build with a Silk Black body and Translucent Natural faces, the lattice on by
+  default, both Chevron face strips baked, the faces visibly changed by the lattice (the same view off and on; its pair
+  of shots sits beside it), no page errors. The other session was told before and after (one GPU).
