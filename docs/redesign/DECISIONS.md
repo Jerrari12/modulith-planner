@@ -3480,3 +3480,8 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   plus a boot per shard. A docs-only push now runs nothing; before, 50-66 min.
 - **Not done here:** the weights stay the local soft-render run's (within one machine the runner's proportions follow
   them); the runs-on 26.04 note is untouched.
+- **Live 2026-10-26 at `1018463c`** (Joey's go; the merge of ci-speedup). Main run 40316065152: 13.7 min wall, every job
+  green, e2e shards 12.6 / 7.5 / 11.2 / 11.4 / 8.3 / 5.8 min, the deploy job's freshness check passed and deploy-pages
+  published - the first run of the deploy as its own job. The live planner serves `boot.js?v=1018463c`, and
+  `peek-prod.mjs 1018463c` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed with no page errors. This Live
+  line is a docs-only push: by the new filter it starts no run.
