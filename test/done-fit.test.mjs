@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, MUG_PAIRS, MUG_HOME_SHARE, hashSeed, mugPlan, mugSpots, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -456,60 +456,60 @@ test('the shots of 2026-10-25: the label glide fits the label, the glide trucks 
   assert.equal(shot('label').focusIn, true, 'the label comes into focus');
 });
 
-test('the mugs: a build\'s own seed picks its sayings, the empty mug\'s turn and its spot, the same every time and other builds otherwise; the spots clear of the props, the build, the desk\'s edge and the coffee\'s front', () => {
+test('the mugs: a build\'s own seed picks how many (none to three), their looks, sayings, turns and spots, the same every time; the spots clear of the props, the build, each other and each other\'s view; the face a shot looks at', () => {
   assert.equal(hashSeed('#build=abc'), hashSeed('#build=abc'), 'a link, one seed');
   assert.notEqual(hashSeed('#build=abc'), hashSeed('#build=abd'), 'another link, another');
-  const a = mugPlan(rngFrom(hashSeed('#build=abc'))), b = mugPlan(rngFrom(hashSeed('#build=abc')));
-  assert.deepEqual(a, b, 'the same build, the same mugs');
-  const plans = Array.from({ length: 60 }, (_, i) => mugPlan(rngFrom(hashSeed('#build=' + i))));
-  const backs = new Set(plans.map((p) => p.empty.back.lines.join('|'))), fronts = new Set(plans.map((p) => p.coffee.back.lines.join('|')));
-  assert.ok(backs.size >= 8 && fronts.size >= 6, `the sayings vary across builds (${backs.size} empty, ${fronts.size} coffee)`);
-  assert.ok(plans.some((p) => p.empty.back.lines[0] === 'NEED DRAWER'), 'Joey\'s NEED DRAWER among them');
-  assert.ok(plans.some((p) => p.empty.back.lines.join(' ').includes('♥')), 'and the I ♥ MODULAR STORAGE SYSTEMS');
-  const paired = plans.filter((p) => MUG_PAIRS.some(([x, y]) => x === p.coffee.back && y === p.empty.back)).length;
-  assert.ok(paired > 3 && paired < 30, `a pair now and then (${paired} of 60)`);
-  for (const p of plans) assert.ok(p.empty.turnDeg >= 0 && p.empty.turnDeg <= 360 && p.empty.spot >= 0 && p.empty.spot < 1);
-  assert.equal(MUGS.modulith.body, '#4a4c54', 'the empty mug in the site\'s charcoal'); assert.equal(MUGS.modulith.ink, '#ececee', 'its paper ink');
-  // the spots, on the room as it stands (stage mm): the mug at (440, 219), the monitor's body behind it to the right, the
-  // keyboard to its right, the caliper in front to its left, the build at the centre
-  const c = { x: 440, z: 219 };
+  assert.deepEqual(mugPlan(rngFrom(hashSeed('#build=abc'))), mugPlan(rngFrom(hashSeed('#build=abc'))), 'the same build, the same mugs');
+  const plans = Array.from({ length: 400 }, (_, i) => mugPlan(rngFrom(hashSeed('#build=' + i))));
+  const counts = [0, 1, 2, 3].map((n) => plans.filter((p) => p.count === n).length / plans.length);
+  counts.forEach((c, n) => assert.ok(Math.abs(c - MUG_COUNTS[n]) < 0.07, `${n} mugs in about ${MUG_COUNTS[n] * 100} % of builds (${(c * 100).toFixed(0)} %)`));
+  for (const p of plans) assert.equal(p.mugs.length, p.count);
+  const off = plans.filter((p) => p.notebookOff).length / plans.length;
+  assert.ok(Math.abs(off - NOTEBOOK_OFF_SHARE) < 0.08, `the notebook off in about ${NOTEBOOK_OFF_SHARE * 100} % (${(off * 100).toFixed(0)} %)`);
+  const all = plans.flatMap((p) => p.mugs);
+  for (const look of MUG_LOOKS) assert.ok(all.some((m) => m.look === look), `the ${look} look appears`);
+  assert.ok(all.every((m) => sayingsOf(m.look).includes(m.back) || MUG_PAIRS.some((pr) => pr.includes(m.back))), 'each saying is its look\'s voice, or a pair\'s');
+  assert.ok(all.some((m) => m.back.lines[0] === 'NEED DRAWER') && all.some((m) => m.back.lines.join(' ').includes('♥')), 'NEED DRAWER and the I ♥ among them');
+  for (const p of plans) for (let i = 1; i < p.mugs.length; i++) assert.notEqual(p.mugs[i].back, p.mugs[i - 1].back, 'no saying twice in a row');
+  assert.ok(plans.some((p) => p.count >= 2 && MUG_PAIRS.some(([x, y]) => p.mugs[0].back === x && p.mugs[1].back === y)), 'a pair now and then');
+  assert.equal(mugPlan(rngFrom(1), { count: 3 }).count, 3, 'a forced count'); assert.equal(mugPlan(rngFrom(1), { count: 0 }).mugs.length, 0);
+  assert.equal(MUGS.modulith.body, '#4a4c54', 'the charcoal a little lighter than the site\'s (it multiplies the bake)');
+  // the spots, on the room as it stands (stage mm)
   const obstacles = [
     { min: { x: 460, z: 10 }, max: { x: 1080, z: 55 } }, { min: { x: 640, z: -17 }, max: { x: 900, z: 183 } }, { min: { x: 550, z: 119 }, max: { x: 990, z: 259 } },
     { min: { x: 103, z: 190 }, max: { x: 337, z: 276 } }, { min: { x: -135 - 28, z: -92 - 28 }, max: { x: 135 + 28, z: 117 + 28 } },
   ];
   const desk = { min: { x: -680, z: -117 }, max: { x: 1120, z: 289 } };
-  const spots = mugSpots(c, obstacles, desk);
-  assert.ok(spots.length >= 3, `somewhere to stand (${spots.length} spots)`);
-  for (const p of spots) {
-    assert.ok(p.z <= c.z, 'never in front of the coffee');
-    assert.ok(p.x - 70 >= desk.min.x + 25 && p.x + 70 <= desk.max.x - 25 && p.z - 70 >= desk.min.z + 25, 'on the desk, off its edge');
-    for (const o of obstacles) {
-      const dx = Math.max(o.min.x - 12 - p.x, 0, p.x - o.max.x - 12), dz = Math.max(o.min.z - 12 - p.z, 0, p.z - o.max.z - 12);
-      assert.ok(Math.hypot(dx, dz) > 70, `clear of every prop and the build (${JSON.stringify(p)})`);
+  const spots = deskSpots(obstacles, desk);
+  assert.ok(spots.some((p) => p.x < -200) && spots.some((p) => p.x > 300), `spots either side of the build (${spots.length})`);
+  for (const p of spots) for (const o of obstacles) assert.ok(Math.hypot(Math.max(o.min.x - 12 - p.x, 0, p.x - o.max.x - 12), Math.max(o.min.z - 12 - p.z, 0, p.z - o.max.z - 12)) > 70, 'clear of every box');
+  const cam = { x: 620, z: 1600 };
+  for (const fr of [[0.1, 0.5, 0.9], [0.3, 0.31, 0.32], [0.9, 0.1, 0.5]]) {
+    const ps = pickSpots(spots, fr, 170, (p, q) => apartFrom(cam, p, q)).filter(Boolean);
+    assert.ok(ps.length >= 2, 'room for more than one');
+    for (let i = 0; i < ps.length; i++) for (let j = 0; j < i; j++) {
+      assert.ok(Math.hypot(ps[i].x - ps[j].x, ps[i].z - ps[j].z) >= 170, 'never touching');
+      assert.ok(apartFrom(cam, ps[i], ps[j]), 'neither hiding the other from the camera');
     }
   }
-  const d = (p) => Math.hypot(p.x - c.x, p.z - c.z);
-  for (let i = 1; i < spots.length; i++) assert.ok(d(spots[i]) >= d(spots[i - 1]) - 1e-9, 'nearest first');
-  assert.deepEqual(mugSpots(c, [{ min: { x: -2000, z: -2000 }, max: { x: 2000, z: 2000 } }], desk), [], 'and none where nothing is free');
-  // a saying's layout: one size for its big lines, the largest that fits, the small line a third of it
+  assert.equal(apartFrom(cam, { x: 400, z: 0 }, { x: 400 - 0.2 * 220, z: 200 }), false, 'two mugs on one line of sight hide each other');
+  assert.equal(apartFrom(cam, { x: 0, z: 0 }, { x: 300, z: 0 }), true, 'side by side they do not');
+  assert.deepEqual(pickSpots([{ x: 0, z: 0 }], [0.5, 0.5]), [{ x: 0, z: 0 }, null], 'a mug with nowhere left stands nowhere');
+  // the face a shot looks at: the saying where it faces the room, else the logo, else neither
+  assert.deepEqual(mugFace(180), { side: 'saying', az: 0 }); assert.deepEqual(mugFace(0), { side: 'logo', az: 0 });
+  assert.deepEqual(mugFace(200), { side: 'saying', az: 20 }); assert.equal(mugFace(90), null, 'side on: the handle or its other side');
+  // a saying's layout: one size for its lines, the largest that fits, the small line a third of it, a larger line counted
   const fit = (line, s) => line.length * 0.7 * s;
   const lay = sayingLayout({ lines: ['ONE MORE DRAWER.', 'THEN I’M DONE.'], small: 'Last updated: one drawer ago.' }, 50, 60, fit);
   assert.ok(Math.abs(lay.size - 50 / (16 * 0.7)) < 1e-9, `the widest line fills the width (${lay.size})`);
   assert.ok(Math.abs(lay.small - lay.size * 0.36) < 1e-12);
   const tall = sayingLayout(MUGS.modulith.sayings[0], 80, 60, fit);
   assert.ok(tall.size * tall.lead * 7 <= 60 + 1e-9, 'seven lines fit the height');
-  // a line drawn larger (Astra's UNSUPERVISED): its share of the height and of the width counted at its own size
   const unsup = MUGS.jerrari.sayings.find((x) => x.lines[1] === 'UNSUPERVISED');
-  assert.ok(unsup && unsup.accent[0] === 1 && unsup.scale[1] > 1, 'I WAS LEFT / UNSUPERVISED / WITH CALIPERS, its middle line orange and largest');
   const ul = sayingLayout(unsup, 80, 60, fit);
-  assert.deepEqual(ul.scales, unsup.scale);
-  assert.ok(ul.size * ul.lead * ul.scales.reduce((a, b) => a + b, 0) <= 60 + 1e-9 && fit('UNSUPERVISED', ul.size * 1.4) <= 80 + 1e-9, 'the larger line fits too');
-  // the coffee's own place: at home in about MUG_HOME_SHARE of builds, elsewhere otherwise, anywhere on the desk that is free
-  const homes = plans.filter((x) => x.coffee.home).length;
-  assert.ok(homes > 60 * MUG_HOME_SHARE * 0.5 && homes < 60 * Math.min(1, MUG_HOME_SHARE * 1.6), `at home in some builds, not all (${homes} of 60)`);
-  const free = deskSpots(obstacles, desk);
-  assert.ok(free.some((p) => p.x < -200) && free.some((p) => p.x > 300), `spots on both sides of the build (${free.length})`);
-  for (const p of free) for (const o of obstacles) assert.ok(Math.hypot(Math.max(o.min.x - 12 - p.x, 0, p.x - o.max.x - 12), Math.max(o.min.z - 12 - p.z, 0, p.z - o.max.z - 12)) > 70, 'clear of every box');
+  assert.ok(ul.size * ul.lead * ul.scales.reduce((a, b) => a + b, 0) <= 60 + 1e-9 && fit('UNSUPERVISED', ul.size * 1.4) <= 80 + 1e-9, 'a larger line fits too');
+  // Astra: the long ones broken short
+  for (const look of ['jerrari', 'modulith']) for (const sy of MUGS[look].sayings) assert.ok(sy.lines.every((l) => l.length <= 20), `no line over 20 characters (${sy.lines.join(' / ')})`);
 });
 
 /* THE VISITOR'S ROOM COLOURS (2026-10-25): the colour maths the room is repainted by. The bake's paint is room.json's

@@ -71,6 +71,9 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
 const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} };
 async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
 async function open(ws, { query = '', phone = false, context = null } = {}) {
+  // the final scene's mugs come from the build's link (done.js makeMugs); a case that does not ask for its own (?mugs=N, or
+  // ?mugs=plan for the link's own) gets the room as it was composed: one mug at home, the notebook on the desk
+  if (/done=room/.test(query) && !/mugs=/.test(query)) query += '&mugs=home';
   const ctx = context || await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
   if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
@@ -2686,10 +2689,10 @@ test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed i
    focus as it fades in ("focusing on specific things, like if they add a custom label ... starting a stationary scene
    out of focus and ending with it focused on a part of the build"), and the mug wears the logo and, on its back, the
    words ("as if it were print on it like a real coffee mug"). At High, where the shots move. */
-test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'s words get the label shot that comes into focus, and the build\'s mugs stand printed, the second at a free spot', async () => {
+test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'s words get the label shot that comes into focus, and the mugs stand printed, each at its own free spot', async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 1500 }; });
-  const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
+  const { page, errors } = await open('assemble', { query: '&done=room&mugs=3', context: ctx });
   await btn(page, 'Skip to the finished build', '#ws-steps').click();
   await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
   // EdgeLabel faceplates (the label parts; the suite's build has Classic), as the Labels panel's switch applies them, then a
@@ -2729,20 +2732,26 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
   assert.ok(Math.abs(f0.target[0] - c[0]) < 1 && Math.abs(f0.target[1] - c[1]) < 1, `aimed at the label (${f0.target.map((n) => n.toFixed(1))} vs ${c.map((n) => n.toFixed(1))})`);
   await page.waitForFunction(() => window.__GEN2_DONE__.focus.state !== 'running', null, { timeout: 6000 }).catch(() => assert.fail('the focus-in never ended'));
   assert.equal(blur((await page.evaluate(() => window.__GEN2_DONE__.focus)).filter), 0, 'and sharp once it has');
-  // THE MUGS: the build's own plan, both prints drawn (the logo's SVG and the saying's face loaded), the second mug at a
-  // free spot with its handle and its shadow, the mugs' shot in the grammar
-  await page.waitForFunction(() => { const m = window.__GEN2_DONE__.mugs; return m && m.logos.every(Boolean) && m.sayings.every(Boolean); }, null, { timeout: 15_000 }).catch(async () => assert.fail('the mugs\' prints never drew: ' + JSON.stringify(await page.evaluate(() => window.__GEN2_DONE__.mugs))));
-  const mp = await page.evaluate(() => { const d = window.__GEN2_DONE__, v = window.__GEN2_VIEWER__, T = v.THREE, c = new T.Box3().setFromObject(v.scene.getObjectByName('mug')).getCenter(new T.Vector3()); return { ...d.mugs, coffee: [c.x, c.z], names: d.sequence.names }; });
-  assert.ok(mp.plan.coffee.back.lines.length > 0 && mp.plan.empty.back.lines.length > 0, `a saying on each mug (${JSON.stringify(mp.plan)})`);
-  assert.deepEqual(mp.logos, [true, true], 'both logos drawn');
-  assert.deepEqual(mp.empty.map((o) => [o.name, o.visible, o.parent]), [['done-mug-empty', true, 'done-room'], ['done-mug-empty', true, 'done-room']], 'the second mug and its handle, in the room');
-  assert.equal(mp.masks, 1, 'its shadow on the desk');
-  assert.ok(Math.abs(mp.empty[0].pos[0] - mp.spot.x) < 0.5 && Math.abs(mp.empty[0].pos[2] - mp.spot.z) < 0.5, `at its spot (${mp.empty[0].pos.map((n) => n.toFixed(1))} vs ${JSON.stringify(mp.spot)})`);
-  assert.ok(Math.hypot(mp.spot.x - mp.coffee[0], mp.spot.z - mp.coffee[1]) >= 169 && mp.spot.z <= mp.coffee[1] + 0.5, 'beside or behind the coffee, not in front of it');
-  if (mp.coffeeAt) assert.ok(Math.abs(mp.coffee[0] - mp.coffeeAt.x) < 0.5 && Math.abs(mp.coffee[1] - mp.coffeeAt.z) < 0.5, `the coffee moved to its spot (${mp.coffee} vs ${JSON.stringify(mp.coffeeAt)})`);
+  // THE MUGS (three asked for: ?mugs=3): each at its own free spot, none touching another or hiding it from the hero's
+  // camera, none in front of the build, their prints drawn, the further ones with their shadows, the mugs' shot in the grammar
+  await page.waitForFunction(() => { const m = window.__GEN2_DONE__.mugs; return m && m.count && m.logos.every(Boolean) && m.sayings.every(Boolean); }, null, { timeout: 15_000 }).catch(async () => assert.fail('the mugs\' prints never drew: ' + JSON.stringify(await page.evaluate(() => window.__GEN2_DONE__.mugs))));
+  const mp = await page.evaluate(async () => {
+    const d = window.__GEN2_DONE__, v = window.__GEN2_VIEWER__, f = await import('/js/scenes/done-fit.js'), m = d.mugs, hero = d.sequence.fits.find((x) => x.name === 'hero').pos, bb = v.assembledBox;
+    const apart = []; for (let i = 0; i < m.placed.length; i++) for (let j = 0; j < i; j++) apart.push({ dist: Math.hypot(m.placed[i].at.x - m.placed[j].at.x, m.placed[i].at.z - m.placed[j].at.z), clear: f.apartFrom({ x: hero[0], z: hero[2] }, m.placed[i].at, m.placed[j].at) });
+    return { ...m, apart, build: { x0: bb.min.x, x1: bb.max.x, z0: bb.min.z }, names: d.sequence.names };
+  });
+  assert.ok(mp.count >= 2 && mp.count <= 3, `two or three mugs stood (${mp.count} of the 3 asked for)`);
+  assert.deepEqual(mp.logos, mp.placed.map(() => true), 'every logo drawn');
+  for (const m of mp.placed) {
+    assert.ok(Math.abs(m.pos[0] - m.at.x) < 0.5 && Math.abs(m.pos[2] - m.at.z) < 0.5 && m.visible, `a mug at its spot (${m.look}, ${m.pos.map((n) => n.toFixed(0))} vs ${JSON.stringify(m.at)})`);
+    assert.ok(!(m.at.x > mp.build.x0 - 60 && m.at.x < mp.build.x1 + 60 && m.at.z > mp.build.z0), `not in front of the build (${JSON.stringify(m.at)})`);
+  }
+  assert.equal(mp.placed.filter((m) => m.coffee).length, 1, 'one of them holds the coffee');
+  for (const a of mp.apart) assert.ok(a.dist >= 169.5 && a.clear, `no two touching, nor one hiding another from the hero (${JSON.stringify(a)})`);
+  assert.equal(mp.more, 2 * (mp.count - 1), 'each further mug a body and a handle'); assert.equal(mp.masks, mp.count - 1, 'and its shadow');
   assert.ok(mp.names.includes('mugs'), 'the mugs\' shot in the grammar');
-  // the prints are drawn: the mugs' shot held, its frame against the same frame with both prints blank (the glaze's own colour
-  // everywhere), the steam hidden for both (it moves between them); the charcoal glaze darker than the coffee's white
+  // the prints are drawn: the mugs' shot held, its frame against the same frame with every print blank, the steam hidden
+  // for both (it moves between them); the shot looks at one mug, its saying toward the room where one is
   const inked = await page.evaluate(async () => {
     const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, T = v.THREE;
     for (let sd = 1; sd < 60; sd++) { d.setTiming({ holdMs: 1e9, dipInMs: 0, maxFrameMs: 1e9, seed: sd, hold: true }); if (d.sequence.order.includes('mugs')) break; }
@@ -2757,14 +2766,20 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
     const was = mats.map((m) => m.userData.mug.uMugPrint.value); mats.forEach((m) => { m.userData.mug.uMugPrint.value = blank; });
     const off = await read();
     mats.forEach((m, i) => { m.userData.mug.uMugPrint.value = was[i]; }); steam.forEach((o) => { o.visible = true; }); blank.dispose();
-    let darker = 0, lighter = 0; for (let i = 0; i < on.length; i += 4) { const dd = (on[i] + on[i + 1] + on[i + 2]) - (off[i] + off[i + 1] + off[i + 2]); if (dd < -30) darker++; else if (dd > 30) lighter++; }
-    const bodies = [v.scene.getObjectByName('mug'), v.scene.getObjectByName('done-mug-empty')].map((o) => o.material.userData.mug.uMugBody.value.toArray());
-    return { prints: mats.length, darker, lighter, shot: d.sequence.shot, bodies };
+    let changed = 0; for (let i = 0; i < on.length; i += 4) if (Math.abs((on[i] + on[i + 1] + on[i + 2]) - (off[i] + off[i + 1] + off[i + 2])) > 30) changed++;
+    return { prints: mats.length, changed, shot: d.sequence.shot, subject: d.mugs.subject };
   });
-  assert.equal(inked.shot, 'mugs'); assert.equal(inked.prints, 2, 'two printed glazes');
-  assert.ok(inked.darker + inked.lighter > 300, `the prints draw in the mugs' shot (${JSON.stringify(inked)})`);
-  assert.ok(inked.bodies[1].every((c, i) => c < 0.2 && c < inked.bodies[0][i]), `the second mug's glaze charcoal, the coffee's white (${JSON.stringify(inked.bodies)})`);
-  // LEAVING: the strip's rest with it, the second mug off the cached room
+  assert.equal(inked.shot, 'mugs'); assert.equal(inked.prints, mp.count, 'a printed glaze on every mug');
+  assert.ok(inked.subject != null && inked.subject >= 0, `the shot looks at one of them (${inked.subject})`);
+  assert.ok(inked.changed > 300, `the prints draw in the mugs' shot (${JSON.stringify(inked)})`);
+  // and a view of the whole build after the mugs' shot, in every plan that has it (Astra: "build -> detail -> mug joke -> build")
+  const after = await page.evaluate(async () => {
+    const d = window.__GEN2_DONE__, f = await import('/js/scenes/done-fit.js'), out = [];
+    for (let sd = 1; sd <= 40; sd++) { d.setTiming({ holdMs: 1e9, dipInMs: 0, maxFrameMs: 1e9, seed: sd, hold: true }); const o = d.sequence.order, i = o.indexOf('mugs'); if (i >= 0 && i + 1 < o.length) out.push([o[i + 1], f.BUILD_VIEWS.includes(o[i + 1])]); }
+    return out;
+  });
+  assert.ok(after.length >= 5 && after.every(([, ok]) => ok), `a build view after the mugs every time (${JSON.stringify(after)})`);
+  // LEAVING: the strip's rest with it
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 15_000 });
   const gone = await page.evaluate(() => ({ cls: document.documentElement.className, title: document.querySelector('#ws-player .title')?.textContent }));
@@ -2773,49 +2788,47 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
   assert.equal(await page.evaluate(() => document.documentElement.classList.contains('scene-idle')), false, 'and the rest does not come back outside the scene');
   await btn(page, 'Watch the final scene', '#ws-player').click();
   await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugs && window.__GEN2_DONE__.mugs.logos.every(Boolean), null, { timeout: 60_000 });
-  const again = await page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-mug-empty') n++; }); return { n, plan: window.__GEN2_DONE__.mugs.plan }; });
-  assert.equal(again.n, 2, 'a second visit stands the second mug once, not twice');
+  const again = await page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-mug-more') n++; }); return { n, count: window.__GEN2_DONE__.mugs.count, plan: window.__GEN2_DONE__.mugs.plan }; });
+  assert.equal(again.n, 2 * (again.count - 1), 'a second visit stands its further mugs once: none left from the first visit');
   // the plan is the build link's own (the words above changed the link between the visits, so it is read again, not compared)
-  const linked = await page.evaluate(async () => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(location.hash || new URLSearchParams(location.search).get('build') || 'room'))); });
+  const linked = await page.evaluate(async () => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(location.hash || new URLSearchParams(location.search).get('build') || 'room')), { count: 3 }); });
   assert.deepEqual(again.plan, linked, 'the mugs follow the build\'s link');
   assert.deepEqual(clean(errors), [], 'no errors');
   await ctx.close();
 });
 
-/* THE MUGS ON THE LEFT (Joey 2026-10-25: "the mug could randomly be placed by the plan on the left side sometimes"). The
-   115 2W kit's link plans its coffee away from home and to the left (done-fit.js mugPlan, its seed), where the plant and the
-   notebook leave no room: the notebook and its pen leave the desk, their shadow with them, and both mugs stand left of the
-   build, their shadows under them; leaving and coming back plans the same, and the room the visit hands back is whole. */
-test('Assemble: the Done scene\'s mugs on the left: a build planned there takes the notebook off the desk and stands both mugs in its place', async () => {
-  const { ctx, page, errors } = await open('assemble', { query: '&build=115-tabletop-2w2h&done=room' });
-  const plan = await page.evaluate(async () => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed('115-tabletop-2w2h'))); });
-  assert.deepEqual([plan.coffee.home, plan.coffee.left], [false, true], 'this kit\'s plan: away from home, to the left');
-  await btn(page, 'Skip to the finished build', '#ws-steps').click();
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
-  await btn(page, 'Next', '#ws-player').click();
-  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
-  await btn(page, 'Watch the final scene', '#ws-player').click();
-  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugs, null, { timeout: 60_000 }).catch(() => assert.fail('the room never came on'));
-  const left = await page.evaluate(() => {
-    const v = window.__GEN2_VIEWER__, T = v.THREE, d = window.__GEN2_DONE__, room = v.scene.getObjectByName('done-room');
-    const bb = v.assembledBox, mid = (bb.min.x + bb.max.x) / 2, c = new T.Box3().setFromObject(room.getObjectByName('mug')).getCenter(new T.Vector3());
-    return { left: d.mugs.left, mid, coffee: [c.x, c.z], at: d.mugs.coffeeAt, spot: d.mugs.spot, notebook: ['notebook', 'pen'].map((n) => room.getObjectByName(n).visible),
-      shadows: d.shadows.filter((q) => q.group === 'notebook').map((q) => q.visible), plan: d.mugs.plan };
-  });
-  assert.equal(left.left, true, `the mugs stood left (${JSON.stringify(left)})`);
-  assert.ok(left.coffee[0] < left.mid && left.spot && left.spot.x < left.mid, `both left of the build (coffee ${left.coffee[0].toFixed(0)}, the second ${left.spot && left.spot.x.toFixed(0)}, the build's middle ${left.mid.toFixed(0)})`);
-  assert.ok(Math.abs(left.coffee[0] - left.at.x) < 0.5 && Math.abs(left.coffee[1] - left.at.z) < 0.5, 'the coffee at its spot');
-  assert.deepEqual(left.notebook, [false, false], 'the notebook and its pen off the desk');
-  assert.ok(left.shadows.length > 0 && left.shadows.every((v) => !v), 'and their shadow with them');
-  assert.deepEqual(left.plan, plan, 'the plan the link gives');
-  // leaving: the stage's own build back, and the notebook in the next visit's room again (each visit clones the room)
-  await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 15_000 });
-  await btn(page, 'Watch the final scene', '#ws-player').click();
-  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugs, null, { timeout: 60_000 });
-  assert.deepEqual(await page.evaluate(() => window.__GEN2_DONE__.mugs.plan), plan, 'the next visit plans the same');
-  assert.deepEqual(clean(errors), [], 'no errors');
-  await ctx.close();
+/* THE BUILD'S OWN MUGS (Joey 2026-10-25: "maybe sometimes there's no mugs, other times there might be two or 3 mugs, they
+   don't have to be grouped together either"), from the kits' own links (?mugs=plan: no debug pinning). The 165 3W kit's
+   plan stands three with the notebook off the desk (its shadow with it); the 115 3W kit's stands none: the room's own mug,
+   its coffee and its shadow off the desk, and no mugs' shot. */
+test('Assemble: the Done scene\'s mugs follow the build\'s link: three on one kit with the notebook off the desk, none on another', async () => {
+  for (const [kit, want] of [['165-tabletop-3w2h', { count: 3, notebookOff: true }], ['115-tabletop-3w2h', { count: 0, notebookOff: false }]]) {
+    const { ctx, page, errors } = await open('assemble', { query: `&build=${kit}&done=room&mugs=plan` });
+    const plan = await page.evaluate(async (k) => { const f = await import('/js/scenes/done-fit.js'); return f.mugPlan(f.rngFrom(f.hashSeed(k))); }, kit);
+    assert.deepEqual([plan.count, plan.notebookOff], [want.count, want.notebookOff], `${kit}: its link's plan`);
+    await btn(page, 'Skip to the finished build', '#ws-steps').click();
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+    await btn(page, 'Watch the final scene', '#ws-player').click();
+    await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.mugs && window.__GEN2_DONE__.sequence.on, null, { timeout: 60_000 }).catch(() => assert.fail(`${kit}: the room never came on`));
+    const st = await page.evaluate(() => {
+      const d = window.__GEN2_DONE__, room = window.__GEN2_VIEWER__.scene.getObjectByName('done-room'), vis = (n) => room.getObjectByName(n).visible;
+      return { plan: d.mugs.plan, count: d.mugs.count, notebook: [vis('notebook'), vis('pen')], notebookShadow: d.shadows.filter((q) => q.group === 'notebook').map((q) => q.visible),
+        mug: [vis('mug'), vis('coffee')], mugShadow: d.shadows.filter((q) => q.group === 'mug').map((q) => q.visible), names: d.sequence.names };
+    });
+    assert.deepEqual(st.plan, plan, `${kit}: the scene's plan is the link's`);
+    if (want.notebookOff) { assert.deepEqual(st.notebook, [false, false], `${kit}: the notebook and its pen off the desk`); assert.ok(st.notebookShadow.every((x) => !x), 'and their shadow'); }
+    else { assert.deepEqual(st.notebook, [true, true], `${kit}: the notebook on the desk`); }
+    if (want.count === 0) {
+      assert.equal(st.count, 0); assert.deepEqual(st.mug, [false, false], `${kit}: no mug, no coffee`); assert.ok(st.mugShadow.every((x) => !x), 'no mug\'s shadow');
+      assert.ok(!st.names.includes('mugs'), 'and no mugs\' shot');
+    } else {
+      assert.ok(st.count >= 2 && st.count <= want.count, `${kit}: its mugs stood (${st.count} of ${want.count})`); assert.deepEqual(st.mug, [true, true]);
+    }
+    assert.deepEqual(clean(errors), [], `${kit}: no errors`);
+    await ctx.close();
+  }
 });
 
 /* a room that cannot load (its module request fails) must not leave the scene mode on: the HUD hidden over an empty

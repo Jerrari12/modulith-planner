@@ -21,13 +21,17 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, hashSeed, mugSpots, deskSpots, sayingLayout, MUG_SHOT_SHARE, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
 const SCALE = 1000;        // metres in the GLB -> the stage's millimetres
 const ENTER_MS = 900;      // the camera's move into the shot
 const SUN_MM = 1200;       // the room's sun, this far from the build: inside the shadow camera's 3000 mm far plane (see applyLights)
+/* the build's shadow on the wall, lighter than on the desk (Astra 2026-10-25: "Soften the build's wall shadow a little ... the
+   desk and props are becoming more believable, so that shadow now stands out more"); its edge stays the room's 1 deg sun's,
+   the props' own (Joey 2026-10-23: at 6 deg it "faded to a faint gradient beside the props' crisp baked ones") */
+const WALL_SHADOW = 0.34;
 let loading = null;        // one load per page: the GLB and its JSON, shared by every entry
 let tracked = false;
 
@@ -264,7 +268,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     hemi: { color: stage.hemi.color.clone(), ground: stage.hemi.groundColor.clone(), intensity: stage.hemi.intensity },
     fill: { intensity: stage.fill.intensity, color: stage.fill.color.clone() },
     sunHalfDeg: stage.sunHalfDeg,
-    controls: controls.enabled, pan: controls.enablePan };
+    controls: controls.enabled, pan: controls.enablePan, polar: controls.maxPolarAngle };
   let json = null, buildBox = null, interior = null;   // interior: the room's box from its walls (roomInterior), the shots' clamp
   let roomLight = {};   // room.json's light-only maps, loaded (loadLight): the desk top's, for the visitor's plain desk colours
   let roomBounce = null;   // room.json's walls' bounce, loaded (loadBounce): the atlas and its rects
@@ -307,7 +311,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   function shotsFor() {
     const list = (GRAMMAR[mount] || GRAMMAR.tabletop).map((s) => ({ ...s, from: { ...s.from }, to: s.to ? { ...s.to } : undefined }))
-      .filter((s) => (s.name !== 'label' || subj.labels.length) && (s.name !== 'mugs' || subj.mugs));   // the label shot only where a drawer carries words, the mugs' only where the room has its mug
+      .filter((s) => (s.name !== 'label' || subj.labels.length) && (s.name !== 'mugs' || (subj.mugs && subj.mugs.length)));   // the label shot only where a drawer carries words, the mugs' only where a mug stands
     const hero = list.find((s) => s.name === 'hero');
     // the bake's own hero shot wins - for a build on the desk, the one it was framed for, the centre of the hero's drift
     if (mount === 'tabletop' && hero && json.shots && json.shots.hero) Object.assign(hero, around({ ...hero.from, ...json.shots.hero }, hero.swing || {}));
@@ -315,7 +319,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   /* THE SHOTS' SUBJECTS (2026-10-25; done-fit.js GRAMMAR): the labels with the visitor's own words on them (the label shot
      picks one each time it comes round) and the fronts' top row of grips and handles (the glide), found once per entry */
-  const subj = { labels: [], label: null, row: null, mugs: null };
+  const subj = { labels: [], label: null, row: null, mugs: null, mug: null };
   function pickSubjects() {
     const units = (stage.build && stage.build.placed) || [];
     const box = (id, types) => { const b = stage.unitPartBox ? stage.unitPartBox(id, types) : new THREE.Box3(); return b.isEmpty() ? null : plain(b); };
@@ -327,12 +331,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      top-left corner of its face (the faceplate's edge, the seam to the case and to the unit above: structure at the scale
      where the layer lines show) */
   function aims() {
-    if (!drawer.unit || !drawer.unit.box) return { label: subj.label, row: subj.row, mugs: subj.mugs };
+    if (!drawer.unit || !drawer.unit.box) return { label: subj.label, row: subj.row, mugs: subj.mug };
     const b = drawer.unit.box;
-    return { drawer: aimAt(plain(buildBox), b), front: { x: b.min.x + 0.08 * (b.max.x - b.min.x), y: b.max.y - 0.12 * (b.max.y - b.min.y), z: b.max.z }, label: subj.label, row: subj.row, mugs: subj.mugs };
+    return { drawer: aimAt(plain(buildBox), b), front: { x: b.min.x + 0.08 * (b.max.x - b.min.x), y: b.max.y - 0.12 * (b.max.y - b.min.y), z: b.max.z }, label: subj.label, row: subj.row, mugs: subj.mug };
   }
   const shotNamed = (name) => (seq.shots || shotsFor()).find((s) => s.name === name);
   // inside the room and above the desk, at k along its move (an under-table build's shots go below the desk top)
+  const GRAMMAR_HERO = () => shotsFor().find((s) => s.name === 'hero');
   const fitOne = (spec) => fitShot(spec, plain(buildBox), view(), interior, aims(), { floorY: mount === 'under-table' ? -Infinity : deskY });
   const fitAt = (shot, k) => (shot.blend && shot.to ? blendShot(shot, k, fitOne) : fitOne(mixShot(shot, k)));
   function drawerSet(open) {
@@ -456,6 +461,15 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // the mugs now and then, not every cycle ("every so often"), by the second random source so the order stays the seed's
     const mi = seq.order.indexOf('mugs');
     if (mi >= 0 && seq.turn && seq.turn() >= MUG_SHOT_SHARE) seq.order.splice(mi, 1);
+    // ... and a view of the whole build straight after them (Astra: "build -> detail -> mug joke -> build")
+    // (the mugs moved to just before the next build view, or the last one when none comes after them; never the first shot)
+    const at2 = seq.order.indexOf('mugs');
+    if (at2 >= 0 && !BUILD_VIEWS.includes(seq.order[at2 + 1])) {
+      seq.order.splice(at2, 1);
+      let j = seq.order.findIndex((n, k) => k >= Math.max(1, at2) && BUILD_VIEWS.includes(n));
+      if (j < 0) j = seq.order.findLastIndex((n, k) => k > 0 && BUILD_VIEWS.includes(n));
+      if (j > 0) seq.order.splice(j, 0, 'mugs');
+    }
     seq.cycle++; seq.idx = 0;
   }
   /* a shot begins, in the black: the camera on its opening (a moving shot at its start, any shot locked off at the middle
@@ -468,6 +482,10 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        order is the same whatever the turns) and its label (a different drawer's each time round, where there are several) */
     if (shot.reversible && shot.to && seq.turn && seq.turn() < 0.5) [shot.from, shot.to] = [shot.to, shot.from];
     if (shot.name === 'label' && subj.labels.length) subj.label = subj.labels[Math.floor((seq.turn ? seq.turn() : 0) * subj.labels.length) % subj.labels.length];
+    if (shot.name === 'mugs' && subj.mugs && subj.mugs.length) {   // one mug each time round, one whose saying faces the room where there is one
+      const pool = subj.mugs.filter((m) => m.face === 'saying').length ? subj.mugs.filter((m) => m.face === 'saying') : subj.mugs;
+      subj.mug = pool[Math.floor((seq.turn ? seq.turn() : 0) * pool.length) % pool.length];
+    }
     seq.shot = shot.name; seq.skipIn = skipIn; seq.cutAt = null; seq.cutK = null; seq.phase = null;
     seq.moving = moves() && !!shot.to && !seq.timing.hold;
     seq.k = seq.moving ? 0 : 0.5;
@@ -512,7 +530,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (b.phase === 'out') drawerCancel();
     }
     if (seq.moving && seq.cutAt == null) {
-      seq.k = b.k;
+      const sh = currentShot();
+      seq.k = sh && sh.settle ? easeSine(Math.min(1, Math.acos(Math.max(-1, Math.min(1, 1 - 2 * b.k))) / Math.PI / sh.settle)) : b.k;   // `settle`: the eased move done by that share of the visible time
       putCam(fitAt(currentShot(), seq.k));
       /* every moving shot is a verdict too, on its frames from 0.4 s to 2.4 s in (the first frames after a cut carry the
          new view's compiles): under 20 fps it locks off where it is, and the visit stays still from then on */
@@ -795,16 +814,15 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     };
     parts.steamRaf = requestAnimationFrame(tick);
   }
-  /* THE MUGS (done-fit.js MUGS, mugPlan, mugSpots; Joey 2026-10-25). The coffee mug wears JERRARI's logo toward the room and
-     a saying on its back; a second, empty mug in MODULITH's charcoal stands at a free spot near it, turned, its square logo
-     on one side and a saying on the other; which sayings, which spot and which turn come from the build's own seed, so a
-     build always shows the same mugs and another build others. The print is IN the glaze (glaze): the mug's material reads
-     a wrap-round print by the angle about its own axis and the height, and multiplies the bake by the glaze's colour, or
-     the ink's where there is ink, so dark ink on white and light ink on charcoal both keep the bake's shading. Both mugs
-     glossy: the desk's sheen (addSheen) at a glaze's roughness, the room's own environment in it. The empty mug is the
-     coffee mug's mesh again (its bake fits any place on the desk as well as the coffee's), its handle turned about the
-     axis, its shadow the coffee mug's shadow mask again under it; no coffee, no steam. Made after the environment capture
-     (the room it reflects has no mug of its own), on every visit, in the visit's own clone of the room; its prints' textures disposed on leave. */
+  /* THE MUGS (done-fit.js MUGS, mugPlan, pickSpots; Joey 2026-10-25). None to three on the desk, each its own look (JERRARI's
+     white, MODULITH's charcoal or white), saying, turn and free spot, all from the build's own seed, so a build always shows
+     the same mugs and another build others; the first holds the coffee and its steam. The print is IN the glaze (glaze): the
+     mug's material reads a wrap-round print by the angle about its own axis and the height, and multiplies the bake by the
+     glaze's colour, or the ink's where there is ink, so dark ink on white and light ink on charcoal both keep the bake's
+     shading. Glossy: the desk's sheen (addSheen) at a glaze's roughness, the room's own environment in it. A further mug is
+     the room's mug mesh again (its bake fits any place on the desk as well as the coffee's), its handle turned about the
+     axis, the coffee mug's shadow mask again under it. Made after the environment capture (the room it reflects has no mug
+     of its own), on every visit, in the visit's own clone of the room; its prints' textures disposed on leave. */
   const MUG_GLAZE_ROUGH = 0.12;
   const MUG_PRINT_GLSL = '\tfloat mugTh = atan( vMugP.x, vMugP.z ) - uMugTurn;\n'
     + '\tfloat mugR2 = max( dot( vMugP.xz, vMugP.xz ), 1e-12 );\n'
@@ -848,8 +866,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // "IMADEATHING" in the 2026-10-25 shots); measureText counts them too
     const setFont = (sz) => { g.font = font(sz); g.wordSpacing = type === 'condensed' ? `${(0.2 * sz).toFixed(1)}px` : '0px'; };
     // its block, as large as a real mug's print (Joey: "scaling them up to use a decent amount of space like a real mug"):
-    // over a quarter of the way round (100 deg, what a front view reads without the curve squeezing it) and 80 % of the height
-    const w = 0.28 * 2 * Math.PI * rMm, hh = 0.8 * hMm;
+    const w = 0.33 * 2 * Math.PI * rMm, hh = 0.82 * hMm;   // a third of the way round: the face a front view reads (Astra: "give longer jokes more room")
     g.textBaseline = 'middle'; g.textAlign = 'center';
     const drawLine = (line, x, y, s, ink) => {   // centred, a heart drawn red
       setFont(s * px);
@@ -890,121 +907,116 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     return tex;
   }
   function makeMugs(group) {
-    const mug = group.getObjectByName('mug'), handle = group.getObjectByName('mug_handle');
+    const mug = group.getObjectByName('mug'), handle = group.getObjectByName('mug_handle'), coffee = group.getObjectByName('coffee');
     if (!mug || !mug.geometry) return;
     mug.geometry.computeBoundingBox();
     const bb = mug.geometry.boundingBox, r = (bb.max.x - bb.min.x) / 2, h = bb.max.y - bb.min.y, rMm = r * SCALE, hMm = h * SCALE;   // the GLB's metres
-    const plan = mugPlan(rngFrom(hashSeed(location.hash || new URLSearchParams(location.search).get('build') || 'room')));   // the build's link (its #build=, or a kit's ?build=), not the page's other parameters
-    const made = { mats: [], meshes: [], masks: [], texs: [], plan, spot: null, coffeeAt: null, left: false };
+    /* the build's link (its #build=, or a kit's ?build=), not the page's other parameters. With ?debug, ?mugs=N sets how many,
+       and ?mugs=home the room as it was composed: one JERRARI mug at its home, the notebook on the desk (the e2e's default) */
+    const q = new URLSearchParams(location.search), m0 = debug ? q.get('mugs') : null;
+    const plan = m0 === 'home' ? { count: 1, notebookOff: false, mugs: [{ look: 'jerrari', back: MUGS.jerrari.sayings[0], turnDeg: 0, spot: 0, home: true }] }
+      : mugPlan(rngFrom(hashSeed(location.hash || q.get('build') || 'room')), { count: m0 != null && /^\d+$/.test(m0) ? +m0 : null });
+    const made = { mats: [], meshes: [], masks: [], texs: [], plan, placed: [] };
     parts.mugs = made;
+    subj.mugs = [];
     const gone = () => parts.mugs !== made;
     const linear = (hex) => (hex ? new THREE.Color(hex) : new THREE.Color(1, 1, 1));   // THREE.Color takes sRGB hex to linear
     const body = (m) => [].concat(m.material)[0];
     const src = { body: body(mug), handle: handle ? body(handle) : null };
-    // the empty mug's materials are made before the coffee's are glazed: the bake's own map and colour, the walls' bounce shader
-    const copyOf = (m) => { const c = new THREE.MeshBasicMaterial({ map: m.map, color: m.color.clone(), side: m.side }); c.onBeforeCompile = m.onBeforeCompile; made.mats.push(c); return c; };
-    const empty = { body: copyOf(src.body), handle: src.handle ? copyOf(src.handle) : null };
     const bounce = { body: !!src.body.userData.bounce, handle: !!(src.handle && src.handle.userData.bounce) };
-    // THE COFFEE MUG: JERRARI's, in the bake's white
-    const ct = mugPrint(MUGS.jerrari, plan.coffee.back, rMm, hMm, gone);
-    made.texs.push(ct);
-    /* the turns about each mug's own axis: the room's mug stands upright (its rotation the identity, measured 2026-10-25), so
-       the vertical is its axis; a mug that did not would keep its pose (Sol 01a17612) */
-    const upright = mug.quaternion.equals(new THREE.Quaternion());
-    const coffeeTurn = upright ? (plan.coffee.turnDeg * Math.PI) / 180 : 0;
-    glaze(src.body, { body: linear(MUGS.jerrari.body), tex: ct, turn: coffeeTurn, y0: bb.min.y, h, r });
-    if (src.handle) glaze(src.handle, { body: linear(MUGS.jerrari.body) });
-    // THE EMPTY MUG: at a free spot, nearest first, picked by the plan (none free, none made)
+    const fn = { body: src.body.onBeforeCompile, handle: src.handle && src.handle.onBeforeCompile };   // the walls' bounce shader, before any glaze
+    // a further mug's materials: the bake's own map and colour, the walls' bounce shader
+    const copyOf = (m, f) => { const c = new THREE.MeshBasicMaterial({ map: m.map, color: m.color.clone(), side: m.side }); c.onBeforeCompile = f; made.mats.push(c); return c; };
     group.updateWorldMatrix(true, true);
     const at = (o) => new THREE.Box3().setFromObject(o);
+    const q0 = parts.masks.find((m) => m.userData.doneShadow && m.userData.doneShadow.group === 'mug' && m.userData.doneShadow.surface === 'desk');
+    // NO MUGS: the coffee mug, its coffee (the steam a child of it) and its shadow off the desk
+    if (!plan.count) { for (const o of [mug, handle, coffee, q0]) if (o) o.visible = false; return; }
+    /* THE NOTEBOOK OFF THE DESK (NOTEBOOK_OFF_SHARE): the plant and the notebook leave no mug-sized room left of the build
+       (measured: no free spot there), so in some builds the notebook and its pen are gone, their shadow with them, and the
+       mugs may stand there */
+    if (plan.notebookOff && mount !== 'under-table') {
+      for (const p of (json.props || []).filter((x) => x.group === 'notebook')) { const o = group.getObjectByName(p.name); if (o) o.visible = false; }
+      for (const m of parts.masks) if (m.userData.doneShadow && m.userData.doneShadow.group === 'notebook') m.visible = false;
+    }
+    // what a mug must stand clear of: every prop on the desk, the build, and the desk in front of the build (where a mug
+    // would stand between the shots and the build)
     const own = new Set(['mug', 'mug_handle', 'coffee']);
-    /* THE LEFT SIDE (Joey: "the mug could randomly be placed by the plan on the left side sometimes"): the plant and the
-       notebook leave no mug-sized room left of the build (measured: no free spot there), so a build whose mugs go left
-       takes the notebook and its pen off the desk, their shadow with them, and the mugs stand in their place */
-    const goLeft = !plan.coffee.home && plan.coffee.left && mount !== 'under-table';
-    const notebook = goLeft ? (json.props || []).filter((p) => p.group === 'notebook').map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible) : [];
-    const notebookMasks = goLeft ? parts.masks.filter((q) => q.userData.doneShadow && q.userData.doneShadow.group === 'notebook' && q.visible) : [];
-    for (const o of [...notebook, ...notebookMasks]) o.visible = false;
     const obstacles = (json.props || []).filter((p) => !own.has(p.name)).map((p) => group.getObjectByName(p.name)).filter((o) => o && o.visible).map((o) => plain(at(o)));
     const desk = group.getObjectByName('desk_top');
     if (buildBox && !buildBox.isEmpty()) {
       obstacles.push({ min: { x: buildBox.min.x - 28, z: buildBox.min.z - 28 }, max: { x: buildBox.max.x + 28, z: buildBox.max.z + 28 } });
-      // and the desk in front of the build, where a mug would stand between the shots and the build
       if (desk) obstacles.push({ min: { x: buildBox.min.x - 60, z: buildBox.min.z }, max: { x: buildBox.max.x + 60, z: at(desk).max.z + 100 } });
     }
-    // THE COFFEE'S PLACE: its home, or a free spot anywhere on the desk; the mug, its handle and its coffee (the steam a
-    // child of it) moved together, and its shadow mask with them (in this visit's clone of the room: the cached load is never touched)
-    const q0 = parts.masks.find((q) => q.userData.doneShadow && q.userData.doneShadow.group === 'mug' && q.userData.doneShadow.surface === 'desk');
     const home = at(mug).getCenter(new THREE.Vector3());
-    /* the shadow mask's reach about the mug (world mm: it falls well to the mug's sunward side), so a mug moved with its mask
-       never carries the mask past the desk's ends or its front edge, where it would print the shadow in the air; a mask the
-       slide already cut at a desk end (its texture window trimmed) keeps the coffee at home (Sol's review round, 2026-10-25:
-       the 12W build carried a cut mask 140 mm past the end) */
+    /* the shadow mask's reach about the mug (world mm: it falls well to the mug's sunward side), so a mug and its mask never
+       carry the mask past the desk's edges, where it would print the shadow in the air; a mask the slide already cut at a
+       desk end (its texture window trimmed) keeps the coffee at home and makes no further mug (Sol 01a17612) */
     const sh = q0 && q0.userData.doneShadow, cut = !!(sh && (sh.u0 > 0 || sh.u1 < 1));
     const reach = q0 ? { x0: q0.position.x - q0.geometry.parameters.width / 2 - home.x, x1: q0.position.x + q0.geometry.parameters.width / 2 - home.x, z0: q0.position.z - q0.geometry.parameters.height / 2 - home.z, z1: q0.position.z + q0.geometry.parameters.height / 2 - home.z } : null;
-    const onDesk = (deskBox) => (p) => !reach || (p.x + reach.x0 >= deskBox.min.x && p.x + reach.x1 <= deskBox.max.x && p.z + reach.z0 >= deskBox.min.z && p.z + reach.z1 <= deskBox.max.z);   // its back edge too (Sol 01a17612 R2)
-    // the notebook back where the mugs do not go left after all, and back among the obstacles (Sol 01a17612 R3)
-    const notebookBack = () => { if (!notebook.length || notebook[0].visible) return; for (const o of [...notebook, ...notebookMasks]) o.visible = true; group.updateWorldMatrix(true, true); for (const o of notebook) obstacles.push(plain(at(o))); };
-    if (plan.coffee.home || !desk || cut) notebookBack();
-    if (!plan.coffee.home && desk && !cut) {
-      const deskBox = plain(at(desk)), fits = onDesk(deskBox);
-      // no nearer the front than its home (where the room's shots were composed round it: a mug in front of that leaves the
-      // hero's frame), only where the second mug can stand beside it, both shadows on the desk
-      const all = deskSpots(obstacles, deskBox).filter((p) => p.z <= home.z + 10 && fits(p) && mugSpots(p, obstacles, deskBox).filter(fits).length);
-      const mid = buildBox && !buildBox.isEmpty() ? (buildBox.min.x + buildBox.max.x) / 2 : home.x;
-      const left = all.filter((p) => p.x < mid);
-      const free = goLeft && left.length ? left : all.filter((p) => p.x >= mid || !goLeft);
-      if (!(goLeft && left.length)) notebookBack();   // no room on the left after all
-      else made.left = true;
-      if (free.length) {
-        const p = free[Math.floor(plan.coffee.spot * free.length) % free.length];
-        const toLocal = (wx, wz) => group.worldToLocal(new THREE.Vector3(wx, home.y, wz));
-        const d = toLocal(p.x, p.z).sub(toLocal(home.x, home.z));
-        for (const o of [mug, handle, group.getObjectByName('coffee')]) if (o) o.position.add(d);
-        if (q0) { q0.position.add({ x: p.x - home.x, y: 0, z: p.z - home.z }); q0.userData.doneShadow.moved = { x: p.x - home.x, z: p.z - home.z }; }   // the move, for a reader of the quads
-        made.coffeeAt = p;
-        group.updateWorldMatrix(true, true);
-      }
-    }
-    const axisOf = () => mug.position.clone().add(bb.getCenter(new THREE.Vector3()).multiply(mug.scale));   // the mug's axis, in the room's frame
-    const turnAbout = (o, axis, turn, d = new THREE.Vector3()) => {   // a handle turned about the axis by `turn`, then moved by `d`
-      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn);
-      o.position.sub(axis).applyQuaternion(q).add(axis).add(d); o.quaternion.premultiply(q);
+    const deskBox = desk ? plain(at(desk)) : null;
+    const onDesk = (p) => !reach || (p.x + reach.x0 >= deskBox.min.x && p.x + reach.x1 <= deskBox.max.x && p.z + reach.z0 >= deskBox.min.z && p.z + reach.z1 <= deskBox.max.z);
+    // THE SPOTS: anywhere on the desk that is free, no nearer the front than the coffee's home (where the room's shots were
+    // composed round it: a mug in front of that leaves the hero's frame), each mug its own, 170 mm from the others
+    const spots = deskBox && !cut ? deskSpots(obstacles, deskBox).filter((p) => p.z <= home.z + 10 && onDesk(p)) : [];
+    // ... and each standing clear of the others as the hero's camera sees them
+    const heroCam = fitAt(GRAMMAR_HERO(), 0.5).position;
+    const picks = cut || (plan.mugs[0] && plan.mugs[0].home) ? [{ x: home.x, z: home.z }] : pickSpots(spots, plan.mugs.map((m) => m.spot), 170, (p, o) => apartFrom(heroCam, p, o));
+    /* the turns about each mug's own axis: the room's mug stands upright (its rotation the identity, measured 2026-10-25), so
+       the vertical is its axis; a mug that did not would keep its pose (Sol 01a17612) */
+    const upright = mug.quaternion.equals(new THREE.Quaternion());
+    const axis = mug.position.clone().add(bb.getCenter(new THREE.Vector3()).multiply(mug.scale));   // the mug's axis at home, in the room's frame
+    const handleHome = handle ? { p: handle.position.clone(), q: handle.quaternion.clone() } : null;
+    /* the BODY turns too, its bake with it: the bake carries the handle's joints (two dark marks where the handle meets the
+       body), which a print turned alone left behind, ghosts beside the logo (the 2026-10-25 shots). The bake's lit side
+       turns with it, a smaller wrong on a white cylinder than the marks. The print is in the body's own frame, so it turns
+       with the body (glaze's turn 0). */
+    const bodyQ = mug.quaternion.clone(), turnQ = (turn) => bodyQ.clone().premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn));
+    const place = (o, turn, d) => {   // a handle from its home pose, turned about the home axis by `turn`, then moved by `d`
+      const t = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn);
+      o.position.copy(handleHome.p).sub(axis).applyQuaternion(t).add(axis).add(d); o.quaternion.copy(handleHome.q).premultiply(t);
     };
-    if (handle && coffeeTurn) { turnAbout(handle, axisOf(), coffeeTurn); group.updateWorldMatrix(true, true); }
-    const mugBox = at(mug), c = mugBox.getCenter(new THREE.Vector3());
-    // no second mug beside a cut mask: its shadow would be the cut one again, cut where nothing ends (Sol 01a17612 R2)
-    const spots = desk && !cut ? mugSpots({ x: c.x, z: c.z }, obstacles, plain(at(desk))).filter(onDesk(plain(at(desk)))) : [];
-    if (spots.length) {
-      const p = spots[Math.floor(plan.empty.spot * spots.length) % spots.length];
-      made.spot = p;
-      const turn = upright ? (plan.empty.turnDeg * Math.PI) / 180 : 0;
-      const toLocal = (wx, wz) => group.worldToLocal(new THREE.Vector3(wx, c.y, wz));
-      const d = toLocal(p.x, p.z).sub(toLocal(c.x, c.z));   // the move, in the room's own frame
-      const et = mugPrint(MUGS.modulith, plan.empty.back, rMm, hMm, gone);
-      made.texs.push(et);
-      glaze(empty.body, { body: linear(MUGS.modulith.body), tex: et, turn, y0: bb.min.y, h, r, bounce: bounce.body });
-      const eb = new THREE.Mesh(mug.geometry, empty.body);
-      eb.position.copy(mug.position).add(d); eb.quaternion.copy(mug.quaternion); eb.scale.copy(mug.scale);
-      const meshes = [eb];
-      if (handle && empty.handle) {
-        glaze(empty.handle, { body: linear(MUGS.modulith.body), bounce: bounce.handle });
-        const eh = new THREE.Mesh(handle.geometry, empty.handle);
-        // the coffee's handle as it stands, turned on by the difference between the two turns, about the coffee's axis, then moved
-        eh.position.copy(handle.position); eh.quaternion.copy(handle.quaternion); eh.scale.copy(handle.scale);
-        turnAbout(eh, axisOf(), turn - coffeeTurn, d);
-        meshes.push(eh);
+    const toLocal = (wx, wz) => group.worldToLocal(new THREE.Vector3(wx, home.y, wz));
+    plan.mugs.forEach((m, i) => {
+      const p = picks[i] || (i === 0 ? { x: home.x, z: home.z } : null);   // the coffee at home where no spot is free; a further mug left out
+      if (!p) return;
+      const look = MUGS[m.look], turn = upright ? (m.turnDeg * Math.PI) / 180 : 0;
+      const d = toLocal(p.x, p.z).sub(toLocal(home.x, home.z));   // the move, in the room's own frame
+      const tex = mugPrint(look, m.back, rMm, hMm, gone);
+      made.texs.push(tex);
+      let b, hd;
+      if (i === 0) {   // THE COFFEE: the room's own mug, its coffee and the steam moved with it, its shadow mask too
+        b = mug; hd = handle;
+        glaze(src.body, { body: linear(look.body), tex, y0: bb.min.y, h, r });
+        mug.quaternion.copy(turnQ(turn));
+        if (src.handle) glaze(src.handle, { body: linear(look.body) });
+        for (const o of [mug, coffee]) if (o) o.position.add(d);
+        if (handle) place(handle, turn, d);
+        if (q0 && (d.x || d.z)) { q0.position.add({ x: p.x - home.x, y: 0, z: p.z - home.z }); q0.userData.doneShadow.moved = { x: p.x - home.x, z: p.z - home.z }; }   // the move, for a reader of the quads
+      } else {         // A FURTHER MUG: the room's mesh again with its own glaze, and the coffee mug's shadow again under it
+        const mb = copyOf(src.body, fn.body);
+        glaze(mb, { body: linear(look.body), tex, y0: bb.min.y, h, r, bounce: bounce.body });
+        b = new THREE.Mesh(mug.geometry, mb);
+        b.position.copy(mug.position).sub(made.placed[0].d).add(d); b.quaternion.copy(turnQ(turn)); b.scale.copy(mug.scale);   // from home: the coffee has moved already
+        const meshes = [b];
+        if (handle && src.handle) {
+          const mh = copyOf(src.handle, fn.handle);
+          glaze(mh, { body: linear(look.body), bounce: bounce.handle });
+          hd = new THREE.Mesh(handle.geometry, mh); hd.scale.copy(handle.scale); place(hd, turn, d);
+          meshes.push(hd);
+        }
+        for (const o of meshes) { o.name = 'done-mug-more'; o.castShadow = false; o.receiveShadow = false; o.raycast = () => {}; o.userData.doneRoom = true; group.add(o); made.meshes.push(o); }
+        if (q0) {
+          const qm = new THREE.Mesh(q0.geometry, q0.material);
+          qm.position.copy(q0.position).sub({ x: made.placed[0].at.x - home.x, y: 0, z: made.placed[0].at.z - home.z }).add({ x: p.x - home.x, y: 0, z: p.z - home.z });
+          qm.renderOrder = q0.renderOrder; qm.raycast = () => {}; qm.userData.doneRoom = true; qm.visible = q0.visible; scene.add(qm); made.masks.push(qm);
+        }
       }
-      for (const o of meshes) { o.name = 'done-mug-empty'; o.castShadow = false; o.receiveShadow = false; o.raycast = () => {}; o.userData.doneRoom = true; group.add(o); made.meshes.push(o); }
-      // its shadow: the coffee mug's own mask on the desk, again under it
-      if (q0) {
-        const q = new THREE.Mesh(q0.geometry, q0.material);
-        q.position.copy(q0.position).add({ x: p.x - c.x, y: 0, z: p.z - c.z }); q.renderOrder = q0.renderOrder; q.raycast = () => {}; q.userData.doneRoom = true;
-        q.visible = q0.visible; scene.add(q); made.masks.push(q);
-      }
-    }
-    // the mugs' shot's subject: both of them, or the coffee alone
-    { const box = at(mug); if (handle) box.union(at(handle)); for (const o of made.meshes) box.union(at(o)); subj.mugs = { box: plain(box) }; }   // the coffee alone where the second mug found no room (Sol 01a17612)
+      made.placed.push({ look: m.look, at: p, d, turnDeg: m.turnDeg, coffee: i === 0, meshes: [b, hd].filter(Boolean) });
+    });
+    // the mugs' shot's subjects: each mug, body and handle (the shot takes one each time it comes round)
+    group.updateWorldMatrix(true, true);
+    subj.mugs = made.placed.map((m) => { const box = new THREE.Box3(); for (const o of m.meshes) box.union(at(o)); const f = mugFace(m.turnDeg); return { box: plain(box), face: f ? f.side : null, faceAz: f ? f.az : null }; });
     parts.mats.push(...made.mats);   // the environment's next capture reaches their sheen too (captureEnv)
   }
   /* the handle's: paint the room, capture it again, remember the choice in this browser, draw it (Very High's mean
@@ -1180,7 +1192,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        so 31.4 mm with the margin, over the 29.9 mm the sun reaches on the face itself. */
     const drop = wallZ != null ? gapDrop(json.sun && json.sun.dir, anchorWorld.z + d.zBack - wallZ) : 0;
     if (wallZ != null) {
-      const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600 + drop), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600 + drop), new THREE.ShadowMaterial({ opacity: WALL_SHADOW, depthWrite: false }));
       wall.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, deskY + 800 - drop / 2, wallZ + 0.3);   // a plane facing +z: toward the desk
       wall.receiveShadow = true; wall.castShadow = false; wall.renderOrder = 1; wall.raycast = () => {};
       wall.userData.doneRoom = true;
@@ -1242,6 +1254,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     applyLights(stage.quality);
     // the scene has no orbit (Joey: "don't let them rotate the camera"); a stage (Colors) keeps it; never a pan, the shots own the aim
     controls.enabled = !!orbit; controls.enablePan = false;
+    /* ... nor the stage's floor on the orbit (maxPolarAngle 0.52 pi on a desk build: "don't go under the table"), which
+       controls.update() applies to every camera put: it lifted the low shot, which looks up from 7 deg below its aim, to
+       3.6 deg below (found 2026-10-25 by the grammar e2e, the camera 33 mm over the shot's fit). The shots keep their own
+       floor over the desk (FLOOR_MM). A stage with the orbit (Colors) keeps it. */
+    if (!orbit) controls.maxPolarAngle = Math.PI;
     on = true;
     /* the dip to black (the grammar's transitions): a black layer over the canvas, in the stage's own wrapper, so the
        workspace above it (the cinema bars, the strip) stays drawn over the black */
@@ -1295,7 +1312,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       },
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
-      get mugs() { const p = parts.mugs; return p ? { plan: p.plan, spot: p.spot, coffeeAt: p.coffeeAt, left: p.left, logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), empty: p.meshes.map((o) => ({ name: o.name, visible: o.visible, parent: o.parent && o.parent.name, pos: o.getWorldPosition(new THREE.Vector3()).toArray() })), masks: p.masks.length } : null; },
+      get mugs() { const p = parts.mugs; return p ? { plan: p.plan, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },
       get subjects() { return { labels: subj.labels.map((l) => l.id), label: subj.label ? subj.label.id : null, row: subj.row }; },
       get focus() { return { state: focus.anim ? focus.anim.playState : null, filter: getComputedStyle(renderer.domElement).filter }; },
       setRoomColours,
@@ -1389,7 +1406,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     stage.holdScene(false);   // and the callouts back as the page last asked for them
     if (parts.env) { parts.env.dispose(); parts.env = null; }
     parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
-    controls.enabled = was.controls; controls.enablePan = was.pan;
+    controls.enabled = was.controls; controls.enablePan = was.pan; controls.maxPolarAngle = was.polar;
     stage.resetView();   // the guided camera of the page the stage is on (the finished step, or the one a click chose)
     stage.invalidateFrame();
   }

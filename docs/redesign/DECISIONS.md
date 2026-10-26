@@ -3902,3 +3902,48 @@ like a real mug". Astra supplied sayings and pairs, and fonts (Anton, Barlow Con
   runs), the relief, the mounts, the colours, the steam, the strip and mugs case; all pass. Once, before the mask fix, the
   grammar case's Next-view-during-the-entrance check found the camera 33 mm off the shot's pose; not seen in three runs
   since. Not deployed.
+
+## 2026-10-25 — The Done scene's mugs: none to three, anywhere free; Astra's four refinements; the low shot looks up again
+
+Joey: "maybe sometimes there's no mugs, other times there might be two or 3 mugs, they don't have to be grouped together
+either, their position and rotation could be pretty random as long as they don't block the build or clip into any other
+objects". Then Astra's review of the shots: give longer jokes more room ("use more deliberate line breaks - even if that
+means fewer words"), "Avoid the mugs hiding each other ... judge overlap from the intended camera position", "Keep mug
+close-ups as occasional discoveries ... build -> detail -> mug joke -> build", "Soften the build's wall shadow a little",
+and "For the joke shots, let the camera settle briefly with the text sharp".
+
+- **How many, which, where** (done-fit.js mugPlan, MUG_COUNTS, pickSpots): the build link's seed picks 0, 1, 2 or 3 mugs
+  (15 / 30 / 35 / 20 % of builds), each its own look (JERRARI's white, MODULITH's charcoal, MODULITH's white with charcoal
+  ink: MUG_LOOKS), saying (its look's voice; no saying twice in a row; Astra's pairs on the first two a quarter of the time
+  where there are two or more), turn and spot. The first holds the coffee and its steam. The spots: anywhere free on the
+  desk (deskSpots: every prop, the build, and the desk in front of the build kept clear), no nearer the front than the
+  coffee's home, each mug's shadow mask on the desk, 170 mm from every other mug, and none hiding another from the hero's
+  camera (apartFrom: their angle at the camera over 1.15 times their two angular widths). No mugs: the room's mug, its
+  coffee and its shadow off the desk, and no mugs' shot. A mask the slide already cut keeps one mug at home.
+- **The notebook off the desk** in 35 % of builds (NOTEBOOK_OFF_SHARE), its pen and shadow with it: the desk's left has no
+  room for a mug otherwise. Independent of the mugs: a build may have neither.
+- **Longer jokes**: the block a third of the way round (the face a front view reads) and 82 % of the height; seven sayings
+  rebroken short, none over 20 characters ("I MADE A THING / TO HOLD / THE THINGS / I MAKE / THINGS WITH.", "DO NOT /
+  DISTURB. / FIXING THINGS / THAT WORK.", "FINAL / FINAL 2 / FINAL 2 FIXED / FINAL 3", ...), with orange punchlines.
+- **The mugs' shot**: one mug each time round (one whose saying faces the room where there is one), its arc turned about
+  that face (mugFace: the saying within 65 deg of the room's front, else the logo, the turn clamped to 50 deg), its move
+  done by 65 % of the visible time and at rest after (`settle`), coming into focus; always just before a view of the whole
+  build (BUILD_VIEWS), never first or last.
+- **The wall's shadow** lighter: 0.42 to 0.34 opacity on the wall's catcher, the desk's unchanged. Its edge stays the
+  room's 1 deg sun (Joey 2026-10-23: at 6 deg it "faded to a faint gradient beside the props' crisp baked ones").
+- **The low shot looks up again.** The stage's orbit floor (maxPolarAngle 0.52 pi on a desk build) is applied by
+  controls.update() to every camera the scene puts, and it lifted the low shot, which aims from 7 deg below, to 3.6 deg
+  below. The scene lifts it while it holds the camera (no orbit) and puts it back on leave; Colors' room stage keeps it.
+  Found by the grammar e2e: twice the camera 33 mm over the low shot's fit, whenever the plan put the low shot second
+  (the earlier "Next view during the entrance" flake).
+- **The e2e** keep the room as composed by default: with ?debug, ?mugs=home is one JERRARI mug at home and the notebook on
+  (the helper adds it to a scene case that asks for nothing else); ?mugs=N forces a count; ?mugs=plan is the link's own.
+- **A mug turns whole**: its body turns with its handle and its bake. A print turned alone left the bake's handle joints
+  behind, two dark marks beside the logo (seen in the first shots of this round); the bake's lit side now turns with the
+  mug, a smaller wrong on a white cylinder.
+- **Review.** Sol `01a17643`, three findings, all discarded on the code: mugFace's null is read through `f ? f.side :
+  null` (the payload abbreviated it); the first mug's fall-back to home is the spot the props' slide already cleared of the
+  build (the slide hides the mug group when it cannot); the coffee is the mug's sibling in the room, not its child, so it
+  moves once (the shots show it in the cup after a move).
+- **Checks.** Unit 34 of 34. The Done scene's e2e cases, 15 of 15 (the strip-and-mugs case at ?mugs=3; the kits' own
+  plans: three on the 165 3W kit with the notebook off, none on the 115 3W kit). Not deployed.

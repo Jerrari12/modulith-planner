@@ -173,8 +173,11 @@ export function lensFor(cam, box, view, { maxPx = LENS.maxPx, samples = LENS.sam
  *   fitted ends (`blend`: blendShot);
  * - dolly: the dolly zoom, the lens narrowing while the camera backs off so the build keeps its size and the room behind
  *   it closes in.
- * - mugs: a slow arc on the mugs (done.js makeMugs; Joey: "every so often the camera focuses on them or catches them
- *   at the right angle"), coming into focus; in about half the cycles (MUG_SHOT_SHARE).
+ * - mugs: a slow arc on one mug (done.js makeMugs; Joey: "every so often the camera focuses on them or catches them
+ *   at the right angle"), coming into focus, about the face of it the room can see (`faceAz`: mugFace, its saying first)
+ *   and at rest for its last part (`settle`, the share of the visible time the move takes: Astra, "let the camera settle
+ *   briefly with the text sharp"); in about half the cycles (MUG_SHOT_SHARE), always followed by a view of the build
+ *   (BUILD_VIEWS: Astra, "build -> detail -> mug joke -> build").
  * `reversible`: each showing runs the move one way or the other, by the visit's random source. */
 export function around(centre, swing) {
   const from = { ...centre }, to = { ...centre };
@@ -182,6 +185,7 @@ export function around(centre, swing) {
   return { from, to };
 }
 const HERO_SWING = { az: -6, el: -2, fill: 0.04 };
+export const BUILD_VIEWS = ['hero', 'push', 'slide', 'side', 'top', 'wide', 'dolly', 'low'];   // the whole build in the frame
 export const MUG_SHOT_SHARE = 0.5;   // the cycles the mugs' shot is in
 export const GRAMMAR = {
   tabletop: [
@@ -203,7 +207,7 @@ export const GRAMMAR = {
     { name: 'glide', from: { az: -30, el: 5, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 5, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
     { name: 'pullback', from: { az: -34, el: 9, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 16, fovV: 28, fill: 0.5, targetLift: -0.08 }, blend: true },
     { name: 'dolly', from: { az: 20, el: 12, fovV: 40, fill: 0.5, targetLift: -0.06 }, to: { az: 20, el: 12, fovV: 22, fill: 0.5, targetLift: -0.06 }, reversible: true },
-    { name: 'mugs', from: { az: -26, el: 16, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 24, el: 11, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true },
+    { name: 'mugs', from: { az: -18, el: 16, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 18, el: 11, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true, settle: 0.65 },
   ],
   /* A WALL BUILD hangs on the back wall over the desk (roomAnchor), so it is seen standing in front of the desk or from
      its chair: the shots keep near the build's own height, none looks down on it from over the wall's top, and the top
@@ -221,7 +225,7 @@ export const GRAMMAR = {
     { name: 'glide', from: { az: -30, el: 2, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 2, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
     { name: 'pullback', from: { az: -34, el: 4, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 6, fovV: 28, fill: 0.5, targetLift: -0.04 }, blend: true },
     { name: 'dolly', from: { az: 20, el: 4, fovV: 40, fill: 0.5, targetLift: -0.04 }, to: { az: 20, el: 4, fovV: 22, fill: 0.5, targetLift: -0.04 }, reversible: true },
-    { name: 'mugs', from: { az: -26, el: 12, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 24, el: 8, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true },
+    { name: 'mugs', from: { az: -18, el: 12, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 18, el: 8, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true, settle: 0.65 },
   ],
   /* AN UNDER-TABLE BUILD hangs under the desk's front edge (roomAnchor; Joey 2026-10-25: "align the under-table build to
      be installed under this scenes table"), so it is seen from in front of the desk, from about its top or below:
@@ -240,7 +244,7 @@ export const GRAMMAR = {
     { name: 'glide', from: { az: -30, el: 1, fovV: 20, distMm: 320, aim: 'row', shiftX: -0.45 }, to: { az: -30, el: 1, fovV: 20, distMm: 320, aim: 'row', shiftX: 0.45 }, reversible: true },
     { name: 'pullback', from: { az: -34, el: 3, fovV: 20, distMm: 150, aim: 'drawer-front' }, to: { az: 18, el: 4, fovV: 28, fill: 0.5 }, blend: true },
     { name: 'dolly', from: { az: 20, el: 3, fovV: 40, fill: 0.5 }, to: { az: 20, el: 3, fovV: 22, fill: 0.5 }, reversible: true },
-    { name: 'mugs', from: { az: -26, el: 16, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 24, el: 11, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true },
+    { name: 'mugs', from: { az: -18, el: 16, fovV: 24, fill: 1.15, aim: 'mugs' }, to: { az: 18, el: 11, fovV: 24, fill: 1.3, aim: 'mugs' }, focusIn: true, reversible: true, settle: 0.65 },
   ],
 };
 
@@ -533,8 +537,8 @@ export function fitShot(spec, box, view, interior, aims = {}, { floorY = 0 } = {
   // a label: aimed at its centre and fitted to its own box (`aims.label`: { box }; done.js drops the shot without one)
   if (s.aim === 'label' && aims.label) { const b = aims.label.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: b.max.z }; }
   // the fronts' top row (`aims.row`: { x0, x1, y, z }), the aim `shiftX` of its width from its middle
-  // the mugs (`aims.mugs`: { box }, both of them): aimed at their middle, fitted to them
-  if (s.aim === 'mugs' && aims.mugs) { const b = aims.mugs.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 }; }
+  // a mug (`aims.mugs`: { box, faceAz }): aimed at its middle, fitted to it, the arc turned about the face the room sees
+  if (s.aim === 'mugs' && aims.mugs) { const b = aims.mugs.box; box = b; s.targetAt = { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 }; if (aims.mugs.faceAz != null) s.az = (s.az || 0) + Math.max(-50, Math.min(50, aims.mugs.faceAz)); }
   if (s.aim === 'row' && aims.row) { const r = aims.row; s.targetAt = { x: r.x0 + (r.x1 - r.x0) * (0.5 + (s.shiftX || 0)), y: r.y, z: r.z }; }
   const cam = clampToInterior(shotCamera(s, box, view), interior);
   const floor = floorY + FLOOR_MM;
@@ -702,42 +706,45 @@ export function steamBeat(now, dueAt, rate) {
  * drawn in the brand's orange (the punchline), `scale` each line's size against the others (1 by default), `type` the face: 'condensed' (Archivo Black at its narrowest, a workshop
  * sign; the default), 'wide' (Archivo Black at its own width) or 'mono' (IBM Plex Mono, a log's deadpan). Both faces are
  * the planner's own (fonts/), so a saying costs no download (Astra's picks that day were Anton, Barlow Condensed and
- * Space Mono, for the same three voices). The coffee is
- * JERRARI's (the designer who cannot stop improving things), the empty one MODULITH's (organisation, obsessed), in the
- * site's charcoal (--ml-charcoal #2C2D31) with its paper ink (#ECECEE): the glaze a little lighter than it (#4A4C54), since
- * it multiplies the bake's light, and at #2C2D31 the mug drew all but black on its lit side (2026-10-25, the first look). */
+ * Space Mono, for the same three voices). Three looks, two voices (`voice`: whose sayings a look's back carries): JERRARI's
+ * white (the designer who cannot stop improving things), MODULITH's charcoal (organisation, obsessed: the site's
+ * --ml-charcoal #2C2D31 with its paper ink #ECECEE, the glaze a little lighter than it, #4A4C54, since it multiplies the
+ * bake's light, and at #2C2D31 the mug drew all but black on its lit side) and MODULITH's white (its charcoal for ink). */
 export const MUGS = {
-  jerrari: { body: null, ink: '#3b3b3e', accent: '#f06a35', logo: { src: 'img/jerrari-logo.svg', aspect: 798.74 / 1365.44, hMm: 70 }, sayings: [
+  jerrari: { voice: 'jerrari', body: null, ink: '#3b3b3e', accent: '#f06a35', logo: { src: 'img/jerrari-logo.svg', aspect: 798.74 / 1365.44, hMm: 70 }, sayings: [
     { lines: ['WORLD’S BEST', '3D PRINTED', 'STORAGE SYSTEM'] },
     { lines: ['JUST ONE', 'SMALL CHANGE.'], small: 'Six prototypes later.', type: 'wide' },
     { lines: ['COFFEE IN.', 'PARTS OUT.'], type: 'wide', accent: [1] },
     { lines: ['IT WORKED', 'IN FUSION.'], type: 'mono' },
-    { lines: ['FINAL VERSION', 'FINAL VERSION 2', 'FINAL VERSION 2 FIXED', 'FINAL VERSION 3'], type: 'mono', accent: [3] },
-    { lines: ['I HAD A', 'FIVE-MINUTE IDEA.', 'THREE PRINTERS', 'ARE WORKING ON IT.'] },
-    { lines: ['DO NOT DISTURB.', 'I’M FIXING SOMETHING', 'THAT ALREADY WORKS.'] },
-    { lines: ['I MADE A THING', 'TO HOLD THE THINGS', 'I MAKE THINGS WITH.'] },
+    { lines: ['FINAL', 'FINAL 2', 'FINAL 2 FIXED', 'FINAL 3'], type: 'mono', accent: [3] },
+    { lines: ['I HAD A', 'FIVE-MINUTE', 'IDEA.', 'THREE PRINTERS', 'ARE ON IT.'], accent: [4] },
+    { lines: ['DO NOT', 'DISTURB.', 'FIXING THINGS', 'THAT WORK.'], accent: [0, 1] },
+    { lines: ['I MADE A THING', 'TO HOLD', 'THE THINGS', 'I MAKE', 'THINGS WITH.'], accent: [0] },
     { lines: ['I WAS LEFT', 'UNSUPERVISED', 'WITH CALIPERS'], accent: [1], scale: [1, 1.4, 1] },   // Astra: the middle line largest, in orange
     { lines: ['DESIGN A DRAWER,', 'THEY SAID.', '', 'I MAY HAVE', 'MISUNDERSTOOD', 'THE SCOPE.'], accent: [4, 5], scale: [1, 1, 0.45, 0.8, 1.3, 1.5] },   // Astra: three levels after a gap (the empty line), THE SCOPE. the biggest
   ] },
-  modulith: { body: '#4a4c54', ink: '#ececee', accent: '#ff6a1a', logo: { src: 'img/modulith-square.svg', aspect: 908.3 / 715.5, hMm: 54 }, sayings: [
+  modulith: { voice: 'modulith', body: '#4a4c54', ink: '#ececee', accent: '#ff6a1a', logo: { src: 'img/modulith-square.svg', aspect: 908.3 / 715.5, hMm: 54 }, sayings: [
     { lines: ['NEED DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER', 'PRINT DRAWER'], accent: [0] },
     { lines: ['NEEDED A DRAWER.', 'PRINTED A DRAWER.', 'NEEDED A CASE.', 'PRINTED A CASE.', 'ANYWAY,', 'THIS IS A WALL NOW.'], accent: [5] },
     { lines: ['I ♥', 'MODULAR', 'STORAGE', 'SYSTEMS'], type: 'wide' },
-    { lines: ['A PLACE FOR EVERYTHING.', 'INCLUDING THE PARTS', 'FOR MORE PLACES', 'FOR EVERYTHING.'] },
-    { lines: ['I CAN STOP', 'ADDING DRAWERS', 'WHENEVER', 'I HAVE ENOUGH', 'DRAWERS.'] },
+    { lines: ['A PLACE FOR', 'EVERYTHING.', 'AND PARTS', 'FOR MORE', 'PLACES.'], accent: [2, 3, 4] },
+    { lines: ['I CAN STOP', 'ANY TIME.', 'ONE MORE', 'DRAWER.'], accent: [2, 3] },
     { lines: ['THIS WAS SUPPOSED', 'TO SAVE SPACE.'], accent: [1] },
-    { lines: ['EMPTY DRAWER?', 'THAT’S EXPANSION', 'CAPACITY.'] },
+    { lines: ['EMPTY DRAWER?', 'EXPANSION', 'CAPACITY.'], accent: [1, 2] },
     { lines: ['ORGANIZED CHAOS.', 'NOW WITH LABELS.'] },
     { lines: ['ONE MORE DRAWER.', 'THEN I’M DONE.'], small: 'Last updated: one drawer ago.', accent: [1] },
   ] },
+  paper: { voice: 'modulith', body: null, ink: '#2c2d31', accent: '#ff6a1a', logo: { src: 'img/modulith-square.svg', aspect: 908.3 / 715.5, hMm: 54 } },
 };
-/* Astra's pairs, for when the camera catches both: the coffee's line, then the empty one's answer */
+export const MUG_LOOKS = ['jerrari', 'modulith', 'paper'];
+export const sayingsOf = (look) => MUGS[MUGS[look].voice].sayings;
+/* Astra's pairs, for when the camera catches two mugs: JERRARI's line, then MODULITH's answer */
 export const MUG_PAIRS = [
   [{ lines: ['I MADE', 'MORE PARTS.'] }, { lines: ['I MADE', 'MORE ROOM.'] }],
   [{ lines: ['JUST ONE MORE', 'PROTOTYPE.'] }, { lines: ['JUST ONE MORE', 'DRAWER.'] }],
   [{ lines: ['THIS IS THE', 'FINAL VERSION.'] }, { lines: ['WE’VE HEARD', 'THAT BEFORE.'] }],
 ];
-export const MUG_PAIR_SHARE = 0.25;   // a pair this often, else a saying each
+export const MUG_PAIR_SHARE = 0.25;   // a pair this often where there are two mugs or more, else a saying each
 /* A build's own seed: FNV-1a over its link's text, so a build shows the same mugs every time it is opened, and another
  * build other ones */
 export function hashSeed(text) {
@@ -745,37 +752,59 @@ export function hashSeed(text) {
   for (let i = 0; i < String(text).length; i++) { h ^= String(text).charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   return h >>> 0;
 }
-/* The mugs a build gets: each mug's back (a pair now and then); whether the coffee stays at its home on the desk (where the
- * room was composed round it, MUG_HOME_SHARE of builds) or stands elsewhere, and a pick in [0, 1) among the desk's free
- * spots (deskSpots; Joey 2026-10-25: "the mug could randomly be placed by the plan on the left side sometimes, also can the
- * white Jerrari Mug randomly be placed sometimes too"); the empty mug's turn about its axis (its logo's facing, in degrees
- * from the room's front; its handle a quarter turn on; the coffee's the same way) and a pick among the spots beside the
- * coffee (mugSpots, from 170 mm out: the handles reach 84 mm from their axes, Sol 01a17612) */
-export const MUG_HOME_SHARE = 0.4;
-export const MUG_LEFT_SHARE = 0.4;   // of the builds whose coffee moves, those whose mugs stand left of the build, where the notebook was
-export function mugPlan(rng) {
+/* The mugs a build gets (Joey 2026-10-25: "maybe sometimes there's no mugs, other times there might be two or 3 mugs, they
+ * don't have to be grouped together either, their position and rotation could be pretty random as long as they don't
+ * block the build or clip into any other objects"): how many (MUG_COUNTS, the share of builds for 0, 1, 2 and 3), whether
+ * the notebook and its pen are off the desk (NOTEBOOK_OFF_SHARE: the desk's left has no room for a mug with them on it),
+ * and each mug's look, its back's saying (a pair now and then), its turn about its axis (its logo's facing, in degrees
+ * from the room's front; its handle a quarter turn on) and a pick in [0, 1) among the free spots (pickSpots). The first
+ * mug holds the coffee. `count` forces how many (the debug ?mugs=). */
+export const MUG_COUNTS = [0.15, 0.3, 0.35, 0.2];
+export const NOTEBOOK_OFF_SHARE = 0.35;
+export function mugPlan(rng, { count = null } = {}) {
   const pick = (list) => list[Math.floor(rng() * list.length) % list.length];
-  const pair = rng() < MUG_PAIR_SHARE ? pick(MUG_PAIRS) : null;
-  return {
-    coffee: { back: pair ? pair[0] : pick(MUGS.jerrari.sayings), home: rng() < MUG_HOME_SHARE, spot: rng(), turnDeg: Math.round(rng() * 360), left: rng() < MUG_LEFT_SHARE },   // the coffee turned too (Joey: "randomize the rotation of the Jerrari mug as well")
-    empty: { back: pair ? pair[1] : pick(MUGS.modulith.sayings), turnDeg: Math.round(rng() * 360), spot: rng() },
-  };
+  let n = 0, u = rng();
+  while (n < MUG_COUNTS.length - 1 && u >= MUG_COUNTS[n]) { u -= MUG_COUNTS[n]; n++; }
+  if (count != null) n = Math.max(0, Math.min(MUG_COUNTS.length - 1, count));
+  const notebookOff = rng() < NOTEBOOK_OFF_SHARE;
+  const pair = n >= 2 && rng() < MUG_PAIR_SHARE ? pick(MUG_PAIRS) : null;
+  const mugs = [];
+  for (let i = 0; i < n; i++) {
+    // a pair's two lines on JERRARI's white and a MODULITH look; otherwise any look, no saying twice
+    const look = pair && i < 2 ? (i === 0 ? 'jerrari' : (rng() < 0.5 ? 'modulith' : 'paper')) : pick(MUG_LOOKS);
+    let back = pair && i < 2 ? pair[i] : pick(sayingsOf(look));
+    for (let t = 0; t < 4 && mugs.some((m) => m.back === back); t++) back = pick(sayingsOf(look));
+    mugs.push({ look, back, turnDeg: Math.round(rng() * 360), spot: rng() });
+  }
+  return { count: n, notebookOff, mugs };
 }
-/* Where the empty mug may stand: points on rings round the coffee mug's centre `c` ({ x, z }, mm, the stage's), each a
- * circle of `radius` (the body and its handle) clear of every box in `obstacles` (props, the build: { min, max } in x and
- * z, grown by `gap`), inside `desk` by `edge`, and not in front of the coffee mug (z no more than its own), so it never
- * stands between the camera and the build or the coffee. In ring order, nearest first. */
-export function mugSpots(c, obstacles, desk, { radius = 70, gap = 12, edge = 25, rings = [170, 200, 230, 260], step = 20 } = {}) {
+/* The spots the mugs take: each mug's pick among `spots` still at least `apart` mm from the mugs placed before it (the
+ * handles reach 84 mm from their axes, so two mugs at 170 never touch: Sol 01a17612) and `clear` of each of them (done.js:
+ * neither hiding the other from the hero's camera), or null where none is left */
+/* Whether two mugs at `a` and `b` (stage mm, x and z) stand apart as the camera at `cam` sees them: the angle between them
+ * at the camera more than `share` of their two angular widths put together, each `radius` across (Astra 2026-10-25: "Avoid
+ * the mugs hiding each other ... judge overlap from the intended camera position") */
+export function apartFrom(cam, a, b, { radius = 70, share = 1.15 } = {}) {
+  const ang = (p) => Math.atan2(p.x - cam.x, p.z - cam.z), half = (p) => Math.asin(Math.min(1, radius / Math.max(radius, Math.hypot(p.x - cam.x, p.z - cam.z))));
+  let d = Math.abs(ang(a) - ang(b)); if (d > Math.PI) d = 2 * Math.PI - d;
+  return d > share * (half(a) + half(b));
+}
+/* Which face of a mug turned `turnDeg` a shot should look at, and from where: its saying (the back, half a turn from the
+ * logo) where that faces the room's front within `within` degrees, else its logo, else neither (null: its side, the
+ * handle); `az` the face's direction, degrees from the room's front, as the shots' azimuths count (Astra: "Frame the
+ * punchline on the visible face") */
+export function mugFace(turnDeg, within = 65) {
+  const norm = (a) => { let x = ((a % 360) + 360) % 360; if (x > 180) x -= 360; return x; };
+  const saying = norm(turnDeg + 180), logo = norm(turnDeg);
+  if (Math.abs(saying) <= within) return { side: 'saying', az: saying };
+  if (Math.abs(logo) <= within) return { side: 'logo', az: logo };
+  return null;
+}
+export function pickSpots(spots, picks, apart = 170, clear = () => true) {
   const out = [];
-  const clear = (p) => obstacles.every((b) => {
-    const dx = Math.max(b.min.x - gap - p.x, 0, p.x - b.max.x - gap), dz = Math.max(b.min.z - gap - p.z, 0, p.z - b.max.z - gap);
-    return Math.hypot(dx, dz) > radius;
-  });
-  for (const d of rings) for (let a = 0; a < 360; a += step) {
-    const t = (a * Math.PI) / 180, p = { x: c.x + d * Math.sin(t), z: c.z - d * Math.cos(t) };
-    if (p.z > c.z) continue;
-    if (p.x - radius < desk.min.x + edge || p.x + radius > desk.max.x - edge || p.z - radius < desk.min.z + edge || p.z + radius > desk.max.z - edge) continue;
-    if (clear(p)) out.push(p);
+  for (const f of picks) {
+    const free = spots.filter((p) => out.every((q) => !q || (Math.hypot(p.x - q.x, p.z - q.z) >= apart && clear(p, q))));
+    out.push(free.length ? free[Math.floor(f * free.length) % free.length] : null);
   }
   return out;
 }
