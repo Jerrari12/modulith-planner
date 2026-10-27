@@ -5452,6 +5452,10 @@ the old setup foot and the CSS without the option rule each fail. Unit 695/695; 
 setup-sheet cases and the top-bar fit at 18 widths green on SwiftShader. Sol 01a17f61: one finding (the 59 bar on the
 light bar), fixed; the measure class on a switch into Parts is as before (its order is unchanged).
 
+- **Live 2026-10-27 at `103792c`** (run 40591874230 green). Checked on the live planner (`toolbar-prod.mjs`, ?done=off):
+  the five toolbars (3D/2D in Build only, Explode in Assemble only, Measure in Build and Assemble), the mount chip's bar and
+  number in 185's orange, the setup foot per step, the printer list's opaque ground; no page errors.
+
 ## 2026-10-27 · Labels: the faceplate tiles, a typed label's stripe, Classic Pro's print line
 
 Joey, from the live planner: the Labels callout's "switch to edgelabel and classic pro" should "use the same images or icons
