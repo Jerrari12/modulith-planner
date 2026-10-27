@@ -270,6 +270,16 @@ try {
     'WebGL unavailable: ' + e.message);
 }
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+/* A SOFTWARE RASTERISER (SwiftShader, llvmpipe, Microsoft's Basic Render Driver): WebGL on the CPU, a browser with no GPU
+   or with hardware acceleration off - and the CI runner's. Every pixel costs a CPU's time there, so nothing that only buys
+   detail with more pixels runs on it (main.js SUPERSAMPLING: on SwiftShader at 2560 x 1440 a lens burst drew 2 of its
+   128 samples in 90 s, 2026-10-26). Read once; the renderer string where the browser gives it. */
+const SOFTWARE_GL = (() => {
+  try {
+    const gl = renderer.getContext(), d = gl.getExtension('WEBGL_debug_renderer_info');
+    return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(String(gl.getParameter(d ? d.UNMASKED_RENDERER_WEBGL : gl.RENDERER)));
+  } catch { return false; }
+})();
 // runtime context loss (GPU reset, tab pressure) — the constructor catch above
 // can't see it. Only the embed cares: the site restores its poster on partError.
 // Failure is TERMINAL for the ready handshake: three's render() returns without
@@ -2935,7 +2945,7 @@ const SUPER_PIXELS = 3840 * 2160;
 let superOn = false;
 function setSupersample(on) { if (superOn === !!on) return; superOn = !!on; invalidateFrame(); }
 function superCap(q, cap) {
-  if (!superOn || !q.accum) return cap;
+  if (!superOn || !q.accum || SOFTWARE_GL) return cap;   // never on a software rasteriser (A SOFTWARE RASTERISER, above)
   const css = Math.max(1, canvas.clientWidth * canvas.clientHeight);
   return Math.max(cap, Math.min(2 * devicePixelRatio, Math.sqrt(SUPER_PIXELS / css)));
 }
@@ -11719,7 +11729,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
     mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
     // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
-    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn; }, compileAhead, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
+    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn && !!QUALITY[quality].accum && !SOFTWARE_GL; }, get softwareGL() { return SOFTWARE_GL; }, compileAhead, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
     // reflector, so a rendering question can be answered by reading state instead

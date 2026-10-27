@@ -5197,3 +5197,26 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   with no URL switch: Very High, a Chevron build with a Silk Black body and Translucent Natural faces, the lattice on by
   default, both Chevron face strips baked, the faces visibly changed by the lattice (the same view off and on; its pair
   of shots sits beside it), no page errors. The other session was told before and after (one GPU).
+
+## 2026-10-26 - The Done scene's first CI run: ten room cases skipped on a software rasteriser, for now
+
+- **What happened.** The done-scene merge (main `69d88ea`, run 40425689471) failed five of its six e2e shards, every
+  failure a Done-room case, the first time those cases had run on the CI runner (the branch was never on main). The local
+  passes before the push had all run on the laptop's GPU: the e2e uses SwiftShader only with `E2E_SOFT=1`.
+- **Measured.** Under `E2E_SOFT=1` 7 of the 10 failing cases fail here, and on `f9cf01a` (the branch that morning, before
+  that day's rendering work) the same 8 fail with the same messages: not regressions. On SwiftShader the entrance is
+  judged slow and the scene locks off (as designed); with that bound lifted it plays the GPU's plan for the same seed, and
+  the cases miss short wall-clock windows (a 1.5 s hold, a 0.8 s fade, a cut) between their polls.
+- **One product defect, fixed.** Very High's supersampling ran on a software rasteriser and starved the lens burst (2 of
+  128 samples in 90 s at 2560 x 1440). main.js A SOFTWARE RASTERISER reads the renderer once (SwiftShader, llvmpipe,
+  softpipe, Basic Render); superCap leaves the ratio alone there.
+- **Joey's call: ship now, skip them on a software rasteriser only, make them runner-safe as a follow-up.** The suite
+  reads the rasteriser from its launched browser (`SOFTWARE_GL`; Sol `01a17823` round 29: not from `CI`, which would skip
+  them on a hardware runner too), and ROOM_SOFT_SKIP skips exactly the ten. They still run on a GPU locally.
+- **Kept in CI.** A new case drives supersampling straight on the stage, with no scene and no clock: twice the screen's
+  ratio on a GPU, never on a software rasteriser, and the ratio back after; a mutant without the guard fails it. The strip
+  case now waits for its fade, not a fixed 400 ms. Already in CI and not skipped: the Room default and Neutral clean-up
+  (the frosted-window case), the room's failed load (Neutral back, no Room on a remount), and `?done=off` (the default of
+  every non-visitor case).
+- **OPEN (Sol round 29).** The skipped cases guard the grammar, the lens, the mounts, the desk and steam, the strip, the
+  spool click and Reset view; none runs in CI until the follow-up.

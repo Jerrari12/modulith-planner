@@ -58,8 +58,21 @@ const studioServer = haveStudio ? await serve(STUDIO_DIR) : null;
 const studio = studioServer ? `http://127.0.0.1:${studioServer.address().port}/` : null;
 /* E2E_SOFT=1 reproduces the CI runner's rendering here: the SwiftShader software rasteriser, no GPU */
 const SOFT = process.env.E2E_SOFT === '1';
+/* THE DONE ROOM'S CASES THAT RACE ITS CLOCK (2026-10-26). Ten room cases first ran on the CI runner with the done-scene
+   merge (main 69d88ea, run 40425689471) and failed there, and they fail the same way under E2E_SOFT=1 on the code of that
+   morning: on a software rasteriser a frame takes so long that a case waiting for a 1.5 s hold, a fade or a cut sees the
+   scene already past it (the scene itself plays the same plan; on a slow device it locks off, as designed). Joey's call:
+   ship, skip them on a software rasteriser only, and make them runner-safe as a follow-up. They run on a GPU locally.
+   The rasteriser is read from the launched browser itself (Sol 01a17823: not from CI's membership, which would skip them on
+   a hardware runner too), the same test as main.js A SOFTWARE RASTERISER. */
 const launchArgs = ['--enable-unsafe-swiftshader', ...(SOFT ? ['--disable-gpu', '--use-angle=swiftshader'] : [])];
 const browser = await (async () => { for (const o of [{ channel: 'chrome' }, {}]) { try { return await chromium.launch({ ...o, args: launchArgs }); } catch {} } throw new Error('no Chromium'); })();
+const SOFTWARE_GL = await (async () => {
+  const p = await browser.newPage();
+  try { return await p.evaluate(() => { const gl = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl'); if (!gl) return true; const d = gl.getExtension('WEBGL_debug_renderer_info'); return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(String(gl.getParameter(d ? d.UNMASKED_RENDERER_WEBGL : gl.RENDERER))); }); }
+  finally { await p.close(); }
+})();
+const ROOM_SOFT_SKIP = SOFTWARE_GL && 'the Done room on a software rasteriser races the scene\'s clock; runs on a GPU (follow-up: make it runner-safe)';
 localParts(browser, root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from this checkout (test/lib/local-parts.mjs)
 test.after(async () => { await browser.close(); server.close(); if (studioServer) studioServer.close(); });
 /* a case that fails before its own ctx.close() must not leave a page rendering: on the CI runner's software rasteriser
@@ -1343,7 +1356,7 @@ test('Assemble: Next steps through, Skip reaches the end, Back returns', async (
    office. Flag off, Done is what it was. Flag on: the room loads, the stage's holds are on (no background, the room's
    environment, controls off, the callouts off, grid and table hidden), a theme flip and a tier change leave the room in
    place (the shadow catcher on a tier with shadows, the baked disc on Fast), Back puts everything back. */
-test('Assemble: the Done scene is off with ?done=off; on for every visitor (no flag) the room comes on at Done, survives a theme flip and a tier change, and Back restores the stage', async () => {
+test('Assemble: the Done scene is off with ?done=off; on for every visitor (no flag) the room comes on at Done, survives a theme flip and a tier change, and Back restores the stage', { skip: ROOM_SOFT_SKIP }, async () => {
   const toDone = async (page) => {
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
@@ -1506,7 +1519,7 @@ function masksPlaced(masks, roomJson, f) {
    mask (room.json shadows); done.js slides each mask's quad with its group and hides it with a hidden group. A 12W x 2H
    build through the Build workspace, as the massive-build probe did: the monitor cannot clear it on the desk and hides, a
    group that can slides; their shadows do the same, by the same slide. */
-test('Assemble: the Done scene\'s prop shadows slide with their group and hide with a hidden group (a 12W build)', async () => {
+test('Assemble: the Done scene\'s prop shadows slide with their group and hide with a hidden group (a 12W build)', { skip: ROOM_SOFT_SKIP }, async () => {
   const { ctx, page, errors } = await open('build', { query: '&build=185-tabletop-2w2h&done=room&new=1' });
   await page.waitForFunction(() => window.__GEN2_CTX__ && document.querySelector('#ws-build, #ws-lib'), null, { timeout: 60_000 });
   await page.evaluate(([W, H]) => { window.__GEN2_STORE__.commit((s, R) => { s.gridW = W; s.gridH = H; s.placed = []; let id = 1; for (let c = 0; c < W / 2; c++) for (let r = 0; r < H / 2; r++) s.placed.push({ id: id++, x: c * 2, y: r * 4, w: 2, hh: 4, fill: 'decor', shelves: 0 }); s.nextId = id; if (R.syncTabletopGrid) R.syncTabletopGrid(); }, 'edit'); }, [12, 2]);
@@ -1608,7 +1621,7 @@ test('Assemble: the Done scene\'s prop shadows slide with their group and hide w
    when the shots move; a slow verdict locks the views off, mid-move too; Next view dips from where the shot is; a hidden
    tab pauses the clock; reduced motion keeps the still hero and turns the views by hand with a plain cut. The clock is
    shortened through the debug hook so the case takes seconds, and every wait on the clock is a poll (SwiftShader). */
-test('Assemble: the Done scene\'s camera grammar: distinct shots in a random order through a dip to black; locked off on Fast and Balanced, moving on High; Next view dips; a slow device locks off; reduced motion keeps the hero', async () => {
+test('Assemble: the Done scene\'s camera grammar: distinct shots in a random order through a dip to black; locked off on Fast and Balanced, moving on High; Next view dips; a slow device locks off; reduced motion keeps the hero', { skip: ROOM_SOFT_SKIP }, async () => {
   const cam = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(2)); });
   const seqOf = (page) => page.evaluate(() => (window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence) || null);
   const fadeOf = (page) => page.evaluate(() => { const f = document.getElementById('done-fade'); return f ? +getComputedStyle(f).opacity : null; });
@@ -1838,7 +1851,7 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
    two). Either way the hero draws without the relief, and the cut into the macro, where it comes on, compiles nothing.
    maxFrameMs 1e9 and a 3 s entrance: a slow runner's entrance would lock the shots off (its verdict also calls a device
    slow when the entrance draws fewer than 4 frames, whatever their length), and a still macro never brings the relief on. */
-test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing or a change of tier, the hero stays without it, and the cut into the macro compiles nothing', async () => {
+test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing or a change of tier, the hero stays without it, and the cut into the macro compiles nothing', { skip: ROOM_SOFT_SKIP }, async () => {
   /* `last`: the newest program's ID. three numbers its programs in order and a released program's slot is refilled, so
      a COUNT can stay level while a program is compiled again; a new ID cannot (Sol 01a16f55's case did exactly that) */
   const look = (page) => page.evaluate(() => {
@@ -1937,6 +1950,29 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
   await lo.ctx.close();
 });
 
+/* SUPERSAMPLING (main.js; the final scene turns it on after its entrance's verdict) and A SOFTWARE RASTERISER: on Very High
+   twice the screen's ratio on a GPU, the screen's own on a software rasteriser - where 2560 x 1440 starved the lens burst
+   (2 of 128 samples in 90 s, 2026-10-26) - and the ratio back when it ends. Driven straight on the stage, no scene and no
+   clock, so it runs on the CI runner: the lens case that also checks it is skipped there (ROOM_SOFT_SKIP, Sol 01a17823) */
+test('Very High: supersampling draws at twice the screen on a GPU and never on a software rasteriser, and ends at the screen\'s ratio', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  const { page, errors } = await open('assemble', { context: ctx });
+  const ratio = () => page.evaluate(() => window.__GEN2_VIEWER__.renderer.getPixelRatio());
+  const soft = await page.evaluate(() => window.__GEN2_VIEWER__.softwareGL);
+  assert.equal(soft, SOFTWARE_GL, 'the stage reads the rasteriser as the suite does');
+  assert.equal(await ratio(), 1, 'the screen\'s own ratio to begin with');
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSupersample(true));
+  const want = soft ? 1 : 2;
+  await page.waitForFunction((p) => window.__GEN2_VIEWER__.renderer.getPixelRatio() === p, want, { timeout: 15_000 }).catch(() => {});
+  assert.deepEqual([await page.evaluate(() => window.__GEN2_VIEWER__.supersampled), await ratio()], soft ? [false, 1] : [true, 2], soft ? 'a software rasteriser: never supersampled' : 'a GPU: twice the screen');
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSupersample(false));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.renderer.getPixelRatio() === 1, null, { timeout: 15_000 }).catch(() => {});
+  assert.deepEqual([await page.evaluate(() => window.__GEN2_VIEWER__.supersampled), await ratio()], [false, 1], 'and the screen\'s ratio when it ends');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE LENS (Very High's bokeh, 2026-10-24; js/lens.js, done-fit.js lensFor, main.js THE LENS). A still shot of the moving
    grammar gets a thin lens that holds the build sharp and lets the room blur; Very High's accumulator draws it, every
    sample moving the camera across the aperture and shearing the projection so the plane in focus stays put. Where this
@@ -1945,7 +1981,7 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
    exactly where it began, the light's disc is visited out of step with the lens's (lightSums), and the AO overlay fades
    with the blur actually on screen (its uniforms); then the picture itself is read, with the lens and without it, and a
    frame the accumulator does not draw keeps its AO whole (Sol 01a17057). */
-test('Assemble: the Done scene\'s lens: a held shot of the moving grammar on Very High gets one, moving shots and the drawer moment do not, it follows a resize and a tier, and leaving clears it', async () => {
+test('Assemble: the Done scene\'s lens: a held shot of the moving grammar on Very High gets one, moving shots and the drawer moment do not, it follows a resize and a tier, and leaving clears it', { skip: ROOM_SOFT_SKIP }, async () => {
   const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
   const L = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__, s = window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence;
     return { lens: v.lens(), total: v.accTotal(), shot: s && s.shot, moving: s && s.moving, ok: v.acc.ok, probed: v.acc.probed, n: v.acc.n, h: v.renderer.domElement.clientHeight, pr: v.renderer.getPixelRatio(), ss: v.supersampled }; });
@@ -1962,11 +1998,13 @@ test('Assemble: the Done scene\'s lens: a held shot of the moving grammar on Ver
   await btn(page, 'Watch the final scene', '#ws-player').click();
   await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 }).catch(async () => assert.fail('the grammar never began: ' + JSON.stringify(await L(page))));
   // THE HERO, held: a lens, the accumulator running to its samples
-  await page.waitForFunction(() => window.__GEN2_VIEWER__.renderer.getPixelRatio() === 2, null, { timeout: 10_000 }).catch(() => {});
+  const soft = await page.evaluate(() => window.__GEN2_VIEWER__.softwareGL);
+  await page.waitForFunction((p) => window.__GEN2_VIEWER__.renderer.getPixelRatio() === p, soft ? 1 : 2, { timeout: 10_000 }).catch(() => {});
   const h = await L(page);
   assert.equal(h.shot, 'hero');
-  // supersampled (main.js SUPERSAMPLING): twice the screen's ratio at 1280 x 720, inside the 4K budget
-  assert.deepEqual([h.ss, h.pr], [true, 2], 'the final scene draws at twice the screen');
+  /* supersampled (main.js SUPERSAMPLING): twice the screen's ratio at 1280 x 720, inside the 4K budget - but never on a
+     software rasteriser, the CI runner's (main.js A SOFTWARE RASTERISER), where it starved the lens burst */
+  assert.deepEqual([h.ss, h.pr], soft ? [false, 1] : [true, 2], soft ? 'a software rasteriser: the screen\'s own ratio' : 'the final scene draws at twice the screen');
   assert.ok(h.lens && h.lens.focus > 0 && h.lens.aperture > 0, `the hero has a lens (${JSON.stringify(h.lens)})`);
   assert.equal(h.lens.samples, 128, 'the lens runs 128 samples'); assert.equal(h.total, 128, 'and the accumulator runs to them');
   await page.waitForFunction(() => window.__GEN2_VIEWER__.acc.probed, null, { timeout: 20_000 }).catch(() => {});
@@ -2087,7 +2125,7 @@ test('Assemble: the Done scene\'s lens: a held shot of the moving grammar on Ver
    roomAnchor). The builder's own wall and slab stay out of the room, the build casts its shadow there (the stage turns
    shadows off for hanging builds in the studio), and each mount has its own shots. Each made through the setup sheet as a
    visitor makes it, then given a 6W x 2H layout, at High (a shadow tier) on the dark theme. */
-test('Assemble: the Done scene hangs a wall build on its wall and an under-table build under its desk, left-justified, the builder\'s backdrops hidden, shadows on, each with its own shots', async () => {
+test('Assemble: the Done scene hangs a wall build on its wall and an under-table build under its desk, left-justified, the builder\'s backdrops hidden, shadows on, each with its own shots', { skip: ROOM_SOFT_SKIP }, async () => {
   const SIX = [[1, 0, 0, 3], [2, 3, 0, 3], [3, 0, 2, 3], [4, 3, 2, 3]];   // [id, x, y (half-rows), w]: 6W x 2H
   const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
   for (const mount of ['wall', 'under-table']) {
@@ -2458,7 +2496,7 @@ test('Assemble: the Done scene\'s shadows run from the desk top onto the wall, o
    steam's frames invalidated the picture: the idle gate stayed open; a software runner draws slower than either, so
    there this bound cannot fail); it changes nothing in the frame outside its own column, stops with its mug hidden or
    out of the shot, holds still on Fast, and on Very High rises only while the camera moves, so a still shot converges. */
-test('Assemble: the Done scene\'s plain desk reflects the room and the oak does not; the coffee steams at its tier\'s rate, in its own column only', async () => {
+test('Assemble: the Done scene\'s plain desk reflects the room and the oak does not; the coffee steams at its tier\'s rate, in its own column only', { skip: ROOM_SOFT_SKIP }, async () => {
   const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
@@ -2753,7 +2791,7 @@ test('Assemble: the Done scene\'s still shots drift, the picture slowly pushed i
    focus as it fades in ("focusing on specific things, like if they add a custom label ... starting a stationary scene
    out of focus and ending with it focused on a part of the build"), and the mug wears the logo and, on its back, the
    words ("as if it were print on it like a real coffee mug"). At High, where the shots move. */
-test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'s words get the label shot that comes into focus, and the mugs stand printed, each at its own free spot', async () => {
+test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'s words get the label shot that comes into focus, and the mugs stand printed, each at its own free spot', { skip: ROOM_SOFT_SKIP }, async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 1500 }; });
   const { page, errors } = await open('assemble', { query: '&done=room&mugs=3', context: ctx });
@@ -2776,7 +2814,8 @@ test('Assemble: the Done scene\'s strip rests until a pointer or key, a drawer\'
   const rest = await strip();
   assert.deepEqual([rest.idle, rest.opacity, rest.cursor], [true, 0, 'none'], `at rest: the strip and the pointer faded out (${JSON.stringify(rest)})`);
   await page.mouse.move(400, 300); await page.mouse.move(420, 310);
-  await settle(page, 400);
+  // its 0.8 s fade back in, waited for rather than slept: on the CI runner's software rendering a frame can take longer
+  await page.waitForFunction(() => +getComputedStyle(document.querySelector('#ws-scene')).opacity === 1, null, { timeout: 5000 }).catch(() => {});
   const woke = await strip();
   assert.deepEqual([woke.idle, woke.opacity], [false, 1], `a pointer brings it back (${JSON.stringify(woke)})`);
   await page.waitForFunction(() => document.documentElement.classList.contains('scene-idle'), null, { timeout: 6000 });
@@ -3005,7 +3044,7 @@ test('Assemble: the Done scene\'s final scene returns to the End page when the r
    allowed, no sequence"): behind the same flag, the panel head gets the toggle; Room puts the build in the room with the
    stage held, the orbit free and no sequence; a colour pick still lands; the toolbar's Reset view returns to the room's
    shot and gives the camera back; Studio restores the stage; the choice survives a trip to another workspace. */
-test('Colors: the Room | Neutral switch is absent with ?done=off; for every visitor (no flag), Room holds the stage with a free orbit and no sequence, the panel leads with the build, picks land, Reset view returns to the shot, Neutral restores, the choice comes back', async () => {
+test('Colors: the Room | Neutral switch is absent with ?done=off; for every visitor (no flag), Room holds the stage with a free orbit and no sequence, the panel leads with the build, picks land, Reset view returns to the shot, Neutral restores, the choice comes back', { skip: ROOM_SOFT_SKIP }, async () => {
   const state = (page) => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { held: v.sceneHeld, room: !!v.scene.getObjectByName('done-room'), done: document.documentElement.dataset.done || null, bg: v.scene.background ? (v.scene.background.isColor ? 'color' : 'other') : null, controls: v.controls.enabled, camFree: v.camFree, seq: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.on : null, seqWanted: window.__GEN2_DONE__ ? window.__GEN2_DONE__.sequence.wanted : null, quality: v.quality, cam: v.camera.position.toArray().map((n) => +n.toFixed(1)) }; });
   const off = await open('colors', { query: '&done=off' });
   assert.equal(await off.page.locator('#ws-tools .backdrop').count(), 0, 'no backdrop switch with ?done=off');
@@ -3112,7 +3151,7 @@ test('Colors: the Room | Neutral switch is absent with ?done=off; for every visi
    would replace everything in the build that used that same color"): on the Colors stage, the pointer over a spool says
    so; a click on it opens the picker on that spool's filament and selects no part; a pick changes every region printed
    in it, in one undo step, and the spool with it; undo puts it all back */
-test('Colors: a spool clicked in the room opens the picker on its filament, and one pick changes everything printed in it, the spool too, in one undo step', async () => {
+test('Colors: a spool clicked in the room opens the picker on its filament, and one pick changes everything printed in it, the spool too, in one undo step', { skip: ROOM_SOFT_SKIP }, async () => {
   const { ctx, page, errors } = await open('colors', { visitor: true, query: '&spools=plan' });
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__ && window.__GEN2_DONE__.spools && window.__GEN2_DONE__.spools.placed.length, null, { timeout: 60_000 }).catch(() => assert.fail('no spools in the room'));
   await settle(page, 1500);
