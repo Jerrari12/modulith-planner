@@ -5487,3 +5487,12 @@ find it by its name. Unit 696/696. Terra 01a17f6f: no findings.
 - **Live 2026-10-27 at `a01df56`** (run 40595261679 green). Checked on the live planner (`labels-prod.mjs`, ?done=off): the
   callout's two tiles with their pictures and stars and no promise, a typed label's Green stripe stored and None taking it
   off, Classic Pro's line in place of the stripe and drawings controls; no page errors.
+
+- **Correction (2026-10-27): all three bundled faces lack their letters, not only Plex Sans.** CDP
+  `getPlatformFontsForNode` on the local planner:
+  - "Parts list" (`--font-display` Archivo): 1 glyph in Archivo, 8 in Segoe UI Black.
+  - "Start assembly" (Archivo): 1 glyph in Archivo, 10 in Segoe UI Black.
+  - "43 to print · 17 files" (`--font-mono` IBM Plex Mono): 5 glyphs in Plex Mono, 17 in Consolas.
+
+  The headings, the orange buttons and the counts draw in the system's faces as the everyday words do. A re-fetch is
+  for Joey.
