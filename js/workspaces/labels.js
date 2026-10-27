@@ -577,8 +577,8 @@ export function mountLabels(stage, ctx) {
   /* A label's preview is drawn by js/label-preview.js from its 3D label's own geometry (Joey 2026-10-17: "the small labels
      differ from the actual labels"; supersedes decision 3b). `u` = the drawer that wears it, when there is one: its look is
      then the drawer's own (label-look.js labelLookOf), exactly what the stage draws; a label still waiting to be placed is
-     drawn as a drawer wearing it would draw it. Until the data has loaded - and on Classic Pro, which the stage draws no
-     text on - the lightweight CSS preview below stands in. */
+     drawn as a drawer wearing it would draw it. Until the data has loaded - and on Classic Pro, whose words the stage draws
+     (since 2026-10-27) but whose flat label face label-preview.js does not hold - the lightweight CSS preview below stands in. */
   const previewLook = (l, u) => {
     const s = S();
     if (s.faceStyle === 'classicpro') return null;

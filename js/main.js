@@ -23,7 +23,7 @@ import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
 import { createSettleBench } from './settle-bench.js';
 import { parseSeeInto, parseSeeIntoSkip, parseSeeIntoLattice, createSeeInto } from './see-into.js';
-import { LABEL_TEXT_DEFAULTS, LABEL_TEXT_NODES, labelFontReady, loadLabelFont, labelGeometry, labelCore, labelIcons,
+import { LABEL_TEXT_DEFAULTS, LABEL_TEXT_NODES, LABEL_TYPE_OF_NODE, labelFontReady, loadLabelFont, labelGeometry, labelCore, labelIcons,
   labelPartsReady, loadLabelParts, partLabelGeometry, stripeGeometry } from './label-text.js';
 import { labelLookOf, labelLooksKey, labelLookNeeds, stripeZone, isStripeZone, stripeHexOfKey } from './label-look.js';
 import { LABEL_SPEC, LABEL_TEXT_MAX, cleanLabelText, cleanLabelBadge, cleanLabelStyle } from './label-spec.js';
@@ -4636,9 +4636,12 @@ function loadLabelPartsOnce(need) {
     console.warn(`[label text] ${(e && e.message) || e} - part labels and colour stripes are shown as plain labels`);
   });
 }
+/* A Classic Pro label prints no stripe (the Label Studio's rule: the band is EdgeLabel's): there a stripe look is the plain
+   label, words and icon. A part label stays one, laid out on Classic Pro's own face (placeLabelText, label-text.js). */
 function labelLookFor(inst, words) {
   const u = labelUnitFor(inst);
-  return u ? labelLookOf(build, u, words) : null;
+  const look = u ? labelLookOf(build, u, words) : null;
+  return look && look.kind === 'stripe' && LABEL_TYPE_OF_NODE[inst.cfg.node] === 'classicpro' ? null : look;
 }
 function attachLabelTexts() {
   const tok = ++labelTextTok;   // a later mount supersedes a font load still in flight for this one
@@ -4671,12 +4674,13 @@ function placeLabelText(inst, text, badge, upload, look) {
   clearLabelText(inst);
   if (!text) return null;
   let t = null, pieces = null;
+  const type = LABEL_TYPE_OF_NODE[inst.cfg.node] || 'edgelabel';   // its label core and frame (label-text.js)
   if (look && look.kind === 'part') {
-    const p = partLabelGeometry(look.item, look.position);   // null: not loaded, or the part item cannot print - the words stand in
+    const p = partLabelGeometry(look.item, look.position, type);   // null: not loaded, or the part item cannot print - the words stand in
     if (p) { t = { parts: p.parts, fits: true, shown: p.shown, badge: null, part: true }; pieces = p.pieces; }
   }
   if (!t) {
-    t = labelGeometry(text, badge, build.labelStyle, upload);
+    t = labelGeometry(text, badge, build.labelStyle, upload, type);
     if (!t) return null;
     if (look && look.kind === 'stripe') pieces = stripeGeometry(look.colours, look.position);
   }
@@ -8730,8 +8734,8 @@ $('identify-close-drawer').onclick = () => setSelected(null);
 
 /* ---- the label editor on the identify card (label plan step 2, Joey 2026-10-02: "the viewer label panel (name + icon per
    label; size/depth/bold/caps/icon size once per build - the generator's own split)") ------------------------------------
-   Anchor: a selected EdgeLabel label (LABEL_TEXT_NODES) that belongs to a planner unit, on a generated build. Classic Pro
-   labels show no text yet, so they get no editor (open question 1). The DRAWER BODY and FACEPLATE cards get one line,
+   Anchor: a selected EdgeLabel or Classic Pro label (LABEL_TEXT_NODES; Classic Pro since 2026-10-27, when its words began to
+   draw) that belongs to a planner unit, on a generated build. The DRAWER BODY and FACEPLATE cards get one line,
    "✎ Label: TORX BITS ▸", that re-selects that drawer's label - the thing people actually tap.
    Preview = a DRAFT: typing rebuilds that one label's meshes from the field's text without touching `build`; Enter / blur
    commits (the planner's own field commits the same way), a badge pick commits at once. A commit writes `build` through
@@ -8831,7 +8835,7 @@ function renderLabelEditorState(opts = {}) {
   $('label-pick-upnote').classList.toggle('hidden', !(upload && docked));
   // the generator's own verdict, read off the meshes it built for THIS label
   let fits = true;   // (a part label's own layout decides its fit; its words never print through label-core)
-  if (text && !partLook && labelFontReady()) { const t = labelGeometry(text, badge, build.labelStyle, upload); if (t && t.fits === false) fits = false; }
+  if (text && !partLook && labelFontReady()) { const t = labelGeometry(text, badge, build.labelStyle, upload, LABEL_TYPE_OF_NODE[inst.cfg.node]); if (t && t.fits === false) fits = false; }
   const fitEl = $('label-edit-fit');
   fitEl.textContent = fits ? '' : 'Won\'t fit, even at the 3 mm minimum';
   fitEl.classList.toggle('hidden', fits);

@@ -69,7 +69,9 @@ test('over the vendored core: the core\'s 23 icons + 9 MODULITH-family icons, th
 test('label-text.js loads the catalog with its own ?v= stamp and builds every label through resolveBadge', () => {
   const src = readFileSync(join(root, 'js', 'label-text.js'), 'utf8').replace(/\r\n/g, '\n');
   assert.match(src, /script\(url\('\.\/vendor\/label-icon-art\.js'\), \(\) => !!window\.GEN2LabelIconArt\),\n {4}script\(url\('\.\/vendor\/label-icons\.js'\), \(\) => !!window\.GEN2LabelIcons\),/);
-  assert.match(src, /core\.prepareLabel\(raw, icons\.resolveBadge\(chosen, S\.badgeSize\), S\.allCaps\)/);
+  // the label type's core (EdgeLabel's, or Classic Pro's since 2026-10-27), one catalog for both, as the Label Studio does
+  assert.match(src, /const C = type === 'classicpro' \? cpCore : core;/);
+  assert.match(src, /C\.prepareLabel\(raw, icons\.resolveBadge\(chosen, S\.badgeSize\), S\.allCaps\)/);
   assert.equal((src.match(/prepareLabel\(/g) || []).length, 1, 'one label build path');
   assert.match(src, /const id = S\.predictIcons \? icons\.guessIconId\(text\) : null;/);
   const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');

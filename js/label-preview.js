@@ -10,8 +10,9 @@
    - a stripe's body pieces (the Label Studio's band data) in their colours;
    - the ink, in the label's TEXT colour: a part label's rings from partLabelLayout - the very layout its 3D ink is extruded
      from - or an ordinary label's top faces from labelGeometry's cached geometry (its wrap, shrink and badge).
-   Nothing is drawn until the data it needs has loaded (the caller shows its CSS preview meanwhile). Classic Pro labels are
-   not drawn in 3D (label-text.js LABEL_TEXT_NODES), so they keep the CSS preview. */
+   Nothing is drawn until the data it needs has loaded (the caller shows its CSS preview meanwhile). Classic Pro labels keep
+   the CSS preview: the stage draws their words since 2026-10-27 (label-text.js, the Classic Pro core), but this file holds
+   only EdgeLabel's face. */
 import { labelFontReady, labelPartsReady, partLabelLayout, labelInk2d, stripePieces2d, stripeColours } from './label-text.js';
 
 export const EDGELABEL_FACE = Object.freeze([[-28.5, -12.501], [-0.671, -12.501], [-0.458, -12.496], [-0.247, -12.481], [-0.039, -12.456],

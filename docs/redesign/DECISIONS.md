@@ -5496,3 +5496,36 @@ find it by its name. Unit 696/696. Terra 01a17f6f: no findings.
 
   The headings, the orange buttons and the counts draw in the system's faces as the everyday words do. A re-fetch is
   for Joey.
+
+## 2026-10-27 · Classic Pro labels show their words on the model
+
+Joey placed "M3-10 SCREW" on a Classic Pro drawer: "it says it added the label but i don't see it" (the panel said
+"1 label · 1 on drawers", the 3D label stayed blank), then: "Yes, make Classic Pro labels show their words on the 3D model,
+using the Label Studio's Classic Pro layout." The stage drew words on EdgeLabel labels only (label-text.js
+`LABEL_TEXT_NODES`), recorded in the Labels entry above as not done.
+
+- **The Classic Pro generator's own core**, vendored byte for byte as `js/vendor/classicpro-core.js` (the Label Studio's
+  `label-core-classicpro.js`, sha256 bbb53c7c..., the live Studio's own stamp; test/classicpro-core-vendor.test.mjs pins it
+  and checks it against the Studio checkout). label-text.js loads it beside EdgeLabel's and builds a Classic Pro label
+  exactly as the Studio does (its getLabelData): the same label style, the same icon catalog (`resolveBadge` over EdgeLabel's
+  core; the cores' DEFAULTS and 23 icons are equal, the test checks), `prepareLabel` + `buildLabelMeshes` of the Classic Pro
+  core, which centres badge + text as a group on its flat 47 x 25.5 mm label.
+- **The frame was measured, not assumed** (`CLASSICPRO_FRAME`): D:/MODULITH/handoffs/edgelabel-v2602/CLASSICPRO-CORE.md
+  section 3 (2026-10-02) fitted the generator's flat label to the Label_ClassicPro model, which is the generator's own 92-vertex
+  STL exported tilted: -45 degrees about X, then (0, 9.0061, -0.5562) mm, residual 0.0000 mm mean / 0.0001 max; a geometry
+  built at z 0 is lifted to the core's LABEL_HT (1.5), turned, then moved. Not mirrored: the e2e finds the badge left of the
+  words, and the words read "M3-10 SCREW" left to right on the model.
+- **Part labels on Classic Pro** are laid out on Classic Pro's own face (the Studio's `hardware-data-classicpro.js`, vendored
+  and pinned beside the other part-label files; label-hardware.js `layOut(item, { type: 'classicpro' })`): the words and the
+  part's icon, centred, no drawing, no stripe - what the Studio prints there. **A stripe** is not drawn on a Classic Pro label
+  (`labelLookFor`: the plain label), as it does not print.
+- The label previews in the Labels panel keep the CSS box on Classic Pro (label-preview.js holds EdgeLabel's face only).
+
+E2E "Classic Pro: a typed label and a part label draw on the Classic Pro label in its measured frame; no stripe there": the
+generator's top-face corners, mapped by the frame, land on the model's own vertices (< 0.02 mm), every vertex of the ink lies
+on that face inside it and no deeper than the text depth, the badge sits left of the words, the part label's ink is 0.45 mm,
+no stripe pieces. Mutants: the frame turned +45 degrees, and the frame mirrored in x, each fail it.
+Sol 01a17faa: two findings, both fixed - the Classic Pro core and its face data loaded in the same all-or-nothing load as
+EdgeLabel's, so one failed file would have blanked EdgeLabel labels too; both now load on their own (a failure leaves Classic
+Pro labels blank, or its part labels in words). E2E "Classic Pro core refused: an EdgeLabel label still shows its words"
+(the coupled load fails it). The frame order, the caches, the one icon catalog and the dropped stripe were confirmed.

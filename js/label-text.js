@@ -26,14 +26,39 @@ import { isLabelSvg } from './label-panel.js';
    colour when a build mounts); test/edgelabel-core-vendor.test.mjs pins it to the core's own DEFAULTS.colorText. */
 export const LABEL_TEXT_DEFAULTS = Object.freeze({ hex: '#1a1a1a' });
 
-/* Which label models get text. EdgeLabel only: the Classic Pro label lies on a sloped grip, its frame has not been measured,
-   and its generator lays a label out differently (badge and text centred as a group), so it needs its own core. */
-export const LABEL_TEXT_NODES = new Set(['Label_EdgeLabel']);
+/* Which label models get text, and which label type each is: the label core and the frame a label of that type is built in.
+   Classic Pro since 2026-10-27 (Joey: a placed Classic Pro label stayed blank - "it says it added the label but i don't see
+   it"): its label is laid out by the Classic Pro generator's own label-core.js, which the Label Studio serves as
+   label-core-classicpro.js and this app vendors as js/vendor/classicpro-core.js (test/classicpro-core-vendor.test.mjs pins
+   it). It centres badge + text as a group on a flat 47 x 25.5 mm label whose top face is z 1.5, and the label lies on the
+   faceplate's sloped grip, so its frame is a rotation, not EdgeLabel's shift (CLASSICPRO_FRAME below). */
+export const LABEL_TYPE_OF_NODE = Object.freeze({ Label_EdgeLabel: 'edgelabel', Label_ClassicPro: 'classicpro' });
+export const LABEL_TEXT_NODES = new Set(Object.keys(LABEL_TYPE_OF_NODE));
+
+/* ⚠ THE CLASSIC PRO FRAME WAS MEASURED, NOT ASSUMED (D:/MODULITH/handoffs/edgelabel-v2602/CLASSICPRO-CORE.md section 3,
+   2026-10-02, tools/frame.mjs): the generator's flat label maps onto the Label_ClassicPro model - the generator's own 92-vertex
+   STL, exported tilted - by a -45 degree rotation about X plus a translation, residual 0.0000 mm mean / 0.0001 mm max over all
+   92 vertices; the next distinct fit was 0.34 mm mean. A geometry the core builds at z 0 is lifted to the top face (the core's
+   LABEL_HT, 1.5), turned, then moved: a point (x, y, 0) lands at (x, 10.0668 + 0.7071 y, 0.5044 - 0.7071 y), the letters
+   standing out along (0, 0.7071, 0.7071), up the grip's slope toward the viewer. x is not mirrored (reading direction: the
+   handoff's reasoning, and the e2e reads the words' left-to-right order off the model). */
+export const CLASSICPRO_FRAME = Object.freeze({ rotX: -Math.PI / 4, ty: 9.0061, tz: -0.5562 });
 
 let core = null;      // GEN2EdgeLabelCore.create(...), once its script and the font have loaded
+let cpCore = null;    // GEN2ClassicProCore.create(...), loaded with it
 let icons = null;     // GEN2LabelIcons.create({ core }): the generator's icon catalog (groups, the MODULITH icon family, the guess)
 let frame = null;     // generator frame -> the Label_EdgeLabel model's frame
 let font = null;      // the parsed label font (opentype), kept for the part-label layout (loadLabelParts)
+
+/* A geometry built in a label core's frame (z 0 under the label's top face), moved into its label model's frame, in place. */
+function toModel(geo, type) {
+  if (type === 'classicpro') {
+    geo.translate(0, 0, cpCore.LABEL_HT);
+    geo.rotateX(CLASSICPRO_FRAME.rotX);
+    geo.translate(0, CLASSICPRO_FRAME.ty, CLASSICPRO_FRAME.tz);
+  } else geo.translate(...frame);
+  return geo;
+}
 
 /* Loading: opentype.js (the generators' UMD build) and the core are classic scripts, the font is fetched as bytes. All three
    load ONCE, and only when a build has label text to show. Each URL carries this module's own ?v= stamp, so a deploy can
@@ -59,16 +84,28 @@ export function loadLabelFont() {
   loading = Promise.all([
     script(url('../vendor/opentype/opentype.min.js'), () => !!window.opentype),
     script(url('./vendor/edgelabel-core.js'), () => !!window.GEN2EdgeLabelCore),
+    // Classic Pro's core may fail alone: EdgeLabel labels must not go blank with it (Sol 01a17faa), so its load never rejects
+    // here; without it a Classic Pro label shows no words, as before 2026-10-27
+    script(url('./vendor/classicpro-core.js'), () => !!window.GEN2ClassicProCore).catch((e) => console.warn(`[label text] ${(e && e.message) || e} - Classic Pro labels left blank`)),
     script(url('./vendor/label-icon-art.js'), () => !!window.GEN2LabelIconArt),
     script(url('./vendor/label-icons.js'), () => !!window.GEN2LabelIcons),
     fetch(url('../vendor/fonts/LiberationSansNarrow-Bold.ttf')).then((r) => { if (!r.ok) throw new Error('label font ' + r.status); return r.arrayBuffer(); }),
-  ]).then(([, , , , buf]) => {
+  ]).then(([, , , , , buf]) => {
     // the core reads THREE.SVGLoader the way the generator's three global carries it; a module namespace cannot take a new
     // property, so the core gets a plain copy of it with the addon added
-    const c = window.GEN2EdgeLabelCore.create({ THREE: { ...THREE, SVGLoader } });
+    const three = { ...THREE, SVGLoader };
+    const c = window.GEN2EdgeLabelCore.create({ THREE: three });
     font = window.opentype.parse(buf);
     c.setFont(font);
     frame = [0, c.LABEL_WID / 2, c.LABEL_HT - c.LABEL_HT / 2];
+    // Classic Pro's core takes the same font (both generators embed Liberation Sans Narrow Bold) and the same icons: the Label
+    // Studio passes every badge through ONE catalog over EdgeLabel's core (its index.html LabelIcons), the cores' 23 icons
+    // being the same in both
+    if (window.GEN2ClassicProCore) {
+      const cp = window.GEN2ClassicProCore.create({ THREE: three });
+      cp.setFont(font);
+      cpCore = cp;
+    }
     icons = window.GEN2LabelIcons.create({ core: c, art: window.GEN2LabelIconArt });
     core = c;
   }).catch((e) => { loading = null; throw e; });   // a failed load may be retried by the next mount
@@ -82,36 +119,39 @@ function defaultBadge(text, S) {
   return id ? { type: 'icon', value: id } : { type: 'none' };
 }
 
-/* One label as geometry in the Label_EdgeLabel model's own frame, built by the generator's buildLabelMeshes. `badge` is
-   the unit's labelBadge (absent or invalid = the generator's prediction), `style` the build's labelStyle (absent or invalid
-   values = the generator's defaults). Returns null when there is nothing to print. `fits` is the generator's own verdict:
-   false means even the 3 mm floor overflows the label, exactly where the generator warns. `upload` is the drawer's uploaded
-   icon (label-panel.js labelUploadFor): it wins, as an upload does in the generator. */
+/* One label as geometry in its label model's own frame (Label_EdgeLabel, or Label_ClassicPro for `type` 'classicpro'), built
+   by that generator's buildLabelMeshes. `badge` is the unit's labelBadge (absent or invalid = the generator's prediction),
+   `style` the build's labelStyle (absent or invalid values = the generator's defaults). Returns null when there is nothing to
+   print. `fits` is the generator's own verdict: false means even the 3 mm floor overflows the label, exactly where the
+   generator warns. `upload` is the drawer's uploaded icon (label-panel.js labelUploadFor): it wins, as an upload does in the
+   generator. The badge goes through the one icon catalog for both types, as the Label Studio sends it (its getLabelData). */
 const cache = new Map();
-export function labelGeometry(text, badge, style, upload) {
+export function labelGeometry(text, badge, style, upload, type = 'edgelabel') {
   if (!core) throw new Error('label core not loaded');
-  const S = { ...core.DEFAULTS, ...(cleanLabelStyle(style) || {}) };
+  if (type === 'classicpro' && !cpCore) return null;   // its core did not load: the label stays blank, EdgeLabel's draw on
+  const C = type === 'classicpro' ? cpCore : core;
+  const S = { ...C.DEFAULTS, ...(cleanLabelStyle(style) || {}) };
   const raw = String(text || '');
   const up = isLabelSvg(upload) ? { type: 'icon', svg: upload } : null;
   const chosen = up || cleanLabelBadge(badge) || defaultBadge(raw, S);
   // the generator's one adapter: an icon its core does not hold reaches the core as the badge's own drawing, chosen for
   // the style's Badge size exactly as the generator chooses it
-  const data = core.prepareLabel(raw, icons.resolveBadge(chosen, S.badgeSize), S.allCaps);
+  const data = C.prepareLabel(raw, icons.resolveBadge(chosen, S.badgeSize), S.allCaps);
   if (!data) return null;
-  const key = JSON.stringify([data.text, data.badge, S.capMm, S.depth, S.badgeSize, S.bold]);
+  const key = JSON.stringify([type, data.text, data.badge, S.capMm, S.depth, S.badgeSize, S.bold]);
   if (cache.has(key)) return cache.get(key);
   let m;
-  try { m = core.buildLabelMeshes(data, S.capMm, S.depth, S.badgeSize, S.bold); }
+  try { m = C.buildLabelMeshes(data, S.capMm, S.depth, S.badgeSize, S.bold); }
   catch (e) {
     if (!up) throw e;
     // an upload this page cannot draw: the words alone, as the generator refuses an SVG it cannot read
     console.warn(`[label text] an uploaded icon could not be drawn (${(e && e.message) || e}) - shown without it`);
-    return labelGeometry(text, { type: 'none' }, style);
+    return labelGeometry(text, { type: 'none' }, style, undefined, type);
   }
   const parts = [];
   if (m.textGeo) parts.push({ part: 'text', geo: m.textGeo });
   if (m.badgeGeo) parts.push({ part: 'badge', geo: m.badgeGeo });
-  for (const p of parts) { p.geo.translate(...frame); p.geo.computeBoundingBox(); }
+  for (const p of parts) { toModel(p.geo, type); p.geo.computeBoundingBox(); }
   const out = { parts, fits: m.textFits, shown: data.text.trim(), badge: data.badge };
   cache.set(key, out);
   return out;
@@ -152,19 +192,23 @@ export function loadLabelParts(need) {
   if (partsLoading) return partsLoading.then(() => loadLabelParts(want));   // one load at a time; then whatever is still missing
   const list = [loadLabelFont(), loadScript(vendorUrl('./vendor/label-hardware.js'), () => !!window.GEN2LabelHardware)];
   if (want.bands) list.push(loadScript(vendorUrl('./vendor/hardware-band-data.js'), () => !!window.GEN2HardwareBandData));
+  // the layout comes with Classic Pro's face (hardware-data-classicpro.js, 36 kB): a part label on a Classic Pro drawer is laid
+  // out on it, as the Label Studio lays it out there (2026-10-27)
   if (want.layout) list.push(
     loadScript(vendorUrl('./vendor/hardware-layout.js'), () => !!window.GEN2HardwareLayout),
     loadScript(vendorUrl('./vendor/hardware-data.js'), () => !!window.GEN2HardwareData),
-    loadScript(vendorUrl('./vendor/hardware-v5-data.js'), () => !!window.GEN2HardwareV5Data));
+    loadScript(vendorUrl('./vendor/hardware-v5-data.js'), () => !!window.GEN2HardwareV5Data),
+    // never rejects (Sol 01a17faa): without it a Classic Pro part label shows its words (layOut says the layout did not load)
+    loadScript(vendorUrl('./vendor/hardware-data-classicpro.js'), () => !!window.GEN2HardwareDataClassicPro).catch((e) => console.warn(`[label text] ${(e && e.message) || e} - Classic Pro part labels show their words`)));
   partsLoading = Promise.all(list).then(() => {
     // created again whenever more data arrives (the layout instances are made by create); the caches below are keyed by what
     // the data gives, so a re-create changes no geometry already built
     const lh = window.GEN2LabelHardware.create({
       THREE, layout: window.GEN2HardwareLayout || null, data: window.GEN2HardwareData || null, v5: window.GEN2HardwareV5Data || null,
-      bands: window.GEN2HardwareBandData || null, mergeGeoms: (g) => core.mergeGeoms(g),
+      classicpro: window.GEN2HardwareDataClassicPro || null, bands: window.GEN2HardwareBandData || null, mergeGeoms: (g) => core.mergeGeoms(g),
     });
     lh.setFont(font);
-    partsHave = { layout: !!lh.layouts.edgelabel, bands: lh.treatments.length > 0 };
+    partsHave = { layout: !!lh.layouts.edgelabel, bands: lh.treatments.length > 0 };   // Classic Pro's face is optional (above)
     parts = lh;
     // loaded but unusable (data of another format): say so, so no caller waits on it again
     if (!labelPartsReady(want)) throw new Error('the part-label data did not load as expected');
@@ -201,29 +245,31 @@ export function stripeGeometry(colours, position) {
 /* A PART label as the Label Studio prints it: { parts: [{ part: 'ink', geo }], pieces | null, record, shown }, or null when the
    layout cannot print it (the Label Studio's red row note: not ready, or it does not fit) - the caller then shows the drawer's
    words instead. Laid out on EdgeLabel with the screw and nut drawings on (the Label Studio's default), the stripe at
-   `position` (null: none); the ink stands 0.45 mm proud (the part label's own depth, not the build's text depth). */
+   `position` (null: none); the ink stands 0.45 mm proud (the part label's own depth, not the build's text depth). On Classic
+   Pro (`type` 'classicpro') it is laid out on that face as the Label Studio lays it out there: the words and the part's icon,
+   every row centred, no drawing and no stripe (label-hardware.js layoutFor, typeSkips), the ink on its label's top face. */
 const partCache = new Map();
 /* The part label's LAYOUT - the Label Studio's layOut result: { elements, band, colours, record, ... } (elements null when it
    cannot print) - shared by the 3D ink below and the panel's 2D preview (js/label-preview.js), so the two are drawn from one
    layout and cannot disagree (Joey 2026-10-17: "the small labels differ from the actual labels"). One layOut per
-   (item, position); null until the part-label files have loaded. */
+   (item, position, type); null until the part-label files have loaded. */
 const layoutCache = new Map();
-export function partLabelLayout(item, position) {
+export function partLabelLayout(item, position, type = 'edgelabel') {
   if (!parts || !partsHave.layout || !core) return null;
-  const key = JSON.stringify([item, position || 'off']);
-  if (!layoutCache.has(key)) layoutCache.set(key, parts.layOut(item, { type: 'edgelabel', profile: true, band: position || 'off' }));
+  const key = JSON.stringify([item, position || 'off', type]);
+  if (!layoutCache.has(key)) layoutCache.set(key, parts.layOut(item, { type, profile: true, band: position || 'off' }));
   return layoutCache.get(key);
 }
-export function partLabelGeometry(item, position) {
-  if (!parts || !partsHave.layout || !core) return null;
-  const key = JSON.stringify([item, position || 'off']);
+export function partLabelGeometry(item, position, type = 'edgelabel') {
+  if (!parts || !partsHave.layout || !core || (type === 'classicpro' && !cpCore)) return null;
+  const key = JSON.stringify([item, position || 'off', type]);
   if (partCache.has(key)) return partCache.get(key);
-  const r = partLabelLayout(item, position);
+  const r = partLabelLayout(item, position, type);
   let out = null;
   if (r.elements) {
     const ink = parts.inkGeometry(r.elements, r.inkDepth);
     const list = [];
-    if (ink) { ink.translate(...frame); ink.computeBoundingBox(); list.push({ part: 'ink', geo: ink }); }
+    if (ink) { toModel(ink, type); ink.computeBoundingBox(); list.push({ part: 'ink', geo: ink }); }
     out = { parts: list, pieces: r.band ? stripePieces(r.band, r.colours) : null, record: r.record,
             shown: (r.record.main_lines || [r.record.main || '']).join(' ') };
   }

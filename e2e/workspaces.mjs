@@ -721,6 +721,89 @@ test('Colors: a preset applied from the gallery recolours the model as one histo
   await ctx.close();
 });
 
+/* CLASSIC PRO LABELS SHOW THEIR WORDS ON THE MODEL (Joey 2026-10-27: a placed Classic Pro label stayed blank - "it says it
+   added the label but i don't see it"). The words come from the Classic Pro generator's own core (js/vendor/classicpro-core.js),
+   in the frame measured against the Label_ClassicPro model (label-text.js CLASSICPRO_FRAME). Checked on the stage, in the
+   label's own frame (its inner group): the generator's flat top face, mapped by the frame, lands on the model's own corner
+   vertices; every vertex of the words lies on that face, no deeper than the text depth and inside it; the badge sits LEFT of
+   the words, as the generator centres badge + text (a mirrored frame would put it right); a part label is laid out on Classic
+   Pro's own face with no stripe pieces; and a stripe on a typed label is not drawn (Classic Pro prints none). */
+test('Classic Pro: a typed label and a part label draw on the Classic Pro label in its measured frame; no stripe there', async () => {
+  const ref = JSON.parse(await readFile(join(root, 'test', 'golden', 'part-label-ref.json'), 'utf8')).items[0].item;
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'classicpro', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 6, gridH: 2, nextId: 3, labelStyle: null, buildId: 'e2ecptext0001', sideCovers: true, plateParts: {},
+    placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'Torx bits' }, { id: 2, x: 2, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'M5 × 20' }],
+    labelList: { format: 'modulith-labels', version: 1, labels: [
+      { text: 'Torx bits', id: 'e2ecplabel0001', colours: { band: { colour: 'green', hex: '#009E73', label: 'Green', pattern: 'solid' } } },
+      { text: 'M5 × 20', id: 'e2ecplabel0002', hardware: ref }] },
+    labelAssign: { 1: 'e2ecplabel0001', 2: 'e2ecplabel0002' } };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('build', { query: `&done=off#build=${b64}` });
+  await page.waitForFunction(() => { const S = window.__GEN2_VIEWER__; return S.build.faceStyle === 'classicpro'
+    && [...S.instances.values()].filter((i) => i.cfg.node === 'Label_ClassicPro' && i.group.children[0]?.children.some((o) => o.name === 'LabelText')).length === 2; }, null, { timeout: 90_000 })
+    .catch(async () => assert.fail(`the two Classic Pro labels did not get their words (${await page.evaluate(() => [...window.__GEN2_VIEWER__.instances.values()].filter((i) => /^Label_/.test(i.cfg.node)).map((i) => i.cfg.node + ':' + i.group.children[0]?.children.map((o) => o.name).join('/')).join(' '))})`));
+  const r = await page.evaluate(() => {
+    const S = window.__GEN2_VIEWER__, V = S.THREE.Vector3;
+    const R2 = Math.SQRT1_2, map = (x, y) => [x, 9.0061 + (y + 1.5) * R2, -0.5562 + (1.5 - y) * R2];   // (x, y, 1.5) through the frame
+    const n = [0, R2, R2];
+    return [...S.instances.values()].filter((i) => i.cfg.node === 'Label_ClassicPro').map((inst) => {
+      const inner = inst.group.children[0];
+      inner.updateWorldMatrix(true, true);
+      const inv = inner.matrixWorld.clone().invert();
+      const pts = (o) => { const p = o.geometry.getAttribute('position'), m = inv.clone().multiply(o.matrixWorld), out = []; for (let k = 0; k < p.count; k++) out.push(new V().fromBufferAttribute(p, k).applyMatrix4(m)); return out; };
+      const body = []; inner.traverse((o) => { if (o.isMesh && !['LabelText', 'LabelBadge', 'LabelPiece'].includes(o.name)) body.push(...pts(o)); });
+      const near = (q) => Math.min(...body.map((v) => Math.hypot(v.x - q[0], v.y - q[1], v.z - q[2])));
+      const corners = [[-22.2121, 11.4134], [22.2121, 11.4134], [-22.2121, -12.7366], [22.2121, -12.7366]].map(([x, y]) => +near(map(x, y)).toFixed(4));
+      const o0 = map(0, 0);
+      const ink = inner.children.filter((o) => o.name === 'LabelText' || o.name === 'LabelBadge');
+      let dMin = Infinity, dMax = -Infinity, xMin = Infinity, xMax = -Infinity, inPlane = true;
+      const cx = {};
+      for (const o of ink) {
+        const ps = pts(o); let sx = 0;
+        for (const v of ps) {
+          const d = (v.x - o0[0]) * n[0] + (v.y - o0[1]) * n[1] + (v.z - o0[2]) * n[2];
+          const u = (v.y - o0[1]) * R2 - (v.z - o0[2]) * R2;   // the label's own y, up the face
+          dMin = Math.min(dMin, d); dMax = Math.max(dMax, d); xMin = Math.min(xMin, v.x); xMax = Math.max(xMax, v.x); sx += v.x;
+          if (Math.abs(v.x) > 22.22 || u > 11.42 || u < -12.74) inPlane = false;
+        }
+        cx[o.name] = sx / ps.length;
+      }
+      return { unit: S.instances.get(inst.cfg.rides)?.cfg.owner, corners, dMin: +dMin.toFixed(3), dMax: +dMax.toFixed(3), x: [+xMin.toFixed(2), +xMax.toFixed(2)], inPlane, cx,
+        part: ink.some((o) => o.userData.partLabel), pieces: inner.children.filter((o) => o.name === 'LabelPiece').length, words: ink.map((o) => o.userData.labelText)[0] };
+    });
+  });
+  const typed = r.find((x) => !x.part), part = r.find((x) => x.part);
+  const j = JSON.stringify(r);
+  assert.ok(typed && part, `one typed label and one part label (${j})`);
+  for (const x of r) {
+    assert.ok(x.corners.every((d) => d < 0.02), `the generator's top-face corners land on the model's own vertices (${j})`);
+    assert.ok(x.dMin > -0.01 && x.dMax < 0.8 && x.inPlane, `the ink stands on the label's face, inside it (${j})`);
+    assert.equal(x.pieces, 0, `no stripe pieces on Classic Pro (${j})`);
+  }
+  assert.ok(typed.words === 'TORX BITS' && typed.cx.LabelBadge < typed.cx.LabelText, `the typed label: its words, the predicted badge LEFT of them (${j})`);
+  assert.ok(part.dMax < 0.5, `the part label's ink at its own depth (0.45 mm) (${j})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE CLASSIC PRO CORE MAY FAIL ALONE (Sol 01a17faa): its script loads beside EdgeLabel's, and a failed load must not take
+   EdgeLabel's words with it. With classicpro-core.js refused, an EdgeLabel drawer still shows its label. */
+test('Classic Pro core refused: an EdgeLabel label still shows its words', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  contexts.add(ctx);
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  await ctx.route(/classicpro-core\.js/, (r) => r.abort());
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 6, gridH: 2, nextId: 2, labelStyle: null, buildId: 'e2ecpfail0001', sideCovers: true, plateParts: {},
+    placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'Hex keys' }],
+    labelList: { format: 'modulith-labels', version: 1, labels: [{ text: 'Hex keys', id: 'e2ecpfaillab1' }] }, labelAssign: { 1: 'e2ecpfaillab1' } };
+  const { page, errors } = await open('build', { context: ctx, query: `&done=off#build=${Buffer.from(JSON.stringify(rec), 'utf8').toString('base64')}` });
+  await page.waitForFunction(() => [...window.__GEN2_VIEWER__.instances.values()].some((i) => i.cfg.node === 'Label_EdgeLabel' && i.group.children[0]?.children.some((o) => o.name === 'LabelText' && o.userData.labelText === 'HEX KEYS')), null, { timeout: 90_000 })
+    .catch(() => assert.fail('the EdgeLabel label went blank with the Classic Pro core refused'));
+  assert.deepEqual(errors.filter((e) => /^pageerror/.test(e)), [], 'no page errors');
+  await ctx.close();
+});
+
 /* A TYPED LABEL'S STRIPE, AND CLASSIC PRO'S PRINT SETTINGS (Joey 2026-10-27: "if i'm manually typing a label i don't see how to
    set a color for the label stripe"; the part label stripe's wording "feels specific to edgelabel labels and odd for this
    classic pro label"). The editor's Stripe row: the Label Studio's colours, stored on the label as the Studio stores it, and

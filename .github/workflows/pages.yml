@@ -231,7 +231,7 @@ jobs:
           sed -i "s|'../label-look.js'|'../label-look.js?v=$V'|; s|'../label-preview.js'|'../label-preview.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./label-text.js'|'./label-text.js?v=$V'|" js/label-preview.js
           # ⚠ The Label Studio's part-label files (js/vendor/label-hardware.js, hardware-layout.js, hardware-data.js,
-          # hardware-v5-data.js, hardware-band-data.js) need NO line here: like the core and the icon catalog they are CLASSIC
+          # hardware-v5-data.js, hardware-band-data.js, and Classic Pro's hardware-data-classicpro.js and classicpro-core.js) need NO line here: like the core and the icon catalog they are CLASSIC
           # scripts label-text.js loads itself (vendorUrl), by URL relative to its import.meta.url and carrying ITS OWN ?v=
           # stamp - so the line stamping './label-text.js' in main.js above stamps all five, loaded only when a build has a
           # part label or a colour stripe.
