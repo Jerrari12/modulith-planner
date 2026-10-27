@@ -8,9 +8,9 @@
    - each case is identified by its POSITION in the file (a name may repeat; a position cannot), and lands in exactly one
      shard - assign() returns one shard per position, and test/e2e-shard.test.mjs proves the partition for many lists;
    - the split balances measured time: the longest case first, each onto the least-loaded shard (ties to the lower shard
-     number), weighted by e2e/shard-weights.json (seconds per case name). Since 2026-10-26 they are the CI runner's own:
-     run 40435163187's shard notices (tools/tap-durations.mjs), each shard divided by its machine's speed against the
-     cases the first (local soft-render) weights knew, so six machines share one scale; a case that skips on the runner
+     number), weighted by e2e/shard-weights.json (seconds per case name). Since 2026-10-27 they are the CI runner's own:
+     runs 40435163187 then 40505936978, their shard notices (tools/tap-durations.mjs), each shard divided by its machine's
+     speed against the cases the previous weights knew, so six machines share one scale; a case that skips on the runner
      (the Done scene's room cases on a software rasteriser, the Studio cases) weighs 0.5 s. Only proportions matter.
      A case missing from the weights - a new one - counts as the median, so a stale file only unbalances, it never drops
      or doubles a case;

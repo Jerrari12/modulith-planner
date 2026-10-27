@@ -5338,13 +5338,18 @@ on every entry; round 4 no objection.
   `drawer-card.mjs`, ?skipgc=1): Build on a 1280x800 desktop, Peek inside - the three pills shown (10 % of the 279x262
   drawer); Build at 360x675 - none (the drawer 142x138); Colors at 360x675, Open the drawer - none; no page errors.
 
-## 2026-10-26 · The e2e shard weights are the CI runner's own
+## 2026-10-27 · The e2e shard weights are the CI runner's own
 
-- **Why:** the first weights were a local soft-render run of 89 cases; the final scene added 24 more, unknown to them, and
-  its room cases run 22-339 s on the runner (run 40425689471). On the green run 40435163187 the six shards' e2e steps took
-  10.2-14.3 min.
-- **Change:** e2e/shard-weights.json regenerated from that run's per-shard notices: each case's runner seconds, divided by
-  its shard machine's speed against the cases the old weights knew (factors 0.98-2.0, the pool's own spread), so the
-  six machines share one scale; the 15 cases that skip on the runner (ten room cases under SOFTWARE_GL, the Studio
-  ones) weigh 0.5 s. Judged by these weights, the old split's slowest shard carried 665 s (341-665) and the new one
-  488 s on every shard. The machines' own speed spread still decides the wall clock, as on 2026-10-26's benchmark.
+- **Why:** the first weights were a local soft-render run of 89 cases; the final scene and the phone fixes brought the
+  suite to 117, unknown to them, and the room cases run 22-339 s on the runner (run 40425689471). Shard times on
+  2026-10-27's green runs spread 8.2-15.0 min.
+- **Change:** e2e/shard-weights.json regenerated from the runner's own per-shard notices, twice: from run 40435163187
+  (113 cases, on the old weights' scale), then from run 40505936978 (117 cases, on that first refresh's scale). Each
+  case's runner seconds are divided by its shard machine's speed against the cases the previous weights knew, so six
+  machines share one scale; the 15 cases that skip on the runner (ten room cases under SOFTWARE_GL, the Studio ones)
+  weigh 0.5 s. Judged by the runner's own timings, the slowest shard's work drops from 665 s with the weights on main
+  to 490 s, all six within a second.
+- **What it cannot fix:** the machines. On run 40505936978 they ran 0.94-1.97 times the reference speed, so a shard's
+  wall time still depends on which machine it draws; "shard 6 is always slowest" was the draw plus queueing (shard 6 had
+  the fastest machine on that run). The weights only stop the WORK being uneven.
+- **Tests:** test/e2e-shard.test.mjs 5/5; the coverage job checks every case runs once on the first CI run.
