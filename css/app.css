@@ -1024,6 +1024,12 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
   #ws .sheet.open { transform: none; clip-path: inset(0); overflow-y: auto; z-index: 13; }
   #ws .sheet[hidden] { display: none; }
+  /* what an open sheet covers steps out, or its words read through the glass (phone.js stack): the collapsed handles, and
+     on a short phone on its side the dock or the player under a sheet that takes the whole column */
+  #ws.sheet-open .sheet:not(.open), #ws.sheet-over #ws-dock, #ws.sheet-over #ws-player { visibility: hidden; }
+  /* the label editor's title row goes, as the picker's: the handle names it and carries the × (labels.js) */
+  #ws .sheet#ws-labeledit > .head { display: none; }
+  #ws .sheet#ws-labels .srow .seg.sm { height: 32px; }   /* Label settings' Off / On: 26 px is a mouse's, not a finger's */
   /* the picker's filaments at their full height, the sheet scrolling them (Joey 2026-10-26, on his phone: "I don't think
      filament colors actually show up on mobile at all"). The desktop rule makes the list the column's scroller (flex 1,
      its own overflow), and in a sheet capped at 56vh the rows around it - the material chips, Printed on, the buy line,
@@ -1045,7 +1051,9 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws .sheet#ws-picker .foot .disc { grid-column: 1 / -1; }
   #ws .sheet-handle .hx { flex: none; width: 32px; height: 32px; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
   #ws .sheet-handle .hx:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
-  #ws .sheet-handle { position: sticky; top: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; background: var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
+  /* the handle's glass is tripled (99 % cover): at the sheet's one layer the rows scrolled under it read through its title
+     (the phone tour, 2026-10-27: "Classic drawer · Decor drawer" under "Unit 1 · 1W·1H Decor Drawer"), and still faintly at two */
+  #ws .sheet-handle { position: sticky; top: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; background: linear-gradient(var(--glass-bg), var(--glass-bg)), linear-gradient(var(--glass-bg), var(--glass-bg)), var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
   #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; }
   #ws .sheet-handle .ttl { flex: 1; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #ws .sheet-handle .chev { color: var(--ink-3); display: inline-flex; }
@@ -1114,7 +1122,10 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-player .text { font-size: 13px; line-height: 1.45; max-height: 24vh; overflow-y: auto; }
   #ws-player .row2 { flex-wrap: wrap; gap: var(--gap-ctl); }
   #ws-player .pips { flex: 1 1 100%; order: -1; }
-  #ws-player .row2 .key { height: 38px; padding: 0 10px; flex: 1; font-size: 12px; }
+  /* "Slow-mo", "← Back" and "Next →" broke over two lines at 360 px: one line each, and 4 px a side (it was 10) keeps the
+     five on one row, "Slow-mo" with 4 px to spare at 360; under ~350 it is wider than its key, so it ends in an ellipsis
+     inside it, never over its neighbour (Terra 01a17e76) */
+  #ws-player .row2 .key { height: 38px; padding: 0 4px; flex: 1; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #ws-player .row2 .sq { flex: none; width: 40px; }
 }
 
@@ -1140,8 +1151,8 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-dock, #ws-player { left: auto; right: 8px; width: calc(var(--side) - 16px); box-sizing: border-box; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
   #ws-player { max-height: calc(100vh - var(--row) - 8px - 50px); overflow-y: auto; padding-bottom: 0; }   /* the steps handle (44 px) keeps its slot over it */
   /* and its controls (the pips, Back / Next) stay on the card's floor while the step's words scroll over them */
-  #ws-player .row2 { position: sticky; bottom: 0; padding: 6px 0 10px; background: linear-gradient(var(--glass-bg), var(--glass-bg)), var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); z-index: 1; }   /* as a sheet's handle over its scrolling list */
-  #ws-player .text { max-height: 12vh; }
+  #ws-player .row2 { position: sticky; bottom: 0; padding: 6px 0 10px; background: linear-gradient(var(--glass-bg), var(--glass-bg)), linear-gradient(var(--glass-bg), var(--glass-bg)), var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); z-index: 1; }   /* as a sheet's handle over its scrolling list */
+  #ws-player .text { max-height: none; overflow: visible; }   /* the card scrolls: a scroller of its own was 31 px, cut mid-line (the phone tour, 2026-10-27) */
   #ws-board { top: var(--row); left: calc(var(--rail) + 8px); right: calc(var(--side) + 8px); bottom: 8px; }
   #ws-issues, #ws-partcard, #ws-shop, #ws-choice { left: calc(var(--rail) + 8px); right: calc(var(--side) + 8px); bottom: 8px; max-height: calc(100vh - var(--row) - 16px); overflow-y: auto; }
   #ws #ws-toast { bottom: 12px; left: calc(var(--rail) + (100vw - var(--rail) - var(--side)) / 2); max-width: calc(100vw - var(--rail) - var(--side) - 24px); }

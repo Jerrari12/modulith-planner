@@ -3493,6 +3493,73 @@ test('the phone on its side: the tabs a rail, the bar and the tools one row, the
   await ctx.close();
 });
 
+/* THE PHONE TOUR (Joey 2026-10-27: "Are we able to test other tabs on the planner on mobile and make sure they behave as
+   expected?"). Build, Labels, Parts and Assemble walked at his S23's 360 x 675 and 780 x 260 found: an open sheet's glass
+   showing the collapsed handles and the dock through it, the rows scrolled under a handle reading through its title,
+   Assemble's step words in a 31 px scroller of their own on its side and its Back / Slow-mo / Next broken over two lines
+   upright, Label settings' Off / On 26 px tall */
+test('the phone tour: an open sheet hides what it covers, its handle hides what scrolls under it, Assemble\'s words and keys fit, Label settings take a finger', async () => {
+  const S23 = { width: 360, height: 675 }, SIDE = { width: 780, height: 260 };
+  const vis = (page, q) => page.evaluate((q) => { const e = document.querySelector(q); return e ? getComputedStyle(e).visibility : null; }, q);
+  {
+    const { ctx, page, errors } = await open('build', { phone: true, viewport: S23 });
+    await settle(page, 1500);
+    const sp = await page.evaluate(() => window.__GEN2_VIEWER__.unitScreen(window.__GEN2_STORE__.state.placed[0].id));
+    await page.touchscreen.tap(sp.x, sp.y);
+    await page.waitForFunction(() => { const s = document.getElementById('ws-insp'); return s && !s.hidden; }, null, { timeout: 30_000 });
+    assert.equal(await vis(page, '#ws-lib'), 'visible', 'the control: both handles show while both sheets are collapsed');
+    await page.click('#ws-insp .sheet-handle');
+    await page.waitForFunction(() => document.getElementById('ws-insp').classList.contains('open'), null, { timeout: 15_000 });
+    assert.equal(await vis(page, '#ws-lib'), 'hidden', 'the library\'s collapsed handle steps out under the open unit sheet');
+    assert.equal(await vis(page, '#ws-dock'), 'visible', 'upright the open sheet sits above the dock, which stays');
+    assert.equal((await page.evaluate(() => getComputedStyle(document.querySelector('#ws-insp .sheet-handle')).backgroundImage)).match(/gradient/g)?.length, 2, 'the handle\'s glass tripled: the colour and two layers over it');
+    await page.click('#ws-insp .sheet-handle');
+    await page.waitForFunction(() => !document.getElementById('ws-insp').classList.contains('open'), null, { timeout: 15_000 });
+    assert.equal(await vis(page, '#ws-lib'), 'visible', 'closed, the library\'s handle is back');
+    assert.deepEqual(clean(errors), [], 'build');
+    await ctx.close();
+  }
+  {
+    const { ctx, page, errors } = await open('labels', { phone: true, viewport: SIDE });
+    await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+    await page.click('#ws-labels .sheet-handle');
+    await page.waitForFunction(() => document.getElementById('ws-labels').classList.contains('open'), null, { timeout: 15_000 });
+    assert.equal(await vis(page, '#ws-dock'), 'hidden', 'on its side the sheet takes the whole column: the dock under it steps out');
+    // Label settings: Off / On at a finger's 32 px
+    const segs = await page.evaluate(() => { const d = [...document.querySelectorAll('#ws-labels details')].find((x) => x.querySelector('.srow .seg.sm')); d.open = true; return [...d.querySelectorAll('.srow .seg.sm')].map((b) => Math.round(b.getBoundingClientRect().height)); });
+    assert.ok(segs.length && segs.every((h) => h >= 32), `Label settings' Off / On ${segs.join(', ')} px`);
+    await page.click('#ws-labels .sheet-handle');
+    await page.waitForFunction(() => !document.getElementById('ws-labels').classList.contains('open'), null, { timeout: 15_000 });
+    assert.equal(await vis(page, '#ws-dock'), 'visible', 'closed, the dock is back');
+    assert.deepEqual(clean(errors), [], 'labels');
+    await ctx.close();
+  }
+  for (const [vp, side] of [[SIDE, true], [S23, false], [{ width: 320, height: 640 }, false]]) {
+    const { ctx, page, errors } = await open('assemble', { phone: true, viewport: vp });
+    await page.waitForSelector('#ws-player .text', { timeout: 60_000 });
+    await settle(page, 1200);
+    const m = await page.evaluate(() => {
+      const t = document.querySelector('#ws-player .text');
+      const keys = [...document.querySelectorAll('#ws-player .row2 .key')].filter((b) => b.getClientRects().length && b.textContent.trim());
+      const lines = keys.map((b) => { const r = document.createRange(); r.selectNodeContents(b); return [b.textContent.trim(), new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size]; });
+      const rows = new Set([...document.querySelectorAll('#ws-player .row2 .key')].filter((b) => b.getClientRects().length).map((b) => Math.round(b.getBoundingClientRect().top))).size;
+      // a word wider than its key: clipped to an ellipsis inside it, or it paints over the next key
+      const over = keys.filter((b) => b.scrollWidth > b.clientWidth).map((b) => [b.textContent.trim(), getComputedStyle(b).overflowX, getComputedStyle(b).textOverflow]);
+      return { own: t.scrollHeight > t.clientHeight + 1, lines, rows, over };
+    });
+    if (side) assert.equal(m.own, false, `on its side the step's words are not a scroller of their own: the card scrolls (${JSON.stringify(m)})`);
+    // and the five keys still one row: words kept whole by pushing Next onto a row of its own made the card taller
+    else assert.ok(m.lines.length >= 3 && m.lines.every(([, n]) => n === 1) && m.rows === 1, `upright every key on one line, all on one row (${JSON.stringify(m)})`);
+    if (vp.width === 360) assert.deepEqual(m.over, [], 'at the S23\'s 360 px every key\'s words fit it whole');
+    if (vp.width === 320) {
+      assert.ok(m.over.length, `the control: at 320 px "Slow-mo" is wider than its key (${JSON.stringify(m)})`);
+      assert.ok(m.over.every(([, o, t]) => o === 'hidden' && t === 'ellipsis'), `at 320 px a word too wide for its key ends in an ellipsis inside it (Terra 01a17e76) (${JSON.stringify(m.over)})`);
+    }
+    assert.deepEqual(clean(errors), [], 'assemble');
+    await ctx.close();
+  }
+});
+
 /* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
    3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
 test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {
@@ -4654,9 +4721,12 @@ test('the phone: Edit raises the label editor sheet, its close is reachable, and
   await page.waitForFunction(() => { const e = document.querySelector('#ws-labeledit'); return e && !e.hidden && e.classList.contains('open'); }, null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => document.querySelector('#ws-labels').classList.contains('open')), false, 'the Labels sheet steps down for the editor');
   // the sheet rises with a transition: wait for it to settle (a single look mid-rise read the dock under the × on a busy run)
-  const reach = await page.waitForFunction(() => { const b = document.querySelector('#ws-labeledit button[aria-label="Close the editor"]'); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t === b || b.contains(t); }, null, { timeout: 15_000 }).then(() => true, () => false);
+  // the close is the handle's × (the phone tour, 2026-10-27): the editor's own title row is gone, the handle names the label
+  const head = await page.evaluate(() => { const h = document.querySelector('#ws-labeledit > .head'), x = document.querySelector('#ws-labeledit .sheet-handle .hx').getBoundingClientRect(); return { row: !!h && h.getClientRects().length > 0, ttl: document.querySelector('#ws-labeledit .sheet-handle .ttl').textContent, x: [Math.round(x.width), Math.round(x.height)] }; });
+  assert.deepEqual(head, { row: false, ttl: 'Edit · “PHONE EDIT”', x: [32, 32] }, 'one row: the handle, the label\'s words and a finger-sized ×');
+  const reach = await page.waitForFunction(() => { const b = document.querySelector('#ws-labeledit .sheet-handle .hx'); const r = b.getBoundingClientRect(); const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return t === b || b.contains(t); }, null, { timeout: 15_000 }).then(() => true, () => false);
   assert.ok(reach, 'nothing covers the editor’s close');
-  await page.click('#ws-labeledit button[aria-label="Close the editor"]');
+  await page.click('#ws-labeledit .sheet-handle .hx');
   const backToList = () => page.waitForFunction(() => document.querySelector('#ws-labeledit').hidden && document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 15_000 });
   await backToList();
   // the other ways out (Sol 01a13fb7: the first version proved Close only): Escape, and an undo that takes the label away

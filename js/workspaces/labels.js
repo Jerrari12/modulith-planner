@@ -980,7 +980,9 @@ export function mountLabels(stage, ctx) {
   const narrow = () => innerWidth < 1280;
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'labels', soon }, { panels: [
     { el: panel, title: () => { if (!L) return 'Labels'; const r = R.waiting(L, S()).length; return st.pick ? `Placing ${quote(R.labelById(S(), st.pick))} · tap a drawer` : r ? `Labels · ${r} ready to place` : 'Labels'; }, open: false },
-    { el: editor, title: 'Edit label' },
+    // its own title row is hidden on the phone (app.css): the handle names the label and carries the × (the phone tour,
+    // 2026-10-27: the two rows took 100 of the 190 px a phone on its side has)
+    { el: editor, title: () => { const l = st.edit && R.labelById(S(), st.edit.id); return l ? `${R.isPartLabel(l) ? 'Part label' : 'Edit'} · ${quote(l)}` : 'Edit label'; }, close: () => closeEdit() },
   ] }) : null;
   if (phone) phone.onLayout(safe);
   function safe() {

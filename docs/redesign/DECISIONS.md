@@ -5369,3 +5369,38 @@ objection.
 - **Live 2026-10-27 at `b46eb57`** (27 min after the push). Checked on the live planner at 780x260 (`chrome-boxes.mjs`,
   ?done=off&skipgc=1): Colors, Build and Assemble with the rail (64x260), the stage's free region {72, 348, 62, 8}, the
   Colors sheet open in the column; no page errors.
+
+## 2026-10-27 - The phone tour: Build, Labels, Parts and Assemble on Joey's S23
+
+Joey: "Are we able to test other tabs on the planner on mobile and make sure they behave as expected, such as in the
+builder, labels, parts, and assembly?" A scripted tour (each workspace's own journey: Build's library, a placed unit, its
+sheet, Peek inside, 2D, the switcher; Labels' sheet, Type a label, the editor, the plate; Parts' list end to end and a
+unit's parts; Assemble through every step and its steps sheet) at 360x675 and 780x260, on SwiftShader, checked after
+every step for controls cut, covered or under 28 px, text cut, sideways scroll, chrome overlaps and page errors. Most of
+what it flagged was by design (a modal over the page, rows scrolled under a handle, an open sheet over the dock on a
+short screen). What was not:
+
+- **An open sheet's glass showed what it covered**: the collapsed handles ("Add units" under the unit's sheet) and, on a
+  phone on its side, the dock or the player ("Layout valid" under the Labels sheet). phone.js `stack()` marks `#ws` with
+  `sheet-open` / `sheet-over`, and those step out (`visibility: hidden`, so the floor element's box still sets the stack).
+- **Rows scrolled under a handle read through its title** ("Classic drawer · Decor drawer" under "Unit 1 · 1W·1H Decor
+  Drawer"): the handle's glass is tripled (99 % cover; at two layers it still showed), and so is Assemble's sticky Back /
+  Next row on its side.
+- **Assemble on its side**: the step's words were a 31 px scroller of their own (12vh) inside a card that already
+  scrolls, cut mid-line; they are not capped there now.
+- **Assemble upright at 360**: "← Back", "Slow-mo" and "Next →" broke over two lines. One line each, padding 4 px a side
+  (it was 10) to keep the five on one row ("Slow-mo" 4 px to spare at 360); under ~350 px it ends in an ellipsis inside
+  its key, not over its neighbour (Terra 01a17e76).
+- **The label editor**: its own title row and × sat under the handle's "Edit label" (100 of the 190 px on its side). On
+  the phone the row is hidden; the handle reads `Edit · "WORDS"` (or `Part label · ...`) and carries the 32 px ×.
+- **Label settings' Off / On** were 26 px tall: 32 on the phone.
+
+Open: upright at 675 px an open sheet (56 % of the screen) leaves the model a 61 px strip, by the sheet sizing of the
+phone layout; for Joey.
+
+E2E "the phone tour: ..." (Build and Labels at 360x675 / 780x260, Assemble at 780x260, 360x675 and 320x640) and the
+editor case now closing by the handle's ×. Thirteen mutants each fail them (the two classes, the hiding rule, two glass
+layers, the 12vh cap, the keys wrapping, padding 6 and 10, no ellipsis, Off / On 26 px, the editor's row shown, its
+close and its title). A flex-basis change survived as a no-op (`flex: 1` is already basis 0, and `overflow: hidden`
+drops the minimum width) and was taken out. Phone e2e set 8/8 on SwiftShader. Terra 01a17e6a no objection; 01a17e76 one
+finding (the words at 320 px), fixed.

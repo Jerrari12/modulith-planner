@@ -68,6 +68,11 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     // the top edge of the collapsed handles: the floating cards (Place / Cancel, the issue card...) and the toast sit on
     // it, not under it (the phone check, 2026-10-17: Place / Cancel and every toast were under the Library's handle)
     root.style.setProperty('--sheet-stack', `${b + off}px`);
+    // an open sheet covers the collapsed handles (and, over, the dock): its glass showed their words through it (the phone
+    // tour, 2026-10-27: "Add units" under the unit's sheet, "Layout valid" under the Labels sheet), so they step out
+    const anyOpen = [...sheets.values()].some((e) => e.open && !e.el.hidden);
+    root.classList.toggle('sheet-open', anyOpen);
+    root.classList.toggle('sheet-over', anyOpen && over);
     // on its side the tools start where the bar ends (app.css), whatever the build name and the mount chip make of it
     const t = isSideways() && document.getElementById('ws-top');
     if (t) root.style.setProperty('--top-r', `${Math.round(t.getBoundingClientRect().right)}px`);
@@ -116,6 +121,6 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     left: () => (isSideways() ? Math.round(bar.getBoundingClientRect().width) + 8 : 8),
     right: () => (isSideways() ? Math.round(sideWidth()) + 8 : 8),
     onLayout: (fn) => { onLayout = fn; },
-    destroy() { bar.remove(); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
+    destroy() { bar.remove(); root.classList.remove('sheet-open', 'sheet-over'); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
   };
 }
