@@ -4398,3 +4398,802 @@ analytic in the shader, not meshes). He copied the spool into its own file.
   - OPEN: the e2e measures suppression overall, not that it is the seam's alone; selectivity rests on the visual
     comparison.
 - **Not deployed.**
+## 2026-10-23 (the top bar fits at 1280-1365, and nothing in it leaves the screen)
+
+- **What was wrong.** From 1280 px the workspace tabs rejoin the bar's single row (below 1280 they have a row of their
+  own), and up to 1365 that row held more than the screen. It was found while the Feedback & support button was being
+  added (branch `feedback-support`, which hides its button at 1280-1365 for this reason). Measured headless on main
+  `7b68f9e`; every workspace measures the same:
+  - On the root kit, Share ended 10.8 px past the bar's 20 px right inset at 1280.
+  - The widest case of this kind, 27.7 px at 1280 and 7.7 px at 1300: a long build name, Under-Table and the Prusa CORE
+    One L. Under-Table is the widest mount chip (171 px; Wall Mount 165, Tabletop 148). The CORE One L is the widest
+    printer chip (167 px; Voron Switchwire 162, a 300×300 custom bed 162).
+  - The tab badges count too. With the widest badges a big build could show (Labels 99/99, Parts 999), the tabs are
+    57 px wider. That case was 85.2 px over at 1280 and still 0.2 px over at 1365.
+  - On `7b68f9e` the same cases overflowed above 1500, where the printer's name and Share's word come back: 6.3 px at
+    1501 (63.8 px with those badges, still 4.8 px at 1650; it fitted again from 1655).
+  - **Then main took the Feedback & support button** (`fe0a410`, merged into this branch as `78f4490`). The button is
+    44 px, shown from 1366 up and hidden at 1280-1365. The printer and Share chips stay icon-only up to 1580, and the
+    name's width term above that is 1424.
+  - With the button, the widest case with those badges was still over. The bar squeezed the button from 44 to 20 px
+    (its 44 px is a `width`, and a flex item shrinks by default). Share was still past the edge: 29.2 px at 1366,
+    15.2 px at 1400-1500, 20.8 px at 1581-1640 and 4.8 px at 1680. It fitted from 1700.
+  - Those figures come from the merge with the switcher rules below taken out; the mount chip's rule acts only below
+    1366. Without the big badges the bar fitted everywhere: 4.3 px to spare at 1366, 12.7 px at 1581.
+  - For scale, a 12W×5H build of 48 drawers on the root kit shows Parts 60 and no Labels badge (its faceplates take no
+    label). 999 is a generous bound.
+- **Now** (`css/app.css`):
+  - **At 1280-1365 the mount chip shows only its icon and length,** as it does on the phone: 79 px for every mount. Its
+    words are clipped, not removed, so the button's accessible name is still "Under-Table · 185". The setup sheet the chip
+    opens names the mount, and so does the chip from 1366 up.
+  - This rule shares its 1280-1365 block with the Feedback & support button's hide. The hide is still needed: 6.4 px is
+    left at 1280 in the widest case, and the button takes 54.
+  - **Only the build name gives way.** The rules are `#ws-top > * { flex-shrink: 0 }`,
+    `#ws-switch { flex-shrink: 1; min-width: 0 }` and `max-width: 100%` on the switcher's chip. If the bar is still too
+    full, the build name gets shorter; no other control is squeezed, and Share stays on the screen.
+  - It only acts in the widest case with the big badges. The name keeps its 120 px floor in 1280-1365. Above that it
+    gives way: to 67 px at 1366, 101 px at 1400, 141 px at 1440 and 201 px at 1500; then to 112 px at 1581 and 171 px
+    at 1640. Without the big badges it never acts.
+    Those are Windows' figures. The deploy runner lays the same text out wider (the bullet below), and there the name
+    gives way in the tier as well: 75 px at 1280, 95 at 1300, 115 at 1320 and 120 from 1340; above it 9 px at 1366,
+    43 at 1400, 83 at 1440, 143 at 1500, 38 at 1581 and 97 at 1640. Without the big badges the runner's name is 120 in
+    the tier, 70 at 1366, 104 at 1400 and 99 at 1581.
+- **Why not the tabs on their own row up to 1365** (the other candidate). That tier moves every panel 44 px down (top 134
+  instead of 90), and 1280-1365 includes the shortest laptop screens (1280×720, 1360×768). It is also not CSS alone: the
+  1280 line is coded in six places across five workspace files (`innerWidth < 1280` for safe areas and narrow layouts in
+  assemble.js twice, build.js, colors.js, labels.js and parts.js) and in seven `max-width: 1279px` blocks in app.css. The
+  mount chip's word was the cheapest room in the bar: 92 px in the widest case. Making the Day/Night pair one button would
+  have saved about 42, which does not cover the big badges.
+- **Checks.** A new e2e case, "the top bar fits at every desktop width in its widest case, in every workspace…":
+  - It sets that build up through the setup sheet. Then, in all five workspaces, at 18 widths from 1024 to 1920 (each
+    tier's edges among them), twice over: with the build's own tabs, then with the widest badges written into them. It
+    asserts:
+    - nothing past the bar's right edge;
+    - 10 px between the controls (the switcher's chip is measured, not its wrapper);
+    - no control narrower than 44 px, the wordmark and the switcher aside;
+    - the tabs on a row of their own below 1280 only, and on the screen;
+    - the mount word shown only outside 1280-1365, with the accessible name kept at 1280;
+    - the build name at least 118 px in 1280-1365, and at least 60 px elsewhere, with the build's own tabs; with the
+      widest badges, that the tabs are at least 40 px wider (57 px here, 61 on the runner: the badges are there and
+      count) and that the name is the only control that gives way: every other control keeps the width it had without
+      them, to the 1/64 px Chrome lays out in, and the name never grows.
+  - It fails on main's CSS (`fe0a410`: 85 px past at 1280). It also fails on each of 10 mutants of the fix:
+    - the chip rule removed, or the words hidden with `display: none`;
+    - either bound of the tier moved;
+    - the switcher rules removed;
+    - any one of `min-width: 0`, the chip's `max-width`, the switcher's `flex-shrink: 1` or the others'
+      `flex-shrink: 0` removed.
+  - Its first version let one mutant through: without the chip's `max-width`, the wrapper shrank, and the chip ran 44 px
+    over the tabs. The case now measures the chip. It had also checked gaps and edges, not widths, so it missed the
+    squeezed Feedback & support button until the 44 px check.
+  - The fix alone on `7b68f9e` (`181a338`): npm test 603 tests, 598 pass, 5 skipped, 0 fail.
+  - On the merged branch: npm test 606 tests, 601 pass, 5 skipped, 0 fail.
+  - The full e2e suite in software rendering (`E2E_SOFT=1`): 81 of 82. The one failure is main's Feedback & support
+    case, at "Escape after the dialog closed did not deselect".
+    - That case is flaky under software rendering on main's CSS too: run alone, it failed 1 of 8 times there and 4 of 9
+      here, the full run included.
+    - At that step (1366×768, root kit), all 55 visible boxes in the bar are the same with either CSS.
+    - A likely cause, not changed here: Escape closes the dialog at once, but its `close` event comes as a later task,
+      and that event is what ends the key hold.
+- **Review:**
+  - Terra `01a168e4` on the fix alone: no findings. It was asked about the phone, the 1024-1279 tier and the switcher's
+    menu; the clipped label's layout and accessible name; a vacuous or flaky pass on the CI runner; and any width or
+    combination left uncovered.
+  - Terra `01a16900` on the follow-up: one finding, confirmed. The 44 px check read `width < 43.5`, so a control squeezed
+    by under half a pixel would have passed. An unsqueezed icon chip measures exactly 44.0 px (Chrome lays out in
+    1/64 px), so the check is now `width < 44`.
+- **The deploy runner lays the bar's text out wider, and the case's first version did not allow for it.** The deploy of
+  this merge (`aca5f1c`, with the Assemble toast fix on top as `eeceaeb`; run 40004575512) failed at this case on
+  2026-10-23 at 19:34Z: at 1280 in Build, with the widest badges written in, the name measured 74.6 px against the
+  118 px floor, with everything else as it should be (`edge` 1260, `last` 1260, gaps 16/20/20/10/10/10, nothing squeezed,
+  the word clipped). A throwaway diagnostic workflow on the runner's image (run 40013974563, branch `diag-topbar-runner`,
+  deleted after) measured the same bar: the same IBM Plex web fonts load there, and a canvas measures a 67-character
+  string in IBM Plex Sans 400 at 13 px as 390.3 px on both machines; but the laid-out tabs are 554 px there against 508
+  here with the build's own tabs (615 against 565 with the widest badges), about 46 px less room in the bar, and the
+  Build tab alone 91 against 83. Every hard guarantee held there at all 18 widths in both passes. So the case now asserts
+  the name's floors with the build's own tabs only, and with the widest badges that nothing but the name gives way.
+  Alone, in software rendering, it passes here in 118 s. On four mutants of the fix it fails as it should: the switcher
+  rules removed (Share 29 px past the edge at 1366 with the widest badges), the mount word's clip removed (the word shown
+  at 1280), the name's floor lowered to 80 px (the 120 px floor at 1280, with the build's own tabs) and the chip's
+  `max-width` removed (the chip 33 px over the tabs at 1366). Terra `01a16a58` on this follow-up: two findings, both
+  confirmed and fixed (the widest pass did not prove the badges had widened the tabs, so a badge hidden by CSS would have
+  passed it on the plain bar; the other controls' widths were compared rounded, so a squeeze under half a pixel would
+  have passed). Not changed here, and Joey's call: where text lays out as on the runner, the widest case leaves the name
+  9 px at 1366 and 38 px at 1581, an ellipsis and little else.
+- **Live:** 2026-10-23 at 22:11Z, stamp `f6ba8d12`. The branch went into main as `aca5f1c` (its merge with main `928e08a`
+  is `cbe0a2a`); that merge's deploy, run 40004575512 (as `eeceaeb`), failed on this entry's e2e case; the runner
+  follow-up above went in as `56faf84` (`5df7184`); and the day's later merges (`ae0d501`, `d37efae`, `1799b00`, `f6ba8d1`)
+  each cancelled the run before them, so the main that carried all of it is `f6ba8d1`, stamp `f6ba8d12`: run 40028267309
+  green, 21:38 to 22:11Z. `topbar-prod.mjs f6ba8d12` on the live site, a fresh profile with analytics blocked: 28 of 28
+  rows clean, all five workspaces at 1280 and 1366, Build at 1024 to 1920, with the build's own tabs and with the widest
+  badges. Nothing past the bar's edge, no overlap, 10 px between controls, no control under 44 px, the Feedback & support
+  button 44 px from 1366 and in the build menu at 1280-1365 as designed, the mount word clipped at 1280-1365 only, the
+  name 120 px in the tier and 67 px at 1366 in the widest case (Windows Chrome). Before, on `928e08a1`, the same script
+  failed 17 of 28 rows: Share 85 px past the edge at 1280 in the widest case, and at 1366 the button squeezed to 20 px
+  with Share 29 px past.
+
+## 2026-10-23 (Assemble's toasts show above the player card: Share's "Link copied." was hidden)
+
+- **The defect** (Joey, 2026-10-23: "I notice the share button at the end of the instructions does nothing"). Share did
+  copy the address and raise "Link copied.", but on the desktop the toast sits 100 px from the workspace's bottom
+  (`#ws-toast`), inside the player card's box (126 px tall on a step, 231 on the end page, 22 px from the bottom), and the
+  card is the later sibling, so it painted over the toast: every Assemble toast was invisible on the desktop. On the phone
+  the toast already rode above the sheets (`#ws #ws-toast`, z-index 14). Reproduced live on `6e19ed12` by
+  `assemble-share-prod.mjs` (new, in the prod-checks folder): desktop copied, shown, and hidden (the toast's 760-800 px
+  inside the card's 674-878); phone visible.
+- **The fix:** a ResizeObserver on the card keeps `--player-h` on the root current (every render, the end page's extra
+  row, a window that rewraps the card's text), and `html[data-ws="assemble"] #ws-toast` sits `22px + var(--player-h) +
+  10px` from the bottom at z-index 14 (css/app.css). The phone rule's two ids still win there. The first draft set the
+  variable in `renderPlayer()` only; Terra `01a169dc` caught the resize case (a window under 680 px wide narrows the
+  card and rewraps it without a render), the one finding, taken.
+- **The test:** the Assemble e2e case presses Share on the end page with the clipboard stubbed and asserts the address was
+  copied, the toast says "Link copied." and its box clears the card's top edge. The toast takes no pointer events, so
+  `elementFromPoint` can never name it: the first draft of the assertion used it and failed with the fix in place.
+  Mutants: without the CSS rule the gap is -126 px, without `--player-h` it is -68 px (the 126 px default against the
+  231 px end card); both fail the case.
+- **Review:** Terra `01a169dc`: one finding, taken (above).
+- **Suites:** npm test 616 (610 pass, 5 skipped; M28's timing gate tripped once under load, max 738 ms, and passes alone:
+  median 0.13 ms, max 7.7); e2e soft 82 (81 pass; the "Part Picker opens that part" case timed out while another session
+  republished the Studio checkout the suite serves, and passes alone). The e2e assertion also requires the toast inside the
+  viewport (Terra's follow-up, `01a169dc`).
+- **Deploy:** a reported bug, so it deploys once the suites pass.
+
+## 2026-10-23 (the Quality pill keeps a visitor's pick, and the tab badges follow the record)
+
+Two findings of the hands-on GPU pass on Joey's laptop browser (an RTX A5000, Brave; Joey's go to fix them: "Yes, fix the
+found bugs: the Quality pill not saving its pick across a reload, and the stale Parts/Labels badges and size line after
+keyboard undo or Remove").
+
+- **The pill.** The shell's Quality pill (`js/ui/toolbar.js`) called `stage.applyQuality(name, true)`: a function of one
+  argument that draws the tier for this page only. The viewer's own pill called `setQuality(name, { user: true })`, which
+  stores the pick (`gen2-quality`, `gen2-quality:set`) and locks out the auto-downgrade; the boot reads those. So a visitor
+  who picked Fast was back on Very High after a reload (the parity list's C4 had claimed the pick was stored; it was not).
+  Now the pill calls `stage.setQuality(next, { user: true })` where the stage offers it.
+- **The badges.** `topbar()` built its tab badges once per mount (`tabs()` read `ctx.badges()` at build time), so the
+  Parts count stood still through placements, undos and removes until the next workspace switch ("Parts 77" at five
+  units in the pass). The nav now redraws its badges on every store change for the mount's lifetime (a subscription
+  dropped on the workspace's abort signal), and the Parts count reads the RECORD (`store.serialize()`), not the stage's
+  last build, so it is right at the store change rather than after the regenerate.
+- **The size line in Labels.** `labels.js`'s stage sync never redrew after `stage.update`: the dock's size line and the
+  bar were drawn on the store change, before the rebuild, and never again. The dock and the View toolbar are drawn again
+  after a completed update: only those, because a whole `renderAll()` there would rebuild an open label editor from the
+  stored label and wipe a word typed while the stage rebuilt (Terra `01a16a49`'s one finding, taken; the 2026-10-18 lesson).
+- **The tests:** two e2e cases. The pill case seeds Fast without the harness's init script (which would reset the pick on
+  every load), clicks the pill, reloads, and expects the picked tier back with `gen2-quality:set` = 1. The badge case
+  places a third unit on the board, switches to Labels, undoes it there, and expects the badge back at once and the dock's
+  size line changed once the stage has rebuilt. Mutants, each failing its case: the pill on `applyQuality`; the badges
+  built once; no redraw after the Labels update; the badge counting `stage.build`.
+- **Review:** Terra `01a16a49`: one finding, taken (above).
+- **Deploy:** on Joey's go above, once the suites pass and main is green again (the top-bar case failed on the runner in
+  the run before this one). Merged as `eb33cb1` + `ae0d501` (main 56faf84 merged in). **Live 2026-10-23 at `f6ba8d12`**
+  (run 40028267309, the deploy that also carried the material chips, the hover clips and the idle-gate fix; live 18:11).
+  `quality-badges-prod.mjs f6ba8d1` passes 6 of 6: a pick is saved as the user's and survives a reload, and the Parts badge
+  grows with a placement on the 2D board (43 to 51) without a workspace switch. The same script failed both halves on
+  `928e08a1` that afternoon.
+
+## 2026-10-23 (the filament picker filters by material: All · PLA · PETG chips above the list)
+
+- **Joey, asked:** "in the color/filament selection on the right side of the screen, should we also have a way to filter by
+  material type when applicable?"
+- **What a material is here.** The catalogue (`js/filament-db.js`, vendored byte-for-byte, so it gains no field) has no
+  material of its own; the 2026-10-21 tags on every line header derive from the line's NAME (a TPU line is TPU; otherwise PLA
+  and/or PETG, both on the Elegoo "PLA / PETG" line). Silk and Translucent are finishes of PLA and stay tagged PLA, so the
+  chips are the tags' three materials and nothing finer: a case's picker offers **All · PLA · PETG**, and the feet's, which
+  lists the TPU lines alone, shows no row at all ("when applicable": a row needs two materials to choose between). The rule
+  now lives in one place, `js/colors/materials.js` (pure, no imports): `lineMaterials` for the tags and the chips alike,
+  `colorMaterial` for a colour on a two-material line (its own name says: "PETG Black" / "PLA Grey"), `materialsIn` for
+  the chips a region's lines offer, `filterByMaterial` for the narrowing, `labelMaterials` for the "In this build" row, and
+  `wordMaterial` for a palette name the catalogue lacks (a shared or uploaded palette can name anything: "petg Blue" answers
+  the PETG chip by its own whole word, any case; "Sunset Orange" says nothing and shows under All only).
+- **The row** (`#ws-picker .mrow`, role group "Material", `button.mchip[aria-pressed]` with a dot in the tag's colour) sits
+  between the search box and the list, All first and pressed. A chip narrows the brand groups (a group's header count follows;
+  a group with no colour of that material hides) and the "In this build" row, and combines with the search both ways: the
+  search alone re-renders the list, never the box, and a chip does the same, so the typed words survive a chip and the chip
+  survives typing. The chips are built once per picker render and their pressed state is set in place: the first draft
+  rebuilt the row on a click, and a Space on a focused chip then dropped the keyboard's focus to the document (Terra, below).
+  A pick's re-render keeps the chip (`st.mat`, like `st.query`); opening a picker for a region starts both afresh at All,
+  so a PETG chip left on the case never follows into the feet's TPU-only list. 8 px between the chips (`--gap-ctl`, the
+  planner's floor); on the phone the row is nowrap and scrolls sideways (3 px of padding keep a chip's focus ring inside the
+  scroll box), so the sheet's list keeps its height.
+- **Checks.** `test/materials.test.mjs` (7 tests) states the rule against the real catalogue: a line's materials from its
+  name, the Elegoo line's by colour, PLA + PETG for a case and TPU alone for the feet, PETG keeping the Polymaker PETG line and
+  Elegoo's one colour, PLA dropping the Polymaker PETG line in order, a full pass over the chips accounting for every colour
+  once, the label map, and the whole-word any-case name rule. The TPU-feet Colors e2e case gained the chips: All · PLA · PETG
+  on a case with All pressed and 8 px gaps; PETG pressing, releasing All, leaving the two lines that sell it with every swatch
+  PETG (In this build included) and Elegoo down to its PETG Black; "black" under PETG the PETG blacks alone, All with the
+  words kept every black, the search box never rebuilt; Space on a focused PLA chip pressing it with the focus kept; an
+  uploaded "PETG Blue (custom)" in the palette answering PETG and not PLA after the picker is opened again at All; the feet
+  with no row and their 11 TPU swatches with a PETG chip left pressed on the case. Passes alone in 38 s (soft). Mutants, each
+  failing its own check: no row, no narrowing, In this build ignoring the chip, no reset on open, a row for one material,
+  4 px gaps, the pressed state not synced, the row rebuilt on a click (focus lost), an uncatalogued name never answering, and
+  in the unit: the first material taken on a two-material line, empty groups kept, TPU never said, a substring match
+  (PLATINUM as PLA): 13 of 13 killed.
+- **Review:** Terra `01a16a51` (routine): two findings, both held and fixed (the rebuilt row losing keyboard focus; an
+  uncatalogued palette name hidden under every chip); its follow-up on the fixes: one more, held and fixed (the word match
+  was case-sensitive). Screenshots in `D:\Claude - Output\material-filter-2026-10-23` (desktop and phone, All and PETG).
+- **Suites:** npm test 623 (617 pass, 5 skipped; M28's timing gate tripped once while the e2e subset rendered in software
+  beside it, median 0.3 ms, max 650.6 ms, and passes alone: the Simplify file 5 of 5 in 88 ms); the e2e cases named Colors,
+  the phone check, the phone journey, analytics and the boot case: 23 of 23 (11.6 min, soft). The full e2e suite runs on the
+  deploy.
+- **Deploy:** a feature, so on Joey's go (2026-10-23: "Yes, deploy the material filter chips: merge material-filter onto main
+  and push, with a live check"). The branch took main twice first (`915538f`: 56faf84; `224a7c2`: ae0d501, one DECISIONS
+  conflict, both entries kept in order); the chips case passed on each, npm test 623 / 617 pass / 5 skipped on the merged tree
+  (M28's gate under load again, 36 ms alone). Main's merge `d37efae` (run 40024341132, cancelled by the hover-hints push, as
+  pages.yml does); the stamp that carries it is `f6ba8d12` (the idle-gate merge on top of the hover clips, run 40028267309).
+- **Live 2026-10-23**, stamp `f6ba8d12`, seen at 18:11 local. `matfilter-prod.mjs f6ba8d12` (the prod-checks folder) passes all
+  20 checks at 1280 x 800 and 390 x 844: a case's All · PLA · PETG with All pressed and 8 px gaps; PETG pressed narrows the
+  heads to PETG and PLA / PETG with 27 of 118 swatches left, every one PETG; the feet with no row and 11 TPU swatches; the
+  phone row nowrap with overflow-x auto; no page errors. Its control on the pre-deploy site (928e08a1) failed exactly the
+  11 chip checks and passed the 8 feet and row checks.
+
+## 2026-10-23 (hover-hint clips on every workspace)
+
+- **Joey:** "can we do more video animations for when hovering over certain buttons to illustrate how they work?" The
+  Labels tiles have had them since 2026-10-13 (js/ui/hint.js: a glass bubble beside the panel after a short dwell, a muted
+  looping clip from img/hints/, recorded from the app by tools/hint-clips.mjs). A shortlist of eleven went to him through
+  the session that asked for this; his answer: "Record all eight recommended hover clips." Labels already had all five of
+  its own, so the new ones are on Build, Colors, Parts and Assemble.
+- **The eight.** Build's size tiles (`build-place`: a size, the amber spots, the top one clicked, the drawer landing, Esc;
+  the "+" spots are stage markers, not buttons, so the clip sits on the tiles, where a visitor is before the spots
+  exist); Fill all on the issue card (`build-fill`: a red slot, Fill all, the 1W case, the toast); Build style's Side
+  covers (`build-sidecovers`, the hint on the track so the bubble stays while the mouse crosses from Off to On); Colors'
+  Browse looks (`colors-browse`: two cards previewed on the model, one opened, Apply), Surprise me (`colors-surprise`: a
+  look previewed, More like this, Use this look) and Simplify… (`colors-simplify`: Down to 3 filaments, the change list,
+  Apply); Parts' Track my build (`parts-track`: the counters on every row, two rows ticked, the dock's progress bar);
+  Assemble's camera chip (`assemble-camera`: a drag orbits the overview and lights the chip, pressing it glides back; the
+  bubble sits UNDER the toolbar, since beside the chip it would cover the next ones). Each control's own title is the
+  touch screen's answer, as on Labels.
+
+  | clip | s | KB | | clip | s | KB |
+  |---|---|---|---|---|---|---|
+  | build-place | 9.4 | 50 | | colors-surprise | 14.1 | 76 |
+  | build-fill | 12.6 | 59 | | colors-simplify | 12.6 | 59 |
+  | build-sidecovers | 9.4 | 57 | | parts-track | 11.7 | 56 |
+  | colors-browse | 16.7 | 87 | | assemble-camera | 9.8 | 144 |
+
+  All at 480 × 222, H.264, loaded only on the first hover of that control. The Assemble clip is the heaviest (the whole
+  frame moves while the camera orbits and returns), at crf 30 and the fast render tier; the rest at the Labels clips'
+  crf 27. Together 588 KB in the repo, nothing until someone looks.
+- **hint.js** (js/ui/hint.js): no bubble while a phone sheet is open (a narrow window with a mouse gets the sheets too);
+  never over an open `role=dialog` the control is not inside (Colors' Simplify card opens under the pointer that pressed
+  Simplify…, and the bubble beside the panel would cover it; the Fill all hint is INSIDE its issue card and shows); never
+  over the dock (centred on a button low in the issue card, the Fill all bubble reached Get parts list; it sits above the
+  dock instead); `spec.below` for a toolbar chip; `spec.scene` optional, with one fallback scene (a cursor pressing a
+  button) so a new hint needs no hand-drawn art; every hinted control carries `data-hint=<clip name>` for the harness;
+  `focusin`/`focusout` instead of `focus`/`blur`, so a hint on a group arms when the keyboard reaches a segment inside it
+  and stays while it moves between the group's own segments. A modal dialog needs no rule of its own: every one here is a
+  full veil, which the overlap rule refuses. Each workspace calls `hideHint()` before rebuilding a panel that holds a hinted
+  control (a removed button never fires mouseleave, Terra 01a13529's rule from Labels). `pages.yml` stamps
+  `../ui/hint.js` in the four workspaces; the clips are assets, loaded by URL, and need no stamp.
+- **The recorder** (tools/hint-clips.mjs, dev only): opens any workspace, keys clips `<workspace>-<key>`, takes a per-clip
+  viewport size, render tier and crf, a `drag` for an orbit, `scrollTo` for a control low in a scrolling panel; the eight
+  new clips are recorded at 1280 × 800 (the one-row desktop layout) and framed two ways, a 700 × 321 window at the Labels
+  clips' scale or a 960 × 440 window at half scale where a panel and the whole model must both read. The side covers print
+  in the case's black, and a black panel leaving a black wall cannot be seen at the bubble's size, so the clip gives them
+  an orange of their own (`setColor` on `SideCover` and `SideCover:FACE`, then `setUseCustom(true)`: Build shows the
+  instruction colours until Colors is opened) and turns the model a little first. The README under img/hints/ says so. One
+  recording of the place clip ran 32 s (the page was slow that run; the frames carry their real timestamps) and was redone
+  at 9.4 s: the recorder's timing is the page's, so read a clip's length back after recording.
+- **Checks.** npm test 616 (611 passed, 0 failed, 5 skipped). A new e2e case, "hover hints: every hinted control shows its
+  clip on hover and hides on leave; none shows over the setup sheet or an open card": on each workspace, for each state
+  that offers hints (Build's Add units, Build style, a gap build with the issue card open), every expected `data-hint`
+  control is present, hovering it shows the bubble with that clip's `<video>` (a missing file errors and fails it), the
+  bubble does not overlap the control, leaving hides it; the keyboard on a segment inside the Side covers group shows it;
+  a bubble up when the setup sheet opens goes down; a hover and a focus fired at a control under the sheet show nothing;
+  Simplify's open card gets no bubble over it; and at a 1000 px window with a mouse the camera chip hints under its
+  toolbar, nothing hints while a sheet is open, and it hints again once the sheet closes. Mutation-checked six ways: an
+  extra document `focusin` listener removed SURVIVED (the browser's boundary events and `focusout` already do that job, so
+  the listener is not in the code); `focus` for `focusin` fails at the keyboard-on-group check; the overlap rule off fails
+  at the Simplify card; Track my build's `attachHint` dropped fails Parts' wait for its hint; a separate `aria-modal` guard
+  removed SURVIVED (every modal is a veil the overlap rule catches, so the guard was narrowed to the sheet rule); the sheet
+  rule removed fails at the narrow-window check. The full e2e suite on this branch, `E2E_SOFT=1` with the ls-public
+  Studio: 83 of 83 in 27.6 min. After main (`eeceaeb`: the top bar at 1280-1365, Assemble's toasts) was merged in as
+  `9cedaef`: npm test 616 (611 passed, 0 failed, 5 skipped), the hover case again, and the full suite 83 of 84 in 41 min,
+  the one failure a 30 s click timeout on the Label plate's "Screw and nut drawings" Off segment in that slow run; alone
+  it passes in 24 s, and the six Labels and plate cases pass together.
+- **Review:** Sol `01a16a18`, substantial (a multi-file feature; the brief said Terra, the class table says Sol): two
+  findings. The `focus` listener on the Side covers track never firing (focus does not bubble): taken, `focusin`, with the
+  keyboard check above. A bubble already up staying visible when a modal opens under a still pointer: discarded, the e2e
+  drove exactly that with no extra code and the bubble went (the veil under the pointer fires mouseleave; a keyboard-shown
+  bubble goes with the focus the modal takes); a line in the vault's reviewer-lessons (`3b105e1`).
+- **The From a file clip, redone the same day** (Joey, a reported bug: the clip "looks wrong, instead it should open a
+  desktop folder explorer window"). The control opens the computer's own file chooser, which no screencast can capture, so
+  the recorder draws a stand-in: an Open window in the planner's glass style over the stage, `modulith-labels.json`
+  chosen among generic names, "JSON files", Cancel and Open; the cursor presses Open, the window goes, and "Added 3
+  labels" lands in the list (`19e6708`; 15.9 s, 65 KB). The hover case now also waits for every clip's metadata and a
+  duration of 6 s or more: a 1 s stub in place of a clip fails it at "readyState 4, duration 1.08". Terra `01a16a90`,
+  routine: NO FINDINGS.
+- **Live 2026-10-23** (Joey's go through the session that asked: "Yes, deploy the hover clips: merge hover-hints onto
+  main and push, with the live check"). Main moved three times before the merge (`56faf84`, `ae0d501`, `d37efae`), each
+  merged into the branch with the hover case and the unit suite re-run (the last tree, `b220f54`: 623 tests, 618 passed,
+  5 skipped; the hover case 104 s); hover-hints merged onto main as `1799b00` at 21:13 UTC, and the idle-gate fix landed on
+  top of it as `f6ba8d1`, whose run 40028267309 passed (22:11 UTC) and is the stamp `f6ba8d12` that carries the clips.
+  Checked live by `planner-prod-checks-2026-10-18\hover-hints-prod.mjs f6ba8d12`: on each workspace every hinted control
+  carries its `data-hint`, hovering it plays its clip, no bubble overlaps its control (the eleven hints, the Labels three
+  included); the eight new clips are served at their committed byte sizes and the redone `labels-file.mp4` at 66,648
+  bytes; no console errors. The same script failed as it should on the pre-deploy site (stamp `928e08a1`, every hint
+  absent, the clips 404).
+
+## 2026-10-23 (Very High on the light theme never let the idle gate rest: the accumulator's last sample left the shadow map flagged)
+
+- **The defect** (found by the Done-scene session on main's own code with no room, 2026-10-23; branch `done-scene` 80b0cca
+  carries the same fix among the room work, not merged). The idle gate (2026-10-17) stops drawing a still view and draws
+  one keepalive frame a second. On Very High every accumulated sample ends with `accSetSun(0)`, which puts the sun home
+  and sets `renderer.shadowMap.needsUpdate` (the stage keeps `shadowMap.autoUpdate` off and flags the map itself); after
+  the 24th sample the converged mean is blitted to the canvas with no scene render, so nothing consumed the flag, and
+  `idleSettling()`'s third branch ("a shadow render still owed") kept the gate open: about 120 frames a second at rest.
+  Only the light theme has a shadow map (`shadowsWanted`), so the dark theme never showed it.
+- **The fix** (`js/main.js` `idleSettling`, one condition, from `done-scene` 80b0cca on its own: no `sceneHold`, no
+  scenes/, no assemble.js change): the owed-shadow branch is ignored while a converged accumulator is blitting its mean
+  (`accWanted() && acc.ok && acc.n >= ACC_SAMPLES`). The flag is honoured by the next plain render, which is the first
+  frame after anything changes, and a restarted accumulation's samples set and consume it themselves. Nothing drawn
+  changes: a converged accumulator blits the same mean on every frame, so the fix changes when a frame draws, never what.
+- **The test:** `test/idle-settling.test.mjs` lifts `idleSettling` from the source text (the swap-shadows pattern, because
+  main.js builds a renderer at import) and drives its three branches with the names it reads as knobs. The mutant with
+  the condition reverted fails the converged case (checked on a scratch copy of main.js).
+- **Measured** (headless Playwright on SwiftShader, 1280 × 800, the 2W2H tabletop kit, Very High, light theme, at the Done
+  page after Skip to the finished build, `idleStats().drawn` sampled once a second for 12 s; the same script on main
+  eeceaeb and on the fix): before, 119–124 frames a second, every second; after, 1 a second (one 2), `skipped` climbing,
+  and `shadowMap.needsUpdate` still true at rest in both, as the fix predicts.
+- **Goldens: 60 of 60 run alone; under load 58 of 60, and the two that differ differ on main too, in the same run.** A
+  fifth full run on this branch alone (CPU 11–28 %) read 60 shots, 0 differ. Before it, four full runs on the fix
+  while other sessions' suites and SwiftShader browsers loaded the machine: 5, 1, 5 and 2 shots differ, every one an
+  `--end--` shot at 0.10–0.17 % of pixels, and in each the build is pixel-identical and only the height ruler stands on
+  the other side. The fourth run was paired with pristine main eeceaeb at the same time: main's 60 differ in the same
+  two (115-2w2h and 115-3w2h, end, Very High) at the same fractions (0.141 %, 0.112 %). The clause cannot reach a
+  golden: the goldens run on the dark stage, where `shadowMap.enabled` is false on every tier, so the changed line
+  short-circuits before the new clause on all 60. The flip is main's: the plain viewer's end page opens the checklist
+  panel, and `updateDims` scores the ruler's corner against the panel's rect each frame with a 15 % hysteresis, so the
+  corner kept depends on which frames ran while the panel came in (the tool's own header records a 0.12 % side flip
+  from panel state); eight single-kit runs, four per tree, never flipped. Not instrumented beyond that. The same clause
+  on `done-scene` read 60/60 at 15:40 the same day, run alone (the Done-scene session). The ruler flake is main's
+  follow-up, not this fix's.
+- **Review:** Terra `01a16a58` (routine): no findings on the diff, the test, the accumulator excerpts and this entry's
+  draft; the goldens and suites bullets went back on the same thread once the runs were in, no findings.
+- **Suites:** npm test 618 (613 pass, 0 fail, the 5 environment skips main has; 44 minutes under the shared load,
+  layout-parity alone 2666 s against 752 s on a quiet machine); goldens as above.
+- **Live:** main `f6ba8d1`, the no-ff merge of `idle-gate-light-vh` at 4eddce0 (this branch with main 1799b00 merged
+  in) onto 1799b00, pushed 17:38 on Joey's go ("Yes, deploy the idle-gate fix: merge idle-gate-light-vh onto main and
+  push, with a live check of the rest rate."); deploy run 40028267309, success 18:11; stamp `boot.js?v=f6ba8d12` live at
+  18:12. The rest rate on the live site, the same headless probe as the measurement above (SwiftShader, Very High, light
+  theme, Assemble at Done with the page untouched, `idleStats()` per second over 12 s, GoatCounter skipped and blocked):
+  before, on the stamp the site served until then (`928e08a1`), drawn 116–123 a second and skipped 0; after, on
+  `f6ba8d12`, drawn 1 a second and skipped 119–121. The merged tree's suite: npm test 625 (620 pass, 0 fail, 5
+  environment skips). No real-GPU reading: Joey's desktop browser keeps the planner on the dark theme, which has no
+  shadow map, and setting light would rewrite his saved preference. Terra `01a16ad3` on this line: one finding,
+  discarded (it read the evidence's "node --test" as a different command from `npm test`, whose script it is).
+
+## 2026-10-24 (the paid-link suffix goes: plain buy labels and one commission line, the September wording)
+
+- **Joey, 2026-10-24:** "paid makes it sound like polymaker paid to put their filament on here, which it's affiliate
+  links, so nothing has been paid by anyone yet"; asked: "Yes, replace the '· paid link' suffix everywhere with the
+  September wording: plain buy labels and one commission line next to the links, Amazon's sentence once; deploy once
+  checks pass."
+- **The September decision** (the old planner, `591e7bb`, 2026-09-19; the vault's "Affiliate-link disclosure"): Joey asked
+  that the parts list's "paid link" wording sound like the viewer's friendlier affiliate treatment. The buy buttons keep
+  plain labels and each hardware row carries ONE line right under them - "Amazon links - I earn a small commission, at
+  no extra cost to you." - instead of "· paid link" on every button; Amazon's required sentence, "As an Amazon Associate
+  I earn from qualifying purchases.", appears once per page, verbatim: a plain commission statement next to the links it
+  covers, Amazon's sentence once, never "affiliate link" alone. The new planner never inherited it: its Colors tab marked
+  every paid link "· paid" / "· paid link" (phase 4, 2026-10-14) and the Parts list followed on 2026-10-21.
+  `rel="noopener sponsored"` on every commission link is unchanged everywhere (the analytics read it).
+- **The wording now** (colors.js `disclosureFor`, exported with `isAmazon` / `isPolymaker` beside `isPaid`; the Parts
+  list imports it): Polymaker links only - "Polymaker links apply the JERRARI discount for you; as a Polymaker
+  Ambassador I earn a small commission, at no extra cost to you."; Amazon only - "As an Amazon Associate I earn from
+  qualifying purchases."; both - "As an Amazon Associate I earn from qualifying purchases. Polymaker links apply the
+  JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you."; a paid host that is
+  neither program (none today) - "I earn a small commission, at no extra cost to you."; plain links - nothing.
+- **The surfaces.** Colors: the look details' Shop this look rows and the shopping list ("Buy ↗" and the one line under
+  the rows, which had read "Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I
+  earn a small commission at no extra cost to you." or "Paid links · I earn a small commission at no extra cost to
+  you."), and the picker's foot ("Buy <filament> →" with the line under it; its Polymaker line had read "Polymaker links
+  apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.").
+  Parts: the "Print in" filament links' titles ("Buy <filament> ↗"), the hardware rows' "Amazon ↗" (the `span.paid`
+  mark and its app.css rules are gone), ONE line "Amazon links - I earn a small commission, at no extra cost to you." as
+  the last child of every section group whose hardware rows link to Amazon (this build has two such groups) - under the
+  section's rows, not under each row as the old planner did it: here a row has one "Amazon ↗" link and the hardware rows
+  sit together, so one line under them covers them all - in the narrow list and the wide table (hidden with the link
+  column under 1024 px), and the foot, which reads Amazon's
+  sentence once, the Ambassador line when a "Print in" link is a Polymaker one, then "Any equivalent hardware from any
+  store works." (it had read "Hardware links are Amazon affiliate links (as an Amazon Associate I earn from qualifying
+  purchases) · any equivalent hardware works."). The old viewer, which the planner serves for kit covers and part
+  previews: `linkEl` loses its `mark` parameter and the suffix, `markFmBuy` only sets rel, the `#paid-note` line stays
+  the one line next to its links, and its sentence for Amazon and Polymaker links shown together now says the commission
+  ("I'm also a Polymaker Ambassador and earn a commission on Polymaker links."; Sol's finding, below); its never-reached
+  fallback for a host in neither program no longer says "paid links". The comments in main.js (the host list, linkEl, the
+  two-part disclosure note, renderIdentifyLinks, renderChecklist, markFmBuy) and index.html's filament-menu comment
+  describe the rule as it is now.
+- **The "null" bug.** Under every look's footer without a translucent filament the word "null" showed (Joey saw it
+  live). `renderDetail` passed `translucent.length ? el('p.note', …) : null` as the last argument of
+  `gallery.append(…)`, and the DOM's `append(null)` writes the text "null": `el()` skips a null child, `append` does
+  not. The picker had the same bug and already filters - its comment reads `append(null) writes the word "null" (it
+  showed under the scope switch, 2026-10-17)`. The details' children now go through `.filter(Boolean)` too. The other
+  `append` / `replaceChildren` calls in colors.js were read for this entry and pass no nullable child (the tray, the
+  gallery grid, Find your next look, the owned editor, Simplify, the part card, the Dock, the shopping list).
+- **The footer sentences reworded.** The look details: "A screen preview: colours are approximate, and the card shows
+  the look without shadows. The Day Grid plate gives the truest read." → "Colours on screen are approximate, and the
+  look card is drawn without shadows; the Day Grid plate shows them truest."; "Appearance only: whether a filament
+  suits a part (strength, heat, flex) is a separate question." → "Looks only: whether a filament suits a part (strength,
+  heat, flex) is a separate question." The shopping list: "Appearance only: whether a filament suits a part (strength,
+  heat, flex, the printer) is a separate question." → "Looks only: whether a filament suits a part (strength, heat,
+  flex, the printer) is a separate question."
+- **Checks.** The buy-link e2e case reads, in both layouts, the Amazon link's rel, its plain text and title, the
+  commission line as the last child of every hardware group and in no other, Amazon's sentence exactly once on the
+  list, no "paid link" text, the foot's shape, the picker foot's label / rel / sentence for an Amazon and then a
+  Polymaker filament, and the shopping list's plain labels and sentence; the two look-detail cases check the sentence,
+  the reworded notes and that no text node reads "null" (a TreeWalker over #ws-gallery, and over #ws-shop); the Simplify
+  case checks the shop note's exact words. Six mutants, each failing only its own assertion: the storeLink suffix
+  restored, the `.filter(Boolean)` removed ("aside: null" in both gallery cases), the picker suffix restored, the
+  commission line's appendChild removed, the old "Paid links." disclosure restored, the old footer sentences restored.
+- **Review:** Sol `01a16c4a` (substantial): one finding, confirmed and fixed - with the suffix gone, the old viewer's
+  `#paid-note` line for Amazon and Polymaker links shown together said "I'm also a Polymaker Ambassador." without the
+  word commission (reachable on a phone, where the checklist panel stays up beside the filament menu; a desktop's
+  `body.fm-open` hides it); the sentence now says it. The fix and this entry's draft went back on the same thread: two
+  findings, one taken (the draft read as promising a line under each hardware row, the old planner's layout, while
+  this list puts one under the section's rows - now said), one discarded (it called the `append` audit and the picker's
+  2026-10-17 comment unverified; both are in the code, neither was in the payload).
+- **Suites:** npm test 625 (620 pass, 0 fail, the 5 environment skips main has; 313 s); the full e2e suite with the
+  Studio checkout, `E2E_SOFT=1`: 86 cases, 86 pass, 0 fail (2708 s), after the four touched cases had passed alone and
+  the six mutants had each failed.
+- **Deploy:** Joey decided it in words, so it deploys once the suites pass. **Live 2026-10-24 at `b368e693`** (01:53 push, live about 02:35 local).
+  `disclosure-prod.mjs b368e69` passes 8 of 8 on the live site: four plain "Amazon ↗" links with `rel=sponsored`, the commission
+  line under each of the two hardware groups, Amazon's sentence exactly once in the Parts foot, the picker's plain Buy label with
+  the Amazon sentence beneath, a look's detail footer with the shared disclosure, no "null", and the reworded notes. The same
+  script failed all eight on `2a5a11f7` before the deploy.
+
+## 2026-10-25 · Settle toward the mount after every edit (the Under-Table report)
+
+- **Asked:** Joey, 2026-10-25, relaying his tech-support thread: in Under-Table mode removing a unit only shifted the units
+  fully beneath it; a 2W that straddled two 3Ws was left floating with its rows below, hatched voids and "!" badges, and he
+  settled it by hand. The revised spec, replacing the 2026-10-21 "don't move anything automatically, just highlight the
+  gap": settle after every edit (add, remove, move, resize, mount switch) - hanging and wall builds up toward the rail,
+  tabletop down; each unit slides straight toward the mount until it touches the mount or any unit on that side (any
+  overlap in width counts), repeated until nothing moves, never sideways; drops allowed anywhere that does not collide or
+  leave the board, the settle decides the final position; one action = one undo, briefly animated; hatched voids become a
+  drag preview only; what remains is structural (the both-ends support rule, sag, alignment), still counted on the badge.
+- **Cause:** the 2026-10-21 settle moved only the units the both-ends rule flagged, and HELD every unit that was already
+  over a gap before the edit (so a mount switch's gaps stayed slots). The straddling 2W lost one end's support, could not
+  rise under the remaining 3W (a collision), and from then on was "already over a gap": held forever, with every row
+  under it. `js/rules/settle.js` says this in its header.
+- **Change:** `js/rules/settle.js` `settleToward(s, Rs)` - every unit, nearest the mount first, slides while `canPlace`
+  allows (the grid's edge or any held cell stops it), repeated until nothing moves; nothing is held. `build.js` `edit()`
+  uses it for every gravity edit; `moveCheck` refuses only a collision, the board's bounds, the width cap and the height
+  cap (the "would leave a unit without support" refusal is gone), and a drop below a hanging build grows the grid down for
+  the move as a placement there does (`tallFor`), in the same undo step; the removal toast names what settled ("Removed
+  3W·1.5H · 2W·2H (unit 3), ... moved up against what is above · Ctrl+Z puts it all back") and the moved units pulse as
+  before. The board draws the hatched open cells only while a drag is in progress (`deficit(dragging)`); the tabletop
+  completion guide stays. The setup sheet settles the layout on a change of mount (moves only, adds nothing - the
+  2026-10-21 "switching mounts adds no units" stands; the page reloads on a mount change, so that settle has no toast).
+- **What a settle leaves:** a wide case over nothing on one end stays where it hooks and is flagged by the both-ends rule
+  (a real structural issue, as the spec says); its slot is still a slot for the generator. The report's layout after both
+  3Ws go has none: three 2W-2H on top, three 2W-3H, two 3W-1.5H at the bottom, 0 issues.
+- **Tests:** `test/settle.test.mjs` (4 cases against the real layout rules: the report's two removals, the drop below the
+  stack, the tabletop half-step, any-overlap stopping); `tools/settle-mutants.mjs` 4/4 killed (direction flipped, one pass
+  with far-first order - the two alone are equivalent by design and are mutated together -, the hold reintroduced, the
+  slide stopping one short); e2e `Build: Under-Table settles up after every edit` (the report's layout through the setup
+  wizard, the two removals, 0 issues, the merged toast, one Undo each, the drop below the stack growing the grid, no
+  hatched cell at rest).
+- **Review:** Terra `01a174b5` (routine): one finding, discarded-known (no toast on the mount-switch settle - the page
+  reloads on a mount change, so none could show; a comment says so); its judgment taken: `hug()` leaves the empty bottom
+  rows a risen drop leaves on a hanging grid.
+- **Suites:** npm test 606 (599 pass; the 2 fails were a stale run of settle.test and a feet-pool flake that passes alone and under the
+  stashed tree); the settle case alone 1/1; the three cases that exercise gravity, moves and grow-down 5/5; mutants 4/4.
+- **Deploy:** Joey's go 2026-10-25 ("merge settle-toward-mount onto main and push, with a live check"); merged as `5721da3`.
+  The deploy's smoke step FAILED (run 40231025225): the e2e case "Joey's wall build switched to Tabletop keeps its gaps as
+  empty slots" encoded the 2026-10-21 rule this entry replaces - the switch now settles his layout first, so of his four
+  gaps two close (units 3, 4, 6, 7 drop a row) and the sheet says 2 slots, not 4; and, because units 3 and 4 drop, the
+  tabletop's top is no longer level over columns 5-6, so after Fill all the build still waits on the "finish the top"
+  guide (two 1W-1H by hand). The case now says exactly that (branch `settle-e2e-fix`). The run's second failure, the
+  Colors "preset after a region pick" undo timing, passed locally and is the runner's timing flake. Lesson recorded: run
+  the WHOLE e2e before a push, and grep the tests for the words of the rule a change replaces. The full local run then
+  failed this entry's own case ("Under-Table settles up after every edit") on an Undo wait: the store coalesces commits
+  made within 350 ms into one history entry (a drag is one undo), and the script's two removals were one round trip
+  apart, so one Undo put both back - a flake that passed alone. The case now flushes history between the edits that must
+  be separate undo steps, as a hand's pace does. **Live 2026-10-25 at `dbf76ba8`** (18:41 push, live 19:49 local; the
+  runner's smoke step alone takes 51-65 min). The live check `settle-prod.mjs dbf76ba8` (D:\Claude - Output\
+  planner-prod-checks-2026-10-18) passed every check: the two removals settle the report's layout, 0 issues, the toast
+  names the settle, the drop below the stack is allowed and settles up, no hatched cell at rest.
+
+
+## 2026-10-25 (every part's real printed top layer at Very High: the baked skin maps)
+
+Joey, 2026-10-25, after the slice-based prototype on a 2W-1H EdgeLabel faceplate (`D:\Claude - Output\skin-beads-2026-10-25`):
+"build the baked top-layer pipeline into the planner for every part (node0 bake per part type, shader module at Very
+High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts branch `skin-maps`. Not merged, not deployed.
+
+- **What it draws.** On every face that looks along a part's build axis - the last layer, and every lower top skin a
+  ledge, a step or a pocket floor leaves - the slicer's own top solid infill lines at the slicer's angle and the perimeter
+  loops around every edge and pocket of that skin, from a normal map baked from the part's real G-code. Nothing is invented
+  in a shader: the `?skinlines=on` trial (bed-finish.js SKIN_LINES, 2026-09-22) guessed a bead direction 90 degrees off
+  the slicer's and is removed. Very High's settle samples only, like the layer lines and the powder grain's detail form
+  (the block is gated on uLLOn); Fast, Balanced and High draw nothing new and never fetch a map. `?skinmap=off` draws and
+  fetches nothing, for comparison; the debug hook is `skinMap` (status, set, uniforms, atlas).
+- **The bake (node0, `D:/MODULITH/ops/slicing/skin_bake.py`, vault `fa67ef0`).** Per part: PrusaSlicer 2.9.4 with the
+  Core One profile where the footprint fits its bed, else the XL's (the two lay the same skin: monotonic lines at 45
+  degrees, 0.42 mm top infill, 0.45 mm perimeters, 0.2 mm layers - only the bed differs), `--rotate-x=180` where the
+  STL sits upside down to Joey's pose; every layer that lays Top solid infill plus the last layer (a thin ridge such as
+  the EdgeLabel grip's top edge is perimeters alone), its infill and its perimeters, overhang perimeters, gap fill, drawn
+  as beads of their recorded width with a 0.06 mm elliptic crown (the prototype's guess, to be judged by eye); the higher
+  bead wins and the Z channel records its layer; 8 px/mm; one RGBA8 PNG per part in the G-code frame (R,G the normal's
+  xy, B,A the layer height in 0.01 mm) with a JSON record, keyed by the STL's sha256 + the rotation + px/mm, so a changed
+  model re-bakes. ⚠ The profiles emit G2/G3 arcs (2,077 in the EdgeLabel 2W-1H file); the prototype's parser read G0/G1
+  only, so its perimeter loops had gaps at every rounded corner. The race below is why the bake refuses a G-code that does not end with the slicer's own trailer line, whose parsed top differs from the max_layer_z it declares, or that stops more than 0.25 mm short of the STL's height (all 555 bakes of 2026-10-25 sat within +/-0.1 mm of it; Terra 01a1755f). Measured: the EdgeLabel 2W-1H slices and bakes in 1.9 s; the 555-part batch took 132 min of CPU (20 min slicing, 110 min rasterising 8.27 million bead segments, 2 min PNG) over a 1 h 46 min wall clock
+  on node0 (numpy 2.3.5 is there; no PIL; PNGs are written with zlib); the raw set is 112 MB.
+- **The frame (`tools/skin-map.mjs plan`, `tools/lib/skin-geometry.mjs`).** The GLB the stage draws and the STL the
+  slicer saw are different asset sets, so the rotation between them is MEASURED, never typed: the 24 proper 90-degree
+  rotations are tried; the extents must agree on every axis (x and y over the vertices above a 1 mm bottom cut - the
+  case and extender STLs carry corner helper disks inside the bottom millimetre that the GLB lacks; measured 2026-10-25:
+  the 185 1W-1H case STL spans 96 x 193.6 where the GLB spans 88 x 185); among the survivors the nearest occupancy grid
+  wins (24 cells a side, filled from points sampled over each triangle's AREA and splatted trilinearly - triangle
+  centroids read the cover tiles 1.0 apart of a possible 2.0 for the same shape, because the GLB and the STL triangulate
+  the same flat faces along different diagonals; hard bins read them 0.58 apart from a sub-cell offset). A runner-up that
+  is the winner turned half a turn about the build axis is harmless; any other within 0.7 of its distance refuses the part.
+  Then R * axis (generate.js buildAxisForType) must be +Z (slice as it sits) or -Z (rotate-x 180): the Cover Uppers and the
+  59 rails come out as 180, confirming slice_batch.py's hard-coded six independently, and the Deco handle does too (its STL
+  sits top-up). The map ships in the part's own bed-plane frame q = (p . t1, p . t2), the two tangents bed-finish.js's grain
+  derives from the axis in GLSL and js/skin-map.js `skinTangents` derives in JS (test-pinned to each other), so the shader
+  needs no flip, swap or offset per part - only the map's origin and px/mm. The slicer's placement (the STL's own bounding
+  box centred on the bed, dropped to z 0) is predicted and checked against the G-code's extrusion extents (above 1 mm, or
+  the whole: a wall bracket is a thin plate with one rib) within 1 mm, else the map is refused.
+- **What is baked and what is not.** 555 of the pools' 632 nodes baked (0 failed). Not: the 27 side covers (they print
+  face-down, so the printed top faces the case wall; and their GLB carries the panel's surface twice, 41,050 mm2 against
+  the STL's 21,467, which no frame match can read); the 25 Decor drawers of 2H and 3H outside the 240 collection (their
+  STLs ship with built-in supports and no clean file exists; 240's "No Support" set is used); 21 hardware, label and handle
+  nodes without a confirmed pose; the four EdgeLabel back covers 1W-15H, 1W-2H, 2W-15H, 2W-2H (the STL is another revision
+  of the GLB, not a mirror - tested). One baked map is refused at shipping: GridfinityDecorDrawer_270-3W-1H, whose G-code
+  reaches 18 mm past the GLB's outline on one side.
+- **The coverage check (`tools/skin-map.mjs check`, `tools/lib/skin-check.mjs`).** Every shipped map read as the shader
+  reads it against the GLB's VISIBLE top faces (surface-sampled, area-weighted; the GLB models the EdgeLabel's raised band
+  as a solid on the plate, so 45 % of its 4.5 mm face runs on underneath as an internal face and is set aside): a sample
+  agrees when the texel holds a bead within 0.45 mm of its own height. Over the 554 shipped maps: median 98.3 %, the tenth percentile 88.1 %, 22 under 80 % - all of them face-down Essential and Chevron plates (their printed top is the back, whose clips and bosses the GLB models differently; lowest 74.6 %) and one Classic Pro plate at 77.0 %; every other family's lowest map is above 84 % (cases 96.7, Decor drawers 96.1, Classic drawers 99.1, cover tiles 96.2, Gridfinity drawers 85.7, accents 84.8). The EdgeLabel 2W-1H: 97.0 % of
+  7,607 mm2; the same map mirrored in q1 / q2 / both: 67.9 / 1.9 / 2.0 %. The mirrored controls mean something only where a
+  part is asymmetric (a flat cover tile's mirror covers its top just as well).
+- **⚠ Six bake processes in parallel on one output folder produced ten "ok" records from G-code another process was still
+  writing** (a drawer with 108 of its 250 layers and no floor), found by the check (Gridfinity drawers at 7-20 %),
+  re-baked one at a time, and the height guard above was added. Run the batch as one process.
+- **The maps shipped (gen2-parts branch `skin-maps`, `parts/skin/<node>.png` + `index.json`).** 554 maps, 96.9 MB in all, median 156 KB, the 90th percentile 325 KB, the largest 623 KB, at 8 px/mm capped at 1.5 Mpx (308 maps scaled down, the biggest 270 cases to 3.8 px/mm) with the normal's two channels at 6 bits (64 levels: the bead flanks use about a tenth of the range; measured against 8 bits on the EdgeLabel macro, 0.01 % of the pixels differ by more than 8 levels and the mean difference is 0.2 of a level; 8 bits would have been 159 MB). The EdgeLabel 2W-1H is 74 KB. The
+  brief budgeted ~160 KB a part; the 8 px/mm RGBA bake with the Z channel costs more on the big parts, and a 1.0 Mpx cap
+  helps little, because the bulk is hundreds of mid-size maps (all 554 maps: 159 MB at 1.5 Mpx and 138 MB at 1.0 Mpx with 8-bit normals; 96.9 MB at 1.5 Mpx and 80.7 MB at 1.0 Mpx with 6-bit). The levers are the tool's
+  `--max-mpx`, `--rg-bits` and `--families`; the raw bakes of every part stay in the work folder and on node0, so shipping
+  a family later is one command. The index is the planner's one fetch (`parts/skin/index.json`: node -> file, size, q0,
+  px/mm, axis, skin layers, the bake's provenance); a node without an entry is never fetched.
+- **The runtime (js/skin-map.js, the atlas manager in main.js).** Part materials are shared per TYPE while a map is per
+  NODE, so the node is a per-vertex attribute (aSkinId = slot + 1, 0 for none, stamped on the template like aBfMm), the
+  slot's frame and atlas rectangle sit in a 2 x 64 float table texture, and every map on the stage is packed into one
+  RGBA8 atlas (2048 px first, 4096 when needed, scaled down past that; 4 px gutters; the empty space is a FLAT normal).
+  The normal's xy is sampled with textureGrad (its derivatives taken in the uniform branch) so a minified map averages
+  toward flat; the layer height is texelFetched, never filtered, and a fragment takes the map only within 0.25-0.45 mm
+  of its own height along the axis (stacked skins under an overhang go plain rather than wearing the skin above). The maps
+  are fetched only while the tier is Very High (the mount's and the tier switch's sync), only for nodes the manifest
+  places, decoded by a hand-written PNG reader (an <img> route premultiplies the alpha that carries half of the layer
+  height), and a failed one leaves its part plain with a console warning. Measured with tools/skin-cost.mjs on the 185 2W-2H tabletop kit (this machine's GPU through Chrome, 1600 x 1000 at dpr 2, the dark stage): the moving frame's median interval with the maps on / off, in ms - veryhigh 8.5 / 8.3, high 8.3 / 8.4, balanced 8.7 / 8.7, fast 8.2 / 8.2 - identical within the vsync; Very High's settle (24 samples) with ten maps on the stage in a 4096 px atlas, three runs each: 393, 413, 465 ms on against 366, 379, 395 ms off - the medians 413 and 379, 34 ms apart, about 1.4 ms a sample (the means 424 and 380, 44 ms apart).
+- **Checks.** test/skin-map.test.mjs (14): the patch composes on three r185's real shader sources after the relief, the
+  bed finish and the cover edge, every block once, its normal work after the finish's plain restore and before the lights;
+  the switch a shared uniform, one program; the GLSL frame pinned to skinTangents() and the Z decode to the bake's encode;
+  the packer; the codec; the EdgeLabel 2W-1H map as a fixture against its GLB (97 % agreement, the controls under 68 %;
+  the label window empty, the plate around it skin, the REMOVE tab along the window's lower edge, the perimeter bead's
+  flank leaning into the opening on both sides); main.js's wiring and the trial's absence; the pages.yml stamp. The feet
+  test reads only numeric pool folders. An e2e case: Fast fetches no map (no request to parts/skin/) and holds none, the
+  switch reaches the uniform; the whole e2e suite on the branch with the maps served from the checkout: 87 of 87, 8.1 min on the GPU. npm test: the first full run (before the two fixes) was 637 tests, 627 pass, 5 fail, 5 skipped - the feet test, the smoke test's three cases and their parent; after the fixes the feet test (4 of 4) and the smoke test (4 of 4, with GEN2_PARTS_LOCAL=1, since it reads the maps from the checkout - see the deploy order) pass alone, and the full suite re-run with GEN2_PARTS_LOCAL=1 reads 639 tests, 634 pass, 0 fail, 5 skipped (the two new fixture tests included). Goldens (TOL 8 per channel, THRESHOLD 0.1 % of a shot's pixels): with the maps ABSENT (the live parts host) 60 of 60 pass
+  at Very High and Fast, so the shader patch alone changes no shot beyond that tolerance; with the maps on (GEN2_PARTS_LOCAL=1) also 60 of 60 pass: at the goldens' whole-build distance (about 2.4 device px per mm) the mipmaps average the beads to flat, so the goldens cannot see the feature within their tolerance and need no re-blessing.
+  Mutants: 15 of 15 killed, each by the test that names its defect (the settle gate, the top-skin weight, the Z decode and gate, the tangents on both sides, the finish guard, the tier gate, the flat atlas fill, the gutter, the resampler, the PNG filter, the mount's and the tier switch's sync, the slot's +1, and the shipping tool's transpose - that last one is a no-op on the EdgeLabel, whose frame is a pure sign flip and its own transpose, and is caught by a second fixture, the CL-185-1W tile, whose frame is a quarter turn: the outermost bead must lean outward on all four edges). ⚠ A first run showed two kills that were artefacts of the runner (its re-ship had refreshed the fixture PNG from a newer bake without its JSON); read which test killed a mutant. Proof shots (`tools/skin-shots.mjs`, `D:\Claude - Output\skin-map-2026-10-25\shots`, the map on
+  and off at the settled Very High frame, next to the FaderBox print-finish stills in reference/): the EdgeLabel plate,
+  macro and window; a cover row and macro - the visible top of a cover row is the Cover Upper's BED face, so on and off
+  are the same there by design; a Decor drawer fully out, its rim's beads from above. Pixels changed by more than 8 levels between on and off (the accumulator restarted by invalidateFrame, no camera nudge - a 0.01 mm nudge alone moved the powder grain on 3-8 % of a frame): covers-macro 0.00 %, covers-row 0.00 %, drawer-macro 0.80 %, drawer-rim 0.21 %, edgelabel-macro 3.80 %, edgelabel-plate 1.62 %, edgelabel-window 3.61 %.
+- **⚠ The deploy order.** The planner's smoke test asserts nothing on the console, and until gen2-parts carries
+  `parts/skin/index.json` the live host answers 404 (a Very High visitor's one request): the smoke step passes locally with
+  GEN2_PARTS_LOCAL=1 and FAILS against the live host. So gen2-parts (branch `skin-maps`) publishes first, the planner
+  merges after. Nothing else in the planner changes for the other tiers.
+- **Review:** Sol `01a174ad` (substantial, the runtime): two findings, both confirmed and fixed in 5f3e295 - the atlas's
+  empty space was cleared to 0, a (-1,-1) normal the mipmaps blend into every map's minified edge, now 128 (flat); the
+  packer's 0.9 steps never tried its floor scale. Terra `01a174b0` (routine, the bake and the frame maths): one finding,
+  confirmed and fixed in vault fa67ef0 - a full-circle arc read as a zero sweep (none in the real file; G-code allows it).
+  Sol `01a17542` (substantial, this entry as the architecture note): five findings, all confirmed and corrected here and in the
+  vault's copy - an npm total quoted without re-running the suite after the two fixes, the settle overhead understated (the
+  medians are 34 ms apart, not 25), the 6-bit comparison counting only differences over 8 levels, "moves no pixel" claiming
+  more than the goldens' tolerance proves, and the 1.0 Mpx figure lacking its precision.
+- **Deploy:** **Live 2026-10-25 at `720be857`** (Joey's go 19:30 local: gen2-parts master `d0b7999` pushed first, live
+  index 554 nodes; the planner's merge `720be85` pushed 19:57, the run succeeded 20:46; main had moved twice during the
+  tests - the settle rule `dbf76ba`, then its Live line `323ee5d` - both merged into the branch first, so the pushed tree
+  equals the tested one). On the merged tree: e2e 88 of 88; npm test 643 (637 pass, 5 skipped, 1 fail: `surprise.test.mjs`
+  M13's timing gate at 2.3 s while a 555-STL pass loaded the CPU - alone it reads median 0.41 ms, 11 of 11). The live check
+  (`live-check.mjs` and its result `live-check-720be857.json`, both in the work folder): the 185 tabletop kit
+  at Very High, `?debug=1`, settled 24 of 24 samples with 10 maps on the stage in a 4096 px atlas, every `parts/skin/`
+  request 200, no failed map, 0 console errors; 8 warnings, none from the maps - GoatCounter's skipgc notice and ANGLE's
+  HLSL notes on three.js's 255/256 packing constant (X4122) and gradients inside the Very High passes' loops (X3595);
+  skin-map.js's GLSL has no loop and reads the atlas with textureGrad and texelFetch only. The github.io address now
+  answers 301 to `planner.modulith.systems`, so a stamp watcher must follow redirects. The bake's completeness guard
+  was strengthened the same evening (vault `9997f06`, Terra `01a1755f`; the race paragraph above).
+
+## 2026-10-25 · A peeked drawer stays open across a rebuild
+
+- **Asked:** Joey, 2026-10-25, with four screenshots: Peek inside on a 3W-1.5H Decor drawer, then Drawer Standard ->
+  Gridfinity in the inspector; the new drawer loaded closed under a button still saying "Close it"; pressing it did
+  nothing visible, the button flipped to "Peek inside", and only then did it open. "I'd rather if the drawer is opened
+  and the type is changed, it remains open."
+- **Cause:** `js/workspaces/build.js` syncStage() rebuilds the stage (`stage.update`) on every manifest change, which
+  replaces every instance; the stage's open carrier and the Build workspace's `st.peeking` both pointed at the old
+  drawer. The button read `st.peeking`; its press ran `stage.unpeek()` on the dead instance.
+- **Change:** syncStage() lets the stage's open drawer go before the update (`stage.unpeek()`, so its dims pills come
+  back) and peeks the same unit again on the new stage after it (`stage.peekUnit`), only if the unit is still the peeked
+  one (a select or a removal during the await may have let it go) and the update succeeded; a unit with no drawer any
+  more (a shelf) leaves the button at Peek inside. Any rebuild keeps a peeked drawer open, not only the drawer's own.
+- **Tests:** e2e `Build: a peeked drawer stays open when its type changes to Gridfinity, and Close it still closes it`
+  (the drawer found by part type: a node-name match takes Drawer_Stoppers_L first; the proof is the new drawer's travel
+  on Close it, since the Gridfinity drawer rests at another z than the standard one). Run against the unfixed build.js
+  it fails on that travel.
+- **Review:** Terra `01a175a2`: 2 of 5 taken (restore only while `st.peeking` is still the peeked unit; the pills
+  round-trip confirmed), 1 discarded (stale `st.stageErrors` - syncStage clears it before the update on every pass).
+- **Deploy:** a bug Joey reported, so it deploys once the suites pass. **Live 2026-10-25 at `2bf7cad1`** (20:40 push,
+  live 22:05 local, queued behind the skin-map deploy). The live check `peek-prod.mjs 2bf7cad1` (D:\Claude - Output\
+  planner-prod-checks-2026-10-18) passed: Peek inside opens the drawer to base + 171.5, the switch to Gridfinity leaves
+  the new drawer open under a button still saying Close it, Close it brings it back by 171.5, the button says Peek inside.
+
+## 2026-10-26 · The deploy workflow in parallel jobs: docs-only pushes run nothing, the e2e in six shards, the image's own Chrome
+
+- **Asked:** Joey, 2026-10-25, decided with Astra's review: a four-line fix and a docs paragraph each cost an hour on the
+  runner. One bounded task, in order: report the measured baseline first; skip documentation-only changes (a NARROW list);
+  cancel superseded testing without ever interrupting a publish or letting an older build publish over a newer one; shard
+  the e2e with verified coverage and isolation; move interaction cases to Fast only case by case; cache nothing without
+  evidence; benchmark on real runs. The stamping and the module-graph guard stay as they are.
+- **The baseline (measured before any change).** Actions API, nine runs on main: npm test 0.1-0.2 min; the one browser
+  step (npm ci, `playwright install --with-deps chromium`, smoke, profile-lands, relief-tier, all of the e2e) 30.5-68.0 min;
+  deploy-pages 0.12 min; queue 0.1 min. Split into one step each on branch run 40257169401 (4470c7b, otherwise unchanged):
+  npm test 0.13, npm ci 0.07, the Playwright install 4.78, smoke 0.65, profile-lands 0.42, relief-tier 0.27, e2e 42.93 min
+  (84 ran, 5 skipped). Its notice: every suite launched the image's own Google Chrome ("channel chrome 155.0.8059.39"),
+  never Playwright's Chromium. The slowest cases on the runner: the stale-tab guard 135.8 s, hover hints 133.9 s, the
+  Studio's Add to planner 127.9 s, Joey's wall build switched to Tabletop 125.6 s, Labels: EdgeLabel 107.2 s, the top bar
+  at every desktop width 102.4 s. Nine of the 28 runs before this were pushes of docs/redesign/*.md alone: 287 of 1155
+  runner minutes.
+- **Documentation-only pushes run nothing:** `paths-ignore: docs/**, *.md` (the root's Markdown only). Not models, fonts,
+  images, kits, configuration or the README files inside served folders: each changes what is published or what a visitor
+  gets. workflow_dispatch ignores the filter.
+- **Jobs:** unit (npm test), build (the stamping, the guard and the site artifact, byte-identical to before and now minutes
+  in, so a forgotten sed line fails before the browser suites finish), browser (the three short suites), e2e x6, e2e-coverage,
+  deploy. **Concurrency is per job, not per workflow:** each test job has a group per ref (and per shard) whose
+  cancel-in-progress is the run's FIRST attempt only; the deploy queues in `pages-deploy` without cancel-in-progress, so a
+  publish in progress always finishes and a waiting deploy is replaced by a newer one. The old workflow-level
+  `pages` + cancel-in-progress could cancel a run mid-publish. **The freshness check:** the deploy publishes only if main's
+  tip is this commit, or differs from it in docs/** and root *.md alone (the same two patterns); otherwise the newer push's
+  run publishes. The deploy needs unit, build, browser, every e2e shard and the coverage job.
+- **The shards** (e2e/shard.mjs): workspaces.mjs collects its 89 `test(...)` calls and registers this process's share at
+  the end of the file. Each case is identified by its position; the split puts the longest case first onto the least-loaded
+  shard, weighted by e2e/shard-weights.json (a whole soft-render run's durations; a case without a weight counts as the
+  median, so stale weights only unbalance). Each shard writes a report (the case list's hash, the weights' hash, its
+  positions); `tools/e2e-shard-gate.mjs` fails unless all n shards agree and every position ran exactly once.
+  test/e2e-shard.test.mjs proves the partition on 300 random lists. **Isolation:** each shard is its own runner; the file
+  serves the app on port 0, opens fresh contexts per case and writes nothing to disk. **Locally, soft render (E2E_SOFT=1,
+  no Studio, as the runner):** serial 1864 s; the four shards one after another 441 / 407 / 379 / 433 s, 22 / 22 / 22 / 23
+  cases, all passing, the gate: 89 cases each run exactly once.
+- **Fast tier:** already done case by case since 2026-10-13 (the harness pins `fast`): 86 of the 89 cases run on Fast.
+  The other three keep their tiers because the tier is what they test: Colors step 2 and the product-preview case
+  (Balanced, a tone-mapped tier's match to the screen) and the Quality pill (the tier switch). Nothing moved.
+- **The browser and caching:** no cache of either kind. npm ci costs 4 s, so dependency caching would save nothing; the
+  Playwright install cost 4.78 min a job for a browser no suite opened. `tools/ci-browser.mjs` launches the image's Chrome
+  first and installs Playwright's Chromium (with its system packages) only if that fails; either way a notice names the
+  browser the suites got.
+- **Failure text and timings:** `tools/ci-named.sh` is the former inline named() (a failure names itself in the
+  annotations), plus one notice per suite with its slowest cases (`tools/tap-durations.mjs`), readable through the API
+  without signing in.
+- **Review:** Sol `01a1762e` (substantial): 2 findings, both confirmed and fixed - a manual re-run of an older main run would
+  cancel the newer run's tests through the ref-only groups and then fail the freshness check, leaving the newest code
+  unpublished (cancel is now first-attempt only); the deploy's docs pathspec differed from the push filter for a root file
+  named `docs` (now `:(exclude,glob)docs/**`, checked in a scratch repo). Four questions answered "holds": no older build
+  publishes over a newer one, no deploy without every shard and the gate, unsharded registration unchanged, a missing
+  system package fails a required job rather than passing a deploy.
+- **After (benchmark, branch runs; the deploy job skipped there, being main's alone):**
+
+  | run | wall clock | e2e shard steps (min) | the rest |
+  |---|---|---|---|
+  | 40257169401, the baseline (old steps, split) | 49.6 min | one serial step, 42.93 | install 4.78, short suites 1.34 |
+  | 40262875906, four shards (d3edeaa) | 17.8 min | 7.52 / 12.73 / 16.92 / 16.28 | browser job 1.4, unit 0.4, build 0.2 |
+  | 40264684655, six shards (2a10d49) | 11.4 min | 5.43 / 8.47 / 10.27 / 10.68 / 5.07 / 5.12 | browser job 2.1, unit 0.4, build 0.1 |
+
+  Every test job passed on both (the deploy job skipped, as on any branch), all on the image's Chrome 155.0.8059.39 (the
+  browser check 6-14 s a job on the four-shard run), the coverage gate
+  green (89 cases, each once: 22/22/22/23 and 14/14/14/16/15/16). **The shard count is six, and the spread is the
+  machines:** the four shards carried equal weighted loads (486 s each by the weights) and their runner/local medians were
+  0.98 / 1.49 / 1.76 / 1.86, so re-weighting cannot fix it; the run waits on its slowest runner, and smaller shards bound
+  that. Two runs are two samples of the runner pool, not a distribution: expect roughly 10-18 min, not a promise of 11.
+  Summed, the shards' e2e steps took 53.5 min (four) and 45.0 min (six) against 42.9 serial - the same machine spread,
+  plus a boot per shard. A docs-only push now runs nothing; before, 50-66 min.
+- **Not done here:** the weights stay the local soft-render run's (within one machine the runner's proportions follow
+  them); the runs-on 26.04 note is untouched.
+- **Live 2026-10-26 at `1018463c`** (Joey's go; the merge of ci-speedup). Main run 40316065152: 13.7 min wall, every job
+  green, e2e shards 12.6 / 7.5 / 11.2 / 11.4 / 8.3 / 5.8 min, the deploy job's freshness check passed and deploy-pages
+  published - the first run of the deploy as its own job. The live planner serves `boot.js?v=1018463c`, and
+  `peek-prod.mjs 1018463c` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed with no page errors. This Live
+  line is a docs-only push: by the new filter it starts no run.
+
+## 2026-10-26 · A part's own build plate finish (Faceplates Holographic, the rest Powder-coated)
+
+- **Asked:** Joey, 2026-10-26, with two screenshots of a 165 Tabletop 3W-2H in Chevron faceplates: the plate finish is one
+  choice under Colors, but "i'd like everything except the faceplate to be printed with the powdercoated, and the faceplate
+  holographic, maybe it can be an option when selecting a certain part type". The code had reserved the model since
+  2026-09-14 ("a part inherits the build's finish unless it has its own").
+- **The record:** `plateParts`, the planner's own field like `sideCovers`: part TYPE -> one of powder / smooth /
+  holographic; a type not in it follows `buildPlate`. Per type, for every unit of it, because it is the sheet a part
+  printed on, not a colour region: a faceplate's Body and Face share it. sanitize keeps only a known finish on a plain type
+  name (at most 32) and always writes the map, `{}` for every older record, share link and file.
+- **The stage (js/main.js):** `plateFinishFor(key)` is what a material wears, `plateProfile()` stays the build's. A part
+  with its own finish gets its own uniforms object, sharing every entry with the build's except the two that say which
+  finish (uPC, uBfHoloOp), so the build's Powder <-> Smooth write passes it by while every settle sample's grain and layer
+  lines still reach it. Holographic picks the holographic program per part; the face-down Essential and Chevron transfer
+  follows the Faceplate's own-or-build finish. `syncBedFinish` purges every material registry when the map changes, from
+  the one place every path reaches (a pick, Undo, a reload, a share link). Preview thumbnails key on the map.
+- **The UI (Colors):** the filament picker gains "Printed on": the three finishes for all of that part type, with "Use the
+  build's finish". Clicking the inherited finish pins it (it then stays when the build's changes). The left panel lists
+  the parts with their own finish, each with "Use the build's". Each change is one undo step; app.js hands an undone map
+  back to the stage, as it does the build plate.
+- **Tests:** test/plate-parts.test.mjs (the record's rules, 2/2); store and parity tests carry the new field. e2e "Colors:
+  a part's own build plate finish": Faceplates own Holographic on a Powder build; the build to Smooth moves the rest and
+  leaves them; Case own Powder-coated on a Smooth build (a uniforms-only difference); Undo x3, Redo; a reload keeps it;
+  "Use the build's" from the list; the pin. Read off the live materials (`bedFinish.wearing()`). Five mutants each fail
+  it (own uniforms ignored, the purge ignoring the map, the holographic program from the build only, the undo hand-back
+  removed, sanitize dropping the field). A Playwright run on a decor + Chevron build at Very High: the faceplates wear the
+  face-down holographic transfer, every other type Powder-coated, no page errors, 8 px between the row's pieces; shots in
+  D:\Claude - Output\plate-per-part-2026-10-26.
+- **Review:** Sol `01a178a5` (substantial): 1 finding, confirmed and fixed - clicking the inherited finish did nothing, so
+  it could not be pinned. Five questions answered "holds".
+- **Not done:** the old planner's relay does not carry the map (the old planner forwards since the cutover); the old
+  viewer's own Build plate row stays build-wide.
+- **Live 2026-10-26 at `7e54f4a1`** (Joey's go; main fast-forwarded to the branch). Main run 40346580980: 13.1 min, every
+  job green, the deploy job published. `plate-parts-prod.mjs 7e54f4a1` (D:\Claude - Output\planner-prod-checks-2026-10-18)
+  passed on the live planner: the Faceplate row's Printed on row, Holographic set for the faceplates on a Powder-coated
+  build, the record `{ Faceplate: 'holographic' }`, the faceplates wearing their own Holographic and the 10 other part
+  types Powder-coated, no page errors; its screenshot sits beside it.
+
+## 2026-10-26 · Polar Filament PLA joins the filament catalog (44 colours)
+
+- **Asked:** Joey, 2026-10-26: Polar Filament is his local maker (Troy, Michigan); add their colours, skipping what
+  cannot be drawn accurately (marble, no colour code). "We can just put them in with their published hex"; and a
+  filamentcolors.xyz spectrophotometer scan of printed material "is probably more true than even if i bought a NIX".
+- **The list:** every 1 kg 1.75 mm PLA spool Polar's shop sells (polarfilament.com, collections/pla-1-75mm) that has a
+  colour code in their colour list (pfil.us/colors.php), joined by SKU; each colour links to its own product page (all
+  44 answered 200). The hex is the filamentcolors.xyz scan where one exists (11; CC BY 4.0; Rust and Teal there are
+  Chestnut and Squid now, as the product addresses still say), else Polar's published hex (33), their target colour:
+  the 10 compared differ by a median dE76 of 27 (Spaceship Steel published #D1D1D1, measured #787E82). No TD: opaque PLA
+  never reads one. Left out: Arctic White and Robotic White (on sale, no colour code), the Mystery Spool, and 25
+  colours the shop no longer sells. The missing list is kept for Joey to source.
+- **What moved with it:** the looks generator's pools gained Polar colours (each style's shells and accents, checked
+  as additions only); `shortName` drops the "Polar " prefix; a second brand line named "PLA" is told apart by brand in
+  the label test. A Surprise me bug the bigger catalog exposed: two candidates of one roll could share a title when
+  neither had a third colour to tell them apart (style any, seed 42: "Lime & wine" twice); such a candidate is now
+  rolled again. Over 1,000 rolls (every style, seeds 1-200) the old generator gave 2 duplicate titles, the new one 0,
+  and neither returned a roll with fewer than three looks.
+- **Tests:** npm test 645 pass / 5 skipped / 0 fail; the 30 Colors, Parts and buy-link e2e cases (two pinned picker line
+  lists gained Polar's line); the picker shows "Polar
+  Filament PLA · 44" with its PLA tag, and a pick's Buy line links Polar's product page (no commission line: not a paid
+  link). Terra `01a179ef`: one finding (the reroll could starve a roll), measured and discarded - 0 short rolls in 1,000.
+- **Live 2026-10-26 at `16dc1a15`** (Joey's go; main fast-forwarded to the branch). Main run 40402177138: 12.9 min, every
+  job green. `polar-prod.mjs 16dc1a15` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed on the live planner:
+  the Faceplate picker's "Polar Filament PLA · 44" group with 44 swatches, Polar Squid picked into the palette, its Buy
+  line linking Polar's product page plainly (not a paid link), no page errors; its screenshot sits beside it.
+
+## 2026-10-26 · The see-into infill lattice is on by default; Chevron face strips read it twice as strong
+
+- **Asked:** Joey, 2026-10-26, after Chevron faces in Panchroma Translucent Natural showed no infill: "regardless in real
+  life you would see infill still because the faces are all transparent"; then "turn the infill lattice on by default for
+  translucent parts. Measure its frame cost first, keep the performance fallback, and look at making it read a little
+  stronger on Chevron strips."
+- **What it was:** the buried lattice (js/see-into.js, 2026-09-21: a translucent part's own perimeter walls and grid infill,
+  with parallax) ran only behind `?silattice=on`, in the old viewer and the planner alike; nothing was lost in the move.
+  Chevron strips are 2 mm deep over a 4.2 mm backer at a 14 mm pitch (vault measurements.md), about 13.75 mm wide, wide
+  enough for grid infill under the pocket rule; with the switch on they did show it, faintly.
+- **Change:** on by default; `?silattice=off` takes it away for comparison, `?silattice=flat` stays. A per-material lattice
+  gain (`uSILatGain`, default 1, the cap uSILatCap still holding); main.js gives the Chevron FACE zone 2
+  (CHEVRON_FACE_LATTICE_GAIN, by eye from 1 / 2 / 3 shots in D:\Claude - Output\lattice-default-2026-10-26); every other
+  part keeps the lab's 1. The see-through's fallback (SEE_INTO_DETAIL_LIMIT, 250 visible part meshes) is unchanged and
+  still removes the whole see-through, lattice included, on a bigger build.
+- **Measured cost** (A5000 laptop, 3200 x 1800 drawing buffer, Very High, camera moving, uncapped, the lattice uniform
+  toggled in 8 paired rounds within one page load; the toggle confirmed live by a still-frame difference on 43 % of
+  pixels), on a laptop with nothing else on the GPU (the done-scene session held off; GPU 0 % before the run): a 12-unit
+  Essential build in translucent faceplates 2.7 -> 2.9 ms a frame, paired median +0.2 ms; a 12-unit Chevron build, face
+  and body translucent, strength 2, 4.1 -> 5.3 ms, paired median +0.9 ms - inside a 120 Hz frame (8.33 ms) either way.
+  ⚠ Two earlier runs overlapped GPU work in another session (Joey caught it) and read 6-8 ms frames with a 4-8 ms spread
+  inside one arm; they are not the record. Lesson: two sessions benchmarking one GPU skew each other - say so first.
+- **Live 2026-10-26 at `64dedfa4`** (Joey's go; main fast-forwarded to the branch). Main run 40415031884: 12.7 min, every
+  job green. `lattice-prod.mjs 64dedfa4` (D:\Claude - Output\planner-prod-checks-2026-10-18) passed on the live planner
+  with no URL switch: Very High, a Chevron build with a Silk Black body and Translucent Natural faces, the lattice on by
+  default, both Chevron face strips baked, the faces visibly changed by the lattice (the same view off and on; its pair
+  of shots sits beside it), no page errors. The other session was told before and after (one GPU).

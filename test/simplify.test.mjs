@@ -123,9 +123,13 @@ test('per-unit picks of a merged filament move with it; a locked key and an unpi
 test('the summary line groups the regions the build has, joins neighbours sharing a filament, splits a group worn in two filaments, and names filaments short', () => {
   const l = surprise({ style: 'workshop', cap: 3, seed: 4 }).looks[1];   // balanced: the accent colour on the face
   const s = summarize(worn(l.colors, FULL));
-  // a group worn in two filaments splits by key (Sol 01a151f0: "Case: Black" hid orange feet)
-  const split = summarize(worn({ ...l.colors, Foot: l.colors['Faceplate:FACE'] }, FULL));
-  assert.ok(split.some((x) => /^Case/.test(x.label) && !/feet/i.test(x.label)) && split.some((x) => /^feet/i.test(x.label) && x.name === l.colors['Faceplate:FACE'].name), JSON.stringify(split));
+  // a group worn in two filaments splits by key (Sol 01a151f0: "Case: Black" hid orange feet). The feet take a filament
+  // the look wears NOWHERE else, so no neighbouring group can absorb them (2026-10-26: with Polar in the catalog, seed 4's
+  // face colour became the deck's, and the feet joined the deck's group instead of splitting from the case's)
+  const used = new Set(Object.values(l.colors).map((c) => c.name));
+  const odd = FILAMENT_DB.flatMap((b) => b.colors).find((c) => !used.has(c.label));
+  const split = summarize(worn({ ...l.colors, Foot: { name: odd.label, hex: odd.hex, url: odd.url } }, FULL));
+  assert.ok(split.some((x) => /^Case/.test(x.label) && !/feet/i.test(x.label)) && split.some((x) => /^feet/i.test(x.label) && x.name === odd.label), JSON.stringify(split));
   assert.ok(s.length >= 3 && s[0].label.startsWith('Case'), JSON.stringify(s));
   const labels = s.map((x) => x.label);
   assert.ok(labels.every((x) => /^[A-Z]/.test(x)), 'each label starts capitalised');

@@ -24,6 +24,18 @@ test('the switch: only a known preset turns it on', () => {
   for (const q of ['', '?seeinto=', '?seeinto=1', '?seeinto=FROSTED', '?seeinto=toString', '?seeinto=__proto__']) assert.equal(SI.parseSeeInto(q), null, q);
 });
 
+test('the buried lattice is on by default (2026-10-26); ?silattice=off takes it away, flat keeps the pre-parallax pattern', () => {
+  for (const q of ['', '?ws=colors', '?silattice=on', '?silattice=1', '?silattice=OFF']) assert.equal(SI.parseSeeIntoLattice(q), 'on', q);
+  assert.equal(SI.parseSeeIntoLattice('?silattice=off'), false);
+  assert.equal(SI.parseSeeIntoLattice('?ws=build&silattice=flat'), 'flat');
+});
+
+test('a part\'s lattice gain scales the structure it reads, under the same cap (the Chevron face strips, 2026-10-26)', () => {
+  const all = Object.values(SI).filter((v) => typeof v === 'string').join('\n');
+  assert.ok(all.includes('uniform float uSILatGain;'), 'the gain is a declared uniform');
+  assert.match(all, /gSIDens = min\( mix\( occS \/ max\( occW, 1e-4 \), occM, 0\.75 \) \* uSILatGain, uSILatCap \);/, 'the gain multiplies the density and the cap still holds');
+});
+
 test('the frosted preset is the lab round-39 cover (index.html COMMON + COVER), structure removed', () => {
   const P = SI.SEE_INTO_PRESETS.frosted;
   assert.deepEqual([P.colorHex, P.seeTintHex, P.see, P.blurPx, P.wallOpaque, P.graze, P.wrap, P.roughness, P.aoWeight, P.interiorScale],

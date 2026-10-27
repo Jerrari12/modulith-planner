@@ -38,7 +38,23 @@ export const BUILD_FIELDS = ["mount", "length", "printer", "customBed", "spaceW"
   "labelStyle", "buildId", "labelList", "labelAssign",
   // the planner's own field (2026-10-20), not the old planner's: side covers on (the 2026-10-17 default, every build) or
   // off; absent in every older record and share link, which read as on
-  "sideCovers"];
+  "sideCovers",
+  // the planner's own field (2026-10-26): a part type's own build plate finish, { Faceplate: "holographic" }; a type
+  // not in it follows buildPlate. Absent in every older record and share link, which read as {} - every part follows
+  "plateParts"];
+/* the per-part plate finishes, cleaned (2026-10-26, the planner's own field): an object of type name -> one of
+   BUILD_PLATES; anything else is dropped, never guessed. Type names are the manifest's part types ("Faceplate",
+   "Case", "Stopper", "MagnetClip"...): a letter, then letters, digits, spaces, "-" or "_", 1-40 characters in all. */
+export const PLATE_PARTS_MAX = 32;
+export function cleanPlateParts(v) {
+  const out = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  for (const [t, f] of Object.entries(v)) {
+    if (Object.keys(out).length >= PLATE_PARTS_MAX) break;
+    if (/^[A-Za-z][A-Za-z0-9 _-]{0,39}$/.test(t) && BUILD_PLATES.includes(f)) out[t] = f;
+  }
+  return out;
+}
 export const BUILD_SCHEMA = 1;
 export const buildTooNew = (d) => !!d && typeof d === "object" && d.schema !== undefined && d.schema !== null
   && !(Number.isInteger(d.schema) && d.schema >= 1 && d.schema <= BUILD_SCHEMA);
@@ -111,6 +127,10 @@ export function sanitizeBuild(d, GEN2) {
      tools agree on what an old link shows. A stored plate is kept (a saved "smooth" stays smooth);
      anything unrecognised is "powder" too, never a guess. */
   d.buildPlate = BUILD_PLATES.includes(d.buildPlate) ? d.buildPlate : "powder";
+  /* a part type's own finish (2026-10-26): only a known finish on a plain type name survives, at most 32 of them, in a
+     fresh object; ALWAYS written ({} when none) - a record without it must not keep the previous build's overrides
+     (the store copies only the fields a record has) */
+  d.plateParts = cleanPlateParts(d.plateParts);
   // a build without an identity (older than the field, or a mangled one) gets
   // a new one; a valid one is KEPT, so a saved or shared build stays itself
   d.buildId = typeof d.buildId === "string" && BUILD_ID_RE.test(d.buildId) ? d.buildId : newBuildId();

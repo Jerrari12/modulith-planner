@@ -31,6 +31,7 @@ import { icon } from '../ui/icons.js';
 import { el, makeToast } from '../ui/dom.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { attachHint, hideHint } from '../ui/hint.js';
 import { FILAMENT_DB } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
@@ -38,18 +39,43 @@ import { surprise, LOCKS, CAPS, shortName } from '../colors/surprise.js';
 import { STYLES } from '../colors/styles.js';
 import { readOwned, writeOwned } from '../state/owned.js';
 import { simplify, worn as wornLook, byFilament, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
+import { lineMaterials, materialsIn, filterByMaterial, labelMaterials, wordMaterial } from '../colors/materials.js';
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
+/* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/colors-*.mp4 from
+   tools/hint-clips.mjs (Joey 2026-10-23). The control's own title is the touch screen's answer. */
+const HINTS = {
+  browse: { title: 'Browse looks', text: 'Every look drawn on this build. Resting on a card shows it on the model; a click opens it, and Apply dresses the build.', video: 'img/hints/colors-browse.mp4' },
+  surprise: { title: 'Surprise me', text: 'Three colour combinations made for this build under your rules: a style, a filament cap, the filaments you own. Try them on the model first.', video: 'img/hints/colors-surprise.mp4' },
+  simplify: { title: 'Simplify', text: 'The same look in fewer filaments: which regions would share one, shown before anything changes. Apply is one undo step.', video: 'img/hints/colors-simplify.mp4' },
+};
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 /* ZONE_LABEL, isPaid and short are exported: the Parts list words a row's zones, filament names and buy links as this tab does */
 export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : z.charAt(0) + z.slice(1).toLowerCase();
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
 const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', SideCover: 'side covers', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
 const typePlural = (key) => TYPE_PLURAL[key.split(':')[0]] || (key.split(':')[0].toLowerCase() + 's');
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const regionOf = (key) => key.includes(':') ? ZONE_LABEL(key.split(':')[1]) : 'Body';
 const FILL_WORD = { classic: 'drawer', decor: 'drawer', shelf: 'shelf', cabinet: 'cabinet' };
+const hostOf = (href) => { try { return new URL(href).hostname.toLowerCase(); } catch { return ''; } };
+/* every host that pays a commission (the viewer's PAID_HOSTS), and the two named programs among them (its PAID_PROGRAMS): Amazon
+   Associates and the Polymaker Ambassador links. A Printed Solid link is plain. Judged per URL, so a line can never misstate one */
 const PAID = [/(^|\.)amazon\./, /(^|\.)amzn\.to$/, /(^|\.)shop\.polymaker\.com$/];
-export const isPaid = (href) => { try { return PAID.some((re) => re.test(new URL(href).hostname.toLowerCase())); } catch { return false; } };
+const AMAZON = [/(^|\.)amazon\./, /(^|\.)amzn\.to$/];
+export const isPaid = (href) => PAID.some((re) => re.test(hostOf(href)));
+export const isAmazon = (href) => AMAZON.some((re) => re.test(hostOf(href)));
+export const isPolymaker = (href) => /(^|\.)shop\.polymaker\.com$/.test(hostOf(href));
+/* THE DISCLOSURE WORDING (2026-10-24; the rule the old planner adopted on 2026-09-19, 591e7bb): a buy link keeps its plain label
+   and rel=sponsored; ONE plain line next to the links it covers says who they go to; Amazon's sentence is its own words, verbatim
+   (the Associates agreement), once per surface. Never "paid link" (Joey: "paid makes it sound like polymaker paid to put their
+   filament on here, which it's affiliate links, so nothing has been paid by anyone yet"), and never "affiliate link" alone */
+export const AMAZON_SENTENCE = 'As an Amazon Associate I earn from qualifying purchases.';
+export const POLYMAKER_LINE = 'Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.';
+const BOTH_LINE = `${AMAZON_SENTENCE} Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.`;
+const OTHER_LINE = 'I earn a small commission, at no extra cost to you.';   // a paid host that is neither program (none today)
+/* the one line for a set of links: both programs, Polymaker's, Amazon's, the plain line, or '' when every link is plain */
+export const disclosureFor = (urls) => { const amazon = urls.some(isAmazon), poly = urls.some(isPolymaker); return amazon && poly ? BOTH_LINE : poly ? POLYMAKER_LINE : amazon ? AMAZON_SENTENCE : urls.some(isPaid) ? OTHER_LINE : ''; };
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 export const short = (name) => String(name).replace('Panchroma ', '');
 /* a filament buy link's click handler: the stage's own `buy:filament:<brand-line>` (main.js buyFilamentEvent), so the
@@ -151,10 +177,13 @@ const LABELS = new Set(FILAMENT_DB.flatMap((b) => b.colors.map((c) => c.label)))
 const silk = (name) => (String(name || '').split(' ').includes('Silk') ? '.silk' : '');
 /* MATERIAL TAGS AND THE FEET (Joey, 2026-10-21: "maybe we need to make PETG and PLA and TPU, like colored tags in the menu to
    help differentiate the material types more"; "when selecting the feet, i feel like we should only list TPU filaments").
-   A line's materials come from its name (the Elegoo line sells PLA and PETG); the TPU lines are the feet's alone, so the
-   feet's picker lists only them and every other picker none of them (the stage keeps the feet TPU: main.js tpuFeet). */
-const materialsOf = (b) => (/TPU/.test(b.line) ? ['TPU'] : [/PLA/.test(b.line) && 'PLA', /PETG/.test(b.line) && 'PETG'].filter(Boolean));
+   A line's materials come from its name (the Elegoo line sells PLA and PETG; colors/materials.js, which the picker's
+   material chips share, 2026-10-23); the TPU lines are the feet's alone, so the feet's picker lists only them and every
+   other picker none of them (the stage keeps the feet TPU: main.js tpuFeet). */
+const materialsOf = (b) => lineMaterials(b.line);
 const matTags = (b) => el('span.mats', {}, materialsOf(b).map((m) => el('span.mat.' + m.toLowerCase(), { text: m, title: m === 'TPU' ? 'TPU: flexible, for the feet' : m })));
+const MAT_OF = labelMaterials(FILAMENT_DB);   // label -> material: the picker's "In this build" row follows the material chip by it
+const materialOfName = (name) => (MAT_OF.has(name) ? MAT_OF.get(name) : wordMaterial(name));   // a palette can name a filament the catalogue lacks: its own words place it (Terra 01a16a51)
 const TPU_LABELS = new Set(FILAMENT_DB.filter((b) => /TPU/.test(b.line)).flatMap((b) => b.colors.map((c) => c.label)));
 const isFeet = (key) => String(key || '').split(':')[0] === 'Foot';
 const storage = () => { try { return localStorage; } catch { return null; } };   // a browser that blocks storage throws on the read itself
@@ -167,7 +196,7 @@ export function mountColors(stage, ctx) {
   // tray: the compare tray is open; flip: the index of the finalist shown on the model (null = the chosen look)
   // surprise: the Surprise me panel is open; owning: its owned-filaments editor is up (oq its search); sshow: the index of
   // the candidate pinned on the model (null = none)
-  const st = { key: null, sel: null, expanded: null, query: '', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null, swap: null };   // swap: the spool whose filament the picker changes everywhere (openSwap); simp: the Simplify panel is open, simpTarget its filament count
+  const st = { key: null, sel: null, expanded: null, query: '', mat: 'all', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null, swap: null };   // swap: the spool whose filament the picker changes everywhere (openSwap); simp: the Simplify panel is open, simpTarget its filament count
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
@@ -265,6 +294,7 @@ export function mountColors(stage, ctx) {
   const strip = (fc) => el('span.strip', {}, [...new Set([...fc.filaments, ...fc.unpicked].map((f) => f.hex))].slice(0, 8).map((h) => el('i', { style: `background:${h}` })));
   function renderPanel() {
     const p = pal();
+    hideHint();   // a control under a bubble is about to be rebuilt; a removed button never fires mouseleave
     panel.replaceChildren();
     /* the panel leads with the build's colours whatever the backdrop (Joey 2026-10-26: "panel always leads with the build's
        colours, room wall/desk as a small section at the bottom only while the room shows, and the view switch moves to the
@@ -303,13 +333,13 @@ export function mountColors(stage, ctx) {
         el('div.sacts', {}, [
           el('button.link.keeplook', { text: 'Keep this look', title: 'Save these colours as a look of your own', onclick: () => { st.saving = true; renderPanel(); } }),
           el('button.link.review', { text: 'Review filaments', title: 'Every filament this build prints in, with where to buy it', onclick: openShop }),
-          fc.count >= 3 ? el('button.link.simplify', { text: 'Simplify…', title: 'Print this look in fewer filaments: see what would change first', onclick: openSimplify }) : null,
+          fc.count >= 3 ? attachHint(el('button.link.simplify', { text: 'Simplify…', title: 'Print this look in fewer filaments: see what would change first', onclick: openSimplify }), HINTS.simplify, panel) : null,
         ]),
       ]));
     }
     look.appendChild(el('div.row4', {}, [
-      el('button.key.sm.strong.browse', { title: 'Every look, shown on this build', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']),
-      el('button.key.sm.surprise', { title: 'Three new looks for this build, under your rules', onclick: openSurprise }, [icon('sparkle', { size: 14 }), 'Surprise me']),
+      attachHint(el('button.key.sm.strong.browse', { title: 'Opens the gallery: every look drawn on this build; rest on one to try it on the model', onclick: () => openGallery('featured') }, [icon('image', { size: 14 }), 'Browse looks']), HINTS.browse, panel),
+      attachHint(el('button.key.sm.surprise', { title: 'Three colour combinations made for this build under your rules; rest on one to try it on the model', onclick: openSurprise }, [icon('sparkle', { size: 14 }), 'Surprise me']), HINTS.surprise, panel),
       el('button.key.sm.save', { text: 'Save', title: 'Keep these colours as a look of your own, to reuse on another build', disabled: !p.on || !Object.keys(p.colors).length, onclick: () => { st.saving = !st.saving; renderPanel(); } }),
       el('button.key.sm.more', { text: '⋯', title: 'Download, Upload, Share', 'aria-label': 'More', 'aria-expanded': String(st.more), onclick: () => { st.more = !st.more; renderPanel(); } }),
     ]));
@@ -348,7 +378,13 @@ export function mountColors(stage, ctx) {
     const plate = el('section');
     plate.appendChild(el('h3.h2', { text: 'Build plate finish' }));
     plate.appendChild(el('div.track.seg3', { role: 'group', 'aria-label': 'Build plate finish' }, PLATE_FINISHES.map((k) => el('button.seg.sm' + ((store.state.buildPlate || 'powder') === k ? '.on' : ''), { text: PLATE_LABELS[k], onclick: async () => { stage.endPreview?.(); store.flush(); await stage.setBuildPlate(k); store.load(stage.build, 'adopt'); store.flush(); renderAll(); } }))));   // its own undo step; app.js hands an undone plate back to the stage
-    plate.appendChild(el('p.note', { text: 'Only changes how the bed faces render · bills nothing. Screen colors are approximate; the Day Grid gives the truest read.' }));
+    // the parts with a finish of their own (2026-10-26), each with its way back to the build's
+    const owns = Object.entries(store.state.plateParts || {}).filter(([, f]) => PLATE_FINISHES.includes(f));
+    if (owns.length) plate.appendChild(el('ul.plateown', { 'aria-label': 'Parts with their own finish' }, owns.map(([t, f]) => el('li', {}, [
+      el('span', {}, [el('b', { text: cap(typePlural(t)) }), ` · ${PLATE_LABELS[f]}`]),
+      el('button.link', { text: 'Use the build’s', title: `Every ${typePlural(t).replace(/s$/, '')} back to the build’s finish, ${PLATE_LABELS[store.state.buildPlate || 'powder']}`, onclick: () => setOwnPlate(t, null) }),
+    ]))));
+    plate.appendChild(el('p.note', { text: 'Only changes how the bed faces render · bills nothing. A part can print on its own finish: pick it, then Printed on. Screen colors are approximate; the Day Grid gives the truest read.' }));
     panel.appendChild(plate);
     /* the room's wall and desk, last and only while the room shows (Joey 2026-10-25: "would it be possible for the user to
        maybe adjust the wall and maybe desk color ... to get a better idea of how the colors look together"; 2026-10-26: "a
@@ -360,6 +396,26 @@ export function mountColors(stage, ctx) {
       rs.appendChild(room.handle.roomColoursPanel());
       panel.appendChild(rs);
     }
+  }
+  /* A part type's own build plate finish (Joey, 2026-10-26: "everything except the faceplate powder-coated, and the
+     faceplate holographic"). One undo step, like the build's plate; app.js hands an undone map back to the stage. */
+  async function setOwnPlate(type, finish) { stage.endPreview?.(); store.flush(); await stage.setPartPlate(type, finish); store.load(stage.build, 'adopt'); store.flush(); renderAll(); }
+  /* the picker's "Printed on" row: the finish this region's part prints on, for every unit of the type (the sheet a part
+     printed on, not a colour region: a faceplate's Body and Face share it). Only for a part with a known bed face. */
+  function plateRow(key) {
+    const type = String(key).split(':')[0];
+    if (!stage.hasBedFace?.(key)) return null;
+    const own = stage.ownPlateOf(type), wears = stage.plateFinishFor(key), buildF = store.state.buildPlate || 'powder';
+    const every = typePlural(key);
+    return el('div.platerow', {}, [
+      el('div.prh', {}, [el('b', { text: 'Printed on' }), el('span', { text: own ? `own finish · all ${every}` : `the build’s · all ${every}` })]),
+      el('div.track.seg3', { role: 'group', 'aria-label': `Build plate finish for all ${every}` }, PLATE_FINISHES.map((f) => el('button.seg.sm' + (wears === f ? '.on' : ''), {
+        text: PLATE_LABELS[f], 'aria-pressed': String(wears === f),
+        title: f === wears ? (own ? `All ${every} print on ${PLATE_LABELS[f]}, their own finish` : `All ${every} follow the build’s ${PLATE_LABELS[f]} · click to keep it whatever the build’s finish`) : `All ${every} on ${PLATE_LABELS[f]}; the rest of the build stays on ${PLATE_LABELS[buildF]}`,
+        onclick: () => { if (own && f === own) return; setOwnPlate(type, f); },   // the inherited finish, clicked, PINS it (Sol 01a178a5): it then stays when the build's changes
+      }))),
+      own ? el('button.link.plateback', { text: `Use the build’s finish (${PLATE_LABELS[buildF]})`, onclick: () => setOwnPlate(type, null) }) : null,
+    ].filter(Boolean));
   }
   function downloadScheme() {
     const p = pal(); const data = { gen2Colors: 1, colors: p.colors, user: p.user };
@@ -460,16 +516,17 @@ export function mountColors(stage, ctx) {
      (the details keep their look shown while they are up) */
   const show = (look) => { if (!st.detail) stage.previewPalette(asLook(look)); };
   const unshow = () => { if (!st.detail) stage.endPreview?.(); };
-  /* the filament rows of a look as THIS build would wear it: a swatch, the name, the parts, Buy (the disclosure stays at the
-     link: `· paid`, rel=sponsored, the Polymaker and Amazon lines) */
+  /* the filament rows of a look as THIS build would wear it: a swatch, the name, the parts, a plain "Buy ↗" (rel=sponsored on a
+     paid host; the disclosure is the one line under the rows, `disclosure` below) */
   function filamentRows(fc) {
     return [
-      ...fc.filaments.map((f) => { const paid = isPaid(f.url); return el('div.frow.well', {}, [el('span.sw' + silk(f.name), { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: 'Buy ↗' + (paid ? ' · paid' : ''), onclick: buyFilament(stage, f) }) : null]); }),
+      ...fc.filaments.map((f) => el('div.frow.well', {}, [el('span.sw' + silk(f.name), { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: isPaid(f.url) ? 'noopener sponsored' : 'noopener', text: 'Buy ↗', onclick: buyFilament(stage, f) }) : null])),
       // printed, but with no filament chosen: a region left on its instruction colour, a label stripe (the label's own colour)
       ...fc.unpicked.map((u) => el('div.frow.well.bare', {}, [el('span.sw', { style: `background:${u.hex}` }), el('div.col', {}, [el('b', { text: u.stripe ? 'Label stripe' : keyLabel(u.key) }), el('span.meta', { text: u.stripe ? `Printed in the label’s own colour, ${u.hex}` : 'No filament picked yet' })])])),
     ];
   }
-  const disclosure = (fc) => el('span.disc', { text: fc.filaments.some((f) => /polymaker/i.test(f.url)) ? 'Paid links. Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission at no extra cost to you.' : fc.filaments.some((f) => isPaid(f.url)) ? 'Paid links · I earn a small commission at no extra cost to you.' : '' });
+  /* the one line under the rows: Amazon's sentence, the Ambassador line, both, or nothing (disclosureFor, the wording at the top) */
+  const disclosure = (fc) => el('span.disc', { text: disclosureFor(fc.filaments.map((f) => f.url)) });
   function renderGallery() {
     document.documentElement.classList.toggle('ws-gallery', (!!st.gallery || st.surprise) && !phone);   // the view tools step aside (app.css); Surprise me takes the gallery's spot
     if (!st.gallery) { gallery.hidden = true; return; }
@@ -527,7 +584,7 @@ export function mountColors(stage, ctx) {
     const hero = el('canvas.render', { width: HERO.w, height: HERO.h, 'aria-label': `This build in ${l.name}` });
     cards.want(hero, look, HERO.w, HERO.h);
     const translucent = fc.filaments.filter((f) => TRANSLUCENT.has(f.name)).map((f) => short(f.name));
-    gallery.append(
+    gallery.append(...[
       el('div.head', {}, [
         // a candidate's details (step 5b) go back to Find your next look, not to the gallery grid
         el('button.back.key.sm', { title: l.kind === 'surprise' ? 'Back to Find your next look' : 'Back to the looks', onclick: () => { if (l.kind === 'surprise') { st.detail = null; st.gallery = false; openSurprise(); return; } st.detail = null; stage.endPreview?.(); renderGallery(); } }, [l.kind === 'surprise' ? '← Find your next look' : '← Looks']),
@@ -543,10 +600,10 @@ export function mountColors(stage, ctx) {
       el('h3.h2', { text: 'Shop this look' }),
       el('div.frows', {}, filamentRows(fc)),
       disclosure(fc),
-      el('p.note', { text: 'A screen preview: colours are approximate, and the card shows the look without shadows. The Day Grid plate gives the truest read.' }),
-      el('p.note', { text: 'Appearance only: whether a filament suits a part (strength, heat, flex) is a separate question.' }),
+      el('p.note', { text: 'Colours on screen are approximate, and the look card is drawn without shadows; the Day Grid plate shows them truest.' }),
+      el('p.note', { text: 'Looks only: whether a filament suits a part (strength, heat, flex) is a separate question.' }),
       translucent.length ? el('p.note', { text: `${translucent.join(', ')} ${translucent.length === 1 ? 'is' : 'are'} translucent; the card shows ${translucent.length === 1 ? 'it' : 'them'} solid.` }) : null,
-    );
+    ].filter(Boolean));   // append(null) writes the word "null": every look without a translucent filament showed it under this footer (Joey saw it live, 2026-10-24)
   }
 
   /* ---------------- Surprise me (step 5): three looks under the visitor's constraints ---------------- */
@@ -714,7 +771,7 @@ export function mountColors(stage, ctx) {
   /* ---------------- the picker (replaces the inspector) ---------------- */
   const picker = el('aside.glass.glass-edge', { id: 'ws-picker', 'aria-label': 'Filament picker', hidden: true });
   root.appendChild(picker);
-  function openPicker(key) { st.key = key; st.swap = null; st.query = ''; renderAll(); if (phone) phone.open(picker); }
+  function openPicker(key) { st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
   function closePicker() { st.key = null; st.swap = null; renderAll(); if (phone) phone.collapse(picker); }
   /* THE SPOOL'S FILAMENT, EVERYWHERE (Joey 2026-10-26: "what if i could select a spool and change it's color, and doing so
      would replace everything in the build that used that same color, kind of a handy feature"). A spool in the room is a
@@ -729,7 +786,7 @@ export function mountColors(stage, ctx) {
     const feet = keys.every(isFeet);
     return { hex: h, names: fil.map((f) => f.name), bare: bare.map((u) => u.key).filter((k) => isFeet(k) === feet), keys: keys.filter((k) => isFeet(k) === feet), feet, url: fil.length ? fil[0].url : null };
   }
-  function openSwap(hex) { const t = swapTarget(hex); if (!t) return; st.swap = t; st.key = null; st.query = ''; renderAll(); if (phone) phone.open(picker); }
+  function openSwap(hex) { const t = swapTarget(hex); if (!t) return; st.swap = t; st.key = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }
   function swapTo(f) {
     const t = st.swap; if (!t) return;
     const fil = { name: f.label || f.name, hex: f.hex, url: f.url };
@@ -753,6 +810,17 @@ export function mountColors(stage, ctx) {
     const unitPick = uid != null ? (pal().on && pal().over[uid] && pal().over[uid][key]) || null : null;
     const w = st.scope === 'unit' ? (unitPick || null) : worn(key);   // what the chosen scope is wearing
     const scopeText = st.scope === 'unit' ? `This ${unitWord()} only${unitNo()}` : `All ${typePlural(key)} · ${count}`;
+    /* THE MATERIAL CHIPS (Joey, 2026-10-23: "should we also have a way to filter by material type when applicable?"): one
+       chip per material the region's lines offer, All first and pressed; no row when they offer one material only (the
+       feet's TPU). A chip narrows the brand groups and the In this build row, combines with the search, holds through a
+       pick's re-render and starts at All when a picker opens (openPicker). Buttons with aria-pressed: the keyboard reaches
+       them; app.css .mrow puts 8 px between them and scrolls the row sideways on the phone */
+    const offered = FILAMENT_DB.filter((b) => /TPU/.test(b.line) === isFeet(key));   // TPU for the feet, and only for the feet
+    const mats = materialsIn(offered);
+    const matRow = mats.length >= 2 ? el('div.mrow', { role: 'group', 'aria-label': 'Material' }, ['all', ...mats].map((m) => el('button.mchip', { 'data-mat': m, title: m === 'all' ? 'Every material' : m === 'TPU' ? 'TPU only: the flexible filament' : `${m} only`, onclick: () => { if (st.mat === m) return; st.mat = m; syncMats(); renderBrands(); } }, [m === 'all' ? null : el('i.mat-dot.' + m.toLowerCase()), m === 'all' ? 'All' : m]))) : null;
+    // the pressed state is set on the chips in place, never by rebuilding them: a rebuilt row drops the keyboard's focus to the document (Terra 01a16a51)
+    const syncMats = () => { if (matRow) for (const b of matRow.children) { const on = b.dataset.mat === st.mat; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); } };
+    syncMats();
     picker.append(...[
       el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: regionOf(key) }), ` · ${scopeText}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
       el('div.track.seg2', { role: 'group', 'aria-label': 'Apply to' }, [
@@ -760,17 +828,20 @@ export function mountColors(stage, ctx) {
         el('button.seg' + (st.scope === 'unit' ? '.on' : ''), { text: uid != null ? `This ${unitWord()} only` : 'This unit only', disabled: uid == null, title: uid == null ? 'Click a part of a unit on the model first' : `Only unit ${unitNo().replace(/[() ]|unit /g, '')} keeps this pick; the other ${typePlural(key)} follow the build colour`, onclick: () => { st.scope = 'unit'; renderAll(); } }),
       ]),
       st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? short(worn(key).name) : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
-      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),   // renderBrands: below, before any input can fire
+      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
+      matRow,
       isFeet(key) ? el('p.note.feet', { text: 'Feet print in TPU, the flexible filament, so only TPU is listed. PolyFlex TPU95 Black is the default.' }) : null,
     ].filter(Boolean));   // append(null) writes the word "null" (it showed under the scope switch, 2026-10-17)
     const brands = el('div.brands');
     picker.appendChild(brands);
-    const renderBrands = () => fillBrands(brands, { tpu: isFeet(key), active: w ? w.name : null, onPick: (f) => pick(key, f) });
+    const renderBrands = () => fillBrands(brands, { tpu: isFeet(key), active: w ? w.name : null, onPick: (f) => pick(key, f), mat: st.mat });
     renderBrands();
-    const buyUrl = w ? w.url : FILAMENT_DB[0].url; const paid = isPaid(buyUrl); const poly = /polymaker/i.test(buyUrl);
+    const pr = plateRow(key);
+    if (pr) picker.appendChild(pr);
+    const buyUrl = w ? w.url : FILAMENT_DB[0].url;
     picker.appendChild(el('div.foot', {}, [
-      el('a.buy', { href: buyUrl, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: (w ? `Buy ${short(w.name)} →` : 'Shop filament →') + (paid ? ' · paid link' : ''), onclick: buyFilament(stage, w) }),
-      el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
+      el('a.buy', { href: buyUrl, target: '_blank', rel: isPaid(buyUrl) ? 'noopener sponsored' : 'noopener', text: w ? `Buy ${short(w.name)} →` : 'Shop filament →', onclick: buyFilament(stage, w) }),
+      el('span.disc', { text: disclosureFor([buyUrl]) }),   // the one line right under the plain Buy: Amazon's sentence or the Ambassador line
       el('div.resets', {}, st.scope === 'unit'
         ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]
         : [el('button.key.sm', { text: isFeet(key) ? 'Reset to TPU95 Black' : 'Reset to instruction colour', title: isFeet(key) ? 'Every foot back to PolyFlex TPU95 Black, own colours included' : `Every ${typePlural(key).replace(/s$/, '')} ${regionOf(key).toLowerCase()} back to the kit’s colour, own colours included`, disabled: isFeet(key) ? !!w && w.name === 'Polymaker PolyFlex TPU95 Black' && !own : !w && !own, onclick: () => commitColors('color', () => { stage.setColor(key, null); if (own) stage.clearOverrides(null, key); }) })]),
@@ -778,26 +849,25 @@ export function mountColors(stage, ctx) {
   }
 
   /* the filaments to pick from: those already in this build, then every brand's, TPU for the feet and only for them;
-     `active` the one worn now, `onPick` what a swatch does */
-  function fillBrands(brands, { tpu, active, onPick }) {
+     `active` the one worn now, `onPick` what a swatch does, `mat` the material chip's (the region picker's; 'all' else) */
+  function fillBrands(brands, { tpu, active, onPick, mat = 'all' }) {
     brands.replaceChildren();
     const q2 = st.query.trim().toLowerCase();
     const p = pal();
     const seen = new Map(); for (const c of Object.values(p.colors)) if (c && c.name && c.hex && !seen.has(c.name)) seen.set(c.name, c);
-    const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === tpu);
+    const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === tpu && (mat === 'all' || materialOfName(c.name) === mat));
     if (inBuild.length) {
       brands.appendChild(el('div.bhead', { text: 'In this build' }));
       brands.appendChild(el('div.swatches', {}, inBuild.map((c) => el('button.sw' + (active === c.name ? '.active' : '') + silk(c.name), { style: `background:${c.hex}`, title: `${c.name} · already in this build`, 'aria-label': c.name, onclick: () => onPick({ label: c.name, hex: c.hex, url: c.url }) }))));
     }
     let any = inBuild.length > 0;
-    for (const brand of FILAMENT_DB) {
-      if (/TPU/.test(brand.line) !== tpu) continue;   // TPU for the feet, and only for the feet
+    for (const brand of filterByMaterial(FILAMENT_DB.filter((b) => /TPU/.test(b.line) === tpu), mat)) {   // TPU for the feet and only for them, narrowed to the chip's material
       const colors = q2 ? brand.colors.filter((f) => `${brand.brand} ${brand.line} ${f.label}`.toLowerCase().includes(q2)) : brand.colors;
       if (q2 && !colors.length) continue;
       any = true;
       const id = brand.brand + '|' + brand.line;
       const open = q2 ? true : st.expanded ? st.expanded.has(id) : true;
-      brands.appendChild(el('button.bhead.toggle', { 'aria-expanded': String(open), onclick: () => { if (!st.expanded) st.expanded = new Set(FILAMENT_DB.map((b) => b.brand + '|' + b.line)); st.expanded[st.expanded.has(id) ? 'delete' : 'add'](id); fillBrands(brands, { tpu, active, onPick }); } }, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${colors.length}` }), matTags(brand)]), el('span.chev', { text: open ? '▾' : '▸' })]));
+      brands.appendChild(el('button.bhead.toggle', { 'aria-expanded': String(open), onclick: () => { if (!st.expanded) st.expanded = new Set(FILAMENT_DB.map((b) => b.brand + '|' + b.line)); st.expanded[st.expanded.has(id) ? 'delete' : 'add'](id); fillBrands(brands, { tpu, active, onPick, mat }); } }, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${colors.length}` }), matTags(brand)]), el('span.chev', { text: open ? '▾' : '▸' })]));
       if (open) brands.appendChild(el('div.swatches', {}, colors.map((f) => el('button.sw' + (active === f.label ? '.active' : '') + (f.pick ? '.pick' : '') + silk(f.label), { style: `background:${f.hex}`, title: f.label + (f.pick ? (f.pickNote || ' · ★ Used by Jerrari') : ''), 'aria-label': f.label, onclick: () => onPick(f) }))));
     }
     if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
@@ -895,7 +965,7 @@ export function mountColors(stage, ctx) {
       ...filamentRows(fc),
       disclosure(fc),
       // the summary's "Review filaments" lands here (step 6): appearance is one question, suitability another (the plan)
-      el('p.note', { text: 'Appearance only: whether a filament suits a part (strength, heat, flex, the printer) is a separate question.' }),
+      el('p.note', { text: 'Looks only: whether a filament suits a part (strength, heat, flex, the printer) is a separate question.' }),
     );
   }
 

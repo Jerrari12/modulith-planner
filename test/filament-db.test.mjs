@@ -33,10 +33,13 @@ const LABEL_PREFIX = {
   PLA: 'Printed Solid ',
   'Burnt Titanium PLA': null,         // ERYONE, explicit per row
 };
+/* a line name two brands share ("PLA": Printed Solid and Polar Filament, 2026-10-26) is told apart by its brand */
+const BRAND_LINE_PREFIX = { 'Polar Filament|PLA': 'Polar ' };
+const prefixOf = (b) => Object.hasOwn(BRAND_LINE_PREFIX, `${b.brand}|${b.line}`) ? BRAND_LINE_PREFIX[`${b.brand}|${b.line}`] : LABEL_PREFIX[b.line];
 
 test('the catalog is the shape main.js and the Lab both read', () => {
   assert.ok(Array.isArray(FILAMENT_DB), 'FILAMENT_DB is an array');
-  assert.equal(FILAMENT_DB.length, 9, 'nine brand entries (the two PolyFlex TPU lines joined 2026-10-21)');
+  assert.equal(FILAMENT_DB.length, 10, 'ten brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26)');
 
   for (const b of FILAMENT_DB) {
     const where = `${b.brand} / ${b.line}`;
@@ -67,7 +70,7 @@ test('every colour carries the four fields a consumer may rely on', () => {
       if ('pickNote' in c) assert.ok(c.pick === true, `${where}: pickNote without pick`);
     }
   }
-  assert.equal(n, 122, 'one hundred and twenty-two colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21)');
+  assert.equal(n, 166, 'one hundred and sixty-six colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21, 44 Polar PLA 2026-10-26)');
 });
 
 test('⚔ every label is unique across every brand', () => {
@@ -80,13 +83,13 @@ test('⚔ every label is unique across every brand', () => {
     }
   }
   assert.deepEqual(clashes, [], 'labels collide, and customColors keys on them');
-  assert.equal(seen.size, 122, 'every colour contributed a distinct label');
+  assert.equal(seen.size, 166, 'every colour contributed a distinct label');
 });
 
 test('⚔ each brand builds its labels the way its block says it does', () => {
   /* Catches the row appended after the `.map()`, which is the way this breaks. */
   for (const b of FILAMENT_DB) {
-    const prefix = LABEL_PREFIX[b.line];
+    const prefix = prefixOf(b);
     assert.notEqual(prefix, undefined, `${b.line}: unknown brand line - add it to LABEL_PREFIX`);
     if (prefix === null) continue;
     for (const c of b.colors) {

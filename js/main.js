@@ -17,6 +17,7 @@ import { lensDisk, lensShear, lightStride } from './lens.js';   // Very High's t
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
+import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
@@ -765,6 +766,7 @@ function applyQuality(name) {
 }
 function setQuality(name, { user = false } = {}) {
   applyQuality(name);
+  skinMaps.sync();   // a visitor stepping up to Very High fetches the maps then, not before
   if (user) qualityLocked = true;
   try {
     if (user) { localStorage.setItem('gen2-quality', quality); localStorage.setItem('gen2-quality:set', '1'); }
@@ -1926,13 +1928,13 @@ if (!ENTRY.isPart) seeInto = createSeeInto({
   /* the preset's constants drive the filament-driven components too (they keep their own colour through `own`); 'frosted'
      is the one every grip/face measurement and Joey's live check ran on */
   THREE, renderer, scene, camera, presetKey: SEE_INTO_COVERS || 'frosted',
-  lattice: parseSeeIntoLattice(location.search),   // the buried-lattice TRIAL (2026-09-21), ?silattice=on only
+  lattice: parseSeeIntoLattice(location.search),   // the buried lattice (2026-09-21), on by default since 2026-10-26; ?silattice=off for comparison
   /* A FILAMENT-DRIVEN part's see-through (Joey 2026-09-21: "maybe overall for the polymaker translucent if it could be slightly
      more see-through", and "when the texture build plate is selected it's not nearly as transparent as the real thing").
      The preset's 0.20 stays the reference cover's accepted look; a picked translucent filament now shows 0.40 of what is
      behind it, and 0.52 when its VISIBLE FRONT printed on the textured (Powder) sheet - the face-down Essential and Chevron
      families - where the grain otherwise reads as extra frost. ARTISTIC values from Joey's look, not measured optics. */
-  ownSee: () => (PLATE_FAMILIES.has(currentFaceplateStyle()?.key) && plateFinishOf(build) === 'powder') ? SEE_OWN_TEXTURED : SEE_OWN,
+  ownSee: () => (PLATE_FAMILIES.has(currentFaceplateStyle()?.key) && plateFinishFor('Faceplate') === 'powder') ? SEE_OWN_TEXTURED : SEE_OWN,
   // every back cover (only behind the switch), one part per instance (hidden meshes draw nothing in the passes)
   parts: () => {
     const out = [];
@@ -3419,7 +3421,7 @@ const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness:
 const zoneKey = (type, zone) => zone ? `${type}:${zone}` : type;
 function ensureMaterials() { // one shared material per type/zone key (idempotent across re-mounts)
   for (const [key, hex] of Object.entries(manifest.colors))
-    if (!materials[key]) materials[key] = seamPatched(key, seeIntoPatched(key, newPartMaterial(key)));
+    if (!materials[key]) materials[key] = skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key))));
 }
 /* the see-into experiment's patch on the back cover material, or the material unchanged (see-into.js) */
 /* ---------------------------------------------------------------- supported translucent previews (Astra 2026-09-17)
@@ -3569,15 +3571,21 @@ function syncSeeIntoComponents() {
   invalidateFrame();
   return true;
 }
+/* A Chevron face strip is 2 mm deep over its 4.2 mm backer (vault measurements.md, "Chevron faceplate pattern"), so the
+   buried lattice crosses far fewer walls in it than in a 6.2 mm Essential plate and read too faint; Joey 2026-10-26: "read
+   a little stronger on Chevron strips". Every other part keeps the lab's strength (1). ⚠ An artistic value, set by eye
+   against the 2026-10-26 comparison shots, not a measurement. */
+const CHEVRON_FACE_LATTICE_GAIN = 2;
+const latticeGainFor = (key) => (key === 'Faceplate:FACE' && currentFaceplateStyle()?.key === 'chevron' ? CHEVRON_FACE_LATTICE_GAIN : 1);
 function seeIntoPatched(key, m) {
   if (!seeInto) return m;
   if (key === 'BackCover' && SEE_INTO_COVERS) seeInto.patch(m, buildAxisForKey(key));   // the reference piece: preset look, switch only
-  else if (seeIntoDrivenKey(key)) seeInto.patch(m, buildAxisForKey(key), { own: true }); // filament-driven: its own colour
+  else if (seeIntoDrivenKey(key)) seeInto.patch(m, buildAxisForKey(key), { own: true, latticeGain: latticeGainFor(key) }); // filament-driven: its own colour
   return m;
 }
 function baseMatFor(type, zone = '') { // shared material per (type, zone) — zones build lazily off the active palette
   const key = zoneKey(type, zone);
-  if (!materials[key]) materials[key] = seamPatched(key, seeIntoPatched(key, newPartMaterial(key)));
+  if (!materials[key]) materials[key] = skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key))));
   return materials[key];
 }
 /* COVER SEAMS (2026-10-21, js/cover-seam.js): the Cover Lower and Cover Upper tiles butt with no gap, so in one filament a
@@ -3589,6 +3597,131 @@ function seamPatched(key, m) {
   return SEAM_TYPES.has(key) ? applyCoverSeam(m, { uniforms: seamU }) : m;
 }
 
+/* SKIN MAPS (2026-10-25, js/skin-map.js): every part's real printed top layer - the slicer's own lines and perimeter
+   loops, baked on node0 from the part's G-code and shipped as parts/skin/<node>.png beside the GLBs - drawn on every
+   top-facing skin in Very High's settle samples. One atlas and one float table serve every node on the stage; a mesh
+   names its map by the per-vertex aSkinId its template is stamped with here. The maps are fetched only while the tier is
+   Very High (the other tiers never draw them), only for nodes the mounted manifest places, and a map that fails to load
+   leaves its part plain. ?skinmap=off draws nothing and fetches nothing, for comparison. */
+const skinU = createSkinMapUniforms({ on: new URLSearchParams(location.search).get('skinmap') !== 'off' });
+function skinPatched(key, m) {
+  return m.userData && m.userData.bedFinish ? applySkinMap(m, { uniforms: skinU }) : m;
+}
+const skinMaps = (() => {
+  const SLOTS = SKIN_MAP.slots;
+  const st = { index: null, indexP: null, atlas: null, atlasPx: 0, atlasData: null, table: null, tableData: new Float32Array(2 * SLOTS * 4),
+    sources: new Map(), roots: new Map(), slots: new Map(), loading: new Map(), failed: new Map(), scale: 1, rev: 0, syncing: null };
+  const wanted = () => skinU.uSMOn.value > 0.5 && !!QUALITY[quality].accum;
+  const base = () => assetUrl('parts/skin/');
+  const inflate = (bytes) => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer().then((b) => new Uint8Array(b));
+  function loadIndex() {
+    if (!st.indexP) {
+      st.indexP = fetch(base() + 'index.json').then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        .then((j) => { st.index = j && j.nodes ? j : { nodes: {} }; return st.index; });
+    }
+    return st.indexP;
+  }
+  async function load(node) {
+    const entry = st.index.nodes[node];
+    const r = await fetch(base() + entry.file);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const png = await decodePng(new Uint8Array(await r.arrayBuffer()), inflate);
+    if (png.width !== entry.size[0] || png.height !== entry.size[1]) throw new Error(`the map is ${png.width}x${png.height}, the index says ${entry.size}`);
+    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm });
+  }
+  function ensureTable() {
+    if (st.table) return;
+    st.table = new THREE.DataTexture(st.tableData, 2, SLOTS, THREE.RGBAFormat, THREE.FloatType);
+    st.table.minFilter = THREE.NearestFilter; st.table.magFilter = THREE.NearestFilter; st.table.generateMipmaps = false;
+    st.table.needsUpdate = true;
+    skinU.uSMTable.value = st.table;
+  }
+  function ensureAtlas(px) {
+    if (st.atlas && st.atlasPx === px) return;
+    if (st.atlas) st.atlas.dispose();
+    st.atlasData = new Uint8Array(px * px * 4);
+    st.atlas = new THREE.DataTexture(st.atlasData, px, px, THREE.RGBAFormat, THREE.UnsignedByteType);
+    st.atlas.minFilter = THREE.LinearMipmapLinearFilter; st.atlas.magFilter = THREE.LinearFilter; st.atlas.generateMipmaps = true;
+    st.atlas.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    st.atlas.flipY = false; st.atlas.colorSpace = THREE.NoColorSpace;
+    st.atlas.wrapS = THREE.ClampToEdgeWrapping; st.atlas.wrapT = THREE.ClampToEdgeWrapping;
+    st.atlasPx = px; skinU.uSMAtlas.value = st.atlas; skinU.uSMAtlasPx.value = px;
+  }
+  /* the per-vertex slot on every mesh of a node's template (the instances share the template's geometries) */
+  function stamp(node, id) {
+    const root = st.roots.get(node);
+    if (!root) return;
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      const g = o.geometry, n = g.attributes.position.count, a = g.attributes.aSkinId;
+      if (a && a.count === n) { a.array.fill(id); a.needsUpdate = true; }
+      else g.setAttribute('aSkinId', new THREE.BufferAttribute(new Float32Array(n).fill(id), 1));
+    });
+  }
+  /* the nodes the stage places and has a decoded map for - the atlas holds exactly these */
+  function live() {
+    const on = new Set(manifest ? manifest.instances.map((i) => i.node) : []);
+    return [...st.sources.keys()].filter((n) => on.has(n) && st.roots.has(n)).sort();
+  }
+  function repack() {
+    const nodes = live();
+    const pack = packAtlas(nodes.map((n) => { const s = st.sources.get(n); return { id: n, w: s.w, h: s.h }; }));
+    for (const n of st.slots.keys()) stamp(n, 0);
+    st.slots.clear();
+    if (!nodes.length) { st.rev++; invalidateFrame(); return; }   // nothing on the stage has a map: no atlas is allocated for it
+    if (!pack) { console.warn('[skin map] the maps on the stage do not fit the atlas even scaled down - none drawn'); invalidateFrame(); return; }
+    ensureTable(); ensureAtlas(pack.size);
+    /* the empty atlas reads FLAT - R,G = 128 is a zero normal, B,A = 0 no bead; a zero byte would be a slope of -1 that the
+       mipmaps blend into every map's edge when it is minified (Sol 01a174ad) */
+    new Uint32Array(st.atlasData.buffer).fill(0x00008080); st.tableData.fill(0);
+    let slot = 0;
+    for (const n of nodes) {
+      if (slot >= SLOTS) { console.warn('[skin map] more than ' + SLOTS + ' mapped nodes on the stage - the rest stay plain'); break; }
+      const s = st.sources.get(n), r = pack.rects.get(n);
+      const data = pack.scale === 1 ? s.data : resampleMap(s.data, s.w, s.h, r.w, r.h);
+      for (let y = 0; y < r.h; y++) st.atlasData.set(data.subarray(y * r.w * 4, (y + 1) * r.w * 4), ((r.y + y) * pack.size + r.x) * 4);
+      const rows = tableRows(r, s, pack.scale);
+      st.tableData.set(rows[0], slot * 2 * 4); st.tableData.set(rows[1], (slot * 2 + 1) * 4);
+      st.slots.set(n, slot); stamp(n, slot + 1); slot++;
+    }
+    st.scale = pack.scale; st.atlas.needsUpdate = true; st.table.needsUpdate = true; st.rev++;
+    invalidateFrame();
+  }
+  /* fetch what the stage needs and repack when the set on stage changed; one run at a time, the next waits for it */
+  async function sync() {
+    if (!wanted()) return st.rev;
+    if (st.syncing) await st.syncing;
+    st.syncing = (async () => {
+      const index = await loadIndex();
+      const on = new Set(manifest ? manifest.instances.map((i) => i.node) : []);
+      const need = [...st.roots.keys()].filter((n) => on.has(n) && index.nodes[n] && !st.sources.has(n) && !st.loading.has(n) && !st.failed.has(n));
+      for (const n of need) {
+        st.loading.set(n, load(n).catch((e) => { st.failed.set(n, (e && e.message) || String(e)); console.warn(`[skin map] ${n}: ${(e && e.message) || e} - left plain`); }).finally(() => st.loading.delete(n)));
+      }
+      await Promise.all([...st.loading.values()]);
+      const want = live();
+      const same = want.length === st.slots.size && want.every((n) => st.slots.has(n));
+      if (!same) repack();
+    })();
+    try { await st.syncing; } finally { st.syncing = null; }
+    return st.rev;
+  }
+  return {
+    uniforms: skinU,
+    /* a template that just loaded: remembered, and fetched on the next sync (the mount's) */
+    adopt(node, root) { st.roots.set(node, root); const slot = st.slots.get(node); if (slot != null) stamp(node, slot + 1); },
+    sync,
+    get on() { return skinU.uSMOn.value === 1; },
+    set(on) { skinU.uSMOn.value = on ? 1 : 0; invalidateFrame(); if (on) sync(); return !!on; },
+    get atlas() { return st.atlas; },
+    status() {
+      return { wanted: wanted(), on: skinU.uSMOn.value === 1, atlasPx: st.atlasPx, scale: st.scale, rev: st.rev,
+        slots: Object.fromEntries(st.slots), sources: [...st.sources.keys()], failed: Object.fromEntries(st.failed),
+        loading: [...st.loading.keys()], index: st.index ? Object.keys(st.index.nodes).length : null };
+    },
+  };
+})();
+
 // ---- build plate (2026-08-10; every eligible part since 2026-09-14) ----------
 // Every printed part's BED-CONTACT FACE takes the finish of the sheet it was
 // printed on - viewer/js/bed-finish.js holds the shader and the rules. The
@@ -3597,12 +3730,25 @@ function seamPatched(key, m) {
 // ⚠ It is a FINISH, not a paint: the material's colour still comes from
 // activeHex(), so the user's filament pick drives it and the transfer rides on
 // top. Never hardcode a colour here.
-// ⚠ PER-PART FINISHES ARE A LATER STEP (Joey 2026-09-14: "it could be an option
-// to any part"). The intended model is "a part inherits the build's finish
-// unless it has its own"; nothing stores an override yet, and `plateProfile` is
-// where one would be consulted.
+// ⚠ PER-PART FINISHES (2026-10-26; Joey 2026-09-14 "it could be an option to any
+// part", and 2026-10-26 "everything except the faceplate powder-coated, the
+// faceplate holographic"): a part TYPE may carry its own finish in
+// `build.plateParts` ({ Faceplate: 'holographic' }); every type without one
+// inherits `build.buildPlate`. One finish per type, for every unit of it - the
+// sheet a part was printed on, not a colour region, so a faceplate's Body and
+// Face zones always share it. `plateProfile()` stays the BUILD's finish;
+// `plateFinishFor(key)` is what a part's material actually wears.
 const PLATE_PROFILES = PLATE_FINISHES.map(key =>
   ({ key, label: PLATE_LABELS[key], holo: key === 'holographic' ? HOLO_OPACITY : 0 }));
+const partPlates = () => (build && build.plateParts && typeof build.plateParts === 'object' && !Array.isArray(build.plateParts)) ? build.plateParts : {};
+/** the finish a part TYPE stores for itself, or null when it follows the build */
+const ownPlateOf = (type) => { const f = Object.hasOwn(partPlates(), type) ? partPlates()[type] : null; return PLATE_FINISHES.includes(f) ? f : null; };
+/** the finish a material key (a type, or type:ZONE) is printed with */
+const plateFinishFor = (key) => ownPlateOf(String(key).split(':')[0]) || plateFinishOf(build);
+const plateProfileFor = (key) => PLATE_PROFILES.find(p => p.key === plateFinishFor(key));
+/* what decides which materials are valid: the build's finish lives in the shared uniforms, but an override decides a
+   material's uniforms object (and, for Holographic, its program), so any change of the map rebuilds them (syncBedFinish) */
+const partPlatesSig = () => JSON.stringify(Object.keys(partPlates()).sort().map(t => [t, ownPlateOf(t)]).filter(e => e[1]));
 // The face-down faceplate families keep the holographic transfer they have had
 // since 2026-08-10, UNCHANGED (Astra 2026-09-14, "preserve existing holographic
 // behaviour"): their whole material takes the plate's polished spec and
@@ -3613,10 +3759,23 @@ const plateProfile = () => PLATE_PROFILES.find(p => p.key === plateFinishOf(buil
 /* One set of finish uniforms for every part material that carries the finish, so Powder <-> Smooth
    is a uniform write and every clone of every material follows it. */
 const bedFinishU = createBedFinishUniforms();
-/* the skin's extrusion lines, a trial (2026-09-22): ?skinlines=on draws them in Very High's settle samples */
-if (new URLSearchParams(location.search).get('skinlines') === 'on') bedFinishU.uSKOn.value = 1;
+/* A part with a finish of its OWN draws from its own uniforms object, so the build's Powder <-> Smooth write never
+   reaches it. It SHARES every other entry with bedFinishU (the same {value} objects): the grain's representation and the
+   layer lines are switched for each settle sample on bedFinishU, and an overridden part must follow them exactly as
+   every other part does. Only uPC and uBfHoloOp - the two that say WHICH finish - are its own. One per finish, made on
+   first use. */
+const ownFinishUs = {};
+const bedFinishUOf = new WeakMap();   // material -> the uniforms object withBedFinish gave it; a clone shares its source's
+function ownFinishUniforms(f) {
+  if (!ownFinishUs[f]) ownFinishUs[f] = Object.assign({}, bedFinishU, {
+    uPC: { value: f === 'powder' ? 1 : 0 },
+    uBfHoloOp: { value: f === 'holographic' ? HOLO_OPACITY : 0 },
+  });
+  return ownFinishUs[f];
+}
 const plateSupported = () => !!build && PLATE_FAMILIES.has(currentFaceplateStyle()?.key);
-const plateActive = () => plateSupported() && plateProfile().holo > 0;
+// the face-down faceplate transfer follows the FACEPLATE's finish, its own or the build's
+const plateActive = () => plateSupported() && plateProfileFor('Faceplate').holo > 0;
 // which key carries the CONTACT face: Chevron's raised strips are its FACE zone
 // (the recessed backer never touched the plate — its grooves stay dark, as on
 // the real print); Essential is a single-zone plate, so its base key is the face.
@@ -3663,7 +3822,7 @@ function ensurePlateUVs() {
 function attachHolo(m, diffracts) {
   m.onBeforeCompile = sh => {
     sh.uniforms.holoTex = { value: holoTexture() };
-    sh.uniforms.uHoloOp = { value: plateProfile().holo };
+    sh.uniforms.uHoloOp = { value: plateProfileFor('Faceplate').holo };   // the face-down faceplates' transfer: the faceplate's finish
     holoUniforms.push(sh.uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vHUv;\nvarying vec3 vON;')
@@ -4013,12 +4172,17 @@ function recordAxis(m, key) {
  * reaches it: the Build options row, the planner's option relay, a planner layout (which replaces
  * `build` wholesale), Reset to original, and boot.
  */
-let bedFinishProgram = null;
+let bedFinishProgram = null, bedFinishParts = null;
 function syncBedFinish() {
   const finish = setBedFinish(bedFinishU, plateFinishOf(build));
   const program = finish === 'holographic' ? 'holographic' : 'profile';
-  if (bedFinishProgram !== null && program !== bedFinishProgram) purgePartMaterials();
+  /* ...and when the per-part finishes change (setPartPlate, an Undo, a loaded or shared build): an overridden part's
+     material holds its own uniforms object and, for Holographic, its own program, so every registry is rebuilt -
+     the same purge, from the same one place every path reaches */
+  const parts = partPlatesSig();
+  if ((bedFinishProgram !== null && program !== bedFinishProgram) || (bedFinishParts !== null && parts !== bedFinishParts)) purgePartMaterials();
   bedFinishProgram = program;
+  bedFinishParts = parts;
 }
 /* Debug-hook handles for the finish (?debug=1 only): the shared uniforms - the readback views
    (uBFDbg), the no-profile diagnostic (uBFPlain 0) and the representation hook - and a check that
@@ -4038,6 +4202,26 @@ const bedFinishDebug = {
       const stamped = o.geometry.userData.bedAxis, want = buildAxisForKey(zoneKey(type, o.userData.zone || ''));
       if (!o.geometry.attributes.aBfMm) out.noAttribute.push(inst.cfg.node);
       else if (!stamped || !want || stamped.some((v, i) => v !== want[i])) out.axisMismatch.push(inst.cfg.node);
+    });
+    return out;
+  },
+  /* What every part TYPE on the stage is wearing (2026-10-26, the per-part finishes), read off the live meshes'
+     materials: per type, the set of finishes they draw - 'holographic' for the face-down faceplate transfer or the
+     holographic program, otherwise the finish its uniforms object holds (its own, or the build's shared one) - and
+     whether any carries a finish of its own. A type whose meshes carry no finish is absent. */
+  wearing() {
+    const out = {};
+    for (const inst of instances.values()) inst.group.traverse(o => {
+      if (!o.isMesh || !o.material) return;
+      const ud = o.material.userData || {};
+      if (!ud.faceHolo && !ud.bedFinish) return;
+      const type = typeByNode[inst.cfg.node];
+      // the object the material was GIVEN; a per-unit clone (not in the map) shares its source's, named by its stamp
+      const u = bedFinishUOf.get(o.material) || (ud.plateOwn ? ownFinishUniforms(ud.plateOwn) : bedFinishU);
+      const f = ud.faceHolo || ud.bedFinish === 'holographic' ? 'holographic' : u.uPC.value === 1 ? 'powder' : 'smooth';
+      const t = out[type] || (out[type] = { finishes: [], own: false });
+      if (!t.finishes.includes(f)) t.finishes.push(f);
+      if (ud.plateOwn) t.own = true;
     });
     return out;
   },
@@ -4076,7 +4260,11 @@ function newPartMaterial(key) {
        way it evaluates — which is a bad way to write a constraint whose failure is invisible, and
        it defeats a source-order gate as well. Each mutates and returns the same material, so
        dropping a return changes nothing but the reading order. */
-    if (spec.holographic) attachHolo(m, plateContact);
+    if (spec.holographic) {
+      attachHolo(m, plateContact);
+      // the face-down transfer, for bedFinishDebug.wearing: plain strings, so a per-unit clone carries them too
+      m.userData = Object.assign({}, m.userData, { faceHolo: true, plateOwn: ownPlateOf(String(key).split(':')[0]) });
+    }
     withLayerDetail(m, key);
     recordAxis(m, key);   // withBedFinish merges userData, so the record survives it
     return withBedFinish(m, key, spec);
@@ -4112,7 +4300,9 @@ function withBedFinish(m, key, spec) {
   const axis = buildAxisForKey(key);
   if (!axis) return m;
   let holo = null;
-  if (plateProfile().key === 'holographic') {
+  const own = ownPlateOf(String(key).split(':')[0]);   // this part's own finish, or null: it follows the build
+  m.userData = Object.assign({}, m.userData, { plateOwn: own });   // read by bedFinishDebug.wearing; a plain string, so a per-unit clone carries it
+  if ((own || plateProfile().key) === 'holographic') {
     holo = { texture: bedHoloTexture(), roughness: HOLO_CONTACT.roughness };
     /* the clearcoat lobe has to be COMPILED for contact to wear it; the patch multiplies it by the
        contact weight, so every face that never touched the plate keeps none, as before */
@@ -4121,7 +4311,9 @@ function withBedFinish(m, key, spec) {
       m.clearcoatRoughness = HOLO_CONTACT.clearcoatRoughness;
     }
   }
-  return applyBedFinish(m, { axis, uniforms: bedFinishU, holo });
+  const u = own ? ownFinishUniforms(own) : bedFinishU;
+  bedFinishUOf.set(m, u);   // the uniforms object this material really draws from (bedFinishDebug.wearing)
+  return applyBedFinish(m, { axis, uniforms: u, holo });
 }
 /* A material's RESTING opacity. Every fade in this engine used to drive
    opacity from/to a hardcoded 1, which is only true while every part is
@@ -4185,6 +4377,32 @@ async function setBuildPlate(key, opts = {}) {
   if (!opts.quiet) track('opt:buildplate:' + key);   // `quiet`: an Undo putting the plate back is not a visitor's pick
   build.buildPlate = key;
   resetPlateMaterials();
+  await regenerate();
+}
+/**
+ * Give one part TYPE a finish of its own (`finish` one of PLATE_FINISHES), or hand it back to the build's (`finish`
+ * null). Every unit of that type follows; the record's `plateParts` holds only the types that differ from following.
+ * A NEW object each time, never an edit in place: the store's undo history keeps the old one.
+ * The materials are rebuilt by mountManifest's syncBedFinish, which sees the map change.
+ */
+async function setPartPlate(type, finish, opts = {}) {
+  if (!build || typeof type !== 'string' || !type) return;
+  if (finish !== null && !PLATE_FINISHES.includes(finish)) return;
+  const next = { ...partPlates() };
+  if (finish === null) delete next[type]; else next[type] = finish;
+  if (JSON.stringify(next) === JSON.stringify(partPlates())) return;
+  if (!opts.quiet) track('opt:partplate:' + type + ':' + (finish || 'build'));   // `quiet`: an Undo is not a visitor's pick
+  build.plateParts = next;
+  await regenerate();
+}
+/* the whole map at once, for an Undo or a Redo that moves it (app.js): unknown finishes dropped, as sanitizeBuild does */
+async function setPartPlates(map, opts = {}) {
+  if (!build) return;
+  const next = {};
+  if (map && typeof map === 'object' && !Array.isArray(map)) for (const [t, f] of Object.entries(map)) if (PLATE_FINISHES.includes(f)) next[t] = f;
+  if (JSON.stringify(next) === JSON.stringify(partPlates())) return;
+  if (!opts.quiet) track('opt:partplates');
+  build.plateParts = next;
   await regenerate();
 }
 /* the plate's materials, for a plate that just changed (setBuildPlate, or a record swap that carries another plate) */
@@ -4283,6 +4501,7 @@ function adoptTemplate(sceneRoot, type, node) {
     try { stampSeams(sceneRoot); }
     catch (e) { console.warn(`[cover seams] ${node}: ${(e && e.message) || e} - left square`); }
   }
+  skinMaps.adopt(node, sceneRoot);   // its baked top layer, fetched on the mount's sync while the tier is Very High (skinMaps)
   return sceneRoot;
 }
 /* the cover edges' aSeam (js/cover-seam.js): x and the part's half-width, mm, in the part frame. Per TEMPLATE, like
@@ -5265,13 +5484,16 @@ function buyFilamentEvent(pick) {
   return 'buy:filament:' + (src ? slug(src.brand + '-' + src.line) : 'unknown');
 }
 
-/* Which hosts pay a commission. HOST-driven so the "· paid link" marking and
-   the disclosures can never drift from the truth of an individual URL — the
-   filament menu mixes Amazon (paid) with Polymaker/Printed Solid (plain), so a
+/* Which hosts pay a commission. HOST-driven so rel=sponsored and the disclosure
+   lines can never drift from the truth of an individual URL — the filament
+   menu mixes Amazon and Polymaker (paid) with Printed Solid (plain), so a
    blanket label would misstate the relationship in one direction or the other.
    When a store becomes a paid program (e.g. Polymaker tracked links), its host
-   joins this list and every surface updates at once. FTC guidance: "paid link"
-   next to the link is adequate where "affiliate link" alone may not be. */
+   joins this list and every surface updates at once. The rule since 2026-10-24
+   (Joey; the planner's colors.js carries the same words): a paid link keeps a
+   PLAIN label - no "· paid link" suffix anywhere - and the disclosure is one
+   plain commission line next to the links plus Amazon's sentence once; never
+   "affiliate link" alone (the FTC FAQ's example of an unclear label). */
 const PAID_HOSTS = [/(^|\.)amzn\.to$/, /(^|\.)amazon\.[a-z.]+$/,
   // Polymaker Ambassador tracked links (2026-08-07) — every FILAMENT_DB
   // Polymaker url routes through /JERRARI, so the whole host is paid now
@@ -5281,31 +5503,34 @@ function isPaidLink(href) {
   catch (e) { return false; }
 }
 
-function linkEl(text, href, ev, mark = true) {
+function linkEl(text, href, ev) {
   const a = document.createElement('a');
   a.className = 'dl-link';
   a.href = href;
   a.target = '_blank';
-  // every paid link is marked AT the link (FTC proximity) and carries
-  // rel=sponsored (the planner's buy buttons already do). mark=false is for a
-  // caller that puts its own disclosure line directly under the link instead
-  // (the identify card) - rel=sponsored stays either way, #paid-note reads it
-  const paid = isPaidLink(href);
-  a.rel = paid ? 'noopener sponsored' : 'noopener';
-  a.textContent = paid && mark ? text + ' · paid link' : text;
+  // a paid link carries rel=sponsored (the analytics and #paid-note read it)
+  // under its plain label: the disclosure is the caller's one line right under
+  // the links (the identify card, the checklist rows) and the #paid-note line.
+  // Until 2026-10-24 this added " · paid link" to the label (Joey: "paid" read
+  // as if a brand had paid to be listed)
+  a.rel = isPaidLink(href) ? 'noopener sponsored' : 'noopener';
+  a.textContent = text;
   a.addEventListener('click', () => track(ev || 'out:' + outTarget(href)));
   return a;
 }
 /* Paid-link disclosure, consolidated 2026-09-18 (Joey: the paragraph in the
    identify card ate the card and read as "super serious"; Astra's layout). Two
    parts, from the sources read that day:
-   1. NEAR each paid link: the "· paid link" label linkEl adds (FTC Endorsement
-      Guides FAQ: "'Paid link' right next to an affiliate link should be an
-      adequate disclosure"; the same FAQ says a bare "affiliate link" may not be
-      understood - never swap the label for that), or, in the identify card and
-      (since 2026-09-19) the parts list, plain link labels with one plain
-      commission line right under them. The filament picker's buy link still
-      wears the label (markFmBuy).
+   1. NEAR the paid links: plain link labels with one plain commission line
+      right under them (cardDisclosure) - the identify card, the checklist's
+      hardware rows and, since 2026-09-19, the parts list. Until 2026-10-24
+      linkEl and markFmBuy also put "· paid link" on a link's own label (the
+      FTC Endorsement Guides FAQ: "'Paid link' right next to an affiliate link
+      should be an adequate disclosure"); Joey dropped that suffix everywhere
+      ("paid" read as if a brand had paid to be listed), so the line beside the
+      links is the proximate disclosure, and for the filament picker's buy link
+      (markFmBuy) it is the #paid-note line below. The same FAQ says a bare
+      "affiliate link" may not be understood - never use that alone.
    2. ON THE SITE, clearly: Amazon's own sentence (Associates Operating
       Agreement s.5: "clearly and prominently state ... on your Site ...: 'As an
       Amazon Associate I earn from qualifying purchases.'" - kept VERBATIM, a
@@ -5367,8 +5592,10 @@ function paidNoteText(programs, polymakerNamed = false) {
   const s = [];
   if (programs.has('amazon')) s.push('As an Amazon Associate I earn from qualifying purchases.');
   if (programs.has('polymaker') && !polymakerNamed)
-    s.push(programs.has('amazon') ? 'I’m also a Polymaker Ambassador.' : 'I’m a Polymaker Ambassador and earn a commission on Polymaker links.');
-  if (programs.has('other') && !s.length) s.push('I earn a commission on paid links.');
+    // both sentences say "commission": with the "· paid link" suffix gone (2026-10-24) this line is the only
+    // disclosure of a Polymaker link shown beside Amazon ones (Sol 01a16c4a)
+    s.push(programs.has('amazon') ? 'I’m also a Polymaker Ambassador and earn a commission on Polymaker links.' : 'I’m a Polymaker Ambassador and earn a commission on Polymaker links.');
+  if (programs.has('other') && !s.length) s.push('I earn a small commission on these links, at no extra cost to you.');   // a paid host that is neither program (none today)
   return s.join(' ');
 }
 function linkShown(a) {
@@ -5563,23 +5790,24 @@ function renderIdentifyLinks(info, filament = null) {
   const linksEl = $('identify-links');
   linksEl.innerHTML = '';
   appendStoreLinks(linksEl, info?.links);
-  // Paid links here drop the "· paid link" suffix: ONE plain commission line
-  // sits right under them instead, and the filament button names its store
-  // (Astra 2026-09-18; this replaced a four-line paragraph that covered both
-  // programs whatever the card showed). Amazon's own sentence is the shared
-  // #paid-note line. Judged by HOST: a Printed Solid pick is a plain link and
-  // brings no line; a Polymaker pick names only Polymaker. A card shows chips
-  // OR a filament link, never both - bought hardware is colour-locked.
+  // Paid links here carry plain labels, ONE plain commission line sits right
+  // under them, and the filament button names its store (Astra 2026-09-18;
+  // this replaced a four-line paragraph that covered both programs whatever
+  // the card showed; since 2026-10-24 every surface reads this way). Amazon's
+  // own sentence is the shared #paid-note line. Judged by HOST: a Printed
+  // Solid pick is a plain link and brings no line; a Polymaker pick names only
+  // Polymaker. A card shows chips OR a filament link, never both - bought
+  // hardware is colour-locked.
   const programs = new Set();
   const chips = info?.links?.buy || [];
   // purchased hardware: Amazon affiliate buy options (generate.js BUY)
   for (const b of chips) {
-    linksEl.appendChild(linkEl(b.label, b.url, buyEvent(b), false));
+    linksEl.appendChild(linkEl(b.label, b.url, buyEvent(b)));
     const p = paidProgramOf(b.url); if (p) programs.add(p);
   }
   if (filament) {
     const where = storePhrase(filament.url);
-    linksEl.appendChild(linkEl(where ? `Get filament ${where}` : 'Get filament', filament.url, buyFilamentEvent(filament), false));
+    linksEl.appendChild(linkEl(where ? `Get filament ${where}` : 'Get filament', filament.url, buyFilamentEvent(filament)));
     const p = paidProgramOf(filament.url); if (p) programs.add(p);
   }
   if (programs.size) {
@@ -5897,11 +6125,12 @@ function renderChecklist() {
       // purchased hardware: Amazon affiliate buy options (generate.js BUY). As in
       // the identify card, the chips carry their plain labels and ONE line right
       // under them says who they go to and that I earn from them (Joey 2026-09-19:
-      // it replaced a "· paid link" suffix on every chip; the Planner's parts list
-      // reads the same). Judged by host, so a plain store link brings no line.
+      // it replaced a "· paid link" suffix on every chip; the planner's parts list
+      // reads the same, and since 2026-10-24 so does every other buy link).
+      // Judged by host, so a plain store link brings no line.
       const programs = new Set();
       for (const b of p.links.buy || []) {
-        lnks.appendChild(linkEl(b.label, b.url, buyEvent(b), false));
+        lnks.appendChild(linkEl(b.label, b.url, buyEvent(b)));
         const pr = paidProgramOf(b.url); if (pr) programs.add(pr);
       }
       mid.appendChild(lnks);
@@ -7936,13 +8165,14 @@ function syncZoneChips() {
   if (selectedId && instances.has(selectedId)) renderZoneChips(instances.get(selectedId));
 }
 // #fm-buy is a STATIC anchor (markup owns it, href/label swapped in TWO places:
-// menu open + colour pick) → linkEl never sees it, so it marks itself. One
+// menu open + colour pick) → linkEl never sees it, so it sets its own rel. One
 // helper for both sites, judged by the CURRENT href like everything else —
-// Elegoo lands on Amazon (paid), Polymaker / Printed Solid are plain.
+// Elegoo lands on Amazon and Polymaker is an Ambassador link (both paid),
+// Printed Solid is plain. The label stays plain (its " · paid link" suffix went
+// on 2026-10-24); the disclosure is the #paid-note line, which reads the rel.
 function markFmBuy() {
   const buy = $('fm-buy');
-  if (isPaidLink(buy.href)) { buy.rel = 'noopener sponsored'; buy.textContent += ' · paid link'; }
-  else buy.rel = 'noopener';
+  buy.rel = isPaidLink(buy.href) ? 'noopener sponsored' : 'noopener';
   schedulePaidNote();
 }
 function openFilamentMenu(type) {
@@ -9157,7 +9387,7 @@ function thumbSpec(opts = {}) {
   const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08, unitId = null } = opts;
   const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
   const sig = paletteSig(), tier = quality;
-  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, sig, tier]);
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, partPlatesSig(), sig, tier]);
   return { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier, key };
 }
 async function renderThumb(opts = {}) {
@@ -10808,6 +11038,7 @@ async function mountManifest(m) {
   // reflector plane are both sized off assembledBox, and regenerate() replaces
   // every instance group, so the shadow casters have to be re-flagged too.
   applyQuality(quality);
+  skinMaps.sync();   // the maps of the nodes this build places, while the tier is Very High; not awaited - they land into a settled frame
   if (isWallBuild) fitWall();
   if (isUnderTableBuild) fitSurface();
   buildAfterState();
@@ -11482,6 +11713,8 @@ for (const m of ['toDataURL', 'toBlob']) {
       uniforms: seamU, get on() { return seamU.uSeamOn.value === 1; },
       set(on) { seamU.uSeamOn.value = on ? 1 : 0; invalidateFrame(); return !!on; },
     },
+    /* the baked top layers (js/skin-map.js): skinMap.set(false) draws every top skin plain, status() says what is loaded */
+    skinMap: skinMaps,
     wall, surface,   // the mount backdrops, for capture tooling that needs the mounting surface as context
     // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
     mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
@@ -11602,7 +11835,10 @@ for (const m of ['toDataURL', 'toBlob']) {
     // and, for the check that they match the model (PREVIEW-FIDELITY.md): one drawn uncached, and the live unit from its camera
     thumbDraw: (o, x) => drawThumb(thumbSpec(o), x), thumbModel,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
-    palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, colorLocked,
+    palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, setPartPlate, setPartPlates, colorLocked,
+    // a part's build plate finish (2026-10-26): the one it wears, its own (null = follows the build), and whether it has a
+    // printed bed face at all (no known build axis, no finish - withBedFinish's rule)
+    plateFinishFor, ownPlateOf, hasBedFace: (key) => !!build && !!buildAxisForKey(String(key)),
     setOverride, clearOverrides, overrideFor, setColorStoreKey, holdColors: (on) => { colorsHeld = !!on; },
     // a look shown and not chosen, and the filament count (the Colors plan's step 1, 2026-10-18)
     previewPalette, endPreview, get previewing() { return !!previewLook; }, filamentsInBuild,

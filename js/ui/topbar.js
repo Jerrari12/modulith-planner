@@ -114,13 +114,24 @@ export function topbar(stage, ctx) {
   }
   function tabs() {
     const nav = el('nav.chip', { id: 'ws-tabs', 'aria-label': 'Workspaces' });
-    const badges = (typeof ctx.badges === 'function' ? ctx.badges() : ctx.badges) || {};
     for (const [id, label, ic] of TABS) {
       const on = id === ctx.active;
       const onclick = on ? null : ctx.has(id) ? () => ctx.switchTo(id) : ctx.soon(`The ${label} workspace`, PHASE[id]);
-      nav.appendChild(el('button.tab' + (on ? '.on' : ''), { 'aria-current': on ? 'page' : null, title: on || ctx.has(id) ? null : `${label} comes in ${PHASE[id]}`, onclick },
-        [icon(ic, { fill: on }), el('span', { text: label }), badges[id] != null ? el('span.badge', { text: String(badges[id]) }) : null]));
+      nav.appendChild(el('button.tab' + (on ? '.on' : ''), { 'data-ws': id, 'aria-current': on ? 'page' : null, title: on || ctx.has(id) ? null : `${label} comes in ${PHASE[id]}`, onclick },
+        [icon(ic, { fill: on }), el('span', { text: label })]));
     }
+    /* the badges follow the record (a placement, a label, an undo from any workspace): drawn now and on every store change
+       for this mount. Built once per mount before 2026-10-23, so they stood still until the next workspace switch (the
+       GPU pass's stale "Parts 77") */
+    const draw = () => {
+      const badges = (typeof ctx.badges === 'function' ? ctx.badges() : ctx.badges) || {};
+      for (const b of nav.querySelectorAll('.tab')) {
+        const v = badges[b.dataset.ws]; const s = b.querySelector('.badge');
+        if (v == null) { if (s) s.remove(); } else if (s) { if (s.textContent !== String(v)) s.textContent = String(v); } else b.appendChild(el('span.badge', { text: String(v) }));
+      }
+    };
+    draw();
+    if (ctx.store?.subscribe) { const off = ctx.store.subscribe(() => draw()); ctx.signal?.addEventListener('abort', off, { once: true }); }
     return nav;
   }
   function themeToggle() {

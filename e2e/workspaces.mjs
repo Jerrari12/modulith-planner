@@ -15,7 +15,7 @@
  * a gesture would need the 3D hit test (the markers are raycast against the live scene, which a synthetic pointer cannot
  * reach reliably headless); everything else is the real DOM.
  */
-import { test, afterEach } from 'node:test';
+import { test as nodeTest, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
@@ -23,6 +23,13 @@ import { existsSync } from 'node:fs';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localParts } from '../test/lib/local-parts.mjs';
+import { parseShard, registerShare } from './shard.mjs';
+/* THE SHARDS (2026-10-25, e2e/shard.mjs): every test(...) below is COLLECTED, and the file's last line registers this
+   process's share - all of them unless E2E_SHARD=k/n asks for one shard. Read before the browser launches, so a malformed
+   value fails at once rather than after the boot. */
+const SHARD = parseShard(process.env.E2E_SHARD);
+const CASES = [];
+const test = Object.assign((...args) => { CASES.push(args); }, { after: nodeTest.after });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');   // e2e/ sits beside test/
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
@@ -102,6 +109,12 @@ const btn = (page, t, root = 'body') => page.locator(`${root} button:has-text("$
 /* the "no errors" assertion ignores what headless SwiftShader itself prints (WebGL context notes) */
 const clean = (errors) => errors.filter((e) => !/WebGL|GPU|swiftshader|GroupMarkerNotSet|setPointerCapture/i.test(e));
 const settle = (page, ms = 1200) => page.waitForTimeout(ms);
+/* the disclosure sentences (colors.js disclosureFor; 2026-10-24: plain buy labels, one line next to the links, never "paid link") */
+const AMAZON_SENTENCE = 'As an Amazon Associate I earn from qualifying purchases.';
+const POLYMAKER_LINE = 'Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.';
+const DISCLOSURES = [AMAZON_SENTENCE, POLYMAKER_LINE, `${AMAZON_SENTENCE} Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.`];
+/* the text nodes under `sel` that read "null": append(null) writes the word (the look details showed one under their footer) */
+const nullText = (page, sel) => page.evaluate((sel) => { const w = document.createTreeWalker(document.querySelector(sel), NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(`${w.currentNode.parentElement.tagName.toLowerCase()}: ${w.currentNode.textContent}`); return out; }, sel);
 
 test('every workspace boots on the root kit without errors, desktop and phone', async () => {
   for (const ws of ['build', 'colors', 'labels', 'parts', 'assemble']) {
@@ -191,32 +204,60 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Case$/ }) }).first().click();
   await page.locator('#ws-picker .sw[aria-label="Elegoo PLA Black"]').first().click();
   await click(page.locator('#ws-picker .foot a.buy', { hasText: 'Buy Elegoo PLA Black' }), 'the picker\'s Elegoo');
+  // the picker's foot (2026-10-24): a plain Buy label, rel=sponsored, and the one disclosure line right under it
+  const foot = () => page.evaluate(() => { const f = document.querySelector('#ws-picker .foot'); const a = f.querySelector('a.buy'); return [a.textContent, a.rel, f.querySelector('.disc').textContent]; });
+  assert.deepEqual(await foot(), ['Buy Elegoo PLA Black →', 'noopener sponsored', AMAZON_SENTENCE], 'the picker\'s Amazon buy: a plain label, rel=sponsored, Amazon\'s sentence under it');
   await page.locator('#ws-picker .sw[aria-label="Panchroma Black"]').first().click();
   await click(page.locator('#ws-picker .foot a.buy', { hasText: /^Buy Black →/ }), 'the picker\'s Panchroma');
+  assert.deepEqual(await foot(), ['Buy Black →', 'noopener sponsored', POLYMAKER_LINE], 'the picker\'s Polymaker buy: a plain label, rel=sponsored, the Ambassador line under it');
   // the Dock's filament stack: the shopping list, one Buy per filament
   await page.locator('#ws-picker button[aria-label="Close the picker"]').click();
   await page.locator('#ws-dock .status.stack').click();
   await click(page.locator('#ws-shop .frow').filter({ has: page.locator('b', { hasText: /^Panchroma Black$/ }) }).locator('a.link'), 'the shopping list\'s');
+  const shop = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-shop .frow a.link')].map((a) => a.textContent), disc: document.querySelector('#ws-shop .disc').textContent }));
+  assert.ok(shop.buys.length && shop.buys.every((t) => t === 'Buy ↗'), `the shopping list's Buy labels are plain: ${shop.buys.join(', ')}`);
+  assert.ok(DISCLOSURES.includes(shop.disc) && /Polymaker Ambassador/.test(shop.disc), `the shopping list's one line is a disclosure sentence naming Polymaker (the Case is Panchroma Black): "${shop.disc}"`);
+  assert.deepEqual(await nullText(page, '#ws-shop'), [], 'nothing reads "null" in the shopping list');
   // the Parts list: the Case row's filament name (shortened to "Black"), then the hardware's Amazon link, in both layouts
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
   await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
   await click(page.locator('#ws-parts .printin a', { hasText: /^Black$/ }).first(), 'the Parts list\'s filament');
+  assert.deepEqual(await page.locator('#ws-parts .printin a', { hasText: /^Black$/ }).first().evaluate((a) => [a.rel, a.title]), ['noopener sponsored', 'Buy Black ↗'], 'the filament link: rel=sponsored, a plain title');
   const hw = page.locator('#ws-parts .prow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first();
   await click(hw, 'the Parts list\'s hardware');
-  // the Amazon link is marked at the link, rel=sponsored and "· paid link" (Joey, 2026-10-21), the mark on its own line so
-  // the link keeps its width; a download-site link is not marked
+  // the Amazon link carries rel=sponsored under a PLAIN label (the "· paid link" mark of 2026-10-21 went on 2026-10-24: Joey read
+  // "paid" as a brand paying to be listed); ONE commission line sits right under the hardware rows, in both layouts, the foot
+  // carries Amazon's own sentence once, and nothing on the list says "paid link"; a download-site link stays plain
   const marks = (row) => Promise.all([page.locator(`#ws-parts ${row}`).filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(),
-    page.locator(`#ws-parts ${row}`).filter({ hasNot: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first()].map((l) => l.evaluate((a) => [a.rel, a.textContent, a.querySelector('.paid') ? getComputedStyle(a.querySelector('.paid')).display : null])));
-  const plainLink = (m) => m[0] === 'noopener' && !/paid/.test(m[1]) && m[2] === null;
+    page.locator(`#ws-parts ${row}`).filter({ hasNot: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first()].map((l) => l.evaluate((a) => [a.rel, a.textContent, a.title, a.children.length])));
+  const plainLink = (m) => m[0] === 'noopener' && !/paid/i.test(m[1] + m[2]) && m[3] === 0;
+  const disclosure = () => page.evaluate(() => {
+    const groups = [...document.querySelectorAll('#ws-parts .rows')];
+    const hw = groups.filter((g) => [...g.querySelectorAll('.badge')].some((b) => b.textContent === 'BUY'));
+    const list = document.querySelector('#ws-parts').textContent;
+    return { hwGroups: hw.length, lastOfHw: [...new Set(hw.map((g) => `${g.lastElementChild.className}: ${g.lastElementChild.textContent}`))], linesElsewhere: groups.filter((g) => !hw.includes(g) && g.querySelector('.commission')).length,
+      amazonSentences: (list.match(/As an Amazon Associate I earn from qualifying purchases\./g) || []).length, paid: /paid link/i.test(list), foot: document.querySelector('#ws-parts .foot').textContent };
+  });
+  const checkDisclosure = async (layout) => {
+    const d = await disclosure();
+    assert.ok(d.hwGroups >= 1, `${layout}: a hardware group`);
+    assert.deepEqual(d.lastOfHw, ['note commission: Amazon links - I earn a small commission, at no extra cost to you.'], `${layout}: the one commission line, last under the hardware rows`);
+    assert.equal(d.linesElsewhere, 0, `${layout}: no other group carries one`);
+    assert.equal(d.amazonSentences, 1, `${layout}: Amazon's sentence once, in the foot`);
+    assert.ok(!d.paid, `${layout}: nothing says "paid link"`);
+    assert.match(d.foot, /^As an Amazon Associate I earn from qualifying purchases\. (Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you\. )?Any equivalent hardware from any store works\.$/, `${layout}: the foot`);
+  };
   const narrow = await marks('.prow');
-  assert.deepEqual(narrow[0], ['noopener sponsored', 'Amazon ↗ · paid link', 'block'], 'the narrow list\'s Amazon link');
+  assert.deepEqual(narrow[0], ['noopener sponsored', 'Amazon ↗', '', 0], 'the narrow list\'s Amazon link: rel=sponsored, a plain label');
   assert.ok(plainLink(narrow[1]), `the narrow list's download link stays plain: ${narrow[1]}`);
+  await checkDisclosure('the narrow list');
   await btn(page, 'Track my build', '#ws-parts').click();
   await page.locator('#ws-parts button.expand').click();
   await click(page.locator('#ws-parts .trow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(), 'the wide list\'s hardware');
   const wide = await marks('.trow');
-  assert.deepEqual(wide[0], ['noopener sponsored', 'Amazon ↗ · paid link', 'block'], 'the wide list\'s Amazon link');
+  assert.deepEqual(wide[0], ['noopener sponsored', 'Amazon ↗', '', 0], 'the wide list\'s Amazon link: rel=sponsored, a plain label');
   assert.ok(plainLink(wide[1]), `the wide list's download link stays plain: ${wide[1]}`);
+  await checkDisclosure('the wide table');
   // the hardware links are the root kit's magnets: the listing the catalog (HARDWARE_BUY) holds at that address, whose id
   // is the dashboard row (a renamed id would split it, so it is a literal too)
   const ids = await page.evaluate((urls) => urls.map((u) => { for (const list of Object.values(HARDWARE_BUY)) { const b = list.find((x) => x.url === u); if (b) return b.id; } return null; }), hrefs.slice(4));
@@ -652,6 +693,7 @@ test('Colors: a preset applied from the gallery recolours the model as one histo
   await cards.nth(1).click();   // Stealth, on a fresh profile
   await page.waitForSelector('#ws-gallery .apply', { timeout: 15_000 });
   assert.match(await text(page, '#ws-gallery h2'), /Stealth/, 'its details open');
+  assert.deepEqual(await nullText(page, '#ws-gallery'), [], 'nothing reads "null" under the details (Stealth has no translucent filament)');
   await page.locator('#ws-gallery .apply').click();
   await settle(page, 600);
   const after = await page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.palette().colors));
@@ -1281,6 +1323,15 @@ test('Assemble: Next steps through, Skip reaches the end, Back returns', async (
   await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });   // the finished step
   await btn(page, 'Next', '#ws-player').click();   // Next on the finished step is the end of the instructions
   await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  // Share on the end page copies the address and says so where it can be seen: the toast sat behind the player card on
+  // the desktop (Joey, 2026-10-23: "the share button at the end of the instructions does nothing")
+  await page.evaluate(() => { window.__copied = null; navigator.clipboard.writeText = async (t) => { window.__copied = String(t); }; });
+  await btn(page, 'Share', '#ws-player').click();
+  await page.waitForFunction(() => document.getElementById('ws-toast')?.classList.contains('show'), null, { timeout: 5_000 });
+  // the toast takes no pointer events, so elementFromPoint never names it: its box must clear the card's top edge instead
+  const shared = await page.evaluate(() => { const t = document.getElementById('ws-toast'); const r = t.getBoundingClientRect(); const pl = document.getElementById('ws-player').getBoundingClientRect();
+    return { copied: window.__copied === location.href, text: t.textContent, above: r.bottom <= pl.top, inView: r.top >= 0 && r.height > 0, gap: Math.round(pl.top - r.bottom) }; });
+  assert.deepEqual({ copied: shared.copied, text: shared.text, above: shared.above, inView: shared.inView }, { copied: true, text: 'Link copied.', above: true, inView: true }, `Share copies the link and its toast shows above the player, inside the viewport: ${JSON.stringify(shared)}`);
   await btn(page, 'Back', '#ws-player').click();
   await settle(page, 800);
   assert.ok(!/End of instructions/.test(await text(page, '#ws-player .title')), 'Back leaves the end');
@@ -3824,6 +3875,87 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   await ctx.close();
 });
 
+/* THE TOP BAR FITS (2026-10-23). At 1280-1365 the bar is one row and was too full: Share ended 11 px past the bar's edge on
+   the root kit and 85 px in the widest case below. From 1366, with the Feedback & support button, that case squeezed the
+   button from 44 to 20 px and still left Share 29 px past the edge (21 px at 1581, where the printer's name and Share's
+   word come back). The widest case: a long build name, Under-Table (the widest mount word), the Prusa CORE One L (the
+   widest printer name), and tab badges no small build reaches, written into the tabs: 99/99 labelled, 999 printed pieces.
+   In every workspace, across the tiers' edges: nothing past the bar's right edge, 10 px between controls, no control
+   narrower than 44 px, the tabs' own row on the screen below 1280; at 1280-1365 the mount chip gives up its word (not its
+   accessible name) and the build name keeps its 120 px floor; above that the name may shorten, never vanish */
+test('the top bar fits at every desktop width in its widest case, in every workspace: nothing past its edge, 10 px between controls, the build name kept', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.fill('#ws-setup input.name', 'The Mighty Bit Bucket Garage Workbench');
+  await page.locator('#ws-setup .card:has-text("Under-Table")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.locator('#ws-setup .card.len:has-text("185 mm")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.selectOption('#ws-setup select.printer', 'coreonel');
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
+  await waitBoot(page);
+  await page.evaluate(() => document.fonts.ready);   // widths in the planner's own fonts, not the fallback's
+  const bar = () => page.evaluate(() => {
+    const top = document.getElementById('ws-top'), r = (k) => k.getBoundingClientRect();
+    // the switcher's chip, not its wrapper: a wrapper that shrinks while its chip does not lets the chip run over the tabs
+    const items = [...top.children].filter((k) => k.checkVisibility() && getComputedStyle(k).position !== 'absolute' && !k.classList.contains('spacer')).map((k) => (k.id === 'ws-switch' ? k.querySelector('.chip-btn') : k));
+    const tabs = r(document.getElementById('ws-tabs'));
+    return { edge: r(top).right, last: r(items[items.length - 1]).right, inner: innerWidth, tabs: [tabs.left, tabs.right], tabsRow: getComputedStyle(document.getElementById('ws-tabs')).position === 'absolute',
+      gaps: items.slice(1).map((k, i) => Math.round(r(k).left - r(items[i]).right)), name: r(document.querySelector('#ws-switch > .chip-btn > span')).width,
+      squeezed: items.filter((k) => k.id !== 'ws-logo' && !k.closest('#ws-switch') && r(k).width < 44).map((k) => `${k.id || k.className} ${Math.round(r(k).width)}`),
+      word: r(document.querySelector('#ws-top .mount .lbl')).width > 1, printer: document.querySelector('#ws-top .printer').textContent,
+      // every control but the tabs (the badges widen them) and the name: the same width, to the 1/64 px Chrome lays out in,
+      // with and without the widest badges (rounded, a squeeze under half a pixel would pass: Terra 01a16a58)
+      others: items.filter((k) => k.id !== 'ws-tabs' && !k.closest('#ws-switch')).map((k) => `${k.id || k.className} ${r(k).width}`) };
+  });
+  /* two passes per workspace. First the build's own tabs (this fresh build shows its Parts count): every guarantee, the
+     name's floors among them. Then the widest badges written into the tabs: the hard guarantees, and that the name is the ONLY
+     control that gives way - every other control keeps the width it had without the badges, and the name never grows. How
+     far it gives way there depends on how wide the text draws: the deploy runner (Ubuntu, the same IBM Plex web fonts)
+     draws the bar's text wider than Windows does, and run 40004575512 failed a 118 px floor in that pass at 1280 with the
+     name at 74.6 px while every other guarantee held (DECISIONS 2026-10-23, "the top bar fits", the runner's figures) */
+  const badges = (big) => page.evaluate((big) => { const tabs = [...document.querySelectorAll('#ws-tabs .tab')];
+    for (const [l, n] of [['Labels', '99/99'], ['Parts', '999']]) { const t = tabs.find((b) => b.textContent.startsWith(l)); let b = t.querySelector('.badge');
+      if (big) { if (!b) { b = t.appendChild(Object.assign(document.createElement('span'), { className: 'badge' })); b.dataset.e2e = '1'; } if (b.dataset.was === undefined) b.dataset.was = b.textContent; b.textContent = n; }
+      else if (b) { if (b.dataset.e2e) b.remove(); else if (b.dataset.was !== undefined) { b.textContent = b.dataset.was; delete b.dataset.was; } } } }, big);   // the build's own badge gets its text back
+  const WIDTHS = [1024, 1279, 1280, 1300, 1320, 1340, 1350, 1365, 1366, 1400, 1440, 1500, 1501, 1540, 1580, 1581, 1640, 1920];
+  for (const [ws, label] of [['build', 'Build'], ['colors', 'Colors'], ['labels', 'Labels'], ['parts', 'Parts'], ['assemble', 'Assemble']]) {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    if (ws !== 'build') {
+      await page.click(`#ws-tabs .tab:has-text("${label}")`);
+      await page.waitForFunction(([w, l]) => document.documentElement.dataset.ws === w && document.querySelector('#ws-tabs .tab.on')?.textContent.startsWith(l), [ws, label], { timeout: 60_000 });
+    }
+    assert.equal((await bar()).printer, 'Prusa CORE One L', `${ws}: the widest printer name`);
+    assert.equal(await page.getByRole('button', { name: 'Under-Table · 185' }).count(), 1, `${ws}: the mount chip's accessible name keeps its word at 1280`);
+    const plain = {};
+    for (const big of [false, true]) {
+      await badges(big);
+      for (const w of WIDTHS) {
+        await page.setViewportSize({ width: w, height: 800 });
+        const m = await bar(), at = `${ws}${big ? ' with the widest badges' : ''} at ${w}: ${JSON.stringify(m)}`;
+        assert.ok(m.last <= m.edge + 0.5 && m.edge <= m.inner, `nothing past the bar's right edge - ${at}`);
+        assert.ok(m.gaps.every((g) => g >= 10), `10 px between controls - ${at}`);
+        assert.deepEqual(m.squeezed, [], `no control narrower than 44 px - ${at}`);
+        assert.equal(m.tabsRow, w < 1280, `the tabs have a row of their own below 1280 only - ${at}`);
+        if (m.tabsRow) assert.ok(m.tabs[0] >= 0 && m.tabs[1] <= m.inner, `the tabs' row is on the screen - ${at}`);
+        const tier = w >= 1280 && w <= 1365;
+        assert.equal(m.word, !tier, `the mount chip shows its word outside 1280-1365 only - ${at}`);
+        if (!big) { plain[w] = m; assert.ok(m.name >= (tier ? 118 : 60), `the build name keeps ${tier ? 'its 120 px floor' : 'some room'} - ${at}`); }
+        else {
+          // the badges must be there and count, or this pass measures the plain bar again (Terra 01a16a58): 57 px wider here, 61 on the runner
+          assert.ok(m.tabs[1] - m.tabs[0] >= plain[w].tabs[1] - plain[w].tabs[0] + 40, `the widest badges widen the tabs by 40 px or more - ${at}`);
+          assert.deepEqual(m.others, plain[w].others, `only the build name gives way: every other control keeps its width - ${at}`);
+          assert.ok(m.name <= plain[w].name + 0.5, `the build name gives way, it never grows - ${at}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* EDIT PART DETAILS OPENS THAT PART (`open/1`, LABELS-INTEGRATION.md, the parts channel's additions).
    - A Picker that offers the cap gets `open` and answers `opened`, with that part in Edit.
    - A second browser profile, whose Picker list lacks the row, gets a refusal; its words show in the dialog's head.
@@ -4143,9 +4275,14 @@ test('Build: a case that would open an empty slot is refused with the column rul
    and "an auto fix button" is welcome). The sheet says how many empty slots the switch leaves; the reload boots with his 11
    units only, a ghost in each slot on the stage and no instructions; Build lists the slots with Fill all. Filling one slot
    by hand leaves the other floating case where it is (gravity drops only what an edit unsupports); Fill all fills the rest
-   and the build is whole. JOEY is his board: [id, x, y, w, hh], y and hh in half-rows from the top of a 7W x 4H wall grid. */
+   and the build is whole. JOEY is his board: [id, x, y, w, hh], y and hh in half-rows from the top of a 7W x 4H wall grid.
+   2026-10-25 (js/rules/settle.js, the Under-Table report): a change of mount SETTLES the layout toward the new surface
+   first - moves only, still adds nothing. Of his four gaps two close (units 3, 4, 6 and 7 drop one row onto the table or
+   onto what is below); the two under the left half of the 4W cannot close (it rests on unit 8 by its right half) and stay
+   empty slots, one row above the table over unit 7. */
 const JOEY = [[1, 0, 0, 4, 4], [2, 4, 0, 1, 2], [3, 5, 0, 1, 2], [4, 6, 0, 1, 2], [5, 4, 2, 1, 2], [6, 5, 2, 2, 4], [7, 0, 4, 2, 2], [8, 2, 4, 2, 2], [9, 4, 4, 1, 2], [10, 2, 6, 2, 2], [11, 4, 6, 1, 2]];
-test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as empty slots, adds nothing, and Fill all completes it', async () => {
+const SETTLED = { 3: 2, 4: 2, 6: 2, 7: 2 };   // half-rows each unit drops toward the table on the switch; the rest keep their height
+test('the setup sheet: Joey\'s wall build switched to Tabletop settles toward the table, keeps the gaps that cannot close as empty slots, adds nothing; Fill all fills them and the top is levelled by hand', async () => {
   const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
   await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
   await page.locator('#ws-setup .card:has-text("Wall Mount")').click();
@@ -4159,7 +4296,7 @@ test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as
   await page.locator('#ws-top .chip-btn.mount').click();
   await page.waitForSelector('#ws-setup .card', { timeout: 30_000 });
   await page.locator('#ws-setup .card:has-text("Tabletop")').click();
-  assert.match(await text(page, '#ws-setup .warn.stand'), /^As a Tabletop build it will have 4 empty slots under it · Apply adds nothing: fill them in Build before it can be assembled\.$/);
+  assert.match(await text(page, '#ws-setup .warn.stand'), /^As a Tabletop build it will have 2 empty slots under it · Apply adds nothing: fill them in Build before it can be assembled\.$/);
   await page.evaluate(() => { window.__e2eBeforeReload = 1; });
   await btn(page, 'Apply and rebuild', '#ws-setup').click();
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'tabletop', null, { timeout: 150_000 });
@@ -4167,14 +4304,17 @@ test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as
   assert.equal(await page.locator('#loading-text:has-text("Can’t show")').count(), 0, 'the build shows');
   const s = await S(page);
   assert.equal(s.placed.length, 11, 'the switch added nothing');
+  assert.equal(s.gridH, 5, 'the tabletop grid: his 4 rows plus the headroom row on top');
   const rows = s.gridH * 2, by = new Map(s.placed.map((p) => [p.id, p]));
-  // his 11 where they were: the same columns and sizes, each at the same height above the table (the tabletop grid adds
-  // headroom on top, so y itself moves with it)
-  for (const [id, x, y, w, hh] of JOEY) { const p = by.get(id); assert.ok(p && p.x === x && p.w === w && p.hh === hh && rows - (p.y + p.hh) === 8 - (y + hh), `unit ${id} kept its place: ${JSON.stringify(p)}`); }
+  // his 11 settled: the same columns and sizes; the four that could drop sit one row lower, the rest at the same height
+  // above the table (the tabletop grid adds headroom on top, so y itself moves with it)
+  for (const [id, x, y, w, hh] of JOEY) { const p = by.get(id); assert.ok(p && p.x === x && p.w === w && p.hh === hh && rows - (p.y + p.hh) === 8 - (y + hh) - (SETTLED[id] || 0), `unit ${id} ${SETTLED[id] ? 'settled one row down' : 'kept its place'}: ${JSON.stringify(p)}`); }
   const shown = () => page.evaluate(() => { const M = window.__GEN2_VIEWER__.manifest; return { incomplete: M.incomplete || null, ghosts: (M.ghosts || []).length, steps: M.steps.length }; });
   const m0 = await shown();
-  assert.ok(m0.incomplete && m0.incomplete.voids === 4 && m0.ghosts === 4 && m0.steps === 1, `a ghost in each of the 4 slots, no instructions: ${JSON.stringify(m0)}`);
-  await page.waitForFunction(() => /Tabletop: 4 empty slots under it to fill · they show red in Build, where Fill all adds 1W cases\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast naming the empty slots'));
+  // 4 ghosts: one per slot, and one per short top column - units 3 and 4 dropped a row, so the tabletop's top is no longer
+  // level over columns 5 and 6 (the 2026-08-23 "finish the top" guide), which Fill all does not fill
+  assert.ok(m0.incomplete && m0.incomplete.voids === 2 && m0.incomplete.columns === 4 && m0.ghosts === 4 && m0.steps === 1, `a ghost in each of the 2 slots and the 2 short top columns, no instructions: ${JSON.stringify(m0)}`);
+  await page.waitForFunction(() => /Tabletop: 2 empty slots under it to fill · they show red in Build, where Fill all adds 1W cases\./.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('no toast naming the empty slots'));
   // Assemble says it is not ready and sends the visitor back to Build; nothing to step through
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
   await page.waitForSelector('#ws-player.blocked', { timeout: 15_000 }).catch(() => assert.fail('Assemble did not say the build is not ready'));
@@ -4185,22 +4325,38 @@ test('the setup sheet: Joey\'s wall build switched to Tabletop keeps its gaps as
   await page.waitForSelector('#ws-dock', { timeout: 15_000 }).catch(() => assert.fail('Go to Build did not open Build'));
   // Build offers a "+" in each slot (the placement judge asks the generator as the stage does: slots are not refusals)
   const offered = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
-  for (const x of [0, 1, 5, 6]) assert.ok(offered.includes(`${x},${rows - 2}`), `a "+" in the slot at column ${x}: ${offered}`);
-  // fill ONE slot by hand (the left gap's left column): the other floating case, unit 6, keeps its height
-  const h6 = rows - (by.get(6).y + by.get(6).hh);
-  await page.evaluate((y) => window.__GEN2_BUILD__.placeAt(0, y, { w: 1, h: 1, hh: 2 }, 'decor'), rows - 2);
+  // the two slots sit one row above the table, under the 4W's left half, over unit 7 (which settled onto the table)
+  for (const x of [0, 1]) assert.ok(offered.includes(`${x},${rows - 4}`), `a "+" in the slot at column ${x}: ${offered}`);
+  // fill ONE slot by hand (the left column): the 4W above keeps its height - it was resting on unit 8 already
+  const h1 = rows - (by.get(1).y + by.get(1).hh);
+  await page.evaluate((y) => window.__GEN2_BUILD__.placeAt(0, y, { w: 1, h: 1, hh: 2 }, 'decor'), rows - 4);
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 12, null, { timeout: 30_000 }).catch(() => assert.fail('the slot was not filled'));
-  const s1 = await S(page); const u6 = s1.placed.find((p) => p.id === 6);
-  assert.equal(s1.gridH * 2 - (u6.y + u6.hh), h6, 'gravity left the other floating case over its slot');
-  // the stage follows: 3 slots left, still a preview, not "can't be shown"
-  await page.waitForFunction(() => { const M = window.__GEN2_VIEWER__.manifest; return M.incomplete && M.incomplete.voids === 3 && !window.__GEN2_VIEWER__.regenBusy; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`the stage did not show the 3 slots left: ${JSON.stringify(await shown())}`));
-  // the issue card names the slots left and fills them all
+  const s1 = await S(page); const u1 = s1.placed.find((p) => p.id === 1);
+  assert.equal(s1.gridH * 2 - (u1.y + u1.hh), h1, 'the 4W kept its height');
+  // the slot left is the other one, in column 1, where it was (Terra 01a17520: a count alone would let a void relocate)
+  const offered1 = await page.evaluate(() => window.__GEN2_BUILD__.placementSpots({ w: 1, h: 1, hh: 2 }, 'decor').map((p) => `${p.x},${p.y}`));
+  assert.ok(offered1.includes(`1,${rows - 4}`) && !offered1.includes(`0,${rows - 4}`), `the column-1 slot is still offered and the filled one is not: ${offered1}`);
+  // the stage follows: 1 slot left, still a preview, not "can't be shown"
+  await page.waitForFunction(() => { const M = window.__GEN2_VIEWER__.manifest; return M.incomplete && M.incomplete.voids === 1 && !window.__GEN2_VIEWER__.regenBusy; }, null, { timeout: 30_000 }).catch(async () => assert.fail(`the stage did not show the 1 slot left: ${JSON.stringify(await shown())}`));
+  // the issue card names the slot left and fills it
   await page.locator('#ws-dock button.status.issue').click();
   await page.waitForSelector('#ws-issues button:has-text("Fill all")', { timeout: 15_000 }).catch(() => assert.fail('no Fill all in the issue card'));
-  assert.match(await text(page, '#ws-issues'), /3 empty slots to fill\./);
+  assert.match(await text(page, '#ws-issues'), /1 empty slot to fill\./);
   await page.locator('#ws-issues button:has-text("Fill all")').click();
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 15 && !window.__GEN2_VIEWER__.manifest.incomplete && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 }).catch(() => assert.fail('Fill all did not complete the build'));
-  // filled, it assembles: the step list is back
+  await page.waitForFunction(() => { const M = window.__GEN2_VIEWER__.manifest; return window.__GEN2_STORE__.state.placed.length === 13 && M.incomplete && !M.incomplete.voids && !window.__GEN2_VIEWER__.regenBusy; }, null, { timeout: 60_000 }).catch(async () => assert.fail(`Fill all did not fill the slots: ${JSON.stringify(await shown())}`));
+  // the slots are filled; the top is still not level, so Assemble still waits, with the top's words this time
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
+  await page.waitForSelector('#ws-player.blocked', { timeout: 15_000 }).catch(() => assert.fail('Assemble did not say the top is not level'));
+  assert.match(await text(page, '#ws-player.blocked .text'), /top isn’t level/);
+  // level the top by hand: a 1W-1H in each short column, beside unit 2 on the top row
+  await btn(page, 'Go to Build', '#ws-player').click();
+  await page.waitForSelector('#ws-dock', { timeout: 15_000 });
+  const top = by.get(2).y;
+  await page.evaluate(([x, y]) => window.__GEN2_BUILD__.placeAt(x, y, { w: 1, h: 1, hh: 2 }, 'decor'), [5, top]);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 14, null, { timeout: 30_000 });
+  await page.evaluate(([x, y]) => window.__GEN2_BUILD__.placeAt(x, y, { w: 1, h: 1, hh: 2 }, 'decor'), [6, top]);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 15 && !window.__GEN2_VIEWER__.manifest.incomplete && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 }).catch(async () => assert.fail(`levelling the top did not complete the build: ${JSON.stringify(await shown())}`));
+  // filled and level, it assembles: the step list is back
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('assemble'));
   await page.waitForSelector('#ws-steps', { timeout: 15_000 }).catch(() => assert.fail('the filled build has no step list'));
   assert.equal(await page.locator('#ws-player.blocked').count(), 0, 'not blocked once filled');
@@ -4587,6 +4743,98 @@ test('Colors: Undo of a plate finish puts the stage back on the old plate, and R
   await ctx.close();
 });
 
+/* A PART'S OWN BUILD PLATE FINISH (Joey, 2026-10-26: "everything except the faceplate powder-coated, and the faceplate
+   holographic"). The picker's Printed on row gives every faceplate its own finish while the rest follow the build; the
+   build's own switch then moves the rest and leaves the faceplates; each change is one undo step; the record carries it
+   through a reload; "Use the build's finish" hands the faceplates back. Read off the live materials (bedFinish.wearing). */
+test('Colors: a part\'s own build plate finish - faceplates Holographic while the rest follow the build, undo, a reload, and back', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 600);
+  const wear = () => page.evaluate(() => window.__GEN2_VIEWER__.bedFinish.wearing());
+  const rec = () => page.evaluate(() => ({ build: window.__GEN2_STORE__.state.buildPlate, parts: window.__GEN2_STORE__.state.plateParts, stage: window.__GEN2_VIEWER__.build.plateParts || {} }));
+  const until = (fn, arg) => page.waitForFunction(fn, arg, { timeout: 30_000 });
+  // the control: before anything, every finished part wears the build's Powder-coated and none has its own
+  if ((await rec()).build !== 'powder') { await page.locator('#ws-colors .seg3 .seg', { hasText: 'Powder-coated' }).click(); await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'powder'); await settle(page, 800); }
+  const w0 = await wear();
+  assert.ok(w0.Faceplate && w0.Case, `faceplates and cases carry a finish: ${JSON.stringify(w0)}`);
+  for (const [t, v] of Object.entries(w0)) assert.deepEqual(v, { finishes: ['powder'], own: false }, `${t} follows the build's Powder-coated`);
+  // the faceplate's row, then Printed on: Holographic
+  await page.locator('#ws-colors .crow', { has: page.locator('b', { hasText: /^Faceplate$/ }) }).click();
+  const row = page.locator('#ws-picker .platerow');
+  await row.waitFor({ timeout: 10_000 });
+  assert.match(await row.textContent(), /the build’s · all faceplates/, 'the row says the faceplates follow the build');
+  await row.locator('.seg', { hasText: 'Holographic' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Faceplate === 'holographic');
+  await settle(page, 800);
+  assert.deepEqual(await rec(), { build: 'powder', parts: { Faceplate: 'holographic' }, stage: { Faceplate: 'holographic' } }, 'the record: the build stays Powder, the faceplates have their own');
+  let w = await wear();
+  assert.deepEqual(w.Faceplate, { finishes: ['holographic'], own: true }, `every faceplate wears Holographic: ${JSON.stringify(w.Faceplate)}`);
+  for (const [t, v] of Object.entries(w)) if (t !== 'Faceplate') assert.deepEqual(v, { finishes: ['powder'], own: false }, `${t} stays on the build's Powder-coated`);
+  assert.match(await page.locator('#ws-picker .platerow').textContent(), /own finish · all faceplates/);
+  assert.match(await page.locator('#ws-colors .plateown').textContent(), /Faceplates · Holographic/, 'the left panel lists it');
+  // the build's switch moves the rest and leaves the faceplates
+  await page.locator('#ws-colors .seg3 .seg', { hasText: 'Smooth' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'smooth');
+  await settle(page, 800);
+  w = await wear();
+  assert.deepEqual(w.Faceplate, { finishes: ['holographic'], own: true }, 'the faceplates keep their own finish');
+  assert.deepEqual(w.Case, { finishes: ['smooth'], own: false }, 'the cases follow the build to Smooth');
+  // an own finish that differs from the build only in its uniforms (no program change): the cases on Powder-coated
+  await page.locator('#ws-colors .crow', { has: page.locator('b', { hasText: /^Case$/ }) }).click();
+  await page.locator('#ws-picker .platerow .seg', { hasText: 'Powder-coated' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Case === 'powder');
+  await settle(page, 800);
+  w = await wear();
+  assert.deepEqual(w.Case, { finishes: ['powder'], own: true }, 'the cases wear their own Powder-coated on a Smooth build');
+  assert.deepEqual(w.Faceplate, { finishes: ['holographic'], own: true }, 'the faceplates keep theirs');
+  for (const [t, v] of Object.entries(w)) if (t !== 'Faceplate' && t !== 'Case') assert.deepEqual(v, { finishes: ['smooth'], own: false }, `${t} follows the build's Smooth`);
+  await page.keyboard.press('Control+Z');
+  await until(() => !(window.__GEN2_VIEWER__.build.plateParts || {}).Case);
+  await settle(page, 800);
+  assert.deepEqual((await wear()).Case, { finishes: ['smooth'], own: false }, 'Undo: the cases follow the build again');
+  // Undo: the build back to Powder; Undo again: the faceplates follow the build; Redo: their own again
+  await page.keyboard.press('Control+Z');
+  await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'powder');
+  await settle(page, 800);
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['holographic'], own: true }, 'Undo of the build plate leaves the faceplates');
+  await page.keyboard.press('Control+Z');
+  await until(() => !(window.__GEN2_VIEWER__.build.plateParts || {}).Faceplate);
+  await settle(page, 800);
+  assert.deepEqual(await rec(), { build: 'powder', parts: {}, stage: {} }, 'Undo: no part has its own finish');
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['powder'], own: false }, 'the faceplates follow the build again');
+  await page.keyboard.press('Control+Y');
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Faceplate === 'holographic');
+  await settle(page, 800);
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['holographic'], own: true }, 'Redo: their own again');
+  // the record carries it: a reload of the address keeps it, and the faceplates still wear it
+  await page.reload({ waitUntil: 'load' });
+  await waitBoot(page);
+  await page.waitForSelector('#ws-colors .crow', { timeout: 30_000 });
+  await settle(page, 1200);
+  assert.deepEqual((await rec()).parts, { Faceplate: 'holographic' }, 'a reload keeps the faceplates\' own finish');
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['holographic'], own: true });
+  // and the way back, from the left panel's list
+  await page.locator('#ws-colors .plateown .link').first().click();
+  await until(() => !(window.__GEN2_VIEWER__.build.plateParts || {}).Faceplate);
+  await settle(page, 800);
+  assert.deepEqual((await rec()).parts, {}, 'Use the build’s: the faceplates follow the build');
+  assert.deepEqual((await wear()).Faceplate, { finishes: ['powder'], own: false });
+  assert.equal(await page.locator('#ws-colors .plateown').count(), 0, 'the list is gone with the last own finish');
+  // the inherited finish, clicked, is PINNED (Sol 01a178a5): the faceplates then keep Powder-coated when the build moves
+  await page.locator('#ws-colors .crow', { has: page.locator('b', { hasText: /^Faceplate$/ }) }).click();
+  await page.locator('#ws-picker .platerow .seg', { hasText: 'Powder-coated' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.plateParts?.Faceplate === 'powder');
+  await page.locator('#ws-colors .seg3 .seg', { hasText: 'Smooth' }).click();
+  await until(() => window.__GEN2_VIEWER__.build.buildPlate === 'smooth');
+  await settle(page, 800);
+  w = await wear();
+  assert.deepEqual(w.Faceplate, { finishes: ['powder'], own: true }, 'pinned Powder-coated stays on a Smooth build');
+  assert.deepEqual(w.Case, { finishes: ['smooth'], own: false });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
@@ -4640,6 +4888,16 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   await page.waitForSelector('#ws-gallery .frow', { timeout: 15_000 });
   assert.equal(await page.locator('#ws-gallery .frow').count(), r.sigRows, 'the Shop list lists exactly those rows');
   assert.match(await page.locator('#ws-gallery .lcount').textContent(), new RegExp(`^${r.sigCount} filaments`), 'the details say the count');   // (not the text() helper: this case declares its own `text` below)
+  // the details' footer (2026-10-24): plain "Buy ↗" labels with rel=sponsored, the one disclosure line (Signal is all Polymaker),
+  // the two reworded notes and no translucent note, and nothing reads "null": gallery.append(null) wrote the word under every
+  // look without a translucent filament (Joey saw it live)
+  const detail = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-gallery .frow a.link')].map((a) => `${a.textContent}|${a.rel}`), disc: document.querySelector('#ws-gallery .disc').textContent, notes: [...document.querySelectorAll('#ws-gallery p.note')].map((p) => p.textContent) }));
+  assert.ok(detail.buys.length && detail.buys.every((b) => b === 'Buy ↗|noopener sponsored'), `plain Buy labels, rel=sponsored: ${detail.buys.join(', ')}`);
+  assert.equal(detail.disc, POLYMAKER_LINE, 'the Shop list\'s one line is the Ambassador sentence');
+  assert.equal(detail.notes.length, 2, `two notes under the rows: ${detail.notes.join(' | ')}`);
+  assert.match(detail.notes[0], /^Colours on screen are approximate, and the look card is drawn without shadows; the Day Grid plate shows them truest\.$/);
+  assert.match(detail.notes[1], /^Looks only: whether a filament suits a part \(strength, heat, flex\) is a separate question\.$/);
+  assert.deepEqual(await nullText(page, '#ws-gallery'), [], 'nothing reads "null" under the details');
   // with no label-text pick, the label text row reads as its own colour, not "follows Body"
   await page.keyboard.press('Escape');   // the details close
   await page.keyboard.press('Escape');   // the gallery closes
@@ -5069,7 +5327,7 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
   // Review filaments opens the shopping list with the suitability note; Keep this look opens Save with the name field
   await page.locator('#ws-colors .summary .review').click();
   await page.waitForSelector('#ws-shop:not([hidden])', { timeout: 15_000 });
-  assert.match(await page.locator('#ws-shop .note').last().textContent(), /whether a filament suits a part/);
+  assert.match(await page.locator('#ws-shop .note').last().textContent(), /^Looks only: whether a filament suits a part \(strength, heat, flex, the printer\) is a separate question\.$/);
   await page.locator('#ws-shop .x').click();
   await page.locator('#ws-colors .summary .keeplook').click();
   await page.waitForSelector('#ws-colors .saverow input', { timeout: 15_000 });
@@ -5696,12 +5954,52 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   await ctx.close();
 });
 
+/* AN OPEN DRAWER STAYS OPEN ACROSS A REBUILD (Joey, 2026-10-25: he peeked a drawer, switched it from Standard to Gridfinity,
+   and the new drawer loaded closed under a "Close it" button that did nothing; a second press said Peek inside and only
+   then opened it). The rebuild replaces every instance, so Build lets the stage's open drawer go before the update and
+   peeks the same unit again on the new one; the button keeps saying Close it, and Close it closes it. */
+test('Build: a peeked drawer stays open when its type changes to Gridfinity, and Close it still closes it', async () => {
+  const { ctx, page, errors } = await open('build');
+  // a decor drawer whose size has a Gridfinity variant (the inspector shows the Drawer row only for those)
+  const drawer = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, S = window.__GEN2_STORE__, R = S.rules();
+    for (const x of v.manifest.instances) {
+      if (!/DecorDrawer/.test(x.node)) continue;
+      const owner = v.partInfo(x.id).owner, u = S.state.placed.find((p) => p.id === owner);
+      if (u && u.fill === 'decor' && !u.variant && R.gridfinityOk(u)) return { id: x.id, owner, z0: v.instances.get(x.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 };
+    }
+    return null;
+  });
+  assert.ok(drawer, 'a decor drawer with a Gridfinity variant in the default build');
+  const stop = drawer.collection - 13.5;
+  // the unit's drawer BODY by its part type (a node-name match would take Drawer_Stoppers_L first)
+  const zOf = (owner) => page.evaluate((owner) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d ? v.instances.get(d.id).group.position.z : null; }, owner);
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
+  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
+  // the type change rebuilds the stage with a new drawer instance for the same unit
+  await btn(page, 'Gridfinity', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction((owner) => { const v = window.__GEN2_VIEWER__; const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === owner); return u && u.variant === 'gridfinity' && !v.regenBusy && v.manifest.instances.some((x) => /Gridfinity/.test(x.node) && v.partInfo(x.id).owner === owner); }, drawer.owner, { timeout: 90_000 }).catch(() => assert.fail('the Gridfinity drawer did not reach the stage'));
+  // the new drawer's own rest position differs from the old one's (another GLB), so the proof is its travel: open now,
+  // and Close it brings it back by the stopper distance
+  await settle(page, 1200);   // the re-peek's 380 ms slide, with margin
+  const zOpen = await zOf(drawer.owner);
+  assert.equal(await btn(page, 'Close it', '#ws-insp').count(), 1, 'the button still says Close it');
+  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction(([owner, z, stop]) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d && Math.abs(v.instances.get(d.id).group.position.z - (z - stop)) < 1; }, [drawer.owner, zOpen, stop], { timeout: 30_000 })
+    .catch(async () => assert.fail(`the new drawer was not open by the stopper distance: open z ${zOpen}, now ${await zOf(drawer.owner)} (expected ${zOpen - stop})`));
+  assert.equal(await btn(page, 'Peek inside', '#ws-insp').count(), 1, 'the button says Peek inside again');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE FEET ARE TPU (Joey, 2026-10-21: "when selecting the feet, i feel like we should only list TPU filaments as an option ...
    default for feet should always be TPU black"; "maybe we need to make PETG and PLA and TPU, like colored tags in the menu").
    The stage keeps a palette's feet TPU (main.js tpuFeet): the boot preset, a whole palette or a saved one that names PLA
    feet, a reset; a unit's own PLA pick for its feet is refused. The feet's picker lists only the TPU lines and every other
    picker none; each line's header carries its material tag. */
-test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and on reset; a TPU-only feet picker; material tags on every line', async () => {
+test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and on reset; a TPU-only feet picker; material tags on every line; the picker’s material chips', async () => {
   const { ctx, page, errors } = await open('colors');
   const TPU_BLACK = 'Polymaker PolyFlex TPU95 Black';
   const feet = () => page.evaluate(() => (window.__GEN2_VIEWER__.palette().colors.Foot || {}).name);
@@ -5711,12 +6009,56 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-colors .crow').first().click();
   await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   const caseHeads = await heads();
-  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']]], 'every line but TPU, each tagged');
+  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26)');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
-  // the feet's picker: the note, the two TPU lines tagged TPU, nothing else
+  // THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a case's lines sell PLA and
+  // PETG, so a row of All · PLA · PETG stands above the list, All pressed, 8 px between the chips (the planner's floor)
+  const chips = () => page.evaluate(() => [...document.querySelectorAll('#ws-picker .mrow .mchip')].map((b) => [b.textContent.trim(), b.getAttribute('aria-pressed')]));
+  const swLabels = () => page.evaluate(() => [...document.querySelectorAll('#ws-picker .brands .sw')].map((e) => e.getAttribute('aria-label')));
+  assert.deepEqual(await chips(), [['All', 'true'], ['PLA', 'false'], ['PETG', 'false']], 'a case: a chip per material offered, All pressed');
+  const gaps = await page.evaluate(() => { const r = [...document.querySelectorAll('#ws-picker .mrow .mchip')].map((b) => b.getBoundingClientRect()); return r.slice(1).map((b, i) => +(b.left - r[i].right).toFixed(1)); });
+  assert.ok(gaps.length === 2 && gaps.every((g) => g >= 8), `8 px between the chips (${gaps.join(', ')})`);
+  const allCount = (await swLabels()).length;
+  // PETG narrows the list: the two lines that sell it (Elegoo down to its PETG colour), In this build down to its PETG, the chip pressed
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();
+  assert.deepEqual(await chips(), [['All', 'false'], ['PLA', 'false'], ['PETG', 'true']], 'PETG pressed, All released');
+  assert.deepEqual(await heads(), [['PETG', ['PETG']], ['PLA / PETG', ['PLA', 'PETG']]], 'PETG: the two lines that sell it, the others gone');
+  const petg = await swLabels();
+  assert.ok(petg.length > 0 && petg.length < allCount && petg.every((l) => /PETG/.test(l)), `every swatch left is PETG, In this build included (${petg.length} of ${allCount}): ${petg}`);
+  const elegoo = petg.filter((l) => /^Elegoo/.test(l));
+  assert.ok(elegoo.length && elegoo.every((l) => l === 'Elegoo PETG Black'), `Elegoo narrowed to its PETG colour (${elegoo})`);
+  // the search combines with the chip: "black" under PETG finds the PETG blacks alone; All with the words kept finds every black
+  await page.locator('#ws-picker .search').fill('black');
+  const petgBlack = await swLabels();
+  assert.ok(petgBlack.length > 0 && petgBlack.every((l) => /PETG/.test(l) && /black/i.test(l)), `PETG + "black": the PETG blacks alone (${petgBlack})`);
+  assert.deepEqual(await chips(), [['All', 'false'], ['PLA', 'false'], ['PETG', 'true']], 'typing keeps the chip');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^All$/ }).click();
+  const allBlack = await swLabels();
+  assert.ok(allBlack.length > petgBlack.length && allBlack.every((l) => /black/i.test(l)) && allBlack.some((l) => !/PETG/.test(l)), `All + "black": every black, the PLA ones back (${allBlack})`);
+  assert.equal(await page.inputValue('#ws-picker .search'), 'black', 'the chip never rebuilt the search box');
+  await page.locator('#ws-picker .search').fill('');
+  assert.equal((await swLabels()).length, allCount, 'All with the search cleared: the whole list again');
+  // the keyboard: Space on a focused chip presses it and the focus stays on it (a rebuilt row dropped it to the document, Terra 01a16a51)
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).focus();
+  await page.keyboard.press('Space');
+  assert.deepEqual(await page.evaluate(() => [document.activeElement.textContent.trim(), document.activeElement.getAttribute('aria-pressed')]), ['PLA', 'true'], 'Space presses the focused chip and keeps the focus on it');
+  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26)');
+  // a shared or uploaded palette can name a filament the catalogue does not know: its own words place it under a chip (Terra 01a16a51)
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const p = v.palette(); v.setPalette({ on: true, colors: { ...p.colors, Accent: { name: 'PETG Blue (custom)', hex: '#2f66b8' } }, over: p.over || {} }); });
+  await page.locator('#ws-colors .crow').first().click();   // the case picker opened again: it reads the palette afresh and starts at All
+  await page.waitForFunction(() => document.querySelector('#ws-picker .sw[aria-label="PETG Blue (custom)"]'), null, { timeout: 15_000 }).catch(() => assert.fail('the custom colour did not reach In this build'));
+  assert.deepEqual(await chips(), [['All', 'true'], ['PLA', 'false'], ['PETG', 'false']], 'a picker opened again starts at All');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();
+  assert.ok((await swLabels()).includes('PETG Blue (custom)'), 'an uncatalogued PETG in the build answers the PETG chip by its name');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).click();
+  assert.ok(!(await swLabels()).includes('PETG Blue (custom)'), 'and not the PLA chip');
+  await page.locator('#ws-picker .mrow .mchip', { hasText: /^PETG$/ }).click();   // left pressed: the feet's picker must open at All
+  // the feet's picker: the note, the two TPU lines tagged TPU, nothing else; no material row (TPU alone), and the case's
+  // PETG chip did not follow (a sticky chip would narrow the TPU lines to nothing: the 11 swatches prove the reset)
   await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Foot$/ }) }).first().click();
   await page.waitForFunction(() => /only TPU is listed/.test(document.getElementById('ws-picker')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('the feet picker did not open with its note'));
   assert.deepEqual(await heads(), [['PolyFlex™ TPU95', ['TPU']], ['PolyFlex™ TPU90', ['TPU']]]);
+  assert.equal(await page.locator('#ws-picker .mrow').count(), 0, 'the feet offer TPU alone: no material row');
   const sws = await page.evaluate(() => [...document.querySelectorAll('#ws-picker .brands .sw')].map((e) => e.getAttribute('aria-label')));
   assert.ok(sws.length === 11 && sws.every((n) => / TPU9/.test(n)), `only TPU swatches (In this build + 10): ${sws}`);
   // TPU95 Orange, then the reset: TPU95 Black
@@ -6084,3 +6426,278 @@ test('Feedback & support: the top bar button and the build menu open the shared 
   assert.deepEqual(errs(P.errors), []);
   await P.ctx.close();
 });
+
+/* THE GPU PASS'S FINDINGS (2026-10-23, Joey's laptop and desktop browsers): the Quality pill's pick did not survive a reload
+   (the shell's pill drew the tier without saving it), and the Parts badge and the size line went stale after an undo made
+   from Labels (the bar and the dock were drawn on the store change, before the regenerate, and never after it). */
+test('the Quality pill keeps a visitor\'s pick across a reload, and marks it as the user\'s', async () => {
+  // without the harness's Fast init script, which would reset the pick on every load: Fast is seeded once instead
+  const c = await browser.newContext({ viewport: { width: 1366, height: 768 } }); contexts.add(c);
+  const seed = await c.newPage(); await seed.goto(`${base}/css/app.css`);
+  await seed.evaluate(() => { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); });
+  await seed.close();
+  const { ctx, page, errors } = await open('build', { context: c });
+  const q = () => page.evaluate(() => ({ pill: document.querySelector('#ws-tools .quality span')?.textContent, tier: window.__GEN2_VIEWER__.quality, saved: localStorage.getItem('gen2-quality'), set: localStorage.getItem('gen2-quality:set') }));
+  assert.equal((await q()).tier, 'fast', 'the seeded tier');
+  await page.click('#ws-tools .quality');   // the next tier in the cycle
+  await settle(page, 800);
+  const picked = await q();
+  assert.ok(picked.tier !== 'fast' && picked.saved === picked.tier && picked.set === '1', `the pick is saved as the user's: ${JSON.stringify(picked)}`);
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('#ws-tools .quality', { timeout: 120_000 }); await settle(page, 1500);
+  const back = await q();
+  assert.equal(back.tier, picked.tier, `the pick survives the reload: ${JSON.stringify(back)}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the Parts badge and the size line follow an undo made from Labels: the badge at once, the dock once the stage has rebuilt', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }]);
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await armSize(page, '1W·1H');
+  await page.waitForFunction(() => (window.__spots || []).length, null, { timeout: 30_000 });
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-spot', { timeout: 30_000 });
+  const badge = () => page.evaluate(() => [...document.querySelectorAll('#ws-tabs .tab')].find((b) => /Parts/.test(b.textContent))?.querySelector('.badge')?.textContent || null);
+  const b2 = await badge();   // two units
+  await clickSpot(page, 3, y);   // a third, on the right
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 15_000 });
+  await settle(page, 2500);
+  const b3 = await badge();
+  assert.ok(b2 && b3 && +b3 > +b2, `the badge grew with the unit: ${b2} -> ${b3}`);
+  // to Labels, where the undo of that placement regenerates the build
+  await page.evaluate(() => [...document.querySelectorAll('#ws-tabs .tab')].find((b) => /Labels/.test(b.textContent)).click());
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 }); await settle(page, 1500);
+  const dims = () => page.evaluate(() => [...document.querySelectorAll('#ws-dock .big')].map((e) => e.textContent).find((s) => /×/.test(s)) || null);
+  const d3 = await dims();
+  assert.equal(await badge(), b3, 'the Labels bar shows the same count');
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 15_000 });
+  assert.equal(await badge(), b2, 'the badge follows the record at once, before the stage has rebuilt');
+  await page.waitForFunction(() => !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 30_000 }).catch(() => {});
+  await settle(page, 2500);
+  const d2 = await dims();
+  assert.ok(d2 && d3 && d2 !== d3, `the size line follows the rebuilt build: ${d3} -> ${d2}`);
+  assert.equal(await badge(), b2, 'and the badge still');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* HOVER HINTS ON EVERY WORKSPACE (2026-10-23, Joey: "can we do more video animations for when hovering over certain buttons
+   to illustrate how they work?"). A hinted control carries data-hint = its clip's name (js/ui/hint.js attachHint); resting
+   the mouse on it shows the bubble beside its panel with that clip after the dwell, leaving hides it, and while a modal
+   dialog is up (the setup sheet here) nothing shows, not even for a harness that fires the hover and the focus straight at
+   the control under the veil; the sheet closing brings the hints back. HINTED lists, per workspace, the way into each
+   state that offers hints and the clips there: a lost attachHint or a renamed clip fails the first assertion, a clip
+   missing from img/hints/ the second (the <video> errors and the SVG scene takes its place). */
+const HINTED = {   // per workspace: the panel the hints wait for (Labels renders after its list module loads), then the steps
+  build: { ready: '#ws-lib .size', steps: [
+    { keys: ['build-place'] },
+    { go: async (page) => { await page.locator('#ws-lib [role=tab]:has-text("Build style")').click(); await page.waitForSelector('[data-hint="build-sidecovers"]', { timeout: 15_000 }); }, keys: ['build-sidecovers'], focus: '[data-hint="build-sidecovers"] .seg' },   // the hint is on the track; the keyboard reaches its segments
+    // a 2W over a 1W leaves a red slot under it; the issue card, opened from the dock's status, offers Fill all
+    { go: async (page) => {
+      await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.gridH = 2; s.gridW = 2; s.placed = [{ id: 1, x: 0, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }]; s.nextId = 3; }, 'edit'));
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 2, null, { timeout: 90_000 });
+      await page.click('#ws-dock .status'); await page.waitForSelector('#ws-issues:not([hidden])', { timeout: 15_000 });
+    }, keys: ['build-fill'] },
+  ] },
+  colors: { ready: '#ws-colors .row4', steps: [{ keys: ['colors-browse', 'colors-surprise', 'colors-simplify'] }] },   // Simplify: the root kit's look has five filaments
+  labels: { ready: '#ws-labels .foot', steps: [{ keys: ['labels-type', 'labels-file', 'labels-picker'] }] },
+  parts: { ready: '#ws-parts .prow', steps: [{ keys: ['parts-track'] }] },
+  assemble: { ready: '#ws-tools .cam', steps: [{ keys: ['assemble-camera'] }] },
+};
+test('hover hints: every hinted control shows its clip on hover and hides on leave; none shows over the setup sheet or an open card', async () => {
+  const shown = (page, key) => page.waitForFunction((k) => { const b = document.getElementById('ws-hint'); return !!b && !b.hidden && b.classList.contains('show') && (b.querySelector('.scene video')?.getAttribute('src') || '').endsWith(`/${k}.mp4`); }, key, { timeout: 15_000 });
+  const isHidden = () => { const b = document.getElementById('ws-hint'); return !b || b.hidden; };
+  const hidden = (page) => page.waitForFunction(isHidden, null, { timeout: 15_000 });
+  const hinted = (key) => `#ws [data-hint="${key}"]`;
+  // a hover and a focus fired straight at the control, as a harness or the keyboard can under a veil
+  const poke = (page, key) => page.evaluate((sel) => { const b = document.querySelector(sel); b.dispatchEvent(new MouseEvent('mouseenter')); b.dispatchEvent(new FocusEvent('focusin', { bubbles: true })); }, hinted(key));
+  for (const [ws, { ready, steps }] of Object.entries(HINTED)) {
+    const { ctx, page, errors } = await open(ws);
+    await page.waitForSelector(ready, { timeout: 30_000 });
+    let last = null;
+    for (const step of steps) {
+      if (step.go) await step.go(page);
+      const present = await page.evaluate(() => [...new Set([...document.querySelectorAll('#ws [data-hint]')].map((e) => e.dataset.hint))]);
+      for (const key of step.keys) assert.ok(present.includes(key), `${ws}: no control carries the ${key} hint (present: ${present.join(', ') || 'none'})`);
+      for (const key of step.keys) {
+        await page.locator(hinted(key)).first().hover({ timeout: 15_000 });
+        await shown(page, key).catch(async () => assert.fail(`${ws}: no bubble with ${key}.mp4 on hover (bubble: ${await page.evaluate(() => document.getElementById('ws-hint')?.outerHTML.slice(0, 300))})`));
+        // a real recording, not a stub: the clip's metadata arrives and it runs 6 s or more (Joey's 10-15 s; the shortest is 9 s)
+        await page.waitForFunction(() => { const v = document.querySelector('#ws-hint .scene video'); return !!v && v.readyState >= 1 && v.duration >= 6; }, null, { timeout: 15_000 })
+          .catch(async () => assert.fail(`${ws}: ${key}.mp4 did not load as a clip of 6 s or more (readyState ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.readyState)}, duration ${await page.evaluate(() => document.querySelector('#ws-hint .scene video')?.duration)})`));
+        // beside the control's panel, never over the control itself (spacing-between-controls: a hint must not cover what it explains)
+        const over = await page.evaluate((sel) => { const b = document.getElementById('ws-hint').getBoundingClientRect(), r = document.querySelector(sel).getBoundingClientRect(); return !(b.right <= r.left || b.left >= r.right || b.bottom <= r.top || b.top >= r.bottom); }, hinted(key));
+        assert.equal(over, false, `${ws}: the bubble for ${key} covers its control`);
+        await page.mouse.move(640, 430);   // onto the stage
+        await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${key} stayed after the mouse left`));
+        last = key;
+      }
+      // the keyboard: focus on the control (or, for a hint on a group, on a segment inside it) shows the hint too; focus
+      // leaving it hides it (Sol 01a16a18: a `focus` listener on the group never fired, the event does not bubble)
+      if (step.focus) {
+        await page.focus(step.focus);
+        await shown(page, last).catch(() => assert.fail(`${ws}: no bubble for ${last} on keyboard focus inside its group`));
+        await page.evaluate(() => document.activeElement.blur());
+        await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${last} stayed after focus left`));
+      }
+    }
+    if (ws === 'colors') {
+      // an open card the control is not part of: Simplify's card opens under the pointer that pressed Simplify…, and a
+      // bubble beside the panel would cover it, so none shows while it is up (the hint on Fill all, INSIDE its issue card, shows above)
+      await page.click(hinted('colors-simplify'));
+      await page.waitForSelector('#ws-simplify:not([hidden])', { timeout: 15_000 });
+      await poke(page, 'colors-simplify'); await settle(page, 1000);
+      assert.equal(await page.evaluate(isHidden), true, 'colors: a hint showed over the Simplify card');
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => document.getElementById('ws-simplify').hidden, null, { timeout: 15_000 });
+    }
+    // a bubble already up when a modal dialog opens (the setup sheet) goes down with it: the veil under the pointer fires the
+    // control's mouseleave, and a keyboard-shown bubble goes with the focus the sheet takes (Sol 01a16a18 said it would
+    // stay; it does not, and no extra listener is needed)...
+    await page.locator(hinted(last)).first().hover({ timeout: 15_000 });
+    await shown(page, last);
+    await page.evaluate(() => { window.__GEN2_CTX__().openSetup('mount'); });
+    await page.waitForSelector('#ws-setup', { timeout: 15_000 });
+    await hidden(page).catch(() => assert.fail(`${ws}: the bubble for ${last} stayed up over the setup sheet`));
+    // ...and while it is up a hover and a focus fired at a hinted control show nothing
+    await poke(page, last); await settle(page, 1000);   // past the dwell
+    assert.equal(await page.evaluate(isHidden), true, `${ws}: a hint showed over the setup sheet`);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.getElementById('ws-setup'), null, { timeout: 15_000 });
+    // ...and once it is closed the same control hints again
+    await page.locator(hinted(last)).first().hover({ timeout: 15_000 });
+    await shown(page, last).catch(() => assert.fail(`${ws}: no bubble for ${last} after the sheet closed`));
+    await page.mouse.move(640, 430);
+    await hidden(page);
+    assert.deepEqual(clean(errors), [], ws);
+    await ctx.close();
+  }
+  // a narrow window with a mouse (1000 px: the phone chrome's sheets, hover still on): the toolbar chip hints under its bar;
+  // while a sheet is open nothing hints, not even a control outside the sheet; the sheet closed, it hints again
+  const narrow = await browser.newContext({ viewport: { width: 1000, height: 700 } }); contexts.add(narrow); await narrow.addInitScript(FAST);
+  const N = await open('assemble', { context: narrow });
+  await N.page.waitForSelector('#ws-steps .sheet-handle', { timeout: 30_000 });
+  await N.page.locator(hinted('assemble-camera')).hover({ timeout: 15_000 });
+  await shown(N.page, 'assemble-camera').catch(() => assert.fail('narrow: no bubble on the camera chip'));
+  assert.ok(await N.page.evaluate(() => document.getElementById('ws-hint').getBoundingClientRect().top >= document.getElementById('ws-tools').getBoundingClientRect().bottom), 'narrow: the bubble sits under the toolbar');
+  await N.page.mouse.move(500, 400); await hidden(N.page);
+  await N.page.locator('#ws-steps .sheet-handle').click();
+  await N.page.waitForSelector('#ws-steps.sheet.open', { timeout: 15_000 });
+  await poke(N.page, 'assemble-camera'); await settle(N.page, 1000);
+  assert.equal(await N.page.evaluate(isHidden), true, 'narrow: a hint showed while a sheet was open');
+  await N.page.locator('#ws-steps .sheet-handle').click();
+  await N.page.waitForFunction(() => !document.querySelector('#ws .sheet.open'), null, { timeout: 15_000 });
+  await N.page.locator(hinted('assemble-camera')).hover({ timeout: 15_000 });
+  await shown(N.page, 'assemble-camera').catch(() => assert.fail('narrow: no bubble once the sheet closed'));
+  assert.deepEqual(clean(N.errors), [], 'narrow');
+  await narrow.close();
+});
+
+/* SETTLING TOWARD THE MOUNT (Joey, 2026-10-25, the Under-Table report from tech support: "the Planner should work like gravity,
+   pulling everything toward the mount after every change"). The report's layout on an Under-Table 185: top 2 x 3W-1.5H, then
+   3 x 2W-2H, 3 x 2W-3H, 2 x 3W-1.5H at the bottom. Acceptance: removing both top 3Ws ends as three 2W-2H on top, three 2W-3H
+   below, two 3W-1.5H at the bottom, 0 issues and no manual moves; dragging the top-right 3W below the bottom row settles
+   everything up in one action (one Undo); the voids are not a standing warning. */
+test('Build: Under-Table settles up after every edit - the report\'s layout, a drop below the stack, one Undo each', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&new=1&setup=1' });
+  await page.waitForSelector('#ws-setup .card', { timeout: 60_000 });
+  await page.locator('#ws-setup .card:has-text("Under-Table")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.locator('#ws-setup .card.len:has-text("185 mm")').click();
+  await btn(page, 'Next', '#ws-setup').click();
+  await page.evaluate(() => { window.__e2eBeforeReload = 1; });
+  await btn(page, 'Start build', '#ws-setup').click();
+  await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.mount === 'under-table', null, { timeout: 150_000 });
+  await waitBoot(page);
+  const U = [[1, 0, 0, 3, 3], [2, 3, 0, 3, 3], [3, 0, 3, 2, 4], [4, 2, 3, 2, 4], [5, 4, 3, 2, 4], [6, 0, 7, 2, 6], [7, 2, 7, 2, 6], [8, 4, 7, 2, 6], [9, 0, 13, 3, 3], [10, 3, 13, 3, 3]];
+  const load = () => page.evaluate((U) => window.__GEN2_STORE__.commit((s) => { s.placed = U.map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0, closure: 'magnet' })); s.nextId = 11; s.gridW = 6; s.gridH = 8; s.spaceW = null; s.spaceH = null; }, 'edit'), U);
+  await load();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 10 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 }).catch(() => assert.fail('the report\'s build did not reach the stage'));
+  const at = async () => Object.fromEntries((await S(page)).placed.map((p) => [p.id, [p.x, p.y]]));
+  const issues = () => page.evaluate(() => window.__GEN2_BUILD__.issues().filter((i) => i.sev !== 'guide').map((i) => i.kind));
+  // the store coalesces commits made within 350 ms into ONE history entry (a drag is one undo); this script edits faster than
+  // a hand can, so every edit that must be its own undo step is flushed into history first (2026-10-25: without it the two
+  // removals merged and "one Undo per edit" timed out waiting for 9 units - a flake that passed alone, failed in the suite)
+  const flush = () => page.evaluate(() => window.__GEN2_STORE__.flush());
+  await flush();
+  // 1. remove the right 3W, then the left: everything settles up, nothing is held, 0 issues, no manual move
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(2));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  await flush();
+  let a = await at();
+  assert.deepEqual([a[5], a[8], a[4]], [[4, 0], [4, 4], [2, 3]], `the right column rose, the centre stays hooked under the left 3W: ${JSON.stringify(a)}`);
+  // the toast is read right after the removal: it hides itself 2.6 s after it shows (dom.js say()) and the reads below can
+  // outlast that under a full-suite load; its text stays readable once hidden, so the first removal's is cleared first
+  // (it matches the same words) and this wait proves the SECOND removal's toast (Terra 01a1752f)
+  await page.evaluate(() => { document.getElementById('ws-toast').textContent = ''; });
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(1));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 8, null, { timeout: 30_000 });
+  await page.waitForFunction(() => /Removed 3W·1\.5H · .*moved up against what is above/.test(document.getElementById('ws-toast')?.textContent || ''), null, { timeout: 15_000 }).catch(() => assert.fail('the removal toast did not name what settled'));
+  a = await at();
+  assert.deepEqual(a, { 3: [0, 0], 4: [2, 0], 5: [4, 0], 6: [0, 4], 7: [2, 4], 8: [4, 4], 9: [0, 10], 10: [3, 10] }, `three 2W-2H on top, three 2W-3H, two 3W-1.5H at the bottom: ${JSON.stringify(a)}`);
+  await settle(page, 800);
+  assert.deepEqual(await issues(), [], 'no issues after settling');
+  assert.equal(await page.locator('#ws-dock .status.issue').count(), 0, 'the Dock shows no issue');
+  // one Undo per edit: the second removal comes back WITH its settle undone
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  a = await at();
+  assert.deepEqual([a[1], a[4], a[9]], [[0, 0], [2, 3], [0, 13]], `one Undo restores the removal and the settle together: ${JSON.stringify(a)}`);
+  // 2. the same starting layout: drag the top-right 3W below the bottom row - allowed (no "would leave a unit without
+  //    support"), the grid grows down for it, everything above settles up in one action
+  await load();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 10, null, { timeout: 30_000 });
+  await flush();   // the load is its own history entry; the move must not merge into it
+  const check = await page.evaluate(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 2); return window.__GEN2_BUILD__.moveCheck(u, 3, 16); });
+  assert.ok(check.g, `the drop below the stack is allowed: ${JSON.stringify(check)}`);
+  await page.evaluate(() => window.__GEN2_BUILD__.moveTo(2, 3, 16));
+  await page.waitForFunction(() => { const p = window.__GEN2_STORE__.state.placed.find((q) => q.id === 2); return p && p.y === 16; }, null, { timeout: 30_000 }).catch(() => assert.fail('the 3W did not move below the stack'));
+  a = await at();
+  assert.deepEqual([a[2], a[5], a[8], a[4]], [[3, 16], [4, 0], [4, 4], [2, 3]], `the dropped 3W hangs at the bottom, the right column rose: ${JSON.stringify(a)}`);
+  assert.ok((await S(page)).gridH >= 10, 'the grid grew down for the drop');
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => { const p = window.__GEN2_STORE__.state.placed.find((q) => q.id === 2); return p && p.y === 0; }, null, { timeout: 30_000 });
+  assert.deepEqual(await at(), Object.fromEntries(U.map(([id, x, y]) => [id, [x, y]])), 'one Undo puts the whole move and its settle back');
+  // 3. the voids are a drag preview only: with the centre column hooked by one end (after the first removal) the board
+  //    draws no hatched cell at rest
+  await flush();
+  await page.evaluate(() => window.__GEN2_BUILD__.removeUnit(2));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 9, null, { timeout: 30_000 });
+  await view(page, '2D');
+  await page.waitForSelector('#ws-board .b-unit', { timeout: 30_000 });
+  assert.equal(await page.locator('#ws-board .b-deficit').count(), 0, 'no hatched void at rest');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE BAKED TOP LAYERS (2026-10-25, js/skin-map.js): a map is fetched only while the tier is Very High, and drawn only in its
+   settle samples. The suite runs on Fast, so what it can hold is the other side of that rule: a build with faceplates on Fast
+   asks the parts host for no map and holds none, while the switch and the status sit on the stage hook. The Very High side
+   (the atlas, the settled frame) is proven by tools/skin-shots.mjs and the Very High goldens on a GPU. */
+test('the baked top layers: Fast fetches no map and holds none; the switch and the status are on the stage hook', async () => {
+  const c = await freshContext();
+  const skinRequests = [];
+  await c.route('**/parts/skin/**', (r) => { skinRequests.push(r.request().url()); return r.continue(); });
+  const { ctx, page, errors } = await open('build', { context: c });
+  await startBuild(page, [{ id: 1, x: 0, w: 2 }]);   // a Decor drawer unit: a faceplate with a map on the parts host
+  await settle(page, 2500);
+  const st = await page.evaluate(() => { const s = window.__GEN2_VIEWER__.skinMap; return { on: s.on, status: s.status(), tier: window.__GEN2_VIEWER__.quality }; });
+  assert.equal(st.tier, 'fast');
+  assert.equal(st.on, true, 'the maps are on by default; only ?skinmap=off turns them off');
+  assert.equal(st.status.wanted, false, 'Fast must not want the maps');
+  assert.equal(st.status.index, null, 'the index was fetched on Fast');
+  assert.deepEqual(st.status.slots, {}, 'a map was packed on Fast');
+  assert.deepEqual(skinRequests, [], 'Fast asked the parts host for a map');
+  const flipped = await page.evaluate(() => { const s = window.__GEN2_VIEWER__.skinMap; s.set(false); const off = s.uniforms.uSMOn.value; s.set(true); return [off, s.uniforms.uSMOn.value]; });
+  assert.deepEqual(flipped, [0, 1], 'the switch does not reach the shared uniform');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* the shards (see the top of the file): this process's share of the cases above, in file order */
+registerShare(nodeTest, CASES, SHARD, { weightsFile: join(root, 'e2e', 'shard-weights.json'), reportFile: process.env.E2E_SHARD_REPORT });

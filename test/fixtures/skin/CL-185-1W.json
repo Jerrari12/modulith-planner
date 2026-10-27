@@ -1,0 +1,39 @@
+{
+ "node": "CL-185-1W",
+ "file": "CL-185-1W.png",
+ "size": [
+  1493,
+  717
+ ],
+ "q0": [
+  -93.275,
+  -44.8541
+ ],
+ "pxPerMm": 8,
+ "axis": [
+  0,
+  1,
+  0
+ ],
+ "skinLayersZ": [
+  0.4,
+  1,
+  4.2,
+  5,
+  8
+ ],
+ "topAngleDeg": 135,
+ "crownMm": 0.06,
+ "rgBits": 6,
+ "bake": {
+  "stl": "GEN2/185/Covers + Footrails/CL-185-1W.stl",
+  "stlSha256": "651aba75d06ba5ca48b7249152478f3ae2cd8c6da8b543602c52f08657a4454d",
+  "rotateX": 0,
+  "profile": "core-one-04hf-02speed-pla.ini",
+  "slicer": "2.9.4+UNKNOWN",
+  "bakeVersion": 3,
+  "key": "651aba75d06ba5ca-rx0-px8"
+ },
+ "pngSha256": "990f443140393fefa63ab93f44a310f805cf7d24f2afc58d091b053784271797",
+ "bytes": 74404
+}

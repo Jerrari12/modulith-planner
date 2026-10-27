@@ -133,6 +133,8 @@ export async function boot() {
     if (why !== 'undo' && why !== 'redo') return;
     const want = state.buildPlate || 'powder';
     if (stage.build && (stage.build.buildPlate || 'powder') !== want) stage.setBuildPlate(want, { quiet: true });
+    // and the per-part finishes (2026-10-26), the same kind of field: the generator never reads them either
+    if (stage.build && JSON.stringify(state.plateParts || {}) !== JSON.stringify(stage.build.plateParts || {})) stage.setPartPlates(state.plateParts || {}, { quiet: true });
   });
   /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
      silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
@@ -276,7 +278,10 @@ export async function boot() {
     /* the palette moves to the build's own key BEFORE the first colour write (and on the first build edit), so a kit
        page's saved palette never takes a project's picks with it (Astra's two-projects-one-kit check) */
     ownPaletteKey: () => stage.setColorStoreKey(buildKey(store.state.buildId)),
-    badges: () => { try { return { parts: printCountOf(stage.build) || null, labels: labelsBadge(store.state) }; } catch { return {}; } },   // the tab badges (the brief: Parts shows the printed-piece count, Labels labelled/slots)
+    // the tab badges (the brief: Parts shows the printed-piece count, Labels labelled/slots). Parts counts the RECORD, not the
+    // stage's last build: a workspace draws its bar on the store change, before the stage has rebuilt, and the stage's record
+    // lagged by one edit there (a keyboard undo, Remove: the GPU pass, 2026-10-23)
+    badges: () => { try { return { parts: printCountOf(store.serialize ? store.serialize() : stage.build) || null, labels: labelsBadge(store.state) }; } catch { return {}; } },
     has: (ws) => !!WORKSPACES[ws],
     /* the switcher's builds: all of it reloads the page on the chosen record (the stage boots from the address), except
        Rename, which is in place */

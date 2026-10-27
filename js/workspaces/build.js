@@ -28,11 +28,13 @@ import { icon } from '../ui/icons.js';
 import { el, makeToast } from '../ui/dom.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
+import { attachHint, hideHint } from '../ui/hint.js';
 import { board } from '../ui/board.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
 import { layoutRules } from '../rules/layout.js';
 import { refusalReason, standUp, openCells } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
+import { settleToward, settleWord } from '../rules/settle.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
 
@@ -48,6 +50,15 @@ const VIEWER_UT_LENGTHS = [59, 115, 165, 185, 240, 270];
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 const sigOf = (m) => { const s = JSON.stringify(m); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + s.length; };
+/* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/build-*.mp4 from
+   tools/hint-clips.mjs (Joey 2026-10-23: "more video animations for when hovering over certain buttons to illustrate how
+   they work"). The "+" spots are stage markers, not buttons, so placing is explained on the size tiles, where a visitor
+   is before the spots exist. The control's own title is the touch screen's answer. */
+const HINTS = {
+  place: { title: 'Place a unit', text: 'Click a size, then an amber spot on the model puts one there. Stop placing or Esc ends it.', video: 'img/hints/build-place.mp4' },
+  fill: { title: 'Fill all', text: 'A 1W case in every red slot at once, so the build can stand or hang. One Undo takes them out again.', video: 'img/hints/build-fill.mp4' },
+  sidecovers: { title: 'Side covers', text: 'The panels on the build’s outer walls. Off leaves the case sides open and takes them off the parts list; On brings them back.', video: 'img/hints/build-sidecovers.mp4' },
+};
 
 export function mountBuild(stage, ctx) {
   const ac = new AbortController();   // every window/document listener the workspace adds, dropped on unmount
@@ -124,9 +135,17 @@ export function mountBuild(stage, ctx) {
       const sig = sigOf(gen.manifest);
       if (sig !== lastSig) {
         lastSig = sig; syncing = true;
+        /* a peeked drawer stays open across the rebuild (Joey 2026-10-25: Standard -> Gridfinity on an open drawer loaded it
+           closed under a "Close it" button that did nothing). The rebuild replaces every instance, so the stage's open
+           drawer is let go first (its dims pills come back) and the same unit is peeked again on the new one */
+        const peeked = st.peeking;
+        if (peeked != null) stage.unpeek();
         try { const r = await stage.update(rec, gen); if (!r.ok) st.stageErrors = r.errors; else { stage.skipToEnd(); stage.setDims(measureOn); } }
         finally { syncing = false; }
         if (st.selId != null && !stage.selectUnit(st.selId)) { st.selId = null; st.sel = null; }
+        // still the peeked unit (a select or a removal during the await may have let it go - Terra 01a175a2); gone, or a
+        // shelf now: the button says Peek inside again
+        if (peeked != null && st.peeking === peeked) st.peeking = !st.stageErrors && stage.peekUnit(peeked) ? peeked : null;
       }
       renderAll();
       if (st.pulse && st.pulse.length) { if (st.view !== '2d') stage.pulseUnits(st.pulse); brd.flash(st.pulse); st.pulse = null; }
@@ -142,23 +161,10 @@ export function mountBuild(stage, ctx) {
     store.load(stage.build, 'adopt'); st.selId = keep; S().selectedUnit = keep;
     renderAll();
   }
-  /* gravity (Joey: drop only): every unsupported unit falls toward the mount surface until something holds it - except the
-     ones in `hold`: a case that already stood over an empty slot before this edit and that the edit did not touch. A mount
-     switch's gaps stay slots until they are filled (Joey, 2026-10-21); filling one must not drop its neighbours into theirs */
-  function settle(s, Rs, hold = null) {
-    const moved = new Map();   // id -> half-rows travelled
-    const dir = s.mount === 'tabletop' ? 1 : -1;
-    for (let pass = 0; pass < 24; pass++) {
-      const uns = new Set(Rs.unsupportedUnits().map((u) => u.id).filter((id) => !(hold && hold.has(id)))); if (!uns.size) break;
-      let any = false;
-      for (const u of s.placed.filter((u) => uns.has(u.id)).sort((a, b) => dir === 1 ? b.y - a.y : a.y - b.y)) {
-        let ny = u.y; while (Rs.canPlace(u.x, ny + dir, u.w, u.hh, u.id)) ny += dir;
-        if (ny !== u.y) { moved.set(u.id, (moved.get(u.id) || 0) + Math.abs(ny - u.y)); u.y = ny; any = true; }
-      }
-      if (!any) break;
-    }
-    return moved;
-  }
+  /* SETTLING (Joey, 2026-10-25, replacing the 2026-10-21 "drop only, hold what was already over a gap"): after every
+     edit every unit slides toward the mount until it touches the mount or any unit on that side - js/rules/settle.js says
+     the model and why nothing is held any more (a held centre column stranded a whole Under-Table build) */
+  function settle(s, Rs) { return settleToward(s, Rs); }
   /* every edit is ONE undo step, gravity included (Astra: make the whole action one Undo step and show which units
      moved): the moved units are named in the toast, pulsed on the model and flashed on the board */
   /* THE BOARD HUGS THE BUILD (the 2D board redesign, Joey + Astra 2026-10-16): after every edit the grid is exactly the
@@ -171,19 +177,19 @@ export function mountBuild(stage, ctx) {
     if (x0) for (const p of s.placed) p.x -= x0;
     s.gridW = Math.max(1, Math.max(...s.placed.map((p) => p.x + p.w)));
   }
+  let settledNote = '';   // what the last edit's settle moved, for a caller that speaks after it (removeUnit)
   function edit(fn, why = 'edit', { gravity = true } = {}) {
-    let dropped = new Map();
+    let dropped = new Map(); settledNote = '';
     const r = store.commit((s, Rs) => {
-      const at = (p) => `${p.x},${p.y},${p.w},${p.hh}`;
-      const was = new Map(Rs.unsupportedUnits().map((u) => [u.id, at(u)]));   // already over a gap before this edit
       const out = fn(s, Rs);
-      if (gravity) dropped = settle(s, Rs, new Set(s.placed.filter((p) => was.get(p.id) === at(p)).map((p) => p.id)));
+      if (gravity) dropped = settle(s, Rs);
       hug(s); return out;
     }, why);
     if (dropped.size) {
       const s = S();
       const names = [...dropped.keys()].map((id) => { const u = s.placed.find((p) => p.id === id); return `${u ? `${u.w}W·${u.hh / 2}H` : 'unit'} (unit ${s.placed.indexOf(u) + 1})`; });
-      say(`Gravity · ${names.join(', ')} dropped onto what is below · one Undo puts it all back.`);
+      settledNote = `${names.join(', ')} ${settleWord(s)}`;
+      say(`Settled · ${settledNote} · one Undo puts it all back.`);
       st.pulse = [...dropped.keys()];
     }
     return r;
@@ -301,23 +307,25 @@ export function mountBuild(stage, ctx) {
     return all.filter((sp) => touchesBuild(sp, a.w, a.hh, s.placed));
   }
   /* ONE MOVE CHECK for every way of moving (the board's drag preview, the arrow keys and Move buttons, the move itself,
-     the 3D drag's targets - Sol 01a14656): collisions and the mount's width cap (fitAt), then the move with gravity
-     settled must raise no NEW structural problem (judge). A temporary completion deficit is not a structural problem, so
-     an uneven top is allowed for a while. `sel` gives the trial the moving unit's own headroom (the 3D drag's frame).
-     Returns { g, rests, y } or { why }; `rests`: gravity left the unit where it was put; `y`: where gravity settles it
-     (in the trial's frame - the board's drag preview draws there, so the ghost shows the final position). */
+     the 3D drag's targets - Sol 01a14656): collisions and the mount's bounds and width cap (fitAt) - nothing else (Joey,
+     2026-10-25: "allow drops anywhere that doesn't collide or leave the board; the settle decides the final position").
+     The earlier refusal "it would leave a unit without support" is gone: dragging a top-row unit below the stack now just
+     works - everything above settles up and the dropped unit hangs at the bottom. `sel` gives the trial the moving unit's
+     own headroom (the 3D drag's frame). Returns { g, rests, y }: `rests` - the settle left the unit where it was put;
+     `y` - where it settles (in the trial's frame - the board's drag preview draws there, so the ghost shows the final position). */
   function moveCheck(u, x, y, sel = null) {
     const s0 = sel ? (() => { const t = clone(S()); t.selected = sel; layoutRules(t, G, { tabletop: TT }).syncTabletopGrid(); return t; })() : S();
     if (!grownFor(x, u.w, s0, layoutRules(s0, G, { tabletop: TT }), u.id)) return { why: `The build is already as wide as this mount allows (${R().capW()}W).` };
-    const g = fitAt(x, y, u.w, u.hh, u.id, s0); if (!g) return { why: 'Can’t move there · another unit is in the way.' };
-    let rests = true, settledY = y;
-    const hold = new Set(R().unsupportedUnits().map((p) => p.id).filter((id) => id !== u.id));   // the others over a gap stay put, as edit() does
-    const ok = judge((t, Rt) => {
-      if (sel) Rt.syncTabletopGrid();
-      growTo(t, g.k, g.span); const p = t.placed.find((q) => q.id === u.id); p.x = x + g.k; p.y = y;
-      const before = p.y; settle(t, Rt, hold); rests = p.y === before; settledY = p.y;
-    }, u.id, sel);
-    return ok ? { g, rests, y: settledY } : { why: 'Can’t move there · it would leave a unit without support.' };
+    // below a hanging build the grid grows down for the move, as it does for a placement there (the height cap says no)
+    const gh = tallFor(y, u.hh, s0, layoutRules(s0, G, { tabletop: TT }));
+    if (gh === null) return { why: `The build is already as tall as this mount allows (${R().capH()}H).` };
+    const s1 = gh > s0.gridH ? (() => { const t = clone(s0); t.gridH = gh; return t; })() : s0;
+    const g = fitAt(x, y, u.w, u.hh, u.id, s1); if (!g) return { why: 'Can’t move there · another unit is in the way.' };
+    const t = clone(s1); const Rt = layoutRules(t, G, { tabletop: TT });
+    if (sel) Rt.syncTabletopGrid();
+    growTo(t, g.k, g.span); const p = t.placed.find((q) => q.id === u.id); p.x = x + g.k; p.y = y;
+    settle(t, Rt);
+    return { g, gh, rests: p.y === y, y: p.y };
   }
   /* the moving unit's own headroom (tabletop: room above the build for ITS height), as moveSpots and moveTo's exact
      path use: sel for the trial, delta = the extra half-rows that frame adds on top */
@@ -391,6 +399,8 @@ export function mountBuild(stage, ctx) {
       if (exact) { s.selected = { w: u.w, h: u.hh / 2 }; Rs.syncTabletopGrid(); }   // headroom for the unit's own height (a stage spot may sit above the live grid)
       const ty = y + (s.gridH * 2 - before);
       const p = s.placed.find((q) => q.id === id);
+      const gh = tallFor(ty, p.hh, s, Rs); if (gh === null) { say(`The build is already as tall as this mount allows (${Rs.capH()}H).`); return; }
+      s.gridH = Math.max(s.gridH, gh);   // a drop below a hanging build adds its rows in this same undo step
       // the same calculation as the spots: past either edge within the cap; checked BEFORE anything changes
       const g = fitAt(x, ty, p.w, p.hh, p.id, s);
       if (!g) { say(grownFor(x, p.w, s, Rs, p.id) ? 'Can’t move there · another unit is in the way.' : `The build is already as wide as this mount allows (${Rs.capW()}W).`); return; }
@@ -404,7 +414,7 @@ export function mountBuild(stage, ctx) {
     if (st.peeking === id) { stage.unpeek(); st.peeking = null; }
     edit((s) => { s.placed = s.placed.filter((p) => p.id !== id); if (s.selectedUnit === id) s.selectedUnit = null; s.removedStoppers = s.removedStoppers.filter((k) => !k.startsWith(id + ':')); }, 'remove');
     if (st.selId === id) { st.selId = null; st.sel = null; ctx.memo.buildSel = null; stage.setSelected(null); }
-    say(`Removed ${u.w}W·${u.hh / 2}H · Ctrl+Z puts it back.`);
+    say(settledNote ? `Removed ${u.w}W·${u.hh / 2}H · ${settledNote} · Ctrl+Z puts it all back.` : `Removed ${u.w}W·${u.hh / 2}H · Ctrl+Z puts it back.`);
   }
   function duplicateUnit(id) {
     const u = S().placed.find((p) => p.id === id); if (!u) return;
@@ -516,6 +526,7 @@ export function mountBuild(stage, ctx) {
   const lib = el('aside.glass', { id: 'ws-lib', 'aria-label': 'Library' });
   root.appendChild(lib);
   function renderLib() {
+    hideHint();   // a control under a bubble is about to be rebuilt; a removed button never fires mouseleave
     lib.replaceChildren();
     lib.classList.toggle('rail', st.collapsed);
     if (st.collapsed) {
@@ -583,10 +594,11 @@ export function mountBuild(stage, ctx) {
       // lit only while it is being PLACED: the remembered size lit on entry read as "placing already" with no spots on the
       // model (Joey 2026-10-16: "no '+' are shown unless i select a different size")
       const why = sizeWhy(w, h); const id = `${w}x${h}`; const dis = !!why, on = st.armed && st.addSize === id;
-      sizes.appendChild(el('button.size.key' + (dis ? '.dis' : on ? '.on' : ''), {
-        title: why || `${w * 88} × ${h * 56} mm · click to place`, 'aria-disabled': dis ? 'true' : null, 'aria-pressed': String(on),
+      const tile = el('button.size.key' + (dis ? '.dis' : on ? '.on' : ''), {
+        title: why || `${w * 88} × ${h * 56} mm · click it, then an amber spot on the model to place one there`, 'aria-disabled': dis ? 'true' : null, 'aria-pressed': String(on),
         onclick: dis ? null : () => { setPalette(st.unit, id); st.armed = true; st.eraser = false; renderAll(); if (phone) phone.collapse(lib); },
-      }, [el('div.holder', {}, [sizeGlyph(kindOf(st.unit), w, h, colors)]), el('span.cap', { text: `${w}W·${h}H` })]));
+      }, [el('div.holder', {}, [sizeGlyph(kindOf(st.unit), w, h, colors)]), el('span.cap', { text: `${w}W·${h}H` })]);
+      sizes.appendChild(dis ? tile : attachHint(tile, HINTS.place, lib));   // a greyed size says why in its title instead
     }
     sz.appendChild(sizes);
     const { w: aw, h: ah } = armedSize(); const wall = G?.interior || { wWall: 17, hWall: 8 };
@@ -680,10 +692,11 @@ export function mountBuild(stage, ctx) {
     // switched off here. Beside Feet on a tabletop, alone on the other mounts.
     const sc = el('section');
     sc.appendChild(el('h2.h2', { text: 'Side covers' }));
-    sc.appendChild(el('div.track.seg2', { role: 'group' }, [
+    // the hint on the track, so the bubble stays while the mouse crosses from Off to On
+    sc.appendChild(attachHint(el('div.track.seg2', { role: 'group', 'aria-label': 'Side covers', title: 'The panels on the build’s outer walls · Off leaves the case sides open and takes them off the parts list' }, [
       el('button.seg.sm' + (s.sideCovers === false ? '.on' : ''), { text: 'Off', onclick: async () => { await stage.setSideCovers(false); await adopt(); } }),
       el('button.seg.sm' + (s.sideCovers !== false ? '.on' : ''), { text: 'On', onclick: async () => { await stage.setSideCovers(true); await adopt(); } }),
-    ]));
+    ]), HINTS.sidecovers, lib));
     const two2 = el('div.two');
     two2.appendChild(sc);
     if (s.mount === 'tabletop') {
@@ -803,8 +816,9 @@ export function mountBuild(stage, ctx) {
   root.appendChild(tools);
   const brd = board({
     state: S, colors: () => ({ ...colors }), armed: () => st.armed ? armedSize() : null, selected: () => st.selId,
-    // the hatched cells: an unfinished tabletop top, and every empty slot under (or above) a case (2026-10-21)
-    flagged: () => flaggedIds(issues()), deficit: () => [...(S().mount === 'tabletop' ? R().tabletopCompletion().cells : []), ...openCells(S(), R())],
+    // the hatched cells: an unfinished tabletop top always; the empty slots under (or above) a case only as a DRAG preview
+    // (Joey, 2026-10-25: after settling no floating gap should remain, so the voids are not a standing warning)
+    flagged: () => flaggedIds(issues()), deficit: (dragging) => [...(S().mount === 'tabletop' ? R().tabletopCompletion().cells : []), ...(dragging ? openCells(S(), R()) : [])],
     canPlace: (x, y, w, hh, id) => R().canPlace(x, y, w, hh, id), labelOf: (u) => u.label || '',
     // the redesign: the board shows the SAME "+" spots as the 3D view, a drag is judged by the same calculation (past
     // the build's edges within the cap), and the margin either side is the room the cap leaves (3 columns, or the armed width if wider)
@@ -853,14 +867,17 @@ export function mountBuild(stage, ctx) {
   let showIdx = 0;
   function renderIssues() {
     const list = issues();
+    hideHint();   // its Fill all may be under the bubble and is about to be rebuilt
     if (!st.issuesOpen || !list.length) { card.hidden = true; st.issuesOpen = st.issuesOpen && list.length > 0; return; }
     card.hidden = false;
     const hard = list.filter((i) => i.sev !== 'guide').length;
+    // Fill all (the empty slots) takes the hover hint; the other fixes keep their one-line text
+    const fixBtn = (i) => i.kind === 'gaps' ? attachHint(el('button.key.sm.strong', { text: i.fix.label, title: 'A 1W case in every red slot at once · one Undo takes them out again', onclick: i.fix.run }), HINTS.fill, card) : el('button.key.sm.strong', { text: i.fix.label, onclick: i.fix.run });
     card.replaceChildren(
       el('div.ihead', {}, [el('b', { text: hard ? `${n(hard, 'issue')} to fix before printing` : list[0].title }), el('button.x', { 'aria-label': 'Close', onclick: () => { st.issuesOpen = false; renderIssues(); renderDock(); } }, [icon('x', { size: 16 })])]),
       ...list.map((i) => el('div.issue.' + i.sev, {}, [el('div.itext', {}, [el('b', { text: i.title + ' ' }), i.text]), el('div.iact', {}, [
         i.ids.length ? el('button.key.sm', { text: 'Show me', onclick: () => { const id = i.ids[showIdx++ % i.ids.length]; select(id); } }) : null,
-        i.fix ? el('button.key.sm.strong', { text: i.fix.label, onclick: i.fix.run }) : null,
+        i.fix ? fixBtn(i) : null,
       ])])),
     );
   }
@@ -1003,7 +1020,7 @@ export function mountBuild(stage, ctx) {
   stage.setDims(false);
   renderAll();
   if (st.selId != null) stage.selectUnit(st.selId);
-  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_BUILD__ = { addSpots, placeAt, moveTo, moveCheck, placementSpots, refusedSpots };   // the e2e suite reads the spots and places through them
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_BUILD__ = { addSpots, placeAt, moveTo, moveCheck, placementSpots, refusedSpots, removeUnit, issues };   // the e2e suite reads the spots and places through them
 
   return {
     onSelect(sel) {

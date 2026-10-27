@@ -316,9 +316,8 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .prow .badge.club { background: transparent; color: var(--club); border: 1px solid var(--club); }
 #ws-parts .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }
 #ws-parts .link.dim { color: var(--ink-3); font-weight: 500; }
-/* a paid link's mark, on its own line under the store name: the link keeps its width and the part's name its room */
-#ws-parts .link .paid { display: block; font-size: 10px; font-weight: 500; color: var(--ink-2); text-align: right; }
-#ws-parts .link .paid .sep { display: none; }
+/* the one commission line under the hardware rows (parts.js renderPanel), right-aligned under their Amazon links; .note sizes it */
+#ws-parts .rows .commission { margin: 2px 0 0; padding: 0 8px; text-align: right; }
 #ws-parts .progress { display: flex; align-items: center; gap: 8px; flex-basis: 100%; padding-left: 58px; }   /* its own line under the name */
 #ws-parts .counter { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--track); }
 #ws-parts .counter button { width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: var(--key-bg); color: var(--ink); cursor: pointer; font-size: 13px; line-height: 1; }
@@ -493,13 +492,23 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
    name in the picker and in Filaments I own. White on a colour dark enough to read at this size in either theme. */
 .mats { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: 1px; }
 .mat { font-size: 9.5px; font-weight: 800; line-height: 1; letter-spacing: .06em; text-transform: uppercase; padding: 3px 6px; border-radius: 999px; color: #fff; }
-.mat.pla { background: #2a64c4; }
-.mat.petg { background: #ad5a0c; }
-.mat.tpu { background: #1b7a50; }
+.mat.pla, .mat-dot.pla { background: #2a64c4; }
+.mat.petg, .mat-dot.petg { background: #ad5a0c; }
+.mat.tpu, .mat-dot.tpu { background: #1b7a50; }
 #ws-picker .note.feet { margin: 0; font-size: 12px; color: var(--ink-2); }
 /* a spool's picker (renderSwap): its swatch beside what it prints */
 #ws-picker .note.swapnote { margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.4; color: var(--ink-2); }
 #ws-picker .note.swapnote .sw { flex: none; width: 12px; height: 12px; margin-top: 2px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
+/* THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a row above the picker's
+   list, All first, a dot in the tag's colour on each material, 8 px apart (--gap-ctl, the planner's floor between
+   controls). On the phone the row scrolls sideways instead of wrapping, so the sheet's list keeps its height; the row's
+   3 px of padding keep a chip's focus ring inside the scroll box. */
+#ws-picker .mrow { display: flex; flex-wrap: wrap; gap: var(--gap-ctl); }
+#ws-picker .mchip { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--key-border); background: var(--key-bg); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+#ws-picker .mchip.on { border-color: var(--orange); background: var(--key-on-bg); box-shadow: var(--key-on-shadow); }
+#ws-picker .mchip:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+#ws-picker .mat-dot { width: 8px; height: 8px; border-radius: 50%; }
+@media (max-width: 1023px) { #ws-picker .mrow { flex: none; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 3px 0; margin: -3px 0; } }
 .sw.silk { position: relative; }
 .sw.silk::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   background: linear-gradient(135deg, rgba(255, 255, 255, .6) 0%, rgba(255, 255, 255, .2) 44%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, .16) 100%); }
@@ -717,6 +726,15 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 /* ---- Colors, the per-unit layer ---- */
 #ws-picker .head .region { font-size: 13px; color: var(--orange); }
 #ws-picker .resets { display: flex; gap: 6px; }
+/* a part's own build plate finish (2026-10-26): the picker's "Printed on" row, above the foot, and the left panel's list of
+   the parts that have one. 8 px between the row's pieces, the planner's spacing (memory: spacing-between-controls) */
+#ws-picker .platerow { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--hair); }
+#ws-picker .platerow .prh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
+#ws-picker .platerow .prh span { color: var(--ink-3); font-size: 11px; text-align: right; }
+#ws-picker .platerow .plateback { align-self: flex-start; }
+#ws-colors .plateown { list-style: none; margin: 8px 2px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+#ws-colors .plateown li { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+#ws-colors .plateown .link, #ws-picker .platerow .plateback { padding: 0; border: none; background: transparent; color: var(--orange); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; flex: none; }
 #ws-colors .crow .own, #ws-partcard .zchip .tag { margin-left: 6px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; background: var(--orange); color: var(--on-orange); font-weight: 700; }
 #ws-partcard .zchip.own { border-color: var(--orange); }
 
@@ -1036,6 +1054,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-parts .body { padding: 0 0 8px; }
   #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
+  #ws-parts .rows.table .commission { display: none; }   /* its links are the hidden column */
   /* Colors: the panel's card keeps its actions in the sheet's first screen (the render beside the name, not above it);
      the gallery is a sheet like the panel, two cards a row at phone width */
   #ws-colors .lookcard { flex-direction: row; align-items: center; gap: 12px; }
@@ -1075,6 +1094,10 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }
+/* Assemble: the player card is 126 to 231 px tall (the end page adds a row), so a toast at 100 px sat behind it on the
+   desktop and "Link copied." never showed (Joey, 2026-10-23: Share "does nothing"). It rides on the card's own height
+   (assemble.js observes the card's size into --player-h), over it. The phone rule (#ws #ws-toast, above) still wins there */
+html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) + 10px); z-index: 14; }
 
 /* ---- narrow desktop (1024-1279): the panels keep their width, the middle gets tight ---- */
 /* up to 1580 px the bar is one row but tight: the printer and Share chips go icon-only and the build name shortens.
@@ -1086,10 +1109,14 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-top .chip-btn.printer, #ws-top .chip-btn.share { padding: 0 12px; }
   #ws-switch > .chip-btn > span { max-width: clamp(120px, calc(100vw - 1260px), 240px); }
 }
-/* 1280-1365: the bar was already full before the Feedback & support button (at 1280 Share sat 11 px past the bar's edge,
-   33 px with an Under-Table build), so the button stays in the build menu there */
+/* 1280-1365: the bar is one row again, and full. At 1280 Share sat 11 px past the bar's edge on the root kit and 85 px
+   with an Under-Table build and the widest tab badges (2026-10-23, DECISIONS). So the mount chip shows its icon and
+   length, as on the phone; the words stay for a screen reader and in the setup sheet. The tabs keep their row: a second
+   row here would move every panel 44 px down on the shortest laptop screens. Even so, 6 px is left at 1280 in that case,
+   so the Feedback & support button stays in the build menu here */
 @media (min-width: 1280px) and (max-width: 1365px) {
   #ws-top .feedback { display: none; }
+  #ws-top .chip-btn.mount .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 /* narrow desktop (1024-1279): the workspace tabs keep their names on a row of their own under the bar, and the
    panels start below it; the chips go icon-only. From 1024 up only: this block comes after the phone's, so without the
@@ -1106,6 +1133,13 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-lib, #ws-insp, #ws-tools, #ws-steps { top: 134px; }
   #ws-dock { gap: 14px; }
 }
+/* the last resort at any width: a bar that is still too full shortens the build name below its floor, and nothing else
+   gives way. That case is the widest tab badges with Under-Table and the longest printer name. Before (2026-10-23), the
+   Feedback & support button took the squeeze first (its 44 px is a width, so the bar shrank it to 20) and Share was
+   still 29 px past the bar's edge at 1366, and 21 px at 1581, where the printer's name and Share's word come back */
+#ws-top > * { flex-shrink: 0; }
+#ws-switch { flex-shrink: 1; min-width: 0; }
+#ws-switch > .chip-btn { max-width: 100%; }
 @media (prefers-reduced-motion: reduce) { #ws-insp { animation: none; } }
 
 /* THE SETUP SHEET ON A PHONE (Joey, 2026-10-18, tapping the mount chip on his phone: "it just opens a broken menu and
@@ -1149,7 +1183,7 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   html[data-ws="parts"] #ws-parts .printhead { display: block; margin: 0 0 6px; font-size: 11px; color: #444; }
   html[data-ws="parts"] #ws-parts .body { padding: 0 !important; }
   html[data-ws="parts"] #ws-parts h2, html[data-ws="parts"] #ws-parts h3, html[data-ws="parts"] #ws-parts .name, html[data-ws="parts"] #ws-parts .qty, html[data-ws="parts"] #ws-parts .link, html[data-ws="parts"] #ws-parts a { color: #000 !important; }
-  html[data-ws="parts"] #ws-parts .mono, html[data-ws="parts"] #ws-parts .note, html[data-ws="parts"] #ws-parts .dim, html[data-ws="parts"] #ws-parts .left, html[data-ws="parts"] #ws-parts .foot, html[data-ws="parts"] #ws-parts .link .paid, html[data-ws="parts"] #ws-parts .counter .lbl { color: #444 !important; }
+  html[data-ws="parts"] #ws-parts .mono, html[data-ws="parts"] #ws-parts .note, html[data-ws="parts"] #ws-parts .dim, html[data-ws="parts"] #ws-parts .left, html[data-ws="parts"] #ws-parts .foot, html[data-ws="parts"] #ws-parts .counter .lbl { color: #444 !important; }
   html[data-ws="parts"] #ws-parts .row2 .ok, html[data-ws="parts"] #ws-parts .row2 .warn { color: #000 !important; }
   html[data-ws="parts"] #ws-parts h3 { break-after: avoid; }
   html[data-ws="parts"] #ws-parts .prow, html[data-ws="parts"] #ws-parts .well { background: none !important; border: 1px solid #ccc !important; box-shadow: none !important; break-inside: avoid; }

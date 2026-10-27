@@ -75,6 +75,7 @@ const PM_TRANS = POLY_LINK('translucent-pla');
 /* Joey's minted TPU handles (2026-10-21, sent as https://shop.polymaker.com/JERRARI?q=polyflex-tpu95 and ?q=polyflex-tpu90) */
 const PM_TPU95 = POLY_LINK('polyflex-tpu95');
 const PM_TPU90 = POLY_LINK('polyflex-tpu90');
+const POLAR = 'https://polarfilament.com/products';   // Polar Filament's product pages (the Polar block, 2026-10-26)
 const POLYMAKER_URL = PM(44863271895097);
 const FILAMENT_DB = [
   { brand: 'Polymaker', line: 'Panchroma™ PLA', url: POLYMAKER_URL, colors: [
@@ -290,6 +291,65 @@ const FILAMENT_DB = [
     { name: 'Burnt Titanium', label: 'ERYONE Burnt Titanium', hex: '#31517e', url: 'https://amzn.to/4fTKtO9', pick: true,
       pickNote: ' · Joey’s colour-shift blue for Accent panels' },
   ] },
+  // Polar Filament PLA (Troy, Michigan - Joey's local filament maker; Joey asked 2026-10-26). Every colour Polar SELLS as a
+  // 1 kg 1.75 mm PLA spool that has a colour code, linked to its own product page; 44 colours, joined by Polar's SKU
+  // (in the comment on each row) across their colour list and their shop. The hex comes from the truest source there is:
+  // a spectrophotometer read of a printed swatch where filamentcolors.xyz has one (CC BY 4.0; two under their older
+  // names - Chestnut was Rust, Squid was Teal, as the product addresses still say), else Polar's own published colour,
+  // which is the colour they aim for and can sit well off the plastic (the 10 measured ones differ by a median dE76 of
+  // 27; Spaceship Steel is published #D1D1D1 and measures #787E82). All opaque PLA: no TD is needed here (it is read
+  // only for translucent filaments, and lives in the Lab).
+  // ⚠ LEFT OUT: Arctic White (P811) and Robotic White (P804), on sale but with no colour code yet; the Mystery Spool;
+  // the 25 colours on the colour list that the shop no longer sells (Polar White, Silver Silk, Matte Coral, the
+  // marbles...), which have no product page to link. A measured hex for any colour replaces its published one.
+  { brand: 'Polar Filament', line: 'PLA', url: 'https://polarfilament.com/collections/pla-1-75mm', colors: [
+    // MEASURED - a spectrophotometer read of a printed swatch (filamentcolors.xyz, CC BY 4.0), the truest colour there is
+    { name: 'Classic Black',     hex: '#242425', url: `${POLAR}/1-75mm-pla-1kg` },   // P001
+    { name: 'Candy Red',         hex: '#BB3638', url: `${POLAR}/polar-filament-red-1-75mm-pla-1kg` },   // P003
+    { name: 'Vivid Orange',      hex: '#DE5635', url: `${POLAR}/orange-pla-1kg-1-75mm` },   // P004
+    { name: 'Sunshine Yellow',   hex: '#DFBF1E', url: `${POLAR}/yellow-pla-1kg-1-75mm` },   // P007
+    { name: 'Alien Green',       hex: '#399739', url: `${POLAR}/copy-of-lime-green-pla-1kg-1-75mm` },   // P008
+    { name: 'Merlot',            hex: '#60404B', url: `${POLAR}/purple-pla-1kg-1-75mm` },   // P009
+    { name: 'Chestnut',          hex: '#693533', url: `${POLAR}/rust-pla` },   // P011
+    { name: 'Squid',             hex: '#029A7F', url: `${POLAR}/teal-pla-1kg-1-75mm` },   // P012
+    { name: 'Royal Blue',        hex: '#1374AE', url: `${POLAR}/blue-pla-1kg-1-75mm` },   // P016
+    { name: 'Spaceship Steel',   hex: '#787E82', url: `${POLAR}/silver-pla-1kg-1-75mm` },   // P020
+    { name: 'Marine Blue',       hex: '#0B64A0', url: `${POLAR}/marine-blue-shiny-1kg-1-75mm` },   // P057
+    // PUBLISHED - Polar's own colour list (pfil.us/colors.php): the colour they aim for, not a measurement
+    { name: 'Shamrock',          hex: '#098647', url: `${POLAR}/green-pla-1kg-1-75mm` },   // P005
+    { name: 'Mocha',             hex: '#6B5029', url: `${POLAR}/brown-pla-1kg-1-75mm` },   // P006
+    { name: 'Deep Space',        hex: '#1F4059', url: `${POLAR}/dark-blue-pla-1kg-1-75mm` },   // P010
+    { name: 'Light Blue',        hex: '#14ADDB', url: `${POLAR}/polar-filament-blue-1-75mm-pla-1kg` },   // P023
+    { name: 'Pink',              hex: '#FCBECC', url: `${POLAR}/pink-pla-1kg-1-75mm` },   // P024
+    { name: 'Cornflower Blue',   hex: '#949BFF', url: `${POLAR}/cornflower-blue-pla-1kg-1-75mm` },   // P025
+    { name: 'Dijon Yellow',      hex: '#EDCE02', url: `${POLAR}/gold-pla-1kg-1-75mm` },   // P028
+    { name: 'Magenta',           hex: '#FF0086', url: `${POLAR}/magenta-pla-1kg-1-75mm` },   // P029
+    { name: 'Banana Split',      hex: '#DAFF00', url: `${POLAR}/banana-split-pla-1kg-1-75mm` },   // P030
+    { name: 'Sapphire',          hex: '#002CFF', url: `${POLAR}/azure-blue-pla-1kg-1-75mm` },   // P031
+    { name: 'Blaze Orange',      hex: '#FF8800', url: `${POLAR}/blaze-orange-pla-1kg-1-75mm` },   // P032
+    { name: 'Rocket Red',        hex: '#FF1900', url: `${POLAR}/rocket-red-pla-1kg-1-75mm` },   // P033
+    { name: 'Regulation Gray',   hex: '#747474', url: `${POLAR}/regulation-gray-pla-1-75mm` },   // P034
+    { name: 'Lemon Drop',        hex: '#EDFF80', url: `${POLAR}/maize-pla-1kg-1-75mm` },   // P035
+    { name: 'Creamsicle',        hex: '#FF8A50', url: `${POLAR}/creamsicle-pla-1kg-1-75mm` },   // P037
+    { name: 'Coral',             hex: '#FF5D5D', url: `${POLAR}/coral-pla-1kg-1-75mm` },   // P038
+    { name: 'Natural',           hex: '#FFFCF0', url: `${POLAR}/natural-pla-1kg-1-75mm` },   // P049
+    { name: 'Bubblegum',         hex: '#FA34C5', url: `${POLAR}/bubblegum-pla-1kg-1-75mm` },   // P058
+    { name: 'Bloopiter',         hex: '#6E3F8D', url: `${POLAR}/bloopiter-shiny-1kg-1-75mm` },   // P063
+    { name: 'Purplex',           hex: '#8500CC', url: `${POLAR}/purplex-pla-1kg-1-75mm` },   // P066
+    { name: 'Seafoam',           hex: '#00A37A', url: `${POLAR}/seafoam-pla-1kg-1-75mm-copy` },   // P093
+    { name: 'Nuclear Green',     hex: '#00D165', url: `${POLAR}/nuclear-green-pla-1kg-1-75mm` },   // P114
+    { name: 'Lavender',          hex: '#D696EE', url: `${POLAR}/lavender-pla-1kg-1-75mm` },   // P548
+    { name: 'Retro Platinum',    hex: '#ECE7DA', url: `${POLAR}/retro-platinum-pla-1kg-1-75mm` },   // P605
+    { name: 'Desert Tan',        hex: '#E5CC94', url: `${POLAR}/desert-tan-pla-1kg-1-75mm` },   // P606
+    { name: 'Army Green',        hex: '#6E8C5A', url: `${POLAR}/army-green-pla-1kg-1-75mm` },   // P607
+    { name: 'Power Gray 500',    hex: '#605F5C', url: `${POLAR}/power-gray-500-pla-1kg-1-75mm` },   // P630
+    { name: 'Blurple',           hex: '#6F5CFF', url: `${POLAR}/blurple-pla-1kg-1-75mm` },   // P691
+    { name: 'Mint',              hex: '#62F9B8', url: `${POLAR}/mint-pla-1kg-1-75mm` },   // P709
+    { name: 'Nebula',            hex: '#7123E7', url: `${POLAR}/neblua-pla-1kg-1-75mm` },   // P741
+    { name: 'Superior Blue',     hex: '#07489C', url: `${POLAR}/superior-blue-pla-1kg-1-75mm` },   // P772
+    { name: 'Power Gray 100',    hex: '#ADA49F', url: `${POLAR}/coming-soon-power-gray-100` },   // P780
+    { name: 'Michigan Dew',      hex: '#EAFF80', url: `${POLAR}/new-michigan-dew-pla-1kg-1-75mm` },   // P786
+  ].map(f => ({ ...f, label: `Polar ${f.name}` })) },
 ];
 
 export { FILAMENT_DB };
