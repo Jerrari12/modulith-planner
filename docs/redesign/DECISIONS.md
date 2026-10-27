@@ -5365,3 +5365,7 @@ no-shrink rule, the switcher at 26vw, `--top-r` never written. A phone.js resize
 because every workspace's resize handler already restacks (safe -> phone.bottom() -> stack). Phone e2e set 24/24 on GPU
 and SwiftShader, portrait unchanged; unit tests 672/672. Sol 01a17da4: one finding (the bottom inset), fixed; round 2 no
 objection.
+
+- **Live 2026-10-27 at `b46eb57`** (27 min after the push). Checked on the live planner at 780x260 (`chrome-boxes.mjs`,
+  ?done=off&skipgc=1): Colors, Build and Assemble with the rail (64x260), the stage's free region {72, 348, 62, 8}, the
+  Colors sheet open in the column; no page errors.
