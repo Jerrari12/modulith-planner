@@ -1448,6 +1448,62 @@ test('Parts: Print puts the whole list on paper, alone and black on white, on a 
   await b.ctx.close();
 });
 
+/* PART RENDERS IN THE LIST (Joey 2026-10-27: "why not include BOM thumbnail images for each part, we should have them?"):
+   every row has a frame beside its chip, 8 px or more from it; a row with a render shows it loaded from the parts host, and
+   the only rows without one are the bought parts nobody has photographed (parts.js partThumb). The phone sheet takes the
+   frame without running wider than itself, at Joey's S23 sizes, and paper leaves the renders off */
+test('Parts: a part render beside every row\'s chip, loaded; the phone sheet holds it; paper leaves it off', async () => {
+  const NO_RENDER = /socket head screw|hex nut|Adhesive rubber feet/;
+  const look = async (page, paper = false) => {
+    if (!paper) for (const img of await page.locator('#ws-parts .thumb img').all()) await img.scrollIntoViewIfNeeded();   // the renders load lazily
+    await page.waitForFunction(() => [...document.querySelectorAll('#ws-parts .thumb img')].every((i) => i.complete), null, { timeout: 30_000 }).catch(() => {});
+    return page.evaluate(() => {
+      const panel = document.getElementById('ws-parts'), pb = panel.getBoundingClientRect();
+      const rows = [...panel.querySelectorAll('.prow')].map((row) => {
+        const t = row.querySelector('.thumb'), img = t && t.querySelector('img'), r = row.getBoundingClientRect();
+        const tb = t && t.getBoundingClientRect(), cb = row.querySelector('.chip').getBoundingClientRect(), mb = row.querySelector('.mid').getBoundingClientRect();
+        return { name: row.querySelector('.name').textContent, buy: !!row.querySelector('.chip.buy'), thumb: !!t, img: !!img, loaded: !!(img && img.complete && img.naturalWidth > 0),
+          w: tb ? Math.round(tb.width) : 0, gap: tb ? Math.round(tb.left - cb.right) : null, mid: Math.round(mb.width), inside: r.right <= pb.right + 0.5 && (!tb || tb.left >= r.left - 0.5) };
+      });
+      return { rows, overflow: panel.scrollWidth - panel.clientWidth, shown: [...panel.querySelectorAll('.thumb')].filter((t) => getComputedStyle(t).display !== 'none').length };
+    });
+  };
+  const check = (v, size, where) => {
+    assert.ok(v.rows.length >= 5, `${where}: rows listed`);
+    const bad = v.rows.filter((r) => !r.thumb || r.w !== size || r.gap < 8 || !r.inside || (r.img ? !r.loaded : !(r.buy && NO_RENDER.test(r.name))));
+    assert.deepEqual(bad, [], `${where}: a ${size} px frame on every row, 8 px from the chip, inside the row; a render loaded on every row but the unphotographed bought parts`);
+    assert.ok(v.rows.filter((r) => r.loaded).length >= v.rows.length - 4, `${where}: renders on all but a few bought parts (${v.rows.filter((r) => !r.loaded).map((r) => r.name)})`);
+    assert.ok(v.overflow <= 1, `${where}: the list no wider than its panel (${v.overflow} px over)`);
+  };
+  const { ctx, page, errors } = await open('parts');
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  check(await look(page), 36, 'desktop');
+  await page.emulateMedia({ media: 'print' });
+  assert.equal((await look(page, true)).shown, 0, 'no renders on paper');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  for (const viewport of [{ width: 360, height: 675 }, { width: 780, height: 260 }]) {   // Joey's S23, portrait and landscape
+    const ph = await open('parts', { phone: true, viewport });
+    await ph.page.waitForSelector('#ws-parts .prow', { state: 'attached', timeout: 30_000 });
+    if (!(await ph.page.evaluate(() => document.querySelector('#ws-parts').classList.contains('open')))) await ph.page.locator('#ws-parts .sheet-handle').tap();
+    await settle(ph.page, 600);
+    const v = await look(ph.page);
+    check(v, 32, `${viewport.width}x${viewport.height}`);
+    assert.ok(v.rows.every((r) => r.mid >= 120), `${viewport.width}x${viewport.height}: the names keep room (${v.rows.map((r) => r.mid)})`);
+    // tracking adds a counters line to every row: it stays inside the row, and the badge and the link still share theirs
+    await ph.page.locator('#ws-parts button:has-text("Track my build")').tap();
+    await settle(ph.page, 400);
+    const t = await ph.page.evaluate(() => [...document.querySelectorAll('#ws-parts .prow')].map((row) => {
+      const r = row.getBoundingClientRect(), b = row.querySelector(':scope > .badge'), l = row.querySelector(':scope > .link');
+      const out = [...row.querySelectorAll('.progress > *')].map((e) => Math.round(e.getBoundingClientRect().right - r.right)).filter((d) => d > 1);
+      return { name: row.querySelector('.name').textContent, out, apart: !!(b && l) && Math.abs(b.getBoundingClientRect().top - l.getBoundingClientRect().top) > 12 };
+    }).filter((x) => x.out.length || x.apart));
+    assert.deepEqual(t, [], `${viewport.width}x${viewport.height}: tracking's counters inside the row, the badge beside the link`);
+    assert.deepEqual(clean(ph.errors), []);
+    await ph.ctx.close();
+  }
+});
+
 test('Assemble: Next steps through, Skip reaches the end, Back returns', async () => {
   const { ctx, page, errors } = await open('assemble');
   const cur = () => page.evaluate(() => window.__GEN2_VIEWER__.cur);

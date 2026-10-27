@@ -19,6 +19,7 @@ import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
+import { assetUrl } from '../config.js';
 import { ZONE_LABEL, isPaid, isAmazon, disclosureFor, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid link's disclosure, and its click event
 
 // eslint-disable-next-line no-undef
@@ -195,6 +196,51 @@ function releasedOverride(r, length) {
 }
 const remaining = (r, p) => Math.max(0, r.qty - (p?.had || 0) - (p?.made || 0));
 
+/* A ROW'S PICTURE (Joey, 2026-10-27: "why not include BOM thumbnail images for each part, we should have them?"). The
+   renders are the parts host's flat img/parts/ set (js/config.js assetUrl), the files the Assemble checklist shows by node
+   (generate.js imgFor). The vendored catalog's partImage() is the OLD planner's map - img/parts/185/..., GEN2_..._256p -
+   a layout the host does not have, so this maps the BOM's own names onto the host's files instead. Dots drop from a size
+   (0.5H -> 05H) as in every render name. A row with no render answers null and keeps an empty frame: the M3 socket screws,
+   the hex nut and the adhesive feet have no photograph (generate.js: no stand-in for a bought part), and a few render
+   batches have gaps (the img onerror empties the frame). BlockBar and Crystal show their A style, the series' own
+   render in the generator. */
+const HW_THUMB = { 'M3×6mm button head screw': 'ButtonHeadScrew_M3-6.png', 'Magnets 10×2mm or 6×2mm': 'Magnets.png', 'Countersunk wood screws (#6/#8)': 'WoodScrew_No6-19mm.png' };
+export function partThumb(name, variant) {
+  const d = (s) => s.replace(/\./g, '');
+  const file = (() => {
+    if (HW_THUMB[name]) return HW_THUMB[name];
+    let m;
+    if ((m = /^GEN2 (\d+)-(\dW-[\d.]+H) (Decor|Classic|Gridfinity Decor) Drawer$/.exec(name))) return `${m[3]} Drawer ${m[1]}-${d(m[2])}.png`;
+    if ((m = /^GEN2 (\d+) Case Extender - (\dW)-1H$/.exec(name))) return `Case Extender ${m[1]}-${m[2]}.png`;
+    if ((m = /^GEN2 (\d+) Case - (\dW-[\d.]+H)$/.exec(name))) return `Case ${m[1]}-${d(m[2])}.png`;
+    if ((m = /^GEN2 (\d+) Side Cover - ([\d.]+H)$/.exec(name))) return `SideCover_${m[1]}-${d(m[2])}.png`;
+    // "Classic Pro" before "Classic", as in partImage: the alternation is leftmost-first
+    if ((m = /^GEN2 (Essential|EdgeLabel|Classic Pro|Classic|Chevron) Decor Faceplate - (.+)$/.exec(name))) {
+      const fam = { Essential: null, EdgeLabel: 'EdgeLabel', 'Classic Pro': 'ClassicPro', Classic: 'ClassicDecor', Chevron: 'Chevron' }[m[1]];
+      return fam ? `${fam}_${d(m[2])}.png` : 'Faceplate-Essential.jpg';
+    }
+    if ((m = /^GEN2 Decor Faceplate Back Cover - (.+)$/.exec(name))) return `BackCover_${d(m[1])}.png`;
+    if ((m = /^GEN2 Decor Handles - (\w+) Series$/.exec(name))) return m[1] === 'Deco' ? 'Handle_Deco.png' : `Handle_${m[1]}_A.png`;
+    if ((m = /^GEN2 (\d+) Cover (Upper|Lower) \((C[UL])\) - (\dW)$/.exec(name))) return `${m[3]}-${m[1]}-${m[4]}.png`;
+    if ((m = /^GEN2 (\d+) Foot Rail (Upper|Lower) \((FR-[UL])\) - (\dW)$/.exec(name))) return `${m[3]}_${m[1]}-${m[4]}.png`;
+    if ((m = /^GEN2 (\d+) Shelf Insert - (\dW)$/.exec(name))) return `ShelfInsert_${m[1]}-${m[2]}.png`;
+    if ((m = /^GEN2 Shelf Lip - (\dW)$/.exec(name))) return `ShelfLip_${m[1]}.png`;
+    const w = /^(\dW) section$/.exec(variant || '');
+    if ((m = /^GEN2 Under Table Rails - (\d+)$/.exec(name)) && w) return `Rails ${m[1]}-${w[1]}.png`;
+    if (/^GEN2 Wall Mount Kit - Lite - \d+$/.test(name) && w) return `WallMount_Lite_${w[1]}.png`;
+    return { 'GEN2 QuickLock - Left': 'QuickLock.png', 'GEN2 QuickLock - Right': 'QuickLock-R.png', 'GEN2 Magnet Clip': 'Magnet Clip.png',
+      'GEN2 Drawer Stopper - Left': 'Drawer Stopper.png', 'GEN2 Drawer Stopper - Right': 'Drawer Stopper.png', 'GEN2 Foot (TPU)': 'TPU Foot.png' }[name] || null;
+  })();
+  return file ? `img/parts/${file}` : null;
+}
+/* the frame beside the chip: the render when there is one, else empty, so every row's name starts at the same place */
+function thumbEl(r) {
+  const p = partThumb(r.name, r.variant);
+  const box = el('span.thumb' + (p ? '' : '.none'));
+  if (p) box.appendChild(el('img', { src: assetUrl(p), alt: '', loading: 'lazy', decoding: 'async', onerror() { this.remove(); box.classList.add('none'); } }));
+  return box;
+}
+
 export function mountParts(stage, ctx) {
   const ac = new AbortController();
   const signal = ac.signal;
@@ -300,7 +346,7 @@ export function mountParts(stage, ctx) {
     for (const r of rs) {
       if (r.section !== last) {
         last = r.section; body.appendChild(el('h3', { text: r.section })); group = el('div.rows' + (table ? '.table' : '')); body.appendChild(group); groups.set(r.section, group);
-        if (table) group.appendChild(el('div.thead', {}, [el('span'), el('span', { text: 'Part' }), el('span', { text: 'Needed' }), el('span', { text: 'Already have' }), el('span', { text: 'Printed / bought' }), el('span', { text: 'Remaining' }), el('span')]));
+        if (table) group.appendChild(el('div.thead', {}, [el('span'), el('span'), el('span', { text: 'Part' }), el('span', { text: 'Needed' }), el('span', { text: 'Already have' }), el('span', { text: 'Printed / bought' }), el('span', { text: 'Remaining' }), el('span')]));
       }
       group.appendChild(table ? renderTableRow(r) : renderRow(r));
     }
@@ -320,7 +366,7 @@ export function mountParts(stage, ctx) {
     const left = remaining(r, p);
     const row = el('div.prow.well' + (st.tracking && left === 0 ? '.done' : ''));
     const regions = printLook(r);
-    row.append(chipEl(r, regions), el('span.qty.mono', { text: `×${r.qty}` }));
+    row.append(chipEl(r, regions), thumbEl(r), el('span.qty.mono', { text: `×${r.qty}` }));
     const mid = el('div.mid', {}, [el('div.name', { text: rowName(r) })]);
     if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: r.note }));
@@ -371,7 +417,7 @@ export function mountParts(stage, ctx) {
       ]);
     };
     const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site) || r.links?.stores?.find((s) => SHOWN.has(s.id));
-    row.append(chip, mid, el('span.mono.need', { text: String(r.qty) }), counter('had', 'Already have'), counter('made', r.hardware ? 'Bought' : 'Printed'),
+    row.append(chip, thumbEl(r), mid, el('span.mono.need', { text: String(r.qty) }), counter('had', 'Already have'), counter('made', r.hardware ? 'Bought' : 'Printed'),
       el('span.mono.left' + (left ? '' : '.ok'), { text: left ? String(left) : '✓ done' }),
       link ? storeLink(r, link) : r.unreleased ? el('span.link.dim', { text: 'Not released' }) : el('span'));
     return row;

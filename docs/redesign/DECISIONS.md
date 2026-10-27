@@ -5529,3 +5529,34 @@ Sol 01a17faa: two findings, both fixed - the Classic Pro core and its face data 
 EdgeLabel's, so one failed file would have blanked EdgeLabel labels too; both now load on their own (a failure leaves Classic
 Pro labels blank, or its part labels in words). E2E "Classic Pro core refused: an EdgeLabel label still shows its words"
 (the coupled load fails it). The frame order, the caches, the one icon catalog and the dropped stripe were confirmed.
+
+## 2026-10-27 · Parts: a part render on every row
+
+Joey, from the live planner's Parts list on a Classic Pro 185 tabletop build: "i like the colors around the blank square,
+but why not include BOM thumbnail images for each part, we should have them?"
+
+- **Each row shows the part's render beside its chip** (parts.js `partThumb`, `thumbEl`): 36 px on a desktop, 32 px on a
+  phone, 10 px from the chip; the chip and its ring are as they were. The renders are the parts host's flat `img/parts/`
+  set (config.js `assetUrl`), the files the Assemble checklist shows by node (generate.js `imgFor`). The vendored
+  catalog's `partImage()` was not reused: it is the old planner's map (`img/parts/185/...`, `GEN2_..._256p.png`), a layout
+  the host does not have. They load lazily (25 rows of ~50 KB each).
+- **Rows with no render keep an empty frame**, so every name starts at the same place: the M3 socket screws (6 and 12 mm),
+  the M3 hex nut and the adhesive rubber feet have no photograph (bought parts get no stand-in, as in the Assemble
+  checklist), and the host lacks three renders - Decor Drawer 270-4W-1H and the 59 Side Covers 2H and 3H (404 on the live
+  host). A missing file empties its frame rather than showing a broken image. BlockBar and Crystal handles show their A
+  style, the series' render in the generator.
+- **On a phone the badge and the link move under the name**, right-aligned. With the render beside the chip, a row with
+  both had 60 px of the 360 px sheet for its name (it was about 100 before); the landscape column (780x260) is as narrow.
+  Every row's name now has 120 px or more at both sizes. The break is a zero-height flex item ordered after the name, not
+  a fixed basis: a chip of several filaments is up to 35 px wide. With Track my build on, the counters' line comes last
+  and right-aligned (under the name it ran 30 px past a 360 px row).
+- **Paper leaves the renders off**: the print view stays the black-on-white checklist (the chip tells the rows apart), and
+  25 colour renders were ink and pages. The wide table's render column goes with them.
+
+E2E: "Parts: a part render beside every row's chip, loaded; the phone sheet holds it; paper leaves it off" (desktop,
+360x675, 780x260: a frame on every row 8 px or more from the chip and inside it, every render loaded but the
+unphotographed bought parts, the list no wider than its panel, none on paper; on the phone, tracking's counters inside
+the row and the badge beside the link). Mutant: the phone rules taken out, it fails (names at 59 px). Unit:
+test/parts-thumbs.test.mjs maps every row name the BOM bills, over every mount, length, style, handle, foot and size, to
+a file in the parts pool, and keeps the known-gap list honest. Terra 01a17fae: one finding (on the phone with tracking
+on, the counters' line split the badge from the link), fixed; the fix also found the counters overflowing at 360 px.

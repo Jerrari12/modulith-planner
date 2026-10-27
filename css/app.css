@@ -311,6 +311,9 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .chip.multi, #ws-insp .uprow .chip.multi { display: inline-flex; gap: 1px; width: auto; padding: 0; background: transparent; border: none; }
 #ws-parts .chip.multi i, #ws-insp .uprow .chip.multi i { display: block; width: 8px; height: 14px; border-radius: 3px; border: 1px solid rgba(128,128,128,.35); }
 #ws-parts .printin a, #ws-insp .uprow .printin a { color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; }
+/* the part's render beside the chip (parts.js thumbEl); a row without one keeps the empty frame, so the names line up */
+#ws-parts .thumb { flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+#ws-parts .thumb img { width: 100%; height: 100%; object-fit: contain; }
 #ws-parts .qty { font-size: 12px; font-weight: 600; width: 34px; flex: none; }
 #ws-parts .mid { flex: 1; min-width: 0; }
 #ws-parts .name { font-size: 13px; font-weight: 600; }
@@ -321,7 +324,7 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .link.dim { color: var(--ink-3); font-weight: 500; }
 /* the one commission line under the hardware rows (parts.js renderPanel), right-aligned under their Amazon links; .note sizes it */
 #ws-parts .rows .commission { margin: 2px 0 0; padding: 0 8px; text-align: right; }
-#ws-parts .progress { display: flex; align-items: center; gap: 8px; flex-basis: 100%; padding-left: 58px; }   /* its own line under the name */
+#ws-parts .progress { display: flex; align-items: center; gap: 8px; flex-basis: 100%; padding-left: 104px; }   /* its own line under the name: chip 14 + thumb 36 + qty 34 + three 10 px gaps */
 #ws-parts .counter { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--track); }
 #ws-parts .counter button { width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: var(--key-bg); color: var(--ink); cursor: pointer; font-size: 13px; line-height: 1; }
 #ws-parts .counter button[disabled] { opacity: .35; cursor: not-allowed; }
@@ -421,9 +424,9 @@ html.ws-2d #ws-tools .measure { visibility: hidden; }
 #ws-parts.wide { width: 820px; }
 html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-parts .rows.table { gap: 2px; }
-#ws-parts .thead { display: grid; grid-template-columns: 14px minmax(0, 1fr) 64px 118px 118px 90px 120px; gap: 10px; align-items: center; padding: 4px 8px 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+#ws-parts .thead { display: grid; grid-template-columns: 14px 36px minmax(0, 1fr) 64px 118px 118px 90px 120px; gap: 10px; align-items: center; padding: 4px 8px 6px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
 #ws-parts .thead span:nth-child(n+3) { text-align: center; }
-#ws-parts .prow.trow { display: grid; grid-template-columns: 14px minmax(0, 1fr) 64px 118px 118px 90px 120px; gap: 10px; align-items: center; min-height: 48px; }
+#ws-parts .prow.trow { display: grid; grid-template-columns: 14px 36px minmax(0, 1fr) 64px 118px 118px 90px 120px; gap: 10px; align-items: center; min-height: 48px; }
 #ws-parts .prow.trow .need, #ws-parts .prow.trow .left { text-align: center; font-size: 14px; font-weight: 600; }
 #ws-parts .prow.trow .left.ok { color: var(--success); font-size: 12px; }
 #ws-parts .prow.trow .link { justify-self: end; }
@@ -1101,7 +1104,15 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws-parts .sites .seg { padding: 0 2px; min-width: 0; overflow: hidden; }
   #ws-parts .row3 > .key { flex: 1; }
   #ws-parts .body { padding: 0 0 8px; }
-  #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 40px 96px 96px 60px; }
+  #ws-parts .thead, #ws-parts .prow.trow { grid-template-columns: 14px 32px minmax(0, 1fr) 40px 96px 96px 60px; }
+  #ws-parts .thumb { width: 32px; height: 32px; }
+  #ws-parts .progress { padding-left: 0; justify-content: flex-end; }   /* under the name it ran 30 px past a 360 px row; right-aligned like the badge and link */
+  /* the name keeps the rest of the first line and the badge and the link go under it, right-aligned: with the render beside
+     the chip, a row with both had 60 px of the 360 px sheet for its name (2026-10-27), and the landscape column is as narrow */
+  #ws-parts .prow:not(.trow)::after { content: ''; order: 1; flex-basis: 100%; height: 0; margin-top: -6px; }   /* the break: a chip of several filaments is up to 35 px wide */
+  #ws-parts .prow:not(.trow) > .badge, #ws-parts .prow:not(.trow) > .link { order: 2; }
+  #ws-parts .prow:not(.trow) > .mid + *, #ws-parts .prow:not(.trow) > .mid + .progress + .link { margin-left: auto; }
+  #ws-parts .prow:not(.trow) > .progress { order: 3; }   /* tracking: the counters' line comes last, so the badge and the link share theirs (Terra 01a17fae) */
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
   #ws-parts .rows.table .commission { display: none; }   /* its links are the hidden column */
   /* Colors: the panel's card keeps its actions in the sheet's first screen (the render beside the name, not above it);
@@ -1273,4 +1284,9 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
   html[data-ws="parts"] #ws-parts .counter { background: none !important; }
   html[data-ws="parts"] #ws-parts .chip, html[data-ws="parts"] #ws-parts .chip i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html[data-ws="parts"] #ws-parts a { text-decoration: none !important; }
+  /* the part renders stay on screen (2026-10-27): paper is the black-on-white checklist, the chip already tells the rows
+     apart, and 25 colour renders were ink and pages. Their column goes with them, so the table keeps its own columns */
+  html[data-ws="parts"] #ws-parts .thumb, html[data-ws="parts"] #ws-parts .thead > span:nth-child(2) { display: none !important; }
+  html[data-ws="parts"] #ws-parts .thead, html[data-ws="parts"] #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 64px 118px 118px 90px 120px !important; }
+  html[data-ws="parts"] #ws-parts .progress { padding-left: 58px; }
 }
