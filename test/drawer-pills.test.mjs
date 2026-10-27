@@ -56,3 +56,22 @@ test('the recheck is what keeps them apart: without it, the top case overlaps ag
   const items = three(600, 0);
   assert.ok(!apart(rects(items, broken(items, BOX, SA))), 'the mutant must overlap');
 });
+
+/* A SHORT CLEAR BAND (Joey's S23, 2026-10-27: Colors on a phone, the part card over the handles, the model framed in the
+   144 px above it): no height above or below is free, so the third pill went on top of the other two. It goes beside them */
+const PHONE = { width: 360, height: 675 }, PSA = { left: 8, right: 8, top: 110, bottom: 381 };
+test('a phone band with no free height: the pills sit side by side, inside it, none overlapping', () => {
+  const items = [{ x: 134, y: 177, w: 72, h: 34 }, { x: 134, y: 220, w: 72, h: 34 }, { x: 154, y: 206, w: 69, h: 34 }];   // measured
+  const rs = rects(items, placePills(items, PHONE, PSA));
+  assert.ok(rs.every((q) => q.l >= PSA.left && q.r <= PHONE.width - PSA.right && q.t >= PSA.top && q.b <= PHONE.height - PSA.bottom), `inside the band ${JSON.stringify(rs)}`);
+  assert.ok(apart(rs), `no two overlap ${JSON.stringify(rs)}`);
+  const broken = load(CODE.replace('if (fx !== undefined) x = fx;', ''));
+  assert.ok(!apart(rects(items, broken(items, PHONE, PSA))), 'without the sideways step they overlap (the mutant must)');
+});
+
+test('a gap that fits beside a pill is found whatever the widths (Sol 01a17d42: fixed steps from the line point missed it)', () => {
+  const box = { width: 360, height: 675 }, sa = { left: 8, right: 8, top: 110, bottom: 445 };   // only y 170 fits a 104 px pill
+  const items = [{ x: 200, y: 170, w: 100, h: 104 }, { x: 210, y: 170, w: 100, h: 104 }];
+  const at = placePills(items, box, sa), rs = items.map((q, i) => ({ l: at[i].x - q.w / 2, r: at[i].x + q.w / 2, t: at[i].y - q.h / 2, b: at[i].y + q.h / 2 }));
+  assert.ok(apart(rs) && rs.every((q) => q.l >= sa.left && q.r <= box.width - sa.right), JSON.stringify(rs));
+});

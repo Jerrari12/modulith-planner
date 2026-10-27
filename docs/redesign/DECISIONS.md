@@ -5271,3 +5271,38 @@ the search is wrapped), so it was a claim no test could fail. Mutants on what st
 the hidden title row, the reset's grid placement, the keydown guard - each fail the phone picker case. Phone e2e set: GPU
 18/18, SwiftShader 17 + the room's spool case skipped there; unit tests 670/670. Sol 01a17d29: one P2 (the keydown),
 fixed; round 2 no objection.
+
+- **Live 2026-10-27 at `358870d1`** (a bug Joey reported: deploys once checks pass). Main run 40499232643, every job green
+  (shard 6 the slowest, ~25 min to live). Checked on the live planner at Joey's S23 size (360x675, `picker-space.mjs`,
+  `sheets-audit.mjs`, ?skipgc=1): the picker's title row hidden, the search and chips on one 36 px row, the list at full
+  height (1309 px) in the 378 px sheet; the Parts sheet clips nothing (3764 px scrolling); no page errors.
+
+## 2026-10-27 - Phone: the part card sits under the model; the drawer's pills side by side
+
+Joey, on his S23 (360x675 in his browser), Colors, a faceplate tapped, Open the drawer: the drawer opened behind the part
+card. Measured: the card (193 px, three rows) sat over the model, because the stage's safe area knew only the sheet
+handles (bottom 214), so the guided camera framed the build under the card; the opened drawer's inside W / L / H pills
+then piled on each other in what was left; and the card said "4 of this sizes".
+
+- **colors.js `phoneBottom()`**: on a phone, with the card shown, the safe area ends at the card's top + 8 px (unless the
+  band left is under 120 px). The stage re-fits a guided camera to the new free region as it does for any panel; a
+  camera the visitor has taken stays put.
+- **The card, shorter** (phone CSS): the region chips and the actions (Open the drawer, a download) share one wrapping
+  row under the title: 193 -> 153 px.
+- **`placePills`**: when no height above or below is free, a pill goes beside the others at its height - the candidates
+  are just clear of each placed pill's edges, nearest first (Sol 01a17d42: fixed steps from the line point missed a gap
+  that fits). Unit tests: the S23 band, and Sol's counter-example.
+- **"N of this size"** (n() pluralised the whole phrase).
+
+Not done, on purpose: a peek never moves the camera (2026-10-21, the Build Peek inside e2e pins it), and the drawer slides
+toward the camera past the framed build, so in the studio view its front lip can reach the card's edge - 88 % of the
+opened unit shows above the card at 360x675 (11 % before); in the room it all shows. The e2e asserts >= 75 %.
+
+Measured, not changed - THE PHONE ON ITS SIDE: at 780x260 (the S23 in landscape, the browser's bars included) the top
+bar and tools take 110 px and the dock and tab bar 124 of the 260, so the model gets 26 px, and an open sheet (its 160 px
+floor) runs off the top. Needs a layout of its own; Joey's call.
+
+New e2e case "Colors on a phone: a tapped part's card sits under the model, framed above it, its chips and Open the
+drawer on shared rows" (360x675; e2e `open()` takes a phone `viewport`); its mutants (phoneBottom returning the handles'
+line; the card's display: contents) fail it. Phone + Peek inside e2e 21/21 on GPU and SwiftShader; unit tests 672/672.
+Sol 01a17d42: one finding (the pills' candidates), fixed; round 2 no objection.

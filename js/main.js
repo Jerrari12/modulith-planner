@@ -7309,8 +7309,10 @@ function placePills(items, box, sa) {
   const placed = [];
   return items.map(({ x: px, y: py, w, h }) => {
     const lo = sa.top + h / 2 + 8, hi = box.height - sa.bottom - h / 2 - 8;
-    const x = clamp(px, sa.left + w / 2 + 8, box.width - sa.right - w / 2 - 8);
-    const hits = (y) => placed.some((p) => Math.abs(p.x - x) < (w + p.w) / 2 + 6 && Math.abs(p.y - y) < (h + p.h) / 2 + 6);
+    const xlo = sa.left + w / 2 + 8, xhi = box.width - sa.right - w / 2 - 8;
+    let x = clamp(px, xlo, xhi);
+    const hitsAt = (x, y) => placed.some((p) => Math.abs(p.x - x) < (w + p.w) / 2 + 6 && Math.abs(p.y - y) < (h + p.h) / 2 + 6);
+    const hits = (y) => hitsAt(x, y);
     let y = clamp(py, lo, hi);
     if (hits(y)) {
       const step = Math.max(h, ...placed.map((p) => p.h)) + 6;
@@ -7318,6 +7320,14 @@ function placePills(items, box, sa) {
       for (let k = 1; k <= 2 * placed.length + 1; k++) tries.push(y - k * step, y + k * step);
       const free = tries.find((t) => t >= lo && t <= hi && !hits(t));
       if (free !== undefined) y = free;
+      else {
+        // no free height - a short clear band (a phone over the part card, Joey's S23 2026-10-27: the three pills piled on
+        // the drawer they measure) - so beside them, at this height, nearest first: just clear of each placed pill's either
+        // side, the edges themselves, so a gap that fits is found whatever the widths (Sol 01a17d42: fixed steps missed one)
+        const xs = placed.flatMap((p) => [p.x + (w + p.w) / 2 + 6, p.x - (w + p.w) / 2 - 6]).sort((a, c) => Math.abs(a - x) - Math.abs(c - x));
+        const fx = xs.find((t) => t >= xlo && t <= xhi && !hitsAt(t, y));
+        if (fx !== undefined) x = fx;
+      }
     }
     placed.push({ x, y, w, h });
     return { x, y };

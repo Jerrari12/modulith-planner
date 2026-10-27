@@ -1058,6 +1058,11 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
      over them; an open sheet (13) still covers them. At a fixed 132 px with z-index 6 they were under the handles: Place /
      Cancel, the issue card's text and its buttons (the phone check, 2026-10-17) */
   #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: calc(var(--sheet-stack, 126px) + 6px); max-height: 44vh; z-index: 12; }
+  /* the part card, shorter (it sits over the model, which is framed above it, colors.js phoneBottom): the region chips and
+     the actions (Open the drawer, the download) flow in one wrapping row under the title - 193 px was three rows */
+  #ws-partcard { flex-direction: row; flex-wrap: wrap; gap: 8px 6px; }
+  #ws-partcard .chead { flex: 1 1 100%; }
+  #ws-partcard .chips, #ws-partcard .cacts { display: contents; }
   /* the toast likewise, over everything (it takes no pointer events), at a readable width: left 50% held it to half the
      screen, and at the desktop's 100 px it sat behind the dock and the handles */
   #ws #ws-toast { bottom: calc(var(--sheet-stack, 126px) + 10px); z-index: 14; width: max-content; max-width: calc(100vw - 40px); box-sizing: border-box; text-align: center; }   /* #ws: the toast's own rule comes later in this file */

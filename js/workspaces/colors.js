@@ -913,7 +913,7 @@ export function mountColors(stage, ctx) {
     card.append(
       el('div.chead', {}, [
         el('span.sw' + silk(ownPick ? (ownPick.name || ownPick.label) : w && w.name), { style: `background:${ownPick ? ownPick.hex : stage.activeHex(primary)}` }),
-        el('div.col', {}, [el('b', { text: info.label }), el('span.meta', { text: `${n(info.qty, 'of this size')} · ${n(total, TYPE_PLURAL[info.type] ? TYPE_PLURAL[info.type].replace(/s$/, '') : info.type.toLowerCase(), TYPE_PLURAL[info.type] || info.type.toLowerCase() + 's')} in the build${unitIdx ? ` · unit ${unitIdx}` : ''} · ${info.locked ? 'bought, not printed' : ownPick ? `${ownPick.name} (this ${unitWord()}’s own)` : w ? w.name : 'instruction colour'}` })]),
+        el('div.col', {}, [el('b', { text: info.label }), el('span.meta', { text: `${info.qty} of this size · ${n(total, TYPE_PLURAL[info.type] ? TYPE_PLURAL[info.type].replace(/s$/, '') : info.type.toLowerCase(), TYPE_PLURAL[info.type] || info.type.toLowerCase() + 's')} in the build${unitIdx ? ` · unit ${unitIdx}` : ''} · ${info.locked ? 'bought, not printed' : ownPick ? `${ownPick.name} (this ${unitWord()}’s own)` : w ? w.name : 'instruction colour'}` })]),
         el('button.x', { title: 'Deselect', 'aria-label': 'Deselect', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })]),
       ]),
     );
@@ -988,7 +988,14 @@ export function mountColors(stage, ctx) {
      still model); on the phone the sheet manager's heights already include an open sheet */
   /* the open tray lifts the safe area's floor ONCE, when it opens (the stage refits only a camera the visitor has not taken);
      a flip never calls this, so the camera stays where the visitor left it between finalists (step 4) */
-  function safeArea() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
+  /* on a phone the part card sits over the handles, and the model above it (Joey 2026-10-27, on his S23: Open the drawer
+     opened the drawer behind the card) - unless that leaves the model less than 120 px, where the handles' line stands */
+  function phoneBottom() {
+    const b = phone.bottom(); if (card.hidden) return b;
+    const r = card.getBoundingClientRect(), under = Math.round(innerHeight - r.top) + 8;
+    return r.height && under > b && innerHeight - phone.top() - under >= 120 ? under : b;
+  }
+  function safeArea() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phoneBottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
   function safe() { safeArea(); if (room && room.handle) room.handle.refit(); }   // the room's shot follows the free region too (the picker opening narrows it)
   function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });

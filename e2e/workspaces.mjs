@@ -90,7 +90,7 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
    30000ms exceeded; this suite passed locally on a real GPU every time) */
 const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} };
 async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
-async function open(ws, { query = '', phone = false, context = null, visitor = false } = {}) {
+async function open(ws, { query = '', phone = false, context = null, visitor = false, viewport = null } = {}) {   // viewport: a phone's own size (390 x 844 when not given)
   /* the room is on for everyone (Joey 2026-10-26): a case about something else keeps the studio it was written for
      (?done=off); the room's own cases ask for it (?done=room), or open as a visitor does, with no flag at all */
   const roomy = visitor || /done=room/.test(query);
@@ -99,7 +99,7 @@ async function open(ws, { query = '', phone = false, context = null, visitor = f
   // ?mugs=plan for the link's own) gets the room as it was composed: one mug at home, the notebook on the desk
   if (roomy && !/mugs=/.test(query)) query += '&mugs=home';
   if (roomy && !/spools=/.test(query)) query += '&spools=off';   // and no spools, unless it asks (?spools=plan)
-  const ctx = context || await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
+  const ctx = context || await browser.newContext(phone ? { viewport: viewport || { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
   if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const page = await ctx.newPage();
@@ -3389,6 +3389,41 @@ test('Colors on a phone: a region\'s picker shows its filaments at their full he
   await settle(page, 600);
   const p = await page.evaluate(() => { const b = document.querySelector('#ws-parts .body'), s = document.querySelector('#ws-parts'); return { h: Math.round(b.getBoundingClientRect().height), full: b.scrollHeight, sheetScrolls: s.scrollHeight > s.clientHeight }; });
   assert.ok(p.h >= p.full - 2 && p.h > 300 && p.sheetScrolls, `the Parts list at its full height, the sheet scrolling it (${JSON.stringify(p)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE PART CARD ON A PHONE (Joey 2026-10-27, on his S23, 360 x 675 in his browser: "when I'm in the color tab and I select
+   open drawer" - the drawer opened behind the card): the stage frames the model above the card, not just above the
+   handles (colors.js phoneBottom), and the card is shorter - its region chips and Open the drawer share one wrapping row */
+test('Colors on a phone: a tapped part\'s card sits under the model, framed above it, its chips and Open the drawer on shared rows', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-colors .crow'), null, { timeout: 60_000 });
+  await settle(page, 1500);
+  const id = await page.evaluate(() => window.__GEN2_STORE__.state.placed[0].id);
+  const sp = await page.evaluate((i) => window.__GEN2_VIEWER__.unitScreen(i), id);
+  assert.ok(sp && await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName === 'CANVAS', sp), `the first unit's front is on the model (${JSON.stringify(sp)})`);
+  await page.touchscreen.tap(sp.x, sp.y);
+  await page.waitForFunction(() => !document.querySelector('#ws-partcard').hidden, null, { timeout: 30_000 }).catch(() => assert.fail('the tap showed no part card'));
+  const open1 = page.locator('#ws-partcard button', { hasText: 'Open the drawer' });
+  assert.equal(await open1.count(), 1, 'the tapped part rides a drawer: the card offers Open the drawer');
+  await open1.tap();
+  await settle(page, 2000);   // the guided camera's 500 ms re-fit to the new free region, and the drawer's slide
+  const m = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, c = document.querySelector('#ws-partcard').getBoundingClientRect(), r = v.renderer.domElement.getBoundingClientRect();
+    const owner = v.partInfo(v.selectedId).owner, b = v.unitBox(owner); let y0 = 1e9, y1 = -1e9;
+    for (let i = 0; i < 8; i++) { const p = new T.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(v.camera); const y = r.top + (1 - p.y) / 2 * r.height; y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const top = (q) => Math.round(q.getBoundingClientRect().top);
+    const btn = [...document.querySelectorAll('#ws-partcard button.key')].find((x) => /Open the drawer/.test(x.textContent));
+    return { vh: innerHeight, cardTop: Math.round(c.top), cardH: Math.round(c.height), safe: v.safeArea, unit: [Math.round(y0), Math.round(y1)], btnTop: top(btn), chipTops: [...document.querySelectorAll('#ws-partcard .zchip')].map(top), meta: document.querySelector('#ws-partcard .meta').textContent };
+  });
+  assert.ok(m.safe && m.safe.bottom >= m.vh - m.cardTop, `the stage's free region ends above the card (${JSON.stringify(m)})`);
+  // the build is framed above the card; the opened drawer slides toward the camera past the framed build (a peek never
+  // moves the camera, 2026-10-21), so its front lip may reach the card's edge - three quarters of the unit or more shows
+  // (measured 0.88 at 360 x 675; with the card left out of the free region, 0.11: the drawer opened behind the card)
+  assert.ok((m.cardTop - m.unit[0]) / (m.unit[1] - m.unit[0]) >= 0.75, `the opened unit shows above the card, not behind it (${JSON.stringify(m)})`);
+  assert.ok(m.chipTops.includes(m.btnTop), `Open the drawer shares a row with the region chips (${JSON.stringify(m)})`);
+  assert.match(m.meta, /^\d+ of this size · /, `"of this size", never "of this sizes" (${m.meta})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
