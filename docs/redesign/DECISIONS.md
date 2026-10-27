@@ -5226,3 +5226,14 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   (`D:\Claude - Output\done-scene-spools-2026-10-26\live`, ?skipgc=1, High): Colors on the room with no flag, Room |
   Neutral and Showcase shown, every script and the three scene modules stamped `v=4a9e3cf6`, Showcase into the final
   scene with "Back to Colors", no page errors. The other session held its pushes to main until then.
+
+## 2026-10-26 · The e2e shard weights are the CI runner's own
+
+- **Why:** the first weights were a local soft-render run of 89 cases; the final scene added 24 more, unknown to them, and
+  its room cases run 22-339 s on the runner (run 40425689471). On the green run 40435163187 the six shards' e2e steps took
+  10.2-14.3 min.
+- **Change:** e2e/shard-weights.json regenerated from that run's per-shard notices: each case's runner seconds, divided by
+  its shard machine's speed against the cases the old weights knew (factors 0.98-2.0, the pool's own spread), so the
+  six machines share one scale; the 15 cases that skip on the runner (ten room cases under SOFTWARE_GL, the Studio
+  ones) weigh 0.5 s. Judged by these weights, the old split's slowest shard carried 665 s (341-665) and the new one
+  488 s on every shard. The machines' own speed spread still decides the wall clock, as on 2026-10-26's benchmark.
