@@ -3501,22 +3501,25 @@ test('the phone on its side: the tabs a rail, the bar and the tools one row, the
 test('the phone tour: an open sheet hides what it covers, its handle hides what scrolls under it, Assemble\'s words and keys fit, Label settings take a finger', async () => {
   const S23 = { width: 360, height: 675 }, SIDE = { width: 780, height: 260 };
   const vis = (page, q) => page.evaluate((q) => { const e = document.querySelector(q); return e ? getComputedStyle(e).visibility : null; }, q);
+  // one-line messages carrying the value: on Node 24 a failed equal / deepEqual prints its diff in place of the message, and
+  // the CI annotations show only one-line errors (run 40573879962 named this case and nothing else)
+  const same = (actual, expected, msg) => assert.ok(JSON.stringify(actual) === JSON.stringify(expected), `${msg} (got ${JSON.stringify(actual)})`);
   {
     const { ctx, page, errors } = await open('build', { phone: true, viewport: S23 });
     await settle(page, 1500);
     const sp = await page.evaluate(() => window.__GEN2_VIEWER__.unitScreen(window.__GEN2_STORE__.state.placed[0].id));
     await page.touchscreen.tap(sp.x, sp.y);
     await page.waitForFunction(() => { const s = document.getElementById('ws-insp'); return s && !s.hidden; }, null, { timeout: 30_000 });
-    assert.equal(await vis(page, '#ws-lib'), 'visible', 'the control: both handles show while both sheets are collapsed');
+    same(await vis(page, '#ws-lib'), 'visible', 'the control: both handles show while both sheets are collapsed');
     await page.click('#ws-insp .sheet-handle');
     await page.waitForFunction(() => document.getElementById('ws-insp').classList.contains('open'), null, { timeout: 15_000 });
-    assert.equal(await vis(page, '#ws-lib'), 'hidden', 'the library\'s collapsed handle steps out under the open unit sheet');
-    assert.equal(await vis(page, '#ws-dock'), 'visible', 'upright the open sheet sits above the dock, which stays');
-    assert.equal((await page.evaluate(() => getComputedStyle(document.querySelector('#ws-insp .sheet-handle')).backgroundImage)).match(/gradient/g)?.length, 2, 'the handle\'s glass tripled: the colour and two layers over it');
+    same(await vis(page, '#ws-lib'), 'hidden', 'the library\'s collapsed handle steps out under the open unit sheet');
+    same(await vis(page, '#ws-dock'), 'visible', 'upright the open sheet sits above the dock, which stays');
+    same((await page.evaluate(() => getComputedStyle(document.querySelector('#ws-insp .sheet-handle')).backgroundImage)).match(/gradient/g)?.length, 2, 'the handle\'s glass tripled: the colour and two layers over it');
     await page.click('#ws-insp .sheet-handle');
     await page.waitForFunction(() => !document.getElementById('ws-insp').classList.contains('open'), null, { timeout: 15_000 });
-    assert.equal(await vis(page, '#ws-lib'), 'visible', 'closed, the library\'s handle is back');
-    assert.deepEqual(clean(errors), [], 'build');
+    same(await vis(page, '#ws-lib'), 'visible', 'closed, the library\'s handle is back');
+    same(clean(errors), [], 'build');
     await ctx.close();
   }
   {
@@ -3524,14 +3527,14 @@ test('the phone tour: an open sheet hides what it covers, its handle hides what 
     await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
     await page.click('#ws-labels .sheet-handle');
     await page.waitForFunction(() => document.getElementById('ws-labels').classList.contains('open'), null, { timeout: 15_000 });
-    assert.equal(await vis(page, '#ws-dock'), 'hidden', 'on its side the sheet takes the whole column: the dock under it steps out');
+    same(await vis(page, '#ws-dock'), 'hidden', 'on its side the sheet takes the whole column: the dock under it steps out');
     // Label settings: Off / On at a finger's 32 px
     const segs = await page.evaluate(() => { const d = [...document.querySelectorAll('#ws-labels details')].find((x) => x.querySelector('.srow .seg.sm')); d.open = true; return [...d.querySelectorAll('.srow .seg.sm')].map((b) => Math.round(b.getBoundingClientRect().height)); });
     assert.ok(segs.length && segs.every((h) => h >= 32), `Label settings' Off / On ${segs.join(', ')} px`);
     await page.click('#ws-labels .sheet-handle');
     await page.waitForFunction(() => !document.getElementById('ws-labels').classList.contains('open'), null, { timeout: 15_000 });
-    assert.equal(await vis(page, '#ws-dock'), 'visible', 'closed, the dock is back');
-    assert.deepEqual(clean(errors), [], 'labels');
+    same(await vis(page, '#ws-dock'), 'visible', 'closed, the dock is back');
+    same(clean(errors), [], 'labels');
     await ctx.close();
   }
   for (const [vp, side] of [[SIDE, true], [S23, false], [{ width: 320, height: 640 }, false]]) {
@@ -3549,17 +3552,17 @@ test('the phone tour: an open sheet hides what it covers, its handle hides what 
       const rows = new Set([...document.querySelectorAll('#ws-player .row2 .key')].filter((b) => b.getClientRects().length).map((b) => Math.round(b.getBoundingClientRect().top))).size;
       // a word wider than its key: clipped to an ellipsis inside it, or it paints over the next key
       const over = keys.filter((b) => b.scrollWidth > b.clientWidth).map((b) => [b.textContent.trim(), getComputedStyle(b).overflowX, getComputedStyle(b).textOverflow]);
-      return { own: t.scrollHeight > t.clientHeight + 1, lines, rows, over };
+      return { own: t.scrollHeight > t.clientHeight + 1, lines, rows, over, widths: keys.map((b) => [b.scrollWidth, b.clientWidth]) };
     });
-    if (side) assert.equal(m.own, false, `on its side the step's words are not a scroller of their own: the card scrolls (${JSON.stringify(m)})`);
+    if (side) same(m.own, false, `on its side the step's words are not a scroller of their own: the card scrolls (${JSON.stringify(m)})`);
     // and the five keys still one row: words kept whole by pushing Next onto a row of its own made the card taller
     else assert.ok(m.lines.length >= 3 && m.lines.every(([, n]) => n === 1) && m.rows === 1, `upright every key on one line, all on one row (${JSON.stringify(m)})`);
-    if (vp.width === 360) assert.deepEqual(m.over, [], 'at the S23\'s 360 px every key\'s words fit it whole');
+    if (vp.width === 360) same(m.over, [], `at the S23's 360 px every key's words fit it whole (scroll / client widths ${JSON.stringify(m.widths)})`);
     if (vp.width === 320) {
       assert.ok(m.over.length, `the control: at 320 px "Slow-mo" is wider than its key (${JSON.stringify(m)})`);
       assert.ok(m.over.every(([, o, t]) => o === 'hidden' && t === 'ellipsis'), `at 320 px a word too wide for its key ends in an ellipsis inside it (Terra 01a17e76) (${JSON.stringify(m.over)})`);
     }
-    assert.deepEqual(clean(errors), [], 'assemble');
+    same(clean(errors), [], 'assemble');
     await ctx.close();
   }
 });
