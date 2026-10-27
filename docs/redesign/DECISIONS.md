@@ -5416,3 +5416,9 @@ finding (the words at 320 px), fixed.
   is dropped (and the `document.fonts.ready` wait, whose premise was wrong); one line, one row and an ellipsis kept inside
   the key at 320 hold in any font and stay. The 4 px padding is a value chosen in Segoe UI and has no test now. The font
   itself is for Joey: fixing it changes the face of every word in the planner.
+
+- **Live 2026-10-27 at `ee84ee5`** (run green after the three above; live by 17:25). Checked on the live planner
+  (`tour-live.mjs`, SwiftShader, ?done=off&skipgc=1): Build 360x675 (the library handle hidden under the open unit sheet,
+  the handle's three layers), Labels 780x260 (the dock hidden under the open sheet, Off / On 32 px, the editor one row
+  with `Edit · "LIVE CHECK"` and its ×, which closes it), Assemble 360x675 (keys one line, one row, none cut) and 780x260
+  (the words not their own scroller); no page errors. 12/12.
