@@ -3424,6 +3424,9 @@ test('Colors on a phone: a tapped part\'s card sits under the model, framed abov
   assert.ok((m.cardTop - m.unit[0]) / (m.unit[1] - m.unit[0]) >= 0.75, `the opened unit shows above the card, not behind it (${JSON.stringify(m)})`);
   assert.ok(m.chipTops.includes(m.btnTop), `Open the drawer shares a row with the region chips (${JSON.stringify(m)})`);
   assert.match(m.meta, /^\d+ of this size · /, `"of this size", never "of this sizes" (${m.meta})`);
+  // and no inside-size pills on it: they are Build's, zoomed in (Joey 2026-10-27, peekUnit { pills: false })
+  const pillsShown = () => page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].filter((id) => { const e = document.getElementById(id); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }));
+  assert.deepEqual(await pillsShown(), [], 'Colors\' Open the drawer shows no W / L / H pills');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -6042,6 +6045,50 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   assert.deepEqual(await openSheets(), [], 'Build: the model is the hero again');
   await page.locator('#ws-tools button[title^="Undo"]').tap();
   await page.waitForFunction((n) => window.__GEN2_VIEWER__.filamentsInBuild().count === n, c3.fc, { timeout: 30_000 }).catch(() => assert.fail('Undo in Build did not take Simplify back'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE PEEK'S PILLS, ONLY ZOOMED IN (Joey 2026-10-27: "maybe only make the pills show up in build when they zoom in on the
+   drawer"): they show while they cover at most a fifth of the open drawer on the screen (main.js peekPillsFit). At Build's
+   own framing on a desktop they cover 10 % of it and show (the Peek inside cases below); on his S23 (360 x 675) the
+   drawer is about 142 x 138 px, they would cover 37 %, and they wait for a zoom */
+test('Build on a phone: Peek inside opens the drawer without its pills at the phone\'s own framing, the drawer too small for them', async () => {
+  const { ctx, page, errors } = await open('build', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest, null, { timeout: 60_000 });
+  await settle(page, 1500);
+  const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: d.id, owner: v.partInfo(d.id).owner, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
+  assert.ok(await page.evaluate((o) => window.__GEN2_VIEWER__.peekUnit(o), drawer.owner), 'Build\'s Peek inside (stage.peekUnit, its pills allowed) opened it');
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + drawer.collection - 13.5], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
+  await settle(page, 800);
+  const m = await page.evaluate((id) => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, b = new T.Box3().setFromObject(v.instances.get(id).group), r = v.renderer.domElement.getBoundingClientRect(); let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (let i = 0; i < 8; i++) { const p = new T.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(v.camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+    const shown = ['dim-w', 'dim-l', 'dim-h'].filter((q) => { const e = document.getElementById(q); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; });
+    const c = (q) => Math.min(1, Math.max(-1, q));   // its part on the screen, as the stage weighs it
+    return { box: [Math.round((c(x1) - c(x0)) * r.width / 2), Math.round((c(y1) - c(y0)) * r.height / 2)], shown, peek: document.documentElement.classList.contains('ws-drawer-dims') };
+  }, drawer.id);
+  assert.ok(m.peek, `the peek holds the drawer's sizes (${JSON.stringify(m)})`);
+  assert.ok(3 * 72 * 34 > 0.2 * m.box[0] * m.box[1], `the control: at this framing three pills would cover more than a fifth of the drawer (${JSON.stringify(m)})`);
+  assert.deepEqual(m.shown, [], `no pills on a drawer too small for them (${JSON.stringify(m)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* COLORS OPENS A DRAWER WITHOUT ITS PILLS (Joey 2026-10-27: the inside sizes are Build's): on a desktop, where the drawer
+   is big enough for them and Build's Peek inside shows them, the Colors card's Open the drawer shows none */
+test('Colors: the card\'s Open the drawer opens it with no W / L / H pills, on a desktop where Build would show them', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest, null, { timeout: 60_000 });
+  await settle(page, 1200);
+  const d = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const i = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: i.id, z0: v.instances.get(i.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), d.id);
+  const btn1 = page.locator('#ws-partcard button', { hasText: 'Open the drawer' });
+  await btn1.click({ timeout: 30_000 });
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [d.id, d.z0 + d.collection - 13.5], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
+  await settle(page, 800);
+  const shown = await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].filter((id) => { const e = document.getElementById(id); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }));
+  assert.deepEqual(shown, [], 'no pills from the Colors card');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

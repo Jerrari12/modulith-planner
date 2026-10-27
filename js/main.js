@@ -7187,14 +7187,23 @@ function drawerInterior(carrier) {
 /* THE PLANNER'S OPEN DRAWER (2026-10-21, Joey: "we no longer get interior dimensions when opening a drawer like we did in
    the old planner"): peekUnit - Build's Peek inside, the Colors card's Open the drawer - enters this focus with
    { swing: false, peek: true }: the inside W / L / H on the open drawer, with no camera swing (the planner never takes the
-   camera unasked), and closing it gives the build's own pills back as they were (dFocus.peek.dimsWas). */
-function enterDrawerFocus(carrier, { swing = true, peek = false } = {}) {
-  if (dFocus.carrier === carrier) return;
+   camera unasked), and closing it gives the build's own pills back as they were (dFocus.peek.dimsWas).
+   THE PEEK'S PILLS, ONLY ZOOMED IN (Joey 2026-10-27, after his S23 showed the three on a drawer smaller than they were:
+   "maybe only make the pills show up in build when they zoom in on the drawer"): `pills` is 'all' (the viewer's own
+   focus, its camera swung onto the drawer), 'fit' (Build's Peek inside: while they cover at most PEEK_PILL_COVER of the
+   open drawer on the screen, updateDrawerDims) or 'none' (the Colors card). At Build's own framing on a desktop they
+   cover 10 % of it, on a phone 37 %, so a phone zooms in first. Every entry sets it, the same drawer again included (Sol
+   01a17d58: an entry that returned early kept the last one's) */
+function enterDrawerFocus(carrier, { swing = true, peek = false, pills = 'all' } = {}) {
+  if (dFocus.carrier === carrier) { dFocus.pills = pills; invalidateFrame(); return; }
   exitDrawerFocus(true); // switching drawers: drop the old lines, keep the saved pose
   const it = drawerInterior(carrier);
   if (!it) { if (dFocus.peek) endPeekFocus(); return; }
   const held = dFocus.peek, wasOn = dims.on; dFocus.peek = null;   // so the setDims below is not read as the ruler taking the pills
   dFocus.carrier = carrier;
+  dFocus.pills = pills; dFocus.pillsFit = false;
+  // the drawer's own box in its group's frame (drawers are unrotated), for the screen size the pills are weighed against
+  dFocus.box = new THREE.Box3().setFromObject(carrier.group).translate(carrier.group.position.clone().negate());
   if (swing && !dFocus.saved) dFocus.saved = { pos: camera.position.clone(), target: controls.target.clone() };
   setDims(false); // the drawer owns the stage — overall dims come back on exit
   if (peek) dFocus.peek = held || { dimsWas: wasOn };   // a hop from one peeked drawer to the next keeps the first one's
@@ -7277,6 +7286,27 @@ function endPeekFocus() { const on = dFocus.peek.dimsWas; dFocus.peek = null; sy
    a peeked drawer's inside sizes are shown with the ruler off too, so the page says when a peek holds them (live
    2026-10-21: with the ruler off, its default, the opened drawer showed no pills at all) */
 function syncPeekClass() { document.documentElement.classList.toggle('ws-drawer-dims', !!(dFocus.peek && dFocus.carrier)); }
+/* do the peek's pills fit the open drawer: their area (a hidden pill at a typical 72 x 34) against the drawer's box on the
+   screen. Shown up to PEEK_PILL_COVER, hidden again only past 1.2 times it, so a zoom resting on the line does not flicker */
+const PEEK_PILL_COVER = 0.2;
+const _peekV = new THREE.Vector3();
+function peekPillsFit(r, rows) {
+  if (dFocus.pills === 'none') return false;
+  const b = dFocus.box, p = dFocus.carrier.group.position;
+  _peekV.copy(camera.position).sub(p);
+  if (b.containsPoint(_peekV)) return (dFocus.pillsFit = true);   // the camera inside the drawer's box: as zoomed in as it gets
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < 8; i++) {
+    _peekV.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).add(p).project(camera);
+    if (_peekV.z > 1) return (dFocus.pillsFit = false);   // a corner behind the camera (or past the far plane): its box on the screen cannot be read, so none (Sol 01a17d58)
+    x0 = Math.min(x0, _peekV.x); x1 = Math.max(x1, _peekV.x); y0 = Math.min(y0, _peekV.y); y1 = Math.max(y1, _peekV.y);
+  }
+  // only the part on the screen counts: zoomed in on the build with the drawer off its edge is not zoomed in on the drawer
+  const c = (v) => Math.min(1, Math.max(-1, v));
+  const area = (c(x1) - c(x0)) * r.width / 2 * (c(y1) - c(y0)) * r.height / 2;
+  const pills = rows.reduce((s, q) => s + (q.measured ? q.w * q.h : 72 * 34), 0);
+  return (dFocus.pillsFit = pills <= PEEK_PILL_COVER * (dFocus.pillsFit ? 1.2 : 1) * area);
+}
 function updateDrawerDims() { // render-loop: pills track their lines while the drawer slides / camera tweens
   if (!dFocus.lines || !dFocus.carrier) return;
   const r = canvas.getBoundingClientRect();
@@ -7289,6 +7319,8 @@ function updateDrawerDims() { // render-loop: pills track their lines while the 
     const mid = seg.a.clone().add(seg.c).multiplyScalar(0.5).add(dFocus.carrier.group.position).project(camera);
     return { el, mid, w: el.offsetWidth || 120, h: el.offsetHeight || 40, measured: el.offsetWidth > 0 };   // 0 while hidden: larger than any pill (about 70-100 x 34), so one shown on the last frame of a glide cannot overlap (Terra 01a15f9c)
   });
+  // the planner's pills only zoomed in (enterDrawerFocus `pills`): none from the Colors card, none while too big for the drawer
+  if (dFocus.pills !== 'all' && !peekPillsFit(r, rows)) { for (const q of rows) q.el.classList.add('hidden'); dFocus.remeasure = 0; return; }
   for (const q of rows) if (q.mid.z > 1) q.el.classList.add('hidden');
   const shown = rows.filter((q) => q.mid.z <= 1);
   const at = placePills(shown.map((q) => ({ x: (q.mid.x + 1) / 2 * r.width, y: (1 - q.mid.y) / 2 * r.height, w: q.w, h: q.h })),
@@ -9903,12 +9935,12 @@ function selectUnit(unitId) {
   setSelected(list[0].cfg.id);
   return true;
 }
-function peekUnit(unitId) {
+function peekUnit(unitId, { pills = true } = {}) {   // pills: false - the drawer opens without its inside sizes (the Colors card)
   const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
   if (!d) return false;
   if (openCarrier && openCarrier !== d) slideDrawer(openCarrier, false);
   openCarrier = d; slideDrawer(d, true, drawerStop());   // "Open the drawer": out to the stopper
-  enterDrawerFocus(d, { swing: false, peek: true });     // its inside W / L / H on the open drawer, the camera left alone
+  enterDrawerFocus(d, { swing: false, peek: true, pills: pills ? 'fit' : 'none' });   // its inside W / L / H on the open drawer, the camera left alone
   invalidateFrame();
   return true;
 }

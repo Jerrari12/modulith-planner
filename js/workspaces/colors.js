@@ -926,7 +926,7 @@ export function mountColors(stage, ctx) {
     }
     const acts = el('div.cacts');
     if (info.links && info.links.length) acts.appendChild(el('a.key.sm', { href: info.links[0].url, target: '_blank', rel: 'noopener', text: `${info.links[0].label || 'Download'} ↗` }));
-    if (info.owner != null && info.type === 'Drawer' || (info.owner != null && info.ridesDrawer)) acts.appendChild(el('button.key.sm', { text: 'Open the drawer', onclick: () => stage.peekUnit(info.owner) }));
+    if (info.owner != null && info.type === 'Drawer' || (info.owner != null && info.ridesDrawer)) acts.appendChild(el('button.key.sm', { text: 'Open the drawer', onclick: () => stage.peekUnit(info.owner, { pills: false }) }));   // no inside sizes here: they are Build's (Joey 2026-10-27)
     if (acts.children.length) card.appendChild(acts);
   }
 

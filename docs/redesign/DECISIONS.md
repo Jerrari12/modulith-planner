@@ -5306,3 +5306,30 @@ New e2e case "Colors on a phone: a tapped part's card sits under the model, fram
 drawer on shared rows" (360x675; e2e `open()` takes a phone `viewport`); its mutants (phoneBottom returning the handles'
 line; the card's display: contents) fail it. Phone + Peek inside e2e 21/21 on GPU and SwiftShader; unit tests 672/672.
 Sol 01a17d42: one finding (the pills' candidates), fixed; round 2 no objection.
+
+- **Live 2026-10-27 at `4af94488`** (a bug Joey reported: deploys once checks pass). Main run 40502509791, every job
+  green (shard 6 again the slowest; live ~25 min after the push). Checked on the live planner at 360x675
+  (`drawer-card.mjs`, ?done=off&skipgc=1): the card 153 px, the safe area ending at its top (381), 88 % of the opened unit
+  above it; no page errors.
+
+## 2026-10-27 - The peek's pills: Build only, and only zoomed in on the drawer
+
+Joey, seeing the three pills piled on a drawer smaller than they were: "maybe only make the pills show up in build when
+they zoom in on the drawer". So:
+
+- **Colors' Open the drawer shows none** (`peekUnit(id, { pills: false })`): the inside sizes are Build's.
+- **Build's Peek inside shows them only while they fit**: their area at most a fifth of the open drawer's box on the screen,
+  clipped to the canvas (main.js `peekPillsFit`; hidden again only past 1.2 times that, so a zoom resting on the line does
+  not flicker; a corner behind the camera hides them unless the camera is inside the drawer's box). Measured: at Build's
+  own framing on a 1280x800 desktop the drawer is 279x262 px and the pills cover 10 % (shown, as before - the Peek inside
+  e2e pins it); on the S23 (360x675) it is 142x138 or less, 25-37 % (hidden until a zoom).
+- `enterDrawerFocus` takes `pills: 'all' | 'fit' | 'none'`, set on every entry, the same drawer again included: 'all' is
+  the old viewer's own drawer focus (its camera swings onto the drawer), unchanged.
+
+Unchanged: a peek never moves the camera. New e2e cases "Build on a phone: Peek inside opens the drawer without its pills
+at the phone's own framing" and "Colors: the card's Open the drawer opens it with no W / L / H pills, on a desktop where
+Build would show them"; the phone card case asserts no pills too. Mutants (Colors without `pills: false`; the fit always
+true; always false) each fail a case. Phone + Peek inside e2e 23/23 on GPU and SwiftShader; unit tests 672/672. Sol
+01a17d58, four rounds: a corner behind the camera read as zoomed in; `pills: false` lost outside a peek; a same-drawer
+entry kept the last entry's option; Build's peek on a viewer-focused drawer skipped the check - all fixed by the mode set
+on every entry; round 4 no objection.
