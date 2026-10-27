@@ -3538,6 +3538,10 @@ test('the phone tour: an open sheet hides what it covers, its handle hides what 
     const { ctx, page, errors } = await open('assemble', { phone: true, viewport: vp });
     await page.waitForSelector('#ws-player .text', { timeout: 60_000 });
     await settle(page, 1200);
+    // widths in the planner's own font, not the fallback's: "Slow-mo" has 4 px to spare at 360 in IBM Plex Sans, and the
+    // CI runner's fallback is likely wider (run 40564020402 failed this case, its log unread; here it passed, throttled too)
+    await page.evaluate(() => document.fonts.ready);
+    assert.ok(await page.evaluate(() => document.fonts.check('600 12px "IBM Plex Sans"')), 'the planner\'s own font has loaded');
     const m = await page.evaluate(() => {
       const t = document.querySelector('#ws-player .text');
       const keys = [...document.querySelectorAll('#ws-player .row2 .key')].filter((b) => b.getClientRects().length && b.textContent.trim());
