@@ -5226,3 +5226,18 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   (`D:\Claude - Output\done-scene-spools-2026-10-26\live`, ?skipgc=1, High): Colors on the room with no flag, Room |
   Neutral and Showcase shown, every script and the three scene modules stamped `v=4a9e3cf6`, Showcase into the final
   scene with "Back to Colors", no page errors. The other session held its pushes to main until then.
+
+## 2026-10-26 - Colors on a phone: the picker's filaments show again (`70924c4`)
+
+Joey, on his phone: "under the column tab, I selected the side cover and I don't think filament colors actually show up on
+mobile at all". The picker's `.brands` list kept its desktop `flex: 1 1 auto; overflow: auto` inside the phone's bottom
+sheet, which is itself the scroller, so the list shrank to the sheet's leftover space - 100 px at 412x915, 61 px in the
+e2e - and its swatches sat clipped below the chips. Fix (css/app.css, phone media block only): `#ws .sheet#ws-picker
+.brands { flex: none; overflow: visible; }`, so the list takes its full height and the sheet scrolls it. Desktop
+unchanged (267 px). New e2e case "Colors on a phone: a region's picker shows its filaments at their full height, the
+sheet scrolling them" passes on the GPU and under E2E_SOFT=1; with the rule removed it fails (61 px). Terra: no defect.
+
+- **Live 2026-10-26 at `70924c42`** (a bug Joey reported: deploys once checks pass). Live 19 min after the push. Checked
+  on the live planner at Joey's phone size (412x915 at 2.6, `picker-live.mjs`, ?skipgc=1): the Side cover picker's list
+  1471 px tall with 162 swatches, the 512 px sheet scrolling 1882 px, no page errors (the one console error is the
+  aborted analytics request). The other session held its pushes to main until then.
