@@ -498,7 +498,7 @@ export function mountParts(stage, ctx) {
     { el: panel, title: () => { const c = counts(); return `Parts · ${c.printCount} to print`; }, open: true },
     { el: insp, title: 'This unit · parts' },
   ] }) : null;
-  const safe = () => { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: (st.wide ? 820 : 440) + 20 + 8, right: 324 + 20 + 8, top: innerWidth < 1280 ? 134 : 90, bottom: 118 }); };
+  const safe = () => { if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: (st.wide ? 820 : 440) + 20 + 8, right: 324 + 20 + 8, top: innerWidth < 1280 ? 134 : 90, bottom: 118 }); };
   if (phone) phone.onLayout(safe);
   addEventListener('resize', safe, { signal });
   document.addEventListener('keydown', (e) => { if (e.key === '\\') root.hidden = !root.hidden; }, { signal });

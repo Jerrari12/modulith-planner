@@ -11,13 +11,23 @@ import { TABS } from './topbar.js';
 export const PHONE_MAX = 1023;
 export const isPhone = () => innerWidth <= PHONE_MAX;
 const TABBAR = 64, DOCK = 56, HANDLE = 44;
+/* THE PHONE ON ITS SIDE (Joey 2026-10-27; app.css, the same query): the tabs a rail down the left, the bar and the tools
+   one row (ROW: its bottom and 8 px), the sheets, the dock and the Assemble player a column on the right, at most SIDE_MAX
+   or 44 % of the width (app.css --side). The sheets stack over the dock as in portrait; the stage keeps what is between */
+export const SIDE_MQ = '(max-width: 1023px) and (orientation: landscape) and (max-height: 500px)';
+export const isSideways = () => matchMedia(SIDE_MQ).matches;
+const ROW = 62, SIDE_MAX = 340;
+const sideWidth = () => Math.min(SIDE_MAX, innerWidth * 0.44);
 
 /* ctx: { active, has, switchTo, badges, soon }; panels: [{ el, title, peek?() -> node | string | null, open?: boolean, close?() }];
    dock: the height of whatever sits on the bar (the dock by default; Assemble passes its player's live height) */
 export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
   const dockH = () => Math.max(0, Math.round(typeof dock === 'function' ? dock() : dock));
-  const base = () => TABBAR + dockH() + 6;   // where the lowest sheet's bottom edge sits
-  const openHeight = () => Math.max(160, Math.min(Math.round(innerHeight * 0.56), innerHeight - base() - 110));
+  // on its side, read off the dock (or the player) itself: it sits 8 px up plus the screen's bottom inset (app.css), which
+  // the script cannot know (Sol 01a17da4: an iPhone's 21 px would put the sheets over it)
+  const floorTop = () => { const f = [...root.querySelectorAll('#ws-dock, #ws-player')].find((e) => !e.hidden && e.getClientRects().length); return f ? Math.round(innerHeight - f.getBoundingClientRect().top) : 8 + dockH(); };
+  const base = () => (isSideways() ? floorTop() : TABBAR + dockH()) + 6;   // where the lowest sheet's bottom edge sits
+  const openHeight = () => isSideways() ? Math.max(88, innerHeight - base() - ROW) : Math.max(160, Math.min(Math.round(innerHeight * 0.56), innerHeight - base() - 110));
   const badges = (typeof ctx.badges === 'function' ? ctx.badges() : ctx.badges) || {};
   const bar = el('nav.glass', { id: 'ws-tabbar', 'aria-label': 'Workspaces' });
   for (const [id, label, ic] of TABS) {
@@ -45,9 +55,12 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
   const collapsedHeight = (e) => HANDLE + (e.peek && e.peek() ? 40 : 0);
   function stack() {
     let off = 0; const b = base();
+    // on its side, with under 160 px left above the dock (the S23's 260 px tall screen), an open sheet takes the whole
+    // column, over the dock (11 under the sheet's 13); collapsed, the dock is back
+    const over = isSideways() && innerHeight - b - ROW < 160;
     for (const e of sheets.values()) {
       if (e.el.hidden) continue;
-      if (e.open) { e.el.style.bottom = `${b}px`; e.el.style.maxHeight = `${openHeight()}px`; continue; }
+      if (e.open) { e.el.style.bottom = over ? 'calc(8px + env(safe-area-inset-bottom, 0px))' : `${b}px`; e.el.style.maxHeight = over ? `calc(${innerHeight - 8 - ROW}px - env(safe-area-inset-bottom, 0px))` : `${openHeight()}px`; continue; }
       e.el.style.maxHeight = '';
       e.el.style.bottom = `${b + off}px`;
       off += collapsedHeight(e);
@@ -55,6 +68,9 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     // the top edge of the collapsed handles: the floating cards (Place / Cancel, the issue card...) and the toast sit on
     // it, not under it (the phone check, 2026-10-17: Place / Cancel and every toast were under the Library's handle)
     root.style.setProperty('--sheet-stack', `${b + off}px`);
+    // on its side the tools start where the bar ends (app.css), whatever the build name and the mount chip make of it
+    const t = isSideways() && document.getElementById('ws-top');
+    if (t) root.style.setProperty('--top-r', `${Math.round(t.getBoundingClientRect().right)}px`);
   }
   function open(panel, on = true) {
     const entry = sheets.get(panel); if (!entry) return;
@@ -93,9 +109,12 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     collapse: (panel) => { if (panel) open(panel, false); else for (const p of sheets.keys()) open(p, false); },
     isOpen: (panel) => !!sheets.get(panel)?.open,
     refresh: () => { for (const e of sheets.values()) render(e); stack(); },
-    /* the stage's safe area under the chrome: the tallest visible sheet (collapsed = its handle and peek), the dock, the bar */
-    bottom: () => { stack(); const vis = [...sheets.values()].filter((e) => !e.el.hidden); const openOne = vis.find((e) => e.open); return base() + (openOne ? openHeight() : vis.reduce((n, e) => n + collapsedHeight(e), 0)); },
-    top: () => 110,
+    /* the stage's safe area under the chrome: the tallest visible sheet (collapsed = its handle and peek), the dock, the bar;
+       on its side the column takes the right instead, the rail the left, and the bottom is the stage's own */
+    bottom: () => { stack(); if (isSideways()) return 8; const vis = [...sheets.values()].filter((e) => !e.el.hidden); const openOne = vis.find((e) => e.open); return base() + (openOne ? openHeight() : vis.reduce((n, e) => n + collapsedHeight(e), 0)); },
+    top: () => (isSideways() ? ROW : 110),
+    left: () => (isSideways() ? Math.round(bar.getBoundingClientRect().width) + 8 : 8),
+    right: () => (isSideways() ? Math.round(sideWidth()) + 8 : 8),
     onLayout: (fn) => { onLayout = fn; },
     destroy() { bar.remove(); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
   };

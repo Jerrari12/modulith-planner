@@ -3431,6 +3431,68 @@ test('Colors on a phone: a tapped part\'s card sits under the model, framed abov
   await ctx.close();
 });
 
+/* THE PHONE ON ITS SIDE (Joey 2026-10-27: "Build a landscape phone layout: the tab bar as a left rail, the top bar and
+   tools on one row, sheets opening as a side panel, so the model gets most of the screen"). At his S23's 780 x 260 the
+   portrait chrome left the model 26 px. Here, in Colors, Build and Assemble: the tabs a rail, the bar and every tool one
+   row at full size, the sheets and the dock (or the player, its Next in view) a column on the right, an open sheet the
+   column's height under the row, and the stage's free region the rest; and turning the phone takes the layout with it */
+const sideLayout = (page) => page.evaluate(() => {
+  const b = (q) => { const e = typeof q === 'string' ? document.querySelector(q) : q; if (!e || e.hidden || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height) }; };
+  const sheets = [...document.querySelectorAll('#ws .sheet')].filter((s) => !s.hidden && s.getClientRects().length).map((s) => ({ id: s.id, open: s.classList.contains('open'), ...b(s) }));
+  const tools = [...document.querySelectorAll('#ws-tools > *')].filter((c) => c.getClientRects().length && getComputedStyle(c).display !== 'none').map((c) => b(c).w);
+  const next = [...document.querySelectorAll('#ws-player button')].find((x) => /Next|Finish|Done/.test(x.textContent));
+  return { vw: innerWidth, vh: innerHeight, rail: b('#ws-tabbar'), top: b('#ws-top'), tools: b('#ws-tools'), toolW: tools, dock: b('#ws-dock'), player: b('#ws-player'), next: next ? b(next) : null, sheets, safe: window.__GEN2_VIEWER__.safeArea };
+});
+test('the phone on its side: the tabs a rail, the bar and the tools one row, the sheets and the dock a column on the right, the model the rest; turning the phone takes the layout along', async () => {
+  for (const ws of ['colors', 'build', 'assemble']) {
+    const { ctx, page, errors } = await open(ws, { phone: true, viewport: { width: 780, height: 260 } });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-tabbar'), null, { timeout: 60_000 });
+    await settle(page, 1200);
+    const m = await sideLayout(page), j = JSON.stringify(m);
+    assert.ok(m.rail && m.rail.l === 0 && m.rail.w <= 80 && m.rail.h === m.vh, `${ws}: the tabs a rail down the left (${j})`);
+    assert.ok(m.top && m.tools && m.top.t === m.tools.t && m.top.r <= m.tools.l && m.top.l >= m.rail.r, `${ws}: the bar and the tools one row, after the rail (${j})`);
+    assert.ok(m.toolW.every((w) => w >= 44), `${ws}: every tool at its full size, none squeezed (${j})`);
+    assert.ok(m.tools.l - m.top.r <= 12, `${ws}: the tools start where the bar ends (phone.js --top-r) (${j})`);
+    // at 780 the build name gives Build's seven tools their room: none scrolled out of view
+    assert.ok(await page.evaluate(() => { const t = document.querySelector('#ws-tools'); return t.scrollWidth <= t.clientWidth + 1; }), `${ws}: every tool in view at 780 px (${j})`);
+    const col = m.vw - 340;
+    assert.ok(m.sheets.length && m.sheets.every((s) => s.l >= col - 1 && s.r === m.vw && s.t >= m.top.b), `${ws}: the sheets a column on the right, under the row (${j})`);
+    const floor = m.dock || m.player;
+    assert.ok(floor && floor.l >= col && floor.r <= m.vw && floor.b <= m.vh, `${ws}: the ${m.dock ? 'dock' : 'player'} in the column (${j})`);
+    if (m.player) assert.ok(m.next && m.next.b <= m.player.b && m.next.t >= m.player.t, `assemble: Next in view on the player (${j})`);
+    assert.ok(m.safe && m.safe.left >= m.rail.r && m.safe.right >= m.vw - col && m.safe.top >= m.top.b, `${ws}: the stage's free region clear of the rail, the row and the column (${j})`);
+    const free = [m.vw - m.safe.left - m.safe.right, m.vh - m.safe.top - m.safe.bottom];
+    assert.ok(free[0] >= 300 && free[1] >= 180, `${ws}: the model gets ${free.join(' x ')} px (it was 26 px tall) (${j})`);
+    // a sheet opened by its handle: the column's height under the row (over the dock, the screen being this short)
+    await page.evaluate(() => { const s = [...document.querySelectorAll('#ws .sheet')].find((x) => !x.hidden && x.getClientRects().length); if (!s.classList.contains('open')) s.querySelector(':scope > .sheet-handle').click(); });
+    await settle(page, 700);
+    const o = (await sideLayout(page)).sheets.find((s) => s.open);
+    assert.ok(o && o.t >= m.top.b && o.h >= 180 && o.l >= col - 1, `${ws}: an open sheet fills the column under the row (${JSON.stringify(o)})`);
+    if (ws === 'colors') {
+      // turning the phone upright and back: the bar goes to the bottom, then back to the rail
+      await page.setViewportSize({ width: 360, height: 675 });
+      await settle(page, 900);
+      const u = await sideLayout(page);
+      assert.ok(u.rail.t === u.vh - u.rail.h && u.rail.w === u.vw && u.sheets.every((s) => s.l === 0), `upright: the tab bar at the bottom, the sheets full width (${JSON.stringify(u)})`);
+      await page.setViewportSize({ width: 780, height: 260 });
+      await settle(page, 900);
+      const s2 = await sideLayout(page);
+      assert.ok(s2.rail.h === s2.vh && s2.sheets.every((s) => s.l >= col - 1) && s2.safe.right >= s2.vw - col, `on its side again: the rail and the column, the free region with them (${JSON.stringify(s2)})`);
+    }
+    assert.deepEqual(clean(errors), [], ws);
+    await ctx.close();
+  }
+  // a smaller phone on its side (667 x 340): Build's tools have less room than they need, so the row scrolls; none squeezes
+  const { ctx, page, errors } = await open('build', { phone: true, viewport: { width: 667, height: 340 } });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-tabbar'), null, { timeout: 60_000 });
+  await settle(page, 1000);
+  const s = await sideLayout(page);
+  assert.ok(await page.evaluate(() => { const t = document.querySelector('#ws-tools'); return t.scrollWidth > t.clientWidth; }), `the control: at 667 px the tools need more than their row (${JSON.stringify(s)})`);
+  assert.ok(s.toolW.every((w) => w >= 44), `at 667 px every tool keeps its 44 px, the row scrolling (${JSON.stringify(s)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
    3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
 test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {

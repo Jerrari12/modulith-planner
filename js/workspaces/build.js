@@ -980,7 +980,7 @@ export function mountBuild(stage, ctx) {
     if (st.view === '2d') brd.render();
   }
   function safe() {
-    if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; }
+    if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phone.bottom() }); return; }
     const libW = st.collapsed ? 68 + 20 : 304 + 20;
     const inspW = (!narrow() || !insp.hidden) ? 324 + 20 : 0;
     const topPx = narrow() ? 134 : 90;
