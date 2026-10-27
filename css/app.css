@@ -1118,6 +1118,35 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-player .row2 .sq { flex: none; width: 40px; }
 }
 
+/* THE PHONE ON ITS SIDE (Joey 2026-10-27: "Build a landscape phone layout: the tab bar as a left rail, the top bar and
+   tools on one row, sheets opening as a side panel, so the model gets most of the screen"). His S23 in landscape is 780 x
+   260 in the browser: the portrait chrome (top bar + tools 110 px, dock + tab bar 124) left the model 26 px and an open
+   sheet ran off the top. Here: the tabs a 64 px rail down the left; the bar and the tools one 46 px row (the wordmark
+   gives way; the tools start where the bar ends, phone.js --top-r); the sheets, the dock and the Assemble player a column
+   on the right (--side), the sheets stacked over the dock as in portrait, an open one up to the row; the cards, the toast
+   and the 2D board in the stage between. The sheet manager reads the same query (phone.js SIDE_MQ) for the heights and
+   the stage's safe area. At 780 x 260 the model's free region is 360 x 190 px */
+@media (max-width: 1023px) and (orientation: landscape) and (max-height: 500px) {
+  #ws { --rail: calc(64px + env(safe-area-inset-left, 0px)); --side: min(340px, 44vw); --row: 62px; }
+  #ws-tabbar { top: 0; bottom: 0; right: auto; width: var(--rail); height: auto; flex-direction: column; padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)) calc(4px + env(safe-area-inset-left, 0px)); border-width: 0 1px 0 0; }
+  #ws-tabbar .tab { gap: 2px; }
+  #ws-tabbar .tab .badge { top: 2px; right: 2px; }
+  #ws-top { top: 8px; left: calc(var(--rail) + 8px); right: auto; }
+  #ws-top #ws-logo { display: none; }
+  #ws-top #ws-switch { flex: none; width: clamp(120px, 20vw, 240px); }   /* 156 px at 780: Build's seven tools keep their 44 px */
+  #ws-tools > * { flex-shrink: 0; }   /* more tools than room scroll the row, never squeeze */
+  #ws-tools, html[data-ws] #ws-tools, html.ws-parts-wide[data-ws="parts"] #ws-tools { top: 8px; left: calc(var(--top-r, 420px) + 8px); right: 8px; }
+  #ws .sheet { left: auto; right: 0; width: var(--side); border-radius: 18px 0 0 0; }
+  #ws-dock, #ws-player { left: auto; right: 8px; width: calc(var(--side) - 16px); box-sizing: border-box; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  #ws-player { max-height: calc(100vh - var(--row) - 8px - 50px); overflow-y: auto; padding-bottom: 0; }   /* the steps handle (44 px) keeps its slot over it */
+  /* and its controls (the pips, Back / Next) stay on the card's floor while the step's words scroll over them */
+  #ws-player .row2 { position: sticky; bottom: 0; padding: 6px 0 10px; background: linear-gradient(var(--glass-bg), var(--glass-bg)), var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); z-index: 1; }   /* as a sheet's handle over its scrolling list */
+  #ws-player .text { max-height: 12vh; }
+  #ws-board { top: var(--row); left: calc(var(--rail) + 8px); right: calc(var(--side) + 8px); bottom: 8px; }
+  #ws-issues, #ws-partcard, #ws-shop, #ws-choice { left: calc(var(--rail) + 8px); right: calc(var(--side) + 8px); bottom: 8px; max-height: calc(100vh - var(--row) - 16px); overflow-y: auto; }
+  #ws #ws-toast { bottom: 12px; left: calc(var(--rail) + (100vw - var(--rail) - var(--side)) / 2); max-width: calc(100vw - var(--rail) - var(--side) - 24px); }
+}
+
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }

@@ -5338,6 +5338,38 @@ on every entry; round 4 no objection.
   `drawer-card.mjs`, ?skipgc=1): Build on a 1280x800 desktop, Peek inside - the three pills shown (10 % of the 279x262
   drawer); Build at 360x675 - none (the drawer 142x138); Colors at 360x675, Open the drawer - none; no page errors.
 
+## 2026-10-27 - The phone on its side: a rail, one row, a column
+
+Joey: "Build a landscape phone layout: the tab bar as a left rail, the top bar and tools on one row, sheets opening as a
+side panel, so the model gets most of the screen." His S23 in landscape is 780x260 in the browser; the portrait chrome
+(top bar + tools 110 px, dock + tab bar 124) left the model 26 px, and an open sheet (its 160 px floor) ran off the top.
+
+`@media (max-width: 1023px) and (orientation: landscape) and (max-height: 500px)` (app.css THE PHONE ON ITS SIDE; the
+same string is phone.js `SIDE_MQ` / `isSideways()`):
+
+- **The tabs a 64 px rail** down the left.
+- **The bar and the tools one row**: the wordmark gives way, the build switcher is 20vw (156 px at 780, so Build's seven
+  tools keep their 44 px), the tools start where the bar ends (phone.js writes `--top-r` on every stack), and more tools
+  than room scroll the row rather than squeeze (667x340: Build's scroll).
+- **A column on the right** (`--side` min(340 px, 44vw)): the sheets, stacked over the dock or the Assemble player as in
+  portrait, read off the floor element's own top (so a screen's bottom inset is in it, Sol 01a17da4); with under 160 px
+  above the dock an open sheet takes the whole column over it (190 px at 260 tall); at 844x390 it sits above the dock
+  (258 px). The player caps its height and scrolls, its pips and Back / Next sticky at its floor.
+- **The stage between**: `phone.left()` / `right()` (rail + 8, column + 8) and `bottom()` 8 feed every workspace's safe
+  area and the Labels plate box; the cards, the toast and the 2D board sit there too. At 780x260 the free region is
+  360x190 px.
+
+E2E "the phone on its side: ..." (Colors, Build, Assemble at 780x260; turning to 360x675 and back; Build at 667x340).
+Mutants each fail it: the query off, right() 8, left() 8, the over-the-dock rule, the player's sticky row, the tools'
+no-shrink rule, the switcher at 26vw, `--top-r` never written. A phone.js resize listener was dropped: its mutant survived
+because every workspace's resize handler already restacks (safe -> phone.bottom() -> stack). Phone e2e set 24/24 on GPU
+and SwiftShader, portrait unchanged; unit tests 672/672. Sol 01a17da4: one finding (the bottom inset), fixed; round 2 no
+objection.
+
+- **Live 2026-10-27 at `b46eb57`** (27 min after the push). Checked on the live planner at 780x260 (`chrome-boxes.mjs`,
+  ?done=off&skipgc=1): Colors, Build and Assemble with the rail (64x260), the stage's free region {72, 348, 62, 8}, the
+  Colors sheet open in the column; no page errors.
+
 ## 2026-10-27 · The e2e shard weights are the CI runner's own
 
 - **Why:** the first weights were a local soft-render run of 89 cases; the final scene and the phone fixes brought the

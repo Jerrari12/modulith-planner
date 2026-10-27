@@ -257,7 +257,7 @@ export function mountAssemble(stage, ctx) {
   const BAR = 0.07;   // the scene's bars, a fraction of the height: the same figure as css/app.css's html.cinema (7vh)
   const safeArea = () => {
     if (inScene) { const bar = Math.round(innerHeight * BAR); stage.setSafeArea({ left: 8, right: 8, top: bar + 8, bottom: bar + 8 }); return; }   // the shots are fitted between the bars; the strip sits inside the lower one
-    if (phone) { phone.refresh(); stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; }
+    if (phone) { phone.refresh(); stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phone.bottom() }); return; }
     stage.setSafeArea({ left: 280 + 20 + 8, right: 8, top: innerWidth < 1280 ? 134 : 90, bottom: 22 + player.offsetHeight + 12 });
   };
   const safe = () => { safeArea(); if (room && room.handle) room.handle.refit(); };   // the room's camera is fitted to the free region too

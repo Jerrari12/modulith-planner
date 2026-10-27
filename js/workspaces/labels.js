@@ -987,9 +987,9 @@ export function mountLabels(stage, ctx) {
     if (plate) {   // the plate fills the stage area the panels and the toolbar leave (the toolbar wraps at narrow widths; the phone's chrome moves)
       const s = plate.box.style;
       s.top = phone ? phone.top() + 'px' : Math.round(bar.el.getBoundingClientRect().bottom + 10) + 'px';
-      s.bottom = phone ? phone.bottom() + 'px' : ''; s.left = phone ? '8px' : ''; s.right = phone ? '8px' : '';
+      s.bottom = phone ? phone.bottom() + 'px' : ''; s.left = phone ? phone.left() + 'px' : ''; s.right = phone ? phone.right() + 'px' : '';
     }
-    if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; }
+    if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phone.bottom() }); return; }
     stage.setSafeArea({ left: 324 + 28, right: (st.edit ? 304 : 0) + 28, top: narrow() ? 134 : 90, bottom: 118 });
   }
   /* THE FOCUS ACROSS A RE-RENDER (the stress test, 2026-10-15). After Switch to EdgeLabel, Add label, Fill, Undo, a

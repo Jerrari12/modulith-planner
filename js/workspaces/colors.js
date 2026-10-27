@@ -995,7 +995,7 @@ export function mountColors(stage, ctx) {
     const r = card.getBoundingClientRect(), under = Math.round(innerHeight - r.top) + 8;
     return r.height && under > b && innerHeight - phone.top() - under >= 120 ? under : b;
   }
-  function safeArea() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phoneBottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
+  function safeArea() { if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phoneBottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
   function safe() { safeArea(); if (room && room.handle) room.handle.refit(); }   // the room's shot follows the free region too (the picker opening narrows it)
   function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });
