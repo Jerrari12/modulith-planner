@@ -5404,3 +5404,15 @@ layers, the 12vh cap, the keys wrapping, padding 6 and 10, no ellipsis, Off / On
 close and its title). A flex-basis change survived as a no-op (`flex: 1` is already basis 0, and `overflow: hidden`
 drops the minimum width) and was taken out. Phone e2e set 8/8 on SwiftShader. Terra 01a17e6a no objection; 01a17e76 one
 finding (the words at 320 px), fixed.
+
+- **The deploy, three runs (2026-10-27).** `0e06a45` and `91e087d` failed CI shard 3 on the phone tour case only (green
+  here on SwiftShader, throttled 4x too); its annotations showed no value, because on Node 24 a failed `equal` /
+  `deepEqual` prints its diff in place of the message and the annotations keep one-line errors. `1c3ca04` made the case's
+  checks one-line `assert.ok`s that carry what they read, and the runner said: "Slow-mo" 58 px in a 51 px key at 360.
+  The cause: **the bundled IBM Plex Sans is not drawing the planner's words.** `fonts/ibm-plex-sans-400/500/600.woff2`
+  are one file (md5 f0e2925b) with the arrows and the space and no letters (CDP `CSS.getPlatformFontsForNode`: "Slow-mo"
+  7 glyphs in Segoe UI Semibold, "← Back" 4 Segoe + 2 Plex), so text falls through to `system-ui`: Segoe UI on Windows,
+  Roboto on Android, a wider face on the Linux runner. The 360 px "fits whole" check is the font's, not the layout's, and
+  is dropped (and the `document.fonts.ready` wait, whose premise was wrong); one line, one row and an ellipsis kept inside
+  the key at 320 hold in any font and stay. The 4 px padding is a value chosen in Segoe UI and has no test now. The font
+  itself is for Joey: fixing it changes the face of every word in the planner.

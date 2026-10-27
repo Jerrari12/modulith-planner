@@ -1123,8 +1123,8 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws-player .row2 { flex-wrap: wrap; gap: var(--gap-ctl); }
   #ws-player .pips { flex: 1 1 100%; order: -1; }
   /* "Slow-mo", "← Back" and "Next →" broke over two lines at 360 px: one line each, and 4 px a side (it was 10) keeps the
-     five on one row, "Slow-mo" with 4 px to spare at 360; under ~350 it is wider than its key, so it ends in an ellipsis
-     inside it, never over its neighbour (Terra 01a17e76) */
+     five on one row, "Slow-mo" with 4 px to spare at 360 in Segoe UI (the keys draw in the system font); narrower, or in a
+     wider face, it ends in an ellipsis inside its key, never over its neighbour (Terra 01a17e76) */
   #ws-player .row2 .key { height: 38px; padding: 0 4px; flex: 1; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #ws-player .row2 .sq { flex: none; width: 40px; }
 }
