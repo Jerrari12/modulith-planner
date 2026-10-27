@@ -5333,3 +5333,7 @@ true; always false) each fail a case. Phone + Peek inside e2e 23/23 on GPU and S
 01a17d58, four rounds: a corner behind the camera read as zoomed in; `pills: false` lost outside a peek; a same-drawer
 entry kept the last entry's option; Build's peek on a viewer-focused drawer skipped the check - all fixed by the mode set
 on every entry; round 4 no objection.
+
+- **Live 2026-10-27 at `6a30db3`** (17 min after the push). Checked on the live planner (`peek-size.mjs`,
+  `drawer-card.mjs`, ?skipgc=1): Build on a 1280x800 desktop, Peek inside - the three pills shown (10 % of the 279x262
+  drawer); Build at 360x675 - none (the drawer 142x138); Colors at 360x675, Open the drawer - none; no page errors.
