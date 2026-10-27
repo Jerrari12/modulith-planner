@@ -3355,6 +3355,24 @@ test('Assemble: the Done scene\'s moving AO leaves a gap under a texel unocclude
   await ctx.close();
 });
 
+/* THE PICKER'S FILAMENTS ON A PHONE (Joey 2026-10-26, live: "I don't think filament colors actually show up on mobile at
+   all"): in the sheet the list is its full height and the sheet scrolls it - the desktop's own-scroller rule left it no
+   height under the material chips, Printed on, the buy line and the resets */
+test('Colors on a phone: a region\'s picker shows its filaments at their full height, the sheet scrolling them', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForFunction(() => document.querySelector('#ws-colors .crow'), null, { timeout: 60_000 });
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForFunction(() => document.querySelector('#ws-picker .brands button.sw'), null, { timeout: 20_000 }).catch(() => assert.fail('the picker has no swatches'));
+  await settle(page, 600);
+  const m = await page.evaluate(() => { const s = document.querySelector('#ws-picker'), b = s.querySelector('.brands'), r = b.getBoundingClientRect(), sw = b.querySelector('button.sw').getBoundingClientRect();
+    return { sheet: s.classList.contains('sheet'), h: Math.round(r.height), full: b.scrollHeight, swatches: b.querySelectorAll('button.sw').length, sheetScrolls: s.scrollHeight > s.clientHeight, sw: Math.round(sw.height) }; });
+  assert.ok(m.sheet && m.swatches > 20, `the picker is a sheet with its swatches (${JSON.stringify(m)})`);
+  assert.ok(m.h >= m.full - 2 && m.h > 300, `the list at its full height, not squeezed (${JSON.stringify(m)})`);
+  assert.ok(m.sheetScrolls && m.sw > 20, `the sheet scrolls it, each swatch full size (${JSON.stringify(m)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
    3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
 test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {

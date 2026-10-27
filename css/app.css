@@ -1023,6 +1023,11 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
   #ws .sheet.open { transform: none; clip-path: inset(0); overflow-y: auto; z-index: 13; }
   #ws .sheet[hidden] { display: none; }
+  /* the picker's filaments at their full height, the sheet scrolling them (Joey 2026-10-26, on his phone: "I don't think
+     filament colors actually show up on mobile at all"). The desktop rule makes the list the column's scroller (flex 1,
+     its own overflow), and in a sheet capped at 56vh the rows around it - the material chips, Printed on, the buy line,
+     the resets - left it no height at all */
+  #ws .sheet#ws-picker .brands { flex: none; overflow: visible; }
   #ws .sheet-handle { position: sticky; top: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; background: var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
   #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; }
   #ws .sheet-handle .ttl { flex: 1; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
