@@ -5483,3 +5483,7 @@ Classic Pro label on 2026-10-27; it is a piece of work of its own, for his decis
 E2E: the callout case (tiles, pictures, both ✦, no promise, Classic Pro applies) and "a typed label takes a stripe colour
 ... Classic Pro offers no stripe and says what its part labels print"; the seven cases that found the switch by its text
 find it by its name. Unit 696/696. Terra 01a17f6f: no findings.
+
+- **Live 2026-10-27 at `a01df56`** (run 40595261679 green). Checked on the live planner (`labels-prod.mjs`, ?done=off): the
+  callout's two tiles with their pictures and stars and no promise, a typed label's Green stripe stored and None taking it
+  off, Classic Pro's line in place of the stripe and drawings controls; no page errors.
