@@ -90,7 +90,7 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
    30000ms exceeded; this suite passed locally on a real GPU every time) */
 const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} };
 async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
-async function open(ws, { query = '', phone = false, context = null, visitor = false } = {}) {
+async function open(ws, { query = '', phone = false, context = null, visitor = false, viewport = null } = {}) {   // viewport: a phone's own size (390 x 844 when not given)
   /* the room is on for everyone (Joey 2026-10-26): a case about something else keeps the studio it was written for
      (?done=off); the room's own cases ask for it (?done=room), or open as a visitor does, with no flag at all */
   const roomy = visitor || /done=room/.test(query);
@@ -99,7 +99,7 @@ async function open(ws, { query = '', phone = false, context = null, visitor = f
   // ?mugs=plan for the link's own) gets the room as it was composed: one mug at home, the notebook on the desk
   if (roomy && !/mugs=/.test(query)) query += '&mugs=home';
   if (roomy && !/spools=/.test(query)) query += '&spools=off';   // and no spools, unless it asks (?spools=plan)
-  const ctx = context || await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
+  const ctx = context || await browser.newContext(phone ? { viewport: viewport || { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
   if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const page = await ctx.newPage();
@@ -3355,6 +3355,82 @@ test('Assemble: the Done scene\'s moving AO leaves a gap under a texel unocclude
   await ctx.close();
 });
 
+/* THE PICKER'S FILAMENTS ON A PHONE (Joey 2026-10-26, live: "I don't think filament colors actually show up on mobile at
+   all"): in the sheet the list is its full height and the sheet scrolls it - the desktop's own-scroller rule left it no
+   height under the material chips, Printed on, the buy line and the resets */
+test('Colors on a phone: a region\'s picker shows its filaments at their full height, the sheet scrolling them', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true });
+  await page.waitForFunction(() => document.querySelector('#ws-colors .crow'), null, { timeout: 60_000 });
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForFunction(() => document.querySelector('#ws-picker .brands button.sw'), null, { timeout: 20_000 }).catch(() => assert.fail('the picker has no swatches'));
+  await settle(page, 600);
+  const m = await page.evaluate(() => { const s = document.querySelector('#ws-picker'), b = s.querySelector('.brands'), r = b.getBoundingClientRect(), sw = b.querySelector('button.sw').getBoundingClientRect();
+    return { sheet: s.classList.contains('sheet'), h: Math.round(r.height), full: b.scrollHeight, swatches: b.querySelectorAll('button.sw').length, sheetScrolls: s.scrollHeight > s.clientHeight, sw: Math.round(sw.height) }; });
+  assert.ok(m.sheet && m.swatches > 20, `the picker is a sheet with its swatches (${JSON.stringify(m)})`);
+  assert.ok(m.h >= m.full - 2 && m.h > 300, `the list at its full height, not squeezed (${JSON.stringify(m)})`);
+  assert.ok(m.sheetScrolls && m.sw > 20, `the sheet scrolls it, each swatch full size (${JSON.stringify(m)})`);
+  /* THE ROWS AROUND IT, TIGHTENED (Joey 2026-10-27: "sometimes I only get a sliver of the menu to work with"): nothing in
+     the sheet shrinks (the search was 19 px of its 36, a bare input in the sheet's column), the title row gives way to the handle, which names the region and
+     carries the ×, the search shares a row with the material chips and Buy one with the reset */
+  const t = await page.evaluate(() => { const s = document.querySelector('#ws-picker'), box = (q) => { const e = s.querySelector(q); if (!e || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]; };
+    return { search: box('.search'), chips: box('.mrow'), head: box(':scope > .head'), hx: box('.sheet-handle .hx'), ttl: s.querySelector('.sheet-handle .ttl').textContent, buy: box('.foot .buy'), reset: box('.foot .resets') }; });
+  assert.ok(t.search && t.search[1] >= 34, `the search at its full height (${JSON.stringify(t)})`);
+  assert.ok(t.chips && Math.abs((t.chips[0] + t.chips[1] / 2) - (t.search[0] + t.search[1] / 2)) <= 2, `the material chips on the search's row (${JSON.stringify(t)})`);
+  assert.ok(!t.head && t.hx && /^\S.* · /.test(t.ttl), `the handle names the region and carries the ×, the title row hidden (${JSON.stringify(t)})`);
+  assert.ok(t.buy && t.reset && t.reset[0] < t.buy[0] + t.buy[1] && t.buy[0] < t.reset[0] + t.reset[1], `Buy and the reset share a row (${JSON.stringify(t)})`);
+  // the × from the keyboard (the phone journey taps it): Enter is the button's, not the handle's toggle (Sol 01a17d29)
+  await page.locator('#ws-picker .sheet-handle .hx').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('Enter on the handle\'s × did not close the picker'));
+  // Parts' sheet the same way: its list was one row tall (83 px), scrolling inside the sheet
+  await page.locator('#ws-tabbar .tab', { hasText: 'Parts' }).tap();
+  await page.waitForFunction(() => document.querySelector('#ws-parts .body .prow'), null, { timeout: 60_000 }).catch(() => assert.fail('the Parts list did not render'));
+  if (!(await page.evaluate(() => document.querySelector('#ws-parts').classList.contains('open')))) await page.locator('#ws-parts .sheet-handle').tap();
+  await settle(page, 600);
+  const p = await page.evaluate(() => { const b = document.querySelector('#ws-parts .body'), s = document.querySelector('#ws-parts'); return { h: Math.round(b.getBoundingClientRect().height), full: b.scrollHeight, sheetScrolls: s.scrollHeight > s.clientHeight }; });
+  assert.ok(p.h >= p.full - 2 && p.h > 300 && p.sheetScrolls, `the Parts list at its full height, the sheet scrolling it (${JSON.stringify(p)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE PART CARD ON A PHONE (Joey 2026-10-27, on his S23, 360 x 675 in his browser: "when I'm in the color tab and I select
+   open drawer" - the drawer opened behind the card): the stage frames the model above the card, not just above the
+   handles (colors.js phoneBottom), and the card is shorter - its region chips and Open the drawer share one wrapping row */
+test('Colors on a phone: a tapped part\'s card sits under the model, framed above it, its chips and Open the drawer on shared rows', async () => {
+  const { ctx, page, errors } = await open('colors', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-colors .crow'), null, { timeout: 60_000 });
+  await settle(page, 1500);
+  const id = await page.evaluate(() => window.__GEN2_STORE__.state.placed[0].id);
+  const sp = await page.evaluate((i) => window.__GEN2_VIEWER__.unitScreen(i), id);
+  assert.ok(sp && await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName === 'CANVAS', sp), `the first unit's front is on the model (${JSON.stringify(sp)})`);
+  await page.touchscreen.tap(sp.x, sp.y);
+  await page.waitForFunction(() => !document.querySelector('#ws-partcard').hidden, null, { timeout: 30_000 }).catch(() => assert.fail('the tap showed no part card'));
+  const open1 = page.locator('#ws-partcard button', { hasText: 'Open the drawer' });
+  assert.equal(await open1.count(), 1, 'the tapped part rides a drawer: the card offers Open the drawer');
+  await open1.tap();
+  await settle(page, 2000);   // the guided camera's 500 ms re-fit to the new free region, and the drawer's slide
+  const m = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, c = document.querySelector('#ws-partcard').getBoundingClientRect(), r = v.renderer.domElement.getBoundingClientRect();
+    const owner = v.partInfo(v.selectedId).owner, b = v.unitBox(owner); let y0 = 1e9, y1 = -1e9;
+    for (let i = 0; i < 8; i++) { const p = new T.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(v.camera); const y = r.top + (1 - p.y) / 2 * r.height; y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const top = (q) => Math.round(q.getBoundingClientRect().top);
+    const btn = [...document.querySelectorAll('#ws-partcard button.key')].find((x) => /Open the drawer/.test(x.textContent));
+    return { vh: innerHeight, cardTop: Math.round(c.top), cardH: Math.round(c.height), safe: v.safeArea, unit: [Math.round(y0), Math.round(y1)], btnTop: top(btn), chipTops: [...document.querySelectorAll('#ws-partcard .zchip')].map(top), meta: document.querySelector('#ws-partcard .meta').textContent };
+  });
+  assert.ok(m.safe && m.safe.bottom >= m.vh - m.cardTop, `the stage's free region ends above the card (${JSON.stringify(m)})`);
+  // the build is framed above the card; the opened drawer slides toward the camera past the framed build (a peek never
+  // moves the camera, 2026-10-21), so its front lip may reach the card's edge - three quarters of the unit or more shows
+  // (measured 0.88 at 360 x 675; with the card left out of the free region, 0.11: the drawer opened behind the card)
+  assert.ok((m.cardTop - m.unit[0]) / (m.unit[1] - m.unit[0]) >= 0.75, `the opened unit shows above the card, not behind it (${JSON.stringify(m)})`);
+  assert.ok(m.chipTops.includes(m.btnTop), `Open the drawer shares a row with the region chips (${JSON.stringify(m)})`);
+  assert.match(m.meta, /^\d+ of this size · /, `"of this size", never "of this sizes" (${m.meta})`);
+  // and no inside-size pills on it: they are Build's, zoomed in (Joey 2026-10-27, peekUnit { pills: false })
+  const pillsShown = () => page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].filter((id) => { const e = document.getElementById(id); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }));
+  assert.deepEqual(await pillsShown(), [], 'Colors\' Open the drawer shows no W / L / H pills');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
    3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
 test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {
@@ -5931,8 +6007,9 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), unitPick, { timeout: 30_000 }).catch(() => assert.fail('Redo did not return the unit’s colour'));
   assert.deepEqual(await openSheets(), ['ws-picker'], 'the picker stays up through Undo and Redo');
   assert.equal((await agree('after Redo')).fc, c3.fc);
-  // 8 the picker's close: the sheets down, the model and the card
-  await page.locator('#ws-picker .x').tap();
+  // 8 the picker's close (on a phone the × is on the sheet's handle; the picker's own title row is hidden): the sheets
+  // down, the model and the card
+  await page.locator('#ws-picker .sheet-handle .hx').tap();
   await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 15_000 });
   assert.deepEqual(await openSheets(), []);
   // 9 Simplify from the Colors sheet: its own sheet, the proposal shown; Apply is one undo step, one filament fewer, back to the Colors sheet
@@ -5968,6 +6045,50 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   assert.deepEqual(await openSheets(), [], 'Build: the model is the hero again');
   await page.locator('#ws-tools button[title^="Undo"]').tap();
   await page.waitForFunction((n) => window.__GEN2_VIEWER__.filamentsInBuild().count === n, c3.fc, { timeout: 30_000 }).catch(() => assert.fail('Undo in Build did not take Simplify back'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE PEEK'S PILLS, ONLY ZOOMED IN (Joey 2026-10-27: "maybe only make the pills show up in build when they zoom in on the
+   drawer"): they show while they cover at most a fifth of the open drawer on the screen (main.js peekPillsFit). At Build's
+   own framing on a desktop they cover 10 % of it and show (the Peek inside cases below); on his S23 (360 x 675) the
+   drawer is about 142 x 138 px, they would cover 37 %, and they wait for a zoom */
+test('Build on a phone: Peek inside opens the drawer without its pills at the phone\'s own framing, the drawer too small for them', async () => {
+  const { ctx, page, errors } = await open('build', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest, null, { timeout: 60_000 });
+  await settle(page, 1500);
+  const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: d.id, owner: v.partInfo(d.id).owner, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
+  assert.ok(await page.evaluate((o) => window.__GEN2_VIEWER__.peekUnit(o), drawer.owner), 'Build\'s Peek inside (stage.peekUnit, its pills allowed) opened it');
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + drawer.collection - 13.5], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
+  await settle(page, 800);
+  const m = await page.evaluate((id) => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, b = new T.Box3().setFromObject(v.instances.get(id).group), r = v.renderer.domElement.getBoundingClientRect(); let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (let i = 0; i < 8; i++) { const p = new T.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(v.camera); x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+    const shown = ['dim-w', 'dim-l', 'dim-h'].filter((q) => { const e = document.getElementById(q); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; });
+    const c = (q) => Math.min(1, Math.max(-1, q));   // its part on the screen, as the stage weighs it
+    return { box: [Math.round((c(x1) - c(x0)) * r.width / 2), Math.round((c(y1) - c(y0)) * r.height / 2)], shown, peek: document.documentElement.classList.contains('ws-drawer-dims') };
+  }, drawer.id);
+  assert.ok(m.peek, `the peek holds the drawer's sizes (${JSON.stringify(m)})`);
+  assert.ok(3 * 72 * 34 > 0.2 * m.box[0] * m.box[1], `the control: at this framing three pills would cover more than a fifth of the drawer (${JSON.stringify(m)})`);
+  assert.deepEqual(m.shown, [], `no pills on a drawer too small for them (${JSON.stringify(m)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* COLORS OPENS A DRAWER WITHOUT ITS PILLS (Joey 2026-10-27: the inside sizes are Build's): on a desktop, where the drawer
+   is big enough for them and Build's Peek inside shows them, the Colors card's Open the drawer shows none */
+test('Colors: the card\'s Open the drawer opens it with no W / L / H pills, on a desktop where Build would show them', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest, null, { timeout: 60_000 });
+  await settle(page, 1200);
+  const d = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const i = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: i.id, z0: v.instances.get(i.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), d.id);
+  const btn1 = page.locator('#ws-partcard button', { hasText: 'Open the drawer' });
+  await btn1.click({ timeout: 30_000 });
+  await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [d.id, d.z0 + d.collection - 13.5], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
+  await settle(page, 800);
+  const shown = await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].filter((id) => { const e = document.getElementById(id); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }));
+  assert.deepEqual(shown, [], 'no pills from the Colors card');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

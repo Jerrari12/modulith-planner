@@ -828,8 +828,8 @@ export function mountColors(stage, ctx) {
         el('button.seg' + (st.scope === 'unit' ? '.on' : ''), { text: uid != null ? `This ${unitWord()} only` : 'This unit only', disabled: uid == null, title: uid == null ? 'Click a part of a unit on the model first' : `Only unit ${unitNo().replace(/[() ]|unit /g, '')} keeps this pick; the other ${typePlural(key)} follow the build colour`, onclick: () => { st.scope = 'unit'; renderAll(); } }),
       ]),
       st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? short(worn(key).name) : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
-      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
-      matRow,
+      // the search and the chips: one row on a phone, stacked on a desktop (app.css .find)
+      el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }), matRow].filter(Boolean)),
       isFeet(key) ? el('p.note.feet', { text: 'Feet print in TPU, the flexible filament, so only TPU is listed. PolyFlex TPU95 Black is the default.' }) : null,
     ].filter(Boolean));   // append(null) writes the word "null" (it showed under the scope switch, 2026-10-17)
     const brands = el('div.brands');
@@ -873,23 +873,25 @@ export function mountColors(stage, ctx) {
     if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
   }
   /* the picker on a spool (swapTarget): what it prints, and one pick changes all of it */
+  const swapName = (t) => t.names.length === 1 ? short(t.names[0]) : t.names.length ? t.names.map(short).join(' & ') : 'Instruction colour';
   function renderSwap(t) {
-    const name = t.names.length === 1 ? short(t.names[0]) : t.names.length ? t.names.map(short).join(' & ') : 'Instruction colour';
+    const name = swapName(t);
     const brands = el('div.brands');
     const renderBrands = () => fillBrands(brands, { tpu: t.feet, active: t.names[0] || null, onPick: swapTo });
     picker.append(...[
       el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: 'Spool' }), ` · ${name}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
       el('p.note.swapnote', {}, [el('i.sw', { style: `background:${t.hex}`, 'aria-hidden': 'true' }), `Prints ${regionWords(t.keys).toLowerCase()}. Pick a filament and all of it takes it, in one undo step.`]),
-      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
+      el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } })]),   // as the region picker's: in a sheet a bare input shrank to 19 px
       t.feet ? el('p.note.feet', { text: 'The feet print in TPU, the flexible filament, so only TPU is listed.' }) : null,
       brands,
     ].filter(Boolean));
     renderBrands();
     if (t.url) {
-      const paid = isPaid(t.url), poly = /polymaker/i.test(t.url);
+      // the region picker's foot, word for word: a plain label (this one still said "· paid link" after 2026-10-24) and
+      // the one disclosure line
       picker.appendChild(el('div.foot', {}, [
-        el('a.buy', { href: t.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: `Buy ${name} →` + (paid ? ' · paid link' : ''), onclick: buyFilament(stage, { name: t.names[0], url: t.url }) }),
-        el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
+        el('a.buy', { href: t.url, target: '_blank', rel: isPaid(t.url) ? 'noopener sponsored' : 'noopener', text: `Buy ${name} →`, onclick: buyFilament(stage, { name: t.names[0], url: t.url }) }),
+        el('span.disc', { text: disclosureFor([t.url]) }),
       ]));
     }
   }
@@ -911,7 +913,7 @@ export function mountColors(stage, ctx) {
     card.append(
       el('div.chead', {}, [
         el('span.sw' + silk(ownPick ? (ownPick.name || ownPick.label) : w && w.name), { style: `background:${ownPick ? ownPick.hex : stage.activeHex(primary)}` }),
-        el('div.col', {}, [el('b', { text: info.label }), el('span.meta', { text: `${n(info.qty, 'of this size')} · ${n(total, TYPE_PLURAL[info.type] ? TYPE_PLURAL[info.type].replace(/s$/, '') : info.type.toLowerCase(), TYPE_PLURAL[info.type] || info.type.toLowerCase() + 's')} in the build${unitIdx ? ` · unit ${unitIdx}` : ''} · ${info.locked ? 'bought, not printed' : ownPick ? `${ownPick.name} (this ${unitWord()}’s own)` : w ? w.name : 'instruction colour'}` })]),
+        el('div.col', {}, [el('b', { text: info.label }), el('span.meta', { text: `${info.qty} of this size · ${n(total, TYPE_PLURAL[info.type] ? TYPE_PLURAL[info.type].replace(/s$/, '') : info.type.toLowerCase(), TYPE_PLURAL[info.type] || info.type.toLowerCase() + 's')} in the build${unitIdx ? ` · unit ${unitIdx}` : ''} · ${info.locked ? 'bought, not printed' : ownPick ? `${ownPick.name} (this ${unitWord()}’s own)` : w ? w.name : 'instruction colour'}` })]),
         el('button.x', { title: 'Deselect', 'aria-label': 'Deselect', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })]),
       ]),
     );
@@ -924,7 +926,7 @@ export function mountColors(stage, ctx) {
     }
     const acts = el('div.cacts');
     if (info.links && info.links.length) acts.appendChild(el('a.key.sm', { href: info.links[0].url, target: '_blank', rel: 'noopener', text: `${info.links[0].label || 'Download'} ↗` }));
-    if (info.owner != null && info.type === 'Drawer' || (info.owner != null && info.ridesDrawer)) acts.appendChild(el('button.key.sm', { text: 'Open the drawer', onclick: () => stage.peekUnit(info.owner) }));
+    if (info.owner != null && info.type === 'Drawer' || (info.owner != null && info.ridesDrawer)) acts.appendChild(el('button.key.sm', { text: 'Open the drawer', onclick: () => stage.peekUnit(info.owner, { pills: false }) }));   // no inside sizes here: they are Build's (Joey 2026-10-27)
     if (acts.children.length) card.appendChild(acts);
   }
 
@@ -973,7 +975,9 @@ export function mountColors(stage, ctx) {
   const narrow = () => innerWidth < 1280;
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'colors', soon }, { panels: [
     { el: panel, title: 'Colors', open: true },
-    { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}` : typePlural(st.key)}` : 'Filament' },
+    // the handle stands in for the picker's own title row on a phone (app.css hides that row), so it says what the row
+    // said - the unit's number, the spool's filament - and carries the close
+    { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}${unitNo()}` : typePlural(st.key)}` : st.swap ? `Spool · ${swapName(st.swap)}` : 'Filament', close: () => closePicker() },
     { el: gallery, title: () => st.detail ? st.detail.name : 'Looks' },
     { el: tray, title: () => `Compare · ${trayLooks.length} of ${TRAY_MAX}` },
     { el: sur, title: () => st.owning ? 'Filaments I own' : 'Find your next look' },
@@ -984,7 +988,14 @@ export function mountColors(stage, ctx) {
      still model); on the phone the sheet manager's heights already include an open sheet */
   /* the open tray lifts the safe area's floor ONCE, when it opens (the stage refits only a camera the visitor has not taken);
      a flip never calls this, so the camera stays where the visitor left it between finalists (step 4) */
-  function safeArea() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phone.bottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
+  /* on a phone the part card sits over the handles, and the model above it (Joey 2026-10-27, on his S23: Open the drawer
+     opened the drawer behind the card) - unless that leaves the model less than 120 px, where the handles' line stands */
+  function phoneBottom() {
+    const b = phone.bottom(); if (card.hidden) return b;
+    const r = card.getBoundingClientRect(), under = Math.round(innerHeight - r.top) + 8;
+    return r.height && under > b && innerHeight - phone.top() - under >= 120 ? under : b;
+  }
+  function safeArea() { if (phone) { stage.setSafeArea({ left: 8, right: 8, top: phone.top(), bottom: phoneBottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
   function safe() { safeArea(); if (room && room.handle) room.handle.refit(); }   // the room's shot follows the free region too (the picker opening narrows it)
   function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });

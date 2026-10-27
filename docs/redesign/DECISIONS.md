@@ -5227,6 +5227,117 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   Neutral and Showcase shown, every script and the three scene modules stamped `v=4a9e3cf6`, Showcase into the final
   scene with "Back to Colors", no page errors. The other session held its pushes to main until then.
 
+## 2026-10-26 - Colors on a phone: the picker's filaments show again (`70924c4`)
+
+Joey, on his phone: "under the column tab, I selected the side cover and I don't think filament colors actually show up on
+mobile at all". The picker's `.brands` list kept its desktop `flex: 1 1 auto; overflow: auto` inside the phone's bottom
+sheet, which is itself the scroller, so the list shrank to the sheet's leftover space - 100 px at 412x915, 61 px in the
+e2e - and its swatches sat clipped below the chips. Fix (css/app.css, phone media block only): `#ws .sheet#ws-picker
+.brands { flex: none; overflow: visible; }`, so the list takes its full height and the sheet scrolls it. Desktop
+unchanged (267 px). New e2e case "Colors on a phone: a region's picker shows its filaments at their full height, the
+sheet scrolling them" passes on the GPU and under E2E_SOFT=1; with the rule removed it fails (61 px). Terra: no defect.
+
+- **Live 2026-10-26 at `70924c42`** (a bug Joey reported: deploys once checks pass). Live 19 min after the push. Checked
+  on the live planner at Joey's phone size (412x915 at 2.6, `picker-live.mjs`, ?skipgc=1): the Side cover picker's list
+  1471 px tall with 162 swatches, the 512 px sheet scrolling 1882 px, no page errors (the one console error is the
+  aborted analytics request). The other session held its pushes to main until then.
+
+## 2026-10-27 - Phone sheets: the Parts list full height, the picker's rows tightened
+
+Joey, on his phone the day after `70924c4`: "sometimes I only get a sliver of the menu to work with... maybe there are a
+few other things we can resize or tighten for mobile". His screenshot was the picker as it was before `70924c4` (its
+list scrolled inside a ~56 px box; a tab opened before that deploy keeps its old stylesheet). The live picker at his size
+(412x772) measured fine, so the audit went to every phone sheet (`sheets-audit.mjs`: each sheet opened, every element
+that clips its own content, every control shorter than its natural height). Found:
+
+- **Parts**: the list (`.body`, the desktop's scroller, flex 1) was one row tall - 83 px of 2766 - scrolling inside the
+  sheet. Now `flex: none; overflow: visible` in the phone block, as the picker's list: the sheet scrolls it.
+- **The picker's search**: 19 px of its 36 (a bare input in the sheet's flex column shrinks; a div does not go below its
+  content). It now sits in `div.find`, on the spool's picker too.
+
+And the picker, tightened on a phone (110 px more for the filaments at 412x772): its title row is hidden - the sheet's
+handle names the region (now with the unit's number, and "Spool · <filament>" on a spool) and carries the × (phone.js
+`close` on a panel spec; the handle's keydown ignores keys aimed at the ×, Sol 01a17d29); the search shares a row with
+the material chips (`.find` is `display: contents` on a desktop, so the desktop column is unchanged); Buy shares a row
+with the reset, the disclosure line under both. The spool's picker foot still said "Buy X → · paid link" with its own
+wording - now the plain label and `disclosureFor()`, as every other surface (the 2026-10-24 rule).
+
+The disclosure's own wording is unchanged: the old planner's reduction (591e7bb, the old viewer's `paidNoteText`) was
+saying it ONCE per surface, beside the links, which the picker already does; with the list at full height the line sits
+at the end of the scroll, under the swatches, not over them.
+
+A generic `#ws .sheet > * { flex-shrink: 0 }` was tried and dropped: its mutant survived (nothing shrinks without it once
+the search is wrapped), so it was a claim no test could fail. Mutants on what stayed - the Parts rule, the `.find` row,
+the hidden title row, the reset's grid placement, the keydown guard - each fail the phone picker case. Phone e2e set: GPU
+18/18, SwiftShader 17 + the room's spool case skipped there; unit tests 670/670. Sol 01a17d29: one P2 (the keydown),
+fixed; round 2 no objection.
+
+- **Live 2026-10-27 at `358870d1`** (a bug Joey reported: deploys once checks pass). Main run 40499232643, every job green
+  (shard 6 the slowest, ~25 min to live). Checked on the live planner at Joey's S23 size (360x675, `picker-space.mjs`,
+  `sheets-audit.mjs`, ?skipgc=1): the picker's title row hidden, the search and chips on one 36 px row, the list at full
+  height (1309 px) in the 378 px sheet; the Parts sheet clips nothing (3764 px scrolling); no page errors.
+
+## 2026-10-27 - Phone: the part card sits under the model; the drawer's pills side by side
+
+Joey, on his S23 (360x675 in his browser), Colors, a faceplate tapped, Open the drawer: the drawer opened behind the part
+card. Measured: the card (193 px, three rows) sat over the model, because the stage's safe area knew only the sheet
+handles (bottom 214), so the guided camera framed the build under the card; the opened drawer's inside W / L / H pills
+then piled on each other in what was left; and the card said "4 of this sizes".
+
+- **colors.js `phoneBottom()`**: on a phone, with the card shown, the safe area ends at the card's top + 8 px (unless the
+  band left is under 120 px). The stage re-fits a guided camera to the new free region as it does for any panel; a
+  camera the visitor has taken stays put.
+- **The card, shorter** (phone CSS): the region chips and the actions (Open the drawer, a download) share one wrapping
+  row under the title: 193 -> 153 px.
+- **`placePills`**: when no height above or below is free, a pill goes beside the others at its height - the candidates
+  are just clear of each placed pill's edges, nearest first (Sol 01a17d42: fixed steps from the line point missed a gap
+  that fits). Unit tests: the S23 band, and Sol's counter-example.
+- **"N of this size"** (n() pluralised the whole phrase).
+
+Not done, on purpose: a peek never moves the camera (2026-10-21, the Build Peek inside e2e pins it), and the drawer slides
+toward the camera past the framed build, so in the studio view its front lip can reach the card's edge - 88 % of the
+opened unit shows above the card at 360x675 (11 % before); in the room it all shows. The e2e asserts >= 75 %.
+
+Measured, not changed - THE PHONE ON ITS SIDE: at 780x260 (the S23 in landscape, the browser's bars included) the top
+bar and tools take 110 px and the dock and tab bar 124 of the 260, so the model gets 26 px, and an open sheet (its 160 px
+floor) runs off the top. Needs a layout of its own; Joey's call.
+
+New e2e case "Colors on a phone: a tapped part's card sits under the model, framed above it, its chips and Open the
+drawer on shared rows" (360x675; e2e `open()` takes a phone `viewport`); its mutants (phoneBottom returning the handles'
+line; the card's display: contents) fail it. Phone + Peek inside e2e 21/21 on GPU and SwiftShader; unit tests 672/672.
+Sol 01a17d42: one finding (the pills' candidates), fixed; round 2 no objection.
+
+- **Live 2026-10-27 at `4af94488`** (a bug Joey reported: deploys once checks pass). Main run 40502509791, every job
+  green (shard 6 again the slowest; live ~25 min after the push). Checked on the live planner at 360x675
+  (`drawer-card.mjs`, ?done=off&skipgc=1): the card 153 px, the safe area ending at its top (381), 88 % of the opened unit
+  above it; no page errors.
+
+## 2026-10-27 - The peek's pills: Build only, and only zoomed in on the drawer
+
+Joey, seeing the three pills piled on a drawer smaller than they were: "maybe only make the pills show up in build when
+they zoom in on the drawer". So:
+
+- **Colors' Open the drawer shows none** (`peekUnit(id, { pills: false })`): the inside sizes are Build's.
+- **Build's Peek inside shows them only while they fit**: their area at most a fifth of the open drawer's box on the screen,
+  clipped to the canvas (main.js `peekPillsFit`; hidden again only past 1.2 times that, so a zoom resting on the line does
+  not flicker; a corner behind the camera hides them unless the camera is inside the drawer's box). Measured: at Build's
+  own framing on a 1280x800 desktop the drawer is 279x262 px and the pills cover 10 % (shown, as before - the Peek inside
+  e2e pins it); on the S23 (360x675) it is 142x138 or less, 25-37 % (hidden until a zoom).
+- `enterDrawerFocus` takes `pills: 'all' | 'fit' | 'none'`, set on every entry, the same drawer again included: 'all' is
+  the old viewer's own drawer focus (its camera swings onto the drawer), unchanged.
+
+Unchanged: a peek never moves the camera. New e2e cases "Build on a phone: Peek inside opens the drawer without its pills
+at the phone's own framing" and "Colors: the card's Open the drawer opens it with no W / L / H pills, on a desktop where
+Build would show them"; the phone card case asserts no pills too. Mutants (Colors without `pills: false`; the fit always
+true; always false) each fail a case. Phone + Peek inside e2e 23/23 on GPU and SwiftShader; unit tests 672/672. Sol
+01a17d58, four rounds: a corner behind the camera read as zoomed in; `pills: false` lost outside a peek; a same-drawer
+entry kept the last entry's option; Build's peek on a viewer-focused drawer skipped the check - all fixed by the mode set
+on every entry; round 4 no objection.
+
+- **Live 2026-10-27 at `6a30db3`** (17 min after the push). Checked on the live planner (`peek-size.mjs`,
+  `drawer-card.mjs`, ?skipgc=1): Build on a 1280x800 desktop, Peek inside - the three pills shown (10 % of the 279x262
+  drawer); Build at 360x675 - none (the drawer 142x138); Colors at 360x675, Open the drawer - none; no page errors.
+
 ## 2026-10-26 · The e2e shard weights are the CI runner's own
 
 - **Why:** the first weights were a local soft-render run of 89 cases; the final scene added 24 more, unknown to them, and

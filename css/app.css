@@ -512,6 +512,7 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 .sw.silk { position: relative; }
 .sw.silk::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   background: linear-gradient(135deg, rgba(255, 255, 255, .6) 0%, rgba(255, 255, 255, .2) 44%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, .16) 100%); }
+#ws-picker .find { display: contents; }   /* the search and the chips: rows of the column on a desktop, one row on a phone */
 #ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
 #ws-picker .foot .buy { font-size: 13px; font-weight: 700; color: var(--ink); text-decoration: none; }
 #ws-picker .foot .disc, #ws-shop .disc { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
@@ -1023,6 +1024,27 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
   #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
   #ws .sheet.open { transform: none; clip-path: inset(0); overflow-y: auto; z-index: 13; }
   #ws .sheet[hidden] { display: none; }
+  /* the picker's filaments at their full height, the sheet scrolling them (Joey 2026-10-26, on his phone: "I don't think
+     filament colors actually show up on mobile at all"). The desktop rule makes the list the column's scroller (flex 1,
+     its own overflow), and in a sheet capped at 56vh the rows around it - the material chips, Printed on, the buy line,
+     the resets - left it no height at all */
+  #ws .sheet#ws-picker .brands { flex: none; overflow: visible; }
+  /* and the Parts list the same way (Joey 2026-10-27: "sometimes I only get a sliver of the menu to work with"): its
+     desktop rule made it the scroller, one row tall (83 px) in the sheet. The phone audit of every sheet (Build library,
+     Colors, Labels, Parts, Assemble's steps) found nothing else clipping its own content */
+  #ws .sheet#ws-parts .body { flex: none; overflow: visible; }
+  /* the picker's rows, tightened: its title row goes (the handle names the region and carries the ×, colors.js), the
+     search shares a row with the material chips, and Buy shares one with the reset - 110 px more for the filaments. The
+     search sits in .find on the spool's picker too: a bare input in the sheet's column shrank to 19 px of its 36 */
+  #ws .sheet#ws-picker > .head { display: none; }
+  #ws .sheet#ws-picker .find { display: flex; align-items: center; gap: var(--gap-ctl); }
+  #ws .sheet#ws-picker .find .search { flex: 1 1 0; min-width: 110px; }
+  #ws .sheet#ws-picker .find .mrow { flex: 0 1 auto; min-width: 0; }
+  #ws .sheet#ws-picker .foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px var(--gap-ctl); }
+  #ws .sheet#ws-picker .foot .resets { grid-column: 2; grid-row: 1; }
+  #ws .sheet#ws-picker .foot .disc { grid-column: 1 / -1; }
+  #ws .sheet-handle .hx { flex: none; width: 32px; height: 32px; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  #ws .sheet-handle .hx:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
   #ws .sheet-handle { position: sticky; top: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; background: var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
   #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; }
   #ws .sheet-handle .ttl { flex: 1; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1036,6 +1058,11 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
      over them; an open sheet (13) still covers them. At a fixed 132 px with z-index 6 they were under the handles: Place /
      Cancel, the issue card's text and its buttons (the phone check, 2026-10-17) */
   #ws-issues, #ws-partcard, #ws-shop, #ws-choice { width: auto; left: 10px; right: 10px; transform: none; bottom: calc(var(--sheet-stack, 126px) + 6px); max-height: 44vh; z-index: 12; }
+  /* the part card, shorter (it sits over the model, which is framed above it, colors.js phoneBottom): the region chips and
+     the actions (Open the drawer, the download) flow in one wrapping row under the title - 193 px was three rows */
+  #ws-partcard { flex-direction: row; flex-wrap: wrap; gap: 8px 6px; }
+  #ws-partcard .chead { flex: 1 1 100%; }
+  #ws-partcard .chips, #ws-partcard .cacts { display: contents; }
   /* the toast likewise, over everything (it takes no pointer events), at a readable width: left 50% held it to half the
      screen, and at the desktop's 100 px it sat behind the dock and the handles */
   #ws #ws-toast { bottom: calc(var(--sheet-stack, 126px) + 10px); z-index: 14; width: max-content; max-width: calc(100vw - 40px); box-sizing: border-box; text-align: center; }   /* #ws: the toast's own rule comes later in this file */
