@@ -5220,3 +5220,9 @@ High, Z channel for stacked skins)". Branch `skin-map`; the maps on gen2-parts b
   every non-visitor case).
 - **OPEN (Sol round 29).** The skipped cases guard the grammar, the lens, the mounts, the desk and steam, the strip, the
   spool click and Reset view; none runs in CI until the follow-up.
+- **Live 2026-10-26 at `4a9e3cf6`** (Joey's go: "i think we are good to go live with this"). The final scene, the room
+  for every visitor, Room | Neutral, Showcase, the spools and their swap, the frosted window, and the day's shadow, AO
+  and supersampling work. Main run 40435163187, every job green, live 17 min after the push. Checked on the live planner
+  (`D:\Claude - Output\done-scene-spools-2026-10-26\live`, ?skipgc=1, High): Colors on the room with no flag, Room |
+  Neutral and Showcase shown, every script and the three scene modules stamped `v=4a9e3cf6`, Showcase into the final
+  scene with "Back to Colors", no page errors. The other session held its pushes to main until then.
