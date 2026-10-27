@@ -828,8 +828,8 @@ export function mountColors(stage, ctx) {
         el('button.seg' + (st.scope === 'unit' ? '.on' : ''), { text: uid != null ? `This ${unitWord()} only` : 'This unit only', disabled: uid == null, title: uid == null ? 'Click a part of a unit on the model first' : `Only unit ${unitNo().replace(/[() ]|unit /g, '')} keeps this pick; the other ${typePlural(key)} follow the build colour`, onclick: () => { st.scope = 'unit'; renderAll(); } }),
       ]),
       st.scope === 'unit' ? el('p.note', { text: unitPick ? `This ${unitWord()} wears its own ${regionOf(key).toLowerCase()} colour. The build colour for ${typePlural(key)} is ${worn(key) ? short(worn(key).name) : 'the instruction colour'}.` : `Picks here colour this ${unitWord()} alone; the build colour stays for the others.` }) : (own ? el('p.note', { text: `${n(own, 'unit')} keep${own === 1 ? 's' : ''} ${own === 1 ? 'its' : 'their'} own colour for this region; the build colour applies to the rest.` }) : null),
-      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
-      matRow,
+      // the search and the chips: one row on a phone, stacked on a desktop (app.css .find)
+      el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }), matRow].filter(Boolean)),
       isFeet(key) ? el('p.note.feet', { text: 'Feet print in TPU, the flexible filament, so only TPU is listed. PolyFlex TPU95 Black is the default.' }) : null,
     ].filter(Boolean));   // append(null) writes the word "null" (it showed under the scope switch, 2026-10-17)
     const brands = el('div.brands');
@@ -873,23 +873,25 @@ export function mountColors(stage, ctx) {
     if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
   }
   /* the picker on a spool (swapTarget): what it prints, and one pick changes all of it */
+  const swapName = (t) => t.names.length === 1 ? short(t.names[0]) : t.names.length ? t.names.map(short).join(' & ') : 'Instruction colour';
   function renderSwap(t) {
-    const name = t.names.length === 1 ? short(t.names[0]) : t.names.length ? t.names.map(short).join(' & ') : 'Instruction colour';
+    const name = swapName(t);
     const brands = el('div.brands');
     const renderBrands = () => fillBrands(brands, { tpu: t.feet, active: t.names[0] || null, onPick: swapTo });
     picker.append(...[
       el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: 'Spool' }), ` · ${name}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
       el('p.note.swapnote', {}, [el('i.sw', { style: `background:${t.hex}`, 'aria-hidden': 'true' }), `Prints ${regionWords(t.keys).toLowerCase()}. Pick a filament and all of it takes it, in one undo step.`]),
-      el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } }),
+      el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } })]),   // as the region picker's: in a sheet a bare input shrank to 19 px
       t.feet ? el('p.note.feet', { text: 'The feet print in TPU, the flexible filament, so only TPU is listed.' }) : null,
       brands,
     ].filter(Boolean));
     renderBrands();
     if (t.url) {
-      const paid = isPaid(t.url), poly = /polymaker/i.test(t.url);
+      // the region picker's foot, word for word: a plain label (this one still said "· paid link" after 2026-10-24) and
+      // the one disclosure line
       picker.appendChild(el('div.foot', {}, [
-        el('a.buy', { href: t.url, target: '_blank', rel: paid ? 'noopener sponsored' : 'noopener', text: `Buy ${name} →` + (paid ? ' · paid link' : ''), onclick: buyFilament(stage, { name: t.names[0], url: t.url }) }),
-        el('span.disc', { text: poly ? 'Polymaker links apply the JERRARI discount for you. As a Polymaker Ambassador I earn a small commission; it costs you nothing extra.' : paid ? 'As an Amazon Associate I earn from qualifying purchases.' : '' }),
+        el('a.buy', { href: t.url, target: '_blank', rel: isPaid(t.url) ? 'noopener sponsored' : 'noopener', text: `Buy ${name} →`, onclick: buyFilament(stage, { name: t.names[0], url: t.url }) }),
+        el('span.disc', { text: disclosureFor([t.url]) }),
       ]));
     }
   }
@@ -973,7 +975,9 @@ export function mountColors(stage, ctx) {
   const narrow = () => innerWidth < 1280;
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'colors', soon }, { panels: [
     { el: panel, title: 'Colors', open: true },
-    { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}` : typePlural(st.key)}` : 'Filament' },
+    // the handle stands in for the picker's own title row on a phone (app.css hides that row), so it says what the row
+    // said - the unit's number, the spool's filament - and carries the close
+    { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}${unitNo()}` : typePlural(st.key)}` : st.swap ? `Spool · ${swapName(st.swap)}` : 'Filament', close: () => closePicker() },
     { el: gallery, title: () => st.detail ? st.detail.name : 'Looks' },
     { el: tray, title: () => `Compare · ${trayLooks.length} of ${TRAY_MAX}` },
     { el: sur, title: () => st.owning ? 'Filaments I own' : 'Find your next look' },

@@ -3369,6 +3369,26 @@ test('Colors on a phone: a region\'s picker shows its filaments at their full he
   assert.ok(m.sheet && m.swatches > 20, `the picker is a sheet with its swatches (${JSON.stringify(m)})`);
   assert.ok(m.h >= m.full - 2 && m.h > 300, `the list at its full height, not squeezed (${JSON.stringify(m)})`);
   assert.ok(m.sheetScrolls && m.sw > 20, `the sheet scrolls it, each swatch full size (${JSON.stringify(m)})`);
+  /* THE ROWS AROUND IT, TIGHTENED (Joey 2026-10-27: "sometimes I only get a sliver of the menu to work with"): nothing in
+     the sheet shrinks (the search was 19 px of its 36, a bare input in the sheet's column), the title row gives way to the handle, which names the region and
+     carries the ×, the search shares a row with the material chips and Buy one with the reset */
+  const t = await page.evaluate(() => { const s = document.querySelector('#ws-picker'), box = (q) => { const e = s.querySelector(q); if (!e || !e.getClientRects().length) return null; const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]; };
+    return { search: box('.search'), chips: box('.mrow'), head: box(':scope > .head'), hx: box('.sheet-handle .hx'), ttl: s.querySelector('.sheet-handle .ttl').textContent, buy: box('.foot .buy'), reset: box('.foot .resets') }; });
+  assert.ok(t.search && t.search[1] >= 34, `the search at its full height (${JSON.stringify(t)})`);
+  assert.ok(t.chips && Math.abs((t.chips[0] + t.chips[1] / 2) - (t.search[0] + t.search[1] / 2)) <= 2, `the material chips on the search's row (${JSON.stringify(t)})`);
+  assert.ok(!t.head && t.hx && /^\S.* · /.test(t.ttl), `the handle names the region and carries the ×, the title row hidden (${JSON.stringify(t)})`);
+  assert.ok(t.buy && t.reset && t.reset[0] < t.buy[0] + t.buy[1] && t.buy[0] < t.reset[0] + t.reset[1], `Buy and the reset share a row (${JSON.stringify(t)})`);
+  // the × from the keyboard (the phone journey taps it): Enter is the button's, not the handle's toggle (Sol 01a17d29)
+  await page.locator('#ws-picker .sheet-handle .hx').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('Enter on the handle\'s × did not close the picker'));
+  // Parts' sheet the same way: its list was one row tall (83 px), scrolling inside the sheet
+  await page.locator('#ws-tabbar .tab', { hasText: 'Parts' }).tap();
+  await page.waitForFunction(() => document.querySelector('#ws-parts .body .prow'), null, { timeout: 60_000 }).catch(() => assert.fail('the Parts list did not render'));
+  if (!(await page.evaluate(() => document.querySelector('#ws-parts').classList.contains('open')))) await page.locator('#ws-parts .sheet-handle').tap();
+  await settle(page, 600);
+  const p = await page.evaluate(() => { const b = document.querySelector('#ws-parts .body'), s = document.querySelector('#ws-parts'); return { h: Math.round(b.getBoundingClientRect().height), full: b.scrollHeight, sheetScrolls: s.scrollHeight > s.clientHeight }; });
+  assert.ok(p.h >= p.full - 2 && p.h > 300 && p.sheetScrolls, `the Parts list at its full height, the sheet scrolling it (${JSON.stringify(p)})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -5949,8 +5969,9 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   await page.waitForFunction((l) => window.__GEN2_VIEWER__.filamentsInBuild().filaments.some((f) => f.name === l || f.name === 'Panchroma ' + l), unitPick, { timeout: 30_000 }).catch(() => assert.fail('Redo did not return the unit’s colour'));
   assert.deepEqual(await openSheets(), ['ws-picker'], 'the picker stays up through Undo and Redo');
   assert.equal((await agree('after Redo')).fc, c3.fc);
-  // 8 the picker's close: the sheets down, the model and the card
-  await page.locator('#ws-picker .x').tap();
+  // 8 the picker's close (on a phone the × is on the sheet's handle; the picker's own title row is hidden): the sheets
+  // down, the model and the card
+  await page.locator('#ws-picker .sheet-handle .hx').tap();
   await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 15_000 });
   assert.deepEqual(await openSheets(), []);
   // 9 Simplify from the Colors sheet: its own sheet, the proposal shown; Apply is one undo step, one filament fewer, back to the Colors sheet

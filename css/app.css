@@ -512,6 +512,7 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 .sw.silk { position: relative; }
 .sw.silk::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   background: linear-gradient(135deg, rgba(255, 255, 255, .6) 0%, rgba(255, 255, 255, .2) 44%, rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, .16) 100%); }
+#ws-picker .find { display: contents; }   /* the search and the chips: rows of the column on a desktop, one row on a phone */
 #ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
 #ws-picker .foot .buy { font-size: 13px; font-weight: 700; color: var(--ink); text-decoration: none; }
 #ws-picker .foot .disc, #ws-shop .disc { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
@@ -1028,6 +1029,22 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
      its own overflow), and in a sheet capped at 56vh the rows around it - the material chips, Printed on, the buy line,
      the resets - left it no height at all */
   #ws .sheet#ws-picker .brands { flex: none; overflow: visible; }
+  /* and the Parts list the same way (Joey 2026-10-27: "sometimes I only get a sliver of the menu to work with"): its
+     desktop rule made it the scroller, one row tall (83 px) in the sheet. The phone audit of every sheet (Build library,
+     Colors, Labels, Parts, Assemble's steps) found nothing else clipping its own content */
+  #ws .sheet#ws-parts .body { flex: none; overflow: visible; }
+  /* the picker's rows, tightened: its title row goes (the handle names the region and carries the ×, colors.js), the
+     search shares a row with the material chips, and Buy shares one with the reset - 110 px more for the filaments. The
+     search sits in .find on the spool's picker too: a bare input in the sheet's column shrank to 19 px of its 36 */
+  #ws .sheet#ws-picker > .head { display: none; }
+  #ws .sheet#ws-picker .find { display: flex; align-items: center; gap: var(--gap-ctl); }
+  #ws .sheet#ws-picker .find .search { flex: 1 1 0; min-width: 110px; }
+  #ws .sheet#ws-picker .find .mrow { flex: 0 1 auto; min-width: 0; }
+  #ws .sheet#ws-picker .foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px var(--gap-ctl); }
+  #ws .sheet#ws-picker .foot .resets { grid-column: 2; grid-row: 1; }
+  #ws .sheet#ws-picker .foot .disc { grid-column: 1 / -1; }
+  #ws .sheet-handle .hx { flex: none; width: 32px; height: 32px; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  #ws .sheet-handle .hx:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
   #ws .sheet-handle { position: sticky; top: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; background: var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
   #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; }
   #ws .sheet-handle .ttl { flex: 1; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

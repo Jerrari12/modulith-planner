@@ -5241,3 +5241,33 @@ sheet scrolling them" passes on the GPU and under E2E_SOFT=1; with the rule remo
   on the live planner at Joey's phone size (412x915 at 2.6, `picker-live.mjs`, ?skipgc=1): the Side cover picker's list
   1471 px tall with 162 swatches, the 512 px sheet scrolling 1882 px, no page errors (the one console error is the
   aborted analytics request). The other session held its pushes to main until then.
+
+## 2026-10-27 - Phone sheets: the Parts list full height, the picker's rows tightened
+
+Joey, on his phone the day after `70924c4`: "sometimes I only get a sliver of the menu to work with... maybe there are a
+few other things we can resize or tighten for mobile". His screenshot was the picker as it was before `70924c4` (its
+list scrolled inside a ~56 px box; a tab opened before that deploy keeps its old stylesheet). The live picker at his size
+(412x772) measured fine, so the audit went to every phone sheet (`sheets-audit.mjs`: each sheet opened, every element
+that clips its own content, every control shorter than its natural height). Found:
+
+- **Parts**: the list (`.body`, the desktop's scroller, flex 1) was one row tall - 83 px of 2766 - scrolling inside the
+  sheet. Now `flex: none; overflow: visible` in the phone block, as the picker's list: the sheet scrolls it.
+- **The picker's search**: 19 px of its 36 (a bare input in the sheet's flex column shrinks; a div does not go below its
+  content). It now sits in `div.find`, on the spool's picker too.
+
+And the picker, tightened on a phone (110 px more for the filaments at 412x772): its title row is hidden - the sheet's
+handle names the region (now with the unit's number, and "Spool · <filament>" on a spool) and carries the × (phone.js
+`close` on a panel spec; the handle's keydown ignores keys aimed at the ×, Sol 01a17d29); the search shares a row with
+the material chips (`.find` is `display: contents` on a desktop, so the desktop column is unchanged); Buy shares a row
+with the reset, the disclosure line under both. The spool's picker foot still said "Buy X → · paid link" with its own
+wording - now the plain label and `disclosureFor()`, as every other surface (the 2026-10-24 rule).
+
+The disclosure's own wording is unchanged: the old planner's reduction (591e7bb, the old viewer's `paidNoteText`) was
+saying it ONCE per surface, beside the links, which the picker already does; with the list at full height the line sits
+at the end of the scroll, under the swatches, not over them.
+
+A generic `#ws .sheet > * { flex-shrink: 0 }` was tried and dropped: its mutant survived (nothing shrinks without it once
+the search is wrapped), so it was a claim no test could fail. Mutants on what stayed - the Parts rule, the `.find` row,
+the hidden title row, the reset's grid placement, the keydown guard - each fail the phone picker case. Phone e2e set: GPU
+18/18, SwiftShader 17 + the room's spool case skipped there; unit tests 670/670. Sol 01a17d29: one P2 (the keydown),
+fixed; round 2 no objection.

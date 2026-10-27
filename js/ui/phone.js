@@ -12,7 +12,7 @@ export const PHONE_MAX = 1023;
 export const isPhone = () => innerWidth <= PHONE_MAX;
 const TABBAR = 64, DOCK = 56, HANDLE = 44;
 
-/* ctx: { active, has, switchTo, badges, soon }; panels: [{ el, title, peek?() -> node | string | null, open?: boolean }];
+/* ctx: { active, has, switchTo, badges, soon }; panels: [{ el, title, peek?() -> node | string | null, open?: boolean, close?() }];
    dock: the height of whatever sits on the bar (the dock by default; Assemble passes its player's live height) */
 export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
   const dockH = () => Math.max(0, Math.round(typeof dock === 'function' ? dock() : dock));
@@ -30,7 +30,9 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
   let current = null;
   function render(entry) {
     const { el: panel, handle, peek } = entry;
-    handle.replaceChildren(el('span.grab'), el('span.ttl', { text: typeof entry.title === 'function' ? entry.title() : entry.title }), el('span.chev', {}, [icon(entry.open ? 'caret-down' : 'caret-up', { size: 16 })]));
+    // a sheet that can be closed (spec.close) carries its × here, on the handle, so its own title row can go (app.css)
+    const x = entry.close ? el('button.hx', { title: 'Close', 'aria-label': `Close ${typeof entry.title === 'function' ? entry.title() : entry.title}`, onclick: (e) => { e.stopPropagation(); entry.close(); } }, [icon('x', { size: 16 })]) : null;
+    handle.replaceChildren(...[el('span.grab'), el('span.ttl', { text: typeof entry.title === 'function' ? entry.title() : entry.title }), x, el('span.chev', {}, [icon(entry.open ? 'caret-down' : 'caret-up', { size: 16 })])].filter(Boolean));
     const p = peek ? peek() : null;
     const peekEl = panel.querySelector(':scope > .sheet-peek');
     if (p && !entry.open) { if (peekEl) peekEl.replaceChildren(typeof p === 'string' ? el('span', { text: p }) : p); else panel.insertBefore(el('div.sheet-peek', {}, [typeof p === 'string' ? el('span', { text: p }) : p]), handle.nextSibling); }
@@ -69,14 +71,16 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     // that follows it (Sol 01a13367)
     let y0 = null, swiped = false;
     handle.addEventListener('click', () => { if (swiped) { swiped = false; return; } open(panel, !sheets.get(panel).open); });
-    handle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(panel, !sheets.get(panel).open); } });
+    // a key on a control inside the handle (the ×) is that control's: here it would be cancelled and toggle the sheet
+    // instead (Sol 01a17d29)
+    handle.addEventListener('keydown', (e) => { if (e.target !== handle) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(panel, !sheets.get(panel).open); } });
     handle.addEventListener('pointerdown', (e) => { y0 = e.clientY; swiped = false; });
     handle.addEventListener('pointerup', (e) => { if (y0 == null) return; const d = e.clientY - y0; y0 = null; if (d > 24) { swiped = true; open(panel, false); } else if (d < -24) { swiped = true; open(panel, true); } });
     panel.prepend(handle);
     // a workspace re-renders its panel with replaceChildren(): the handle comes back on top every time
     const mo = new MutationObserver(() => { if (panel.firstChild !== handle) { panel.prepend(handle); render(sheets.get(panel)); } });
     mo.observe(panel, { childList: true });
-    const entry = { el: panel, handle, title: spec.title, peek: spec.peek || null, open: !!spec.open, mo };
+    const entry = { el: panel, handle, title: spec.title, peek: spec.peek || null, close: spec.close || null, open: !!spec.open, mo };
     sheets.set(panel, entry);
     render(entry);
     if (entry.open) current = panel;
