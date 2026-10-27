@@ -36,6 +36,23 @@ export const PART_ITEM = 'part-picker-label-item/1';
 export const PART_ITEM_MAX = Object.freeze({ printable: 8, attributes: 24, fields: 6, text: 60, json: 8 * 1024 });
 export const STRIPE_POSITIONS = Object.freeze(['bottom', 'end', 'wedge']);
 export const STRIPE_DEFAULTS = Object.freeze({ part: 'bottom', ordinary: 'end' });
+/* The stripe colours a typed label can be given here (Joey 2026-10-27: "if i'm manually typing a label i don't see how to set a
+   color for the label stripe"): the Label Studio's own menu, label-stripes.js COLOURS (the Part Picker's colour-blind-safe
+   pair, then yellow, white, green, purple), so a stripe picked here and one picked in the Studio are the same stored value
+   and share one line in the filament list. `name` is the menu word, `label` what the label stores. */
+export const STRIPE_COLOURS = Object.freeze([
+  Object.freeze({ colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', name: 'Metric' }),
+  Object.freeze({ colour: 'red', hex: '#D55E00', label: 'Inch (SAE)', name: 'SAE / inch' }),
+  Object.freeze({ colour: 'yellow', hex: '#F0E442', label: 'Yellow', name: 'Yellow' }),
+  Object.freeze({ colour: 'white', hex: '#F4F4F2', label: 'White', name: 'White' }),
+  Object.freeze({ colour: 'green', hex: '#009E73', label: 'Green', name: 'Green' }),
+  Object.freeze({ colour: 'purple', hex: '#CC79A7', label: 'Purple', name: 'Purple' }),
+]);
+/* a label's `colours` for one of those (label-stripes.js stripe()), or null for a key it does not offer */
+export function stripeFor(key) {
+  const c = STRIPE_COLOURS.find((x) => x.colour === key);
+  return c ? { band: { colour: c.colour, hex: c.hex, label: c.label, pattern: 'solid' } } : null;
+}
 
 const isObj = (v) => Object.prototype.toString.call(v) === '[object Object]';
 

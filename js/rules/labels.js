@@ -201,7 +201,8 @@ export function edit(L, b, labelId, patch, scope = 'all', unitId) {
   if (!r.ok) return refuse('bad', r.reason);
   const after = r.state.list.labels.find((x) => x.id === r.id);
   const c = caps(b);
-  const desc = r.cloned ? `${quote(after, c)} on drawer ${drawerNumber(b, unitId)} only` : 'text' in p && labelWords(before) !== labelWords(after) ? `${quote(before, c)} became ${quote(after, c)}` : `${quote(after, c)}’s icon changed`;
+  const desc = r.cloned ? `${quote(after, c)} on drawer ${drawerNumber(b, unitId)} only` : 'text' in p && labelWords(before) !== labelWords(after) ? `${quote(before, c)} became ${quote(after, c)}`
+    : 'colours' in p ? `${quote(after, c)}’s stripe ${after.colours && after.colours.band ? `is ${after.colours.band.label}` : 'is off'}` : `${quote(after, c)}’s icon changed`;
   return done(r.state, desc, null, { id: r.id, cloned: !!r.cloned });
 }
 /* convert a part label to plain words on one drawer: the part label goes back to the list, a typed label takes its place */

@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cleanPartItem, stripeColour, cleanStripe, stripePositionOf, assignedLabelOf, wornLabelOf, labelLookOf, labelLooksKey, labelLookNeeds,
-  stripeZone, isStripeZone, stripeHexOfKey, STRIPE_POSITIONS } from '../js/label-look.js';
+  stripeZone, isStripeZone, stripeHexOfKey, STRIPE_POSITIONS, STRIPE_COLOURS, stripeFor } from '../js/label-look.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STUDIO = process.env.GEN2_LABELSTUDIO_ROOT
@@ -225,4 +225,24 @@ test("cleanStripe and the default positions agree with the Label Studio's label-
   }
   assert.equal(stripePositionOf({}, 'part'), S.positionFor('part', 'bottom'));
   assert.equal(stripePositionOf({}, 'ordinary'), S.positionFor('ordinary', 'bottom'));
+});
+
+/* The planner's stripe menu (the label editor, 2026-10-27) is the Label Studio's: the same six colours in its order, each giving
+   the label the colours the Studio's stripe() gives it, which clean to themselves. Checked against the Studio's label-stripes.js
+   when it is checked out beside this repo; the fixed list pins it without. */
+test("the editor's stripe colours are the Label Studio's menu, each a clean stripe", (t) => {
+  assert.deepEqual(STRIPE_COLOURS.map((c) => c.colour), ['sky-blue', 'red', 'yellow', 'white', 'green', 'purple']);
+  for (const c of STRIPE_COLOURS) {
+    const s = stripeFor(c.colour);
+    assert.deepEqual(s, { band: { colour: c.colour, hex: c.hex, label: c.label, pattern: 'solid' } }, c.colour);
+    assert.deepEqual(cleanStripe(s), s, `${c.colour} cleans to itself`);
+  }
+  assert.equal(stripeFor('orange'), null, 'a colour the menu does not offer');
+  const dir = STUDIO.find((d) => existsSync(join(d, 'label-stripes.js')));
+  if (!dir) { t.diagnostic("the Label Studio's label-stripes.js is not present: the fixed list only"); return; }
+  delete globalThis.GEN2LabelStripes;
+  (0, eval)(readFileSync(join(dir, 'label-stripes.js'), 'utf8'));
+  const S = globalThis.GEN2LabelStripes;
+  assert.deepEqual(STRIPE_COLOURS.map((c) => ({ ...c })), S.COLOURS.map((c) => ({ ...c })), "the Studio's COLOURS");
+  for (const c of S.COLOURS) assert.deepEqual(stripeFor(c.colour), S.stripe(c.colour), c.colour);
 });

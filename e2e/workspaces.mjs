@@ -721,10 +721,49 @@ test('Colors: a preset applied from the gallery recolours the model as one histo
   await ctx.close();
 });
 
+/* A TYPED LABEL'S STRIPE, AND CLASSIC PRO'S PRINT SETTINGS (Joey 2026-10-27: "if i'm manually typing a label i don't see how to
+   set a color for the label stripe"; the part label stripe's wording "feels specific to edgelabel labels and odd for this
+   classic pro label"). The editor's Stripe row: the Label Studio's colours, stored on the label as the Studio stores it, and
+   None takes it off. On Classic Pro, which prints no stripe, the row is not offered, and the settings say what its part
+   labels print in place of the EdgeLabel stripe and drawings controls */
+test('Labels: a typed label takes a stripe colour in the editor and None takes it off; Classic Pro offers no stripe and says what its part labels print', async () => {
+  const { ctx, page, errors } = await open('labels');
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
+  await btn(page, 'Type a label', '#ws-labels').click();
+  await page.fill('#ws-modal input.field', 'M3 screws');
+  await btn(page, 'Add label', '#ws-modal .box').click();
+  await page.locator('#ws-labels button.mini[title="Edit this label"]').first().click();
+  await page.waitForSelector('#ws-labeledit .swatches', { timeout: 15_000 });
+  const stripe = () => page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels[0]; return l.colours ? l.colours.band.colour : null; });
+  assert.equal(await stripe(), null, 'the control: a typed label starts with no stripe');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ws-labeledit .swatches button')].map((b) => b.getAttribute('aria-label'))),
+    ['No stripe', 'Stripe: Metric', 'Stripe: SAE / inch', 'Stripe: Yellow', 'Stripe: White', 'Stripe: Green', 'Stripe: Purple'], 'None and the Label Studio\'s six colours');
+  await page.locator('#ws-labeledit button[aria-label="Stripe: Green"]').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList.labels[0].colours?.band?.hex === '#009E73', null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`Green did not land on the label (${JSON.stringify(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels[0]))})`));
+  assert.equal(await page.getAttribute('#ws-labeledit button[aria-label="Stripe: Green"]', 'aria-pressed'), 'true', 'the picked swatch reads pressed');
+  await page.locator('#ws-labeledit button[aria-label="No stripe"]').click();
+  await page.waitForFunction(() => !('colours' in window.__GEN2_STORE__.state.labelList.labels[0]), null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`None left a stripe (${JSON.stringify(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels[0]))})`));
+  // Classic Pro: the same label's editor has no stripe row, the settings no stripe or drawings controls
+  await page.evaluate(async () => { const v = window.__GEN2_VIEWER__; await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === 'classicpro')); v.setDims(false); window.__GEN2_STORE__.load(v.build, 'adopt'); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro', null, { timeout: 60_000 });
+  await page.locator('#ws-labels button.mini[title="Edit this label"]').first().click();
+  await page.waitForSelector('#ws-labeledit input.words', { timeout: 15_000 });
+  await page.locator('#ws-labels details.settings summary').click();
+  const cp = await page.evaluate(() => ({ swatches: !!document.querySelector('#ws-labeledit .swatches'), band: !!document.querySelector('#ws-labels select[aria-label="Part label stripe"]'),
+    drawings: !!document.querySelector('#ws-labels [aria-label="Screw and nut drawings"]'), note: document.querySelector('#ws-labels details.settings').textContent }));
+  assert.ok(!cp.swatches && !cp.band && !cp.drawings && /Classic Pro part labels print the words and the part’s icon/.test(cp.note), `Classic Pro: no stripe controls, the line instead (${JSON.stringify(cp)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the panel Undo, a labels link', async () => {
   const { ctx, page, errors } = await open('labels');
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
   for (const w of ['M3 screws', 'Hex keys', 'Solder']) {
@@ -3947,7 +3986,7 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
 test('the Label plate view (step B1): the Studio embedded read-only shows this build’s list with its drawers, a row clicked there is the selection here, the plate follows undo, the frame is kept across the toggle', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
   for (const w of ['Screws', 'Nuts']) {
@@ -4275,7 +4314,7 @@ test('the top bar fits at every desktop width in its widest case, in every works
 test('Edit part details: the Part Picker opens that part (open/1), or just opens with an older Picker', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
@@ -4762,7 +4801,7 @@ test('the phone: the Build library sheet opens on its handle; the Labels sheet c
   await page.waitForFunction(() => document.querySelector('#ws-lib').classList.contains('open'), null, { timeout: 30_000 });   // the library sheet opened
   await page.click('#ws-tabbar .tab:has-text("Labels")');
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 600);
   await page.evaluate(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const b = (t, root = document) => [...root.querySelectorAll('button')].find((x) => !x.closest('[hidden]') && x.textContent.trim().startsWith(t)); b('Type a label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = 'Phone'; b('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); document.querySelector('#ws-labels .sheet-handle').click(); await sleep(300); b('Place several').click(); });
@@ -4815,7 +4854,7 @@ test('the phone: Edit raises the label editor sheet, its close is reachable, and
 test('the label previews are drawn from the 3D label\'s own layout and geometry', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
   const set = await page.evaluate(async () => {
@@ -4891,7 +4930,7 @@ test('a label preview drawn late swaps in place: the editor keeps the keyboard a
 test('the label editor: a part label offers no icon choice; an ordinary label\'s icon tiles are dark on light', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
   await page.evaluate(async () => {
@@ -5152,7 +5191,7 @@ test('Colors: a part\'s own build plate finish - faceplates Holographic while th
 test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => x.textContent.trim().startsWith('Switch to EdgeLabel')); if (b) b.click(); });
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
   // a part label with a stripe, on a drawer, so the build prints label text and a stripe colour
@@ -6660,15 +6699,22 @@ test('Build: a Parts switch while a layout change still waits on its GLBs throws
 
 /* BOTH LABEL FAMILIES IN THE CALLOUT (2026-10-20, Joey: "why not show both edgelabel and classic pro as clickable options?").
    A build whose faceplates take no labels opens Labels to the callout; it offered Switch to EdgeLabel alone, after naming
-   both families. Now both are buttons, EdgeLabel first and starred; Classic Pro applies the Classic Pro faceplate. */
-test('Labels: the no-label-faceplate callout offers Switch to EdgeLabel and Switch to Classic Pro; Classic Pro applies that family and the callout goes', async () => {
+   both families. Now both are buttons, EdgeLabel first; Classic Pro applies the Classic Pro faceplate. Since 2026-10-27
+   they are the Build library's faceplate tiles (the stage's picture, the name under it) and both carry the Club ✦ (Joey:
+   "both are premium models so both should have that"), and the callout promises nothing ("Paper and label-maker labels
+   are coming later" went: Joey, "that's still a brainstorm idea") */
+test('Labels: the no-label-faceplate callout offers EdgeLabel and Classic Pro as faceplate tiles, both Club; Classic Pro applies that family and the callout goes', async () => {
   const { ctx, page, errors } = await open('labels');
   await page.waitForSelector('#ws-labels .callout', { timeout: 30_000 });
   const before = await S(page);
   assert.notEqual(before.faceStyle, 'classicpro', `the control: the build starts on a no-label faceplate (${before.faceStyle})`);
-  const buttons = await page.evaluate(() => [...document.querySelectorAll('#ws-labels .callout .btns button')].map((b) => b.textContent.trim()));
-  assert.deepEqual(buttons, ['Switch to EdgeLabel ✦', 'Switch to Classic Pro'], 'both label families, EdgeLabel first and starred');
-  await page.locator('#ws-labels .callout button:has-text("Switch to Classic Pro")').click({ timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelectorAll('#ws-labels .callout .faces button img').length === 2, null, { timeout: 30_000 })
+    .catch(() => assert.fail('the two tiles did not get the stage\'s pictures'));
+  const c = await page.evaluate(() => ({ tiles: [...document.querySelectorAll('#ws-labels .callout .faces button.face')].map((b) => [b.getAttribute('aria-label'), b.textContent.trim(), !!b.querySelector('.pv img')]),
+    text: document.querySelector('#ws-labels .callout').textContent }));
+  assert.deepEqual(c.tiles, [['Switch to EdgeLabel', 'EdgeLabel✦', true], ['Switch to Classic Pro', 'Classic Pro✦', true]], `both label families, EdgeLabel first, each a picture, its name and the ✦ (${JSON.stringify(c)})`);
+  assert.ok(!/coming later|paper|label-maker/i.test(c.text), `the callout promises nothing (${c.text})`);
+  await page.locator('#ws-labels .callout button[aria-label="Switch to Classic Pro"]').click({ timeout: 30_000 });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro' && !document.querySelector('#ws-labels .callout'), null, { timeout: 60_000 })
     .catch(async () => assert.fail(`Classic Pro did not apply: faceStyle ${(await S(page)).faceStyle}, callout ${await page.locator('#ws-labels .callout').count()}`));
   assert.deepEqual(clean(errors), []);

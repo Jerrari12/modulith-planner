@@ -130,6 +130,8 @@ jobs:
           sed -i "s|'../label-panel.js'|'../label-panel.js?v=$V'|" js/rules/labels.js
           # the Label plate (step B1): its rules module, imported by the Labels workspace and importing the label rules
           sed -i "s|'../rules/plate.js'|'../rules/plate.js?v=$V'|" js/workspaces/labels.js
+          # the faceplate tiles in its no-label-faceplate callout (2026-10-27): the Build library's glyphs
+          sed -i "s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./labels.js'|'./labels.js?v=$V'|" js/rules/plate.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../filament-db.js'|'../filament-db.js?v=$V'|; s|'../bed-finish.js'|'../bed-finish.js?v=$V'|" js/workspaces/colors.js
           # the Colors plan's step 5 / 5b (2026-10-18): the look generator, its styles, colour words and maths, the owned list

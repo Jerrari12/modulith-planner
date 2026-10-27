@@ -5451,3 +5451,31 @@ per step, the option's opaque ground); the Wall Mount 115 case reads the chip's 
 the old setup foot and the CSS without the option rule each fail. Unit 695/695; the 22 phone and toolbar cases, the
 setup-sheet cases and the top-bar fit at 18 widths green on SwiftShader. Sol 01a17f61: one finding (the 59 bar on the
 light bar), fixed; the measure class on a switch into Parts is as before (its order is unchanged).
+
+## 2026-10-27 · Labels: the faceplate tiles, a typed label's stripe, Classic Pro's print line
+
+Joey, from the live planner: the Labels callout's "switch to edgelabel and classic pro" should "use the same images or icons
+we used for selecting faceplates in the build tab ... both are premium models so both should have that"; "i don't want to
+advertise 'Paper and label-maker labels are coming later.' because that's still a brainstorm idea"; the part label
+stripe's wording "feels specific to edgelabel labels and odd for this classic pro label"; and "if i'm manually typing a
+label i don't see how to set a color for the label stripe".
+
+- **The callout's two families are the Build library's faceplate tiles** (labels.js `tile`): the stage's own picture of a
+  1W-1H Decor faceplate (`stage.thumb`, the glyph until it is ready), the name under it, and the Club ✦ on both. The
+  "coming later" line is gone. The buttons keep "Switch to EdgeLabel" / "Switch to Classic Pro" as their accessible names.
+- **A typed label's stripe** (the editor's Stripe row): None and the Label Studio's six colours (label-look.js
+  `STRIPE_COLOURS`, its label-stripes.js COLOURS, a unit test checks them against that file), stored on the label as
+  `colours` exactly as the Studio stores it; it runs along the label's left end. Typed labels on EdgeLabel builds only:
+  Classic Pro prints no stripe, and on a part label `colours: null` means "not the Part Picker's colours".
+- **Classic Pro's print settings:** the Label Studio prints Classic Pro part labels with the words and the part's icon; the
+  stripe and the screw and nut drawings are EdgeLabel's. On a Classic Pro build the two controls give way to one line
+  saying so; this browser's preference for EdgeLabel builds is left as it was.
+
+Not done here: **a Classic Pro label's words on the 3D model.** The stage draws words only on EdgeLabel labels
+(label-text.js `LABEL_TEXT_NODES`): the Classic Pro label lies on the sloped grip, its frame on the model has not been
+measured, and its layout is the Studio's own label-core-classicpro.js. Joey saw "1 label · 1 on drawers" with a blank
+Classic Pro label on 2026-10-27; it is a piece of work of its own, for his decision.
+
+E2E: the callout case (tiles, pictures, both ✦, no promise, Classic Pro applies) and "a typed label takes a stripe colour
+... Classic Pro offers no stripe and says what its part labels print"; the seven cases that found the switch by its text
+find it by its name. Unit 696/696. Terra 01a17f6f: no findings.

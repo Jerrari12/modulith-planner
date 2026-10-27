@@ -9,6 +9,7 @@
    view (step B1) shows this build's list as the Studio lays it out, in a frame, read-only, with its print file to download. */
 import { el, makeToast, trapTab } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
+import { glyphEl, FACEK } from '../ui/glyph.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
@@ -17,7 +18,7 @@ import * as R from '../rules/labels.js';
 import * as P from '../rules/plate.js';
 import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle, labelUploadFor, isLabelSvg } from '../label-panel.js';
 import { loadLabelFont, loadLabelParts, labelIcons } from '../label-text.js';
-import { labelLookOf, labelLookOfLabel } from '../label-look.js';
+import { labelLookOf, labelLookOfLabel, cleanStripe, STRIPE_COLOURS, stripeFor } from '../label-look.js';
 import { labelPreviewUrl, previewNeeds, previewReady } from '../label-preview.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
@@ -724,14 +725,22 @@ export function mountLabels(stage, ctx) {
     if (!faceOk) {
       // both label families as buttons (Joey 2026-10-19: "why not show both edgelabel and classic pro as clickable
       // options?"), from the stage's own style list so a family it does not offer for this collection gets no button;
-      // EdgeLabel first and starred, the Studio's default family
+      // EdgeLabel first, the Studio's default family. Each is the Build library's faceplate tile: the stage's own picture of
+      // the faceplate (its glyph until the picture is ready) with the name under it, and BOTH carry the Club ✦: both are
+      // Club models (Joey 2026-10-27: "we have a lot of room so i think we should use the same images or icons we used for
+      // selecting faceplates in the build tab ... both are premium models so both should have that")
       const LABEL_FAMILIES = ['edgelabel', 'classicpro'];
       const styles = (stage.availableFaceplateStyles?.() || []).filter((x) => LABEL_FAMILIES.includes(x.key)).sort((a, b) => LABEL_FAMILIES.indexOf(a.key) - LABEL_FAMILIES.indexOf(b.key));
       const switchTo = (style) => async () => { await stage.applyFaceplateStyle(style); stage.setDims(false); store.load(stage.build, 'adopt'); lastSig = (() => { const g = tryGen(store.serialize()); return g.manifest ? sigOf(g.manifest) : lastSig; })(); renderAll(); say(`${style.label} faceplates · the drawers can take labels now.`); };
+      const tile = (style) => {
+        const name = FACE_LABEL[style.key] || style.label;
+        const pic = el('div.pv.face', {}, [glyphEl(FACEK[style.key] || 'edgelabel', 40, 26)]);
+        if (stage.thumb) stage.thumb({ fill: 'decor', w: 1, hh: 2, faceStyle: style.key, view: 'front' }).then((url) => { if (url) pic.replaceChildren(el('img', { src: url, alt: '' })); }).catch(() => {});
+        return el('button.face.key', { title: `Switch every Decor drawer to ${name} faceplates · ✦ Club`, 'aria-label': `Switch to ${name}`, onclick: switchTo(style) }, [pic, name, el('span.club', { text: '✦', title: 'Club' })]);
+      };
       panel.appendChild(el('div.callout', {}, [
         el('p', { text: `${FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] + ' faceplates take' : 'These faceplates take'} no printed labels. EdgeLabel and Classic Pro do; the list below can still be built and exported.` }),
-        styles.length ? el('div.btns', {}, styles.map((style) => el('button.key.sm', { onclick: switchTo(style) }, [`Switch to ${style.label}${style.key === 'edgelabel' ? ' ✦' : ''}`]))) : null,
-        el('p.dim', { text: 'Paper and label-maker labels are coming later.' }),
+        styles.length ? el('div.faces.two', {}, styles.map(tile)) : null,
       ]));
     }
     // the selected drawer
@@ -828,6 +837,14 @@ export function mountLabels(stage, ctx) {
        printer's capability with a look, so a printer profile or a build override may come later): a two-colour printer turns the
        stripe off once and every build follows; the Label plate's own inputs change the same choice */
     det.appendChild(el('p.sub', { text: 'Printing part labels' }));
+    /* Classic Pro part labels print the words and the part's icon, centred; the stripe and the screw and nut drawings are
+       EdgeLabel's (the Label Studio's rule, its index.html "CLASSIC PRO PART LABELS"). Its stripe positions were EdgeLabel's
+       edges and slanted end, which read oddly over a Classic Pro label (Joey 2026-10-27), so a Classic Pro build is told
+       what prints instead; the browser's choice stays as it was for EdgeLabel builds */
+    if (S().faceStyle === 'classicpro') {
+      det.appendChild(el('p.dim', { text: 'Classic Pro part labels print the words and the part’s icon. Stripes and screw and nut drawings are EdgeLabel’s.' }));
+      return det;
+    }
     const bandSel = el('select', { 'aria-label': 'Part label stripe' }, [['bottom', 'Bottom edge'], ['end', 'End stripe'], ['wedge', '45° end'], ['off', 'Off · two filaments']].map(([v, t]) => el('option', { value: v, text: t, selected: st.print.band === v ? '' : null })));
     bandSel.addEventListener('change', () => { setPrint({ band: bandSel.value }); renderAll(); });
     det.appendChild(el('label.srow', {}, [el('span', { text: 'Part label stripe' }), bandSel]));
@@ -919,6 +936,20 @@ export function mountLabels(stage, ctx) {
       editor.appendChild(el('p.note.noicon', { text: 'Icons don’t apply here: the part’s drawing prints in their place. To use an icon instead, choose “Use custom wording” on the drawer.' }));
       if (place) editor.appendChild(place);
       return;
+    }
+    /* the stripe (Joey 2026-10-27: "if i'm manually typing a label i don't see how to set a color for the label stripe"): the
+       Label Studio's menu (label-look.js STRIPE_COLOURS), stored on the label as `colours` as the Studio stores it; it runs
+       along the label's left end, the one place a typed label's words never reach. EdgeLabel only: Classic Pro labels print
+       no stripe (the Studio's rule), so on a Classic Pro build the row is not offered. Typed labels only: on a part label
+       `colours: null` means "not the Part Picker's colours", which None here would not say (label-look.js header) */
+    if (S().faceStyle !== 'classicpro' && !R.isPartLabel(l)) {
+      const on = cleanStripe(l.colours, false)?.band.colour || 'none';
+      const known = STRIPE_COLOURS.find((x) => x.colour === on);
+      editor.appendChild(el('div.frow', {}, [el('span', { text: 'Stripe' }), el('span.dim', { text: on === 'none' ? 'None' : known ? known.name : 'From the Label Studio' })]));
+      editor.appendChild(el('div.swatches', { role: 'group', 'aria-label': 'Stripe colour' }, [
+        el('button.sw.none' + (on === 'none' ? '.on' : ''), { title: 'No stripe', 'aria-label': 'No stripe', 'aria-pressed': String(on === 'none'), onclick: () => editCommit({ colours: null }) }),
+        ...STRIPE_COLOURS.map((x) => el('button.sw' + (on === x.colour ? '.on' : ''), { title: x.name, 'aria-label': `Stripe: ${x.name}`, 'aria-pressed': String(on === x.colour), style: `--sw:${x.hex}`, onclick: () => editCommit({ colours: stripeFor(x.colour) }) })),
+      ]));
     }
     // the icon
     const b = L.cleanBadge(l.badge, { svg: true });

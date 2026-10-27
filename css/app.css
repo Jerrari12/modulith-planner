@@ -786,7 +786,11 @@ html[data-ws="colors"].ws-gallery #ws-tools { left: 580px; right: 40px; }
 #ws-labels .banner.copy .btns { display: flex; gap: 6px; flex-wrap: wrap; }
 #ws-labels .callout { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--warn-bg); color: var(--warn-fg); font-size: 12px; }
 #ws-labels .callout p { margin: 0; }
-#ws-labels .callout .btns { display: flex; flex-wrap: wrap; gap: 8px; }   /* the two label families side by side, the planner's control gap */
+/* the two label families side by side as the Build library's faceplate tiles (#ws .faces / .face), a little taller: the
+   panel has the room (Joey 2026-10-27) */
+#ws-labels .callout .faces.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#ws-labels .callout .face { height: 92px; font-size: 12px; color: var(--ink); }
+#ws-labels .callout .pv.face img { width: 84px; height: 63px; margin: -6px 0 -6px; }
 #ws-labels .callout .dim, #ws-labels .why, #ws-labels .dim, #ws-labeledit .dim { font-size: 11px; color: var(--ink-3); }
 #ws-labels .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
 #ws-labels .scroll { flex: 1; min-height: 60px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin: 0 -6px; padding: 0 6px; }
@@ -885,6 +889,11 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 #ws-labeledit[hidden] { display: none; }
 #ws-labeledit .head { display: flex; align-items: center; justify-content: space-between; }
 #ws-labeledit .prev { display: flex; justify-content: center; padding: 6px 0; }
+/* the stripe colours (labels.js): a swatch each, the picked one ringed; None crossed through */
+#ws-labeledit .swatches { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }   /* None + six: one row */
+#ws-labeledit .sw { aspect-ratio: 1; min-width: 0; padding: 0; border-radius: 8px; border: 1px solid var(--key-border); background: var(--sw); cursor: pointer; }
+#ws-labeledit .sw.none { background: linear-gradient(135deg, transparent 46%, var(--ink-3) 46% 54%, transparent 54%), var(--key-bg); }
+#ws-labeledit .sw.on { outline: 2px solid var(--orange); outline-offset: 2px; }
 #ws-labeledit .note { margin: 0; font-size: 12px; color: var(--ink-2); }
 #ws-labeledit .frow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
 #ws-labeledit .frow > span:first-child { flex: none; width: 48px; color: var(--ink-2); }
