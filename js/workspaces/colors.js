@@ -931,7 +931,7 @@ export function mountColors(stage, ctx) {
   }
 
   /* ---------------- toolbar, dock, the shopping list ---------------- */
-  const bar = toolbar(stage, { soon, history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } },
+  const bar = toolbar(stage, { history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } },
     reset: () => { if (room) { if (room.handle) room.handle.recenter(); return; } stage.resetView(); },
     backdrop: ROOM_FLAG ? { get: () => (st.room ? 'room' : 'neutral'), set: (v) => setRoom(v === 'room') } : null });   // with the room on, Reset view returns to the room's shot; while it loads, nothing (its entrance places the camera; the stage's preset would fly out of the room: Terra 01a16b56)
   root.appendChild(bar.el);

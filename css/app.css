@@ -60,6 +60,11 @@ html[data-ws] #stage-wrap { inset: 0 !important; top: 0 !important; bottom: 0 !i
 #ws .glass-edge { box-shadow: inset 3px 0 0 var(--orange), var(--glass-shadow); }
 #ws .chip { background: var(--chip-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--chip-border); box-shadow: var(--chip-shadow); color: var(--ink); }
 #ws .chip-btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-radius: 12px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+/* the mount chip's length in its own colour (topbar.js --len): a bar for the divider, outlined in the chip's own border so
+   59's near-white still reads on the light bar (Sol 01a17f61); the number in it on the dark bar only (the light bar keeps
+   the ink: that near-white would vanish on white) */
+#ws-top .chip-btn.mount .lenbar { flex: none; width: 3px; height: 18px; border-radius: 2px; background: var(--len); box-shadow: 0 0 0 1px var(--chip-border); }
+[data-mode="dark"] #ws-top .chip-btn.mount .mono { color: var(--len); }
 #ws .chip-btn.strong { font-weight: 600; }
 #ws .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border-radius: 12px; cursor: pointer; }
 #ws .key { background: var(--key-bg); border: 1px solid var(--key-border); box-shadow: var(--key-shadow); color: var(--ink); cursor: pointer; }
@@ -191,11 +196,9 @@ html.ws-mode-flip #ws *, html.ws-mode-flip #ws *::before, html.ws-mode-flip #ws 
 #ws-tools .view { display: flex; padding: 4px; gap: 4px; border-radius: 13px; }
 #ws-tools .view button { height: 36px; padding: 0 14px; border-radius: 10px; border: none; font-family: var(--font-mono); font-size: 13px; background: transparent; color: var(--ink-2); cursor: pointer; }
 #ws-tools .view button.on { background: var(--toggle-on); color: var(--ink); font-weight: 600; }
-#ws-tools .view button[disabled] { opacity: .45; cursor: not-allowed; }
-/* Room | Neutral (Colors): words, so the interface's own face, not the 3D/2D chip's mono; on a phone's bar it takes the
-   place of what does nothing there, the 3D-only chip and Explode's "comes later" (the bar fitted its 370 px exactly before) */
+/* Room | Neutral (Colors): words, so the interface's own face, not the 3D/2D chip's mono. The toolbar only carries the
+   3D/2D switch and Explode where they work (Build; Assemble), so on a phone's bar it has the room they left */
 #ws-tools .backdrop button { font-family: inherit; font-size: 12px; padding: 0 12px; }
-@media (max-width: 1023px) { #ws-tools:has(.backdrop) > .view.fixed, #ws-tools:has(.backdrop) > .explode.soon { display: none; } }
 #ws-tools .measure.on { color: var(--measure); }
 #ws-tools .quality { display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; border-radius: 12px; cursor: pointer; font-size: 12px; font-weight: 600; white-space: nowrap; }
 #ws-dock { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); display: flex; align-items: center; gap: 20px; padding: 10px 10px 10px 12px; border-radius: 20px; white-space: nowrap; }
@@ -963,6 +966,8 @@ html[data-ws="labels"] #ws-tools { left: 364px; right: 344px; }
 #ws-setup .unit { font-size: 11px; color: var(--ink-3); }
 #ws-setup .selrow { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink-2); }
 #ws-setup select { flex: 1; min-width: 0; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 13px; }
+/* every open select list on an opaque ground (tokens.css --menu-bg): the setup sheet's printers, the label settings */
+select option, select optgroup { background: var(--menu-bg); color: var(--ink); }
 #ws-setup .foot { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--hair); }
 #ws-setup .fit { margin: 0; font-size: 12px; font-weight: 600; }
 #ws-setup .warn { margin: 0; font-size: 12px; color: var(--warn-fg); }

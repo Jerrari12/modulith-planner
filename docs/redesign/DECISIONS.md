@@ -5422,3 +5422,32 @@ finding (the words at 320 px), fixed.
   the handle's three layers), Labels 780x260 (the dock hidden under the open sheet, Off / On 32 px, the editor one row
   with `Edit · "LIVE CHECK"` and its ×, which closes it), Assemble 360x675 (keys one line, one row, none cut) and 780x260
   (the words not their own scroller); no page errors. 12/12.
+
+## 2026-10-27 · No dead controls in the toolbar; the setup sheet leads; the length wears its colour
+
+Joey, reporting from the live planner: Explode "does nothing, just says something about assemble phase 1"; the 3D/2D
+toggle "seems odd in all tabs other than Build where it can be used"; Measure "does nothing on the colors tab ... maybe
+lets only use it on the build tab"; the length "is extremely easy to overlook ... you instantly want to click the apply
+button and not the next button"; the printer list "a bright grey on grey"; and the mount chip "the color of the length
+on it's right side, for instance 240 teal ... using the color as a vertical division".
+
+- **The toolbar adds a control only where it works** (js/ui/toolbar.js): the 3D/2D switch is Build's (`opts.view`),
+  Explode is Assemble's (`opts.explode`, the exploded overview), Measure is Build's and Assemble's (`opts.measure`; in
+  Colors the room holds the callouts back, Labels and Parts switch them off on arrival; Assemble's finished step turns
+  them on itself, so its button toggles something). Reset view and the quality pill stay everywhere. The phone's rule
+  hiding the "3D-only chip" and Explode's "comes later" for the Room | Neutral switch is gone with them.
+- **The setup sheet:** before the last step the orange button is "Next · Length" / "Next · Printer" and Apply (Start
+  build, Apply and rebuild) a plain button beside it; on Printer the orange button applies.
+- **An open select list is opaque:** `--menu-bg` (tokens.css; #1D1E20 dark, white light) under every `option` and
+  `optgroup`. The see-through `--input-bg` was painted over the browser's white list.
+- **The mount chip:** "Tabletop", a 3 px bar in the length's catalog colour (GEN2.lengths[].color, the setup sheet's
+  stripes) in place of the "·", then the length, in that colour on the dark bar (the ink on the light bar, where 59's
+  near-white would vanish; the bar has the chip's border round it for the same reason, Sol 01a17f61). The accessible
+  name keeps "Tabletop · 240".
+
+E2E: "the toolbar: 3D/2D only in Build, Explode only in Assemble, Measure in Build and Assemble ..." (each workspace;
+Explode from step 1 back to the overview) and "the setup sheet: Next is the orange button until Printer ..." (the foot
+per step, the option's opaque ground); the Wall Mount 115 case reads the chip's bar and number. Mutants: the old toolbar,
+the old setup foot and the CSS without the option rule each fail. Unit 695/695; the 22 phone and toolbar cases, the
+setup-sheet cases and the top-bar fit at 18 widths green on SwiftShader. Sol 01a17f61: one finding (the 59 bar on the
+light bar), fixed; the measure class on a switch into Parts is as before (its order is unchanged).

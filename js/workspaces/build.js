@@ -806,7 +806,7 @@ export function mountBuild(stage, ctx) {
 
   /* ---------------- toolbar, board, dock, issue card, menu ---------------- */
   const bar = toolbar(stage, {
-    soon,
+    measure: true,
     view: { get: () => st.view, set: (v) => { st.view = v; st.armed = st.armed && true; renderAll(); } },
     history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } },
     eraser: { get: () => st.eraser, set: (on) => { st.eraser = on; if (on) { st.armed = false; select(null); } renderAll(); } },

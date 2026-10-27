@@ -213,7 +213,7 @@ export function mountParts(stage, ctx) {
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
   root.prepend(topbar(stage, { ...ctx, active: 'parts', say, soon, signal }));
-  root.appendChild(toolbar(stage, { soon }).el);
+  root.appendChild(toolbar(stage, {}).el);
 
   /* ---------------- the list ---------------- */
   const sections = () => computeBom(build, G) || [];

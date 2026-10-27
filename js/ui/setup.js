@@ -178,12 +178,19 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
       lost.length ? el('p.warn', { text: `${lost.length} of your units aren’t in the ${draft.length} lineup · swap them for sizes it has before changing the length.` }) : null,   // the stage can't show them (2026-10-20: the old promise, "they stay on the board flagged", ended on "Can't show this build yet")
       slots ? el('p.warn.stand', { text: `As a ${mountDef(draft.mount)?.label || draft.mount} build it will have ${slotWords(draft.mount, slots)} · Apply adds nothing: fill ${slots === 1 ? 'it' : 'them'} in Build before it can be assembled.` }) : null,
       refusal ? el('p.warn.refused', { role: 'alert', text: refusal }) : null,
-      el('div.btns', {}, [
-        i > 0 ? el('button.key', { text: 'Back', onclick: () => { cur = STEPS[i - 1]; render(); } }) : null,
-        i < STEPS.length - 1 ? el('button.key', { text: 'Next', onclick: () => { cur = STEPS[i + 1]; render(); } }) : null,
-        el('span.spacer'),
-        el('button.cta', { onclick: apply }, [fresh ? 'Start build' : changesScene() ? 'Apply and rebuild' : 'Apply', icon('arrow-right', { size: 18 })]),
-      ]),
+      /* Next is the orange one until the last step, Apply a plain button beside it (Joey 2026-10-27: the length "is extremely
+         easy to overlook ... you instantly want to click the apply button and not the next button"); on Printer, Apply */
+      el('div.btns', {}, (() => {
+        const last = i === STEPS.length - 1;
+        const words = fresh ? 'Start build' : changesScene() ? 'Apply and rebuild' : 'Apply';
+        return [
+          i > 0 ? el('button.key', { text: 'Back', onclick: () => { cur = STEPS[i - 1]; render(); } }) : null,
+          el('span.spacer'),
+          last ? null : el('button.key.apply', { text: words, onclick: apply }),
+          last ? el('button.cta', { onclick: apply }, [words, icon('arrow-right', { size: 18 })])
+            : el('button.cta.next', { onclick: () => { cur = STEPS[i + 1]; render(); } }, [`Next · ${STEPS[i + 1] === 'length' ? 'Length' : 'Printer'}`, icon('arrow-right', { size: 18 })]),
+        ];
+      })()),
     ]));
   }
   async function apply() {

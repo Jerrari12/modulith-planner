@@ -45,7 +45,7 @@ export function mountAssemble(stage, ctx) {
      re-render, the end page's extra row and a window that rewraps the card's text all keep it current */
   const trackHeight = (card) => new ResizeObserver(() => root.style.setProperty('--player-h', `${card.offsetHeight}px`)).observe(card);
   root.prepend(topbar(stage, { ...ctx, active: 'assemble', say, soon, signal }));
-  const tb = toolbar(stage, { soon, explode: () => stage.goTo(pageOf.overview), camTitle: 'Back to the step\u2019s camera \u00b7 after you orbit or zoom, this returns to the guided view' });
+  const tb = toolbar(stage, { measure: true, explode: () => stage.goTo(pageOf.overview), camTitle: 'Back to the step\u2019s camera \u00b7 after you orbit or zoom, this returns to the guided view' });
   root.appendChild(tb.el);
   attachHint(tb.el.querySelector('.cam'), CAM_HINT, tb.el);
 

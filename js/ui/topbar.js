@@ -10,6 +10,7 @@ const MOUNT_NAME = { 'under-table': 'Under-Table', tabletop: 'Tabletop', wall: '
 const MOUNT_ICON = { 'under-table': 'desk', tabletop: 'table', wall: 'wall' };
 export const TABS = [['build', 'Build', 'cube'], ['colors', 'Colors', 'palette'], ['labels', 'Labels', 'tag'], ['parts', 'Parts', 'list-checks'], ['assemble', 'Assemble', 'wrench']];
 const printerName = (s) => { const id = s?.printer || 'any'; if (id === 'any') return 'Any printer'; if (id === 'custom') return s.customBed?.x ? `Custom ${s.customBed.x}×${s.customBed.y}` : 'Custom bed'; const p = ((typeof GEN2 !== 'undefined' ? GEN2 : null)?.printers || []).find((q) => q.id === id); return p ? p.label.split(' / ')[0] : 'Printer'; };
+const lengthColor = (len) => ((typeof GEN2 !== 'undefined' ? GEN2 : null)?.lengths || []).find((l) => l.id === len)?.color || 'currentColor';
 const PHASE = { colors: 'phase 4', labels: 'phase 5', parts: 'phase 2', assemble: 'phase 1', build: 'phase 0' };   // what a missing workspace says it waits for
 const FEEDBACK = 'Feedback & support';
 const STAMP = new URL(import.meta.url).searchParams.get('v');   // the deploy's ?v=<sha> (pages.yml), named in a feedback email; none in local dev
@@ -26,8 +27,11 @@ export function topbar(stage, ctx) {
     el('div.spacer'),
     tabs(),
     el('div.spacer'),
-    el('button.chip.chip-btn.mount', { title: 'Mount and length · opens the setup sheet', onclick: ctx.openSetup ? () => ctx.openSetup('mount') : ctx.soon('The setup sheet', 'the next phase-0 step') }, [
-      icon(MOUNT_ICON[build?.mount] || 'table'), el('span.lbl', { text: `${MOUNT_NAME[build?.mount] || 'Tabletop'} · ` }), el('span.mono', { text: String(length) }),
+    /* the length wears its own colour (the setup sheet's stripes, GEN2.lengths[].color): a bar in it divides the mount from
+       the length in place of the "·" (Joey 2026-10-27, "240 teal ... using the color as a vertical division"); the
+       accessible name keeps the words, "Tabletop · 240" */
+    el('button.chip.chip-btn.mount', { title: 'Mount and length · opens the setup sheet', 'aria-label': `${MOUNT_NAME[build?.mount] || 'Tabletop'} · ${length}`, style: `--len:${lengthColor(length)}`, onclick: ctx.openSetup ? () => ctx.openSetup('mount') : ctx.soon('The setup sheet', 'the next phase-0 step') }, [
+      icon(MOUNT_ICON[build?.mount] || 'table'), el('span.lbl', { text: MOUNT_NAME[build?.mount] || 'Tabletop' }), el('span.lenbar', { 'aria-hidden': 'true' }), el('span.mono', { text: String(length) }),
     ]),
     el('button.chip.chip-btn.printer', { title: 'Printer · optional; only greys out sizes that will not fit', onclick: ctx.openSetup ? () => ctx.openSetup('printer') : ctx.soon('The printer picker', 'the setup sheet') }, [icon('printer-3d'), el('span', { text: printerName(ctx.store?.state) })]),
     themeToggle(),

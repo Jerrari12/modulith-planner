@@ -3565,19 +3565,76 @@ test('the phone tour: an open sheet hides what it covers, its handle hides what 
   }
 });
 
+/* NO DEAD CONTROLS IN THE TOOLBAR (Joey 2026-10-27: Explode "does nothing, just says something about assemble phase 1",
+   the 3D/2D toggle "seems odd in all tabs other than Build where it can be used", and Measure "does nothing on the colors
+   tab"): the 3D/2D switch is Build's alone, with both halves live; Explode is Assemble's alone; Measure is Build's and
+   Assemble's; and no workspace's bar holds a disabled view button */
+test('the toolbar: 3D/2D only in Build, Explode only in Assemble, Measure in Build and Assemble, nothing in any bar that does nothing', async () => {
+  const { ctx, page, errors } = await open('build');
+  const bars = await page.evaluate(() => {
+    const out = {};
+    for (const ws of ['build', 'colors', 'labels', 'parts', 'assemble']) {
+      window.__GEN2_CTX__().switchTo(ws);
+      const t = document.querySelector('#ws-tools'), chip = t && t.querySelector(':scope > .view:not(.backdrop)');
+      out[ws] = { bar: !!t, view: chip ? [...chip.querySelectorAll('button')].map((b) => `${b.textContent}${b.disabled ? ' (disabled)' : ''}`) : null,
+        explode: !!(t && t.querySelector('.explode')), measure: !!(t && t.querySelector('.measure')), disabledView: t ? t.querySelectorAll('.view button[disabled]').length : 0 };
+    }
+    return out;
+  });
+  for (const [ws, b] of Object.entries(bars)) {
+    assert.ok(b.bar, `${ws} has its toolbar (${JSON.stringify(bars)})`);
+    assert.ok(ws === 'build' ? JSON.stringify(b.view) === '["3D","2D"]' : b.view === null, `${ws}: the 3D/2D switch ${ws === 'build' ? 'with both halves live' : 'is not there'} (${JSON.stringify(bars)})`);
+    assert.ok(b.explode === (ws === 'assemble'), `${ws}: Explode ${ws === 'assemble' ? 'is there' : 'is not there'} (${JSON.stringify(bars)})`);
+    assert.ok(b.measure === (ws === 'build' || ws === 'assemble'), `${ws}: Measure ${b.measure ? 'is there' : 'is not there'} (${JSON.stringify(bars)})`);
+    assert.ok(b.disabledView === 0, `${ws}: no disabled view button (${JSON.stringify(bars)})`);
+  }
+  // Explode in Assemble still does what it says: from step 1 (Assemble arrives ON the overview) back to the exploded overview
+  const onPage = () => page.evaluate(() => document.querySelector('#ws-steps [aria-current="step"]')?.title || '');
+  await page.locator('#ws-steps button.step').nth(1).click();
+  await page.waitForFunction(() => !/exploded/i.test(document.querySelector('#ws-steps [aria-current="step"]')?.title || 'exploded'), null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`step 1 did not become the current page (${await onPage()})`));
+  await page.locator('#ws-tools .explode').click();
+  await page.waitForFunction(() => /exploded/i.test(document.querySelector('#ws-steps .on, #ws-steps [aria-current="step"]')?.title || ''), null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`Explode did not open the exploded overview (${await page.evaluate(() => document.querySelector('#ws-steps')?.innerHTML.slice(0, 300))})`));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE SETUP SHEET LEADS THROUGH ITS STEPS (Joey 2026-10-27: the length "is extremely easy to overlook ... you instantly want
+   to click the apply button and not the next button"; the printer list "a bright grey on grey"): before the last step the
+   orange button is Next and Apply a plain one beside it; on Printer the orange one applies; an open select list draws on an
+   opaque ground in the dark bar's charcoal */
+test('the setup sheet: Next is the orange button until Printer, Apply stays a plain one beside it, the printer list is opaque', async () => {
+  const { ctx, page, errors } = await open('build');
+  await page.locator('#ws-top .chip-btn.mount').click();
+  await page.waitForSelector('#ws-setup .card', { timeout: 30_000 });
+  const foot = () => page.evaluate(() => ({ cta: document.querySelector('#ws-setup .btns .cta')?.textContent.trim(), plain: [...document.querySelectorAll('#ws-setup .btns .key')].map((b) => b.textContent.trim()) }));
+  const seen = [];
+  for (let i = 0; i < 3; i++) {
+    seen.push(await foot());
+    if (i < 2) await page.locator('#ws-setup .btns .cta').click();
+  }
+  assert.deepEqual(seen, [{ cta: 'Next · Length', plain: ['Apply'] }, { cta: 'Next · Printer', plain: ['Back', 'Apply'] }, { cta: 'Apply', plain: ['Back'] }], JSON.stringify(seen));
+  const opt = await page.evaluate(() => { const s = document.querySelector('#ws-setup select'), cs = getComputedStyle(s.querySelector('option')); return { bg: cs.backgroundColor, color: cs.color, ink: getComputedStyle(s).color, mode: document.documentElement.dataset.mode }; });
+  assert.ok(opt.mode === 'dark' && opt.bg === 'rgb(29, 30, 32)' && opt.color === opt.ink, `the printer list: the select's own ink on opaque charcoal (${JSON.stringify(opt)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE ROOM | NEUTRAL SWITCH ON A PHONE (2026-10-26): the bar fitted its 370 px exactly before the switch; with it, the
-   3D-only chip and Explode's "comes later" give way, and nothing is squeezed or scrolled */
-test('Colors on a phone: the Room | Neutral switch fits the bar, the 3D-only chip and Explode give way, every button full size', async () => {
+   3D-only chip and Explode's "comes later" gave way, and nothing is squeezed or scrolled. Since 2026-10-27 Colors' bar
+   carries neither at any width (the toolbar adds them only where they work) */
+test('Colors on a phone: the Room | Neutral switch fits the bar, no 3D-only chip or Explode, every button full size', async () => {
   const { ctx, page, errors } = await open('colors', { visitor: true, phone: true });
   await page.waitForFunction(() => document.querySelector('#ws-tools .backdrop'), null, { timeout: 60_000 });
   await settle(page, 800);
   const bar = await page.evaluate(() => { const t = document.querySelector('#ws-tools'), r = t.getBoundingClientRect();
-    return { client: t.clientWidth, scroll: t.scrollWidth, right: Math.round(r.right), vw: innerWidth, fixed: document.querySelector('#ws-tools .view.fixed').checkVisibility(), explode: document.querySelector('#ws-tools .explode').checkVisibility(),
+    return { client: t.clientWidth, scroll: t.scrollWidth, right: Math.round(r.right), vw: innerWidth, fixed: !!document.querySelector('#ws-tools > .view:not(.backdrop)'), explode: !!document.querySelector('#ws-tools .explode'),
       buttons: [...t.querySelectorAll(':scope > .icon-btn')].filter((b) => b.checkVisibility()).map((b) => Math.round(b.getBoundingClientRect().width)), backdrop: [...t.querySelectorAll('.backdrop button')].map((b) => b.textContent) }; });
   assert.deepEqual(bar.backdrop, ['Room', 'Neutral']);
-  assert.equal(bar.fixed, false, 'the 3D-only chip gives way'); assert.equal(bar.explode, false, `and Explode's "comes later"`);
+  assert.equal(bar.fixed, false, 'no 3D-only chip'); assert.equal(bar.explode, false, 'no Explode');
   assert.ok(bar.scroll <= bar.client && bar.right <= bar.vw, `nothing scrolled or off the screen (${JSON.stringify(bar)})`);
-  assert.ok(bar.buttons.length >= 4 && bar.buttons.every((w) => w >= 40), `every button full size (${JSON.stringify(bar.buttons)})`);
+  assert.ok(bar.buttons.length >= 3 && bar.buttons.every((w) => w >= 40), `every button full size (${JSON.stringify(bar.buttons)})`);   // Reset view, Undo, Redo
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -4117,7 +4174,12 @@ test('the setup sheet: New build, Wall Mount at 115 with a printer, Start build 
   assert.equal(s.printer, 'mk4');
   assert.equal(s.placed.length, 1, 'one starter drawer');
   assert.equal(await page.evaluate(() => document.title), 'E2E wall · MODULITH Planner');
-  assert.match(await text(page, '#ws-top .chip-btn.mount'), /Wall Mount · 115/);
+  assert.equal(await page.getAttribute('#ws-top .chip-btn.mount', 'aria-label'), 'Wall Mount · 115');
+  // the length in its own colour: the divider bar and (dark bar) the number wear 115's stripe colour (Joey 2026-10-27)
+  const chip = await page.evaluate(() => { const c = document.querySelector('#ws-top .chip-btn.mount'), bar = c.querySelector('.lenbar');
+    return { text: c.textContent, bar: bar && getComputedStyle(bar).backgroundColor, num: getComputedStyle(c.querySelector('.mono')).color, stripe: GEN2.lengths.find((l) => l.id === 115).color, mode: document.documentElement.dataset.mode }; });
+  const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+  assert.ok(chip.text === 'Wall Mount115' && chip.bar === rgb(chip.stripe) && (chip.mode !== 'dark' || chip.num === rgb(chip.stripe)), `the mount chip: no "·", a ${chip.stripe} bar between, the number in it on the dark bar (${JSON.stringify(chip)})`);
   // the whole trip is quiet, the 200 ms between Start build's commit and the reload included: Build does not push the
   // 115 record into a stage built for the 185 pool (a throttled software run showed 404s for every 115 part otherwise)
   assert.deepEqual(clean(errors), []);
@@ -5977,7 +6039,7 @@ test('the phone: New build’s setup sheet opens whole and Start build is a tap 
   const box = await page.evaluate(() => { const q = document.querySelector('#ws-setup > div').getBoundingClientRect(); return { top: q.top, bottom: q.bottom }; });
   assert.ok(box.top >= 0 && box.bottom <= 844 + 1 && box.bottom - box.top > 300, `the sheet is on screen, whole: ${JSON.stringify(box)}`);
   await page.evaluate(() => { window.__e2eBeforeReload = 1; });
-  await page.locator('#ws-setup .cta').tap({ timeout: 15_000 });
+  await page.locator('#ws-setup button:has-text("Start build")').tap({ timeout: 15_000 });   // beside Next, the orange one before the last step
   await page.waitForFunction(() => window.__e2eBeforeReload === undefined && window.__GEN2_STORE__ && window.__GEN2_STORE__.state.placed.length === 1, null, { timeout: 150_000 })
     .catch(() => assert.fail('Start build did not rebuild on the starter drawer within 150 s'));
   await waitBoot(page);

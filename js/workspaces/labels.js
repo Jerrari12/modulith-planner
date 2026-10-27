@@ -121,7 +121,7 @@ export function mountLabels(stage, ctx) {
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
   root.prepend(topbar(stage, { ...ctx, active: 'labels', say, soon, signal }));
-  const bar = toolbar(stage, { soon, history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } } });
+  const bar = toolbar(stage, { history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } } });
   root.appendChild(bar.el);
 
   /* ---------------- the record, the stage ---------------- */
