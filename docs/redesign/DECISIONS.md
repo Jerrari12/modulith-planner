@@ -5854,3 +5854,23 @@ cases and 707 unit tests pass. Shots: `D:\Claude - Output\sheet-hint-2026-10-28`
 Live 2026-10-28 10:10 as 58a04e6f: `sheet-hint-prod.mjs` green (twice) - on a fresh phone visit to Build the collapsed
 library's caret-up is a symbol of the served sprite, the nudge plays and is remembered, a reload does not nudge, no page
 errors. The same check failed on b2e27a22, before the deploy (no caret symbol, no nudge).
+
+## 2026-10-28 · A void the armed size fills shows one "+"; a new shelf starts with its lip
+
+Joey, placing a 1W·3H shelf into a 1W·3H void of his build: "when i hover over the yellow + it flickers between a red+ and
+a yellow+, making it like a 50/50 chance i can place a shelf or it tries to place a 1W-1h to like fill the gap, fighting
+me." The void's empty slots (the red "+"s: the three 1W·1H cases Fill all would add, at half-rows 8, 10 and 12) went on the
+stage beside the armed spot (2, 8), and the middle slot's marker stood on the very point of the shelf spot's (both centred
+at half-row 11). Hovering one hides its marker and shows its ghost; the stage hit-tests visible markers first, so the
+other marker took the pointer, and back. A click took whichever held it.
+
+- `stand.js armedSpots`: while a size is armed, a red slot that an offered spot's footprint overlaps is not shown (placing
+  the armed unit fills it), and a muted refused cell whose marker would sit on a red slot's gives way to the slot. Unarmed,
+  the red slots are as before.
+- Joey, the same day: "can we also default the shelf lip on by default?" A placed shelf starts with `lip: 'front'`
+  (`placeAt`); the inspector's Lip still takes it off. Shelves are only made by placing (type conversion swaps drawers
+  only, and Duplicate copies the lip); saved builds keep what they have.
+
+Tests: `stand.test.mjs` runs Joey's build (standUp's slots, the shared marker point, armedSpots' result); the e2e case arms
+a 1W·3H shelf on it, finds one spot in the void, holds the pointer on its "+" through twelve one-pixel nudges and clicks:
+a 1W·3H shelf at (2, 8) with its front lip. Against the old spot list it fails (three red slots and the shelf's spot).

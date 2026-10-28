@@ -33,7 +33,7 @@ import { board } from '../ui/board.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { buildName } from '../ui/names.js';   // the chip shows the name without GEN2, like the top bar
 import { layoutRules } from '../rules/layout.js';
-import { refusalReason, standUp, openCells } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
+import { refusalReason, standUp, openCells, armedSpots } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
 import { settleToward, settleWord } from '../rules/settle.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
@@ -386,6 +386,7 @@ export function mountBuild(stage, ctx) {
       id = s.nextId++;
       const u = { id, x: x + g.k, y, w: size.w, hh: size.hh, fill, shelves: 0 };
       if (fill === 'decor' && st.gf === 'gridfinity' && s.fill === 'decor') u.variant = 'gridfinity';
+      if (fill === 'shelf') u.lip = 'front';   // a new shelf starts with its front lip (Joey 2026-10-28); the inspector's Lip takes it off
       s.placed.push(u); s.selectedUnit = id;
     }, 'add');
     st.selId = id; ctx.memo.buildSel = id;
@@ -935,13 +936,12 @@ export function mountBuild(stage, ctx) {
     if (!show3d || st.eraser) { stage.setSpots(null); stage.setDrag(null); return; }
     // a reason chip belongs to the spots being replaced: a rebuild closes it (a touch choice is closed by setSpots itself)
     if (st.chosen && st.chosen.kind === 'no') { st.hoverNo = false; st.chosen = null; renderChoice(); }
-    const spots = [];
-    for (const sp of neededSpots()) spots.push(sp);
-    // the shared "+" list (placementSpots): the 2D board shows exactly these. Every mount: a gap along a wall or table
-    // rail comes from moving a unit (drag, ← →, the inspector's Move), and the gap then offers its own spots
-    if (st.armed) for (const sp of placementSpots()) spots.push(sp);
-    if (st.armed) for (const sp of refusedSpots()) spots.push(sp);   // the refused cells, muted: a click or tap says why
+    // the red slots; armed, the shared "+" list (placementSpots: the 2D board shows exactly these - every mount: a gap along
+    // a wall or table rail comes from moving a unit, and the gap then offers its own spots) and the refused cells, muted (a
+    // click or tap says why). Armed, a slot the armed unit's spot covers is not shown (stand.js armedSpots: their markers met
+    // and the hover flickered between them, Joey 2026-10-28)
     const a = armedSize();
+    const spots = st.armed ? armedSpots(neededSpots(), placementSpots(), refusedSpots(), a.w, a.hh) : neededSpots();
     stage.setSpots(spots.length ? { spots, w: a.w, hh: a.hh, rows: s.gridH * 2,
       onPick: (sp) => { st.chosen = null; renderChoice(); if (sp.kind === 'no') { st.hoverNo = false; st.chosen = sp; renderChoice(); return; } if (sp.kind === 'need') placeAt(sp.x, sp.y, { w: sp.w, h: sp.hh / 2, hh: sp.hh }, majorityFill()); else placeAt(sp.x, sp.y); },
       onChoose: (sp) => { st.chosen = sp; renderChoice(); },

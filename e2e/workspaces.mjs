@@ -490,6 +490,47 @@ test('Build: a wall build offers "+" spots under its bottom row, taking one grow
   await ctx.close();
 });
 
+/* A VOID FILLED BY THE ARMED SIZE (Joey 2026-10-28, with his build: placing a 1W·3H shelf into a 1W·3H void, "when i hover
+   over the yellow + it flickers between a red+ and a yellow+, making it like a 50/50 chance i can place a shelf or it tries
+   to place a 1W-1h to like fill the gap, fighting me"). The void's red slots shared a marker point with the armed spot; armed,
+   they now give way to it (stand.js armedSpots). Held over the "+" and nudged a pixel at a time, the hover stays on the
+   shelf's spot; a click places the 1W·3H shelf there - with its front lip, a new shelf's default since the same day. */
+test('Build: a void the armed size fills shows one "+" there, the hover holds on it, and a click places that shelf with its lip', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'xl', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 7, gridH: 10, sideCovers: true, plateParts: {}, nextId: 24, labelStyle: null, buildId: 'e2evoidflick1',
+    placed: [[1, 0, 18, 2, 2], [2, 0, 16, 1, 2], [3, 2, 18, 1, 2], [4, 1, 16, 2, 2], [5, 3, 19, 1, 1], [6, 4, 19, 1, 1], [7, 5, 19, 1, 1],
+      [8, 6, 19, 1, 1], [9, 3, 16, 4, 3], [10, 3, 13, 4, 3], [11, 3, 10, 4, 3], [12, 3, 7, 4, 3], [13, 0, 15, 2, 1],
+      [14, 0, 14, 2, 1], [15, 2, 15, 1, 1], [16, 2, 14, 1, 1], [18, 0, 8, 2, 6], [19, 0, 7, 3, 1]].map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0 })) };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('build', { query: `#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__?.manifest?.instances?.length, null, { timeout: 90_000 });
+  await page.locator('#ws-lib button.unit', { hasText: 'Shelf' }).first().click();
+  await armSize(page, '1W·3H');
+  const spots = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.spot && o.userData.ghost) out.push({ ...o.userData.spot, ghost: o.userData.ghost.visible }); }); return out; });
+  await page.waitForFunction(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.spot && !o.userData.spot.kind) n++; }); return n > 0; }, null, { timeout: 30_000 });
+  const all = await spots();
+  const inVoid = all.filter((s) => s.x === 2 && s.y >= 8 && s.y < 14);
+  assert.deepEqual(inVoid.map((s) => [s.kind || 'add', s.x, s.y]), [['add', 2, 8]], `one spot in the void, the shelf's (${JSON.stringify(inVoid)})`);
+  // the pointer on that "+", then nudged a pixel at a time: the hover stays on it (before, it flickered with a red slot's)
+  const at = await page.evaluate(() => { const S = window.__GEN2_VIEWER__; let g = null; S.scene.traverse((o) => { if (o.userData.spot && !o.userData.spot.kind && o.userData.spot.x === 2 && o.userData.spot.y === 8) g = o; });
+    const v = new S.THREE.Vector3(); g.userData.marker.getWorldPosition(v); v.project(S.camera); const r = S.renderer.domElement.getBoundingClientRect();
+    return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height }; });
+  const held = [];
+  for (let k = 0; k < 12; k++) {
+    await page.mouse.move(at.x + (k % 2 ? 1 : -1), at.y + (k % 3) - 1);
+    await page.waitForTimeout(60);
+    held.push((await spots()).filter((s) => s.ghost).map((s) => `${s.kind || 'add'}@${s.x},${s.y}`).join('+') || 'none');
+  }
+  assert.ok(held.every((h) => h === 'add@2,8'), `the hover holds on the shelf's spot (${held.join(' ')})`);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.some((p) => p.fill === 'shelf'), null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`no shelf placed (${JSON.stringify(await page.evaluate(() => window.__GEN2_STORE__.state.placed.slice(-2)))})`));
+  const placed = await page.evaluate(() => window.__GEN2_STORE__.state.placed.filter((p) => p.fill === 'shelf').map(({ x, y, w, hh, lip }) => ({ x, y, w, hh, lip })));
+  assert.deepEqual(placed, [{ x: 2, y: 8, w: 1, hh: 6, lip: 'front' }], 'the 1W·3H shelf in the void, its front lip on');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE REDESIGN'S FOLLOW-UP CHECKS (Joey + Astra, 2026-10-16): separate sections said in the Dock and on the board; the
    drag ghost shows the settled position; a unit taller than the headroom can be dragged on top; a gap build and an
    older over-wide build survive save, reopen and share; on a phone a "+" takes a finger's tap. */
