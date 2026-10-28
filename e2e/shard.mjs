@@ -8,8 +8,11 @@
    - each case is identified by its POSITION in the file (a name may repeat; a position cannot), and lands in exactly one
      shard - assign() returns one shard per position, and test/e2e-shard.test.mjs proves the partition for many lists;
    - the split balances measured time: the longest case first, each onto the least-loaded shard (ties to the lower shard
-     number), weighted by e2e/shard-weights.json (seconds per case name: a whole soft-render run's durations, from
-     tools/tap-durations.mjs; only the proportions matter, so the runner's own - its shards' notices - can replace them).
+     number), weighted by e2e/shard-weights.json (seconds per case name; only the proportions matter). Since 2026-10-27
+     they are the RUNNER's own: each case's median over the shard notices (tools/tap-durations.mjs) of three green main
+     runs, 40611504137, 40614184548 and 40616559063, each shard's seconds divided by its machine's speed (the median ratio
+     against the previous weights), so six machines of 0.95-1.98x share one scale; a case that skips on the runner weighs
+     0.5.
      A case missing from the weights - a new one - counts as the median, so a stale file only unbalances, it never drops
      or doubles a case;
    - each shard writes what it ran to E2E_SHARD_REPORT, and the deploy workflow's coverage gate checks the reports of all

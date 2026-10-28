@@ -5734,3 +5734,26 @@ B is wall and desk floored at a real matte black, with no extra fill light on th
   - a black wall of one's own draws exactly as a #38393b one, its chip #38393b with "lifted to #38393b";
   - the Black preset desk draws exactly as a #38393b desk;
   - no page errors.
+
+## 2026-10-27 · Eight e2e shards, weighted by the runner's own times
+
+Joey: "why does it take so long?" A deploy ran 20-21 min on 2026-10-27, nearly all of it the e2e shards: run 40616559063
+took 15.2 / 12.8 / 20.8 / 16.2 / 16.0 / 5.7 min, and the deploy waits on the slowest. Two causes: the weights were a local
+soft-render run's (2026-10-25), from before about twenty cases were added, and the runner machines differ by up to 2x
+(that day's shard speeds 0.95-1.98 against the same weights).
+
+- **The weights are the runner's own** (e2e/shard-weights.json): each case's median over the shard notices of the day's
+  three green main runs (40611504137, 40614184548, 40616559063), each shard's seconds divided by its machine's speed (the
+  median ratio against the previous weights), so the machines share one scale; the 16 cases that skip on the runner (the
+  room cases under SOFTWARE_GL) weigh 0.5, which holds while they skip there. 127 weights for the 128 cases: the room
+  floor case added since gets the median (shard.mjs weightOf). Judged by the new weights the split is 511 s per shard at
+  most, where the old split put up to 538.
+- **Eight shards, not six** (pages.yml): the run waits on its slowest machine, and smaller shards bound that. Modelled on
+  the three runs, each shard's work times its measured machine speed: the old split 19.7-21.0 min of test work, the new
+  weights 15.8-16.8, the new weights on eight shards 11.9-12.6 - estimates, test work only (each shard also spends about
+  1.5 min on checkout, npm ci and the browser check, in parallel), and shards 7-8 given each run's median machine, so an
+  unlucky draw of slow machines still shows. The repository is public, so two more runners cost nothing, and 13 jobs at
+  most run at once (the plan allows 20). The coverage gate reads the shard count from the reports, unchanged. Terra
+  01a1804d: the mechanics approved; the wording of the estimates and the case count tightened.
+
+test/e2e-shard.test.mjs 5/5; the first CI run is the real check (the coverage job proves every case ran once across eight).

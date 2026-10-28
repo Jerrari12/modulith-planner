@@ -376,10 +376,14 @@ jobs:
     # weights) and took 7.5 / 12.7 / 16.9 / 16.3 min, their runner/local medians 0.98 / 1.49 / 1.76 / 1.86 - the spread is
     # the runner machines, which no weighting can fix, so the run waits on its slowest machine; smaller shards bound that.
     # Six on run 40264684655: 5.4 / 8.5 / 10.2 / 10.7 / 5.1 / 5.1 min, the whole run 11.4 min (four: 17.8).
+    # EIGHT (2026-10-27, Joey: "why does it take so long?"): the suite had grown to 128 cases and runs took 20-21 min, the
+    # slowest shard 20.8 min (run 40616559063: 15.2 / 12.8 / 20.8 / 16.2 / 16.0 / 5.7). Modelled on that day's three green
+    # runs with each shard's measured machine speed: the runner's own weights alone 15.8-16.8 min, eight shards 11.9-12.6.
+    # The repository is public, so the two extra runners cost nothing.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     name: e2e (shard ${{ matrix.shard }})
     concurrency:
       group: e2e-${{ github.ref }}-${{ matrix.shard }}
