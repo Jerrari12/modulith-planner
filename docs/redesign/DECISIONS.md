@@ -5996,6 +5996,151 @@ Yellow pick takes every one away on the same material; the tier strengths read 1
 same check failed on 53c2a639, before the deploy. The Lab's re-vendor is still owed (its drift gate's upstream is the old
 viewer checkout, which stopped at the 2026-10-21 catalog).
 
+## 2026-10-28 - The final scene's spools say what they are: a tag on a wire, a sticker on the flange
+
+Joey (relayed by planner-2, 2026-10-27): "a way to identify if they are pla, petg, tpu ... like maybe a paper tag ... two
+black spools but one is PLA black and the other is TPU black, but at a glance they look identical."
+
+- **The route there.** Three mock-ups (a hanging tag, a flange sticker, banded rims): he chose the tag. Then, in turn:
+  - a kraft shipping tag ("hanging more randomly ... twisted slightly ... partly sideways");
+  - hung lower and smaller, so it cannot clip the coil or flange; white paper; "tiny text with brand name ... silk, high
+    temp, carbon fiber"; a foot strip "of the exact color";
+  - hung from the coil rather than the flange (Sunlu's anti-tangle tag as the reference);
+  - "a thin metal wire instead" of a strand of filament.
+
+  Then Astra's review, which he brought: a flange sticker for the views the tag misses, one order of words, and a picked
+  row lighting its spool. Last, his four photos of real spools: "make the label aligned to the center of the spool ...
+  centered between the oval slots ... just don't want the text to be completely sideways or upsidedown".
+- **The words** (main.js `materialOfFilament`, on `filamentsInBuild`'s filament records):
+  - a catalogue label's material, read as colors/materials.js reads it;
+  - its brand, and its line without the ™ or material words;
+  - its colour's own name;
+  - the properties its line and name carry: SILK, MATTE, TRANSLUCENT, CARBON FIBRE, HIGH TEMP, HIGH SPEED, GLOW, MARBLE,
+    WOOD, SPARKLE, MULTICOLOUR, and TPU hardness "95A" (from "TPU95" or "TPU 95A");
+  - a name the catalogue lacks is read by its own words.
+
+  spool.js `tagInfo` orders them: the material; `detail` (grade or finish · colour, "95A · BLACK"); `maker` (brand ·
+  line, "POLYMAKER · POLYFLEX").
+- **The tag** (spool.js `makeTag`):
+  - a white card 20 x 36 mm with its top corners clipped and a 1.9 mm hole, its reinforcement ring in the material's
+    colour (the picker's tags: PLA blue, PETG amber, TPU green);
+  - the three lines, and a 7 mm foot strip in the filament's exact hex;
+  - hung on a 0.6 mm bare-steel wire that leaves the coil just under its surface (90.5 of 91 mm), toward its top front,
+    and arches 10 mm out into the hole;
+  - the card pivots at the hole, seeded by the spool: twisted 12 to 35 deg, swung 5 to 16, leaning 4 to 12, never
+    straight;
+  - no point of the card is inside the coil or a flange (the e2e reads its corners).
+- **The sticker** (spool.js `makeSticker`, done.js `placeSpoolMarks`):
+  - 44 x 24 mm, a band of the filament's colour, the same three lines;
+  - on a standing spool's camera-side flange, and on a stack's top spool's top flange (the faces under a spool are hidden);
+  - centred in a clear sector between two of the flange's three slots. The slots were measured by rays on the spool mesh
+    (2026-10-28): at 90, 210 and 330 deg, 10 deg wide, from the bore to 90 mm. The sticker sits 65 mm out, square to the
+    centre;
+  - of the six choices (three sectors, words out or in), the one reading most upright from the front: never more than 30
+    deg off, the spool's own turn setting how far;
+  - fixed in the spool's frame.
+- **A shared colour** (Sol 01a1839e): spools are one per hex, and the catalogue has filaments sharing one. Panchroma Grey
+  (PLA) and Polymaker PETG Grey are both #9a9da3, and TPU95 and TPU90 Black both #16161a. Such a spool's words say every
+  filament on it ("PLA / PETG", both makers), with a neutral ring. Giving each filament its own spool is not done.
+- **The font** (Sol): the words are drawn into canvases in Archivo. When the face is not ready yet, the marks are drawn
+  again once `document.fonts.load` resolves, if the scene is still on.
+- **Colors**: a region's row picked lights the spool it prints in (`selectSpool(activeHex(key))`), as a spool's own picker
+  already did. A click on a tag or a sticker is a click on its spool.
+- **Lifecycle**: the marks are made after the spools are posed and again at the end of every `refreshSpools`. They are
+  cleared before the groups' boxes are measured (the shadow fit and the mugs see only spools) and on leave. ?spooltag=off
+  (debug) compares.
+- **Checks.**
+  - E2E "the Done scene's spools each hang a tag with their material ...": the words, the ring and the strip's pixel; the
+    wire (metal, 0.6, tucked); no clip; never straight; the same after a refresh; the boxes unchanged; the silk, the
+    two-material line, the shared grey and an unknown TPU 95A; every sticker on its face, in a sector, square to the
+    centre, <= 30 deg off upright, no corner on a slot; the font redraw; ?spooltag=off.
+  - E2E "Colors: a region's row picked lights the spool it prints in".
+  - 23 mutants, each failing one or the other.
+  - Unit 722/722; the spool placement, label-palette stripe, floor and boot cases green on SwiftShader; the two room
+    cases skipped there green on the GPU.
+  - Sol 01a1839e: three findings, fixed; round 2 no objection (its font-weight caveat discarded: Archivo is one variable
+    file, 400 to 900).
+
+- **Live 2026-10-28 at `66b7914`** (pushed 14:08, live 14:27). Checked on the live planner (`tags-live.mjs`, Assemble's
+  final scene, the build in Elegoo PLA Black):
+  - tags "PLA / BLACK / ELEGOO" (ring #2a64c4) and "TPU / 95A · BLACK / POLYMAKER · POLYFLEX" (ring #1b7a50), both on
+    metal wires;
+  - the stack's top spool's sticker "PLA / BLACK";
+  - marks drawn once, no page errors.
+
+## 2026-10-28 · A shared build carries its colours
+
+Astra, after the label palette went live: "Users reasonably expect 'Share build' to share what they see. Carrying the
+stripe while dropping the label background can change both its appearance and readability." The requirement: opening a
+shared build in a fresh browser reproduces its colours, label bodies, text and stripes included, without inheriting the
+recipient's unrelated preferences; old links keep their fallback. Design note `docs/redesign/SHARE-LOOK.md`.
+
+- **The record carries its look:** a new field `look` = `{ v: 1, on, colors, over }`, the Colors palette as chosen (every
+  part pick, the per-unit picks, the label body and text). The store stamps it at every serialisation, so the address (what
+  Share copies), Undo's write-back, Recent, the slot and a file all carry the current colours.
+- **The boot applies it** once, through one gate (decode, `buildTooNew`, the schema's `cleanLook`), in place of this
+  browser's palette for the build and of the first preset; a look of instruction colours stays one. A record with no look
+  (every link and file before today) opens exactly as before. A `#scheme=` beside the link still applies after it.
+- **The recipient keeps their own:** label defaults, saved schemes, the owned list and "★ My palette" are untouched.
+- **The chosen `on`, never Assemble's Part colors:** the stage holds the chosen value while that temporary view is on, and
+  both the look and the history read it.
+- **Outside data:** names are strings of at most 80 characters, hexes have 3, 4, 6 or 8 digits, links are http(s) of at
+  most 500 characters, plain objects only, no prototype keys; past 256 KB of UTF-8 the per-unit layer is dropped and the
+  build-wide colours stay (a fully picked build is under 4 KB).
+
+Tests: `test/share-look.test.mjs` (the cleaner, the cap in UTF-8 bytes, the round trip, the store stamping and Undo); E2E
+"Share: ..." x3 (a fresh context with its own same-id palette, defaults, schemes and owned list gets the sender's body, text,
+part, unit pick and stripe, its own settings unchanged; `on: false`, the no-look fallbacks and `#scheme=`; Assemble's Part
+colors never shared or undone into). Mutants: the boot apply disabled fails two cases; `look()` reading the live flag
+fails the Assemble case. Unit 736/736, e2e 95/95 (Colors, Assemble, Share, Labels, Parts, presets,
+undo). Reviews: Sol 01a183be (design: reject, nine changes folded in, three discarded with reasons in the note), Sol
+01a183df (code: the cap counted UTF-16 units; now UTF-8 bytes).
+
+Live 2026-10-28 as 02f6a55e (main 02f6a55, Joey's go: "merge and deploy share-look"). `share-look-prod.mjs` green: a
+sender's label body (Panchroma Cream), text (Panchroma Navy), Metric spool (Panchroma Blue) and drawer 1's own faceplate
+colour (Polar Seafoam) reach a fresh browser through the address, and through Save build file then Load build file in
+another; both recipients' seeded label defaults, schemes and owned list are byte-identical afterwards; no page errors.
+Vault e0901b8. Kept separate, not started: a v2 suggestion set (a chosen purple, a grey stainless) and the patch print test.
+
+## 2026-10-28 · On a phone an open sheet puts the tab bar away; a stack's tags are staggered
+
+**The tab bar.** Joey, asked whether to hide the bottom bar while a sheet is open on his phone (at his 360 x 675 an
+open sheet left 61 px of model between the top chrome and the sheet): "yes".
+- Upright, while a sheet is open, the tab bar steps out (`#ws.bar-off`, phone.js `stack`). The dock, or Assemble's
+  player, drops into its place, 6 px off the bottom plus the screen's inset, and the sheet sits 6 px over it (`base`
+  reads the dock's own top, as on its side). The model's strip about doubles: 61 to 119 px at 360 x 675.
+- Collapsing the sheet (its handle) brings the tabs back. A workspace that opens a sheet on arrival (Colors, Parts)
+  shows no tabs until it is collapsed: the trade accepted.
+- On its side the tabs are a rail beside the sheets, and stay.
+- A sheet's `bottom` now moves with its slide (`transition`). Done at once, a sheet collapsing as the bar came back rose
+  58 px over the model for the slide's first frames. A tap on a part in Colors collapses the sheet, and the tap's click,
+  about 110 ms later, landed on the rising handle and opened it again: the phone journey and the part-card case caught
+  it, and a toggle trace found the click on the handle's title.
+
+**The tags, staggered.** Joey, on a five-spool stack: the tags hung "perfectly in a vertical column ... randomize them
+slightly ... as if you rotated the spools a few degrees to the left or right ... but mostly still visible from the front".
+- A lying spool's wire leaves the coil 5 to 20 deg round from its front, either way, seeded by the spool apart from the
+  card's hang (done.js `placeSpoolMarks`). It is at least 10 deg off the tag before it in the stack, re-drawn up to eight
+  times, then put on the other side (Terra 01a183f3).
+- The card turns with its wire (the pivot's twist). Left square to the room, its corner on the turned side swung into the
+  coil (the e2e's clip check: r 90.6 of 91.5).
+- A spool on its rim is not turned: its front is the coil's furthest-forward line, and turned, the card would hang up
+  or down the coil, toward it.
+
+**Checks.**
+- E2E "the phone: an open sheet puts the tab bar away, the dock or the player takes its place, and collapsing brings
+  the tabs back" (360 x 675, Build and Assemble). The Build library case and the phone journey collapse their sheet
+  before a tab.
+- The tag case: every lying tag 5 to 20 deg round, a standing one at the front, neighbours 10 deg or more apart (a
+  five-colour stack has a pair), no clip, the twist counted from the wire.
+- The sideways case: the rail stays beside an open sheet.
+- 9 mutants, each failing its case: the bar never put away, put away on its side too (it survived until the sideways
+  check), left visible, the dock left up, the sheet's base off the dock, `bottom` jumping, the tags not turned, the
+  neighbours let line up, the card square to the room.
+- All 24 phone cases and the tag cases green on SwiftShader. The tag case runs about 5 min here under load; its new
+  five-colour step is 3.3 s of it, and the rest is its three fresh entries, as before.
+- Terra 01a183d2 (the bar, then the bottom transition): no findings. Terra 01a183f3 (the stagger): one finding, fixed.
+
 ## 2026-10-28 · A face printed down on the smooth sheet shows its first layer, drawn as vectors
 
 Joey, on the Silk Gold EdgeLabel accents: printed face down on a smooth build plate "you can still see the beads on the

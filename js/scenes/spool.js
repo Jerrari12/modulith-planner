@@ -145,6 +145,132 @@ export function makeSpool(geo, color, { plastic = SPOOL.plastic } = {}) {
   return g;
 }
 
+/* THE SPOOL'S MATERIAL, SHOWN (Joey 2026-10-27: "a way to identify if they are pla, petg, tpu, and so on, like maybe a
+ * paper tag or something that hangs down near the front? ... two black spools but one is PLA black and the other is TPU
+ * black, but at a glance they look identical"). Of three mock-ups (a tag, a flange sticker, banded rims; 2026-10-28) he
+ * chose the tag, then a real shipping tag, then (the same day): "hang them further down, maybe slightly smaller, so it
+ * doesn't run the risk of clipping into the spool or filament ... a different color other than cardboard ... tiny text
+ * with brand name? or maybe text defining if it's silk, high temp, carbon fiber, etc, maybe even using the bottom of the
+ * tag as a color strip of the exact color the filament is"). Then Astra's review, which Joey brought (the same day): a
+ * sticker on the flange for the views the tag misses, and one order of words on both, "TPU / 95A · BLACK / Polymaker ·
+ * PolyFlex": the material, then its grade or finish and colour, then its maker and line, smaller. done.js
+ * placeSpoolMarks hangs the tags and lays the stickers. */
+export const MATERIAL_COLOURS = { PLA: '#2a64c4', PETG: '#ad5a0c', TPU: '#1b7a50' };
+/* a filament's label words (main.js filamentsInBuild: material, props, brand, line, colourName; hex), or null when it says
+   no material: `detail` its grade or finish and its colour ("95A · BLACK"), `maker` its brand and line ("POLYMAKER ·
+   POLYFLEX") */
+export const tagInfo = (f) => {
+  if (!f || !f.material) return null;
+  const props = f.props || (f.silk ? ['SILK'] : []);
+  return { material: f.material, props, brand: f.brand || null, line: f.line || null, colour: f.colourName || null, hex: f.hex,
+    detail: [...props, f.colourName].filter(Boolean).join(' · ').toUpperCase(), maker: (f.maker || [f.brand, f.line].filter(Boolean).join(' · ')).toUpperCase() };   // f.maker: a shared spool's makers (done.js spoolMaterials)
+};
+const markMat = (tex) => new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
+/* THE SHIPPING TAG (Joey 2026-10-28, two photos of one: its top corners clipped, a reinforced hole, a string loop). White
+   card, 20 x 36 mm, the corners clipped 4 mm, a 1.9 mm hole 5 mm down, its reinforcement ring in the material's colour
+   (PLA blue, PETG amber, TPU green: the picker's material tags), then, down it: the material, large; its grade or finish
+   and its colour (tagInfo detail) in the material's colour; its maker and line, small; and its foot a strip in the
+   filament's own colour. It hangs on a wire from the coil (ON A WIRE FROM THE COIL) */
+export const TAG = { w: 20, h: 36, clip: 4, hole: 1.9, holeDown: 5, strip: 7 };
+// the words' sizes fitted to a width: largest first, down to 6 px
+const fitter = (g) => (text, weight, px, maxW) => { let p = px; do { g.font = `${weight} ${p}px Archivo, "IBM Plex Sans", sans-serif`; p -= 1; } while (g.measureText(text).width > maxW && p > 6); };
+function tagTexture(info, accent) {
+  const k = 11, W = TAG.w * k, H = TAG.h * k, cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#f1efe9'; g.fillRect(0, 0, W, H);
+  // the card's faint fibres, seeded by what it says (the same tag every time)
+  let s = [...`${info.material}|${info.hex}`].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const rnd = () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < 500; i++) { const x = rnd() * W, y = rnd() * H, l = 2 + rnd() * 7, a = rnd() * Math.PI; g.strokeStyle = `rgba(120,110,95,${0.04 + rnd() * 0.05})`; g.lineWidth = 0.6; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  g.fillStyle = accent; g.beginPath(); g.arc(W / 2, TAG.holeDown * k, TAG.hole * 2.2 * k, 0, 2 * Math.PI); g.fill();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  const fit = fitter(g);
+  g.fillStyle = '#1d1e20'; fit(info.material, 800, Math.round(7 * k), W - 2 * k); g.fillText(info.material, W / 2, 15.5 * k);
+  if (info.detail) { g.fillStyle = accent; fit(info.detail, 700, Math.round(2.4 * k), W - 2 * k); g.fillText(info.detail, W / 2, 21.5 * k); }
+  if (info.maker) { g.fillStyle = '#6b665d'; fit(info.maker, 600, Math.round(1.9 * k), W - 2 * k); g.fillText(info.maker, W / 2, 25 * k); }
+  // the foot: the filament's own colour, a hairline between paper and strip
+  const y0 = (TAG.h - TAG.strip) * k;
+  g.fillStyle = info.hex; g.fillRect(0, y0, W, H - y0);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, y0, W, 1);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+function tagGeometry() {
+  const { w, h, clip, hole, holeDown } = TAG, x = w / 2, y = h / 2;
+  const sh = new THREE.Shape([[-x, -y], [x, -y], [x, y - clip], [x - clip, y], [-x + clip, y], [-x, y - clip]].map(([a, b]) => new THREE.Vector2(a, b)));
+  const hp = new THREE.Path(); hp.absarc(0, y - holeDown, hole, 0, 2 * Math.PI, true); sh.holes.push(hp);
+  const geo = new THREE.ShapeGeometry(sh, 24);
+  const p = geo.attributes.position, uv = geo.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) + x) / w, (p.getY(i) + y) / h);   // the texture over the whole tag
+  return geo;
+}
+/* ON A WIRE FROM THE COIL (Joey 2026-10-28: "instead of the string/wire being kind-of mounted to the plastic frame of the
+   spool, maybe instead just tuck it in an make it stick out from the top of the filament coil ... and like the string/wire
+   arches out slightly away from it ... like how sunlu uses their anti-tangle paper tag piece ... lets keep it simple";
+   drawn as a strand of the filament, it "looks like a piece of filament holding them on there now, can we instead do like
+   a thin metal wire instead?"). The group's origin is where the wire leaves the coil, tucked under its surface; the wire
+   (0.6 mm, bare steel) comes straight out along `out`, arches over and down, and its tip goes through the card's hole. The
+   card hangs from that hole on its own pivot ('spool-tag-pivot', userData.pivot), which done.js turns (its twist, its
+   swing, its lean), so the wire never turns with it into the coil. `out` and `down` in the group's own frame, which
+   done.js leaves unturned (the world's axes) */
+export const STRAND = { r: 0.3, out: 10, drop: 12, tip: 2 };
+export function makeTag(info, accent, out, down = new THREE.Vector3(0, -1, 0)) {
+  const g = new THREE.Group(); g.name = 'spool-tag';
+  g.userData.tag = { ...info, accent };   // what it says, for a reader of the scene (the e2e suite)
+  const o = out.clone().normalize(), d = down.clone().normalize();
+  const hole = o.clone().multiplyScalar(STRAND.out).addScaledVector(d, STRAND.drop);
+  const curve = new THREE.CubicBezierCurve3(new THREE.Vector3(), o.clone().multiplyScalar(STRAND.out * 0.6).addScaledVector(d, -1.5), o.clone().multiplyScalar(STRAND.out * 1.05).addScaledVector(d, STRAND.drop * 0.25), hole.clone().addScaledVector(d, STRAND.tip));
+  const strand = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, STRAND.r, 8, false), new THREE.MeshStandardMaterial({ color: new THREE.Color('#b9bcc0'), roughness: 0.32, metalness: 1 }));
+  strand.name = 'spool-tag-wire';
+  const pivot = new THREE.Group(); pivot.name = 'spool-tag-pivot'; pivot.position.copy(hole);
+  const card = new THREE.Mesh(tagGeometry(), markMat(tagTexture(info, accent)));
+  card.name = 'spool-tag-card';
+  card.position.y = -(TAG.h / 2 - TAG.holeDown);   // the hole at the pivot
+  pivot.add(card);
+  for (const m of [card, strand]) { m.castShadow = true; m.receiveShadow = true; m.userData.doneRoom = true; }
+  g.add(strand, pivot);
+  g.userData.pivot = pivot;
+  return g;
+}
+/* THE FLANGE STICKER (Astra's review, brought by Joey 2026-10-28: "a compact rounded rectangular sticker between the centre
+   hole and outer rim, clear of the slots. Keep it physically attached to the spool - no rotating to follow the camera";
+   for the views the hanging tag misses: a spool on its rim, a stack seen from above). 44 x 24 mm, corners 3 mm, white;
+   its left edge a 7 mm band in the filament's own colour, then the tag's words in the tag's order. Its face +z, its words'
+   up +y; done.js lays it on the flange between two slots (the slots at 90, 210 and 330 deg round the axis, 10 wide, from
+   the bore to 90 mm: measured 2026-10-28; the clear sectors centred at 30, 150 and 270), 65 mm out */
+export const STICKER = { w: 44, h: 24, corner: 3, band: 7, at: 65, sectors: [30, 150, 270] };
+function stickerTexture(info, accent) {
+  const k = 10, W = STICKER.w * k, H = STICKER.h * k, cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#f3f1ec'; g.fillRect(0, 0, W, H);
+  g.fillStyle = info.hex; g.fillRect(0, 0, STICKER.band * k, H);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(STICKER.band * k, 0, 1, H);
+  const fit = fitter(g), x0 = (STICKER.band + 2.5) * k, maxW = W - x0 - 2 * k;
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = '#1d1e20'; fit(info.material, 800, Math.round(9 * k), maxW); g.fillText(info.material, x0, 8.5 * k);
+  if (info.detail) { g.fillStyle = accent; fit(info.detail, 700, Math.round(2.8 * k), maxW); g.fillText(info.detail, x0, 15.6 * k); }
+  if (info.maker) { g.fillStyle = '#6b665d'; fit(info.maker, 600, Math.round(2.2 * k), maxW); g.fillText(info.maker, x0, 19.8 * k); }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
+export function makeSticker(info, accent) {
+  const { w, h, corner: c } = STICKER, x = w / 2, y = h / 2;
+  const sh = new THREE.Shape();
+  sh.moveTo(-x + c, -y); sh.lineTo(x - c, -y); sh.quadraticCurveTo(x, -y, x, -y + c); sh.lineTo(x, y - c); sh.quadraticCurveTo(x, y, x - c, y);
+  sh.lineTo(-x + c, y); sh.quadraticCurveTo(-x, y, -x, y - c); sh.lineTo(-x, -y + c); sh.quadraticCurveTo(-x, -y, -x + c, -y);
+  const geo = new THREE.ShapeGeometry(sh, 6), p = geo.attributes.position, uv = geo.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) + x) / w, (p.getY(i) + y) / h);
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: stickerTexture(info, accent), roughness: 0.6, metalness: 0 }));
+  m.name = 'spool-sticker'; m.receiveShadow = true; m.userData.doneRoom = true;
+  m.userData.sticker = { ...info, accent };   // what it says, for a reader of the scene (the e2e suite)
+  return m;
+}
+export function disposeMark(o) { o.traverse((m) => { if (!m.isMesh) return; m.geometry.dispose(); if (m.material.map) m.material.map.dispose(); m.material.dispose(); }); }
+
 /* every material a spool made (the geometry is shared and stays) */
 export function disposeSpool(g) {
   for (const m of (g.userData.spool && g.userData.spool.materials) || []) m.dispose();

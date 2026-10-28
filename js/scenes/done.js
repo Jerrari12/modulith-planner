@@ -21,7 +21,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { loadSpool, makeSpool, disposeSpool } from './spool.js';
+import { loadSpool, makeSpool, disposeSpool, makeTag, makeSticker, STICKER, disposeMark, tagInfo, MATERIAL_COLOURS } from './spool.js';
 import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook, roomFloor } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
@@ -1078,10 +1078,120 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       placed.push({ kind: g.kind, colours: g.colours, at: p, box: plain(new THREE.Box3().setFromObject(root, true)) });   // precise: a turned cylinder's own box would overstate it by a quarter
     });
     parts.spools.placed = placed;
+    placeSpoolMarks();
     return placed.map((x) => x.box);
   }
   const lower = (c) => String(c).toLowerCase();
   const spoolsOf = (root) => root.children.filter((s) => s.userData.setColor);
+  /* THE SPOOL'S MATERIAL, SHOWN (spool.js THE SHIPPING TAG and THE FLANGE STICKER; Joey's pick of three mock-ups,
+     2026-10-28, then Astra's review; ?spooltag=off compares): each spool's words are its filament's (main.js
+     filamentsInBuild: its material, grade or finish, colour, maker and line; a region nothing picked has none, and no
+     tag). Every spool hangs a tag at its coil's front (+z, the room's camera side), on a wire from the coil; a flange face
+     that shows carries a sticker too. Made after the spools are posed, and again after every refresh (the marks are the
+     spools' children, so they move with them) */
+  const tagsOff = () => debug && new URLSearchParams(location.search).get('spooltag') === 'off';
+  /* a spool is a colour (spoolColours), and two filaments can share one: the catalogue has Panchroma Grey (PLA) and
+     Polymaker PETG Grey both #9a9da3, TPU95 and TPU90 Black both #16161a (Sol 01a1839e: keyed by the hex alone, the last
+     one read named the spool). Its words then say both: "PLA / PETG", every grade or finish, each maker */
+  const uniq = (a) => [...new Set(a.filter(Boolean))];
+  function spoolMaterials() {
+    const f = stage.filamentsInBuild ? stage.filamentsInBuild() : { filaments: [] }, by = new Map();
+    for (const x of f.filaments) { const k = lower(x.hex); if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
+    return new Map([...by].map(([k, list]) => [k, list.length === 1 ? list[0] : {
+      hex: list[0].hex, material: uniq(list.map((x) => x.material)).join(' / ') || null, silk: list.some((x) => x.silk),
+      props: uniq(list.flatMap((x) => x.props || [])), colourName: uniq(list.map((x) => x.colourName)).join(' / ') || null,
+      maker: uniq(list.map((x) => [x.brand, x.line].filter(Boolean).join(' · '))).join(' / ') || null,
+    }]));
+  }
+  function clearSpoolMarks() {
+    for (const s of parts.spools ? parts.spools.groups.flatMap(spoolsOf) : []) for (const o of s.children.filter((c) => c.userData.spoolMark)) { disposeMark(o); o.removeFromParent(); }
+  }
+  function placeSpoolMarks() {
+    clearSpoolMarks();
+    if (tagsOff() || !parts.spools) return;
+    parts.marksDrawn = (parts.marksDrawn || 0) + 1;   // for a reader of the scene (the e2e suite: the redraw for the font)
+    const mats = spoolMaterials(), F = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0);
+    const lastYaw = new Map();   // per stack, the turn of the tag before (below)
+    for (const s of parts.spools.groups.flatMap(spoolsOf)) {
+      const info = tagInfo(mats.get(lower(s.userData.spool.color)));
+      if (!info) continue;
+      const accent = MATERIAL_COLOURS[info.material] || '#5a5f66';
+      s.updateWorldMatrix(true, false);
+      const C = new THREE.Vector3().setFromMatrixPosition(s.matrixWorld);
+      const A = new THREE.Vector3(0, 1, 0).transformDirection(s.matrixWorld);
+      const lying = Math.abs(A.y) > 0.7;
+      if (lying && A.y < 0) A.negate();   // the top flange
+      if (!lying && A.dot(F) < 0) A.negate();   // the flange on the camera's side (a spool on its rim faces sideways: either)
+      /* the wire leaves the coil at its front, tucked just under the surface (90.5 of the coil's 91 mm; spool.js ON A
+         WIRE FROM THE COIL): lying, toward the top of the coil (20 mm up its 27.5), out at the front, a little turned; on its
+         rim, at the coil's front a little over the axle (a standing coil is furthest forward at mid-height, so a card
+         hanging there stays in front of it), toward the outer flange. Either way the card hangs 100 mm out, in front of
+         the coil (91) and between the flanges (27.5) */
+      const out = F.clone().addScaledVector(A, -F.dot(A)).normalize();   // the coil's front, square to its axis
+      /* lying, that front turned 5 to 20 deg either way about the axis, as if the spool had been set down a little turned
+         (Joey 2026-10-28: a stack's tags hung "perfectly in a vertical column"), and at least 10 deg off the tag before it in
+         the stack, so no two line up; all still facing the room. Seeded apart from the hang below, which stays as it was.
+         On its rim the front is the coil's furthest-forward line, at mid-height: turned, it would hang the card up or down
+         the coil, toward it, so it is not turned. The card turns with its wire (the pivot's twist below): hung square to the
+         room, its corner on the turned side swung into the coil */
+      let yaw = 0;
+      if (lying) {
+        const yr = rngFrom(hashSeed(`tagyaw|${lower(s.userData.spool.color)}|${s.parent ? s.parent.children.indexOf(s) : 0}`));
+        const prev = lastYaw.get(s.parent);
+        for (let i = 0; i < 8; i++) { yaw = (yr() < 0.5 ? -1 : 1) * (0.087 + yr() * 0.262); if (prev == null || Math.abs(yaw - prev) >= 0.175) break; }
+        // eight draws all close to it (a seed is a seed, Terra 01a183f3): the other side of it, 0.1 or more round
+        if (prev != null && Math.abs(yaw - prev) < 0.175) yaw = -Math.sign(prev) * Math.max(0.1, Math.abs(yaw));
+        lastYaw.set(s.parent, yaw);
+        out.applyAxisAngle(A, yaw);
+      }
+      const at = C.clone().addScaledVector(out, 90.5).addScaledVector(lying ? A : UP, lying ? 20 : 12);
+      if (!lying) at.addScaledVector(A, 10);
+      const mark = makeTag(info, accent, out);
+      mark.position.copy(at);
+      /* hung as a tag hangs (Joey 2026-10-28: "hanging more randomly, can be twisted slightly randomly or hanging partly
+         sideways slight"): about its hole, twisted on the wire 12 to 35 deg, swung to the side 5 to 16 (never straight),
+         either way, its foot off the coil 4 to 12; seeded by the spool's colour and its place in the group, so a spool's
+         tag hangs the same every time */
+      const rnd = rngFrom(hashSeed(`tag|${lower(s.userData.spool.color)}|${s.parent ? s.parent.children.indexOf(s) : 0}`));
+      const either = (lo, hi) => (rnd() < 0.5 ? -1 : 1) * (lo + rnd() * (hi - lo));
+      const twist = either(0.21, 0.61), swing = either(0.09, 0.28), lean = -(0.07 + rnd() * 0.14);
+      mark.userData.pivot.rotation.set(lean, yaw + twist, swing, 'YXZ');
+      mark.userData.spoolMark = true;
+      scene.add(mark); mark.updateMatrixWorld(true);
+      s.attach(mark);   // kept where it is, and moved with the spool from now on
+      /* THE FLANGE STICKER (spool.js): where a flange's face shows, the tag's words again, fixed to the spool. A spool on
+         its rim, on its camera-side flange (its broad face, blank before: Astra); a stack's top spool, on its top flange
+         (the faces under a spool above are hidden). As a maker's label sits (Joey 2026-10-28, four photos of real spools:
+         "make the label aligned to the center of the spool rather than slapped on to be perfectly upright, centered between
+         the oval slots ... try to keep the sticker upright, but randomize it so they arent perfectly upright, just don't
+         want the text to be completely sideways or upsidedown"): centred in a clear sector between two slots, 65 mm out,
+         square to the spool's centre, its words along the flange's circle and their top out toward the rim or in toward
+         the hub. Of the three sectors and the two ways, the one that reads most upright: on its rim the room's up, lying
+         flat away from the front. Six choices 60 deg apart, so its words are never more than 30 deg off upright, and the
+         spool's own turn (seeded) sets how far: never quite square, never sideways. Laid once, in the spool's frame: it
+         never turns after the camera */
+      const sibs = s.parent ? spoolsOf(s.parent) : [s];
+      if (lying && s !== sibs[sibs.length - 1]) continue;
+      const side = new THREE.Vector3(0, 1, 0).transformDirection(s.matrixWorld).dot(A) > 0 ? 1 : -1;   // A's flange, in the spool's frame
+      const upWant = lying ? F.clone().negate() : UP;
+      const radial = (deg) => new THREE.Vector3(Math.cos(deg * Math.PI / 180), 0, Math.sin(deg * Math.PI / 180));
+      const ways = STICKER.sectors.flatMap((d) => [1, -1].map((k) => ({ R: radial(d), up: radial(d).multiplyScalar(k) })));
+      const { R, up } = ways.reduce((b, w) => (w.up.clone().transformDirection(s.matrixWorld).dot(upWant) > b.up.clone().transformDirection(s.matrixWorld).dot(upWant) ? w : b));
+      const normal = new THREE.Vector3(0, side, 0), right = up.clone().cross(normal);
+      const st = makeSticker(info, accent);
+      st.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, normal));
+      st.position.copy(R).multiplyScalar(STICKER.at).setY(side * 32.7);   // 0.2 mm off the face (32.5)
+      st.userData.spoolMark = true;
+      s.add(st);
+    }
+    stage.invalidateFrame();
+    /* the words are drawn into canvases now, in Archivo: if the face has not loaded yet the fallback's shapes stay in the
+       textures for the visit (Sol 01a1839e). So when it is not ready, load it and draw the marks once more, unless the
+       scene has gone (or the marks have been drawn again since) */
+    if (document.fonts && !document.fonts.check('800 20px Archivo') && !parts.markFontWait) {
+      parts.markFontWait = document.fonts.load('800 20px Archivo').then(() => { if (on && !cancelled && parts.spools) placeSpoolMarks(); }, () => {});
+    }
+  }
   /* THE WINDOW: FROSTED GLASS (Joey 2026-10-26, after his garden through it in six versions, a photo on a cylinder round
      the room at the last: "that window scene is pretty gross, maybe there is something more simple claude can do without
      an image?"; Astra: "a softly lit, frosted window ... Pale, slightly cool daylight across the glass. A very subtle
@@ -1167,6 +1277,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function refreshSpools() {
     const sp = parts.spools;
     if (!sp || !sp.groups.length || !sp.geo) return;
+    clearSpoolMarks();   // out of the boxes below; made again at the end
     const now = [...new Set(spoolColours().map(lower))].sort().slice(0, SPOOL_MAX);
     if (!now.length) return;
     const kept = new Set(), spare = [];
@@ -1195,6 +1306,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       Object.assign(sp.placed[i], { kind: r.userData.spoolGroup.kind, colours: list.map((x) => x.userData.spool.color), box: plain(new THREE.Box3().setFromObject(r, true)) });
     }
     if (parts.hovered && !parts.hovered.parent) parts.hovered = null;   // a spool taken off the desk is under no pointer
+    placeSpoolMarks();
     glowSpools();
     fitShadowToSpools();   // a stack grown or one gone: the sun's shadow refitted round them
     stage.invalidateFrame();
@@ -1683,7 +1795,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       },
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
-      get spools() { const p = parts.spools; return p ? { cleared: p.cleared || [], plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible) } : null; },
+      get spools() { const p = parts.spools; return p ? { cleared: p.cleared || [], plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible), marksDrawn: parts.marksDrawn || 0 } : null; },
       refreshSpools, selectSpool,
       get spoolGlow() { return parts.spools ? parts.spools.groups.flatMap(spoolsOf).map((s) => [lower(s.userData.spool.color), s.userData.glow || 0]) : []; },
       get mugs() { const p = parts.mugs; return p ? { framed: subj.mug ? (subj.mug.group ? subj.mug.group.map((g) => subj.mugs.indexOf(g)) : [subj.mugs.indexOf(subj.mug)]) : null, plan: p.plan, facts: p.facts, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },
@@ -1760,7 +1872,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (parts.steam && parts.steam.overlay) stage.removeAccOverlay(parts.steam.overlay);   // off the still picture before its meshes go
     if (parts.steam) { for (const o of [parts.steam.mesh, parts.steam.mist]) { o.geometry.dispose(); o.material.dispose(); } parts.steam = null; }   // the meshes leave with the room
     if (parts.pane) { const m = parts.pane; m.removeFromParent(); m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); parts.pane = null; }
-    if (parts.spools) { for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays
+    if (parts.spools) { clearSpoolMarks(); for (const r of parts.spools.groups) { r.traverse((o) => { if (o.userData.spool) disposeSpool(o); }); r.removeFromParent(); } for (const d of parts.spools.discs) { d.removeFromParent(); d.geometry.dispose(); d.material.dispose(); } parts.spools = null; }   // the spools' geometry is shared and stays
     if (parts.mugs) { for (const o of [...parts.mugs.meshes, ...parts.mugs.masks]) o.removeFromParent(); for (const t of parts.mugs.texs) t.dispose(); parts.mugs = null; }   // the second mug and its shadow out (their geometry is the cached load's; their materials go with parts.mats)
     subj.mugs = null;
     removeEventListener('resize', refit);
