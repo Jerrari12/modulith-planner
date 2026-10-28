@@ -1,7 +1,7 @@
 /* THE VENDORED CLASSIC PRO LABEL CORE - drift gate + what the stage leans on (2026-10-27).
  *
  * `js/vendor/classicpro-core.js` is a BYTE-FOR-BYTE copy of the Classic Pro label generator's `label-core.js`, which the
- * MODULITH Label Studio serves as `label-core-classicpro.js` (its sha256 bbb53c7c..., the Studio's own ?v= stamp): the
+ * MODULITH Label Studio serves as `label-core-classicpro.js` (its sha256 072dcada... since 2026-10-28 - the 1.8 mm slit margin and ink-measured text blocks - the Studio's own ?v= stamp): the
  * generator's own code for one Classic Pro label (a flat 47 x 25.5 mm label, the text plane at z 1.5, badge + text centred
  * as a group, the same 23 icons, the 3 mm floor). The stage builds every Classic Pro drawer label with it (label-text.js),
  * so a label on a Classic Pro drawer is the label the Studio prints (Joey 2026-10-27: a placed Classic Pro label stayed blank).
@@ -26,7 +26,7 @@ const STUDIO = process.env.GEN2_LABELSTUDIO_ROOT
   ? [process.env.GEN2_LABELSTUDIO_ROOT]
   : [join(root, '..', 'GEN2 label-types', 'GEN2 EdgeLabel Label Generator'), join(root, '..', 'ls-next'), join(root, '..', 'GEN2 EdgeLabel Label Generator')];
 const STUDIO_ROOT = STUDIO.find((d) => existsSync(join(d, 'label-core-classicpro.js')));
-const PINNED_SHA256 = 'bbb53c7c460544286de60a19288c7c6586e43e5cdd7d031f898f1fa78457433a';
+const PINNED_SHA256 = '072dcada70d1e7c0305b54c9beb5523b57a705b73baae55709db03ac321ced9a';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 function load(file, name) {

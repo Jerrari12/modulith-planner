@@ -38,8 +38,15 @@ const TOP_X     = 22.2121;   // top-plane half-width (X)
 const TOP_Y_HI  = 11.4134;   // top-plane upper Y bound
 const TOP_Y_LO  = -12.7366;  // top-plane lower Y bound
 const AREA_MARGIN = 2.0;                   // inset from the flat-top edges
-const AREA_LEFT  = -TOP_X + AREA_MARGIN;   // usable rectangle: left
-const AREA_RIGHT =  TOP_X - AREA_MARGIN;   // usable rectangle: right
+// The two slits that make the lower corners springy cut into the face at |x| 21.0121 (CP_BASE_VERTS, up to y -2.74). The
+// face's margin is 1.8 mm from every edge, the slits included (Jerrari 2026-10-09: "avoid the compliant mechanisms at all
+// cost") - the part-label layout keeps it (hardware-data-classicpro.js cutouts), and so do words and icons since 2026-10-28:
+// the rectangle 2 mm in from the outer edges left them 0.8 mm off the slits. The rectangle keeps its plain rule (every line
+// the same width), so its sides are the slits less 1.8 mm over the whole height.
+const SLIT_X = 21.0121, SLIT_MARGIN = 1.8;
+const AREA_HALF_W = Math.min(TOP_X - AREA_MARGIN, SLIT_X - SLIT_MARGIN);   // 19.2121
+const AREA_LEFT  = -AREA_HALF_W;           // usable rectangle: left
+const AREA_RIGHT =  AREA_HALF_W;           // usable rectangle: right
 const AREA_TOP   =  TOP_Y_HI - AREA_MARGIN;// usable rectangle: top
 const AREA_BOTTOM=  TOP_Y_LO + AREA_MARGIN;// usable rectangle: bottom
 const AREA_CX    = (AREA_LEFT + AREA_RIGHT) / 2;   // horizontal center of usable area
@@ -170,7 +177,7 @@ function buildTextBlock(text, capMm, depth, maxWidth, maxHeight, bold) {
   for (let it = 0; it < 24; it++) {
     const w = wrapText(text, cap, maxWidth);
     const lines = [];
-    let overflow = false, blockW = 0;
+    let overflow = false, blockW = 0, inkH = 0;
     for (let i = 0; i < w.lines.length; i++) {
       const g = buildLineGeo(w.lines[i], w.fontSize, depth, bold);
       if (!g) continue;
@@ -181,8 +188,12 @@ function buildTextBlock(text, capMm, depth, maxWidth, maxHeight, bold) {
       lines.push({ geo: g, w: lw });
       if (lw > maxWidth + 0.1) overflow = true;
       if (lw > blockW) blockW = lw;
+      // the block's height is its INK (2026-10-28): a line's descenders (g, j, p, q, y, Q's tail) hang below its cap height,
+      // and a block measured by cap heights alone left them up to 0.29 cap below the text area - inside the face's 1.8 mm
+      // margin and onto the bottom stripe
+      inkH = Math.max(inkH, i * w.pitch + (bb.max.y - bb.min.y));
     }
-    const visualH = (w.lines.length - 1) * w.pitch + cap;
+    const visualH = Math.max((w.lines.length - 1) * w.pitch + cap, inkH);
     const tooTall = visualH > maxHeight + 0.1;
     fits = !overflow && !tooTall;
     result = { lines, blockW, visualH, cap, pitch: w.pitch, fits };

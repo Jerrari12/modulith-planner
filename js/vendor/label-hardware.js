@@ -23,21 +23,26 @@
        type     'edgelabel' | 'classicpro' (anything but 'classicpro' is EdgeLabel)
        profile  false asks for the text layout; anything else gives the screw / nut drawing where the part has one
        band     the colour-band position SETTING: 'bottom' | 'end' | 'wedge' (| 'off' or anything else: no band). It applies
-                only on EdgeLabel and only to an item that carries colours (item.colours, the Part Picker's colour scheme);
-                the words are then laid out in the face less the band and its 0.8 mm gap.
+                only to an item that carries colours (item.colours, the Part Picker's colour scheme); the words are then laid
+                out in the face less the band and its 0.8 mm gap. Classic Pro has ONE place for it (chosen 2026-10-28 from
+                three measured placements: the bottom edge, between its two slits), so any of the three settings gives it the bottom band there.
      r = { elements: { name: [rings, ...] } | null,  record: {...}  (hardware-layout.js's result, as it gives it)
            covered: bool        the part type has a drawing (whether or not it printed)
            band, colours        set when the label carries a band: the position and colours(item.colours)
+           type                 'edgelabel' | 'classicpro': the label body the band cuts (bandParts' third argument)
            proposal: record     on a NON-FIT with more than one pin: the layout leaving off the fewest pins (never applied)
            inkDepth: mm         how proud the ink stands (0.45 on EdgeLabel)
-           typeSkips: [words]   what the type does not print yet ('colour band' on Classic Pro); absent when none }
+           typeSkips: [words]   what the type does not print yet ('colour band' on Classic Pro when the band data has no
+                                Classic Pro section); absent when none }
      An item that cannot be read gives { elements: null, record: { not_ready: 'the label item could not be read (...)' } }.
    LH.layoutFor(item, type, band) -> { layout, band, inkDepth }   the hardware-layout instance layOut uses, the band
                                     position it resolves to (null = no band) and the ink depth
-   LH.bandFor(item, band) -> band | null      the band position an item gets on EdgeLabel (null: no colours, or no such position)
+   LH.bandFor(item, band, type) -> band | null  the band position an item gets (null: no colours, or no such position)
    LH.typeSkips(item, type) -> [words]        as r.typeSkips
-   LH.layouts = { edgelabel, classicpro, bands: { bottom, end, wedge } }   the hardware-layout instances (null when not loaded)
+   LH.layouts = { edgelabel, classicpro, bands: { bottom, end, wedge }, classicproBands: { bottom } }   the hardware-layout
+                                               instances (null / empty when not loaded)
    LH.treatments -> ['bottom', 'end', 'wedge']   the band positions the band data holds; LH.bandNames -> { bottom: 'Bottom band', ... }
+   LH.treatmentsFor(type) -> [positions]       the band positions a label type has (Classic Pro: ['bottom'], or [] without its data)
    LH.inkDepth                                 EdgeLabel's ink depth (hardware-data.js rules.inkDepth, 0.45 mm)
 
    COLOURS
@@ -52,9 +57,10 @@
        r the layOut result; textGeo = LH.inkGeometry(r.elements, depth); baseParts = r.band ? LH.bandParts(r.band, r.colours) : null
        (null: the label body is the plain label, e.g. label-core.js's BASE_VERTS).
    LH.inkGeometry(elements, depth) -> BufferGeometry | null    every outline filled even-odd and extruded, merged with mergeGeoms
-   LH.bandParts(treatment, colours) -> [{ piece: 'base'|'band'|'accent', geo, colour }] | null (unknown position / no data)
-       The EdgeLabel label body cut for one band position, for ANY label - a part label, or an ordinary label whose words come
-       from label-core.js: the three pieces together are the whole label (they replace the plain body, not add to it).
+   LH.bandParts(treatment, colours, type) -> [{ piece: 'base'|'band'|'accent', geo, colour }] | null (unknown position / no data)
+       The label body (EdgeLabel's, or Classic Pro's for type 'classicpro') cut for one band position, for ANY label - a part
+       label, or an ordinary label whose words come from its label core: the three pieces together are the whole label (they
+       replace the plain body, not add to it).
        colours is a cleaned { band, band_accent } (LH.colours, or { band: LH.colour({...}) } for a stripe of one colour):
        the band piece takes band, the accent piece (the band's first 8 mm) takes band_accent, or band's colour when there is no
        band_accent slot (undefined); colour null = print it in the base colour. A 'dashed' band pattern gives the dashed cut.
@@ -73,7 +79,8 @@
      label core (4.5 on EdgeLabel, 1.5 on Classic Pro) - the Label Studio positions the mesh at z LABEL_HT;
    - band pieces: the EdgeLabel label body itself (57 x 27 mm, z 0 the bed to z 4.5 the top face), the same frame as
      label-core.js's label - placed like the plain label body. The band and accent pieces are the body's top layers over the
-     band's area (from z = bands.treatments[position].z0, 3.2 or 4.0, up to 4.5); the base piece is the rest.
+     band's area (from z = bands.treatments[position].z0, 3.2 or 4.0, up to 4.5); the base piece is the rest. On Classic Pro
+     the pieces are ITS body (CP_BASE_VERTS, 47 x 25.5 mm, top face z 1.5), the band a 0.5 mm inlay from z 1.0.
    The 3D Build Studio maps this generator frame onto its EdgeLabel label model as (x, y, z) -> (x, y + 13.5, z - 2.25)
    (measured 2026-10-01). */
 (function (root) {
@@ -100,29 +107,40 @@ function create(deps) {
   }
   // Classic Pro takes the screw and nut drawings too since 2026-10-27, its rows centred (hardware-layout.js arrange5)
   const classicpro = Layout && CP ? Layout.create({ data: CP, v5: V5 || null }) : null;
+  // and its one band position since 2026-10-28: the bottom edge, its face less the band and gap (export_bands.py cp_section)
+  const CPB = BANDS_OK && B.classicpro && B.classicpro.treatments ? B.classicpro : null;
+  const cpBands = Object.create(null);
+  if (classicpro && CPB) for (const tr of Object.keys(CPB.treatments)) {
+    cpBands[tr] = Layout.create({ data: Object.assign({}, CP, { usable: CPB.treatments[tr].usable }), v5: V5 || null });
+  }
   const INK_DEPTH = (D && D.rules.inkDepth) || 0.45;
   const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
+  const SETTINGS = ['bottom', 'end', 'wedge'];   // the position setting's values (anything else is off)
 
   function setFont(font) {
     if (edgelabel) edgelabel.setFont(font);
     if (classicpro) classicpro.setFont(font);
     Object.values(bands).forEach(h => h.setFont(font));
+    Object.values(cpBands).forEach(h => h.setFont(font));
   }
 
-  // the band position an item gets: the setting, when the item carries colours and the position exists
-  function bandFor(item, position) {
-    return item && item.colours && typeof item.colours === 'object' && bands[position] ? position : null;
+  // the band position an item gets: the setting, when the item carries colours and the position exists. On Classic Pro every
+  // setting but off is its one position, the bottom band
+  function bandFor(item, position, type) {
+    if (!item || !item.colours || typeof item.colours !== 'object') return null;
+    if (type === 'classicpro') return SETTINGS.includes(position) && cpBands.bottom ? 'bottom' : null;
+    return bands[position] ? position : null;
   }
-  // the layout a part label gets on a type, its band position (EdgeLabel only) and its ink depth
+  // the layout a part label gets on a type, its band position and its ink depth
   function layoutFor(item, type, position) {
-    if (type === 'classicpro') return { layout: classicpro, band: null, inkDepth: classicpro ? CP.rules.inkDepth : INK_DEPTH };
-    const band = bandFor(item, position);
+    const band = bandFor(item, position, type);
+    if (type === 'classicpro') return { layout: band ? cpBands[band] : classicpro, band, inkDepth: classicpro ? CP.rules.inkDepth : INK_DEPTH };
     return { layout: band ? bands[band] : edgelabel, band, inkDepth: INK_DEPTH };
   }
-  // what a part label carries that Classic Pro does not print yet (it prints again on EdgeLabel): the colour band. Its drawing
-  // prints there too since 2026-10-27, where it fits, as on EdgeLabel
+  // what a part label carries that Classic Pro cannot print (it prints again on EdgeLabel): the colour band, when the band
+  // data has no Classic Pro section (before 2026-10-28). Its drawing prints there too since 2026-10-27, where it fits
   function typeSkips(item, type) {
-    if (type !== 'classicpro' || !item) return [];
+    if (type !== 'classicpro' || !item || cpBands.bottom) return [];
     const out = [];
     if (item.colours && typeof item.colours === 'object') out.push('colour band');
     return out;
@@ -136,7 +154,7 @@ function create(deps) {
       if (!L) throw new Error(a.type === 'classicpro' ? 'the Classic Pro part-label layout did not load' : 'the part-label layout did not load');
       r = L.layOut(item, opts);
       r.covered = L.profileCovered ? L.profileCovered(item) : false;
-      if (band && r.elements) { r.band = band; r.colours = colours(item.colours); }
+      if (band && r.elements) { r.band = band; r.colours = colours(item.colours); r.type = a.type === 'classicpro' ? 'classicpro' : 'edgelabel'; }
     }
     catch (e) { r = { elements: null, record: { not_ready: 'the label item could not be read (' + e.message + ')' } }; }
     if (r.record.nonfit && (item.pinned || []).length > 1) { try { r.proposal = L.propose(item, opts).record; } catch (e) {} }
@@ -162,10 +180,11 @@ function create(deps) {
   // ---------------------------------------------------------------- the label body cut into band pieces
   let bandCache = new Map();
   function needThree() { if (!THREE) throw new Error('label-hardware: create({ THREE }) is needed to build geometry'); }
-  function bandGeo(tr, kind, piece) {
-    const key = tr + '/' + kind + '/' + piece;
+  const treatmentsOf = (type) => (type === 'classicpro' ? (CPB ? CPB.treatments : null) : (BANDS_OK ? B.treatments : null));
+  function bandGeo(type, tr, kind, piece) {
+    const key = type + '/' + tr + '/' + kind + '/' + piece;
     if (!bandCache.has(key)) {
-      const m = B.treatments[tr][kind][piece], g = new THREE.BufferGeometry();
+      const m = treatmentsOf(type)[tr][kind][piece], g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(m.v, 3));
       g.setIndex(m.t);
       g.computeVertexNormals();
@@ -174,16 +193,17 @@ function create(deps) {
     return bandCache.get(key);
   }
   // the label body of a banded label: base / band / accent pieces, each with its colour (null = the base colour)
-  function bandParts(treatment, cs) {
-    if (!BANDS_OK || typeof treatment !== 'string' || !has(B.treatments, treatment)) return null;
+  function bandParts(treatment, cs, type) {
+    const t = type === 'classicpro' ? 'classicpro' : 'edgelabel', T = treatmentsOf(t);
+    if (!T || typeof treatment !== 'string' || !has(T, treatment)) return null;
     needThree();
     const c = cs || {};
     const b = c.band || null, a = c.band_accent;
     const kind = b && b.pattern === 'dashed' ? 'dashed' : 'solid';
     return [
-      { piece: 'base', geo: bandGeo(treatment, kind, 'base'), colour: null },
-      { piece: 'band', geo: bandGeo(treatment, kind, 'band'), colour: b },
-      { piece: 'accent', geo: bandGeo(treatment, kind, 'accent'), colour: a === undefined ? b : a },
+      { piece: 'base', geo: bandGeo(t, treatment, kind, 'base'), colour: null },
+      { piece: 'band', geo: bandGeo(t, treatment, kind, 'band'), colour: b },
+      { piece: 'accent', geo: bandGeo(t, treatment, kind, 'accent'), colour: a === undefined ? b : a },
     ];
   }
   function resetBandGeometry() { bandCache = new Map(); }
@@ -233,7 +253,7 @@ function create(deps) {
   }
   function meshes(hw, depth) {
     const textGeo = inkGeometry(hw.elements, depth);
-    return { textGeo, badgeGeo: null, textFits: true, baseParts: hw.band ? bandParts(hw.band, hw.colours) : null };
+    return { textGeo, badgeGeo: null, textFits: true, baseParts: hw.band ? bandParts(hw.band, hw.colours, hw.type) : null };
   }
 
   // ---------------------------------------------------------------- the row note
@@ -276,8 +296,9 @@ function create(deps) {
     colour, colours,
     meshes, inkGeometry, bandParts, resetBandGeometry,
     noteText, noteDetail, bandNote,
-    layouts: { edgelabel, classicpro, bands },
+    layouts: { edgelabel, classicpro, bands, classicproBands: cpBands },
     treatments: BANDS_OK ? Object.keys(B.treatments) : [],
+    treatmentsFor: (type) => (type === 'classicpro' ? Object.keys(cpBands) : BANDS_OK ? Object.keys(B.treatments) : []),
     bandNames: BANDS_OK && B.names ? Object.assign({}, B.names) : {},
     inkDepth: INK_DEPTH,
   };

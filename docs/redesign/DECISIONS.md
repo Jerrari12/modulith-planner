@@ -5801,3 +5801,25 @@ Test `feet-option.test.mjs`: the count is 4 (printed and adhesive, the step titl
 Live 2026-10-27 23:25 as 688243e7; `feet-prod.mjs` green: a lone 2W-2H and a lone 4W-1H stand on 4 feet (the Parts list
 bills 4, the step says "insert the 4 feet"), two 1W cases still stand on a foot rail with 6. The same check on aadfa1de
 failed (6 and 10), so it can tell. Vault `rules.md` 98da1dd.
+
+## 2026-10-28 · Classic Pro labels take their stripe along the bottom edge
+
+Joey looked at the label sheets (`D:\Claude - Output\label-variants-2026-10-28`) and sent Astra's reading of them: the bottom
+stripe is Classic Pro's strongest default, alternate positions belong under advanced options, and the slit clearance should
+be fixed in the layout. The Label Studio made it first (labels-public b18cada7, planner-plate 26b342a8); this copies it.
+
+- Every Classic Pro stripe runs along the bottom edge, between the two springy slits (|x| <= 20.51, 0.5 mm clear of each),
+  as a 0.5 mm inlay, with the 8 mm material patch at its left end. Any stripe a label carries there (a typed label's end
+  stripe, a part label's position) draws at the bottom (`main.js labelLookFor`); a label with none stays plain.
+- `label-text.js` cuts Classic Pro's own body for it (`bandParts(position, colours, 'classicpro')` - with two arguments the
+  pieces would be EdgeLabel's, Sol 01a18294) and places the pieces by `CLASSICPRO_FRAME`'s turn without the ink's lift.
+- The label editor offers the stripe row on Classic Pro too; the settings give a plain On / Off stripe switch (never
+  EdgeLabel's position names, which read oddly there, 2026-10-27) beside the drawings switch.
+- Classic Pro's word layout (the vendored core) keeps the face's 1.8 mm margin from the slits (|x| <= 19.2121, was 20.2121)
+  and measures a text block by its ink, descenders included. 600 random typed labels: before, 31 came within 0.45 mm of the
+  stripe (worst 1.4 mm onto it, one past the face's edge) and 97 within 1.8 mm of a slit; after, none (worst 0.61 mm).
+
+Tests: the vendor pins move; the Classic Pro e2e case now expects three stripe pieces filling the model body's box, the band
+between the slits, the typed label's green and the part label's metric band with its stainless patch (a flipped frame fails
+it); the editor case expects the stripe row and the On / Off switch on Classic Pro. Not deployed until the Label Studio's
+public push, so the stage never shows a stripe the Studio does not print.

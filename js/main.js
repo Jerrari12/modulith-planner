@@ -4636,12 +4636,13 @@ function loadLabelPartsOnce(need) {
     console.warn(`[label text] ${(e && e.message) || e} - part labels and colour stripes are shown as plain labels`);
   });
 }
-/* A Classic Pro label prints no stripe (the Label Studio's rule: the band is EdgeLabel's): there a stripe look is the plain
-   label, words and icon. A part label stays one, laid out on Classic Pro's own face (placeLabelText, label-text.js). */
+/* A Classic Pro label has ONE stripe position since 2026-10-28, the bottom edge between its two slits (the Label Studio's
+   rule, label-hardware.js): any stripe a label carries there - a typed label's 'end', a part label's setting - is drawn at
+   the bottom; a label with none stays plain. A part label is laid out on Classic Pro's own face less that stripe. */
 function labelLookFor(inst, words) {
   const u = labelUnitFor(inst);
   const look = u ? labelLookOf(build, u, words) : null;
-  return look && look.kind === 'stripe' && LABEL_TYPE_OF_NODE[inst.cfg.node] === 'classicpro' ? null : look;
+  return look && look.position && LABEL_TYPE_OF_NODE[inst.cfg.node] === 'classicpro' ? { ...look, position: 'bottom' } : look;
 }
 function attachLabelTexts() {
   const tok = ++labelTextTok;   // a later mount supersedes a font load still in flight for this one
@@ -4682,7 +4683,7 @@ function placeLabelText(inst, text, badge, upload, look) {
   if (!t) {
     t = labelGeometry(text, badge, build.labelStyle, upload, type);
     if (!t) return null;
-    if (look && look.kind === 'stripe') pieces = stripeGeometry(look.colours, look.position);
+    if (look && look.kind === 'stripe') pieces = stripeGeometry(look.colours, look.position, type);
   }
   const inner = inst.group.children[0];
   if (!t.fits) console.warn(`[label text] "${t.shown}" overflows the label even at the 3 mm floor (the generator warns too)`);
