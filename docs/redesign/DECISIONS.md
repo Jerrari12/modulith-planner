@@ -5603,3 +5603,11 @@ Joey, told that the bundled fonts had no letters: "yes" (fetch them and show bef
   failure, "the Label plate: a faceplate switch with the plate open...", timed out on a click under the double load
   (47 s) and passed alone (15 s). After the review's one-face change: the phone tour, the phone on its side, the Room |
   Neutral switch fits, the label editor and the boot cases, 5/5.
+
+- **Live 2026-10-27 at `20e8dc4`** (pushed 20:52, live 21:14). Checked on the live planner:
+  - CDP `getPlatformFontsForNode` (`font-map-live.mjs`): "Parts list", "Start assembly" and Assemble's title draw in
+    Archivo, "43 to print · 17 files" in Plex Mono, "Layout valid" and the step text in Plex Sans; only the arrow of
+    "← Back" is the system's.
+  - The new woff2 files are served as `font/woff2`, the two OFL texts as `text/plain`, and an old file name answers
+    404.
+  - The phone checks (`tour-live.mjs`) are 12/12, Assemble's keys at 360 px whole in Plex Sans too.
