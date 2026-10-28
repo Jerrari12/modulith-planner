@@ -5823,3 +5823,8 @@ Tests: the vendor pins move; the Classic Pro e2e case now expects three stripe p
 between the slits, the typed label's green and the part label's metric band with its stainless patch (a flipped frame fails
 it); the editor case expects the stripe row and the On / Off switch on Classic Pro. Not deployed until the Label Studio's
 public push, so the stage never shows a stripe the Studio does not print.
+
+Live 2026-10-28 09:29 as b2e27a22, after the Label Studio's public push (b18cada7, served 09:13): `cp-stripe-prod.mjs` green -
+a typed Classic Pro label's green stripe and an M5 x 20 part label's metric band with its stainless patch, each three pieces
+filling the model body's box (0.0006 mm), the band at |x| 20.512 between the slits, no page errors. The same check failed on
+688243e7, before the deploy.
