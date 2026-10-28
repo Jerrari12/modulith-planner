@@ -1007,6 +1007,89 @@ test('Labels: a shared link shows the sender\'s label palette; the recipient\'s 
   await ctx.close();
 });
 
+/* A SHARED BUILD CARRIES ITS COLOURS (2026-10-28, docs/redesign/SHARE-LOOK.md; Astra: "opening a shared build in a fresh
+   browser reproduces its colours, including label bodies, text and stripes, without inheriting the recipient's unrelated
+   preferences"). The record's `look` rides in the address; the boot applies it in place of this browser's palette for the
+   build and of the first preset; the recipient's own label defaults, saved schemes, owned list and "My palette" stay. */
+const lookRec = (id, extra = {}) => ({ mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+  removedStoppers: [], gridW: 4, gridH: 2, nextId: 2, labelStyle: null, buildId: id, sideCovers: true, plateParts: {}, labelPalette: null,
+  placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'M3 screws' }],
+  labelList: { format: 'modulith-labels', version: 1, labels: [{ text: 'M3 screws', id: id + 'a', colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } }] },
+  labelAssign: { 1: id + 'a' }, ...extra });
+const b64rec = (r) => Buffer.from(JSON.stringify(r), 'utf8').toString('base64');
+
+test('Share: a build\'s colours ride in its link - body, text, a part, a unit\'s own pick and the stripe - and the recipient\'s own settings stay', async () => {
+  const id = 'e2esharelook01';
+  const { ctx, page, errors } = await open('labels', { query: `&done=off#build=${b64rec(lookRec(id))}` });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  // the sender picks, each as the workspaces commit a pick (one store entry)
+  await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, st = window.__GEN2_STORE__;
+    const pick = (fn) => { st.flush(); fn(); st.commit(() => {}, 'palette'); st.flush(); };
+    pick(() => v.setColor('Label', { name: 'Panchroma Cream', hex: '#f1e7cf' }));
+    pick(() => v.setColor('Label:TEXT', { name: 'Panchroma Navy', hex: '#1f2a44' }));
+    pick(() => v.setColor('Faceplate', { name: 'Polar Seafoam', hex: '#00A37A' }));
+    pick(() => v.setOverride(1, 'Accent', { name: 'Panchroma Lemon Yellow', hex: '#f8e35a' }));
+    st.flush(); st.commit((s) => { s.labelPalette = { v: 1, spools: { 'sky-blue': { name: 'Panchroma Blue', hex: '#2f6fbe' } } }; }, 'label-palette'); st.flush();
+  });
+  const link = await page.evaluate(() => location.href);
+  const sent = JSON.parse(Buffer.from(/#build=([^&]+)/.exec(link)[1], 'base64').toString('utf8'));
+  assert.equal(sent.look && sent.look.colors.Label.name, 'Panchroma Cream', 'the address carries the look');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  // the recipient: a fresh browser with its own palette saved for THIS build id, its own label defaults, schemes and owned list
+  const SAVED = { colors: { Label: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, on: true, user: { Case: { name: 'Panchroma Tan', hex: '#c8a77c' } }, over: {}, t: 1 };
+  const MINE = { 'gen2-label-palette': JSON.stringify({ v: 1, spools: { red: { name: 'Polar Rocket Red', hex: '#FF1900' } } }), 'gen2-schemes': JSON.stringify([{ name: 'My scheme', colors: { Case: { name: 'Panchroma Tan', hex: '#c8a77c' } } }]), 'gen2-owned': JSON.stringify({ v: 1, labels: ['Elegoo PLA Black'] }) };
+  const rctx = await freshContext();
+  await rctx.addInitScript(([key, saved, mine]) => { try { if (!sessionStorage.getItem('e2e-seeded')) { localStorage.setItem(key, saved); for (const [k, v] of Object.entries(mine)) localStorage.setItem(k, v); sessionStorage.setItem('e2e-seeded', '1'); } } catch {} }, ['gen2-colors:build-' + id, JSON.stringify(SAVED), MINE]);
+  const { page: rp, errors: rerr } = await open('labels', { context: rctx, query: '&done=off#' + link.split('#')[1] });
+  await rp.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  const got = await rp.evaluate(() => { const v = window.__GEN2_VIEWER__, p = v.palette();
+    return { body: p.colors.Label?.name, text: p.colors['Label:TEXT']?.name, face: p.colors.Faceplate?.name, own: v.overrideFor(1, 'Accent')?.name, on: p.on, bodyHex: v.activeHex('Label'), stripe: v.activeHex('Label:STRIPE@sky-blue'), user: p.user?.Case?.name,
+      mine: ['gen2-label-palette', 'gen2-schemes', 'gen2-owned'].map((k) => localStorage.getItem(k)) }; });
+  assert.deepEqual([got.body, got.text, got.face, got.own, got.on], ['Panchroma Cream', 'Panchroma Navy', 'Polar Seafoam', 'Panchroma Lemon Yellow', true], `the sender's colours (${JSON.stringify(got)})`);
+  assert.equal(got.bodyHex, '#f1e7cf', 'the label body is drawn in them');
+  assert.equal(got.stripe, '#2f6fbe', 'and the stripe in the sender\'s spool');
+  assert.equal(got.user, 'Panchroma Tan', 'the recipient\'s "My palette" for the build stays');
+  assert.deepEqual(got.mine, Object.values(MINE), 'the recipient\'s label defaults, schemes and owned list are untouched');
+  assert.deepEqual(clean(rerr), []);
+});
+
+test('Share: a look of instruction colours stays one; a link without a look opens as before; a #scheme= beside the link still wins', async () => {
+  const ctx = await freshContext();
+  // on: false - not replaced by the first preset
+  const { page, errors } = await open('build', { context: ctx, query: `&done=off#build=${b64rec(lookRec('e2esharelook02', { look: { v: 1, on: false, colors: {}, over: {} } }))}` });
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.useCustom), false, 'the instruction colours, as chosen');
+  // no look, nothing saved: the first preset, as before
+  const p2 = await ctx.newPage();
+  await p2.goto(`${base}/index.html?ws=build&debug=1&done=off#build=${b64rec(lookRec('e2esharelook03'))}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p2);
+  assert.deepEqual(await p2.evaluate(() => [window.__GEN2_VIEWER__.useCustom, window.__GEN2_VIEWER__.palette().colors.Label?.name]), [true, 'Panchroma Cold White'], 'the first preset');
+  // no look, a palette saved for the id: that palette, as before
+  await p2.evaluate(() => localStorage.setItem('gen2-colors:build-e2esharelook04', JSON.stringify({ colors: { Label: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, on: true, user: {}, over: {}, t: 1 })));
+  const p3 = await ctx.newPage();
+  await p3.goto(`${base}/index.html?ws=build&debug=1&done=off#build=${b64rec(lookRec('e2esharelook04'))}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p3);
+  assert.equal(await p3.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Elegoo PLA Black', 'this browser\'s palette for the build');
+  // a look and a #scheme=: the scheme, an explicit choice, applies after it
+  const scheme = Buffer.from(JSON.stringify({ Label: { name: 'Panchroma Lemon Yellow', hex: '#f8e35a' } }), 'utf8').toString('base64');
+  const p4 = await ctx.newPage();
+  await p4.goto(`${base}/index.html?ws=build&debug=1&done=off#build=${b64rec(lookRec('e2esharelook05', { look: { v: 1, on: true, colors: { Label: { name: 'Panchroma Cream', hex: '#f1e7cf' } }, over: {} } }))}&scheme=${scheme}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p4);
+  assert.equal(await p4.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Panchroma Lemon Yellow');
+  assert.deepEqual(clean(errors), []);
+});
+
+test('Share: while Assemble shows Part colors, the build\'s chosen colours are what a save carries and what Undo restores', async () => {
+  const look = { v: 1, on: true, colors: { Label: { name: 'Panchroma Cream', hex: '#f1e7cf' } }, over: {} };
+  const { ctx, page, errors } = await open('assemble', { query: `&done=off#build=${b64rec(lookRec('e2esharelook06', { look }))}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.useCustom === false, null, { timeout: 30_000 }).catch(() => assert.fail('Assemble did not switch to Part colors'));
+  const r = await page.evaluate(() => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { s.labelStyle = { ...(s.labelStyle || {}), bold: !(s.labelStyle && s.labelStyle.bold) }; }, 'label-style'); st.flush();
+    const sent = JSON.parse(decodeURIComponent(escape(atob(/#build=([^&]+)/.exec(location.hash)[1]))));
+    st.undo(); return { addressOn: sent.look && sent.look.on, viewOn: window.__GEN2_VIEWER__.useCustom, lookOn: window.__GEN2_VIEWER__.look().on }; });
+  assert.equal(r.addressOn, true, 'the address carries the chosen colours, not the temporary Part colors');
+  assert.equal(r.lookOn, true, 'and after Undo the build\'s choice is still on');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* A TYPED LABEL'S STRIPE, AND CLASSIC PRO'S PRINT SETTINGS (Joey 2026-10-27: "if i'm manually typing a label i don't see how to
    set a color for the label stripe"; the part label stripe's wording "feels specific to edgelabel labels and odd for this
    classic pro label"). The editor's Stripe row: the Label Studio's colours, stored on the label as the Studio stores it, and
@@ -2896,7 +2979,11 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
       // the strip as printed: a pixel of the card's own texture, 1.5 mm up from its foot
       const im = card.material.map.image, px = im.getContext('2d').getImageData(Math.floor(im.width / 2), im.height - 16, 1, 1).data;
       const strip = '#' + [px[0], px[1], px[2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+      // how far round from the coil's front (the room's +z, square to the axis) the wire leaves it, about the axis, in degrees
+      const lying = Math.abs(A.y) > 0.7, ua = lying && A.y < 0 ? A.clone().negate() : A, fr = new T.Vector3(0, 0, 1).addScaledVector(ua, -ua.z).normalize(), rd = sp.clone().addScaledVector(ua, -sp.dot(ua)).normalize();
+      const yaw = Math.atan2(ua.dot(new T.Vector3().crossVectors(fr, rd)), fr.dot(rd)) * 180 / Math.PI;
       out.push({ ...o.userData.tag, spool: String(s.userData.spool.color).toLowerCase(), strip, rot: [pv.rotation.x, pv.rotation.y, pv.rotation.z], front: tie.z - c.z, below: tie.y - cc.y, clips,
+        lying, yaw: +yaw.toFixed(2), stack: s.parent.uuid, at: s.parent.children.indexOf(s),
         strand: { metal: strand.material.metalness, thick: 2 * strand.geometry.parameters.radius, r: +sp.clone().addScaledVector(A, -sax).length().toFixed(2), ax: +sax.toFixed(2) } });
     });
     return out.sort((a, b) => a.spool.localeCompare(b.spool));
@@ -2921,14 +3008,26 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
   const t0 = await tags(page);
   // the words in Astra's order: the material, then its grade or finish and colour, then its maker and line
   assert.deepEqual(t0.map((t) => [t.spool, t.material, t.accent, t.detail, t.maker, String(t.hex).toLowerCase()]), [['#16161a', 'TPU', '#1b7a50', '95A · BLACK', 'POLYMAKER · POLYFLEX', '#16161a'], ['#1c1d20', 'PLA', '#2a64c4', 'BLACK', 'ELEGOO', '#1c1d20']], 'his two black spools: a PLA tag and a TPU tag, each ring in its material\'s colour, "95A · BLACK" / "POLYMAKER · POLYFLEX", its strip the filament\'s own colour');
+  /* staggered (Joey 2026-10-28: a stack's tags hung "perfectly in a vertical column ... as if you rotated the spools a few
+     degrees to the left or right ... but mostly still visible from the front"): a lying spool's wire 5 to 20 deg round from
+     the coil's front, and 10 or more from the tag before it in its stack; a spool on its rim, at its front */
+  const staggered = (list) => {
+    for (const t of list) assert.ok(t.lying ? Math.abs(t.yaw) >= 4.9 && Math.abs(t.yaw) <= 20.1 : Math.abs(t.yaw) < 1, `${t.spool}: ${t.lying ? 'lying, turned 5 to 20 deg' : 'on its rim, at the front'} (${t.yaw} deg)`);
+    const stacks = new Map(); for (const t of list.filter((x) => x.lying)) stacks.set(t.stack, [...(stacks.get(t.stack) || []), t]);
+    let pairs = 0;
+    for (const s of stacks.values()) { s.sort((a, b) => a.at - b.at); for (let i = 1; i < s.length; i++, pairs++) assert.ok(Math.abs(s[i].yaw - s[i - 1].yaw) >= 9.9, `no two tags in a column: ${s[i - 1].spool} ${s[i - 1].yaw} deg, ${s[i].spool} ${s[i].yaw} deg`); }
+    return pairs;
+  };
+  staggered(t0);
   for (const t of t0) {
-    assert.ok(t.front > 85, `the tag hangs at the spool's front (${t.front.toFixed(1)} mm out)`);
+    assert.ok(t.front > 80, `the tag hangs at the spool's front (${t.front.toFixed(1)} mm out)`);
     assert.ok(t.below > 20, `the card below where its strand leaves the coil (${t.below.toFixed(1)} mm)`);
     assert.ok(t.strand.metal === 1 && t.strand.thick <= 0.8, `a thin metal wire, not a strand of filament (${JSON.stringify(t.strand)})`);
     assert.equal(t.strip, t.spool, 'the tag\'s foot printed in the filament\'s exact colour (Joey: "a color strip of the exact color")');
     assert.ok(t.strand.r > 89 && t.strand.r <= 91 && Math.abs(t.strand.ax) < 27.5, `the wire tucked into the coil, under its 91 mm surface, between the flanges (${JSON.stringify(t.strand)})`);
     assert.deepEqual(t.clips, [], `no point of the card inside the coil or a flange (Joey: "so it doesn't run the risk of clipping")`);
-    assert.ok(Math.abs(t.rot[1]) >= 0.2 && Math.abs(t.rot[2]) >= 0.08 && t.rot[0] < 0, `turned on its string, swung, its foot off the coil: never straight (${t.rot.map((r) => r.toFixed(2))})`);
+    // its twist on the wire counted from where the wire leaves the coil (the card turns with a staggered wire)
+    assert.ok(Math.abs(t.rot[1] - t.yaw * Math.PI / 180) >= 0.2 && Math.abs(t.rot[2]) >= 0.08 && t.rot[0] < 0, `turned on its string, swung, its foot off the coil: never straight (${t.rot.map((r) => r.toFixed(2))}, wire ${t.yaw} deg)`);
   }
   assert.notDeepEqual(t0[0].rot, t0[1].rot, 'each tag hangs its own way');
   // a refresh (a pick in the Colors room): the tags made again, hung the same, and the groups' boxes (what the mugs and the
@@ -2997,6 +3096,17 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
     assert.ok(k.radial > 0.999, `square to the spool's centre, its words along the circle (${k.radial})`);
     assert.ok(k.upright >= Math.cos(Math.PI / 6) - 1e-3, `never more than 30 deg off upright (${(Math.acos(Math.min(1, k.upright)) * 180 / Math.PI).toFixed(0)} deg)`);
   }
+  // a stack of several colours (Joey's five, 2026-10-28): staggered, none in a column with the one under it
+  const many = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, ks = v.keysInBuild().filter((e) => !e.locked && !e.zone);
+    const fs = [['Elegoo PLA Black', '#1c1d20'], ['Polymaker PolyFlex TPU95 Black', '#16161a'], ['Panchroma Grey', '#9a9da3'], ['Elegoo PETG Black', '#232427'], ['Panchroma Silk Black', '#3a3b40']];
+    ks.slice(0, fs.length).forEach((e, i) => v.setColor(e.key, { name: fs[i][0], hex: fs[i][1] }));
+    window.__GEN2_DONE__.refreshSpools();
+    return Math.min(ks.length, fs.length);
+  });
+  const t5 = await tags(page);
+  assert.ok(staggered(t5) >= 1, `a stack with two tags or more to stagger (${many} colours; ${JSON.stringify(t5.map((t) => [t.spool, t.lying, t.yaw, t.at, t.stack.slice(0, 4)]))})`);
+  assert.ok(t5.every((t) => !t.clips.length), `none clips, turned (${JSON.stringify(t5.map((t) => t.clips))})`);
   assert.deepEqual(clean(errors), [], 'no errors');
   await ctx.close();
   // ?spooltag=off: the spools, no tags
@@ -4152,6 +4262,8 @@ test('the phone on its side: the tabs a rail, the bar and the tools one row, the
     await settle(page, 700);
     const o = (await sideLayout(page)).sheets.find((s) => s.open);
     assert.ok(o && o.t >= m.top.b && o.h >= 180 && o.l >= col - 1, `${ws}: an open sheet fills the column under the row (${JSON.stringify(o)})`);
+    // and the rail stays beside it: upright an open sheet puts the tab bar away (phone.js bar-off), on its side it does not
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ws-tabbar')).visibility + '|' + document.getElementById('ws').classList.contains('bar-off')), 'visible|false', `${ws}: the rail beside an open sheet`);
     if (ws === 'colors') {
       // turning the phone upright and back: the bar goes to the bottom, then back to the rail
       await page.setViewportSize({ width: 360, height: 675 });
@@ -5475,6 +5587,9 @@ test('the phone: the Build library sheet opens on its handle; the Labels sheet c
   const { ctx, page, errors } = await open('build', { phone: true });
   await page.click('#ws-lib .sheet-handle');
   await page.waitForFunction(() => document.querySelector('#ws-lib').classList.contains('open'), null, { timeout: 30_000 });   // the library sheet opened
+  // the open sheet put the tabs away: its handle collapses it and they come back
+  await page.click('#ws-lib .sheet-handle');
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ws-tabbar')).visibility === 'visible', null, { timeout: 15_000 }).catch(() => assert.fail('collapsing the library did not bring the tab bar back'));
   await page.click('#ws-tabbar .tab:has-text("Labels")');
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
@@ -5485,6 +5600,40 @@ test('the phone: the Build library sheet opens on its handle; the Labels sheet c
   assert.match(await text(page, '#ws-labels .sheet-handle .ttl'), /Placing/);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* THE TAB BAR STEPS OUT FOR AN OPEN SHEET (Joey 2026-10-28, yes to it: at his 360 x 675 an open sheet left 61 px of model
+   between the top chrome and the sheet). Upright, the bar goes, the dock (Assemble: the player) drops into its place 6 px
+   off the bottom, the sheet sits 6 px over it, and the model's strip about doubles; the sheet collapsed, all of it is back. */
+test('the phone: an open sheet puts the tab bar away, the dock or the player takes its place, and collapsing brings the tabs back', async () => {
+  const viewport = { width: 360, height: 675 };
+  const measure = (page, sheet, floor) => page.evaluate(([s, f]) => {
+    const r = (q) => { const e = document.querySelector(q), b = e.getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom), vis: getComputedStyle(e).visibility }; };
+    return { vh: innerHeight, tab: r('#ws-tabbar'), floor: r(f), sheet: r(s), open: document.querySelector(s).classList.contains('open') };
+  }, [sheet, floor]);
+  for (const [ws, sheet, floor] of [['build', '#ws-lib', '#ws-dock'], ['assemble', '#ws-steps', '#ws-player']]) {
+    const { ctx, page, errors } = await open(ws, { phone: true, viewport });
+    await page.waitForSelector(`${sheet}.sheet > .sheet-handle`, { timeout: 60_000 });
+    if (await page.evaluate((s) => document.querySelector(s).classList.contains('open'), sheet)) { await page.click(`${sheet} .sheet-handle`); await settle(page, 500); }
+    const down = await measure(page, sheet, floor);
+    assert.ok(!down.open && down.tab.vis === 'visible' && down.vh - down.floor.bottom === 70, `${ws}, collapsed: the tab bar up, the ${floor} on it (${JSON.stringify(down)})`);
+    await page.click(`${sheet} .sheet-handle`);
+    await page.waitForFunction((s) => document.querySelector(s).classList.contains('open'), sheet, { timeout: 15_000 });
+    await settle(page, 600);
+    const up = await measure(page, sheet, floor);
+    assert.ok(up.tab.vis === 'hidden', `${ws}, open: the tab bar put away (${JSON.stringify(up)})`);
+    assert.ok(up.vh - up.floor.bottom === 6, `${ws}, open: the ${floor} dropped to 6 px off the bottom (${JSON.stringify(up)})`);
+    assert.ok(Math.abs(up.floor.top - 6 - up.sheet.bottom) <= 1, `${ws}, open: the sheet sits 6 px over the ${floor} (${JSON.stringify(up)})`);
+    // the model's strip between the top chrome (110 px, phone.js top) and the open sheet: 61 px with the bar, ~119 without
+    if (ws === 'build') assert.ok(up.sheet.top - 110 >= 110, `${ws}, open: the model keeps about twice its strip (${up.sheet.top - 110} px; ${JSON.stringify(up)})`);
+    await page.click(`${sheet} .sheet-handle`);
+    await page.waitForFunction((s) => !document.querySelector(s).classList.contains('open'), sheet, { timeout: 15_000 });
+    await settle(page, 500);
+    const back = await measure(page, sheet, floor);
+    assert.ok(back.tab.vis === 'visible' && back.vh - back.floor.bottom === 70, `${ws}, collapsed again: the tabs back, the ${floor} on them (${JSON.stringify(back)})`);
+    assert.deepEqual(clean(errors), []);
+    await ctx.close();
+  }
 });
 
 /* THE PHONE'S LABEL EDITOR (the spacing audit, 2026-10-15): the pencil left the editor's sheet collapsed behind the open
@@ -6969,7 +7118,10 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   const named = await page.evaluate(() => { const out = new Set(); for (const l of document.querySelectorAll('#ws-parts .printin')) { const t = l.textContent.replace(/^Print in /, ''); if (/^No filament/.test(t)) continue; for (const part of t.split(' · ')) for (const nm of part.replace(/^[a-z][a-z ]*?(?= [A-Z])/, '').trim().split(' / ')) out.add(nm.trim()); } return [...out]; });
   const shortNames = c4.names.map((s) => s.replace('Panchroma ', ''));
   assert.deepEqual(named.sort(), [...shortNames].sort(), 'the Parts list prints in exactly the filaments the Colors Dock counted');
-  // 12 back to the model: Build from the tab bar, its sheets down; Undo there takes Simplify back
+  // 12 back to the model: the Parts sheet down (an open sheet puts the tab bar away), Build from the tab bar, its sheets
+  // down; Undo there takes Simplify back
+  await page.locator('#ws-parts .sheet-handle .ttl').tap();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ws-tabbar')).visibility === 'visible', null, { timeout: 15_000 }).catch(() => assert.fail('collapsing the Parts sheet did not bring the tab bar back'));
   await page.locator('#ws-tabbar .tab:has-text("Build")').tap();
   await page.waitForSelector('#ws-lib', { timeout: 30_000 });
   await settle(page, 800);

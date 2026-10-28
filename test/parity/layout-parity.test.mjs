@@ -116,7 +116,7 @@ test('the ported layout rules and schema match the planner on kits, random build
       if (!keepId) { delete a.buildId; delete b.buildId; }
       // the planner's own fields, which the old planner never writes (schema.js BUILD_FIELDS says which): sanitize
       // gives them their default here, the old planner's state has none, and parity is about the shared fields
-      for (const k of ['sideCovers', 'plateParts', 'labelPalette']) { delete a[k]; delete b[k]; }
+      for (const k of ['sideCovers', 'plateParts', 'labelPalette', 'look']) { delete a[k]; delete b[k]; }
       same(label + ' ' + name + ' kept', a, b);
     }
   }

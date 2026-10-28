@@ -11,7 +11,7 @@
    Persistence here is the share-link form only (`#build=`, the viewer's own boot path and the planner's share link);
    the build store with Recent builds, files and IndexedDB is the plan's phase-0 leftover, not this module. */
 import { layoutRules } from '../rules/layout.js';
-import { BUILD_FIELDS, sanitizeBuild, serializeBuild, buildTooNew, newBuildId } from '../rules/schema.js';
+import { BUILD_FIELDS, sanitizeBuild, serializeBuild, buildTooNew, newBuildId, cleanLook } from '../rules/schema.js';
 
 const HISTORY_MAX = 50, COALESCE_MS = 350;
 
@@ -26,7 +26,7 @@ export function createStore(GEN2, opts = {}) {
     spaceW: null, spaceH: null, printer: 'any', customBed: { x: null, y: null },
     gridW: 6, gridH: 4, placed: [], selected: { w: 1, h: 1 }, selectedUnit: null, nextId: 1,
     wallStagger: false, removedStoppers: [], backCover: false, feet: 'tpu', buildPlate: 'powder', plateParts: {},
-    labelStyle: null, buildId: newBuildId(), labelList: null, labelAssign: null, labelPalette: null,
+    labelStyle: null, buildId: newBuildId(), labelList: null, labelAssign: null, labelPalette: null, look: null,
   };
   const rules = () => layoutRules(state, GEN2, { tabletop });
   const subs = new Set();
@@ -58,7 +58,9 @@ export function createStore(GEN2, opts = {}) {
     notify(why);
     return r;
   }
-  const serialize = () => serializeBuild(state);
+  /* `opts.look()` = the build's colours as chosen (the stage's look, docs/redesign/SHARE-LOOK.md): stamped into the record
+     at EVERY serialisation, so the address, Undo's own write-back, Share and a file all carry the current colours */
+  const serialize = () => { if (opts.look) state.look = cleanLook(opts.look()); return serializeBuild(state); };
   function pushNow() {
     clearTimeout(history.timer); history.timer = null;
     const snap = JSON.stringify(extra ? { b: serialize(), x: extra.get() } : serialize());

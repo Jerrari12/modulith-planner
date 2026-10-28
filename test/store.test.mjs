@@ -49,7 +49,7 @@ test('commit, undo, redo: history coalesces, ids are never reused, the hash roun
   // the share-link form decodes to the serialised record
   const decoded = JSON.parse(decodeURIComponent(escape(atob(store.hash()))));
   assert.deepEqual(decoded, serializeBuild(store.state));
-  assert.deepEqual(Object.keys(decoded).sort(), ['backCover', 'buildId', 'buildPlate', 'customBed', 'doorStyle', 'faceStyle', 'feet', 'gridH', 'gridW', 'handleStyle', 'labelAssign', 'labelList', 'labelPalette', 'labelStyle', 'length', 'mount', 'nextId', 'placed', 'plateParts', 'printer', 'removedStoppers', 'sideCovers', 'spaceH', 'spaceW', 'wallStagger']);   // sideCovers (2026-10-20), plateParts (2026-10-26) and labelPalette (2026-10-28): the planner's own fields
+  assert.deepEqual(Object.keys(decoded).sort(), ['backCover', 'buildId', 'buildPlate', 'customBed', 'doorStyle', 'faceStyle', 'feet', 'gridH', 'gridW', 'handleStyle', 'labelAssign', 'labelList', 'labelPalette', 'labelStyle', 'length', 'look', 'mount', 'nextId', 'placed', 'plateParts', 'printer', 'removedStoppers', 'sideCovers', 'spaceH', 'spaceW', 'wallStagger']);   // sideCovers (2026-10-20), plateParts (2026-10-26), labelPalette and look (2026-10-28): the planner's own fields
   // two commits inside the coalescing window land as one entry
   store.commit((s) => { s.placed[0].x = 0; }); store.commit((s) => { s.placed[0].x = 1; });
   store.flush();

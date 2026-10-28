@@ -18,7 +18,7 @@ import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFin
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
 import { createSilkUniforms, applySilkAxis, silkTier } from './silk-axis.js';
-import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows } from './skin-map.js';
+import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows, firstRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
@@ -3654,7 +3654,8 @@ function skinPatched(key, m) {
 }
 const skinMaps = (() => {
   const SLOTS = SKIN_MAP.slots;
-  const st = { index: null, indexP: null, atlas: null, atlasPx: 0, atlasData: null, table: null, tableData: new Float32Array(2 * SLOTS * 4),
+  const COLS = SKIN_MAP.tableCols;   // 2 for the top map, 5 for the first layer's vectors (skin-map.js firstRows)
+  const st = { index: null, indexP: null, atlas: null, atlasPx: 0, atlasData: null, table: null, tableData: new Float32Array(COLS * SLOTS * 4),
     sources: new Map(), roots: new Map(), slots: new Map(), loading: new Map(), failed: new Map(), scale: 1, rev: 0, syncing: null };
   const wanted = () => skinU.uSMOn.value > 0.5 && !!QUALITY[quality].accum;
   const base = () => assetUrl('parts/skin/');
@@ -3672,11 +3673,22 @@ const skinMaps = (() => {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const png = await decodePng(new Uint8Array(await r.arrayBuffer()), inflate);
     if (png.width !== entry.size[0] || png.height !== entry.size[1]) throw new Error(`the map is ${png.width}x${png.height}, the index says ${entry.size}`);
-    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm });
+    /* the first layer's distance field (2026-10-28), when the node has one: a failure leaves the top map and no first layer */
+    let first = null;
+    if (entry.first) {
+      try {
+        const rf = await fetch(base() + entry.first.file);
+        if (!rf.ok) throw new Error('HTTP ' + rf.status);
+        const pf = await decodePng(new Uint8Array(await rf.arrayBuffer()), inflate);
+        if (pf.width !== entry.first.size[0] || pf.height !== entry.first.size[1]) throw new Error(`the field is ${pf.width}x${pf.height}, the index says ${entry.first.size}`);
+        first = { w: pf.width, h: pf.height, data: pf.data, meta: entry.first };
+      } catch (e) { console.warn(`[skin map] ${node} first layer: ${(e && e.message) || e} - drawn without it`); }
+    }
+    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm, first });
   }
   function ensureTable() {
     if (st.table) return;
-    st.table = new THREE.DataTexture(st.tableData, 2, SLOTS, THREE.RGBAFormat, THREE.FloatType);
+    st.table = new THREE.DataTexture(st.tableData, COLS, SLOTS, THREE.RGBAFormat, THREE.FloatType);
     st.table.minFilter = THREE.NearestFilter; st.table.magFilter = THREE.NearestFilter; st.table.generateMipmaps = false;
     st.table.needsUpdate = true;
     skinU.uSMTable.value = st.table;
@@ -3710,7 +3722,7 @@ const skinMaps = (() => {
   }
   function repack() {
     const nodes = live();
-    const pack = packAtlas(nodes.map((n) => { const s = st.sources.get(n); return { id: n, w: s.w, h: s.h }; }));
+    const pack = packAtlas(nodes.flatMap((n) => { const s = st.sources.get(n); return [{ id: n, w: s.w, h: s.h }, ...(s.first ? [{ id: n + '#first', w: s.first.w, h: s.first.h }] : [])]; }));
     for (const n of st.slots.keys()) stamp(n, 0);
     st.slots.clear();
     if (!nodes.length) { st.rev++; invalidateFrame(); return; }   // nothing on the stage has a map: no atlas is allocated for it
@@ -3726,7 +3738,13 @@ const skinMaps = (() => {
       const data = pack.scale === 1 ? s.data : resampleMap(s.data, s.w, s.h, r.w, r.h);
       for (let y = 0; y < r.h; y++) st.atlasData.set(data.subarray(y * r.w * 4, (y + 1) * r.w * 4), ((r.y + y) * pack.size + r.x) * 4);
       const rows = tableRows(r, s, pack.scale);
-      st.tableData.set(rows[0], slot * 2 * 4); st.tableData.set(rows[1], (slot * 2 + 1) * 4);
+      st.tableData.set(rows[0], slot * COLS * 4); st.tableData.set(rows[1], (slot * COLS + 1) * 4);
+      const rf = s.first ? pack.rects.get(n + '#first') : null;
+      if (rf) {
+        const fd = pack.scale === 1 ? s.first.data : resampleMap(s.first.data, s.first.w, s.first.h, rf.w, rf.h);
+        for (let y = 0; y < rf.h; y++) st.atlasData.set(fd.subarray(y * rf.w * 4, (y + 1) * rf.w * 4), ((rf.y + y) * pack.size + rf.x) * 4);
+      }
+      firstRows(rf, s.first && s.first.meta, pack.scale).forEach((row, k) => st.tableData.set(row, (slot * COLS + 2 + k) * 4));
       st.slots.set(n, slot); stamp(n, slot + 1); slot++;
     }
     st.scale = pack.scale; st.atlas.needsUpdate = true; st.table.needsUpdate = true; st.rev++;
@@ -3762,7 +3780,9 @@ const skinMaps = (() => {
     status() {
       return { wanted: wanted(), on: skinU.uSMOn.value === 1, atlasPx: st.atlasPx, scale: st.scale, rev: st.rev,
         slots: Object.fromEntries(st.slots), sources: [...st.sources.keys()], failed: Object.fromEntries(st.failed),
-        loading: [...st.loading.keys()], index: st.index ? Object.keys(st.index.nodes).length : null };
+        loading: [...st.loading.keys()], index: st.index ? Object.keys(st.index.nodes).length : null,
+        // the slotted nodes whose first layer is drawn (2026-10-28): a live check reads it
+        firsts: [...st.slots.keys()].filter((n) => st.sources.get(n) && st.sources.get(n).first) };
     },
   };
 })();
@@ -7985,7 +8005,13 @@ const persistColors = () => {
   try { localStorage.setItem(COLOR_STORE_KEY, JSON.stringify({ colors: customColors, on: useCustom, user: userPalette, over: overrides, t: colorsT })); }
   catch (e) { /* storage unavailable (private mode) — the planner relay still works */ }
 };
-const saveColors = () => { colorsT = Date.now(); persistColors(); postColorsToPlanner(); };
+const saveColors = () => { heldOn = null; colorsT = Date.now(); persistColors(); postColorsToPlanner(); };
+/* THE CHOSEN `on`, for a shared look (docs/redesign/SHARE-LOOK.md, 2026-10-28): Assemble shows "Part colors" by setting the
+   stage's useCustom without saving it, and sets it back on leave. heldOn remembers the build's chosen value while such a
+   temporary view is on (the setter below, its only writer), and every real palette change - each ends in saveColors -
+   forgets it. look() and the history read the chosen value, so the temporary view is never shared or undone into. */
+let heldOn = null;
+function look() { return { v: 1, on: heldOn !== null ? heldOn : useCustom, colors: structuredClone(customColors), over: structuredClone(overrides) }; }
 // call after any HAND edit to the palette (never after a preset)
 const snapshotUserPalette = () => { userPalette = structuredClone(customColors); };
 // purchased hardware (wood screws, magnets — every row of the type is `purchased`)
@@ -11959,7 +11985,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     /* ⚠ `useCustom` IS THE GATE, and without it `customColors` is inert. A test
        that assigned customColors and called applyPalette repainted NOTHING and
        produced eighteen identical arms that looked like a working matrix. */
-    get useCustom() { return useCustom; }, set useCustom(v) { useCustom = !!v; },
+    get useCustom() { return useCustom; }, set useCustom(v) { v = !!v; if (v === useCustom) return; if (heldOn === null) heldOn = useCustom; useCustom = v; if (useCustom === heldOn) heldOn = null; },   // a temporary view (Assemble's Part colors): the chosen value is held (look)
+    look,   // the build's colours as chosen, for the record and the history (SHARE-LOOK.md)
     // the relief lever, for the tier gate: `reliefWanted` is the constant AND the tier
     LAYER_DETAIL_ENABLED, reliefWanted,
     // the print pose's axis per material key - a buried-infill experiment needs

@@ -18,6 +18,7 @@ import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
 import { readLabelDefaults, paletteOfDefaults, urlFor } from './label-palette.js';   // the label palette's defaults for new builds (2026-10-28)
+import { cleanLook, buildTooNew } from './rules/schema.js';   // a shared build's look, cleaned once at the boot (SHARE-LOOK.md)
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
@@ -122,11 +123,23 @@ export async function boot() {
   /* a representative finished build in every workspace (Astra): the first preset's coordinated filaments unless the
      visitor already has a saved palette; Assemble switches to Part colors on its own and restores this on leave. Applied
      BEFORE the store captures its baseline, so the first Undo returns to this palette and not to none (e2e, 2026-10-13). */
-  if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0], { quiet: true });   // not a visitor's pick: no preset event
+  /* A SHARED LOOK (docs/redesign/SHARE-LOOK.md, 2026-10-28): a #build= whose record carries its colours shows exactly
+     them - the label body and text included, and the instruction colours when that was the choice - in place of this
+     browser's palette for the build and of the first preset. Outside data, so decoded, version-checked and cleaned here
+     ONCE, by the schema's own cleaner (the store's sanitize applies the same one to the record it keeps). A record with no
+     look (every link and file before the field) opens as it always has. */
+  const bootLook = (() => {
+    const m = /#build=([^&]+)/.exec(location.hash); if (!m) return null;
+    try { const raw = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); const rec = raw.data || raw; return buildTooNew(rec) ? null : cleanLook(rec.look); } catch { return null; }
+  })();
+  if (bootLook) stage.setPalette({ colors: bootLook.colors, over: bootLook.over, on: bootLook.on });
+  else if (!stage.useCustom && stage.PRESETS?.length) stage.applyPreset(stage.PRESETS[0], { quiet: true });   // not a visitor's pick: no preset event
   /* THE STORE (phase 3): the build record with the planner's rules and undo history. It opens on the record the
      stage booted with (the kit file, or a #build= hash) and writes every settled change back to the address as the
      planner's own share-link form, so a reload or a shared link reopens the edited build (the viewer decodes it). */
-  const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: p.on, user: p.user, over: p.over }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette and the per-unit layer ride along too (Sol 01a13330) */, onSave: (snap) => { try { history.replaceState(history.state, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); stage.setColorStoreKey(buildKey(store.state.buildId)); } catch { /* a very old browser */ } saveBuild(snap); } });
+  const store = createStore(G, { extra: { get: () => { const p = stage.palette(); return { colors: p.colors, on: stage.look().on, user: p.user, over: p.over }; }, set: (v) => stage.setPalette(v) } /* the hand-built palette and the per-unit layer ride along too (Sol 01a13330); `on` is the CHOSEN one, never Assemble's temporary Part colors (Sol 01a183be) */,
+    look: () => stage.look(),   // the record carries the build's colours as chosen (SHARE-LOOK.md): every serialisation stamps them
+    onSave: (snap) => { try { history.replaceState(history.state, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(snap)))}`); stage.setColorStoreKey(buildKey(store.state.buildId)); } catch { /* a very old browser */ } saveBuild(snap); } });
   /* the plate is the one record field the generator never reads, so no workspace's regenerate puts it back: an Undo or a
      Redo that moves it hands it to the stage here (the Colors plan's step 1, 2026-10-18; before, the stage kept the newer
      plate while the store and the address went back) */

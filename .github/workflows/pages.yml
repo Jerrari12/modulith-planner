@@ -240,6 +240,7 @@ jobs:
           # the label palette (2026-10-28): imported by main.js, app.js and labels.js; it imports label-look.js, the catalog,
           # the colour maths and the schema (its record cleaner); labels.js reads the owned list, colors.js the stripe words
           sed -i "s|'./label-palette.js'|'./label-palette.js?v=$V'|" js/main.js js/app.js
+          sed -i "s|'./rules/schema.js'|'./rules/schema.js?v=$V'|" js/app.js   # a shared build's look, cleaned at the boot (2026-10-28)
           sed -i "s|'../label-palette.js'|'../label-palette.js?v=$V'|; s|'../state/owned.js'|'../state/owned.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./label-look.js'|'./label-look.js?v=$V'|; s|'./filament-db.js'|'./filament-db.js?v=$V'|; s|'./colors/colour.js'|'./colors/colour.js?v=$V'|; s|'./rules/schema.js'|'./rules/schema.js?v=$V'|" js/label-palette.js
           sed -i "s|'../label-look.js'|'../label-look.js?v=$V'|" js/workspaces/colors.js

@@ -6068,6 +6068,112 @@ black spools but one is PLA black and the other is TPU black, but at a glance th
   - the stack's top spool's sticker "PLA / BLACK";
   - marks drawn once, no page errors.
 
+## 2026-10-28 · A shared build carries its colours
+
+Astra, after the label palette went live: "Users reasonably expect 'Share build' to share what they see. Carrying the
+stripe while dropping the label background can change both its appearance and readability." The requirement: opening a
+shared build in a fresh browser reproduces its colours, label bodies, text and stripes included, without inheriting the
+recipient's unrelated preferences; old links keep their fallback. Design note `docs/redesign/SHARE-LOOK.md`.
+
+- **The record carries its look:** a new field `look` = `{ v: 1, on, colors, over }`, the Colors palette as chosen (every
+  part pick, the per-unit picks, the label body and text). The store stamps it at every serialisation, so the address (what
+  Share copies), Undo's write-back, Recent, the slot and a file all carry the current colours.
+- **The boot applies it** once, through one gate (decode, `buildTooNew`, the schema's `cleanLook`), in place of this
+  browser's palette for the build and of the first preset; a look of instruction colours stays one. A record with no look
+  (every link and file before today) opens exactly as before. A `#scheme=` beside the link still applies after it.
+- **The recipient keeps their own:** label defaults, saved schemes, the owned list and "★ My palette" are untouched.
+- **The chosen `on`, never Assemble's Part colors:** the stage holds the chosen value while that temporary view is on, and
+  both the look and the history read it.
+- **Outside data:** names are strings of at most 80 characters, hexes have 3, 4, 6 or 8 digits, links are http(s) of at
+  most 500 characters, plain objects only, no prototype keys; past 256 KB of UTF-8 the per-unit layer is dropped and the
+  build-wide colours stay (a fully picked build is under 4 KB).
+
+Tests: `test/share-look.test.mjs` (the cleaner, the cap in UTF-8 bytes, the round trip, the store stamping and Undo); E2E
+"Share: ..." x3 (a fresh context with its own same-id palette, defaults, schemes and owned list gets the sender's body, text,
+part, unit pick and stripe, its own settings unchanged; `on: false`, the no-look fallbacks and `#scheme=`; Assemble's Part
+colors never shared or undone into). Mutants: the boot apply disabled fails two cases; `look()` reading the live flag
+fails the Assemble case. Unit 736/736, e2e 95/95 (Colors, Assemble, Share, Labels, Parts, presets,
+undo). Reviews: Sol 01a183be (design: reject, nine changes folded in, three discarded with reasons in the note), Sol
+01a183df (code: the cap counted UTF-16 units; now UTF-8 bytes).
+
+Live 2026-10-28 as 02f6a55e (main 02f6a55, Joey's go: "merge and deploy share-look"). `share-look-prod.mjs` green: a
+sender's label body (Panchroma Cream), text (Panchroma Navy), Metric spool (Panchroma Blue) and drawer 1's own faceplate
+colour (Polar Seafoam) reach a fresh browser through the address, and through Save build file then Load build file in
+another; both recipients' seeded label defaults, schemes and owned list are byte-identical afterwards; no page errors.
+Vault e0901b8. Kept separate, not started: a v2 suggestion set (a chosen purple, a grey stainless) and the patch print test.
+
+## 2026-10-28 · On a phone an open sheet puts the tab bar away; a stack's tags are staggered
+
+**The tab bar.** Joey, asked whether to hide the bottom bar while a sheet is open on his phone (at his 360 x 675 an
+open sheet left 61 px of model between the top chrome and the sheet): "yes".
+- Upright, while a sheet is open, the tab bar steps out (`#ws.bar-off`, phone.js `stack`). The dock, or Assemble's
+  player, drops into its place, 6 px off the bottom plus the screen's inset, and the sheet sits 6 px over it (`base`
+  reads the dock's own top, as on its side). The model's strip about doubles: 61 to 119 px at 360 x 675.
+- Collapsing the sheet (its handle) brings the tabs back. A workspace that opens a sheet on arrival (Colors, Parts)
+  shows no tabs until it is collapsed: the trade accepted.
+- On its side the tabs are a rail beside the sheets, and stay.
+- A sheet's `bottom` now moves with its slide (`transition`). Done at once, a sheet collapsing as the bar came back rose
+  58 px over the model for the slide's first frames. A tap on a part in Colors collapses the sheet, and the tap's click,
+  about 110 ms later, landed on the rising handle and opened it again: the phone journey and the part-card case caught
+  it, and a toggle trace found the click on the handle's title.
+
+**The tags, staggered.** Joey, on a five-spool stack: the tags hung "perfectly in a vertical column ... randomize them
+slightly ... as if you rotated the spools a few degrees to the left or right ... but mostly still visible from the front".
+- A lying spool's wire leaves the coil 5 to 20 deg round from its front, either way, seeded by the spool apart from the
+  card's hang (done.js `placeSpoolMarks`). It is at least 10 deg off the tag before it in the stack, re-drawn up to eight
+  times, then put on the other side (Terra 01a183f3).
+- The card turns with its wire (the pivot's twist). Left square to the room, its corner on the turned side swung into the
+  coil (the e2e's clip check: r 90.6 of 91.5).
+- A spool on its rim is not turned: its front is the coil's furthest-forward line, and turned, the card would hang up
+  or down the coil, toward it.
+
+**Checks.**
+- E2E "the phone: an open sheet puts the tab bar away, the dock or the player takes its place, and collapsing brings
+  the tabs back" (360 x 675, Build and Assemble). The Build library case and the phone journey collapse their sheet
+  before a tab.
+- The tag case: every lying tag 5 to 20 deg round, a standing one at the front, neighbours 10 deg or more apart (a
+  five-colour stack has a pair), no clip, the twist counted from the wire.
+- The sideways case: the rail stays beside an open sheet.
+- 9 mutants, each failing its case: the bar never put away, put away on its side too (it survived until the sideways
+  check), left visible, the dock left up, the sheet's base off the dock, `bottom` jumping, the tags not turned, the
+  neighbours let line up, the card square to the room.
+- All 24 phone cases and the tag cases green on SwiftShader. The tag case runs about 5 min here under load; its new
+  five-colour step is 3.3 s of it, and the rest is its three fresh entries, as before.
+- Terra 01a183d2 (the bar, then the bottom transition): no findings. Terra 01a183f3 (the stagger): one finding, fixed.
+
+## 2026-10-28 · A face printed down on the smooth sheet shows its first layer, drawn as vectors
+
+Joey, on the Silk Gold EdgeLabel accents: printed face down on a smooth build plate "you can still see the beads on the
+surface. right now the smooth surface looks way too perfect". Then, of the baked top-layer maps' 8 px/mm going soft up
+close: "is there a way to produce the texture as vectors?" (option 1 of the two offered: lines from their numbers and a
+distance field, over shipping the toolpath itself), and "Subtle (0.03)" for the bead's relief.
+
+- WHAT IS DRAWN: on a bed-contact face, smooth plate only (a powder coat's grain prints over the beads), the part's real
+  first layer - the infill lines and the perimeter loops of its own G-code - as a cosine relief of 0.03 mm
+  (`SKIN_MAP.firstCrownMm`). Very High settle samples only, like the top-layer maps: the block sits in their gate.
+- AS VECTORS: the infill is one family of parallel lines per ISLAND (angle shared, spacing and phase per island: each
+  island of a slice lays its own lines - a Decor faceplate fitted 0.87 as one family, 0.96 and 1.0 per island), drawn
+  from those numbers at any zoom; the loops are bands at the slicer's own distances (measured off its ring segments) in a
+  distance field to the layer's outline, 8 bits at 4 px/mm, read at mip 0 so it interpolates where a picture blurs. The
+  field also carries each pixel's island phase (B) and spacing (A). Both fade out before their pitch reaches two screen
+  pixels, so a whole-build view shows nothing new and nothing shimmers.
+- THE PIPELINE: node0 cut every skin bake's G-code to its first layer (no re-slicing; 555 files, 115 MB); the extraction
+  (`D:/MODULITH/ops/slicing/skin_vector.py`, version 3, numpy + scipy + Pillow) ran here in 8 processes; `tools/skin-map.mjs
+  vector` carries it into each part's frame with the frame `ship` measures (now one `sliceFrame`) and adds `first` to the
+  node's entry in `parts/skin/index.json` (gen2-parts) beside `<node>.first.png`. 434 of 555 parts ship, 8.6 MB in all;
+  121 are left plain - case bottoms (the bed side of a case, under the mount), some rails and covers, and one faceplate
+  (EdgeLabel 1W-05H, 0.82) - where fewer than 85 % of the first layer's lines fit their island's grid within 0.05 mm.
+- In the shader (`js/skin-map.js FIRST_BLOCK`): the table grows from 2 columns to 7 (`firstRows`); `lineFamilyInPart` and
+  `islandPhaseByte` carry a family from G-code into the part frame (unit-tested on every axis permutation, and the test
+  fails when the phase shift's sign is flipped). An island the extraction could not fit draws no infill rather than the
+  layer's lines out of phase. Silk on these faces already streaks at 45 degrees (silk-axis.js skinAcross), which on the
+  EdgeLabel accent coincides with the real first layer's lines.
+- Not changed: the top skins still draw the baked 8 px/mm maps (their islands need the same per-island families; next).
+
+Reviews: Sol 01a183fd (code: the field's range checked at ship, an unfitted island left plain, the island angle within
+0.25 degrees, central differences for the outline's direction). Tests: unit 735 pass; the e2e silk and skin-map cases
+pass. Shots: `D:\Claude - Output\vector-skin-2026-10-28` (`closeup.mjs`; proof-first-layer-b.png, first-layer-closeup.png).
+
 ## 2026-10-28 · A tabletop build read back with a rounded-up grid still stands on the table
 
 Joey: "we keep randomly running into this 'issue' on the build, nothing changed, I just went between tabs ... In the 2d
