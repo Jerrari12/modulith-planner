@@ -163,7 +163,7 @@ export const tagInfo = (f) => {
   if (!f || !f.material) return null;
   const props = f.props || (f.silk ? ['SILK'] : []);
   return { material: f.material, props, brand: f.brand || null, line: f.line || null, colour: f.colourName || null, hex: f.hex,
-    detail: [...props, f.colourName].filter(Boolean).join(' · ').toUpperCase(), maker: [f.brand, f.line].filter(Boolean).join(' · ').toUpperCase() };
+    detail: [...props, f.colourName].filter(Boolean).join(' · ').toUpperCase(), maker: (f.maker || [f.brand, f.line].filter(Boolean).join(' · ')).toUpperCase() };   // f.maker: a shared spool's makers (done.js spoolMaterials)
 };
 const markMat = (tex) => new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0, side: THREE.DoubleSide });
 /* THE SHIPPING TAG (Joey 2026-10-28, two photos of one: its top corners clipped, a reinforced hole, a string loop). White

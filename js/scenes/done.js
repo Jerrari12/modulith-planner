@@ -1090,9 +1090,18 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      that shows carries a sticker too. Made after the spools are posed, and again after every refresh (the marks are the
      spools' children, so they move with them) */
   const tagsOff = () => debug && new URLSearchParams(location.search).get('spooltag') === 'off';
+  /* a spool is a colour (spoolColours), and two filaments can share one: the catalogue has Panchroma Grey (PLA) and
+     Polymaker PETG Grey both #9a9da3, TPU95 and TPU90 Black both #16161a (Sol 01a1839e: keyed by the hex alone, the last
+     one read named the spool). Its words then say both: "PLA / PETG", every grade or finish, each maker */
+  const uniq = (a) => [...new Set(a.filter(Boolean))];
   function spoolMaterials() {
-    const f = stage.filamentsInBuild ? stage.filamentsInBuild() : { filaments: [] };
-    return new Map(f.filaments.map((x) => [lower(x.hex), x]));
+    const f = stage.filamentsInBuild ? stage.filamentsInBuild() : { filaments: [] }, by = new Map();
+    for (const x of f.filaments) { const k = lower(x.hex); if (!by.has(k)) by.set(k, []); by.get(k).push(x); }
+    return new Map([...by].map(([k, list]) => [k, list.length === 1 ? list[0] : {
+      hex: list[0].hex, material: uniq(list.map((x) => x.material)).join(' / ') || null, silk: list.some((x) => x.silk),
+      props: uniq(list.flatMap((x) => x.props || [])), colourName: uniq(list.map((x) => x.colourName)).join(' / ') || null,
+      maker: uniq(list.map((x) => [x.brand, x.line].filter(Boolean).join(' · '))).join(' / ') || null,
+    }]));
   }
   function clearSpoolMarks() {
     for (const s of parts.spools ? parts.spools.groups.flatMap(spoolsOf) : []) for (const o of s.children.filter((c) => c.userData.spoolMark)) { disposeMark(o); o.removeFromParent(); }
@@ -1100,6 +1109,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function placeSpoolMarks() {
     clearSpoolMarks();
     if (tagsOff() || !parts.spools) return;
+    parts.marksDrawn = (parts.marksDrawn || 0) + 1;   // for a reader of the scene (the e2e suite: the redraw for the font)
     const mats = spoolMaterials(), F = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0);
     for (const s of parts.spools.groups.flatMap(spoolsOf)) {
       const info = tagInfo(mats.get(lower(s.userData.spool.color)));
@@ -1111,8 +1121,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       const lying = Math.abs(A.y) > 0.7;
       if (lying && A.y < 0) A.negate();   // the top flange
       if (!lying && A.dot(F) < 0) A.negate();   // the flange on the camera's side (a spool on its rim faces sideways: either)
-      /* the strand leaves the coil at its front, tucked just under the surface (90.5 of the coil's 91 mm; spool.js ON A
-         STRAND OF THE FILAMENT): lying, toward the top of the coil (20 mm up its 27.5), straight out at the front; on its
+      /* the wire leaves the coil at its front, tucked just under the surface (90.5 of the coil's 91 mm; spool.js ON A
+         WIRE FROM THE COIL): lying, toward the top of the coil (20 mm up its 27.5), straight out at the front; on its
          rim, at the coil's front a little over the axle (a standing coil is furthest forward at mid-height, so a card
          hanging there stays in front of it), toward the outer flange. Either way the card hangs 100 mm out, in front of
          the coil (91) and between the flanges (27.5) */
@@ -1122,7 +1132,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       const mark = makeTag(info, accent, out);
       mark.position.copy(at);
       /* hung as a tag hangs (Joey 2026-10-28: "hanging more randomly, can be twisted slightly randomly or hanging partly
-         sideways slight"): about its hole, twisted on the strand 12 to 35 deg, swung to the side 5 to 16 (never straight),
+         sideways slight"): about its hole, twisted on the wire 12 to 35 deg, swung to the side 5 to 16 (never straight),
          either way, its foot off the coil 4 to 12; seeded by the spool's colour and its place in the group, so a spool's
          tag hangs the same every time */
       const rnd = rngFrom(hashSeed(`tag|${lower(s.userData.spool.color)}|${s.parent ? s.parent.children.indexOf(s) : 0}`));
@@ -1158,6 +1168,12 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       s.add(st);
     }
     stage.invalidateFrame();
+    /* the words are drawn into canvases now, in Archivo: if the face has not loaded yet the fallback's shapes stay in the
+       textures for the visit (Sol 01a1839e). So when it is not ready, load it and draw the marks once more, unless the
+       scene has gone (or the marks have been drawn again since) */
+    if (document.fonts && !document.fonts.check('800 20px Archivo') && !parts.markFontWait) {
+      parts.markFontWait = document.fonts.load('800 20px Archivo').then(() => { if (on && !cancelled && parts.spools) placeSpoolMarks(); }, () => {});
+    }
   }
   /* THE WINDOW: FROSTED GLASS (Joey 2026-10-26, after his garden through it in six versions, a photo on a cylinder round
      the room at the last: "that window scene is pretty gross, maybe there is something more simple claude can do without
@@ -1762,7 +1778,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       },
       // the shots' subjects (pickSubjects) and the label shot's focus-in (its animation's state, the canvas's filter now)
       // the mugs (makeMugs): the build's plan, where the second one stood, whether each print's logo has drawn, its meshes
-      get spools() { const p = parts.spools; return p ? { cleared: p.cleared || [], plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible) } : null; },
+      get spools() { const p = parts.spools; return p ? { cleared: p.cleared || [], plan: p.plan, placed: (p.placed || []).map((x) => ({ kind: x.kind, colours: x.colours, at: x.at, box: x.box })), colours: p.groups.flatMap((r) => r.children.map((s) => s.userData.spool && s.userData.spool.color)), discs: p.discs.map((d) => d.visible), marksDrawn: parts.marksDrawn || 0 } : null; },
       refreshSpools, selectSpool,
       get spoolGlow() { return parts.spools ? parts.spools.groups.flatMap(spoolsOf).map((s) => [lower(s.userData.spool.color), s.userData.glow || 0]) : []; },
       get mugs() { const p = parts.mugs; return p ? { framed: subj.mug ? (subj.mug.group ? subj.mug.group.map((g) => subj.mugs.indexOf(g)) : [subj.mugs.indexOf(subj.mug)]) : null, plan: p.plan, facts: p.facts, count: p.placed.length, placed: p.placed.map((m) => ({ look: m.look, at: m.at, turnDeg: m.turnDeg, coffee: m.coffee, pos: m.meshes[0].getWorldPosition(new THREE.Vector3()).toArray(), visible: m.meshes[0].visible })), logos: p.texs.map((t) => !!t.userData.logo), sayings: p.texs.map((t) => !!t.userData.saying), more: p.meshes.length, masks: p.masks.length, subject: subj.mug ? subj.mugs.indexOf(subj.mug) : null } : null; },

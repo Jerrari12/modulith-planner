@@ -7651,7 +7651,7 @@ const TPU_LABELS = new Set(FILAMENT_DB.filter((b) => /TPU/.test(b.line)).flatMap
    line and name carry (FILAMENT_PROPS). A name the catalogue lacks is read by its own words, with no brand */
 const MATERIAL_WORDS = ['PLA', 'PETG', 'TPU'];
 const wordsOf = (s) => String(s || '').toUpperCase().split(/[\s/]+/);
-const FILAMENT_PROPS = [[/silk/i, 'SILK'], [/matte/i, 'MATTE'], [/translucent|transparent|\bclear\b/i, 'TRANSLUCENT'], [/carbon|\bCF\b/i, 'CARBON FIBRE'], [/\bHT\b|high[- ]?temp/i, 'HIGH TEMP'], [/high[- ]?speed|\bHS\b|\bHF\b/i, 'HIGH SPEED'], [/glow/i, 'GLOW'], [/marble/i, 'MARBLE'], [/wood/i, 'WOOD'], [/sparkle|glitter|galaxy/i, 'SPARKLE'], [/dual|tri[- ]?colou?r|rainbow/i, 'MULTICOLOUR'], [/TPU ?(\d{2})\b/i, (m) => `${m[1]}A`]];
+const FILAMENT_PROPS = [[/silk/i, 'SILK'], [/matte/i, 'MATTE'], [/translucent|transparent|\bclear\b/i, 'TRANSLUCENT'], [/carbon|\bCF\b/i, 'CARBON FIBRE'], [/\bHT\b|high[- ]?temp/i, 'HIGH TEMP'], [/high[- ]?speed|\bHS\b|\bHF\b/i, 'HIGH SPEED'], [/glow/i, 'GLOW'], [/marble/i, 'MARBLE'], [/wood/i, 'WOOD'], [/sparkle|glitter|galaxy/i, 'SPARKLE'], [/dual|tri[- ]?colou?r|rainbow/i, 'MULTICOLOUR'], [/TPU\s*(\d{2})A?\b/i, (m) => `${m[1]}A`]];   // "TPU95" and "TPU 95A" alike (Sol 01a1839e)
 const propsOf = (text) => FILAMENT_PROPS.map(([re, say]) => { const m = String(text || '').match(re); return m ? (typeof say === 'function' ? say(m) : say) : null; }).filter(Boolean);
 // a line's own name, the ™ and the material words off ("Panchroma™ Silk PLA" -> "Panchroma"; "PETG" -> ""); the tag prints
 // "BRAND · LINE" (Astra 2026-10-28: "for two black PLAs, the product line becomes more important")

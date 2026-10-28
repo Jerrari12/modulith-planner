@@ -2901,9 +2901,10 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
     });
     return out.sort((a, b) => a.spool.localeCompare(b.spool));
   });
-  const enter = async (query) => {
+  const enter = async (query, init = null) => {
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+    if (init) await ctx.addInitScript(init);
     const { page, errors } = await open('assemble', { query: '&done=room&spools=plan' + query, context: ctx });
     await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setUseCustom(true); for (const e of v.keysInBuild()) if (!e.locked) v.setColor(e.key, { name: 'Elegoo PLA Black', hex: '#1c1d20' }); });
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
@@ -2947,6 +2948,19 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
   assert.deepEqual([by['#3a3b40'].material, by['#3a3b40'].detail, by['#3a3b40'].maker], ['PLA', 'SILK · BLACK', 'POLYMAKER · PANCHROMA'], 'a silk line\'s spool: PLA, SILK · BLACK, its brand and line');
   assert.equal(by['#232427'].material, 'PETG', 'a two-material line\'s colour: its own material');
   assert.ok(Object.values(by).every((t) => !t.clips.length), `none clips after the refresh either (${JSON.stringify(Object.values(by).map((t) => t.clips))})`);
+  /* a spool two filaments share (Sol 01a1839e: Panchroma Grey, a PLA, and Polymaker PETG Grey are both #9a9da3; spools are a
+     colour each): its words say both, not whichever was read last; and a name the catalogue lacks ("Generic TPU 95A
+     Black") still reads its material and its hardness */
+  await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, ks = v.keysInBuild().filter((e) => !e.locked && !e.zone);
+    v.setColor(ks[0].key, { name: 'Panchroma Grey', hex: '#9a9da3' }); v.setColor(ks[1].key, { name: 'Polymaker PETG Grey', hex: '#9a9da3' });
+    if (ks[2]) v.setColor(ks[2].key, { name: 'Generic TPU 95A Black', hex: '#202122' });
+    window.__GEN2_DONE__.refreshSpools();
+  });
+  const by2 = Object.fromEntries((await tags(page)).map((t) => [t.spool, t]));
+  assert.deepEqual([by2['#9a9da3'].material, by2['#9a9da3'].maker, by2['#9a9da3'].accent], ['PLA / PETG', 'POLYMAKER · PANCHROMA / POLYMAKER', '#5a5f66'], 'a shared colour\'s spool: both materials, both makers, a neutral ring');
+  assert.ok(by2['#202122'], `the control: a third region took the unknown TPU (${Object.keys(by2)})`);
+  assert.deepEqual([by2['#202122'].material, by2['#202122'].props], ['TPU', ['95A']], 'a name the catalogue lacks: "TPU 95A" read as TPU, 95A');
   /* THE FLANGE STICKERS (Astra's review): on a stack's top spool (its top flange) and a spool on its rim (its camera-side
      flange), none under a spool above; each says what its spool's tag says; on the flange's face, 65 mm out, in a clear
      sector, no corner on a slot (90, 210, 330 deg, 10 wide) or the bore; laid square to the room's front */
@@ -2973,7 +2987,7 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
   assert.ok(stickers.length >= 1 && stickers.length <= placedNow.length, `a sticker for each group's showing face: ${stickers.length} for ${placedNow.length} groups (${JSON.stringify(stickers)})`);
   for (const k of stickers) {
     assert.ok(k.top, `only on a stack's top spool or a spool on its rim (${JSON.stringify(k)})`);
-    assert.deepEqual([k.material, k.detail], [by[k.spool].material, by[k.spool].detail], 'it says what the spool\'s tag says');
+    assert.deepEqual([k.material, k.detail], [by2[k.spool].material, by2[k.spool].detail], 'it says what the spool\'s tag says');
     assert.ok(Math.abs(k.face - 32.7) < 0.05 && Math.abs(k.out - 65) < 0.5, `on the flange's face, 65 mm out (${JSON.stringify(k)})`);
     assert.deepEqual(k.bad, [], 'no corner on a slot, the bore or past the rim');
     // as a maker's label sits (Joey: "aligned to the center of the spool ... centered between the oval slots ... just don't
@@ -2990,6 +3004,16 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
   assert.ok(await off.page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-spools') n++; }); return n > 0; }), 'the control: the spools are there');
   assert.deepEqual(await tags(off.page), [], 'and no tags');
   await off.ctx.close();
+  /* THE FONT (Sol 01a1839e): the words are drawn into canvases in Archivo; with the face not yet ready the marks are drawn
+     again once it loads, not left in the fallback. Here the page is told it is not ready (check() false), then load()
+     resolves: the marks are drawn twice; a normal entry, once */
+  const early = await enter('', () => { const check = FontFaceSet.prototype.check; FontFaceSet.prototype.check = function (font, ...a) { return /Archivo/.test(font) ? false : check.call(this, font, ...a); }; });
+  await early.page.waitForFunction(() => window.__GEN2_DONE__.spools.marksDrawn >= 2, null, { timeout: 15_000 }).catch(async () => assert.fail(`not drawn again for the font (${await early.page.evaluate(() => window.__GEN2_DONE__.spools.marksDrawn)})`));
+  await early.ctx.close();
+  const plain = await enter('');
+  await settle(plain.page, 1500);
+  assert.equal(await plain.page.evaluate(() => window.__GEN2_DONE__.spools.marksDrawn), 1, 'the control: with the face ready, drawn once at entry');
+  await plain.ctx.close();
 });
 
 /* A ROW LIGHTS ITS SPOOL (Astra's review, brought by Joey 2026-10-28: "selecting its row could also briefly highlight the
