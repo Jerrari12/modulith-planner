@@ -147,6 +147,9 @@ jobs:
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../rules/bom.js'|'../rules/bom.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|" js/workspaces/parts.js
           # the Parts list names the filament a part prints in (2026-10-18): it reads the Colors tab's words from its module
           sed -i "s|'./colors.js'|'./colors.js?v=$V'|" js/workspaces/parts.js
+          # the rows' part renders (2026-10-27) come from the parts host by config.js's assetUrl - the same stamped URL as
+          # main.js's import, so one instance
+          sed -i "s|'../config.js'|'../config.js?v=$V'|" js/workspaces/parts.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|" js/workspaces/assemble.js
           # the Done scene (2026-10-23): assemble.js imports it on demand, so its import() is stamped like a static one; the
           # module's own helper and the room assets it fetches (scenes/) are stamped inside it
