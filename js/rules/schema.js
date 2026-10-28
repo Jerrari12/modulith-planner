@@ -45,7 +45,11 @@ export const BUILD_FIELDS = ["mount", "length", "printer", "customBed", "spaceW"
   // the planner's own field (2026-10-28): the LABEL PALETTE, the spool each stripe meaning prints in, { v: 1, spools:
   // { "sky-blue": { name, hex }, ... } } (docs/redesign/LABEL-PALETTE.md). Absent in every older record and share link,
   // which read as null - the built-in suggested spools, version 1 (js/label-palette.js SUGGESTED_V1)
-  "labelPalette"];
+  "labelPalette",
+  // the planner's own field (2026-10-28): the build's LOOK, its Colors palette as chosen, { v: 1, on, colors, over }
+  // (docs/redesign/SHARE-LOOK.md), so a link, a file or a Recent entry carries its colours. Absent in every older record
+  // and share link, which read as null - this browser's palette for the build, else the first preset, as before
+  "look"];
 /* the per-part plate finishes, cleaned (2026-10-26, the planner's own field): an object of type name -> one of
    BUILD_PLATES; anything else is dropped, never guessed. Type names are the manifest's part types ("Faceplate",
    "Case", "Stopper", "MagnetClip"...): a letter, then letters, digits, spaces, "-" or "_", 1-40 characters in all. */
@@ -75,6 +79,40 @@ export function cleanLabelPalette(v) {
   const spools = {};
   for (const k of LABEL_PALETTE_KEYS) { const s = cleanSpool(src[k]); if (s) spools[k] = s; }
   return Object.keys(spools).length ? { v: 1, spools } : null;
+}
+/* the look, cleaned (2026-10-28, the planner's own field): outside data, so as strict as the stage's own cleaner and
+   stricter - a filament is { name: a string of at most 80 characters, hex: #rgb, #rgba, #rrggbb or #rrggbbaa, url?: an
+   http(s) link of at most 500 characters }; `colors` maps a key (a part type or a zone of one, 1-60 characters) to one;
+   `over` maps a unit id to such a map; plain objects only, never a prototype key. Past LOOK_MAX bytes of UTF-8 JSON the
+   per-unit layer goes and the build-wide colours stay; `v` must be 1; nothing usable is null. */
+export const LOOK_MAX = 256 * 1024;
+const plainObj = (v) => Object.prototype.toString.call(v) === "[object Object]";
+const BAD_KEY = (k) => k === "__proto__" || k === "constructor" || k === "prototype";
+const utf8Bytes = (o) => new TextEncoder().encode(JSON.stringify(o)).length;   // bytes, not UTF-16 units (Sol 01a183df)
+export function cleanFilament(f) {
+  if (!plainObj(f) || typeof f.name !== "string" || f.name.length > 80 || typeof f.hex !== "string" || !/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(f.hex)) return null;
+  const out = { name: f.name, hex: f.hex };
+  if (typeof f.url === "string" && f.url.length <= 500 && /^https?:\/\//.test(f.url)) out.url = f.url;
+  return out;
+}
+function cleanLookMap(m) {
+  const out = {};
+  if (!plainObj(m)) return out;
+  for (const [k, v] of Object.entries(m)) {
+    if (BAD_KEY(k) || !k || k.length > 60) continue;
+    const f = cleanFilament(v);
+    if (f) out[k] = f;
+  }
+  return out;
+}
+export function cleanLook(v) {
+  if (!plainObj(v) || v.v !== 1) return null;
+  const colors = cleanLookMap(v.colors), over = {};
+  if (plainObj(v.over)) for (const [u, m] of Object.entries(v.over)) { if (BAD_KEY(u) || !/^\d{1,9}$/.test(u)) continue; const c = cleanLookMap(m); if (Object.keys(c).length) over[u] = c; }
+  let out = { v: 1, on: v.on === true, colors, over };
+  if (utf8Bytes(out) > LOOK_MAX) out = { v: 1, on: out.on, colors, over: {} };
+  if (utf8Bytes(out) > LOOK_MAX) return null;
+  return out;
 }
 export const BUILD_SCHEMA = 1;
 export const buildTooNew = (d) => !!d && typeof d === "object" && d.schema !== undefined && d.schema !== null
@@ -154,6 +192,8 @@ export function sanitizeBuild(d, GEN2) {
   d.plateParts = cleanPlateParts(d.plateParts);
   // the label palette (2026-10-28): ALWAYS written (null when none), for the same reason
   d.labelPalette = cleanLabelPalette(d.labelPalette);
+  // the look (2026-10-28): ALWAYS written (null when none), for the same reason
+  d.look = cleanLook(d.look);
   // a build without an identity (older than the field, or a mangled one) gets
   // a new one; a valid one is KEPT, so a saved or shared build stays itself
   d.buildId = typeof d.buildId === "string" && BUILD_ID_RE.test(d.buildId) ? d.buildId : newBuildId();
