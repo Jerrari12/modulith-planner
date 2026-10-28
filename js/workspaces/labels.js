@@ -891,6 +891,8 @@ export function mountLabels(stage, ctx) {
     if (fromEditor) restoreFocus(back, true);   // renderAll parked the keyboard on the panel; the opener is where it goes back
   }
   const editCommit = (patch) => { const e = st.edit; if (!e) return; const r = R.edit(L, S(), e.id, patch, e.scope === 'this' && e.unitId != null ? 'this' : 'all', e.unitId); if (labelCommit(r) && r.id !== e.id) st.edit.id = r.id; renderAll(); };
+  // a stripe: the colours, null (a part label's "no stripe") or undefined (the part's own; none on a typed label) - R.setStripe
+  const stripeCommit = (colours) => { const e = st.edit; if (!e) return; const r = R.setStripe(L, S(), e.id, colours, e.scope === 'this' && e.unitId != null ? 'this' : 'all', e.unitId); if (labelCommit(r) && r.id !== e.id) st.edit.id = r.id; renderAll(); };
   function renderEditor() {
     const e = st.edit; const l = e ? R.labelById(S(), e.id) : null;
     editor.hidden = !l;
@@ -934,24 +936,28 @@ export function mountLabels(stage, ctx) {
     // them"). The look decides it exactly as for the 3D label: a drawer whose words were changed draws words and an icon.
     const editUnit = e.unitId != null ? R.drawers(S()).find((u) => u.id === e.unitId) : null;
     const lookNow = editUnit ? labelLookOf(S(), editUnit) : labelLookOfLabel(l);
+    /* the stripe (Joey 2026-10-27: "if i'm manually typing a label i don't see how to set a color for the label stripe", then,
+       of a Part Picker label, "i can't figure out after the fact how to add like a colored stripe?"): the Label Studio's menu
+       (label-look.js STRIPE_COLOURS), stored on the label as `colours` as the Studio stores it. A typed label's runs along its
+       left end, the one place its words never reach; a part label's goes where the stripe setting says, its words laid out
+       clear of it, and it may keep the Part Picker's own colours (no `colours`), take none (`colours: null`, the Studio's "no
+       stripe" for a part label) or one of these. EdgeLabel only: Classic Pro prints no stripe yet (the Studio's rule) */
+    if (S().faceStyle !== 'classicpro') {
+      const part = R.isPartLabel(l), own = part && l.hardware && l.hardware.colours && l.hardware.colours.band;
+      const ownHex = own && typeof own.hex === 'string' ? own.hex : null;
+      const on = l.colours === null ? 'none' : cleanStripe(l.colours, false)?.band.colour || (ownHex ? 'picker' : 'none');
+      const known = STRIPE_COLOURS.find((x) => x.colour === on);
+      editor.appendChild(el('div.frow', {}, [el('span', { text: 'Stripe' }), el('span.dim', { text: on === 'none' ? 'None' : on === 'picker' ? `The part’s own · ${own.label || 'Part Picker'}` : known ? known.name : 'From the Label Studio' })]));
+      editor.appendChild(el('div.swatches', { role: 'group', 'aria-label': 'Stripe colour' }, [
+        ownHex ? el('button.sw.own' + (on === 'picker' ? '.on' : ''), { title: `The Part Picker’s colours (${own.label || ownHex})`, 'aria-label': 'Stripe: the part’s own colours', 'aria-pressed': String(on === 'picker'), style: `--sw:${ownHex}`, onclick: () => stripeCommit(undefined) }) : null,
+        el('button.sw.none' + (on === 'none' ? '.on' : ''), { title: 'No stripe', 'aria-label': 'No stripe', 'aria-pressed': String(on === 'none'), onclick: () => stripeCommit(ownHex ? null : undefined) }),
+        ...STRIPE_COLOURS.map((x) => el('button.sw' + (on === x.colour ? '.on' : ''), { title: x.name, 'aria-label': `Stripe: ${x.name}`, 'aria-pressed': String(on === x.colour), style: `--sw:${x.hex}`, onclick: () => stripeCommit(stripeFor(x.colour)) })),
+      ].filter(Boolean)));
+    }
     if (lookNow && lookNow.kind === 'part') {
       editor.appendChild(el('p.note.noicon', { text: 'Icons don’t apply here: the part’s drawing prints in their place. To use an icon instead, choose “Use custom wording” on the drawer.' }));
       if (place) editor.appendChild(place);
       return;
-    }
-    /* the stripe (Joey 2026-10-27: "if i'm manually typing a label i don't see how to set a color for the label stripe"): the
-       Label Studio's menu (label-look.js STRIPE_COLOURS), stored on the label as `colours` as the Studio stores it; it runs
-       along the label's left end, the one place a typed label's words never reach. EdgeLabel only: Classic Pro labels print
-       no stripe (the Studio's rule), so on a Classic Pro build the row is not offered. Typed labels only: on a part label
-       `colours: null` means "not the Part Picker's colours", which None here would not say (label-look.js header) */
-    if (S().faceStyle !== 'classicpro' && !R.isPartLabel(l)) {
-      const on = cleanStripe(l.colours, false)?.band.colour || 'none';
-      const known = STRIPE_COLOURS.find((x) => x.colour === on);
-      editor.appendChild(el('div.frow', {}, [el('span', { text: 'Stripe' }), el('span.dim', { text: on === 'none' ? 'None' : known ? known.name : 'From the Label Studio' })]));
-      editor.appendChild(el('div.swatches', { role: 'group', 'aria-label': 'Stripe colour' }, [
-        el('button.sw.none' + (on === 'none' ? '.on' : ''), { title: 'No stripe', 'aria-label': 'No stripe', 'aria-pressed': String(on === 'none'), onclick: () => editCommit({ colours: null }) }),
-        ...STRIPE_COLOURS.map((x) => el('button.sw' + (on === x.colour ? '.on' : ''), { title: x.name, 'aria-label': `Stripe: ${x.name}`, 'aria-pressed': String(on === x.colour), style: `--sw:${x.hex}`, onclick: () => editCommit({ colours: stripeFor(x.colour) }) })),
-      ]));
     }
     // the icon
     const b = L.cleanBadge(l.badge, { svg: true });

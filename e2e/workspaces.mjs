@@ -807,6 +807,50 @@ test('Classic Pro core refused: an EdgeLabel label still shows its words', async
   await ctx.close();
 });
 
+/* A PART LABEL'S STRIPE (Joey 2026-10-27, of a Part Picker label: "i can't figure out after the fact how to add like a colored
+   stripe?"). On EdgeLabel the editor's Stripe row offers the part's own colours (the Part Picker's, the default), None and the
+   six colours, stored as the Label Studio stores them: no `colours`, `colours: null`, or the stripe. On the model a part label
+   with `colours: null` draws no stripe pieces, the same part with its own colours does. */
+test('Labels: a part label\'s stripe - its own colours, None or one of the six - in the editor and on the model', async () => {
+  const ref = JSON.parse(await readFile(join(root, 'test', 'golden', 'part-label-ref.json'), 'utf8')).items[0].item;   // M5 x 20 SHCS: metric blue + A2
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 6, gridH: 2, nextId: 3, labelStyle: null, buildId: 'e2epartstripe1', sideCovers: true, plateParts: {},
+    placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'M5 × 20' }, { id: 2, x: 2, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'M5 × 20' }],
+    labelList: { format: 'modulith-labels', version: 1, labels: [
+      { text: 'M5 × 20', id: 'e2epartstripe01', hardware: ref },                  // on drawer 1: its own colours
+      { text: 'M5 × 20', id: 'e2epartstripe02', hardware: ref, colours: null },   // on drawer 2: no stripe
+      { text: 'M5 × 20', id: 'e2epartstripe03', hardware: ref }] },              // waiting: edited in the panel
+    labelAssign: { 1: 'e2epartstripe01', 2: 'e2epartstripe02' } };
+  const { ctx, page, errors } = await open('labels', { query: `&done=off#build=${Buffer.from(JSON.stringify(rec), 'utf8').toString('base64')}` });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  // the model: pieces on drawer 1's label (its own colours), none on drawer 2's (null)
+  const pieces = (owner) => page.evaluate((o) => { const v = window.__GEN2_VIEWER__;
+    const lab = [...v.instances.values()].find((i) => i.cfg.node === 'Label_EdgeLabel' && v.instances.get(i.cfg.rides)?.cfg.owner === o);
+    return lab ? lab.group.children[0].children.filter((x) => x.name === 'LabelPiece').length : -1; }, owner);
+  await page.waitForFunction(() => [...window.__GEN2_VIEWER__.instances.values()].filter((i) => i.cfg.node === 'Label_EdgeLabel' && i.group.children[0]?.children.some((x) => x.name === 'LabelText')).length === 2, null, { timeout: 90_000 })
+    .catch(() => assert.fail('the two part labels did not draw'));
+  assert.ok(await pieces(1) > 0, `drawer 1: its own colours draw the stripe pieces (${await pieces(1)})`);
+  assert.equal(await pieces(2), 0, 'drawer 2: colours null draws no stripe');
+  // the editor, on the waiting label
+  await page.locator('#ws-labels button.mini[title="Edit this label"]').first().click();
+  await page.waitForSelector('#ws-labeledit .swatches', { timeout: 15_000 });
+  const row = () => page.evaluate(() => [...document.querySelectorAll('#ws-labeledit .swatches button')].map((b) => b.getAttribute('aria-label') + (b.getAttribute('aria-pressed') === 'true' ? ' *' : '')));
+  const label = () => page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels.find((x) => x.id === 'e2epartstripe03'); return 'colours' in l ? l.colours : 'absent'; });
+  assert.deepEqual(await row(), ['Stripe: the part’s own colours *', 'No stripe', 'Stripe: Metric', 'Stripe: SAE / inch', 'Stripe: Yellow', 'Stripe: White', 'Stripe: Green', 'Stripe: Purple'], 'the part\'s own first, pressed');
+  await page.locator('#ws-labeledit button[aria-label="No stripe"]').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList.labels.find((x) => x.id === 'e2epartstripe03').colours === null, null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`None did not store colours: null (${JSON.stringify(await label())})`));
+  await page.locator('#ws-labeledit button[aria-label="Stripe: Green"]').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList.labels.find((x) => x.id === 'e2epartstripe03').colours?.band?.hex === '#009E73', null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`Green did not land (${JSON.stringify(await label())})`));
+  await page.locator('#ws-labeledit button[aria-label="Stripe: the part’s own colours"]').click();
+  await page.waitForFunction(() => !('colours' in window.__GEN2_STORE__.state.labelList.labels.find((x) => x.id === 'e2epartstripe03')), null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`the part's own did not clear colours (${JSON.stringify(await label())})`));
+  assert.ok((await row())[0].endsWith('*'), 'the part\'s own reads pressed again');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* A TYPED LABEL'S STRIPE, AND CLASSIC PRO'S PRINT SETTINGS (Joey 2026-10-27: "if i'm manually typing a label i don't see how to
    set a color for the label stripe"; the part label stripe's wording "feels specific to edgelabel labels and odd for this
    classic pro label"). The editor's Stripe row: the Label Studio's colours, stored on the label as the Studio stores it, and

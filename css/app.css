@@ -891,7 +891,8 @@ body.dragging-label, body.dragging-label * { cursor: grabbing !important; user-s
 #ws-labeledit .head { display: flex; align-items: center; justify-content: space-between; }
 #ws-labeledit .prev { display: flex; justify-content: center; padding: 6px 0; }
 /* the stripe colours (labels.js): a swatch each, the picked one ringed; None crossed through */
-#ws-labeledit .swatches { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }   /* None + six: one row */
+#ws-labeledit .swatches { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; }   /* one row: None + six, or the part's own + None + six */
+#ws-labeledit .sw.own { box-shadow: inset 0 0 0 3px var(--key-bg); }   /* the Part Picker's own colours: a ring inside, set apart from the six */
 #ws-labeledit .sw { aspect-ratio: 1; min-width: 0; padding: 0; border-radius: 8px; border: 1px solid var(--key-border); background: var(--sw); cursor: pointer; }
 #ws-labeledit .sw.none { background: linear-gradient(135deg, transparent 46%, var(--ink-3) 46% 54%, transparent 54%), var(--key-bg); }
 #ws-labeledit .sw.on { outline: 2px solid var(--orange); outline-offset: 2px; }

@@ -5768,3 +5768,17 @@ soft-render run's (2026-10-25), from before about twenty cases were added, and t
   01a1804d: the mechanics approved; the wording of the estimates and the case count tightened.
 
 test/e2e-shard.test.mjs 5/5; the first CI run is the real check (the coverage job proves every case ran once across eight).
+
+## 2026-10-27 · A part label's stripe in the editor
+
+Joey, of a Part Picker label placed on a drawer: "i can't figure out after the fact how to add like a colored stripe?" The
+editor's Stripe row was for typed labels only. It now serves part labels too, on EdgeLabel builds (Classic Pro prints no
+stripe yet), with the Label Studio's three states: **the part's own** colours (no `colours` on the label: the Part
+Picker's band, e.g. metric blue; offered when the item has one, first and ringed), **None** (`colours: null`, the Studio's
+"no stripe" for a part label) and the six colours (the stripe in place of the part's). `R.setStripe` writes them:
+label-list.js editLabel drops a null patch value as "remove the key", so null is set on the edited label after it.
+
+E2E "Labels: a part label's stripe - its own colours, None or one of the six - in the editor and on the model": on the
+model a part label with its own colours draws the stripe pieces, the same part with `colours: null` none; the editor lists
+own (pressed), None and the six, and each click stores what the Studio stores (a mutant that skips the null fails it).
+Label unit tests 63/63. Terra 01a1806b: approved.

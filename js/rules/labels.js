@@ -205,6 +205,19 @@ export function edit(L, b, labelId, patch, scope = 'all', unitId) {
     : 'colours' in p ? `${quote(after, c)}’s stripe ${after.colours && after.colours.band ? `is ${after.colours.band.label}` : 'is off'}` : `${quote(after, c)}’s icon changed`;
   return done(r.state, desc, null, { id: r.id, cloned: !!r.cloned });
 }
+/* A label's stripe (the editor's Stripe row, 2026-10-27): `colours` a stripe (label-look.js stripeFor), `null` - a PART label's
+   "no stripe", which the Label Studio stores as `colours: null` so the Part Picker's own colours do not print - or undefined
+   (the key gone: a part label keeps the Part Picker's colours, a typed label has none). editLabel drops a null patch value as
+   "remove the key", so null is written onto the edited label after it. */
+export function setStripe(L, b, labelId, colours, scope = 'all', unitId) {
+  const r = edit(L, b, labelId, { colours: colours === null ? undefined : colours }, scope, unitId);
+  if (!r.ok) return r;
+  const list = colours === null ? { ...r.list, labels: r.list.labels.map((x) => (x.id === r.id ? { ...x, colours: null } : x)) } : r.list;
+  const after = list.labels.find((x) => x.id === r.id), c = caps(b), part = isPartLabel(after);
+  const what = colours ? `is ${colours.band.label}` : colours === null || !part ? 'is off' : 'is the part’s own';
+  const desc = r.cloned ? r.desc : `${quote(after, c)}’s stripe ${what}`;
+  return { ...r, list, desc, msg: desc + '.' };
+}
 /* convert a part label to plain words on one drawer: the part label goes back to the list, a typed label takes its place */
 export function customWording(L, b, unitId, text) {
   const cur = withList(L, stateOf(b));
