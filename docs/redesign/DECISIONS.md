@@ -6094,7 +6094,13 @@ part, unit pick and stripe, its own settings unchanged; `on: false`, the no-look
 colors never shared or undone into). Mutants: the boot apply disabled fails two cases; `look()` reading the live flag
 fails the Assemble case. Unit 736/736, e2e 95/95 (Colors, Assemble, Share, Labels, Parts, presets,
 undo). Reviews: Sol 01a183be (design: reject, nine changes folded in, three discarded with reasons in the note), Sol
-01a183df (code: the cap counted UTF-16 units; now UTF-8 bytes). Not deployed: a new feature, waiting on Joey's go.
+01a183df (code: the cap counted UTF-16 units; now UTF-8 bytes).
+
+Live 2026-10-28 as 02f6a55e (main 02f6a55, Joey's go: "merge and deploy share-look"). `share-look-prod.mjs` green: a
+sender's label body (Panchroma Cream), text (Panchroma Navy), Metric spool (Panchroma Blue) and drawer 1's own faceplate
+colour (Polar Seafoam) reach a fresh browser through the address, and through Save build file then Load build file in
+another; both recipients' seeded label defaults, schemes and owned list are byte-identical afterwards; no page errors.
+Vault e0901b8. Kept separate, not started: a v2 suggestion set (a chosen purple, a grey stainless) and the patch print test.
 
 ## 2026-10-28 · On a phone an open sheet puts the tab bar away; a stack's tags are staggered
 
