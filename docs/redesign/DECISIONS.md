@@ -5783,6 +5783,9 @@ model a part label with its own colours draws the stripe pieces, the same part w
 own (pressed), None and the six, and each click stores what the Studio stores (a mutant that skips the null fails it).
 Label unit tests 63/63. Terra 01a1806b: approved.
 
+Live 2026-10-27 23:07 as aadfa1de (run 40623476063); `part-stripe-prod.mjs` green: the row lists the part's own (pressed),
+None and the six, the placed label draws its stripe, None stores `colours: null`, Green lands, the part's own clears it.
+
 ## 2026-10-27 · A lone case stands on four feet, one per corner
 
 Joey, from a lone 2W-2H Decor drawer on the Tabletop: "since we aren't using a foot rail, there's really no point in adding
@@ -5794,3 +5797,7 @@ kits stand on rails, so their goldens do not move. The vault's `rules.md` says t
 
 Test `feet-option.test.mjs`: the count is 4 (printed and adhesive, the step titles too), and a new case puts a lone 1W to
 4W case on exactly the two corner slots, front and back. Terra 01a18078: no findings.
+
+Live 2026-10-27 23:25 as 688243e7; `feet-prod.mjs` green: a lone 2W-2H and a lone 4W-1H stand on 4 feet (the Parts list
+bills 4, the step says "insert the 4 feet"), two 1W cases still stand on a foot rail with 6. The same check on aadfa1de
+failed (6 and 10), so it can tell. Vault `rules.md` 98da1dd.
