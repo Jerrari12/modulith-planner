@@ -822,7 +822,9 @@ export function mountColors(stage, ctx) {
   function renderPicker() {
     picker.replaceChildren();
     const key = st.key, swap = st.swap;
-    if (room && room.handle && room.handle.selectSpool) room.handle.selectSpool(swap ? swap.hex : null);   // the spool whose picker this is, lit in the room
+    // the spool whose picker this is, lit in the room; and a region's row picked, the spool it prints in (Astra's review,
+    // brought by Joey 2026-10-28: "selecting its row could also briefly highlight the corresponding spool")
+    if (room && room.handle && room.handle.selectSpool) room.handle.selectSpool(swap ? swap.hex : key && stage.activeHex ? stage.activeHex(key) : null);
     if (!key && !swap) { picker.hidden = true; return; }
     picker.hidden = false;
     if (swap) { renderSwap(swap); return; }

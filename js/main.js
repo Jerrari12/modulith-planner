@@ -7643,6 +7643,27 @@ function _db(label) {
    A unit's own Foot pick that is not TPU is dropped. Up here, before PRESETS and the saved palette's load, which use it. */
 const FEET_TPU = 'Polymaker PolyFlex TPU95 Black';
 const TPU_LABELS = new Set(FILAMENT_DB.filter((b) => /TPU/.test(b.line)).flatMap((b) => b.colors.map((c) => c.label)));
+/* A FILAMENT'S MATERIAL, for the final scene's spool tags (Joey 2026-10-27: "a way to identify if they are pla, petg, tpu ...
+   at a glance they look identical"; 2026-10-28: "tiny text with brand name? or maybe text defining if it's silk, high temp,
+   carbon fiber, etc"): a catalogue label's material, read as colors/materials.js colorMaterial reads it (a line's one
+   material; where a line sells two, the one the colour's own name carries), here so main.js imports nothing new; its
+   brand and its line (the ™ and the material words off: "Polymaker", "Panchroma"), its colour's own name, and the properties its
+   line and name carry (FILAMENT_PROPS). A name the catalogue lacks is read by its own words, with no brand */
+const MATERIAL_WORDS = ['PLA', 'PETG', 'TPU'];
+const wordsOf = (s) => String(s || '').toUpperCase().split(/[\s/]+/);
+const FILAMENT_PROPS = [[/silk/i, 'SILK'], [/matte/i, 'MATTE'], [/translucent|transparent|\bclear\b/i, 'TRANSLUCENT'], [/carbon|\bCF\b/i, 'CARBON FIBRE'], [/\bHT\b|high[- ]?temp/i, 'HIGH TEMP'], [/high[- ]?speed|\bHS\b|\bHF\b/i, 'HIGH SPEED'], [/glow/i, 'GLOW'], [/marble/i, 'MARBLE'], [/wood/i, 'WOOD'], [/sparkle|glitter|galaxy/i, 'SPARKLE'], [/dual|tri[- ]?colou?r|rainbow/i, 'MULTICOLOUR'], [/TPU ?(\d{2})\b/i, (m) => `${m[1]}A`]];
+const propsOf = (text) => FILAMENT_PROPS.map(([re, say]) => { const m = String(text || '').match(re); return m ? (typeof say === 'function' ? say(m) : say) : null; }).filter(Boolean);
+// a line's own name, the ™ and the material words off ("Panchroma™ Silk PLA" -> "Panchroma"; "PETG" -> ""); the tag prints
+// "BRAND · LINE" (Astra 2026-10-28: "for two black PLAs, the product line becomes more important")
+const lineName = (b) => String(b.line).replace(/™/g, '').replace(/\b(PLA|PETG|TPU\d*|Silk|Translucent)\b/gi, '').replace(/\s*\/\s*/g, ' ').replace(/\s+/g, ' ').trim();
+const LABEL_MATERIAL = new Map(FILAMENT_DB.flatMap((b) => {
+  const ms = /TPU/.test(b.line) ? ['TPU'] : ['PLA', 'PETG'].filter((m) => b.line.includes(m));
+  return b.colors.map((c) => {
+    const props = propsOf(`${b.line} ${c.name || ''}`);
+    return [c.label, { material: ms.length <= 1 ? ms[0] || null : ms.find((m) => wordsOf(`${c.name || ''} ${c.label || ''}`).includes(m)) || null, silk: props.includes('SILK'), props, brand: b.brand, line: lineName(b) || null, colourName: String(c.name || '').replace(/\b(PLA|PETG|TPU\d*|PolyFlex|Silk|Translucent)\b/gi, '').replace(/\s+/g, ' ').trim() || c.name || null }];
+  });
+}));
+const materialOfFilament = (name) => LABEL_MATERIAL.get(name) || { material: MATERIAL_WORDS.find((m) => wordsOf(name).includes(m)) || null, silk: /silk/i.test(name || ''), props: propsOf(name), brand: null, line: null, colourName: null };
 function tpuFeet(colors) {
   if (!colors || typeof colors !== 'object') return colors;
   if (!colors.Foot || !TPU_LABELS.has(colors.Foot.name)) colors.Foot = { ..._db(FEET_TPU) };
@@ -9978,7 +9999,7 @@ function filamentsInBuild(look = null) {
   const over = (look ? look.over : overrides) || {};
   const idHex = identificationHex;
   const fil = new Map(), loose = new Map();
-  const wear = (f, key) => { const id = f.name || f.hex; let r = fil.get(id); if (!r) fil.set(id, r = { name: f.name || f.hex, hex: f.hex, url: f.url, keys: [] }); if (!r.keys.includes(key)) r.keys.push(key); };
+  const wear = (f, key) => { const id = f.name || f.hex; let r = fil.get(id); if (!r) fil.set(id, r = { name: f.name || f.hex, hex: f.hex, url: f.url, keys: [], ...materialOfFilament(f.name) }); if (!r.keys.includes(key)) r.keys.push(key); };
   const bare = (key, hex, stripe = false) => { const id = stripe ? 'stripe:' + hex : key; if (!loose.has(id)) loose.set(id, { key, hex, stripe }); };
   for (const inst of instances.values()) {
     const t = typeByNode[inst.cfg.node]; if (!t || !inst.group || colorLocked(t)) continue;

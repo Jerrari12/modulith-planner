@@ -2862,6 +2862,159 @@ test('Assemble: the Done scene\'s room has a floor at matte black: a black wall,
   await ctx.close();
 });
 
+/* THE SPOOL'S MATERIAL ON A TAG (Joey 2026-10-27: "two black spools but one is PLA black and the other is TPU black, but at
+   a glance they look identical"; his pick of three mock-ups, then "more of a tag like this, maybe hanging more randomly",
+   then "hang them further down, maybe slightly smaller, so it doesn't run the risk of clipping into the spool or filament
+   ... a different color other than cardboard ... tiny text with brand name ... silk, high temp, carbon fiber ... a color
+   strip of the exact color", 2026-10-28). His case: the build in Elegoo PLA Black, its feet TPU95 Black. Each spool
+   carries a white tag: its material, what else its filament is (95A, SILK), its brand and line, the material's colour on
+   the hole's ring and the filament's own on the strip, with the colour's name; it hangs from a thin metal wire ("can we
+   instead do like a thin metal wire instead?") tucked into the coil, in front of the spool, turned and swung
+   (never straight), and no point of the card is inside the coil or a flange; the same after a
+   refresh; a two-material line's colour its own material (Elegoo PETG Black: PETG); ?spooltag=off has none. Read off the
+   scene (spool.js makeTag's userData, the card's own corners). */
+test('Assemble: the Done scene\'s spools each hang a tag with their material, its properties, brand and colour - clear of the coil and the flanges, turned as a tag hangs, kept over a refresh, none with ?spooltag=off', async () => {
+  const tags = (page) => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, out = [];
+    v.scene.traverse((o) => {
+      if (o.name !== 'spool-tag') return;
+      const s = o.parent, c = new T.Vector3().setFromMatrixPosition(s.matrixWorld), tie = new T.Vector3().setFromMatrixPosition(o.matrixWorld);
+      const A = new T.Vector3(0, 1, 0).transformDirection(s.matrixWorld);
+      const card = o.getObjectByName('spool-tag-card'), cc = new T.Vector3().setFromMatrixPosition(card.matrixWorld);
+      // the card's corners, edge midpoints and centre against the spool: inside the coil (radius 91, half-width 27.5) or a
+      // flange (radius 100, 27.5 to 32.5 along the axis) is a clip
+      const g = card.geometry; g.computeBoundingBox(); const bb = g.boundingBox, clips = [];
+      for (const fx of [0, 0.5, 1]) for (const fy of [0, 0.5, 1]) {
+        const p = new T.Vector3(bb.min.x + fx * (bb.max.x - bb.min.x), bb.min.y + fy * (bb.max.y - bb.min.y), 0).applyMatrix4(card.matrixWorld).sub(c);
+        const ax = p.dot(A), r = p.clone().addScaledVector(A, -ax).length();
+        if ((Math.abs(ax) < 27.5 && r < 91.5) || (Math.abs(ax) >= 27.5 && Math.abs(ax) <= 33 && r < 100.5)) clips.push([fx, fy, ax.toFixed(1), r.toFixed(1)]);
+      }
+      // the wire: thin bare metal (Joey: "can we instead do like a thin metal wire instead?"), leaving the coil from just
+      // under its surface
+      const strand = o.getObjectByName('spool-tag-wire'), sp = tie.clone().sub(c), sax = sp.dot(A);
+      const pv = o.getObjectByName('spool-tag-pivot');
+      // the strip as printed: a pixel of the card's own texture, 1.5 mm up from its foot
+      const im = card.material.map.image, px = im.getContext('2d').getImageData(Math.floor(im.width / 2), im.height - 16, 1, 1).data;
+      const strip = '#' + [px[0], px[1], px[2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+      out.push({ ...o.userData.tag, spool: String(s.userData.spool.color).toLowerCase(), strip, rot: [pv.rotation.x, pv.rotation.y, pv.rotation.z], front: tie.z - c.z, below: tie.y - cc.y, clips,
+        strand: { metal: strand.material.metalness, thick: 2 * strand.geometry.parameters.radius, r: +sp.clone().addScaledVector(A, -sax).length().toFixed(2), ax: +sax.toFixed(2) } });
+    });
+    return out.sort((a, b) => a.spool.localeCompare(b.spool));
+  });
+  const enter = async (query) => {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+    const { page, errors } = await open('assemble', { query: '&done=room&spools=plan' + query, context: ctx });
+    await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setUseCustom(true); for (const e of v.keysInBuild()) if (!e.locked) v.setColor(e.key, { name: 'Elegoo PLA Black', hex: '#1c1d20' }); });
+    await btn(page, 'Skip to the finished build', '#ws-steps').click();
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+    await btn(page, 'Next', '#ws-player').click();
+    await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+    await btn(page, 'Watch the final scene', '#ws-player').click();
+    await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 90_000 });
+    return { ctx, page, errors };
+  };
+  const { ctx, page, errors } = await enter('');
+  const fil = await page.evaluate(() => window.__GEN2_VIEWER__.filamentsInBuild().filaments.map((f) => [f.name, f.material, f.silk]).sort());
+  assert.deepEqual(fil, [['Elegoo PLA Black', 'PLA', false], ['Polymaker PolyFlex TPU95 Black', 'TPU', false]], 'the build\'s filaments know their materials (main.js materialOfFilament)');
+  const t0 = await tags(page);
+  // the words in Astra's order: the material, then its grade or finish and colour, then its maker and line
+  assert.deepEqual(t0.map((t) => [t.spool, t.material, t.accent, t.detail, t.maker, String(t.hex).toLowerCase()]), [['#16161a', 'TPU', '#1b7a50', '95A · BLACK', 'POLYMAKER · POLYFLEX', '#16161a'], ['#1c1d20', 'PLA', '#2a64c4', 'BLACK', 'ELEGOO', '#1c1d20']], 'his two black spools: a PLA tag and a TPU tag, each ring in its material\'s colour, "95A · BLACK" / "POLYMAKER · POLYFLEX", its strip the filament\'s own colour');
+  for (const t of t0) {
+    assert.ok(t.front > 85, `the tag hangs at the spool's front (${t.front.toFixed(1)} mm out)`);
+    assert.ok(t.below > 20, `the card below where its strand leaves the coil (${t.below.toFixed(1)} mm)`);
+    assert.ok(t.strand.metal === 1 && t.strand.thick <= 0.8, `a thin metal wire, not a strand of filament (${JSON.stringify(t.strand)})`);
+    assert.equal(t.strip, t.spool, 'the tag\'s foot printed in the filament\'s exact colour (Joey: "a color strip of the exact color")');
+    assert.ok(t.strand.r > 89 && t.strand.r <= 91 && Math.abs(t.strand.ax) < 27.5, `the wire tucked into the coil, under its 91 mm surface, between the flanges (${JSON.stringify(t.strand)})`);
+    assert.deepEqual(t.clips, [], `no point of the card inside the coil or a flange (Joey: "so it doesn't run the risk of clipping")`);
+    assert.ok(Math.abs(t.rot[1]) >= 0.2 && Math.abs(t.rot[2]) >= 0.08 && t.rot[0] < 0, `turned on its string, swung, its foot off the coil: never straight (${t.rot.map((r) => r.toFixed(2))})`);
+  }
+  assert.notDeepEqual(t0[0].rot, t0[1].rot, 'each tag hangs its own way');
+  // a refresh (a pick in the Colors room): the tags made again, hung the same, and the groups' boxes (what the mugs and the
+  // sun's shadow fit round) measured without them, as at entry
+  const boxes = () => page.evaluate(() => window.__GEN2_DONE__.spools.placed.map((x) => x.box));
+  const b0 = await boxes();
+  await page.evaluate(() => window.__GEN2_DONE__.refreshSpools());
+  assert.deepEqual((await tags(page)).map((t) => [t.spool, t.material, t.rot]), t0.map((t) => [t.spool, t.material, t.rot]), 'the same tags, hung the same, after a refresh');
+  assert.deepEqual(await boxes(), b0, 'the spool groups\' boxes the same after a refresh: the tags not in them');
+  // a silk, and a two-material line's PETG colour
+  await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, ks = v.keysInBuild().filter((e) => !e.locked && !e.zone);
+    v.setColor(ks[0].key, { name: 'Panchroma Silk Black', hex: '#3a3b40' }); v.setColor(ks[1].key, { name: 'Elegoo PETG Black', hex: '#232427' });
+    window.__GEN2_DONE__.refreshSpools();
+  });
+  const by = Object.fromEntries((await tags(page)).map((t) => [t.spool, t]));
+  assert.deepEqual([by['#3a3b40'].material, by['#3a3b40'].detail, by['#3a3b40'].maker], ['PLA', 'SILK · BLACK', 'POLYMAKER · PANCHROMA'], 'a silk line\'s spool: PLA, SILK · BLACK, its brand and line');
+  assert.equal(by['#232427'].material, 'PETG', 'a two-material line\'s colour: its own material');
+  assert.ok(Object.values(by).every((t) => !t.clips.length), `none clips after the refresh either (${JSON.stringify(Object.values(by).map((t) => t.clips))})`);
+  /* THE FLANGE STICKERS (Astra's review): on a stack's top spool (its top flange) and a spool on its rim (its camera-side
+     flange), none under a spool above; each says what its spool's tag says; on the flange's face, 65 mm out, in a clear
+     sector, no corner on a slot (90, 210, 330 deg, 10 wide) or the bore; laid square to the room's front */
+  const stickers = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE, out = [];
+    v.scene.traverse((o) => {
+      if (o.name !== 'spool-sticker') return;
+      const s = o.parent, sibs = s.parent.children.filter((x) => x.userData.setColor), lying = Math.abs(new T.Vector3(0, 1, 0).transformDirection(s.matrixWorld).y) > 0.7;
+      const g = o.geometry; g.computeBoundingBox(); const bb = g.boundingBox, bad = [];
+      for (const [x, y] of [[bb.min.x, bb.min.y], [bb.max.x, bb.min.y], [bb.min.x, bb.max.y], [bb.max.x, bb.max.y]]) {
+        const p = new T.Vector3(x, y, 0).applyMatrix4(o.matrix);   // in the spool's frame
+        const r = Math.hypot(p.x, p.z), a = (Math.atan2(p.z, p.x) * 180 / Math.PI + 360) % 360;
+        if (r < 40 || r > 92 || [90, 210, 330].some((sl) => Math.abs(((a - sl + 540) % 360) - 180) < 7 && r < 91)) bad.push([+r.toFixed(1), +a.toFixed(0)]);
+      }
+      // its words' up: in the spool's frame along its radius (square to the centre), and in the room how far off upright
+      const lup = new T.Vector3(0, 1, 0).applyQuaternion(o.quaternion), rad = new T.Vector3(o.position.x, 0, o.position.z).normalize();
+      const wup = new T.Vector3(0, 1, 0).transformDirection(o.matrixWorld);
+      out.push({ spool: String(s.userData.spool.color).toLowerCase(), material: o.userData.sticker.material, detail: o.userData.sticker.detail, face: +Math.abs(o.position.y).toFixed(1), out: +Math.hypot(o.position.x, o.position.z).toFixed(1), top: lying ? s === sibs[sibs.length - 1] : true, lying, bad,
+        sector: +((Math.atan2(o.position.z, o.position.x) * 180 / Math.PI + 360) % 360).toFixed(1), radial: +Math.abs(lup.dot(rad)).toFixed(3), upright: +(lying ? -wup.z : wup.y).toFixed(3) });
+    });
+    return out;
+  });
+  const placedNow = await page.evaluate(() => window.__GEN2_DONE__.spools.placed.map((x) => x.kind));
+  assert.ok(stickers.length >= 1 && stickers.length <= placedNow.length, `a sticker for each group's showing face: ${stickers.length} for ${placedNow.length} groups (${JSON.stringify(stickers)})`);
+  for (const k of stickers) {
+    assert.ok(k.top, `only on a stack's top spool or a spool on its rim (${JSON.stringify(k)})`);
+    assert.deepEqual([k.material, k.detail], [by[k.spool].material, by[k.spool].detail], 'it says what the spool\'s tag says');
+    assert.ok(Math.abs(k.face - 32.7) < 0.05 && Math.abs(k.out - 65) < 0.5, `on the flange's face, 65 mm out (${JSON.stringify(k)})`);
+    assert.deepEqual(k.bad, [], 'no corner on a slot, the bore or past the rim');
+    // as a maker's label sits (Joey: "aligned to the center of the spool ... centered between the oval slots ... just don't
+    // want the text to be completely sideways or upsidedown"): centred in a clear sector, square to the centre, and its
+    // words no more than 30 deg off upright (a stack: their top away from the front; on its rim: up)
+    assert.ok([30, 150, 270].some((d) => Math.abs(k.sector - d) < 0.5), `centred between two slots (${k.sector} deg)`);
+    assert.ok(k.radial > 0.999, `square to the spool's centre, its words along the circle (${k.radial})`);
+    assert.ok(k.upright >= Math.cos(Math.PI / 6) - 1e-3, `never more than 30 deg off upright (${(Math.acos(Math.min(1, k.upright)) * 180 / Math.PI).toFixed(0)} deg)`);
+  }
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
+  // ?spooltag=off: the spools, no tags
+  const off = await enter('&spooltag=off');
+  assert.ok(await off.page.evaluate(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-spools') n++; }); return n > 0; }), 'the control: the spools are there');
+  assert.deepEqual(await tags(off.page), [], 'and no tags');
+  await off.ctx.close();
+});
+
+/* A ROW LIGHTS ITS SPOOL (Astra's review, brought by Joey 2026-10-28: "selecting its row could also briefly highlight the
+   corresponding spool"): in the Colors room, a region's row picked lights the spool it prints in (the glow a spool's own
+   picker gives it, spool.js setGlow 2), and closing the picker puts it out. */
+test('Colors: a region\'s row picked lights the spool it prints in, in the room; closing its picker puts it out', async () => {
+  const { ctx, page, errors } = await open('colors', { query: '&done=room&spools=plan' });
+  const room = page.locator('#ws-tools .backdrop button:has-text("Room")');
+  if (await room.count() && (await room.getAttribute('aria-pressed')) !== 'true') await room.click();
+  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.spools && window.__GEN2_DONE__.spools.placed.length, null, { timeout: 90_000 }).catch(() => assert.fail('no spools in the room within 90 s'));
+  const glows = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.setColor && o.userData.spool) out.push([String(o.userData.spool.color).toLowerCase(), o.userData.glow || 0]); }); return out; });
+  assert.ok((await glows()).every(([, g]) => g === 0), 'the control: no spool lit before a pick');
+  const i = await page.evaluate(() => window.__GEN2_VIEWER__.keysInBuild().findIndex((k) => !k.locked));
+  const hex = await page.evaluate((i) => { const v = window.__GEN2_VIEWER__; return v.activeHex(v.keysInBuild()[i].key).toLowerCase(); }, i);
+  await page.locator('#ws-colors button.crow').nth(i).click();
+  await page.waitForFunction(() => !document.querySelector('#ws-picker').hidden, null, { timeout: 15_000 });
+  const lit = (await glows()).filter(([, g]) => g === 2).map(([c]) => c);
+  assert.ok(lit.length >= 1 && lit.every((c) => c === hex), `the row's spool lit (${hex}): ${JSON.stringify(lit)}`);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('#ws-picker').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('Escape did not close the picker'));
+  assert.ok((await glows()).every(([, g]) => g !== 2), 'the picker closed: the spool out');
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
+});
+
 /* THE SHADOWS RUN FROM THE DESK ONTO THE WALL (2026-10-25; Joey: "the way the shadows cut off or start right at where the
    table is nearest the wall, i see it for both the plant and build shadows"). The desk stands 20 mm off the wall, and the
    sun reaches a strip of wall under the desk top through that gap; the build's wall catcher and the props' wall masks
