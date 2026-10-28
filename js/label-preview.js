@@ -37,7 +37,7 @@ export function previewReady(look) {
 
 /* The flat pieces of a look, from the 3D label's own sources: { pieces, ink } or null (not loaded, or nothing that prints:
    a part label that cannot be laid out shows its words in 3D, and the caller falls back the same way).
-     pieces: [{ tris, hex }]                  stripe body pieces (hex null = the label's Body colour)
+     pieces: [{ tris, hex, colour }]          stripe body pieces (hex null = the label's Body colour; colour = the slot's key)
      ink:    { rings: [[ring, ...], ...] }    a part label's even-odd outlines, one entry per shape
            | { tris: [Float32Array, ...] }    an ordinary label's top-face triangles (text, badge) */
 export function previewShapes(look) {
@@ -59,14 +59,15 @@ export function previewShapes(look) {
   return { pieces, ink: { tris: g.tris } };
 }
 
-/* A PNG data URL of the label as its 3D label draws it, or null (see previewShapes). opts: { width (CSS px), dpr, body, ink }
-   (hex colours: the build's Label and Label:TEXT). Cached by look and size: the panel re-renders on every change. */
+/* A PNG data URL of the label as its 3D label draws it, or null (see previewShapes). opts: { width (CSS px), dpr, body, ink,
+   stripes } (hex colours: the build's Label and Label:TEXT, and each stripe meaning's spool - the label palette, 2026-10-28 -
+   by colour key; a piece whose key is not in it keeps its own hex). Cached by look and size: the panel re-renders on every change. */
 const cache = new Map();
 const CACHE_MAX = 300;
-export function labelPreviewUrl(look, { width = 84, dpr = 1, body = '#f4f1ec', ink = '#1a1a1a' } = {}) {
+export function labelPreviewUrl(look, { width = 84, dpr = 1, body = '#f4f1ec', ink = '#1a1a1a', stripes = null } = {}) {
   if (!look || typeof document === 'undefined') return null;
   const W = Math.max(16, Math.round(width * dpr)), H = Math.max(8, Math.round(W * FACE_BOX.h / FACE_BOX.w));
-  const key = JSON.stringify([look, W, body, ink]);
+  const key = JSON.stringify([look, W, body, ink, stripes]);
   if (cache.has(key)) return cache.get(key);
   const shapes = previewShapes(look);
   if (!shapes) return null;
@@ -83,7 +84,7 @@ export function labelPreviewUrl(look, { width = 84, dpr = 1, body = '#f4f1ec', i
   cx.fill();
   cx.save();
   cx.clip();   // the stripe and the ink lie on the face, as on the label
-  for (const p of shapes.pieces) { cx.fillStyle = p.hex || body; fillTris(cx, p.tris); }
+  for (const p of shapes.pieces) { cx.fillStyle = (p.colour && stripes && stripes[p.colour]) || p.hex || body; fillTris(cx, p.tris); }
   cx.fillStyle = ink;
   if (shapes.ink.rings) for (const rings of shapes.ink.rings) fillRings(cx, rings);
   if (shapes.ink.tris) for (const t of shapes.ink.tris) fillTris(cx, t);

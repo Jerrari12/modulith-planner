@@ -121,6 +121,15 @@ export function paletteSnapshot(stage) {
     if (!byType.has(k.type)) byType.set(k.type, []);
     byType.get(k.type).push({ key: k.key, zone: k.zone, ownColor: !!k.ownColor, filaments, bare: bare ? bare.hex : null });
   }
+  /* a label stripe in one of the six meanings prints in its spool (the label palette, 2026-10-28): a region of its own on the
+     Label row, named by the spool's identity (filamentsInBuild), never by a hex. keysInBuild leaves stripes out (they are no
+     Colors pick), so they come from the filament list */
+  for (const f of fc.filaments) for (const key of f.keys) {
+    const z = key.split(':')[1] || '', t = key.split(':')[0];
+    if (!/^STRIPE@/.test(z) || !byType.has(t)) continue;
+    if (!byType.get(t).some((g) => g.key === key)) byType.get(t).push({ key, zone: z, ownColor: true, filaments: [], bare: null });
+    byType.get(t).find((g) => g.key === key).filaments.push(f);
+  }
   return byType;
 }
 /* WHAT ONE UNIT'S PART PRINTS IN (2026-10-19; Astra put "inspector colours" first among what was left: they decide whether
@@ -135,7 +144,8 @@ export function unitRegions(stage, pal, uid, type) {
   if (!regions || !regions.length) return null;
   let colors = {}; try { colors = stage.palette().colors || {}; } catch { colors = {}; }
   const idHex = (key) => { try { return stage.activeHex(key) || '#b9bcc2'; } catch { return '#b9bcc2'; } };
-  return regions.map((g) => {
+  // a stripe is the label's, not a unit's pick: the type row lists the build's stripes, a unit's row leaves them out
+  return regions.filter((g) => !/^STRIPE@/.test(g.zone)).map((g) => {
     let own = null; try { own = uid != null ? stage.overrideFor(uid, g.key) : null; } catch { own = null; }
     const pick = own || colors[g.key] || (g.zone && !g.ownColor ? colors[type] : null);
     if (pick && pick.hex) return { key: g.key, zone: g.zone, ownColor: g.ownColor, filaments: [{ name: pick.name || pick.hex, hex: pick.hex, url: pick.url || null }], bare: null };

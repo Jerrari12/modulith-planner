@@ -38,6 +38,7 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { surprise, LOCKS, CAPS, shortName } from '../colors/surprise.js';
 import { STYLES } from '../colors/styles.js';
 import { readOwned, writeOwned } from '../state/owned.js';
+import { STRIPE_COLOURS } from '../label-look.js';   // a stripe meaning's word (the label palette, 2026-10-28)
 import { simplify, worn as wornLook, byFilament, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
 import { lineMaterials, materialsIn, filterByMaterial, labelMaterials, wordMaterial } from '../colors/materials.js';
 
@@ -51,7 +52,9 @@ const HINTS = {
 };
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 /* ZONE_LABEL, isPaid and short are exported: the Parts list words a row's zones, filament names and buy links as this tab does */
-export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : z.charAt(0) + z.slice(1).toLowerCase();
+// a label stripe's zone names its meaning ('STRIPE@sky-blue': label-look.js stripePieceZone) and reads as "Metric stripe"
+const stripeWord = (z) => { const c = /^STRIPE@/.test(z) ? STRIPE_COLOURS.find((x) => 'STRIPE@' + x.colour === z) : null; return c ? c.name + ' stripe' : null; };
+export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : stripeWord(z) || z.charAt(0) + z.slice(1).toLowerCase();
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
 const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', SideCover: 'side covers', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
 const typePlural = (key) => TYPE_PLURAL[key.split(':')[0]] || (key.split(':')[0].toLowerCase() + 's');
@@ -782,7 +785,8 @@ export function mountColors(stage, ctx) {
   function swapTarget(hex) {
     const h = String(hex).toLowerCase(), fc = stage.filamentsInBuild();
     const fil = fc.filaments.filter((f) => f.hex.toLowerCase() === h), bare = fc.unpicked.filter((u) => !u.stripe && u.hex.toLowerCase() === h);
-    const keys = [...new Set([...fil.flatMap((f) => f.keys), ...bare.map((u) => u.key)])];
+    // a label stripe's spool is the label palette's (the Labels workspace), not a Colors pick: never swapped from here
+    const keys = [...new Set([...fil.flatMap((f) => f.keys), ...bare.map((u) => u.key)])].filter((k) => !/:STRIPE@/.test(k));
     if (!keys.length) return null;
     const feet = keys.every(isFeet);
     return { hex: h, names: fil.map((f) => f.name), bare: bare.map((u) => u.key).filter((k) => isFeet(k) === feet), keys: keys.filter((k) => isFeet(k) === feet), feet, url: fil.length ? fil[0].url : null };

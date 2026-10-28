@@ -20,6 +20,9 @@ import { LABEL_STYLE_ROWS, styleEdit, iconGroups, effectiveStyle, labelUploadFor
 import { loadLabelFont, loadLabelParts, labelIcons } from '../label-text.js';
 import { labelLookOf, labelLookOfLabel, cleanStripe, STRIPE_COLOURS, stripeFor } from '../label-look.js';
 import { labelPreviewUrl, previewNeeds, previewReady } from '../label-preview.js';
+import { LABEL_MEANINGS, SUGGESTED_BODY_TEXT, CATALOG, spoolsOf, spoolFor, paletteOf, samePalette, paletteWarnings, warningText, rankSpools, urlFor,
+  readLabelDefaults, writeLabelDefaults, paletteOfDefaults } from '../label-palette.js';
+import { readOwned } from '../state/owned.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
 // eslint-disable-next-line no-undef
@@ -595,9 +598,11 @@ export function mountLabels(stage, ctx) {
     return { kind: 'words', text: R.labelWords(l) || '', badge: b, style: s.labelStyle || null,
       upload: b && b.type === 'icon' && isLabelSvg(b.svg) ? b.svg : null, stripe: stripeOf(lk) };
   };
+  // each stripe meaning's colour as the stage draws it (the build's label palette): the previews match the 3D labels
+  const stripeHexes = () => Object.fromEntries(LABEL_MEANINGS.map((k) => [k, stage.activeHex('Label:STRIPE@' + k)]));
   const drawnPreview = (look, big, width) => {
     const url = labelPreviewUrl(look, { width: big ? 120 : width, dpr: Math.min(3, window.devicePixelRatio || 1),
-      body: stage.activeHex('Label'), ink: stage.activeHex('Label:TEXT') });
+      body: stage.activeHex('Label'), ink: stage.activeHex('Label:TEXT'), stripes: stripeHexes() });
     return url ? el('span.lprev.img' + (big ? '.big' : ''), { 'aria-hidden': 'true' }, [el('img', { src: url, alt: '', draggable: 'false' })]) : null;
   };
   /* A CSS stand-in shown while its data loads is swapped for the drawn image IN PLACE when the data arrives: nothing
@@ -794,6 +799,7 @@ export function mountLabels(stage, ctx) {
       attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
       pairs.length ? null : el('span.why', { text: !faceOk ? 'Needs an EdgeLabel or Classic Pro faceplate' : !ready.length ? 'No labels ready to place' : 'No empty drawers' }),
     ]));
+    if (S().faceStyle !== 'classicpro') foot.appendChild(renderPalette());
     foot.appendChild(renderSettings());
     if (st.status) foot.appendChild(el('p.status' + (st.warn ? '.warn' : ''), { role: 'status', text: st.status }));
     panel.appendChild(foot);
@@ -853,6 +859,103 @@ export function mountLabels(stage, ctx) {
     det.appendChild(drawingsRow());
     det.appendChild(el('p.dim', { text: (st.print.band === 'off' ? 'Part labels print in two filaments: the base and the words.' : 'The stripe adds the thread-system colour and a material patch: more filaments.') + ' Your default for printing labels, kept in this browser for every build.' }));
     return det;
+  }
+
+  /* THE LABEL COLOURS (the label palette, Joey 2026-10-28; docs/redesign/LABEL-PALETTE.md): the spool each stripe meaning
+     prints in for THIS build (the record's labelPalette; null = the suggested spools), and the label body and text, which
+     are this build's Colors picks for Label and Label:TEXT. Ready-made: nothing needs choosing. "Use my filaments" opens
+     the rows; each pick is one undo step. The defaults for new builds sit in this browser and never change a build by
+     themselves: when they differ from this one, a line offers them. EdgeLabel only, as the editor's Stripe row. */
+  const storage = () => { try { return localStorage; } catch { return null; } };
+  const CATALOG_LABELS = new Set(CATALOG.map((c) => c.label));
+  // the body or the text as a spool: the build's Colors pick, or null when the Colors palette is off or has none
+  const regionSpool = (key) => { const p = stage.palette(); const c = p && p.on && p.colors ? p.colors[key] : null; return c && c.name && c.hex ? { name: c.name, hex: c.hex } : null; };
+  const REGION = { body: 'Label', text: 'Label:TEXT' };
+  const REGION_WORD = { body: 'Label body', text: 'Label text' };
+  const meaningWord = (key) => REGION_WORD[key] || spoolsOf(null).find((r) => r.key === key).meaning;
+  function paletteCommit(next, desc) {
+    store.flush();
+    store.commit((x) => { x.labelPalette = next; }, 'label-palette');
+    store.flush();
+    status(desc); renderAll();
+  }
+  function setSpool(key, sp) {
+    if (REGION[key]) {
+      if (ctx.ownPaletteKey) ctx.ownPaletteKey();   // the build's own palette key before the first colour write (colors.js commitColors)
+      store.flush(); stage.setColor(REGION[key], { name: sp.name, hex: sp.hex, url: sp.url || urlFor(sp.name) }); store.commit(() => {}, 'palette'); store.flush();
+      status(`${REGION_WORD[key]}: ${sp.name}.`); renderAll(); return;
+    }
+    const spools = Object.fromEntries(LABEL_MEANINGS.map((k) => [k, spoolFor(S().labelPalette, k)]));
+    spools[key] = { name: sp.name, hex: sp.hex };
+    paletteCommit(paletteOf(spools), `${meaningWord(key)} prints in ${sp.name}.`);
+  }
+  /* the visitor's defaults, applied to this build: the six spools into the record, the body and text onto the Colors palette,
+     ONE history entry (flushed around; the Colors palette rides in the same entry as the record) */
+  function useDefaultsHere(d) {
+    if (ctx.ownPaletteKey && (d.body || d.text)) ctx.ownPaletteKey();
+    store.flush();
+    for (const k of ['body', 'text']) if (d[k]) stage.setColor(REGION[k], { name: d[k].name, hex: d[k].hex, url: urlFor(d[k].name) });
+    store.commit((x) => { x.labelPalette = paletteOfDefaults(d); }, 'label-palette');
+    store.flush();
+    status('This build uses your label filaments.'); renderAll();
+  }
+  const defaultsDiffer = (d) => !!d && (!samePalette(paletteOfDefaults(d), S().labelPalette) ||
+    ['body', 'text'].some((k) => { const o = regionSpool(REGION[k]); return d[k] && (!o || o.name !== d[k].name || o.hex.toLowerCase() !== d[k].hex.toLowerCase()); }));   // a spool is its name AND its colour (Sol 01a182a1)
+  function renderPalette() {
+    const pal = S().labelPalette, rows = spoolsOf(pal);
+    const body = stage.activeHex('Label'), text = stage.activeHex('Label:TEXT');
+    const warns = paletteWarnings(pal, body, text);
+    const det = el('details.palette', { open: st.palette ? '' : null });
+    det.addEventListener('toggle', () => { const was = st.palette; st.palette = det.open; if (det.open && !was) { try { det.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } });
+    det.appendChild(el('summary', {}, [icon('palette', { size: 16 }), 'Label colours', el('span.chips', { 'aria-hidden': 'true' }, rows.map((r) => el('span.sw', { style: `--sw:${r.hex}` }))), warns.length ? el('span.warndot', { title: n(warns.length, 'note') }) : null]));
+    det.appendChild(el('p.dim.intro', { text: 'Use the colours you have. These are suggested filament matches. Similar colours from other brands work too—keep your colour coding consistent and easy to tell apart.' }));
+    const d = readLabelDefaults(storage());
+    if (defaultsDiffer(d)) det.appendChild(el('div.offer', { role: 'status' }, [el('span', { text: 'Your default label filaments differ from this build’s.' }), el('button.key.sm', { text: 'Use them here', onclick: () => useDefaultsHere(d) })]));
+    const owned = readOwned(storage() || { getItem: () => null }, CATALOG_LABELS);
+    const notesFor = (key) => warns.filter((w) => (key === 'text' ? w.kind === 'text' : w.kind !== 'text' && w.keys[0] === key)).map(warningText);
+    const row = (key, sp, suggested) => {
+      const open = st.palEdit && st.palPick === key, word = meaningWord(key);
+      const label = [el('span.sw', { style: `--sw:${sp.hex}` }), el('span.mean', { text: word }), el('span.spool', { text: sp.name }), suggested ? el('span.dim.sugg', { text: 'suggested' }) : null];
+      const head = st.palEdit
+        ? el('button.prow.pick' + (open ? '.on' : ''), { 'data-key': key, 'aria-expanded': String(open), 'aria-label': `${word}: ${sp.name}. Change the spool`, onclick: () => { st.palPick = open ? null : key; st.palQ = ''; renderAll(); } }, label)
+        : el('div.prow', { 'data-key': key }, label);
+      const out = [head, ...notesFor(key).map((t) => el('p.pnote', { 'data-key': key, text: t }))];
+      if (open) out.push(pickerFor(key, sp));
+      return out;
+    };
+    const list = el('div.prows', { 'aria-label': 'Label colours' });
+    for (const r of rows) list.append(...row(r.key, r, r.suggested));
+    for (const k of ['body', 'text']) {
+      const own = regionSpool(REGION[k]);
+      list.append(...row(k, own || { name: SUGGESTED_BODY_TEXT[k].name, hex: stage.activeHex(REGION[k]) }, !own));
+    }
+    det.appendChild(list);
+    const acts = el('div.pacts');
+    acts.appendChild(el('button.key.sm.mine' + (st.palEdit ? '.on' : ''), { 'aria-pressed': String(!!st.palEdit), onclick: () => { st.palEdit = !st.palEdit; st.palPick = null; renderAll(); } }, [icon(st.palEdit ? 'check' : 'pencil-simple', { size: 14 }), st.palEdit ? 'Done' : 'Use my filaments']));
+    if (pal) acts.appendChild(el('button.key.sm.suggested', { title: 'The suggested spools for the six stripe colours (the body and the text stay as they are)', onclick: () => paletteCommit(null, 'The stripes use the suggested filaments.') }, ['Use the suggested filaments']));
+    det.appendChild(acts);
+    det.appendChild(el('button.key.sm.wide.mydefaults', { title: 'Kept in this browser. New builds start with these; a build you already have keeps its own.', onclick: () => {
+      const def = { v: 1, spools: Object.fromEntries(rows.map((r) => [r.key, { name: r.name, hex: r.hex }])) };
+      for (const k of ['body', 'text']) { const o = regionSpool(REGION[k]); if (o) def[k] = o; }
+      const st0 = storage();
+      status(st0 && writeLabelDefaults(st0, def) ? 'New builds will start with these label filaments.' : 'This browser cannot keep defaults (private mode?).', !st0); renderAll();
+    } }, ['Use these as my defaults for new builds']));
+    return det;
+    function pickerFor(key, cur) {
+      const box = el('div.ppick');
+      const q = el('input.search', { type: 'search', value: st.palQ || '', placeholder: 'Search filaments', 'aria-label': `Search filaments for ${meaningWord(key)}`, autocomplete: 'off' });
+      const items = el('div.pitems');
+      const fill = () => {
+        const t = (st.palQ || '').trim().toLowerCase();
+        const all = rankSpools(key, owned).filter((c) => !t || c.name.toLowerCase().includes(t)).slice(0, t ? 60 : 24);
+        items.replaceChildren(...all.map((c) => el('button.pitem' + (c.name === cur.name ? '.on' : ''), { 'aria-pressed': String(c.name === cur.name), title: c.name, onclick: () => { st.palPick = null; setSpool(key, c); } },
+          [el('span.sw', { style: `--sw:${c.hex}` }), el('span', { text: c.name }), c.owned ? el('span.dim.own', { text: 'yours' }) : null])));
+      };
+      q.addEventListener('input', () => { st.palQ = q.value; fill(); });
+      fill();
+      box.append(q, items);
+      return box;
+    }
   }
 
   /* ---------------- add / edit a label (the editor card) ---------------- */
@@ -947,11 +1050,14 @@ export function mountLabels(stage, ctx) {
       const ownHex = own && typeof own.hex === 'string' ? own.hex : null;
       const on = l.colours === null ? 'none' : cleanStripe(l.colours, false)?.band.colour || (ownHex ? 'picker' : 'none');
       const known = STRIPE_COLOURS.find((x) => x.colour === on);
-      editor.appendChild(el('div.frow', {}, [el('span', { text: 'Stripe' }), el('span.dim', { text: on === 'none' ? 'None' : on === 'picker' ? `The part’s own · ${own.label || 'Part Picker'}` : known ? known.name : 'From the Label Studio' })]));
+      // the part's own band, when it is one of the six meanings, is drawn in this build's spool for it (the label palette)
+      const ownSpool = own && spoolFor(S().labelPalette, own.colour), ownDraw = ownSpool ? ownSpool.hex : ownHex;
+      editor.appendChild(el('div.frow', {}, [el('span', { text: 'Stripe' }), el('span.dim', { text: on === 'none' ? 'None' : on === 'picker' ? `The part’s own · ${own.label || 'Part Picker'}` : known ? `${known.name} · ${spoolFor(S().labelPalette, known.colour).name}` : 'From the Label Studio' })]));
       editor.appendChild(el('div.swatches', { role: 'group', 'aria-label': 'Stripe colour' }, [
-        ownHex ? el('button.sw.own' + (on === 'picker' ? '.on' : ''), { title: `The Part Picker’s colours (${own.label || ownHex})`, 'aria-label': 'Stripe: the part’s own colours', 'aria-pressed': String(on === 'picker'), style: `--sw:${ownHex}`, onclick: () => stripeCommit(undefined) }) : null,
+        ownHex ? el('button.sw.own' + (on === 'picker' ? '.on' : ''), { title: `The Part Picker’s colours (${own.label || ownHex}${ownSpool ? ' · ' + ownSpool.name : ''})`, 'aria-label': 'Stripe: the part’s own colours', 'aria-pressed': String(on === 'picker'), style: `--sw:${ownDraw}`, onclick: () => stripeCommit(undefined) }) : null,
         el('button.sw.none' + (on === 'none' ? '.on' : ''), { title: 'No stripe', 'aria-label': 'No stripe', 'aria-pressed': String(on === 'none'), onclick: () => stripeCommit(ownHex ? null : undefined) }),
-        ...STRIPE_COLOURS.map((x) => el('button.sw' + (on === x.colour ? '.on' : ''), { title: x.name, 'aria-label': `Stripe: ${x.name}`, 'aria-pressed': String(on === x.colour), style: `--sw:${x.hex}`, onclick: () => stripeCommit(stripeFor(x.colour)) })),
+        // each meaning swatched in the spool this build prints it in (the label palette); the label still stores the meaning
+        ...STRIPE_COLOURS.map((x) => { const sp = spoolFor(S().labelPalette, x.colour); return el('button.sw' + (on === x.colour ? '.on' : ''), { title: `${x.name} · ${sp.name}`, 'aria-label': `Stripe: ${x.name}`, 'aria-pressed': String(on === x.colour), style: `--sw:${sp.hex}`, onclick: () => stripeCommit(stripeFor(x.colour)) }); }),
       ].filter(Boolean)));
     }
     if (lookNow && lookNow.kind === 'part') {

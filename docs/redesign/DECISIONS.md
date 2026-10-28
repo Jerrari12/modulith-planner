@@ -5801,3 +5801,37 @@ Test `feet-option.test.mjs`: the count is 4 (printed and adhesive, the step titl
 Live 2026-10-27 23:25 as 688243e7; `feet-prod.mjs` green: a lone 2W-2H and a lone 4W-1H stand on 4 feet (the Parts list
 bills 4, the step says "insert the 4 feet"), two 1W cases still stand on a foot rail with 6. The same check on aadfa1de
 failed (6 and 10), so it can tell. Vault `rules.md` 98da1dd.
+
+## 2026-10-28 · The label palette: a stripe colour is a meaning, printed in the spool you have
+
+Joey, of the label sheets of 2026-10-28: a stripe's colour is a suggestion. People print Metric in whatever blue they own,
+and they keep one set of label spools across builds. Sol (01a1825f) rejected a live per-browser map, because shared links
+would drift and a remap would recolour old builds. Astra refined Sol's option 1, and Joey settled it: a ready-made palette
+with no setup, optional "Use my filaments", a per-browser default for new builds, and the palette saved with the build.
+Design note: `docs/redesign/LABEL-PALETTE.md`.
+
+- **A stripe stores its meaning, as before.** The label keeps the Label Studio's `colours` (`sky-blue`, `#56B4E9`, Metric),
+  so the Studio round trip is unchanged. The build's new record field `labelPalette` (`{ v: 1, spools: { <meaning>:
+  { name, hex } } }`, cleaned in schema.js) says which spool prints each of the six meanings. `null`, and every older
+  record, reads as the frozen v1 suggestions in `js/label-palette.js`.
+- **The suggested spools** are the nearest plain PLA in the catalog by ΔE00 to the scheme colour: Metric is Polar Light
+  Blue (5.6), SAE / inch Printed Solid Safety Orange (8.8), Yellow Panchroma Lemon Yellow (3.0), White Printed Solid White
+  (1.87), Green Polar Seafoam (1.8), and Purple Panchroma Pink (12.2, because the scheme's purple is a pink). The body and
+  text are the first preset's picks. A test re-runs the rule and fails on catalog drift; it never rewrites v1.
+- **Drawing.** A stripe piece in one of the six meanings wears the zone `STRIPE@<meaning>`, and `activeHex` gives it the
+  build's spool in every colour mode. A colour the page does not offer keeps `STRIPE#hex`, as before. A palette change
+  repaints; it never regenerates. The stage keeps its own copy, handed over by app.js on every store change.
+- **Body and text stay the Colors palette's `Label` / `Label:TEXT` picks.** The panel shows them and edits them there, so
+  there is one source of truth. Gap, and Joey's call: these two, like every Colors pick, do not ride in `#build=`.
+- **Defaults** (`gen2-label-palette`, try-guarded) seed only a fresh build (`?new` / setup). Any other build is offered them
+  ("Your default label filaments differ · Use them here", one undo step), never changed by them silently.
+- **Warnings, computed and gentle:** two meanings in one spool; ΔE00 < 15 between two meanings; a meaning at ΔE00 < 10 from
+  the body; text contrast < 3. The v1 set warns once: White on the Cold White body, ΔE 4.1, the measured invisible patch.
+  How to fix that patch is still Joey's open call.
+- **Lists name the spool by identity.** `filamentsInBuild` wears a stripe as its spool (by name, buy link from the catalog),
+  so the Colors list, the Dock count and the Parts Label row name it. The room's spool swap leaves stripes alone.
+- **One visual change, once:** a build that already had a stripe (stripes exist since 2026-10-27) now draws it in the v1
+  spool's hex instead of the scheme's, for example Metric #14ADDB instead of #56B4E9.
+
+Reviews: Sol 01a1827b on the design (approve with changes; 9 findings folded in, 2 discarded with reasons in the note §9),
+Sol 01a182a1 on the code (one finding, the defaults offer compared body/text by name only; fixed).

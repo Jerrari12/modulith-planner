@@ -25,7 +25,8 @@ import { createSettleBench } from './settle-bench.js';
 import { parseSeeInto, parseSeeIntoSkip, parseSeeIntoLattice, createSeeInto } from './see-into.js';
 import { LABEL_TEXT_DEFAULTS, LABEL_TEXT_NODES, LABEL_TYPE_OF_NODE, labelFontReady, loadLabelFont, labelGeometry, labelCore, labelIcons,
   labelPartsReady, loadLabelParts, partLabelGeometry, stripeGeometry } from './label-text.js';
-import { labelLookOf, labelLooksKey, labelLookNeeds, stripeZone, isStripeZone, stripeHexOfKey } from './label-look.js';
+import { labelLookOf, labelLooksKey, labelLookNeeds, stripePieceZone, isStripeZone, stripeHexOfKey, stripeMeaningOfKey } from './label-look.js';
+import { spoolFor, urlFor, cleanLabelPalette } from './label-palette.js';   // the label palette (2026-10-28); stamped in pages.yml
 import { LABEL_SPEC, LABEL_TEXT_MAX, cleanLabelText, cleanLabelBadge, cleanLabelStyle } from './label-spec.js';
 import { LABEL_STYLE_ROWS, labelOrder, effectiveStyle, labelOptsOf, labelOptsChanges, applyLabelOpts, labelOnlyDiff, copyLabelFields,
   editCommit, styleEdit, iconGroups, badgeStateText, shownBadge, historyKeyOf, labelSnap, labelUndoPatch, rejectionIsMine,
@@ -4622,8 +4623,9 @@ function labelTextFor(inst) {
    - a PART label's ink - the words and the screw / nut drawing the Label Studio lays out - on the TEXT zone, in place of the
      words label-core.js would lay out from the drawer's mirror;
    - a STRIPE: the label body cut into base / band / accent pieces. The base piece is the label's Body (the plain zone, so it
-     keeps every finish the Body material has); the band and accent pieces are zones of their own whose colour is the
-     stripe's (label-look.js stripeZone; activeHex reads it off the key - never a filament, no identify-card chip). The GLB's
+     keeps every finish the Body material has); the band and accent pieces are zones of their own (label-look.js
+     stripePieceZone): a meaning's ('STRIPE@sky-blue') is drawn in the spool the build's label palette gives it, any other
+     colour ('STRIPE#hex') in its own hex (activeHex). Neither is a part colour pick: no identify-card chip. The GLB's
      own body mesh is hidden while the pieces stand in for it (two coincident skins would z-fight) and shown again when the
      stripe goes (clearLabelText). A label with neither draws exactly what it drew before: no file loads, no mesh changes. */
 let labelPartsBroken = false;   // the part-label files failed to load once: the words stand in for the rest of the page's life
@@ -4703,13 +4705,13 @@ function placeLabelText(inst, text, badge, upload, look) {
   return t;
 }
 /* A stripe's body pieces onto the label, in place of the GLB's own body mesh (hidden, and marked so clearLabelText shows it
-   again). The base piece wears the Body zone; a band or accent piece the stripe's own colour, or the Body when its slot is
-   unassigned (hex null - printed in the base colour, as the Label Studio prints it). */
+   again). The base piece wears the Body zone; a band or accent piece its meaning's spool or its own colour (stripePieceZone),
+   or the Body when its slot is unassigned (hex null - printed in the base colour, as the Label Studio prints it). */
 function placeLabelPieces(inst, inner, pieces, cast) {
   stampPieceBedFaces(inst, pieces.map((p) => p.geo));
   for (const o of inner.children) if (o.isMesh && !LABEL_MESH_NAMES.has(o.name) && o.visible) { o.visible = false; o.userData.stripeHidden = true; }
   for (const p of pieces) {
-    const zone = p.hex ? stripeZone(p.hex) : '';
+    const zone = stripePieceZone(p.colour, p.hex);
     const mesh = new THREE.Mesh(p.geo, materialFor(inst, false, zone));
     mesh.name = 'LabelPiece';
     if (zone) mesh.userData.zone = zone;
@@ -7896,8 +7898,16 @@ const colorLocked = type => {
 // ONLY the instruction palette: a user's own filament pick is the colour they will
 // actually print, and must never be second-guessed by the stage they're viewing on.
 const DARK_STAGE_PALETTE = { Case: '#dfe3ec' };
+/* THE LABEL PALETTE (2026-10-28, docs/redesign/LABEL-PALETTE.md): the spool each stripe meaning prints in, the record's
+   `labelPalette` cleaned (null = the suggested spools, version 1). The stage keeps its OWN copy, handed over by app.js on
+   every store change (setLabelPalette), so no record swap (update, setLabels, the kit boot) can leave it stale. */
+let labelPalette = null;
 const activeHex = key => {
-  // a label's colour STRIPE is the label's own colour, never a filament pick (label-look.js stripeZone): the key carries it
+  // a label stripe in one of the six meanings prints in the build's spool for it, in every colour mode: it is the label's
+  // own colour, which this build prints in a known spool (label-look.js stripePieceZone)
+  const meaning = stripeMeaningOfKey(key);
+  if (meaning) return spoolFor(labelPalette, meaning).hex;
+  // any other stripe colour is the label's own, drawn as it is: the key carries it
   const stripe = stripeHexOfKey(key);
   if (stripe) return stripe;
   const cc = previewLook ? previewLook.colors : customColors;   // a look being shown stands in for the palette (previewLook)
@@ -7929,7 +7939,9 @@ const activeHex = key => {
  * the decision of 2026-09-07, and it is enforced here rather than anywhere else.
  */
 const activeLabel = key => {
-  if (stripeHexOfKey(key)) return null;   // a stripe wears its label's colour, not a filament (activeHex)
+  const meaning = stripeMeaningOfKey(key);
+  if (meaning) return spoolFor(labelPalette, meaning).name;   // a meaning's stripe wears its spool (activeHex)
+  if (stripeHexOfKey(key)) return null;   // any other stripe wears its label's colour, not a filament (activeHex)
   const cc = previewLook ? previewLook.colors : customColors;   // as activeHex: a look being shown stands in for the palette
   if ((previewLook || useCustom) && cc[key] && !colorLocked(key)) return cc[key].name || null;
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return null;
@@ -9652,7 +9664,7 @@ function lookSnapshot() {
 }
 function lookMaterialFor(look, it) {
   const key = zoneKey(it.type, it.zone);
-  if (colorLocked(key) || stripeHexOfKey(key)) return (it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone);
+  if (colorLocked(key) || stripeHexOfKey(key) || stripeMeaningOfKey(key)) return (it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone);   // a stripe is no look's: the live material (its spool, or its own colour)
   const colors = look.colors || {}, over = look.over || {};
   const o = it.uid != null ? over[it.uid] : null;
   const f = (o ? (o[key] || (it.zone && !colors[key] && o[it.type]) || null) : null)
@@ -9797,6 +9809,15 @@ function clearOverrides(uid = null, key = null) {   // every unit's own pick for
   useCustom = useCustom && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0);
   saveColors(); applyPalette(); refreshMaterials();
 }
+/* the build's label palette (the record's `labelPalette`): a repaint, never a regenerate - the stripe zones name meanings,
+   so only their colour moves. Returns whether it changed. */
+function setLabelPalette(p) {
+  const next = cleanLabelPalette(p);
+  if (JSON.stringify(next) === JSON.stringify(labelPalette)) return false;
+  labelPalette = next;
+  applyPalette(); invalidateFrame();
+  return true;
+}
 function setColorStoreKey(key) { if (!key || key === COLOR_STORE_KEY) return; COLOR_STORE_KEY = key; persistColors(); }
 function setColor(key, f) {   // one region, build-wide: a filament { name, hex, url }, or null for the instruction colour; units' own picks stay
   previewLook = null;
@@ -9862,7 +9883,8 @@ function identificationHex(key) {
    - Bought hardware never counts.
    - A unit's own pick wins over the build's: an exact key, or its Body pick for a zone the build has not picked.
    - A zone with no pick follows its body, unless it has a colour of its own (the label text).
-   - A label's stripes count, one per colour.
+   - A label's stripes count: a meaning's by its spool (the label palette, by name - it merges with any other region printed
+     in that spool), any other colour as a bare colour.
    - A region left on an identification colour has no filament to buy, but it is still printed: it is listed in
      `unpicked` (in the colour the stage shows it) and counted once per colour that no picked filament already wears.
    Returns { filaments: [{ name, hex, url, keys }], unpicked: [{ key, hex, stripe }], count }. */
@@ -9880,6 +9902,8 @@ function filamentsInBuild(look = null) {
     const uid = inst.cfg.planned ? null : unitOf(inst);   // a planned part never takes a unit's own pick (materialFor)
     for (const z of zones) {
       const key = zoneKey(t, z);
+      const meaning = stripeMeaningOfKey(key);
+      if (meaning) { const sp = spoolFor(labelPalette, meaning); wear({ name: sp.name, hex: sp.hex, url: urlFor(sp.name) }, key); continue; }
       const stripe = stripeHexOfKey(key);
       if (stripe) { bare(key, stripe, true); continue; }
       const o = on && uid != null ? over[uid] : null;
@@ -11904,6 +11928,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     setOverride, clearOverrides, overrideFor, setColorStoreKey, holdColors: (on) => { colorsHeld = !!on; },
     // a look shown and not chosen, and the filament count (the Colors plan's step 1, 2026-10-18)
     previewPalette, endPreview, get previewing() { return !!previewLook; }, filamentsInBuild,
+    // the label palette (2026-10-28): set from the record (app.js), and read back
+    setLabelPalette, get labelPalette() { return labelPalette; },
     // the look cards (step 2's probe, now the gallery's renderer; step 3, 2026-10-18) and the scene revision they key on
     lookCard, get sceneRev() { return sceneRev; },
     get manifest() { return manifest; } };

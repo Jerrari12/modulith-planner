@@ -851,6 +851,106 @@ test('Labels: a part label\'s stripe - its own colours, None or one of the six -
   await ctx.close();
 });
 
+/* THE LABEL PALETTE (Joey 2026-10-28; docs/redesign/LABEL-PALETTE.md): a stripe stores its meaning as the Label Studio stores
+   it, and the build's label palette says which spool prints that meaning. Ready-made (the suggested spools, null in the
+   record); "Use my filaments" swaps one, which repaints the stripe, rides in the record and the address, and undoes as one
+   step; the filament list names the spool; White on the white body is warned about, never blocked. */
+const paletteRec = (id, labelPalette = null) => ({ mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+  removedStoppers: [], gridW: 6, gridH: 2, nextId: 3, labelStyle: null, buildId: id, sideCovers: true, plateParts: {}, labelPalette,
+  placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'M3 screws' }, { id: 2, x: 2, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'Stainless' }],
+  labelList: { format: 'modulith-labels', version: 1, labels: [
+    { text: 'M3 screws', id: id + '01', colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } },
+    { text: 'Stainless', id: id + '02', colours: { band: { colour: 'white', hex: '#F4F4F2', label: 'White', pattern: 'solid' } } }] },
+  labelAssign: { 1: id + '01', 2: id + '02' } });
+const hashOfRec = (rec) => `#build=${Buffer.from(JSON.stringify(rec), 'utf8').toString('base64')}`;
+// the band piece of a drawer's label: its zone and the colour it is drawn in
+const bandOf = (page, owner) => page.evaluate((o) => { const v = window.__GEN2_VIEWER__;
+  const lab = [...v.instances.values()].find((i) => i.cfg.node === 'Label_EdgeLabel' && v.instances.get(i.cfg.rides)?.cfg.owner === o);
+  const m = lab && lab.group.children[0].children.find((x) => x.name === 'LabelPiece' && x.userData.labelPiece === 'band');
+  return m ? { zone: m.userData.zone, hex: m.material.color.getHexString() } : null; }, owner);
+const waitBands = (page) => page.waitForFunction(() => [...window.__GEN2_VIEWER__.instances.values()].filter((i) => i.cfg.node === 'Label_EdgeLabel' && i.group.children[0]?.children.some((x) => x.name === 'LabelPiece')).length === 2, null, { timeout: 90_000 })
+  .catch(() => assert.fail('the two striped labels did not draw'));
+const waitBandHex = (page, owner, hex, why) => page.waitForFunction(([o, h]) => { const v = window.__GEN2_VIEWER__;
+  const lab = [...v.instances.values()].find((i) => i.cfg.node === 'Label_EdgeLabel' && v.instances.get(i.cfg.rides)?.cfg.owner === o);
+  const m = lab && lab.group.children[0].children.find((x) => x.name === 'LabelPiece' && x.userData.labelPiece === 'band');
+  return m && m.material.color.getHexString() === h; }, [owner, hex], { timeout: 30_000 }).catch(async () => assert.fail(`${why}: ${JSON.stringify(await bandOf(page, owner))}`));
+
+test('Labels: the label palette - a stripe prints in its meaning\'s spool, a swap repaints it, rides in the record, undoes and survives a reload', async () => {
+  const { ctx, page, errors } = await open('labels', { query: '&done=off' + hashOfRec(paletteRec('e2elabpal1')) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await waitBands(page);
+  // ready-made: the record has no palette, the Metric stripe draws in the suggested spool (Polar Light Blue), by meaning
+  assert.equal((await S(page)).labelPalette, null);
+  assert.deepEqual(await bandOf(page, 1), { zone: 'STRIPE@sky-blue', hex: '14addb' }, 'Metric in the v1 spool, not the scheme hex 56b4e9');
+  assert.equal((await S(page)).labelList.labels[0].colours.band.hex, '#56B4E9', 'the label still stores the Studio\'s scheme colour');
+  // the section: six meanings, body and text; the White stripe on the white body is noted, nothing is blocked
+  await page.locator('#ws-labels details.palette summary').click();
+  assert.equal(await page.locator('#ws-labels .palette .prow').count(), 8);
+  assert.match(await page.locator('#ws-labels .palette .pnote[data-key="white"]').first().textContent(), /White is hard to see on the label body/);
+  assert.equal(await page.locator('#ws-labels .palette .pnote').count(), 1, 'the suggested set warns about White only');
+  // swap Metric for Panchroma Aqua Blue
+  await page.locator('#ws-labels .palette button.mine').click();
+  await page.locator('#ws-labels .palette button.prow[data-key="sky-blue"]').click();
+  await page.locator('#ws-labels .palette .ppick input.search').fill('Aqua Blue');
+  await page.locator('#ws-labels .palette .pitem[title="Panchroma Aqua Blue"]').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelPalette?.spools?.['sky-blue']?.name === 'Panchroma Aqua Blue', null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`the swap did not reach the record (${JSON.stringify((await S(page)).labelPalette)})`));
+  await waitBandHex(page, 1, '5cc6e0', 'the Metric stripe did not repaint in Panchroma Aqua Blue');
+  assert.equal((await bandOf(page, 2)).hex, 'efefea', 'the White stripe kept its spool');
+  // the filament list names the spool (identity, not a hex), with its buy link
+  const fil = await page.evaluate(() => window.__GEN2_VIEWER__.filamentsInBuild().filaments.find((f) => f.keys.includes('Label:STRIPE@sky-blue')));
+  assert.equal(fil && fil.name, 'Panchroma Aqua Blue');
+  assert.match(fil.url || '', /^https:/);
+  // one undo step back to the suggestions, and redo
+  await page.evaluate(() => window.__GEN2_STORE__.undo());
+  await waitBandHex(page, 1, '14addb', 'undo did not repaint the stripe');
+  assert.equal((await S(page)).labelPalette, null);
+  await page.evaluate(() => window.__GEN2_STORE__.redo());
+  await waitBandHex(page, 1, '5cc6e0', 'redo did not repaint the stripe');
+  // the address carries it: a reload opens the swapped palette
+  await page.waitForFunction(() => { const m = /#build=([^&]+)/.exec(location.hash); if (!m) return false; try { return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))).labelPalette?.spools?.['sky-blue']?.name === 'Panchroma Aqua Blue'; } catch { return false; } }, null, { timeout: 15_000 })
+    .catch(() => assert.fail('the address does not carry the palette'));
+  await page.reload({ waitUntil: 'load' });
+  await waitBoot(page);
+  await waitBands(page);
+  await waitBandHex(page, 1, '5cc6e0', 'the reload lost the palette');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Labels: a shared link shows the sender\'s label palette; the recipient\'s defaults are offered, used as one undo step, and seed a new build', async () => {
+  const DEFAULTS = { v: 1, spools: { 'sky-blue': { name: 'Panchroma Azure Blue', hex: '#2e8fdc' } }, body: { name: 'Panchroma Cream', hex: '#f1e7cf' } };
+  const ctx = await freshContext();
+  await ctx.addInitScript((d) => { try { if (!sessionStorage.getItem('e2e-defaults-set')) { localStorage.setItem('gen2-label-palette', JSON.stringify(d)); sessionStorage.setItem('e2e-defaults-set', '1'); } } catch {} }, DEFAULTS);
+  const sender = { v: 1, spools: { 'sky-blue': { name: 'Panchroma Aqua Blue', hex: '#5cc6e0' } } };
+  const { page, errors } = await open('labels', { context: ctx, query: '&done=off' + hashOfRec(paletteRec('e2elabpal2', sender)) });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await waitBands(page);
+  // the sender's palette, untouched by the recipient's defaults
+  await waitBandHex(page, 1, '5cc6e0', 'the recipient does not see the sender\'s Metric spool');
+  assert.deepEqual((await S(page)).labelPalette, sender);
+  const bodyWas = await page.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name);
+  // the offer, then "Use them here": the stripes and the body change together, as ONE undo step
+  await page.locator('#ws-labels details.palette summary').click();
+  await page.locator('#ws-labels .palette .offer button').click();
+  await waitBandHex(page, 1, '2e8fdc', 'the defaults did not reach the stripe');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Panchroma Cream', 'the default body');
+  assert.equal(await page.locator('#ws-labels .palette .offer').count(), 0, 'nothing left to offer');
+  await page.evaluate(() => window.__GEN2_STORE__.undo());
+  await waitBandHex(page, 1, '5cc6e0', 'one undo did not return the sender\'s stripe');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), bodyWas, 'the same undo returned the body');
+  assert.deepEqual(clean(errors), []);
+  // a NEW build in this browser starts with the defaults: the record's spool and the body
+  const fresh = await ctx.newPage();
+  await fresh.goto(`${base}/index.html?ws=labels&debug=1&done=off&new=1`, { waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(fresh);
+  const st = await S(fresh);
+  assert.equal(st.labelPalette?.spools?.['sky-blue']?.name, 'Panchroma Azure Blue', 'a new build takes the default Metric spool');
+  assert.equal(st.labelPalette?.spools?.red?.name, 'Printed Solid Safety Orange', 'and the suggestion where the defaults name none');
+  assert.equal(await fresh.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Panchroma Cream', 'and the default body');
+  await ctx.close();
+});
+
 /* A TYPED LABEL'S STRIPE, AND CLASSIC PRO'S PRINT SETTINGS (Joey 2026-10-27: "if i'm manually typing a label i don't see how to
    set a color for the label stripe"; the part label stripe's wording "feels specific to edgelabel labels and odd for this
    classic pro label"). The editor's Stripe row: the Label Studio's colours, stored on the label as the Studio stores it, and
@@ -5484,16 +5584,21 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
     return {
       lockedKeys: [...locked], countedKeys: mine.filaments.flatMap((f) => f.keys),
       count: mine.count, filaments: mine.filaments.length, stripes: mine.unpicked.filter((u) => u.stripe).map((u) => u.hex),
+      stripeSpool: (mine.filaments.find((f) => f.keys.includes('Label:STRIPE@sky-blue')) || {}).name || null,
       textWears: (mine.filaments.find((f) => f.keys.includes('Label:TEXT')) || {}).name || null,
       sigRows: sig.filaments.length + sig.unpicked.length, sigCount: sig.count, sigNames: sig.filaments.map((f) => f.name), sigOnlyHardware,
-      sigLeaks: sig.filaments.flatMap((f) => f.keys).filter((k) => !keys.some((x) => x.key === k)),
+      // a label stripe is the label's own region (keysInBuild leaves it out: it is no Colors pick), so it is no leak
+      sigLeaks: sig.filaments.flatMap((f) => f.keys).filter((k) => !/:STRIPE@/.test(k) && !keys.some((x) => x.key === k)),
     };
   });
   assert.ok(r.lockedKeys.length > 0, 'the control: this build has bought hardware');
   assert.deepEqual(r.countedKeys.filter((k) => r.lockedKeys.includes(k)), [], 'bought hardware never counts');
   assert.ok(r.textWears, 'the label text counts, wearing the preset\'s own black');
-  assert.deepEqual(r.stripes, ['#56b4e9'], 'the stripe counts, in the label\'s own colour');
-  assert.equal(r.count, r.filaments + 1, 'the count: every filament plus the one stripe colour');
+  /* since the label palette (2026-10-28) a Metric stripe counts as the spool that prints it (the suggested Polar Light
+     Blue, by name), no longer as a bare colour */
+  assert.deepEqual(r.stripes, [], 'no stripe is left as a bare colour');
+  assert.equal(r.stripeSpool, 'Polar Light Blue', 'the stripe counts as its spool');
+  assert.equal(r.count, r.filaments, 'the count: every filament, the stripe\'s spool among them');
   assert.match(await page.locator('#ws-dock .status.stack').textContent(), new RegExp(`\\b${r.count} filaments\\b`), 'the Dock shows that count');
   // Signal's Shop list, as THIS build would wear it: only its regions, and no filament the preset gives bought hardware alone
   assert.deepEqual(r.sigLeaks, [], 'no region the build lacks');
@@ -5507,8 +5612,12 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   // the details' footer (2026-10-24): plain "Buy ↗" labels with rel=sponsored, the one disclosure line (Signal is all Polymaker),
   // the two reworded notes and no translucent note, and nothing reads "null": gallery.append(null) wrote the word under every
   // look without a translucent filament (Joey saw it live)
-  const detail = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-gallery .frow a.link')].map((a) => `${a.textContent}|${a.rel}`), disc: document.querySelector('#ws-gallery .disc').textContent, notes: [...document.querySelectorAll('#ws-gallery p.note')].map((p) => p.textContent) }));
-  assert.ok(detail.buys.length && detail.buys.every((b) => b === 'Buy ↗|noopener sponsored'), `plain Buy labels, rel=sponsored: ${detail.buys.join(', ')}`);
+  const detail = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-gallery .frow a.link')].map((a) => `${a.textContent}|${a.rel}|${new URL(a.href).hostname}`), disc: document.querySelector('#ws-gallery .disc').textContent, notes: [...document.querySelectorAll('#ws-gallery p.note')].map((p) => p.textContent) }));
+  /* since the label palette (2026-10-28) the Metric stripe is listed as its spool, the suggested Polar Light Blue: a maker's
+     own shop, no paid link, so its rel is plain; every Polymaker link is still sponsored */
+  const polar = detail.buys.filter((b) => b.endsWith('|polarfilament.com')), paid = detail.buys.filter((b) => !b.endsWith('|polarfilament.com'));
+  assert.deepEqual(polar, ['Buy ↗|noopener|polarfilament.com'], `the stripe's spool, a plain link: ${detail.buys.join(', ')}`);
+  assert.ok(paid.length && paid.every((b) => b.startsWith('Buy ↗|noopener sponsored|')), `plain Buy labels, rel=sponsored: ${detail.buys.join(', ')}`);
   assert.equal(detail.disc, POLYMAKER_LINE, 'the Shop list\'s one line is the Polymaker sentence');
   assert.equal(detail.notes.length, 2, `two notes under the rows: ${detail.notes.join(' | ')}`);
   assert.match(detail.notes[0], /^Colours on screen are approximate, and the look card is drawn without shadows; the Day Grid plate shows them truest\.$/);

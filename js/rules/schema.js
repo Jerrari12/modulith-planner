@@ -41,7 +41,11 @@ export const BUILD_FIELDS = ["mount", "length", "printer", "customBed", "spaceW"
   "sideCovers",
   // the planner's own field (2026-10-26): a part type's own build plate finish, { Faceplate: "holographic" }; a type
   // not in it follows buildPlate. Absent in every older record and share link, which read as {} - every part follows
-  "plateParts"];
+  "plateParts",
+  // the planner's own field (2026-10-28): the LABEL PALETTE, the spool each stripe meaning prints in, { v: 1, spools:
+  // { "sky-blue": { name, hex }, ... } } (docs/redesign/LABEL-PALETTE.md). Absent in every older record and share link,
+  // which read as null - the built-in suggested spools, version 1 (js/label-palette.js SUGGESTED_V1)
+  "labelPalette"];
 /* the per-part plate finishes, cleaned (2026-10-26, the planner's own field): an object of type name -> one of
    BUILD_PLATES; anything else is dropped, never guessed. Type names are the manifest's part types ("Faceplate",
    "Case", "Stopper", "MagnetClip"...): a letter, then letters, digits, spaces, "-" or "_", 1-40 characters in all. */
@@ -54,6 +58,23 @@ export function cleanPlateParts(v) {
     if (/^[A-Za-z][A-Za-z0-9 _-]{0,39}$/.test(t) && BUILD_PLATES.includes(f)) out[t] = f;
   }
   return out;
+}
+/* the label palette, cleaned (2026-10-28, the planner's own field): the six stripe meanings - the Label Studio's colour keys
+   (label-look.js STRIPE_COLOURS, a test pins the two lists equal) - each to a spool { name, hex }: the catalog's label (the
+   identity, 1-80 characters) and the colour it draws in. `v` must be 1. Anything else is dropped, never guessed; no spool
+   left is null, which reads as the suggested spools. */
+export const LABEL_PALETTE_KEYS = ["sky-blue", "red", "yellow", "white", "green", "purple"];
+export function cleanSpool(s) {
+  if (!s || typeof s !== "object" || Array.isArray(s) || typeof s.name !== "string" || typeof s.hex !== "string") return null;
+  const name = s.name.trim();
+  return name && name.length <= 80 && /^#[0-9a-fA-F]{6}$/.test(s.hex) ? { name, hex: s.hex } : null;
+}
+export function cleanLabelPalette(v) {
+  if (!v || typeof v !== "object" || Array.isArray(v) || v.v !== 1) return null;
+  const src = v.spools && typeof v.spools === "object" && !Array.isArray(v.spools) ? v.spools : {};
+  const spools = {};
+  for (const k of LABEL_PALETTE_KEYS) { const s = cleanSpool(src[k]); if (s) spools[k] = s; }
+  return Object.keys(spools).length ? { v: 1, spools } : null;
 }
 export const BUILD_SCHEMA = 1;
 export const buildTooNew = (d) => !!d && typeof d === "object" && d.schema !== undefined && d.schema !== null
@@ -131,6 +152,8 @@ export function sanitizeBuild(d, GEN2) {
      fresh object; ALWAYS written ({} when none) - a record without it must not keep the previous build's overrides
      (the store copies only the fields a record has) */
   d.plateParts = cleanPlateParts(d.plateParts);
+  // the label palette (2026-10-28): ALWAYS written (null when none), for the same reason
+  d.labelPalette = cleanLabelPalette(d.labelPalette);
   // a build without an identity (older than the field, or a mangled one) gets
   // a new one; a valid one is KEPT, so a saved or shared build stays itself
   d.buildId = typeof d.buildId === "string" && BUILD_ID_RE.test(d.buildId) ? d.buildId : newBuildId();
