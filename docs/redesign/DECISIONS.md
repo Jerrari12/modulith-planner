@@ -5727,3 +5727,10 @@ B is wall and desk floored at a real matte black, with no extra fill light on th
     (negligible at "about 4 %"), and the additive lift nudges toward the floor's slight blue-grey rather than keeping the
     exact hue (the ask was "stays navy", and scaling has no answer for black).
   - A Very High render of his setup on this code draws like his pick B (scratchpad `floor-renders`).
+
+- **Live 2026-10-27 at `f87a315`** (pushed 22:04, live 22:26, run 40618780426). Checked on the live planner
+  (`floor-live.mjs`, Assemble's final scene, SwiftShader):
+  - the Black desk swatch is #38393b;
+  - a black wall of one's own draws exactly as a #38393b one, its chip #38393b with "lifted to #38393b";
+  - the Black preset desk draws exactly as a #38393b desk;
+  - no page errors.
