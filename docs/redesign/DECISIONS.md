@@ -6099,5 +6099,10 @@ slightly ... as if you rotated the spools a few degrees to the left or right ...
   before a tab.
 - The tag case: every lying tag 5 to 20 deg round, a standing one at the front, neighbours 10 deg or more apart (a
   five-colour stack has a pair), no clip, the twist counted from the wire.
-- All 24 phone cases and the tag cases green on SwiftShader.
+- The sideways case: the rail stays beside an open sheet.
+- 9 mutants, each failing its case: the bar never put away, put away on its side too (it survived until the sideways
+  check), left visible, the dock left up, the sheet's base off the dock, `bottom` jumping, the tags not turned, the
+  neighbours let line up, the card square to the room.
+- All 24 phone cases and the tag cases green on SwiftShader. The tag case runs about 5 min here under load; its new
+  five-colour step is 3.3 s of it, and the rest is its three fresh entries, as before.
 - Terra 01a183d2 (the bar, then the bottom transition): no findings. Terra 01a183f3 (the stagger): one finding, fixed.
