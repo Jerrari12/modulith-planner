@@ -6067,3 +6067,29 @@ black spools but one is PLA black and the other is TPU black, but at a glance th
     metal wires;
   - the stack's top spool's sticker "PLA / BLACK";
   - marks drawn once, no page errors.
+
+## 2026-10-28 · A tabletop build read back with a rounded-up grid still stands on the table
+
+Joey: "we keep randomly running into this 'issue' on the build, nothing changed, I just went between tabs ... In the 2d
+view i can see the issue though, it appears to be floating 0.5H above the ground." His build's link carries `gridH: 7.5`:
+with a 0.5H size in the palette, `syncTabletopGrid` sizes the tabletop grid to the build plus that half row of headroom.
+Every read of a record (a link, a saved build, a reload, and every undo and redo, which restore through `load`) goes
+through `sanitizeBuild`, which keeps whole heights and rounds 7.5 to 8 without moving the units, so the half row of
+headroom lands UNDER the build. The units then end at half-row 15 of 16, the six on the bottom say "not supported on both
+ends", and `syncTabletopGrid` kept the gap because it counts the headroom from the top.
+
+- `layout.js syncTabletopGrid`: a tabletop build stands on the surface first (`rebaseToMountEdge()`), then the headroom
+  is sized as before. It moves the whole build, only when its lowest unit is off the table, and the settle rule already
+  keeps every tabletop unit down after an edit, so nothing a user placed moves relative to anything else.
+- `sanitizeBuild` still rounds the grid; the record's half heights are left alone (the grid is re-sized on every commit).
+- The parity gate (`test/parity/layout-parity.test.mjs`, local only) found the old planner floating the same way on its
+  random tabletop builds read back with a half grid ("kept" comparisons, gridH 4.5 theirs vs 3.5 ours), and after a
+  nudge up that lifted a build's only bottom unit (5 of 148,199 comparisons; live, Build's `edit` settles that unit back
+  down anyway). That is the bug, so the gate moves the old planner's units down to its table and lets the old planner's own
+  refresh size the grid before it compares (`standTheirs`). Terra 01a183ea's follow-up: normalising both sides with the
+  ported rule would hide a headroom regression, so the old planner stays the oracle for the headroom.
+
+Tests: `store.test.mjs` loads Joey's 19 units at 7.5H with a 1H and a 0.5H size armed, twice through the share hash: the
+bottom row on the table, nothing unsupported. Against main it fails (6 unsupported). Unit suite and the e2e cases a
+tabletop grid touches (the wall "+" spots, the void, gravity's ghost, the spot left of the starter, the setup sheet's
+switch to Tabletop and its default starter) green on SwiftShader. Terra 01a183ea: no findings.

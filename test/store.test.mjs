@@ -69,3 +69,28 @@ test('the rules see the record: an unsupported unit, Fix structure, gravity-styl
   const r = store.commit((s, Rs) => Rs.fixStructure());
   assert.equal(r.added, 1); assert.equal(store.rules().unsupportedUnits().length, 0);
 });
+
+/* Joey 2026-10-28: his tabletop build said "6 units not supported on both ends" after a tab switch, and the 2D board
+   showed it floating half a row above the table. The live grid had a half height (7.5H, picked with a 0.5H size in the
+   palette) and the record reads it back as 8H, a row of headroom grown UNDER the units; syncTabletopGrid counted from the
+   top and left the build up there. His board's units, [id, x, y, w, hh, fill] with y and hh in half-rows from the top. */
+test('a tabletop build read back with a rounded-up grid still stands on the table', async () => {
+  const { createStore } = await import('../js/state/store.js');
+  const { GEN2, GEN2_TABLETOP } = catalog();
+  const units = [[1, 0, 13, 2, 2], [2, 0, 11, 1, 2], [3, 2, 13, 1, 2], [4, 1, 11, 2, 2], [5, 3, 14, 1, 1], [6, 4, 14, 1, 1],
+    [7, 5, 14, 1, 1], [8, 6, 14, 1, 1], [9, 3, 11, 4, 3], [10, 3, 8, 4, 3], [11, 3, 5, 4, 3], [12, 3, 2, 4, 3], [13, 0, 10, 2, 1],
+    [14, 0, 9, 2, 1], [15, 2, 10, 1, 1], [16, 2, 9, 1, 1], [18, 0, 3, 2, 6], [19, 0, 2, 3, 1], [24, 2, 3, 1, 6, 'shelf']];
+  const rec = { ...kit(), mount: 'tabletop', gridW: 7, gridH: 7.5, nextId: 30,
+    placed: units.map(([id, x, y, w, hh, fill = 'decor']) => ({ id, x, y, w, hh, fill, shelves: 0, ...(fill === 'shelf' ? { lip: 'front' } : {}) })) };
+  for (const h of [1, 0.5]) {
+    const store = createStore(GEN2, { tabletop: GEN2_TABLETOP });
+    store.state.selected = { w: 4, h };
+    store.load(JSON.parse(JSON.stringify(rec)));
+    for (let trip = 0; trip < 2; trip++) {
+      const s = store.state, bottom = Math.max(...s.placed.map((u) => u.y + u.hh));
+      assert.equal(bottom, s.gridH * 2, `the bottom row is on the table (palette ${h}H, trip ${trip})`);
+      assert.deepEqual(store.rules().unsupportedUnits().map((u) => u.id), [], `nothing unsupported (palette ${h}H, trip ${trip})`);
+      store.load(JSON.parse(decodeURIComponent(escape(atob(store.hash())))));   // a reload or a re-opened link
+    }
+  }
+});

@@ -64,11 +64,22 @@ test('the ported layout rules and schema match the planner on kits, random build
   }
   /* 2. the mutators: the planner on its live state (then refresh, as its UI does), mine on a copy of the same
         state (then syncTabletopGrid, the refresh-time normalisation); compare the post-layouts and the tallies */
+  /* a deliberate divergence (2026-10-28, Joey's floating build): the old planner read a tabletop record with a half grid
+     (7.5H, from a 0.5H palette) back as 8H and left the build half a row above the table, and a nudge up of a build's
+     only bottom unit left it floating too; syncTabletopGrid now stands the build on the table first. standTheirs moves
+     the planner's units down to its table and lets the planner's OWN refresh size the grid, so the headroom stays its
+     (Terra 01a183ea: normalising both sides with the ported rule would hide a headroom regression) */
+  function standTheirs() {
+    const st = app.state;
+    if (st.mount !== 'tabletop' || !st.placed.length) return;
+    const gap = st.gridH * 2 - Math.max(...st.placed.map((p) => p.y + p.hh));
+    if (gap) { st.placed.forEach((p) => { p.y += gap; }); app.refresh(); }
+  }
   function mutate(label, theirsFn, mineFn) {
     const copy = clone(app.state);
     const Rc = layoutRules(copy, GEN2, { tabletop: GEN2_TABLETOP });
     const b = mineFn(Rc, copy); Rc.syncTabletopGrid();
-    const a = theirsFn(); app.refresh();
+    const a = theirsFn(); app.refresh(); standTheirs();
     same(label + ' result', a, b);
     same(label + ' layout', layoutOf(app.state), layoutOf(copy));
     same(label + ' nextId', app.state.nextId, copy.nextId);
@@ -95,6 +106,7 @@ test('the ported layout rules and schema match the planner on kits, random build
       const ok = app.applyBuild(clone(v));
       same(label + ' ' + name + ' accepted', ok, !tooNew);
       if (tooNew) continue;
+      standTheirs();
       const d = clone(v); sanitizeBuild(d, GEN2);
       // the planner's refresh normalises with its live palette (syncTabletopGrid reads `selected`), which a load does not change
       Object.assign(d, { fill: app.state.fill, selected: clone(app.state.selected), selectedUnit: null });

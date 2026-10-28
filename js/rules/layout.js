@@ -136,6 +136,10 @@ export function layoutRules(build, GEN2, deps = {}) {
   }
   function syncTabletopGrid() {
     if (build.mount !== "tabletop") return;
+    /* the build stands on the surface first (Joey 2026-10-28, "floating 0.5H above the ground"): the headroom is counted
+       from the top, so a grid that grew under the units (a 7.5H grid read back as 8H - the record keeps whole heights)
+       left every bottom unit half a row up and "not supported", with nothing to bring it down */
+    rebaseToMountEdge();
     const selH = build.selected ? build.selected.h : 1;
     const used = build.placed.length
       ? (rows() - Math.min(...build.placed.map((p) => p.y))) / 2
