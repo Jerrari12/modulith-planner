@@ -841,7 +841,8 @@ test('Labels: a typed label takes a stripe colour in the editor and None takes i
   await page.locator('#ws-labels details.settings summary').click();
   const cp = await page.evaluate(() => ({ swatches: !!document.querySelector('#ws-labeledit .swatches'), band: !!document.querySelector('#ws-labels select[aria-label="Part label stripe"]'),
     drawings: !!document.querySelector('#ws-labels [aria-label="Screw and nut drawings"]'), note: document.querySelector('#ws-labels details.settings').textContent }));
-  assert.ok(!cp.swatches && !cp.band && !cp.drawings && /Classic Pro part labels print the words and the part’s icon/.test(cp.note), `Classic Pro: no stripe controls, the line instead (${JSON.stringify(cp)})`);
+  // since 2026-10-27 Classic Pro prints the drawings too: their switch stays, the stripe gives way to a line
+  assert.ok(!cp.swatches && !cp.band && cp.drawings && /Classic Pro part labels print the words and the part’s drawing/.test(cp.note), `Classic Pro: no stripe controls, the drawings switch and the line (${JSON.stringify(cp)})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

@@ -5674,3 +5674,24 @@ Any equivalent hardware from any store works."
   shows. E2E "the open drawer's measuring lines show only with their pills: none from the Colors card, with them in Build"
   (the old code fails it); the six peek cases pass. Terra 01a1800c: one finding discarded (the 'none' mode is already refused
   first thing in peekPillsFit; the existing desktop Colors case holds it), the centring approved.
+
+## 2026-10-27 · Classic Pro part labels carry the screw and nut drawings
+
+Joey, looking at Classic Pro drawers labelled from the Part Picker ("M3 SHCS × 6 NYLON", words only): "these labels are
+missing the icons and everything like what we have on the edgelabel labels". The planner drew exactly what the Label
+Studio printed there: words and, for nuts and washers, the family icon; the drawings and the colour band were EdgeLabel's
+"for now". Three layouts were measured with the Studio's own code and fit rule on its 54 v5 reference items
+(`D:\Claude - Output\cp-part-drawings-2026-10-27`: EdgeLabel's top-left profile fitted 1; the drawing under the size,
+centred, the head-on view beside the size, and the side profile alone were the options); Joey chose the drawing under the
+size.
+
+- **In the Label Studio first** (labels-public `6fd9313c`, planner-plate `16a10a25`; not pushed - the public push is
+  Joey's): hardware-layout.js builds the v5 profile label on Classic Pro too and centres its three rows (`arrange5`), then
+  settles it towards the middle with the v5 fit rule (`centreDown(els, fits5)`); label-hardware.js gives the Classic Pro
+  layout the drawing data and skips only the colour band there; the page's drawings switch works on Classic Pro. 49 of the
+  54 items take the drawing (EdgeLabel 48), the size at 6.4-9.1 mm, median 7.2. Studio suite 195/195 with a new test
+  (inside the area and clear of the slits, rows centred and stacked, the text layout unchanged with drawings off); Sol
+  01a18014: no invalid layout, two test/comment points applied.
+- **The planner** copies the two files (test/label-hardware-vendor.test.mjs pins them), so a Classic Pro drawer's part label
+  on the model shows the drawing (label-text.js `partLabelGeometry(..., 'classicpro')`); the Labels settings on a Classic Pro
+  build keep the "Screw and nut drawings" switch, with a line that the stripe is EdgeLabel's.

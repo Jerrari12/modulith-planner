@@ -81,7 +81,7 @@ function create(deps) {
 
   const V5 = deps.v5 || null;
   if (V5 && (V5.format !== 'modulith-hardware-v5' || V5.version !== 1)) throw new Error('hardware-layout: hardware-v5-data.js is not v5 data');
-  if (V5 && ALIGN !== 'left') throw new Error('hardware-layout: profile drawings are laid out from the top-left only');
+  // a centred face (Classic Pro) takes the profile drawings too since 2026-10-27, its rows centred (arrange5 below)
 
   let font = null, xScale = 0, yScale = 0;
   const glyphCache = new Map(), textCache = new Map(), trackCache = new Map(), tgCache = new Map(), nutTextCache = new Map();
@@ -485,15 +485,16 @@ function create(deps) {
     }
     return out;
   }
-  function centreDown(els) {
+  // `fits` judges a placement: the text layout's okHere, or the profile layout's fits5 (arrange5)
+  function centreDown(els, fits = (e) => okHere(e)[0]) {
     let miny = Infinity, maxy = -Infinity;
     for (const el of Object.values(els)) { miny = Math.min(miny, el.miny); maxy = Math.max(maxy, el.maxy); }
     const move = ((miny - usMinY) - (YTOP - maxy)) / 2;   // down by this, the room above and below is the same
     if (!(move > 1e-9)) return els;
     const at = dy => Object.fromEntries(Object.entries(els).map(([k, el]) => [k, shift(el, 0, -dy)]));
-    if (okHere(at(move))[0]) return at(move);
+    if (fits(at(move))) return at(move);
     let lo = 0, hi = move;                         // lo fits (where the search checked it), hi does not: halve towards the lowest that fits
-    for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (okHere(at(mid))[0]) lo = mid; else hi = mid; }
+    for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (fits(at(mid))) lo = mid; else hi = mid; }
     return lo > 0 ? at(lo) : els;
   }
 
@@ -775,6 +776,28 @@ function create(deps) {
     }
     return out;
   }
+  /* PROFILE LABELS ON A CENTRED FACE (Classic Pro, Jerrari 2026-10-27: its part labels were "missing the icons and everything
+     like what we have on the edgelabel labels"; of three measured layouts he chose the drawing under the size). The v5 label is
+     built as on EdgeLabel - the size (with a nut's word beside it), the head-on view and side profile under it, the attribute
+     line under them - and then each of those three rows is centred across the usable area, as Classic Pro centres its text
+     rows; the v5 rule (fits5: inside the area less the slits, the v5 spacings) judges it there, and the label it picks is moved
+     down towards the middle (centreDown, the text rows' own search: it settles low where it still fits, without proving no
+     lower place fits past a slit - Sol 01a18014). Rows keep their heights and gaps. A label that does not fit
+     gets the text layout, as on EdgeLabel. On the 54 items of test/fixtures/hardware-v5-ref.json, 49 take the drawing
+     (EdgeLabel 48), the size at 6.4-9.1 mm, median 7.2 (Classic Pro's text layout: median 8.0). */
+  const ROW5 = { 'main spec': 'main', 'family word': 'main', 'head-on view': 'drawing', 'side profile': 'drawing', secondary: 'secondary' };
+  function arrange5(els) {
+    if (ALIGN !== 'centre') return els;
+    const rows = {};
+    for (const k of Object.keys(els)) (rows[ROW5[k] || k] = rows[ROW5[k] || k] || []).push(k);
+    const out = {};
+    for (const keys of Object.values(rows)) {
+      const b = boxOf(...keys.map(k => els[k])), dx = XC - (b.minx + b.maxx) / 2;
+      for (const k of keys) out[k] = dx ? shift(els[k], dx, 0) : els[k];
+    }
+    return out;
+  }
+  const settle5 = els => (ALIGN === 'centre' ? centreDown(els, fits5) : els);
   function layOut5(it) {
     const kind = covered5(it);
     if (!kind) return { why: 'no profile drawing for this part type' };
@@ -785,8 +808,8 @@ function create(deps) {
       const main = fields.join(' '), head = V5.screwHeads[it.head];
       for (const sc of secondaries5(it, ['head'])) {
         for (const cap of V5.caps) {
-          const els = buildScrew5(main, head, sc.s, cap);
-          if (fits5(els)) return { els, sc, rec: { layout: 'v5', kind, head, head_as_drawing: hw, main, main_cap: cap, H: V5.hScrew, secondary: sc.s,
+          const els = arrange5(buildScrew5(main, head, sc.s, cap));
+          if (fits5(els)) return { els: settle5(els), sc, rec: { layout: 'v5', kind, head, head_as_drawing: hw, main, main_cap: cap, H: V5.hScrew, secondary: sc.s,
             sec_cap: V5.secCap, sec_track: sc.s ? trackFor(sc.s, V5.secCap) : null, shown: sc.shown, not_shown: sc.notShown } };
         }
       }
@@ -797,8 +820,8 @@ function create(deps) {
     for (const sc of secondaries5(it, ['head'])) {
       for (const cap of V5.caps) {
         for (const H of V5.nutHs) {
-          const els = buildNut5(main, word, sc.s, lock, cap, H);
-          if (fits5(els)) return { els, sc, rec: { layout: 'v5', kind, lock, main, word, main_cap: cap, word_cap: Math.round(cap * V5.nutWordCap * 1e4) / 1e4, H,
+          const els = arrange5(buildNut5(main, word, sc.s, lock, cap, H));
+          if (fits5(els)) return { els: settle5(els), sc, rec: { layout: 'v5', kind, lock, main, word, main_cap: cap, word_cap: Math.round(cap * V5.nutWordCap * 1e4) / 1e4, H,
             secondary: sc.s, sec_cap: V5.secCap, sec_track: sc.s ? trackFor(sc.s, V5.secCap) : null, shown: sc.shown, not_shown: sc.notShown } };
         }
       }

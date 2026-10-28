@@ -25,8 +25,9 @@ const STUDIO = process.env.GEN2_LABELSTUDIO_ROOT
   : [join(root, '..', 'ls-next'), join(root, '..', 'GEN2 EdgeLabel Label Generator'), join(root, '..', '..', 'GEN2 EdgeLabel Label Generator')];
 const STUDIO_ROOT = STUDIO.find((d) => existsSync(join(d, 'label-hardware.js')));
 const PINS = {
-  'label-hardware.js': 'd1c0eb6b96d791f628fc56d1ce66d22f50f4738da11f4108b486d656ed0d9df0',
-  'hardware-layout.js': 'd807991cc8d012399084b072db750b72744f723aa1cf183812a2bed6060946e2',
+  // 2026-10-27: Classic Pro part labels take the screw and nut drawings, rows centred (Studio labels-public 6fd9313c)
+  'label-hardware.js': '9bd3a241c77e46eb7ee33c7ea6842b7737af01541e896ee1853faad433a5861b',
+  'hardware-layout.js': '0c416fc507fe45fb3ef9f5e53a1b2c6f22addd927e50dfa4296dde2b9352ab43',
   'hardware-data.js': 'b97c422e90699c1e9dafc610292f44bf1341cbd3a4d1e12fbedd2a5be1c75d2d',
   'hardware-v5-data.js': '73b3895d8865dfc2c91a215405e78d597dc6dd9f7dda9cfaf4ee6034dc3224e8',
   'hardware-band-data.js': '865744a360b3816b2f8b28a69ae6fc907e6d8306edaf0abca4091f47184b3a78',

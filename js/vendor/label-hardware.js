@@ -30,7 +30,7 @@
            band, colours        set when the label carries a band: the position and colours(item.colours)
            proposal: record     on a NON-FIT with more than one pin: the layout leaving off the fewest pins (never applied)
            inkDepth: mm         how proud the ink stands (0.45 on EdgeLabel)
-           typeSkips: [words]   what the type does not print yet ('drawing', 'colour band' on Classic Pro); absent when none }
+           typeSkips: [words]   what the type does not print yet ('colour band' on Classic Pro); absent when none }
      An item that cannot be read gives { elements: null, record: { not_ready: 'the label item could not be read (...)' } }.
    LH.layoutFor(item, type, band) -> { layout, band, inkDepth }   the hardware-layout instance layOut uses, the band
                                     position it resolves to (null = no band) and the ink depth
@@ -98,7 +98,8 @@ function create(deps) {
   if (edgelabel && BANDS_OK) for (const tr of Object.keys(B.treatments)) {
     bands[tr] = Layout.create({ data: Object.assign({}, D, { usable: B.treatments[tr].usable }), v5: V5 || null });
   }
-  const classicpro = Layout && CP ? Layout.create({ data: CP }) : null;
+  // Classic Pro takes the screw and nut drawings too since 2026-10-27, its rows centred (hardware-layout.js arrange5)
+  const classicpro = Layout && CP ? Layout.create({ data: CP, v5: V5 || null }) : null;
   const INK_DEPTH = (D && D.rules.inkDepth) || 0.45;
   const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
 
@@ -118,11 +119,11 @@ function create(deps) {
     const band = bandFor(item, position);
     return { layout: band ? bands[band] : edgelabel, band, inkDepth: INK_DEPTH };
   }
-  // what a part label carries that Classic Pro does not print yet (it prints again on EdgeLabel)
+  // what a part label carries that Classic Pro does not print yet (it prints again on EdgeLabel): the colour band. Its drawing
+  // prints there too since 2026-10-27, where it fits, as on EdgeLabel
   function typeSkips(item, type) {
     if (type !== 'classicpro' || !item) return [];
     const out = [];
-    if (edgelabel && edgelabel.profileCovered(item)) out.push('drawing');
     if (item.colours && typeof item.colours === 'object') out.push('colour band');
     return out;
   }

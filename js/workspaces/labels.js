@@ -837,18 +837,20 @@ export function mountLabels(stage, ctx) {
        printer's capability with a look, so a printer profile or a build override may come later): a two-colour printer turns the
        stripe off once and every build follows; the Label plate's own inputs change the same choice */
     det.appendChild(el('p.sub', { text: 'Printing part labels' }));
-    /* Classic Pro part labels print the words and the part's icon, centred; the stripe and the screw and nut drawings are
-       EdgeLabel's (the Label Studio's rule, its index.html "CLASSIC PRO PART LABELS"). Its stripe positions were EdgeLabel's
-       edges and slanted end, which read oddly over a Classic Pro label (Joey 2026-10-27), so a Classic Pro build is told
-       what prints instead; the browser's choice stays as it was for EdgeLabel builds */
+    const drawingsRow = () => el('label.srow', {}, [el('span', { text: 'Screw and nut drawings' }), el('div.track.seg2', { role: 'group', 'aria-label': 'Screw and nut drawings' }, [false, true].map((v) => el('button.seg.sm' + (st.print.drawings === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(st.print.drawings === v), onclick: () => { setPrint({ drawings: v }); renderAll(); } })))]);
+    /* Classic Pro part labels print the words, the part's icon and, since 2026-10-27, the screw and nut drawings, every row
+       centred (the Label Studio's rule); the stripe stays EdgeLabel's. Its positions were EdgeLabel's edges and slanted end,
+       which read oddly over a Classic Pro label (Joey 2026-10-27), so a Classic Pro build gets the drawings switch and a line
+       for the stripe instead; the browser's stripe choice stays as it was for EdgeLabel builds */
     if (S().faceStyle === 'classicpro') {
-      det.appendChild(el('p.dim', { text: 'Classic Pro part labels print the words and the part’s icon. Stripes and screw and nut drawings are EdgeLabel’s.' }));
+      det.appendChild(drawingsRow());
+      det.appendChild(el('p.dim', { text: 'Classic Pro part labels print the words and the part’s drawing, centred. They take no stripe: that is EdgeLabel’s.' }));
       return det;
     }
     const bandSel = el('select', { 'aria-label': 'Part label stripe' }, [['bottom', 'Bottom edge'], ['end', 'End stripe'], ['wedge', '45° end'], ['off', 'Off · two filaments']].map(([v, t]) => el('option', { value: v, text: t, selected: st.print.band === v ? '' : null })));
     bandSel.addEventListener('change', () => { setPrint({ band: bandSel.value }); renderAll(); });
     det.appendChild(el('label.srow', {}, [el('span', { text: 'Part label stripe' }), bandSel]));
-    det.appendChild(el('label.srow', {}, [el('span', { text: 'Screw and nut drawings' }), el('div.track.seg2', { role: 'group', 'aria-label': 'Screw and nut drawings' }, [false, true].map((v) => el('button.seg.sm' + (st.print.drawings === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(st.print.drawings === v), onclick: () => { setPrint({ drawings: v }); renderAll(); } })))]));
+    det.appendChild(drawingsRow());
     det.appendChild(el('p.dim', { text: (st.print.band === 'off' ? 'Part labels print in two filaments: the base and the words.' : 'The stripe adds the thread-system colour and a material patch: more filaments.') + ' Your default for printing labels, kept in this browser for every build.' }));
     return det;
   }
