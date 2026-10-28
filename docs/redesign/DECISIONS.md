@@ -5886,3 +5886,9 @@ instead of doing nothing. The stripe stays a colour, not a spool of the build's 
 Tests: a new e2e case (an EdgeLabel build with a Metric-striped label: the room stacks a #56b4e9 spool; it fails with the
 old filter); the Assemble spool case reads the same list. Terra 01a18305: one finding, discarded (past the 32-spool cap a
 stripe may take another colour's place - the cap's sort order decides which fall off, as it always has).
+
+Live 2026-10-28 11:16 as b3b99056 (with 610ecee, whose own run had failed on an unrelated case - "Colors: on Very High at
+rest the steam keeps rising", "the room did not come on within 60 s" on the runner; it passed locally and in this run):
+`void-prod.mjs` green (one "+" in Joey's void, the hover held through twelve nudges, the 1W·3H shelf placed with lip
+'front'; on 58a04e6f it failed, the hover swapping between a red slot and the shelf's spot on every move) and
+`stripe-spool-prod.mjs` green (a #56b4e9 spool for a Metric-striped label; on 58a04e6f six spools and no blue).
