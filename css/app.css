@@ -322,8 +322,6 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .prow .badge.club { background: transparent; color: var(--club); border: 1px solid var(--club); }
 #ws-parts .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }
 #ws-parts .link.dim { color: var(--ink-3); font-weight: 500; }
-/* the one commission line under the hardware rows (parts.js renderPanel), right-aligned under their Amazon links; .note sizes it */
-#ws-parts .rows .commission { margin: 2px 0 0; padding: 0 8px; text-align: right; }
 #ws-parts .progress { display: flex; align-items: center; gap: 8px; flex-basis: 100%; padding-left: 104px; }   /* its own line under the name: chip 14 + thumb 36 + qty 34 + three 10 px gaps */
 #ws-parts .counter { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--track); }
 #ws-parts .counter button { width: 22px; height: 22px; padding: 0; border: none; border-radius: 6px; background: var(--key-bg); color: var(--ink); cursor: pointer; font-size: 13px; line-height: 1; }
@@ -1114,7 +1112,6 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws-parts .prow:not(.trow) > .mid + *, #ws-parts .prow:not(.trow) > .mid + .progress + .link { margin-left: auto; }
   #ws-parts .prow:not(.trow) > .progress { order: 3; }   /* tracking: the counters' line comes last, so the badge and the link share theirs (Terra 01a17fae) */
   #ws-parts .thead span:last-child, #ws-parts .prow.trow > :last-child { display: none; }
-  #ws-parts .rows.table .commission { display: none; }   /* its links are the hidden column */
   /* Colors: the panel's card keeps its actions in the sheet's first screen (the render beside the name, not above it);
      the gallery is a sheet like the panel, two cards a row at phone width */
   #ws-colors .lookcard { flex-direction: row; align-items: center; gap: 12px; }

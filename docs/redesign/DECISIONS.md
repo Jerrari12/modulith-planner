@@ -5611,3 +5611,43 @@ Joey, told that the bundled fonts had no letters: "yes" (fetch them and show bef
   - The new woff2 files are served as `font/woff2`, the two OFL texts as `text/plain`, and an old file name answers
     404.
   - The phone checks (`tour-live.mjs`) are 12/12, Assemble's keys at 360 px whole in Plex Sans too.
+
+## 2026-10-27 · The Parts list says the disclosure once: one line under the hardware
+
+Joey, with a screenshot of the bottom of the Parts list: "same question as earlier about affiliate link information,
+didn't we find a way to shorten this or use it differently?" Under the hardware it read "Amazon links - I earn a small
+commission, at no extra cost to you." and then the foot: "As an Amazon Associate I earn from qualifying purchases.
+Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.
+Any equivalent hardware from any store works."
+
+- **Why it said it twice.** The 2026-10-24 entry (the paid-link suffix goes) put the commission line under every section
+  group whose hardware rows link to Amazon, and Amazon's sentence in the foot. The mount's section ends the list and has
+  Amazon hardware, so its commission line landed directly on the foot, and the two said the same thing one above the other.
+  The Colors tab and the old viewer already say it once (colors.js `disclosureFor`; main.js `paidNoteText`: "saying it twice
+  was the clutter this replaced"). No other answer to "the earlier question" was found in this file or the session
+  transcripts: the earlier question is the 2026-10-24 one.
+- **Joey picked, of three wordings:** "Go with A: one line under the hardware, the Colors rule, with the shorter Polymaker
+  sentence in Colors too."
+- **The Parts list now** (parts.js renderPanel): no separate commission line (the `p.note.commission` element and its two
+  app.css rules are gone); the foot is the one line, right under the hardware rows (the Hardware section, then the mount's,
+  end the list): "As an Amazon Associate I earn from qualifying purchases. Any equivalent hardware works.", with "Polymaker
+  links apply the JERRARI discount and earn me a small commission." between them when a "Print in" filament link is a
+  Polymaker one. About 300 characters became 85, or 160 with the Polymaker sentence.
+- **The Polymaker sentence everywhere** (colors.js `POLYMAKER_LINE`, and `BOTH_LINE` is now Amazon's sentence followed by
+  it): "Polymaker links apply the JERRARI discount and earn me a small commission." It had read "Polymaker links apply the
+  JERRARI discount for you; as a Polymaker Ambassador I earn a small commission, at no extra cost to you." (alone) and
+  "...the JERRARI discount; as a Polymaker Ambassador I earn..." (after Amazon's). Its surfaces: the picker's foot, the
+  shopping list, a look's Shop list, and the Parts foot. The old viewer's own sentences (main.js) are not changed.
+- **Unchanged:** Amazon's sentence verbatim, once on the list; the links' plain labels and `rel="noopener sponsored"`; no
+  "paid link", no "affiliate link". "at no extra cost to you" is no longer said on the Parts list.
+- **Checks.** The buy-link e2e case, in both layouts: the foot ends the list right under the last hardware group, the word
+  "commission" appears only in the foot's Polymaker sentence (no separate line), Amazon's sentence once, the foot's exact
+  shape; the picker's and the shopping list's sentences; the look Shop list case reads the Polymaker sentence. Five
+  mutants, each failing its own assertion: the commission line restored, the old Polymaker sentence, the old shopping tip,
+  the foot moved above the mount's section, the foot at the top. (The first version of the placement check asked only for
+  "a hardware group" above the foot and let the foot-above-the-mount mutant through, since Hardware is one; it now asks for
+  the last.) npm test 701: 695 pass, 5 environment skips, 1 fail - M28's timing gate in simplify.test.mjs, under 100 % CPU
+  beside the e2e runs; alone it passes (median 0.13 ms). The two touched e2e cases pass with `E2E_SOFT=1`.
+- **Review:** Terra `01a17fa7` (routine): one finding, discarded as decided - a list with Amazon links and no Polymaker
+  link now shows only Amazon's sentence, no separate plain commission sentence. That is option A's text exactly as Joey
+  picked it, and the Colors tab's rule for Amazon-only links since 2026-10-24 (Sol `01a16c4a`).

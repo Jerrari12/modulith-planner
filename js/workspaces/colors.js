@@ -69,10 +69,11 @@ export const isPolymaker = (href) => /(^|\.)shop\.polymaker\.com$/.test(hostOf(h
 /* THE DISCLOSURE WORDING (2026-10-24; the rule the old planner adopted on 2026-09-19, 591e7bb): a buy link keeps its plain label
    and rel=sponsored; ONE plain line next to the links it covers says who they go to; Amazon's sentence is its own words, verbatim
    (the Associates agreement), once per surface. Never "paid link" (Joey: "paid makes it sound like polymaker paid to put their
-   filament on here, which it's affiliate links, so nothing has been paid by anyone yet"), and never "affiliate link" alone */
+   filament on here, which it's affiliate links, so nothing has been paid by anyone yet"), and never "affiliate link" alone. The
+   Polymaker sentence is the short one Joey picked on 2026-10-27 ("didn't we find a way to shorten this"), alone or after Amazon's */
 export const AMAZON_SENTENCE = 'As an Amazon Associate I earn from qualifying purchases.';
-export const POLYMAKER_LINE = 'Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.';
-const BOTH_LINE = `${AMAZON_SENTENCE} Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.`;
+export const POLYMAKER_LINE = 'Polymaker links apply the JERRARI discount and earn me a small commission.';
+const BOTH_LINE = `${AMAZON_SENTENCE} ${POLYMAKER_LINE}`;
 const OTHER_LINE = 'I earn a small commission, at no extra cost to you.';   // a paid host that is neither program (none today)
 /* the one line for a set of links: both programs, Polymaker's, Amazon's, the plain line, or '' when every link is plain */
 export const disclosureFor = (urls) => { const amazon = urls.some(isAmazon), poly = urls.some(isPolymaker); return amazon && poly ? BOTH_LINE : poly ? POLYMAKER_LINE : amazon ? AMAZON_SENTENCE : urls.some(isPaid) ? OTHER_LINE : ''; };
@@ -525,7 +526,7 @@ export function mountColors(stage, ctx) {
       ...fc.unpicked.map((u) => el('div.frow.well.bare', {}, [el('span.sw', { style: `background:${u.hex}` }), el('div.col', {}, [el('b', { text: u.stripe ? 'Label stripe' : keyLabel(u.key) }), el('span.meta', { text: u.stripe ? `Printed in the label’s own colour, ${u.hex}` : 'No filament picked yet' })])])),
     ];
   }
-  /* the one line under the rows: Amazon's sentence, the Ambassador line, both, or nothing (disclosureFor, the wording at the top) */
+  /* the one line under the rows: Amazon's sentence, the Polymaker sentence, both, or nothing (disclosureFor, the wording at the top) */
   const disclosure = (fc) => el('span.disc', { text: disclosureFor(fc.filaments.map((f) => f.url)) });
   function renderGallery() {
     document.documentElement.classList.toggle('ws-gallery', (!!st.gallery || st.surprise) && !phone);   // the view tools step aside (app.css); Surprise me takes the gallery's spot
@@ -841,7 +842,7 @@ export function mountColors(stage, ctx) {
     const buyUrl = w ? w.url : FILAMENT_DB[0].url;
     picker.appendChild(el('div.foot', {}, [
       el('a.buy', { href: buyUrl, target: '_blank', rel: isPaid(buyUrl) ? 'noopener sponsored' : 'noopener', text: w ? `Buy ${short(w.name)} →` : 'Shop filament →', onclick: buyFilament(stage, w) }),
-      el('span.disc', { text: disclosureFor([buyUrl]) }),   // the one line right under the plain Buy: Amazon's sentence or the Ambassador line
+      el('span.disc', { text: disclosureFor([buyUrl]) }),   // the one line right under the plain Buy: Amazon's sentence or the Polymaker sentence
       el('div.resets', {}, st.scope === 'unit'
         ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]
         : [el('button.key.sm', { text: isFeet(key) ? 'Reset to TPU95 Black' : 'Reset to instruction colour', title: isFeet(key) ? 'Every foot back to PolyFlex TPU95 Black, own colours included' : `Every ${typePlural(key).replace(/s$/, '')} ${regionOf(key).toLowerCase()} back to the kit’s colour, own colours included`, disabled: isFeet(key) ? !!w && w.name === 'Polymaker PolyFlex TPU95 Black' && !own : !w && !own, onclick: () => commitColors('color', () => { stage.setColor(key, null); if (own) stage.clearOverrides(null, key); }) })]),

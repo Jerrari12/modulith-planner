@@ -122,10 +122,11 @@ const btn = (page, t, root = 'body') => page.locator(`${root} button:has-text("$
 /* the "no errors" assertion ignores what headless SwiftShader itself prints (WebGL context notes) */
 const clean = (errors) => errors.filter((e) => !/WebGL|GPU|swiftshader|GroupMarkerNotSet|setPointerCapture/i.test(e));
 const settle = (page, ms = 1200) => page.waitForTimeout(ms);
-/* the disclosure sentences (colors.js disclosureFor; 2026-10-24: plain buy labels, one line next to the links, never "paid link") */
+/* the disclosure sentences (colors.js disclosureFor; 2026-10-24: plain buy labels, one line next to the links, never "paid link";
+   2026-10-27: the short Polymaker sentence, alone or after Amazon's) */
 const AMAZON_SENTENCE = 'As an Amazon Associate I earn from qualifying purchases.';
-const POLYMAKER_LINE = 'Polymaker links apply the JERRARI discount for you; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.';
-const DISCLOSURES = [AMAZON_SENTENCE, POLYMAKER_LINE, `${AMAZON_SENTENCE} Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you.`];
+const POLYMAKER_LINE = 'Polymaker links apply the JERRARI discount and earn me a small commission.';
+const DISCLOSURES = [AMAZON_SENTENCE, POLYMAKER_LINE, `${AMAZON_SENTENCE} ${POLYMAKER_LINE}`];
 /* the text nodes under `sel` that read "null": append(null) writes the word (the look details showed one under their footer) */
 const nullText = (page, sel) => page.evaluate((sel) => { const w = document.createTreeWalker(document.querySelector(sel), NodeFilter.SHOW_TEXT); const out = []; while (w.nextNode()) if (w.currentNode.textContent.trim() === 'null') out.push(`${w.currentNode.parentElement.tagName.toLowerCase()}: ${w.currentNode.textContent}`); return out; }, sel);
 
@@ -222,14 +223,14 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   assert.deepEqual(await foot(), ['Buy Elegoo PLA Black →', 'noopener sponsored', AMAZON_SENTENCE], 'the picker\'s Amazon buy: a plain label, rel=sponsored, Amazon\'s sentence under it');
   await page.locator('#ws-picker .sw[aria-label="Panchroma Black"]').first().click();
   await click(page.locator('#ws-picker .foot a.buy', { hasText: /^Buy Black →/ }), 'the picker\'s Panchroma');
-  assert.deepEqual(await foot(), ['Buy Black →', 'noopener sponsored', POLYMAKER_LINE], 'the picker\'s Polymaker buy: a plain label, rel=sponsored, the Ambassador line under it');
+  assert.deepEqual(await foot(), ['Buy Black →', 'noopener sponsored', POLYMAKER_LINE], 'the picker\'s Polymaker buy: a plain label, rel=sponsored, the Polymaker sentence under it');
   // the Dock's filament stack: the shopping list, one Buy per filament
   await page.locator('#ws-picker button[aria-label="Close the picker"]').click();
   await page.locator('#ws-dock .status.stack').click();
   await click(page.locator('#ws-shop .frow').filter({ has: page.locator('b', { hasText: /^Panchroma Black$/ }) }).locator('a.link'), 'the shopping list\'s');
   const shop = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-shop .frow a.link')].map((a) => a.textContent), disc: document.querySelector('#ws-shop .disc').textContent }));
   assert.ok(shop.buys.length && shop.buys.every((t) => t === 'Buy ↗'), `the shopping list's Buy labels are plain: ${shop.buys.join(', ')}`);
-  assert.ok(DISCLOSURES.includes(shop.disc) && /Polymaker Ambassador/.test(shop.disc), `the shopping list's one line is a disclosure sentence naming Polymaker (the Case is Panchroma Black): "${shop.disc}"`);
+  assert.ok(DISCLOSURES.includes(shop.disc) && shop.disc.includes(POLYMAKER_LINE), `the shopping list's one line is a disclosure sentence naming Polymaker (the Case is Panchroma Black): "${shop.disc}"`);
   assert.deepEqual(await nullText(page, '#ws-shop'), [], 'nothing reads "null" in the shopping list');
   // the Parts list: the Case row's filament name (shortened to "Black"), then the hardware's Amazon link, in both layouts
   await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
@@ -239,26 +240,28 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   const hw = page.locator('#ws-parts .prow').filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first();
   await click(hw, 'the Parts list\'s hardware');
   // the Amazon link carries rel=sponsored under a PLAIN label (the "· paid link" mark of 2026-10-21 went on 2026-10-24: Joey read
-  // "paid" as a brand paying to be listed); ONE commission line sits right under the hardware rows, in both layouts, the foot
-  // carries Amazon's own sentence once, and nothing on the list says "paid link"; a download-site link stays plain
+  // "paid" as a brand paying to be listed); since 2026-10-27 the list says it ONCE: the foot, right under the last hardware rows
+  // (the mount's section ends the list), is the one line - Amazon's own sentence, the short Polymaker sentence when a "Print in"
+  // link is Polymaker's, the shopping tip - with no separate commission line above it; nothing says "paid link"; a download-site
+  // link stays plain
   const marks = (row) => Promise.all([page.locator(`#ws-parts ${row}`).filter({ has: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first(),
     page.locator(`#ws-parts ${row}`).filter({ hasNot: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first()].map((l) => l.evaluate((a) => [a.rel, a.textContent, a.title, a.children.length])));
   const plainLink = (m) => m[0] === 'noopener' && !/paid/i.test(m[1] + m[2]) && m[3] === 0;
   const disclosure = () => page.evaluate(() => {
     const groups = [...document.querySelectorAll('#ws-parts .rows')];
     const hw = groups.filter((g) => [...g.querySelectorAll('.badge')].some((b) => b.textContent === 'BUY'));
-    const list = document.querySelector('#ws-parts').textContent;
-    return { hwGroups: hw.length, lastOfHw: [...new Set(hw.map((g) => `${g.lastElementChild.className}: ${g.lastElementChild.textContent}`))], linesElsewhere: groups.filter((g) => !hw.includes(g) && g.querySelector('.commission')).length,
-      amazonSentences: (list.match(/As an Amazon Associate I earn from qualifying purchases\./g) || []).length, paid: /paid link/i.test(list), foot: document.querySelector('#ws-parts .foot').textContent };
+    const list = document.querySelector('#ws-parts').textContent, foot = document.querySelector('#ws-parts .foot');
+    return { hwGroups: hw.length, afterHw: foot === foot.parentElement.lastElementChild && foot.previousElementSibling === hw[hw.length - 1], commission: (list.match(/commission/g) || []).length,
+      amazonSentences: (list.match(/As an Amazon Associate I earn from qualifying purchases\./g) || []).length, paid: /paid link/i.test(list), foot: foot.textContent };
   });
   const checkDisclosure = async (layout) => {
     const d = await disclosure();
     assert.ok(d.hwGroups >= 1, `${layout}: a hardware group`);
-    assert.deepEqual(d.lastOfHw, ['note commission: Amazon links - I earn a small commission, at no extra cost to you.'], `${layout}: the one commission line, last under the hardware rows`);
-    assert.equal(d.linesElsewhere, 0, `${layout}: no other group carries one`);
+    assert.ok(d.afterHw, `${layout}: the foot ends the list, right under the last hardware group`);
+    assert.equal(d.commission, /Polymaker/.test(d.foot) ? 1 : 0, `${layout}: "commission" only in the foot's Polymaker sentence (no separate commission line): ${d.commission}`);
     assert.equal(d.amazonSentences, 1, `${layout}: Amazon's sentence once, in the foot`);
     assert.ok(!d.paid, `${layout}: nothing says "paid link"`);
-    assert.match(d.foot, /^As an Amazon Associate I earn from qualifying purchases\. (Polymaker links apply the JERRARI discount; as a Polymaker Ambassador I earn a small commission, at no extra cost to you\. )?Any equivalent hardware from any store works\.$/, `${layout}: the foot`);
+    assert.match(d.foot, /^As an Amazon Associate I earn from qualifying purchases\. (Polymaker links apply the JERRARI discount and earn me a small commission\. )?Any equivalent hardware works\.$/, `${layout}: the foot`);
   };
   const narrow = await marks('.prow');
   assert.deepEqual(narrow[0], ['noopener sponsored', 'Amazon ↗', '', 0], 'the narrow list\'s Amazon link: rel=sponsored, a plain label');
@@ -5385,7 +5388,7 @@ test('Colors: the Dock and a preset\'s Shop list count what this build prints - 
   // look without a translucent filament (Joey saw it live)
   const detail = await page.evaluate(() => ({ buys: [...document.querySelectorAll('#ws-gallery .frow a.link')].map((a) => `${a.textContent}|${a.rel}`), disc: document.querySelector('#ws-gallery .disc').textContent, notes: [...document.querySelectorAll('#ws-gallery p.note')].map((p) => p.textContent) }));
   assert.ok(detail.buys.length && detail.buys.every((b) => b === 'Buy ↗|noopener sponsored'), `plain Buy labels, rel=sponsored: ${detail.buys.join(', ')}`);
-  assert.equal(detail.disc, POLYMAKER_LINE, 'the Shop list\'s one line is the Ambassador sentence');
+  assert.equal(detail.disc, POLYMAKER_LINE, 'the Shop list\'s one line is the Polymaker sentence');
   assert.equal(detail.notes.length, 2, `two notes under the rows: ${detail.notes.join(' | ')}`);
   assert.match(detail.notes[0], /^Colours on screen are approximate, and the look card is drawn without shadows; the Day Grid plate shows them truest\.$/);
   assert.match(detail.notes[1], /^Looks only: whether a filament suits a part \(strength, heat, flex\) is a separate question\.$/);
