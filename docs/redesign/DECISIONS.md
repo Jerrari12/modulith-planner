@@ -5989,3 +5989,9 @@ the deploy, so the Lab never pins a finish that is not live; the Lab's own pane 
 unchanged.
 
 Reviews: Sol 01a182f6 (design), Sol 01a18343 (code: the bevel seam, the studio scale split from the light, the debug rebuild hook dropped). Tests: unit 720 pass; the silk and look-card e2e cases pass on the GPU and under E2E_SOFT (the soft Colors run: 29 passed, 2 skipped, the look-card case failed until its rewrite above and passes since). Shots: `D:\Claude - Output\silk-finish-2026-10-28` (`shoot.mjs`, `tune.mjs`).
+
+Live 2026-10-28 13:03 as 06aadeb3: `silk-prod.mjs` green on Fast and Very High - a Silk Gold pick gives the live material
+roughness 0.2, metalness 0.75, anisotropy 0.4, the SILK_SHEEN and SILK_ENV defines and the studio reflection; a Panchroma
+Yellow pick takes every one away on the same material; the tier strengths read 1 / 0.3 on Fast and 6 / 1 on Very High. The
+same check failed on 53c2a639, before the deploy. The Lab's re-vendor is still owed (its drift gate's upstream is the old
+viewer checkout, which stopped at the 2026-10-21 catalog).
