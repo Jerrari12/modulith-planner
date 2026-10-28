@@ -47,7 +47,28 @@
 export const SKIN_MAP = Object.freeze({
   pxPerMm: 8, crownMm: 0.06, zToleranceMm: Object.freeze([0.25, 0.45]), strength: 1,
   atlasPx: Object.freeze([2048, 4096]), slots: 64, gutterPx: 4, minScale: 0.35,
+  /* THE FIRST LAYER AS VECTORS (2026-10-28): the table's columns grow from 2 to 7 (see firstRows); firstCrownMm is the
+     squashed first-layer bead's relief, a cosine across one line pitch - judged by eye on the EdgeLabel accent's close-up
+     (D:\Claude - Output\vector-skin-2026-10-28), lower than a top skin's 0.06 because the bed flattens it */
+  tableCols: 7, firstCrownMm: 0.03,
+  /* an island's own line family, per pixel of the first layer's field (D:/MODULITH/ops/slicing/skin_vector.py version 2):
+     B = its phase as a fraction of its spacing in 1/256, A = its spacing as islandSpacingLo + A * islandSpacingStep mm,
+     A = 0 where no island family was fitted (the table's layer-wide family is drawn there) */
+  islandSpacingLo: 0.2, islandSpacingStep: 0.0015,
 });
+
+/** The spacing an island's A byte names (0 = none). */
+export const islandSpacing = (a) => (a > 0 ? SKIN_MAP.islandSpacingLo + a * SKIN_MAP.islandSpacingStep : 0);
+/**
+ * An island's phase byte carried from the G-code frame into the part frame: the phase moves by dot(n_g, c) (`shift`, as
+ * lineFamilyInPart moves the layer's), taken as a fraction of the island's own spacing.
+ */
+export function islandPhaseByte(phaseByte, spacingByte, shift) {
+  const s = islandSpacing(spacingByte);
+  if (!s) return 0;
+  const f = (((phaseByte / 256) * s - shift) / s) % 1;
+  return Math.round((f < 0 ? f + 1 : f) * 256) % 256;
+}
 
 /** The cache-key suffix a patched material adds, exported so a test can read it. */
 export const SKIN_MAP_KEY = '|sm1';
@@ -86,6 +107,67 @@ const FRAG_COMMON = [
   'uniform sampler2D uSMTable;',
   'varying float vSkinId;',
 ].join('\n');
+/* THE FIRST LAYER, AS VECTORS (2026-10-28; Joey: the face-down accents on the smooth sheet looked "way too perfect", then,
+   of the 8 px/mm maps, "is there a way to produce the texture as vectors?"). On a bed-contact face, where the plate is
+   smooth (a powder coat's grain prints over the beads), the first layer's beads are DRAWN, not looked up: the infill from
+   its one line family (a bead's centre where dot(n, q) - phase is a multiple of the spacing), the perimeter loops from a
+   distance field to the layer's outline (bands at the slicer's own distances), each bead a cosine of firstCrownMm across
+   its pitch. Exact at any zoom; each fades out before its pitch reaches two screen pixels, so it never aliases. The field
+   is read at mip 0 (bilinear: a distance interpolates exactly where a picture would blur) and its direction from two
+   half-texel taps, so nothing here needs a derivative inside the per-fragment branch. */
+const FIRST_BLOCK = [
+  '  if ( vSkinId > 0.5 && gBFContact > 0.0 ) {',
+  '    int idF = int( vSkinId + 0.5 ) - 1;',
+  '    vec4 rF = texelFetch( uSMTable, ivec2( 2, idF ), 0 );',    // the field's atlas rectangle
+  '    vec4 fF = texelFetch( uSMTable, ivec2( 3, idF ), 0 );',    // q0.x, q0.y, atlas px per mm, mm per level
+  '    vec2 pxF = ( qSM - fF.xy ) * fF.z;',
+  '    float wF = gBFContact * ( 1.0 - clamp( uPC, 0.0, 1.0 ) );',
+  '    if ( wF > 0.0 && fF.z > 0.0 && pxF.x >= 0.0 && pxF.y >= 0.0 && pxF.x < rF.z && pxF.y < rF.w ) {',
+  '      vec4 gF = texelFetch( uSMTable, ivec2( 4, idF ), 0 );',  // n.x, n.y, spacing, phase
+  '      vec4 bF = texelFetch( uSMTable, ivec2( 5, idF ), 0 );',  // perimeter band distances (0 = none)
+  '      vec4 eF = texelFetch( uSMTable, ivec2( 6, idF ), 0 );',  // ring width, crown
+  /* one texel in from the rectangle's edge, so the central taps below stay inside it (Sol 01a183fd) */
+  '      vec2 cF = rF.xy + clamp( pxF, vec2( 1.0 ), rF.zw - 1.0 );',
+  '      float sF = 255.0 * fF.w;',
+  '      float dF = textureLod( uSMAtlas, cF / uSMAtlasPx, 0.0 ).r * sF - 1.0;',
+  /* the outline's direction from CENTRAL differences a texel across (one-sided taps leaned on curves and corners) */
+  '      vec2 gF2 = vec2( textureLod( uSMAtlas, ( cF + vec2( 0.5, 0.0 ) ) / uSMAtlasPx, 0.0 ).r - textureLod( uSMAtlas, ( cF - vec2( 0.5, 0.0 ) ) / uSMAtlasPx, 0.0 ).r,',
+  '                       textureLod( uSMAtlas, ( cF + vec2( 0.0, 0.5 ) ) / uSMAtlasPx, 0.0 ).r - textureLod( uSMAtlas, ( cF - vec2( 0.0, 0.5 ) ) / uSMAtlasPx, 0.0 ).r );',
+  '      float fq = max( length( dqxSM ), length( dqySM ) );',      // mm a screen pixel spans
+  '      vec2 slF = vec2( 0.0 );',
+  '      if ( dF > 0.0 ) {',
+  '        float lastF = max( max( bF.x, bF.y ), max( bF.z, bF.w ) );',
+  '        if ( lastF > 0.0 && dF < lastF + 0.5 * eF.x ) {',
+  /* a perimeter: the nearest band's bead, across the outline (the field's gradient points inward) */
+  '          float bn = bF.x;',
+  '          if ( bF.y > 0.0 && abs( dF - bF.y ) < abs( dF - bn ) ) bn = bF.y;',
+  '          if ( bF.z > 0.0 && abs( dF - bF.z ) < abs( dF - bn ) ) bn = bF.z;',
+  '          if ( bF.w > 0.0 && abs( dF - bF.w ) < abs( dF - bn ) ) bn = bF.w;',
+  '          float up = clamp( ( dF - bn ) / eF.x, -0.5, 0.5 );',
+  '          float aR = 1.0 - smoothstep( 0.25, 0.5, fq / eF.x );',
+  '          float lg = length( gF2 );',
+  '          if ( lg > 1e-6 ) slF = ( eF.y * PI * sin( 6.2831853 * up ) / eF.x ) * ( gF2 / lg ) * aR;',
+  '        } else if ( gF.z > 0.0 ) {',
+  /* the infill: h = crown / 2 cos( 2 pi u ), u = ( n . q - phase ) / spacing; the slope is -grad h. The island's own phase and
+     spacing where the field names one (B, A, read unfiltered: a family is never interpolated), else the layer's */
+  '          vec4 tIF = texelFetch( uSMAtlas, ivec2( rF.xy + floor( clamp( pxF, vec2( 0.0 ), rF.zw - 1.0 ) ) ), 0 );',
+  '          float spF = gF.z, phF = gF.w;',
+  `          if ( tIF.a > 0.0 ) { spF = ${SKIN_MAP.islandSpacingLo.toFixed(4)} + tIF.a * 255.0 * ${SKIN_MAP.islandSpacingStep.toFixed(6)}; phF = tIF.b * 255.0 / 256.0 * spF; }`,
+  /* a part whose islands carry their own families leaves an island with none plain, rather than lay the layer's lines on
+     it out of phase (Sol 01a183fd) */
+  '          else if ( eF.z > 0.5 ) spF = 0.0;',
+  '          if ( spF > 0.0 ) {',
+  '          float u = ( dot( qSM, gF.xy ) - phF ) / spF;',
+  '          float aI = 1.0 - smoothstep( 0.25, 0.5, fq / spF );',
+  '          slF = ( eF.y * PI * sin( 6.2831853 * u ) / spF ) * gF.xy * aI;',
+  '          }',
+  '        }',
+  '      }',
+  '      normal = normalize( normal + ( normalize( vPCT1 ) * slF.x + normalize( vPCT2 ) * slF.y ) * wF );',
+  '    }',
+  '  }',
+].join('\n');
+
 const FRAG_MAIN = [
   'if ( uSMOn > 0.5 && uLLOn > 0.5 ) {',
   /* the frame and its screen-space derivatives in the UNIFORM branch, so textureGrad below is defined on every pixel of
@@ -115,6 +197,7 @@ const FRAG_MAIN = [
   '      if ( wSM > 0.0 ) normal = normalize( normal + ( normalize( vPCT1 ) * slSM.x + normalize( vPCT2 ) * slSM.y ) * wSM );',
   '    }',
   '  }',
+  FIRST_BLOCK,
   '}',
 ].join('\n');
 
@@ -208,6 +291,31 @@ export function resampleMap(src, w, h, dw, dh) {
 /** The table's two texels for a slot: [rect x, y, w, h] and [q0.x, q0.y, atlas px per part mm, 0]. */
 export function tableRows(rect, frame, scale) {
   return [[rect.x, rect.y, rect.w, rect.h], [frame.q0[0], frame.q0[1], frame.pxPerMm * scale, 0]];
+}
+
+/**
+ * A first layer's line family carried from the G-code's XY frame into the part's bed-plane frame q, where g = A q + c
+ * (tools/skin-map.mjs sliceFrame: A's columns are the sliced images of the two tangents). In G-code a bead's centre lies
+ * where dot(n_g, g) - phase_g is a multiple of the spacing, n_g = (-sin angle, cos angle); since dot(n_g, g) =
+ * dot(A^T n_g, q) + dot(n_g, c), in q the normal is A^T n_g and the phase moves by dot(n_g, c).
+ */
+export function lineFamilyInPart({ angleDeg, spacingMm, phaseMm }, A, c) {
+  const th = angleDeg * Math.PI / 180, ng = [-Math.sin(th), Math.cos(th)];
+  const n = [ng[0] * A[0][0] + ng[1] * A[0][1], ng[0] * A[1][0] + ng[1] * A[1][1]];
+  const s = spacingMm, phase = (((phaseMm - (ng[0] * c[0] + ng[1] * c[1])) % s) + s) % s;
+  return { n, spacing: s, phase };
+}
+
+/**
+ * The first layer's five texels (columns 2-6) for a slot, from its index entry `first` (tools/skin-map.mjs vector) and
+ * its distance field's atlas rectangle: [rect], [q0.x, q0.y, atlas px per mm, mm per level], [n.x, n.y, spacing, phase],
+ * [up to four perimeter band distances, 0 = none], [ring width, crown, 1 when the islands carry their own families (an island without one is then left plain), 0]. All zero when the node has no first layer.
+ */
+export function firstRows(rect, first, scale) {
+  if (!rect || !first) return [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  const b = [...(first.bands || []), 0, 0, 0, 0].slice(0, 4);
+  return [[rect.x, rect.y, rect.w, rect.h], [first.q0[0], first.q0[1], first.pxPerMm * scale, first.sdfStepMm],
+    [first.n[0], first.n[1], first.spacing, first.phase], b, [first.ringWidth, SKIN_MAP.firstCrownMm, first.islands > 0 ? 1 : 0, 0]];
 }
 
 /* ---- PNG, 8-bit, non-interlaced: the one shape the bake writes ------------------------------

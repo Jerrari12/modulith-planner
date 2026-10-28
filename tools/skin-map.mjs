@@ -240,6 +240,43 @@ async function push() {
   }
 }
 
+/* ---- the slice frame, shared by ship and vector ---- */
+/* The part's bed-plane frame in the G-code: g.xy = A q + c, re-measured from the STL and the GLB rather than trusted from
+   the plan. Returns { A, c, slack } or { skip, slack? }. */
+async function sliceFrame(job, raw) {
+  const glb = await readGlbTriangles(glbPathOf(job.node));
+  const stl = readStlTriangles(join(CORPUS, job.stl));
+  const m = matchRotation(glb, stl, job.axis);
+  if (m.error || m.ambiguous) return { skip: 'the frame no longer matches: ' + (m.error || 'ambiguous') };
+  /* the slicer saw the STL as it is (helper disks included), turned by rotate_x and centred on the bed by ITS
+     bounding box, then dropped to z 0: sliced = Rx (R p + t); g = sliced - centre(Rx stl bbox) + bedCentre */
+  const Rx = RX(job.rotate_x), S = matMul(Rx, m.R);                 // authored -> sliced orientation
+  const stlR = new Float64Array(stl.positions.length);
+  for (let i = 0; i < stlR.length; i += 3) { const v = rotate(Rx, [stl.positions[i], stl.positions[i + 1], stl.positions[i + 2]]); stlR[i] = v[0]; stlR[i + 1] = v[1]; stlR[i + 2] = v[2]; }
+  const bStl = bounds(stlR);
+  const centre = [(bStl.lo[0] + bStl.hi[0]) / 2, (bStl.lo[1] + bStl.hi[1]) / 2];
+  const off = [raw.bed_centre_mm[0] - centre[0], raw.bed_centre_mm[1] - centre[1]];
+  /* the GLB's own outline on the bed, predicted, against the G-code's extrusion above the first millimetre (the
+     helper disks lie below it, outside the GLB) */
+  const sp = new Float64Array(glb.positions.length);
+  const tR = rotate(Rx, m.t);
+  for (let i = 0; i < sp.length; i += 3) { const v = rotate(S, [glb.positions[i], glb.positions[i + 1], glb.positions[i + 2]]); sp[i] = v[0] + tR[0] + off[0]; sp[i + 1] = v[1] + tR[1] + off[1]; sp[i + 2] = v[2]; }
+  const b = bounds(sp);
+  const predicted = [b.lo[0], b.lo[1], b.hi[0], b.hi[1]];
+  /* against the extrusion above the first millimetre (a case's helper disks lie below it) OR the whole extrusion (a
+     wall bracket is a thin plate with one rib above 1 mm): a wrong frame matches neither */
+  const slackOf = (ext) => (ext && Number.isFinite(ext[0])) ? Math.max(...[0, 1, 2, 3].map((k) => Math.abs(predicted[k] - ext[k]))) : Infinity;
+  const slack = Math.min(slackOf(raw.gcode_extents_above_mm), slackOf(raw.gcode_extents_mm));
+  const ext = slackOf(raw.gcode_extents_above_mm) <= slackOf(raw.gcode_extents_mm) ? raw.gcode_extents_above_mm : raw.gcode_extents_mm;
+  if (slack > 1.0) return { slack, skip: `the predicted placement misses the G-code's extents by ${slack.toFixed(2)} mm (predicted ${predicted.map((v) => v.toFixed(2))}, g-code ${ext.map((v) => v.toFixed(2))})` };
+  /* the part's bed-plane frame: q = (p . s1, p . s2); g.xy = A q + c, A the sliced images of s1 and s2 (the axis part
+     of p reaches only g.z, since S maps the axis onto +-Z), c the sliced translation plus the centring */
+  const [s1, s2] = SM.skinTangents(job.axis);
+  const A = [rotate(S, s1), rotate(S, s2)].map((v) => [v[0], v[1]]);   // columns: A[0] = image of s1, A[1] = image of s2 (x,y)
+  const c = [tR[0] + off[0], tR[1] + off[1]];
+  return { A, c, slack };
+}
+
 /* ---- ship: the raw bake into the part frame ---- */
 async function ship() {
   const RAW = opt('--raw', join(OUT, 'raw'));
@@ -262,38 +299,10 @@ async function ship() {
     const raw = JSON.parse(readFileSync(jsonPath, 'utf8'));
     if (raw.failed) { row.skip = 'the bake failed: ' + raw.error; continue; }
     if (raw.stl_sha256 !== job.sha256 || raw.rotate_x_deg !== job.rotate_x) { row.skip = 'the raw bake is for another STL or rotation'; continue; }
-    /* the slice frame from the STL and the GLB, re-measured here rather than trusted from the plan */
-    const glb = await readGlbTriangles(glbPathOf(job.node));
-    const stl = readStlTriangles(join(CORPUS, job.stl));
-    const m = matchRotation(glb, stl, job.axis);
-    if (m.error || m.ambiguous) { row.skip = 'the frame no longer matches: ' + (m.error || 'ambiguous'); continue; }
-    /* the slicer saw the STL as it is (helper disks included), turned by rotate_x and centred on the bed by ITS
-       bounding box, then dropped to z 0: sliced = Rx (R p + t); g = sliced - centre(Rx stl bbox) + bedCentre */
-    const Rx = RX(job.rotate_x), S = matMul(Rx, m.R);                 // authored -> sliced orientation
-    const stlR = new Float64Array(stl.positions.length);
-    for (let i = 0; i < stlR.length; i += 3) { const v = rotate(Rx, [stl.positions[i], stl.positions[i + 1], stl.positions[i + 2]]); stlR[i] = v[0]; stlR[i + 1] = v[1]; stlR[i + 2] = v[2]; }
-    const bStl = bounds(stlR);
-    const centre = [(bStl.lo[0] + bStl.hi[0]) / 2, (bStl.lo[1] + bStl.hi[1]) / 2];
-    const off = [raw.bed_centre_mm[0] - centre[0], raw.bed_centre_mm[1] - centre[1]];
-    /* the GLB's own outline on the bed, predicted, against the G-code's extrusion above the first millimetre (the
-       helper disks lie below it, outside the GLB) */
-    const sp = new Float64Array(glb.positions.length);
-    const tR = rotate(Rx, m.t);
-    for (let i = 0; i < sp.length; i += 3) { const v = rotate(S, [glb.positions[i], glb.positions[i + 1], glb.positions[i + 2]]); sp[i] = v[0] + tR[0] + off[0]; sp[i + 1] = v[1] + tR[1] + off[1]; sp[i + 2] = v[2]; }
-    const b = bounds(sp);
-    const predicted = [b.lo[0], b.lo[1], b.hi[0], b.hi[1]];
-    /* against the extrusion above the first millimetre (a case's helper disks lie below it) OR the whole extrusion (a
-       wall bracket is a thin plate with one rib above 1 mm): a wrong frame matches neither */
-    const slackOf = (ext) => (ext && Number.isFinite(ext[0])) ? Math.max(...[0, 1, 2, 3].map((k) => Math.abs(predicted[k] - ext[k]))) : Infinity;
-    const slack = Math.min(slackOf(raw.gcode_extents_above_mm), slackOf(raw.gcode_extents_mm));
-    const ext = slackOf(raw.gcode_extents_above_mm) <= slackOf(raw.gcode_extents_mm) ? raw.gcode_extents_above_mm : raw.gcode_extents_mm;
-    row.extentSlack = +slack.toFixed(3);
-    if (slack > 1.0) { row.skip = `the predicted placement misses the G-code's extents by ${slack.toFixed(2)} mm (predicted ${predicted.map((v) => v.toFixed(2))}, g-code ${ext.map((v) => v.toFixed(2))})`; continue; }
-    /* the part's bed-plane frame: q = (p . s1, p . s2); g.xy = A q + c, A the sliced images of s1 and s2 (the axis part
-       of p reaches only g.z, since S maps the axis onto +-Z), c the sliced translation plus the centring */
-    const [s1, s2] = SM.skinTangents(job.axis);
-    const A = [rotate(S, s1), rotate(S, s2)].map((v) => [v[0], v[1]]);   // columns: A[0] = image of s1, A[1] = image of s2 (x,y)
-    const c = [tR[0] + off[0], tR[1] + off[1]];
+    const fr = await sliceFrame(job, raw);
+    row.extentSlack = fr.slack != null ? +fr.slack.toFixed(3) : undefined;
+    if (fr.skip) { row.skip = fr.skip; continue; }
+    const { A, c } = fr;
     const rgbaRaw = (await SM.decodePng(readFileSync(join(RAW, key + '.png')), (b) => inflateSync(b))).data;
     const [W, H] = raw.size_px, px = raw.px_per_mm;
     const [x0, y0] = raw.bounds_mm;
@@ -381,8 +390,100 @@ ${rows.length} maps checked; ${weak.length} weak (agree under 80 %) -> ${join(OU
   for (const r of weak) console.log(`  weak ${r.node}: agree ${(r.rate * 100).toFixed(1)} %, control ${(r.control * 100).toFixed(1)} %`);
 }
 
+/* ---- vector: the first layer, as numbers and a distance field (2026-10-28) ---- */
+/* Joey 2026-10-28: a part printed face down on the smooth sheet still shows its first layer's beads, and the baked maps'
+   8 px/mm went soft up close - "is there a way to produce the texture as vectors?". The first layer's solid infill is
+   ONE family of parallel lines on one grid (angle, spacing, phase - fitted from the G-code by
+   D:/MODULITH/ops/slicing/skin_vector.py, every line within 0.05 mm on the parts tried), so the shader draws every bead
+   from three numbers; the perimeter loops follow the outline, so they come from a distance field to it, which stays
+   crisp when magnified because distances interpolate where pictures blur. This carries the raw extraction (G-code
+   frame) into the part frame with the frame ship measures, and adds `first` to the node's index entry:
+     file      <node>.first.png  R = signed distance to the first layer's outline, (mm + 1) / SDF_STEP, 8 bits
+     q0, pxPerMm, size           the field's frame, as a map's
+     n, spacing, phase           the infill family in q: a bead's centre where dot(n, q) - phase is a multiple of spacing
+     width, bands, ringWidth     the infill bead width, the perimeter centres' distances from the outline, their width */
+const SDF_STEP = 0.0125;          // mm a level: 255 levels span -1 .. +2.19 mm, past every perimeter band
+const FIRST_FIT_MIN = 0.85;     // the line-weighted share of first-layer lines on their island's grid within 0.05 mm, to ship
+async function vector() {
+  const RAW = opt('--raw', join(OUT, 'raw'));
+  const VRAW = opt('--vraw', null);
+  if (!VRAW) throw new Error('vector needs --vraw <dir> holding <key>.first.json and <key>.first-sdf.png');
+  const plan = JSON.parse(readFileSync(join(OUT, 'jobs.json'), 'utf8'));
+  const dest = DEST || join(root, 'parts', 'skin');
+  mkdirSync(dest, { recursive: true });
+  const index = existsSync(join(dest, 'index.json')) ? JSON.parse(readFileSync(join(dest, 'index.json'), 'utf8')) : { version: 1, pxPerMm: SM.SKIN_MAP.pxPerMm, nodes: {} };
+  const report = [];
+  for (const job of plan.jobs) {
+    if (ONLY && !ONLY.has(job.node)) continue;
+    if (MATCH && !job.node.includes(MATCH)) continue;
+    if (FAMILIES && !FAMILIES.some((f) => job.node.startsWith(f))) continue;
+    const key = `${job.sha256.slice(0, 16)}-rx${job.rotate_x}-px${SM.SKIN_MAP.pxPerMm}`;
+    const row = { node: job.node, key };
+    report.push(row);
+    const rawPath = join(RAW, key + '.json'), vPath = join(VRAW, key + '.first.json');
+    if (!existsSync(rawPath) || !existsSync(vPath)) { row.skip = 'no raw bake or no first-layer extraction'; continue; }
+    if (!index.nodes[job.node]) { row.skip = 'the node has no shipped top map to ride with'; continue; }
+    const raw = JSON.parse(readFileSync(rawPath, 'utf8')), v = JSON.parse(readFileSync(vPath, 'utf8'));
+    if (raw.failed || v.failed) { row.skip = 'the bake or the extraction failed'; continue; }
+    if (v.key !== key) { row.skip = 'the extraction is for another bake'; continue; }
+    /* the islands' families (skin_vector.py version 2): an island's own phase and spacing, the line-weighted fit over them */
+    /* 0.85: the EdgeLabel 1W-1H faceplate, in the 185 2W-2H kit, fits 0.895; every line still lies on the drawn grid within
+       0.05 mm for 85 % or more of the layer */
+    if (!v.family || !(v.islandFit >= FIRST_FIT_MIN)) { row.skip = `the first layer's islands are not line families (fit ${v.islandFit})`; continue; }
+    /* the 8-bit field saturates at -1 + 255 * SDF_STEP mm: past the last perimeter band's outer edge it must still be
+       distinct, or the interior reads as a ring with no direction and draws nothing (Sol 01a183fd) */
+    const ringEdge = Math.max(0, ...v.bands) + v.ringWidth / 2 + 0.1;
+    if (ringEdge >= -1 + 255 * SDF_STEP) { row.skip = `the perimeters reach ${ringEdge.toFixed(2)} mm, past the field's range`; continue; }
+    const fr = await sliceFrame(job, raw);
+    if (fr.skip) { row.skip = fr.skip; continue; }
+    const { A, c } = fr;
+    const src = (await SM.decodePng(readFileSync(join(VRAW, key + '.first-sdf.png')), (b) => inflateSync(b))).data;
+    const [W, H] = v.size, px = v.px, [x0, y0] = v.bounds;
+    const dAt = (col, rowi) => { const s = (rowi * W + col) * 4; return (src[s] * 256 + src[s + 1]) / 1000 - 2; };   // the extraction's 16-bit field
+    /* an island's family moves into the part frame like the layer's: same angle, so its phase shifts by the same dot(n_g, c),
+       as a fraction of its own spacing (js/skin-map.js islandPhaseByte, pinned by test/skin-map.test.mjs) */
+    const th = v.family.angleDeg * Math.PI / 180, nc = -Math.sin(th) * c[0] + Math.cos(th) * c[1];
+    const toQ = (gx, gy) => { const dx = gx - c[0], dy = gy - c[1]; return [A[0][0] * dx + A[0][1] * dy, A[1][0] * dx + A[1][1] * dy]; };
+    const corners = [[x0, y0], [x0 + W / px, y0], [x0, y0 + H / px], [x0 + W / px, y0 + H / px]].map(([gx, gy]) => toQ(gx, gy));
+    const q0 = [Math.min(...corners.map((p) => p[0])), Math.min(...corners.map((p) => p[1]))];
+    const q1 = [Math.max(...corners.map((p) => p[0])), Math.max(...corners.map((p) => p[1]))];
+    const OW = Math.round((q1[0] - q0[0]) * px), OH = Math.round((q1[1] - q0[1]) * px);
+    const out = new Uint8Array(OW * OH * 4);
+    for (let j = 0; j < OH; j++) for (let i = 0; i < OW; i++) {
+      const qx = q0[0] + (i + 0.5) / px, qy = q0[1] + (j + 0.5) / px;
+      const gx = A[0][0] * qx + A[1][0] * qy + c[0], gy = A[0][1] * qx + A[1][1] * qy + c[1];
+      const col = Math.round((gx - x0) * px - 0.5), rowi = Math.round((gy - y0) * px - 0.5);   // A is a signed permutation: grid onto grid
+      const inside = !(col < 0 || col >= W || rowi < 0 || rowi >= H);
+      const d = inside ? dAt(col, rowi) : -1;
+      const o = (j * OW + i) * 4;
+      /* R the field; G unused (flat 128 - resampleMap box-averages R and G); B, A the island's phase and spacing bytes,
+         which resampleMap takes from the nearest texel, never averaged */
+      out[o] = Math.max(0, Math.min(255, Math.round((d + 1) / SDF_STEP))); out[o + 1] = 128;
+      const s = inside ? (rowi * W + col) * 4 : -1;
+      out[o + 2] = s >= 0 && src[s + 3] ? SM.islandPhaseByte(src[s + 2], src[s + 3], nc) : 0;
+      out[o + 3] = s >= 0 ? src[s + 3] : 0;
+    }
+    /* the line family in the part frame (js/skin-map.js lineFamilyInPart, pinned by test/skin-map.test.mjs) */
+    const { n: nq, spacing: sp, phase } = SM.lineFamilyInPart(v.family, A, c);
+    const png = SM.encodePng(out, OW, OH, (b) => deflateSync(b, { level: 9 }));
+    writeFileSync(join(dest, job.node + '.first.png'), png);
+    index.nodes[job.node].first = {
+      file: job.node + '.first.png', size: [OW, OH], q0: [+q0[0].toFixed(4), +q0[1].toFixed(4)], pxPerMm: px, sdfStepMm: SDF_STEP,
+      n: [+nq[0].toFixed(6), +nq[1].toFixed(6)], spacing: +sp.toFixed(5), phase: +phase.toFixed(5), width: +v.family.width.toFixed(4),
+      bands: v.bands, ringWidth: v.ringWidth, fit: v.family.fit, islands: v.islands, islandFit: v.islandFit, extractVersion: v.version, pngSha256: sha256(png), bytes: png.length,
+    };
+    row.size = [OW, OH]; row.bytes = png.length; row.bands = v.bands;
+    console.log(`  ${job.node.padEnd(36)} first ${OW}x${OH}  ${(png.length / 1024).toFixed(0)} KB  ${v.family.angleDeg.toFixed(1)} deg  ${sp.toFixed(3)} mm  bands ${v.bands}`);
+  }
+  writeFileSync(join(dest, 'index.json'), JSON.stringify(index, null, 1));
+  writeFileSync(join(OUT, 'vector-report.json'), JSON.stringify(report, null, 1));
+  const n = report.filter((r) => !r.skip).length;
+  console.log(`vector: ${n} shipped, ${report.length - n} skipped -> ${dest}`);
+}
+
 if (cmd === 'plan') await plan();
 else if (cmd === 'push') await push();
 else if (cmd === 'ship') await ship();
+else if (cmd === 'vector') await vector();
 else if (cmd === 'check') await check();
 else { console.error('usage: node tools/skin-map.mjs plan|push|ship|check [options]'); process.exit(2); }

@@ -357,7 +357,7 @@ for (const [name, edges] of [['Faceplate_EdgeLabel_2W-1H', [['q1', -1], ['q1', 1
 
 test('main.js patches every finished material, stamps every template, syncs on the mount and the tier switch; the trial is gone', () => {
   const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');
-  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows \} from '\.\/skin-map\.js';/);
+  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows, firstRows \} from '\.\/skin-map\.js';/);
   assert.match(main, /const skinU = createSkinMapUniforms\(\{ on: new URLSearchParams\(location\.search\)\.get\('skinmap'\) !== 'off' \}\);/);
   assert.match(main, /return m\.userData && m\.userData\.bedFinish \? applySkinMap\(m, \{ uniforms: skinU \}\) : m;/);
   assert.equal(count(main, 'applySkinMap('), 1, 'the map is applied somewhere the finish check does not cover');
@@ -384,4 +384,82 @@ test('main.js patches every finished material, stamps every template, syncs on t
 test('the deploy stamps the new module, as the module-graph guard demands', () => {
   const yml = readFileSync(join(root, '.github', 'workflows', 'pages.yml'), 'utf8');
   assert.ok(yml.includes(`sed -i "s|'./skin-map.js'|'./skin-map.js?v=$V'|" js/main.js`), 'no pages.yml stamping line for js/skin-map.js');
+});
+
+/* ── THE FIRST LAYER AS VECTORS (2026-10-28) ─────────────────────────────────────────────────── */
+
+test('the first layer: a slicer line in G-code lands on a bead centre in the part frame, for every axis permutation', () => {
+  /* every signed permutation A a frame can measure, with an offset: a point on a G-code line must give dot(n, q) - phase
+     a whole multiple of the spacing in q, and a point half a pitch off must give a half */
+  const fam = { angleDeg: 45, spacingMm: 0.4596, phaseMm: 0.1963 };
+  const perms = [[[1, 0], [0, 1]], [[0, 1], [1, 0]], [[-1, 0], [0, 1]], [[0, -1], [1, 0]], [[1, 0], [0, -1]], [[0, 1], [-1, 0]], [[-1, 0], [0, -1]], [[0, -1], [-1, 0]]];
+  const th = fam.angleDeg * Math.PI / 180, ng = [-Math.sin(th), Math.cos(th)], dg = [Math.cos(th), Math.sin(th)];
+  for (const A of perms) {
+    const c = [123.4, -56.7];
+    const { n, spacing, phase } = SM.lineFamilyInPart(fam, A, c);
+    assert.ok(Math.abs(Math.hypot(...n) - 1) < 1e-12, 'the normal stays unit');
+    for (const k of [-3, 0, 7]) for (const t of [-20, 0, 35]) for (const half of [0, 0.5]) {
+      const off = fam.phaseMm + (k + half) * fam.spacingMm;
+      const g = [ng[0] * off + dg[0] * t, ng[1] * off + dg[1] * t];
+      const dx = g[0] - c[0], dy = g[1] - c[1];
+      const q = [A[0][0] * dx + A[0][1] * dy, A[1][0] * dx + A[1][1] * dy];   // q = A^T (g - c)
+      const u = (n[0] * q[0] + n[1] * q[1] - phase) / spacing;
+      assert.ok(Math.abs(u - Math.round(u - half) - half) < 1e-9, `A ${JSON.stringify(A)} k ${k} t ${t} half ${half}: u ${u}`);
+    }
+  }
+});
+
+test('the first layer\'s table rows: rect, frame, family, bands, ring - and all zero for a node without one', () => {
+  assert.equal(SM.SKIN_MAP.tableCols, 7);
+  assert.deepEqual(SM.firstRows(null, null, 1), [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]);
+  const first = { q0: [-44.2, -28.45], pxPerMm: 4, sdfStepMm: 0.0125, n: [0.7071, -0.7071], spacing: 0.4596, phase: 0.408, bands: [0.279, 0.736], ringWidth: 0.5 };
+  const rows = SM.firstRows({ x: 10, y: 20, w: 353, h: 116 }, first, 0.5);
+  assert.deepEqual(rows[0], [10, 20, 353, 116]);
+  assert.deepEqual(rows[1], [-44.2, -28.45, 2, 0.0125], 'the atlas px per mm follows the pack scale');
+  assert.deepEqual(rows[2], [0.7071, -0.7071, 0.4596, 0.408]);
+  assert.deepEqual(rows[3], [0.279, 0.736, 0, 0], 'unused bands read 0');
+  assert.deepEqual(rows[4], [0.5, SM.SKIN_MAP.firstCrownMm, 0, 0]);
+  assert.deepEqual(SM.firstRows({ x: 0, y: 0, w: 1, h: 1 }, { ...first, islands: 3 }, 1)[4], [0.5, SM.SKIN_MAP.firstCrownMm, 1, 0], 'the island flag');
+  assert.equal(SM.SKIN_MAP.firstCrownMm, 0.03, 'Joey picked the subtle bead (2026-10-28)');
+});
+
+test('the first-layer block: once, on a bed face, smooth plate only, no implicit derivative in its branch, fades before aliasing', () => {
+  const bf = BF.createBedFinishUniforms(), cs = CS.createCoverSeamUniforms(), sm = SM.createSkinMapUniforms();
+  const m = fullMaterial(THREE.MeshPhysicalMaterial, bf, cs, sm);
+  const sh = shaderFor('physical'); m.onBeforeCompile(sh, null);
+  const fs = resolveIncludes(sh.fragmentShader);
+  const blk = fs.slice(fs.indexOf('if ( vSkinId > 0.5 && gBFContact > 0.0 ) {'));
+  assert.equal(count(fs, 'if ( vSkinId > 0.5 && gBFContact > 0.0 ) {'), 1);
+  assert.ok(fs.indexOf('if ( uSMOn > 0.5 && uLLOn > 0.5 ) {') < fs.indexOf('if ( vSkinId > 0.5 && gBFContact > 0.0 ) {'), 'the block sits inside the Very High settle gate');
+  assert.match(blk, /float wF = gBFContact \* \( 1\.0 - clamp\( uPC, 0\.0, 1\.0 \) \);/, 'a powder-coated face would draw beads its grain hides');
+  const branch = blk.slice(0, blk.indexOf('normal = normalize( normal + ( normalize( vPCT1 ) * slF.x'));
+  assert.ok(!/\btexture\(|dFdx|dFdy|fwidth/.test(branch), 'an implicit LOD or a derivative inside the per-fragment branch is undefined');
+  assert.equal(count(branch, 'textureLod( uSMAtlas'), 5, 'the field and its four central taps, all at mip 0');
+  assert.match(branch, /vec2 cF = rF\.xy \+ clamp\( pxF, vec2\( 1\.0 \), rF\.zw - 1\.0 \);/, 'the taps must stay inside the rectangle (Sol 01a183fd)');
+  assert.match(branch, /else if \( eF\.z > 0\.5 \) spF = 0\.0;/, 'an island without a family would take the layer\'s, out of phase (Sol 01a183fd)');
+  assert.match(branch, /float aI = 1\.0 - smoothstep\( 0\.25, 0\.5, fq \/ spF \);/, 'the infill does not fade before two pixels a line');
+  /* an island's family is read unfiltered (a phase averaged across two islands is neither), and only where A names one */
+  assert.match(branch, /vec4 tIF = texelFetch\( uSMAtlas, ivec2\( rF\.xy \+ floor\( clamp\( pxF, vec2\( 0\.0 \), rF\.zw - 1\.0 \) \) \), 0 \);/);
+  assert.match(branch, /if \( tIF\.a > 0\.0 \) \{ spF = 0\.2000 \+ tIF\.a \* 255\.0 \* 0\.001500; phF = tIF\.b \* 255\.0 \/ 256\.0 \* spF; \}/);
+  assert.match(branch, /float aR = 1\.0 - smoothstep\( 0\.25, 0\.5, fq \/ eF\.x \);/, 'the perimeters do not fade before two pixels a bead');
+  /* the field's mm per level is the table's, so the bake's step and the shader's decode cannot disagree */
+  assert.match(branch, /float sF = 255\.0 \* fF\.w;/);
+});
+
+test('an island\'s phase byte moves into the part frame like the layer\'s phase, as a fraction of its own spacing', () => {
+  /* the byte the extraction writes for phase p at spacing s, carried with shift k, decodes to (p - k) mod s - the same move
+     lineFamilyInPart makes for the layer's phase */
+  for (const a of [140, 173, 191]) for (const p of [0.01, 0.2, 0.44]) for (const k of [-123.4, 0, 56.78]) {
+    const s = SM.islandSpacing(a);
+    if (p >= s) continue;
+    const pb = Math.round(p / s * 256) % 256;
+    const qb = SM.islandPhaseByte(pb, a, k);
+    const want = (((pb / 256 * s - k) % s) + s) % s;
+    const got = qb / 256 * s;
+    const err = Math.min(Math.abs(got - want), s - Math.abs(got - want));
+    assert.ok(err <= s / 256 + 1e-12, `a ${a} p ${p} k ${k}: ${got} against ${want}`);
+  }
+  assert.equal(SM.islandSpacing(0), 0, 'A = 0 names no island family');
+  assert.equal(SM.islandPhaseByte(77, 0, 3), 0);
+  assert.ok(Math.abs(SM.islandSpacing(173) - 0.4595) < 1e-9, 'the byte steps 0.0015 mm from 0.2');
 });

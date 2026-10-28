@@ -5995,3 +5995,36 @@ roughness 0.2, metalness 0.75, anisotropy 0.4, the SILK_SHEEN and SILK_ENV defin
 Yellow pick takes every one away on the same material; the tier strengths read 1 / 0.3 on Fast and 6 / 1 on Very High. The
 same check failed on 53c2a639, before the deploy. The Lab's re-vendor is still owed (its drift gate's upstream is the old
 viewer checkout, which stopped at the 2026-10-21 catalog).
+
+## 2026-10-28 · A face printed down on the smooth sheet shows its first layer, drawn as vectors
+
+Joey, on the Silk Gold EdgeLabel accents: printed face down on a smooth build plate "you can still see the beads on the
+surface. right now the smooth surface looks way too perfect". Then, of the baked top-layer maps' 8 px/mm going soft up
+close: "is there a way to produce the texture as vectors?" (option 1 of the two offered: lines from their numbers and a
+distance field, over shipping the toolpath itself), and "Subtle (0.03)" for the bead's relief.
+
+- WHAT IS DRAWN: on a bed-contact face, smooth plate only (a powder coat's grain prints over the beads), the part's real
+  first layer - the infill lines and the perimeter loops of its own G-code - as a cosine relief of 0.03 mm
+  (`SKIN_MAP.firstCrownMm`). Very High settle samples only, like the top-layer maps: the block sits in their gate.
+- AS VECTORS: the infill is one family of parallel lines per ISLAND (angle shared, spacing and phase per island: each
+  island of a slice lays its own lines - a Decor faceplate fitted 0.87 as one family, 0.96 and 1.0 per island), drawn
+  from those numbers at any zoom; the loops are bands at the slicer's own distances (measured off its ring segments) in a
+  distance field to the layer's outline, 8 bits at 4 px/mm, read at mip 0 so it interpolates where a picture blurs. The
+  field also carries each pixel's island phase (B) and spacing (A). Both fade out before their pitch reaches two screen
+  pixels, so a whole-build view shows nothing new and nothing shimmers.
+- THE PIPELINE: node0 cut every skin bake's G-code to its first layer (no re-slicing; 555 files, 115 MB); the extraction
+  (`D:/MODULITH/ops/slicing/skin_vector.py`, version 3, numpy + scipy + Pillow) ran here in 8 processes; `tools/skin-map.mjs
+  vector` carries it into each part's frame with the frame `ship` measures (now one `sliceFrame`) and adds `first` to the
+  node's entry in `parts/skin/index.json` (gen2-parts) beside `<node>.first.png`. 434 of 555 parts ship, 8.6 MB in all;
+  121 are left plain - case bottoms (the bed side of a case, under the mount), some rails and covers, and one faceplate
+  (EdgeLabel 1W-05H, 0.82) - where fewer than 85 % of the first layer's lines fit their island's grid within 0.05 mm.
+- In the shader (`js/skin-map.js FIRST_BLOCK`): the table grows from 2 columns to 7 (`firstRows`); `lineFamilyInPart` and
+  `islandPhaseByte` carry a family from G-code into the part frame (unit-tested on every axis permutation, and the test
+  fails when the phase shift's sign is flipped). An island the extraction could not fit draws no infill rather than the
+  layer's lines out of phase. Silk on these faces already streaks at 45 degrees (silk-axis.js skinAcross), which on the
+  EdgeLabel accent coincides with the real first layer's lines.
+- Not changed: the top skins still draw the baked 8 px/mm maps (their islands need the same per-island families; next).
+
+Reviews: Sol 01a183fd (code: the field's range checked at ship, an unfitted island left plain, the island angle within
+0.25 degrees, central differences for the outline's direction). Tests: unit 735 pass; the e2e silk and skin-map cases
+pass. Shots: `D:\Claude - Output\vector-skin-2026-10-28` (`closeup.mjs`; proof-first-layer-b.png, first-layer-closeup.png).
