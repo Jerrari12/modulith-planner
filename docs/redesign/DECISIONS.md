@@ -5936,3 +5936,8 @@ meaning's stripe is a named spool, so its room spool is that spool's colour (Pol
 #56B4E9), and a tap on it opens Labels on that meaning's row with its picker (the sheet open on a phone; a spool two
 meanings share opens the rows, none guessed). A stripe in a colour the palette does not hold keeps main's sentence. Terra
 01a1832d: one finding taken (the shared spool), one discarded (ctx.memo always exists).
+
+Live 2026-10-28 as 53c2a639 (main 53c2a63, fast-forward from 9335d95). `label-palette-prod.mjs` green: a build with no
+palette draws its Metric band in zone STRIPE@sky-blue at #14addb with the record null, the Label colours section lists its
+eight rows and the White note, and the same build carrying Metric = Panchroma Blue draws #2f6fbe. `stripe-spool-prod.mjs`
+(updated) green: the room's spool is #14addb, not #56b4e9, and its tap opens the Metric row in Labels.
