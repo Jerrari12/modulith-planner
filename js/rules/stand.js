@@ -98,3 +98,21 @@ export function slotWords(mount, n) {
   const slots = `${n} empty slot${n === 1 ? "" : "s"}`;
   return mount === "tabletop" ? `${slots} under it` : `${slots} up to the ${mount === "wall" ? "brackets" : "rails"}`;
 }
+
+/* THE STAGE'S SPOTS WHILE A SIZE IS ARMED (Joey 2026-10-28: placing a 1W·3H shelf into a 1W·3H void, "when i hover over the
+   yellow + it flickers between a red+ and a yellow+, making it like a 50/50 chance i can place a shelf or it tries to place a
+   1W-1h to like fill the gap, fighting me"). The void's empty slots are red "+"s (the cases Fill all would add), and one of
+   them had its marker on the very point of the armed spot's: hovering one hides its marker and shows its ghost, so the
+   other's marker took the pointer, and back - a click took whichever held it. Placing the armed unit fills the slots its
+   footprint covers, so while it is armed a red slot inside an offered spot is not shown (the armed spot wins), and a muted
+   refused cell gives way to a red slot whose marker it would cover (the slot is the one a click can do something with).
+   need, offered, refused: [{ x, y, w?, hh? }] (y and hh in half-rows); w, hh: the armed size, for spots that carry none.
+   Returns the list in the stage's order: the slots, the offered spots, the refused cells. */
+export function armedSpots(need, offered, refused, w, hh) {
+  const box = (s) => [s.x, s.y, s.x + (s.w || w), s.y + (s.hh || hh)];
+  const overlaps = (a, b) => { const [ax0, ay0, ax1, ay1] = box(a), [bx0, by0, bx1, by1] = box(b); return ax0 < bx1 && bx0 < ax1 && ay0 < by1 && by0 < ay1; };
+  const centre = (s) => { const [x0, y0, x1, y1] = box(s); return `${x0 + x1},${y0 + y1}`; };
+  const shownNeed = need.filter((n) => !offered.some((o) => overlaps(n, o)));
+  const shownNo = refused.filter((r) => !shownNeed.some((n) => centre(n) === centre(r)));
+  return [...shownNeed, ...offered, ...shownNo];
+}

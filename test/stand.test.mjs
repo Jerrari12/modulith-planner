@@ -19,7 +19,7 @@ const { GEN2, GEN2_TABLETOP } = vm.runInContext(read('js/catalog/data.js') + '\n
 const mod = (...p) => import(pathToFileURL(join(root, ...p)).href);
 const { layoutRules } = await mod('js', 'rules', 'layout.js');
 const { serializeBuild } = await mod('js', 'rules', 'schema.js');
-const { standUp, standRecord, slotWords, openCells } = await mod('js', 'rules', 'stand.js');
+const { standUp, standRecord, slotWords, openCells, armedSpots } = await mod('js', 'rules', 'stand.js');
 const { generateManifest } = await mod('js', 'generate.js');
 const deps = { tabletop: GEN2_TABLETOP };
 const errorsOf = (b) => generateManifest(serializeBuild(b)).errors;
@@ -199,4 +199,31 @@ test('the generator\'s voids mode: Joey\'s switched build is an in-progress prev
   const kit = JSON.parse(read('builds/185-tabletop-2w2h.json')).build;
   assert.equal(JSON.stringify(generateManifest(kit, { voids: true })), JSON.stringify(generateManifest(kit)));
   assert.ok(generateManifest(serializeBuild(record('tabletop', 2, 3, [[1, 0, 0, 2, 2]])), { voids: true }).errors.some((e) => /floating/.test(e)));
+});
+
+/* Joey's build of 2026-10-28 (185 Tabletop, 7W): a 1W x 3H void at column 2, half-rows 8-13, under a 3W case. Its red
+   slots are the cases standUp would add; armed with a 1W x 3H shelf the void is also an offered spot. Before, one slot's
+   "+" stood on the very point of the offered spot's "+", and the hover flickered between them (a click could add a 1W x 1H
+   instead of the shelf). armedSpots shows the offered spot alone there. */
+test('a void armed with a size that fills it: its red slots give way to the offered spot, whose marker they shared', () => {
+  const b = record('tabletop', 7, 10, [
+    [1, 0, 18, 2, 2], [2, 0, 16, 1, 2], [3, 2, 18, 1, 2], [4, 1, 16, 2, 2], [5, 3, 19, 1, 1], [6, 4, 19, 1, 1], [7, 5, 19, 1, 1],
+    [8, 6, 19, 1, 1], [9, 3, 16, 4, 3], [10, 3, 13, 4, 3], [11, 3, 10, 4, 3], [12, 3, 7, 4, 3], [13, 0, 15, 2, 1],
+    [14, 0, 14, 2, 1], [15, 2, 15, 1, 1], [16, 2, 14, 1, 1], [18, 0, 8, 2, 6], [19, 0, 7, 3, 1],
+  ]);
+  const R = layoutRules(b, GEN2, deps);
+  assert.ok(R.canPlace(2, 8, 1, 6), 'the 1W x 3H fits the void');
+  const t = JSON.parse(JSON.stringify(b)); const r = standUp(t, layoutRules(t, GEN2, deps));
+  const need = t.placed.filter((p) => r.ids.includes(p.id)).map((p) => ({ x: p.x, y: p.y, w: p.w, hh: p.hh, kind: 'need' }));
+  assert.ok(need.length >= 1 && need.every((n) => n.x === 2 && n.y >= 8 && n.y + n.hh <= 14), `the slots are the void's (${JSON.stringify(need)})`);
+  const offered = [{ x: 2, y: 8 }, { x: 5, y: 0 }], refused = [{ x: 2, y: 9, kind: 'no' }];
+  const centre = (s, w, hh) => `${2 * s.x + (s.w || w)},${2 * s.y + (s.hh || hh)}`;
+  assert.ok(need.some((n) => centre(n) === centre(offered[0], 1, 6)), 'before: a slot\'s "+" on the offered spot\'s "+" (the flicker)');
+  const shown = armedSpots(need, offered, refused, 1, 6);
+  assert.deepEqual(shown.filter((s) => s.kind === 'need'), [], 'armed: the void\'s slots give way to the shelf that fills it');
+  assert.deepEqual(shown.filter((s) => !s.kind), offered, 'the offered spots are all there');
+  // a slot the armed unit does not cover stays, and a refused cell on a slot's marker gives way to the slot
+  const lone = { x: 0, y: 0, w: 1, hh: 2, kind: 'need' }, onIt = { x: 0, y: 0, kind: 'no' };
+  assert.deepEqual(armedSpots([lone], [{ x: 4, y: 0 }], [onIt], 1, 2), [lone, { x: 4, y: 0 }]);
+  assert.deepEqual(armedSpots([lone], [], [{ x: 3, y: 0, kind: 'no' }], 1, 2), [lone, { x: 3, y: 0, kind: 'no' }], 'a refused cell elsewhere stays');
 });

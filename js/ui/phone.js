@@ -18,6 +18,11 @@ export const SIDE_MQ = '(max-width: 1023px) and (orientation: landscape) and (ma
 export const isSideways = () => matchMedia(SIDE_MQ).matches;
 const ROW = 62, SIDE_MAX = 340;
 const sideWidth = () => Math.min(SIDE_MAX, innerWidth * 0.44);
+/* the sheets' one-time nudge (phoneChrome below): played or no longer needed, per browser; a storage that throws (a
+   private window) reads as played, so it never repeats on every load */
+export const NUDGE_KEY = 'gen2-sheet-nudged', NUDGE_DELAY = 1100;
+const nudged = () => { try { return localStorage.getItem(NUDGE_KEY) === '1'; } catch { return true; } };
+const markNudged = () => { try { localStorage.setItem(NUDGE_KEY, '1'); } catch { /* private mode */ } };
 
 /* ctx: { active, has, switchTo, badges, soon }; panels: [{ el, title, peek?() -> node | string | null, open?: boolean, close?() }];
    dock: the height of whatever sits on the bar (the dock by default; Assemble passes its player's live height) */
@@ -79,6 +84,8 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
   }
   function open(panel, on = true) {
     const entry = sheets.get(panel); if (!entry) return;
+    if (on) markNudged();   // opened by hand: the visitor knows a bar opens, the nudge is not needed
+    entry.el.classList.remove('nudge');   // opened mid-nudge: its class must not replay the nudge when it collapses again
     if (on) for (const e of sheets.values()) if (e !== entry && e.open) { e.open = false; render(e); }
     entry.open = !!on; current = on ? panel : (current === panel ? null : current);
     render(entry); stack();
@@ -107,6 +114,20 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     if (entry.open) current = panel;
   }
   stack();
+  /* THE ONE-TIME NUDGE (Joey 2026-10-28: a collapsed bar "looks kind of like just a static bar until i click it", asking
+     for an up icon, "a slight movement up animation right after page load", or a hover change): once per browser, a second
+     after the chrome comes up, the top collapsed sheet lifts and settles (app.css .sheet.nudge). Not under reduced motion,
+     not with a sheet open, and never again once a sheet has been opened by hand or the nudge has played */
+  const nudgeTimer = nudged() || matchMedia('(prefers-reduced-motion: reduce)').matches ? null : setTimeout(() => {
+    const vis = [...sheets.values()].filter((e) => !e.el.hidden && e.el.getClientRects().length);
+    const top = vis.filter((e) => !e.open).pop();
+    if (!top || vis.some((e) => e.open) || nudged()) return;
+    top.el.classList.add('nudge');
+    // its own animation only: one inside the sheet ending (they bubble) must not cut the nudge short
+    const done = (ev) => { if (ev.target !== top.el) return; top.el.classList.remove('nudge'); top.el.removeEventListener('animationend', done); top.el.removeEventListener('animationcancel', done); };
+    top.el.addEventListener('animationend', done); top.el.addEventListener('animationcancel', done);
+    markNudged();
+  }, NUDGE_DELAY);
   let onLayout = null;
   return {
     bar,
@@ -121,6 +142,6 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     left: () => (isSideways() ? Math.round(bar.getBoundingClientRect().width) + 8 : 8),
     right: () => (isSideways() ? Math.round(sideWidth()) + 8 : 8),
     onLayout: (fn) => { onLayout = fn; },
-    destroy() { bar.remove(); root.classList.remove('sheet-open', 'sheet-over'); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
+    destroy() { clearTimeout(nudgeTimer); bar.remove(); root.classList.remove('sheet-open', 'sheet-over'); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
   };
 }

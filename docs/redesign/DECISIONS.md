@@ -5829,6 +5829,70 @@ a typed Classic Pro label's green stripe and an M5 x 20 part label's metric band
 filling the model body's box (0.0006 mm), the band at |x| 20.512 between the slits, no page errors. The same check failed on
 688243e7, before the deploy.
 
+## 2026-10-28 · A collapsed phone sheet says it opens
+
+Joey, of the collapsed Colors bar on a phone: it "looks kind of like just a static bar until i click it ... there's nothing
+about it that says expand me", suggesting an up icon, "a slight movement up animation right after page load", or a hover
+change. The cause of most of it: `phone.js` has asked for a `caret-up` on every collapsed handle since the sheets were built,
+and the icon sprite had none (only `caret-down`, `caret-right`), so a collapsed handle drew a blank where its arrow goes and
+only an open sheet showed one.
+
+- **The arrow.** `caret-up` added to `tools/make-icons.mjs` and the sprite rebuilt (one new symbol); the caret drawn at the
+  title's strength (`--ink-2`, was `--ink-3`). `test/icon-sprite.test.mjs` now reads every icon named in an `icon(...)` call
+  (ternaries too) against the sprite: it fails on the old sprite, on `caret-up`.
+- **The hover.** With a mouse (`hover: hover`), the handle's glass lightens, the grab bar brightens and the caret steps 2 px
+  its way (up collapsed, down open).
+- **The nudge.** Once per browser, 1.1 s after the phone chrome comes up, the top collapsed sheet lifts 14 px and settles
+  (a registered `--nudge` length added into the sheet's transform and clip, so the lift shows a glimpse under the handle).
+  Not under reduced motion, not while a sheet is open, and never again once it has played or a sheet was opened
+  (`gen2-sheet-nudged`). Build is where it plays first: its library starts collapsed (Colors and Parts open theirs).
+
+Tests: the new e2e case (the collapsed caret's symbol is in the served sprite; a first visit nudges and remembers; a reload
+does not; reduced motion never); every other e2e case marks the nudge played, so no sheet moves under a tap. All 23 phone
+cases and 707 unit tests pass. Shots: `D:\Claude - Output\sheet-hint-2026-10-28`.
+
+Live 2026-10-28 10:10 as 58a04e6f: `sheet-hint-prod.mjs` green (twice) - on a fresh phone visit to Build the collapsed
+library's caret-up is a symbol of the served sprite, the nudge plays and is remembered, a reload does not nudge, no page
+errors. The same check failed on b2e27a22, before the deploy (no caret symbol, no nudge).
+
+## 2026-10-28 · A void the armed size fills shows one "+"; a new shelf starts with its lip
+
+Joey, placing a 1W·3H shelf into a 1W·3H void of his build: "when i hover over the yellow + it flickers between a red+ and
+a yellow+, making it like a 50/50 chance i can place a shelf or it tries to place a 1W-1h to like fill the gap, fighting
+me." The void's empty slots (the red "+"s: the three 1W·1H cases Fill all would add, at half-rows 8, 10 and 12) went on the
+stage beside the armed spot (2, 8), and the middle slot's marker stood on the very point of the shelf spot's (both centred
+at half-row 11). Hovering one hides its marker and shows its ghost; the stage hit-tests visible markers first, so the
+other marker took the pointer, and back. A click took whichever held it.
+
+- `stand.js armedSpots`: while a size is armed, a red slot that an offered spot's footprint overlaps is not shown (placing
+  the armed unit fills it), and a muted refused cell whose marker would sit on a red slot's gives way to the slot. Unarmed,
+  the red slots are as before.
+- Joey, the same day: "can we also default the shelf lip on by default?" A placed shelf starts with `lip: 'front'`
+  (`placeAt`); the inspector's Lip still takes it off. Shelves are only made by placing (type conversion swaps drawers
+  only, and Duplicate copies the lip); saved builds keep what they have.
+
+Tests: `stand.test.mjs` runs Joey's build (standUp's slots, the shared marker point, armedSpots' result); the e2e case arms
+a 1W·3H shelf on it, finds one spot in the void, holds the pointer on its "+" through twelve one-pixel nudges and clicks:
+a 1W·3H shelf at (2, 8) with its front lip. Against the old spot list it fails (three red slots and the shelf's spot).
+
+## 2026-10-28 · A label stripe's colour has its spool in the room
+
+Joey, in the room on his yellow build: "we are using the blue accent color in the label but it's not adding to our filament
+stack." A label's stripe prints from its own spool and the dock already counted it among the build's filaments, but the
+room's spools left stripes out (`done.js spoolColours` filtered `!u.stripe` since the spools were built). They are in now.
+A click on a stripe's spool opens no picker (a stripe is no region: its colour is set on each label), so it says that
+instead of doing nothing. The stripe stays a colour, not a spool of the build's choosing, until the label palette lands.
+
+Tests: a new e2e case (an EdgeLabel build with a Metric-striped label: the room stacks a #56b4e9 spool; it fails with the
+old filter); the Assemble spool case reads the same list. Terra 01a18305: one finding, discarded (past the 32-spool cap a
+stripe may take another colour's place - the cap's sort order decides which fall off, as it always has).
+
+Live 2026-10-28 11:16 as b3b99056 (with 610ecee, whose own run had failed on an unrelated case - "Colors: on Very High at
+rest the steam keeps rising", "the room did not come on within 60 s" on the runner; it passed locally and in this run):
+`void-prod.mjs` green (one "+" in Joey's void, the hover held through twelve nudges, the 1W·3H shelf placed with lip
+'front'; on 58a04e6f it failed, the hover swapping between a red slot and the shelf's spot on every move) and
+`stripe-spool-prod.mjs` green (a #56b4e9 spool for a Metric-striped label; on 58a04e6f six spools and no blue).
+
 ## 2026-10-28 · The label palette: a stripe colour is a meaning, printed in the spool you have
 
 Joey, of the label sheets of 2026-10-28: a stripe's colour is a suggestion. People print Metric in whatever blue they own,

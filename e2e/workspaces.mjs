@@ -88,7 +88,7 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
    page renders at its default quality, and on the CI runner's software rasteriser that kept the main thread so busy that
    a click outlived its 30 s (deploy run 38981210610: "the redesign follow-up: a gap build…" - locator.click: Timeout
    30000ms exceeded; this suite passed locally on a real GPU every time) */
-const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} };
+const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} };   // no sheet nudge (open() says why)
 async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
 async function open(ws, { query = '', phone = false, context = null, visitor = false, viewport = null } = {}) {   // viewport: a phone's own size (390 x 844 when not given)
   /* the room is on for everyone (Joey 2026-10-26): a case about something else keeps the studio it was written for
@@ -101,7 +101,9 @@ async function open(ws, { query = '', phone = false, context = null, visitor = f
   if (roomy && !/spools=/.test(query)) query += '&spools=off';   // and no spools, unless it asks (?spools=plan)
   const ctx = context || await browser.newContext(phone ? { viewport: viewport || { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
-  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  // the phone sheets' one-time nudge stays out of every case but its own: a sheet lifting a second after load moves what a
+  // case taps or measures
+  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
   const page = await ctx.newPage();
   // E2E_THROTTLE=n slows this machine's CPU n times (Chrome's own throttling), towards the CI runner's speed: the
   // follow-up cases of 2026-10-16 passed here, soft rendering included, and failed there twice
@@ -484,6 +486,47 @@ test('Build: a wall build offers "+" spots under its bottom row, taking one grow
   await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 }).catch(() => assert.fail('Duplicate placed nothing within 30 s'));
   const dup = await S(page);
   assert.ok(dup.gridH === 2 && dup.placed.some((p) => p.id === 2 && p.x === 0 && p.y === 2 && p.w === 2), `the copy hangs under the 2W in a 2H grid: ${dup.gridH} ${JSON.stringify(dup.placed)}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A VOID FILLED BY THE ARMED SIZE (Joey 2026-10-28, with his build: placing a 1W·3H shelf into a 1W·3H void, "when i hover
+   over the yellow + it flickers between a red+ and a yellow+, making it like a 50/50 chance i can place a shelf or it tries
+   to place a 1W-1h to like fill the gap, fighting me"). The void's red slots shared a marker point with the armed spot; armed,
+   they now give way to it (stand.js armedSpots). Held over the "+" and nudged a pixel at a time, the hover stays on the
+   shelf's spot; a click places the 1W·3H shelf there - with its front lip, a new shelf's default since the same day. */
+test('Build: a void the armed size fills shows one "+" there, the hover holds on it, and a click places that shelf with its lip', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'xl', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 7, gridH: 10, sideCovers: true, plateParts: {}, nextId: 24, labelStyle: null, buildId: 'e2evoidflick1',
+    placed: [[1, 0, 18, 2, 2], [2, 0, 16, 1, 2], [3, 2, 18, 1, 2], [4, 1, 16, 2, 2], [5, 3, 19, 1, 1], [6, 4, 19, 1, 1], [7, 5, 19, 1, 1],
+      [8, 6, 19, 1, 1], [9, 3, 16, 4, 3], [10, 3, 13, 4, 3], [11, 3, 10, 4, 3], [12, 3, 7, 4, 3], [13, 0, 15, 2, 1],
+      [14, 0, 14, 2, 1], [15, 2, 15, 1, 1], [16, 2, 14, 1, 1], [18, 0, 8, 2, 6], [19, 0, 7, 3, 1]].map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0 })) };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('build', { query: `#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__?.manifest?.instances?.length, null, { timeout: 90_000 });
+  await page.locator('#ws-lib button.unit', { hasText: 'Shelf' }).first().click();
+  await armSize(page, '1W·3H');
+  const spots = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.spot && o.userData.ghost) out.push({ ...o.userData.spot, ghost: o.userData.ghost.visible }); }); return out; });
+  await page.waitForFunction(() => { let n = 0; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.spot && !o.userData.spot.kind) n++; }); return n > 0; }, null, { timeout: 30_000 });
+  const all = await spots();
+  const inVoid = all.filter((s) => s.x === 2 && s.y >= 8 && s.y < 14);
+  assert.deepEqual(inVoid.map((s) => [s.kind || 'add', s.x, s.y]), [['add', 2, 8]], `one spot in the void, the shelf's (${JSON.stringify(inVoid)})`);
+  // the pointer on that "+", then nudged a pixel at a time: the hover stays on it (before, it flickered with a red slot's)
+  const at = await page.evaluate(() => { const S = window.__GEN2_VIEWER__; let g = null; S.scene.traverse((o) => { if (o.userData.spot && !o.userData.spot.kind && o.userData.spot.x === 2 && o.userData.spot.y === 8) g = o; });
+    const v = new S.THREE.Vector3(); g.userData.marker.getWorldPosition(v); v.project(S.camera); const r = S.renderer.domElement.getBoundingClientRect();
+    return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height }; });
+  const held = [];
+  for (let k = 0; k < 12; k++) {
+    await page.mouse.move(at.x + (k % 2 ? 1 : -1), at.y + (k % 3) - 1);
+    await page.waitForTimeout(60);
+    held.push((await spots()).filter((s) => s.ghost).map((s) => `${s.kind || 'add'}@${s.x},${s.y}`).join('+') || 'none');
+  }
+  assert.ok(held.every((h) => h === 'add@2,8'), `the hover holds on the shelf's spot (${held.join(' ')})`);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.some((p) => p.fill === 'shelf'), null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`no shelf placed (${JSON.stringify(await page.evaluate(() => window.__GEN2_STORE__.state.placed.slice(-2)))})`));
+  const placed = await page.evaluate(() => window.__GEN2_STORE__.state.placed.filter((p) => p.fill === 'shelf').map(({ x, y, w, hh, lip }) => ({ x, y, w, hh, lip })));
+  assert.deepEqual(placed, [{ x: 2, y: 8, w: 1, hh: 6, lip: 'front' }], 'the 1W·3H shelf in the void, its front lip on');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -3314,7 +3357,7 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
     const clear = d.spools.placed.map((x) => props.filter((pr) => new T.Box3(new T.Vector3(x.box.min.x, x.box.min.y, x.box.min.z), new T.Vector3(x.box.max.x, x.box.max.y, x.box.max.z)).intersectsBox(pr.box)).map((pr) => pr.name));
     const room = v.scene.getObjectByName('done-room'), groupOf = (name) => { const out = []; room.traverse((o) => { if (o.userData.group === name || (o.userData.slot && o.name && (o.userData.group || o.name) === name)) out.push(o.visible); }); return out; };
     const cleared = d.spools.cleared.map((name) => ({ name, props: groupOf(name), shadows: d.shadows.filter((q) => q.group === name).map((q) => q.visible) }));
-    return { ...d.spools, clearedState: cleared, monitor: groupOf('monitor'), hexes: [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)].map((h) => h.toLowerCase()), build: { x0: bb.min.x, x1: bb.max.x, z0: bb.min.z }, clear, shadowTier: !!(v.QUALITY[v.quality] || {}).shadow };
+    return { ...d.spools, clearedState: cleared, monitor: groupOf('monitor'), hexes: [...f.filaments.map((x) => x.hex), ...f.unpicked.map((u) => u.hex)].map((h) => h.toLowerCase()), build: { x0: bb.min.x, x1: bb.max.x, z0: bb.min.z }, clear, shadowTier: !!(v.QUALITY[v.quality] || {}).shadow };
   });
   assert.ok(sp.plan.groups.length >= 1, `the kit's plan has spools (${JSON.stringify(sp.plan)})`);
   assert.ok(sp.placed.length >= 1, `at least one group stood (${sp.placed.length} of ${sp.plan.groups.length})`);
@@ -3336,7 +3379,7 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
   /* THE SPOOLS FOLLOW THE BUILD (the Colors workspace's Room stage calls refreshSpools on each commit; Joey 2026-10-26: "so
      i added a blue filament, should we stack another filament on top of the stack when we do that"): a spool a filament */
   const groupsNow = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-spools') out.push({ kind: o.userData.spoolGroup.kind, colours: o.children.filter((s) => s.userData.setColor).map((s) => String(s.userData.spool.color).toLowerCase()), ys: o.children.filter((s) => s.userData.setColor).map((s) => +s.position.y.toFixed(1)) }); }); return out; });
-  const wears = () => page.evaluate(() => { const f = window.__GEN2_VIEWER__.filamentsInBuild(); return [...new Set([...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)].map((h) => h.toLowerCase()))].sort(); });
+  const wears = () => page.evaluate(() => { const f = window.__GEN2_VIEWER__.filamentsInBuild(); return [...new Set([...f.filaments.map((x) => x.hex), ...f.unpicked.map((u) => u.hex)].map((h) => h.toLowerCase()))].sort(); });   // a label stripe's colour too (2026-10-28)
   const onePer = (gs, w, label) => { const all = gs.flatMap((g) => g.colours).sort(); assert.deepEqual(all, w.slice(0, 32), `${label}: a spool for each filament the build wears, each once (${JSON.stringify(gs)})`); };
   const g0 = await groupsNow();
   // one filament over the whole build (the feet keep their TPU): one spool each for it and the TPU, the spares off the desk
@@ -3536,6 +3579,28 @@ test('Colors: the Room | Neutral switch is absent with ?done=off; for every visi
   await settle(page, 1500);
   assert.equal(await seg('Neutral').getAttribute('aria-pressed'), 'true', 'Neutral, as picked, after a reload');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'and no room loaded');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A LABEL STRIPE'S SPOOL (Joey 2026-10-28: "we are using the blue accent color in the label but it's not adding to our
+   filament stack"). The stripe prints from its own spool and the dock counted it, but the room's spools left stripes out
+   (done.js spoolColours). An EdgeLabel build whose drawer carries a Metric-striped label: the room stacks a spool of its
+   blue. */
+test('Colors: a label stripe\'s colour has its spool in the room', { skip: ROOM_SOFT_SKIP }, async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 6, gridH: 2, nextId: 3, labelStyle: null, buildId: 'e2estripespool', sideCovers: true, plateParts: {},
+    placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'Screws' }, { id: 2, x: 2, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0 }],
+    labelList: { format: 'modulith-labels', version: 1, labels: [{ text: 'Screws', id: 'e2estripelab01', colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } }] },
+    labelAssign: { 1: 'e2estripelab01' } };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('colors', { visitor: true, query: `&spools=plan#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__?.filamentsInBuild?.().unpicked.some((u) => u.stripe && u.hex.toLowerCase() === '#56b4e9'), null, { timeout: 90_000 })
+    .catch(() => assert.fail('the label stripe never reached the build filaments'));
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__?.spools?.placed?.length, null, { timeout: 60_000 }).catch(() => assert.fail('no spools in the room'));
+  await page.evaluate(() => window.__GEN2_DONE__.refreshSpools());
+  const colours = await page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.spool && o.userData.setColor) out.push(String(o.userData.spool.color).toLowerCase()); }); return out; });
+  assert.ok(colours.includes('#56b4e9'), `a spool of the stripe's blue (${JSON.stringify(colours)})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -3746,6 +3811,48 @@ test('Assemble: the Done scene\'s moving AO leaves a gap under a texel unocclude
   assert.ok(rest.passes > 2 && rest.crack === 0, `at rest the passes accumulate with the check off (${JSON.stringify(rest)})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* A COLLAPSED SHEET SAYS IT OPENS (Joey 2026-10-28: the bar "looks kind of like just a static bar until i click it ... there's
+   nothing about it that says expand me"). Its caret is drawn - the sprite lacked caret-up, so a collapsed handle showed
+   none - and once per browser the top collapsed sheet nudges up a second after load (phone.js, the one-time nudge): it plays on a first
+   visit, not again on a reload, and never under reduced motion. Every other case marks it played (open(), FAST) */
+test('Phone sheets: a collapsed handle shows its up caret, and the one-time nudge plays once - not on reload, not under reduced motion', async () => {
+  const phoneCtx = async (o = {}) => {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, ...o }); contexts.add(c);
+    await c.addInitScript(() => {
+      try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {}
+      window.__nudges = 0;   // every sheet that takes the nudge class, from the first paint on
+      new MutationObserver((ms) => { for (const m of ms) if (m.target.classList?.contains('nudge') && !(m.oldValue || '').includes('nudge')) window.__nudges++; })
+        .observe(document, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+    });
+    return c;
+  };
+  const ctx = await phoneCtx();
+  // Build: the first workspace a visitor meets, its library sheet collapsed (Colors and Parts open theirs: nothing to nudge)
+  const { page, errors } = await open('build', { phone: true, context: ctx });
+  await page.waitForFunction(() => document.querySelector('#ws .sheet:not(.open) > .sheet-handle .chev use'), null, { timeout: 60_000 });
+  // the caret it points at is in the sprite the page is served (a <use> of a missing symbol draws nothing, silently)
+  const chev = await page.evaluate(async () => { const u = document.querySelector('#ws .sheet:not(.open) > .sheet-handle .chev use'); const href = u.getAttribute('href');
+    const [file, id] = href.split('#'); const svg = await (await fetch(file)).text(); return { id, inSprite: svg.includes(`<symbol id="${id}"`) }; });
+  assert.deepEqual(chev, { id: 'ph-caret-up', inSprite: true }, 'the collapsed handle draws its up caret');
+  const played = await page.waitForFunction(() => window.__nudges > 0 && localStorage.getItem('gen2-sheet-nudged') === '1', null, { timeout: 6_000 }).then(() => true).catch(() => false);
+  assert.ok(played, 'a first visit: the top collapsed sheet nudges and the browser remembers it');
+  await page.waitForFunction(() => !document.querySelector('#ws .sheet.nudge'), null, { timeout: 5_000 }).catch(() => assert.fail('the nudge class stayed on'));
+  // a reload: remembered, so no nudge
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#ws .sheet > .sheet-handle'), null, { timeout: 60_000 });
+  await settle(page, 2500);
+  assert.equal(await page.evaluate(() => window.__nudges), 0, 'no nudge on a reload');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  // reduced motion: never, and nothing remembered
+  const rctx = await phoneCtx({ reducedMotion: 'reduce' });
+  const r = await open('build', { phone: true, context: rctx });
+  await r.page.waitForFunction(() => document.querySelector('#ws .sheet > .sheet-handle'), null, { timeout: 60_000 });
+  await settle(r.page, 2500);
+  assert.deepEqual(await r.page.evaluate(() => [window.__nudges, localStorage.getItem('gen2-sheet-nudged')]), [0, null], 'no nudge under reduced motion');
+  await rctx.close();
 });
 
 /* THE PICKER'S FILAMENTS ON A PHONE (Joey 2026-10-26, live: "I don't think filament colors actually show up on mobile at

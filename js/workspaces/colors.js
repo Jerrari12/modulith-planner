@@ -791,7 +791,12 @@ export function mountColors(stage, ctx) {
     const feet = keys.every(isFeet);
     return { hex: h, names: fil.map((f) => f.name), bare: bare.map((u) => u.key).filter((k) => isFeet(k) === feet), keys: keys.filter((k) => isFeet(k) === feet), feet, url: fil.length ? fil[0].url : null };
   }
-  function openSwap(hex) { const t = swapTarget(hex); if (!t) return; st.swap = t; st.key = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }
+  function openSwap(hex) {
+    const t = swapTarget(hex);
+    // a label stripe's spool (done.js spoolColours, since 2026-10-28): its colour is set on the labels, in Labels, not here
+    if (!t) { const h = String(hex).toLowerCase(); if (stage.filamentsInBuild().unpicked.some((u) => u.stripe && u.hex.toLowerCase() === h)) say('That spool prints the label stripes: their colour is set on each label, in Labels.'); return; }
+    st.swap = t; st.key = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker);
+  }
   function swapTo(f) {
     const t = st.swap; if (!t) return;
     const fil = { name: f.label || f.name, hex: f.hex, url: f.url };
