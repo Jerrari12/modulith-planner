@@ -5657,3 +5657,20 @@ Any equivalent hardware from any store works."
   `.commission` element and "commission" only in that sentence, the foot last and right under the last hardware group,
   Amazon's sentence once with every Amazon link `rel="noopener sponsored"`, and the looks' Shop lists showing only the new
   sentences; no page errors. The same script failed three of its checks on `9b5fca99` before the deploy.
+
+## 2026-10-27 · The toolbar row centred under the tabs; a peek's lines go with its pills
+
+- **The row under the tabs** (Joey: "can we center the icons at the top of the screen better, it looks offset after we
+  removed a few"). The row centred in the space the side panels leave (each workspace's left / right), the tabs in the top
+  bar between their neighbours: at 1600 px the row sat 72 px right of the tabs in Build and 232 px in Assemble.
+  toolbar.js `centreUnderTabs` shifts the row's buttons (CSS `translate`) to sit centred under the tabs, as far as that
+  space allows and never past it; measured again when the row, the tabs or the window resize; not on a phone (its bar lays
+  the row out its own way). E2E "the toolbar row sits centred under the tabs in every workspace, inside the space the side
+  panels leave" (1280, 1440, 1600, 1920; the old code fails it).
+- **A peek's lines go with its pills** (Joey: after a peek in Build with the ruler on, the Colors card's Open the drawer
+  showed "lines inside that i know were from the represented measurements"). The card opens a drawer with no pills
+  (`pills: 'none'`) and Build's Peek inside hides them while too big for the drawer, but the three measuring lines were
+  drawn regardless. main.js: the lines' group starts hidden for a peek and `updateDrawerDims` shows it only while a pill
+  shows. E2E "the open drawer's measuring lines show only with their pills: none from the Colors card, with them in Build"
+  (the old code fails it); the six peek cases pass. Terra 01a1800c: one finding discarded (the 'none' mode is already refused
+  first thing in peekPillsFit; the existing desktop Colors case holds it), the centring approved.

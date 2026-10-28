@@ -7235,6 +7235,7 @@ function enterDrawerFocus(carrier, { swing = true, peek = false, pills = 'all' }
   };
   const geo = new THREE.BufferGeometry().setFromPoints(segs);
   dFocus.group = new THREE.Group();
+  dFocus.group.visible = pills === 'all';   // a peek's lines wait for their pills (updateDrawerDims), so none flash in the Colors card
   dFocus.group.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: STAGE_THEMES[stageTheme].dim, transparent: true, opacity: 0.9 })));
   carrier.group.add(dFocus.group);
   if (!swing) return;
@@ -7324,9 +7325,14 @@ function updateDrawerDims() { // render-loop: pills track their lines while the 
     return { el, mid, w: el.offsetWidth || 120, h: el.offsetHeight || 40, measured: el.offsetWidth > 0 };   // 0 while hidden: larger than any pill (about 70-100 x 34), so one shown on the last frame of a glide cannot overlap (Terra 01a15f9c)
   });
   // the planner's pills only zoomed in (enterDrawerFocus `pills`): none from the Colors card, none while too big for the drawer
-  if (dFocus.pills !== 'all' && !peekPillsFit(r, rows)) { for (const q of rows) q.el.classList.add('hidden'); dFocus.remeasure = 0; return; }
+  /* the lines go with their pills (Joey 2026-10-27: after a peek in Build with the ruler on, the Colors card's Open the drawer
+     showed "lines inside that i know were from the represented measurements" - the card opens a drawer with no pills, and
+     the three lines were drawn regardless): no pill shown, no line */
+  const linesOn = (on) => { if (dFocus.group && dFocus.group.visible !== on) { dFocus.group.visible = on; invalidateFrame(); } };
+  if (dFocus.pills !== 'all' && !peekPillsFit(r, rows)) { for (const q of rows) q.el.classList.add('hidden'); dFocus.remeasure = 0; linesOn(false); return; }
   for (const q of rows) if (q.mid.z > 1) q.el.classList.add('hidden');
   const shown = rows.filter((q) => q.mid.z <= 1);
+  linesOn(shown.length > 0);
   const at = placePills(shown.map((q) => ({ x: (q.mid.x + 1) / 2 * r.width, y: (1 - q.mid.y) / 2 * r.height, w: q.w, h: q.h })),
     { width: r.width, height: r.height }, safeArea || { left: 0, right: 0, top: 0, bottom: 0 });
   shown.forEach((q, i) => { q.el.style.left = at[i].x + 'px'; q.el.style.top = at[i].y + 'px'; q.el.classList.remove('hidden'); });

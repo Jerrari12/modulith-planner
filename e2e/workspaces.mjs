@@ -3746,6 +3746,37 @@ test('the phone tour: an open sheet hides what it covers, its handle hides what 
   }
 });
 
+/* THE ROW CENTRED UNDER THE TABS (Joey 2026-10-27: "can we center the icons at the top of the screen better, it looks offset
+   after we removed a few"). In every workspace, at four desktop widths: the toolbar's buttons are centred under the tab bar
+   within a pixel, or, where the space between the side panels does not reach that far, pressed to that space's edge - and
+   never outside it. The control: before the change the row sat 72 px right of the tabs in Build at 1600 (232 in Assemble). */
+test('the toolbar row sits centred under the tabs in every workspace, inside the space the side panels leave', async () => {
+  const { ctx, page, errors } = await open('build');
+  const seen = [];
+  for (const w of [1280, 1440, 1600, 1920]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    for (const ws of ['build', 'colors', 'labels', 'parts', 'assemble']) {
+      await page.evaluate((x) => window.__GEN2_CTX__().switchTo(x), ws);
+      await page.waitForTimeout(250);   // the observer's frame
+      const m = await page.evaluate(() => {
+        const t = document.getElementById('ws-tabs').getBoundingClientRect(), tools = document.getElementById('ws-tools');
+        // the space the CSS gives the row: its box before the shift (translate moves the box with the buttons)
+        const box = tools.getBoundingClientRect(), shift = parseFloat((tools.style.translate || '0').split(' ')[0]) || 0;
+        const kids = [...tools.children].filter((k) => k.getClientRects().length).map((k) => k.getBoundingClientRect());
+        const l = Math.min(...kids.map((r) => r.left)), r = Math.max(...kids.map((r) => r.right));
+        return { tabs: (t.left + t.right) / 2, row: (l + r) / 2, l, r, spaceL: box.left - shift, spaceR: box.right - shift };
+      });
+      const centred = Math.abs(m.row - m.tabs) <= 1, atEdge = Math.abs(m.l - m.spaceL) <= 1 || Math.abs(m.r - m.spaceR) <= 1;
+      seen.push(`${w} ${ws}: ${Math.round(m.row - m.tabs)} px`);
+      assert.ok(m.l >= m.spaceL - 1 && m.r <= m.spaceR + 1, `${w} ${ws}: the row stays inside the space between the panels (${JSON.stringify(m)})`);
+      assert.ok(centred || atEdge, `${w} ${ws}: centred under the tabs, or at its space's edge (${JSON.stringify(m)})`);
+    }
+  }
+  assert.ok(seen.filter((s) => / 0 px$|: -?1 px$/.test(s)).length >= 15, `centred in most cases (${seen.join('; ')})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* NO DEAD CONTROLS IN THE TOOLBAR (Joey 2026-10-27: Explode "does nothing, just says something about assemble phase 1",
    the 3D/2D toggle "seems odd in all tabs other than Build where it can be used", and Measure "does nothing on the colors
    tab"): the 3D/2D switch is Build's alone, with both halves live; Explode is Assemble's alone; Measure is Build's and
@@ -6477,6 +6508,36 @@ test('Colors: the card\'s Open the drawer opens it with no W / L / H pills, on a
    drawer stopper"). Measured in the scene: the stopper's tab sits 2 mm behind the case front and the drawer's inner back
    face 10 mm inside the case back, so the wall meets the tab after collection − 13.5 mm (171.5 on a 185). Build's "Peek
    inside" and the Colors card's "Open the drawer" both go through the stage's peekUnit. */
+/* A PEEK'S LINES GO WITH ITS PILLS (Joey 2026-10-27: after a peek in Build with the ruler on, the Colors card's "Open the
+   drawer" showed "lines inside that i know were from the represented measurements"). The card opens a drawer with no pills;
+   its three measuring lines are not drawn either. In Build, where Peek inside shows the pills at this framing, the lines are. */
+test('the open drawer\'s measuring lines show only with their pills: none from the Colors card, with them in Build', async () => {
+  const { ctx, page, errors } = await open('build');
+  const lines = (owner) => page.evaluate((o) => {
+    const v = window.__GEN2_VIEWER__, d = [...v.instances.values()].find((i) => i.cfg.owner === o && /Drawer/.test(i.cfg.node) && i.group.visible);
+    const shown = (x) => { for (let p = x; p; p = p.parent) if (!p.visible) return false; return true; };
+    let n = 0; d.group.traverse((x) => { if (x.isLineSegments && shown(x)) n++; });
+    return { lines: n, pills: ['dim-w', 'dim-l', 'dim-h'].filter((id) => { const e = document.getElementById(id); return e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }).length };
+  }, owner);
+  const owner = await page.evaluate(() => window.__GEN2_STORE__.state.placed[0].id);
+  // Build, the ruler on (Joey's state), Peek inside: the pills and their lines
+  await page.locator('#ws-tools .measure').click();
+  await page.evaluate((o) => window.__GEN2_VIEWER__.peekUnit(o), owner);
+  await page.waitForFunction((o) => { const v = window.__GEN2_VIEWER__; return ['dim-w', 'dim-l', 'dim-h'].every((id) => !document.getElementById(id).classList.contains('hidden')); }, owner, { timeout: 15_000 })
+    .catch(async () => assert.fail(`the control: Build's peek shows no pills (${JSON.stringify(await lines(owner))})`));
+  const inBuild = await lines(owner);
+  assert.ok(inBuild.lines >= 1 && inBuild.pills === 3, `Build: the pills with their lines (${JSON.stringify(inBuild)})`);
+  // Colors: the card's Open the drawer
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.waitForTimeout(500);
+  await page.evaluate((o) => window.__GEN2_VIEWER__.peekUnit(o, { pills: false }), owner);
+  await page.waitForTimeout(800);
+  const inColors = await lines(owner);
+  assert.deepEqual(inColors, { lines: 0, pills: 0 }, `Colors: no pills, no lines (${JSON.stringify(inColors)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.5 mm), and Close it brings it back', async () => {
   const { ctx, page, errors } = await open('build');
   const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: d.id, owner: v.partInfo(d.id).owner, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });

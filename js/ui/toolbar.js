@@ -56,5 +56,31 @@ export function toolbar(stage, { measure = false, explode = null, view = null, h
     if (backdrop) { const r = backdrop.get() === 'room'; bRoom.classList.toggle('on', r); bNeutral.classList.toggle('on', !r); bRoom.setAttribute('aria-pressed', String(r)); bNeutral.setAttribute('aria-pressed', String(!r)); }
   }
   sync();
+  centreUnderTabs(tools);
   return { el: tools, sync };
+}
+
+/* THE ROW CENTRED UNDER THE TABS (Joey 2026-10-27: "can we center the icons at the top of the screen better, it looks offset
+   after we removed a few"). The CSS gives the row the space the side panels leave (left / right per workspace) and centres
+   it there, while the tabs centre in the top bar between its own neighbours: at 1600 px the row sat 72 px right of the tabs
+   in Build and 232 px in Assemble. Here the row's buttons move to sit centred under the tabs, as far as that space allows -
+   never over a panel. Not on a phone, whose bar lays the row out its own way (app.css). Measured again whenever the row,
+   the tabs or the window change size; it stops with the row (a remount builds a new one). */
+function centreUnderTabs(tools) {
+  if (typeof ResizeObserver !== 'function') return;
+  const place = () => {
+    if (!tools.isConnected) { ro.disconnect(); return; }
+    tools.style.translate = '';
+    const tabs = document.getElementById('ws-tabs');
+    if (!tabs || matchMedia('(max-width: 1023px)').matches) return;
+    const kids = [...tools.children].filter((k) => k.getClientRects().length);
+    if (!kids.length) return;
+    const box = tools.getBoundingClientRect(), t = tabs.getBoundingClientRect();
+    const left = Math.min(...kids.map((k) => k.getBoundingClientRect().left)), right = Math.max(...kids.map((k) => k.getBoundingClientRect().right));
+    const dx = Math.max(box.left - left, Math.min(box.right - right, (t.left + t.right) / 2 - (left + right) / 2));
+    if (Math.abs(dx) >= 1) tools.style.translate = `${Math.round(dx)}px 0`;
+  };
+  const ro = new ResizeObserver(() => place());
+  ro.observe(tools); ro.observe(document.documentElement);
+  requestAnimationFrame(() => { const tabs = document.getElementById('ws-tabs'); if (tabs && tools.isConnected) ro.observe(tabs); place(); });
 }
