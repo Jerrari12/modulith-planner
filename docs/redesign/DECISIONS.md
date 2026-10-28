@@ -5569,3 +5569,37 @@ on, the counters' line split the badge from the link), fixed; the fix also found
   has one now. Checked on the live planner (`thumbs-prod.mjs`, ?done=off, analytics blocked), desktop and 360x675: 21 rows,
   a frame on each, 18 renders loaded, the three without one the M3 socket screws and the hex nut; names 127 px and up on
   the desktop, 190 px and up on the phone; nothing wider than the panel; no page errors.
+
+## 2026-10-27 - The real fonts: IBM Plex Sans, Archivo and IBM Plex Mono draw the planner's words
+
+Joey, told that the bundled fonts had no letters: "yes" (fetch them and show before / after), then "Yes, deploy".
+
+- **The cause** (`tools/fetch-fonts.mjs`, 2026-10-12). Google's css2 puts each block's subset in a comment BEFORE it
+  (`/* latin */ @font-face {...}`). The script split on `@font-face`, so each chunk ended with the NEXT block's comment,
+  and its `latin` filter kept latin-ext: 208 characters, no A-Z, a-z or 0-9 (checked by a cmap read of the old file).
+  Since then every word fell through to `system-ui`.
+- **The fix.** Each block is read with its own comment. latin and latin-ext are both kept with Google's `unicode-range`,
+  so latin-ext (accented letters past Latin-1) loads only when a page draws one. The arrows ← → are in neither subset
+  and stay the system's. Every request must succeed and a font must start with `wOF2`, or the run stops (Terra
+  01a17fbe).
+- **The files.** File names carry the subset, so no browser keeps the old letterless files from cache: `fonts.css` is
+  `?v`-stamped at deploy, the woff2 URLs are not. Plex Sans is one variable file for all three weights on Google, so
+  it is ONE face per subset, `font-weight: 400 600` (Terra 01a17fbe). 10 files, 331 KB, of which a page loads only the
+  latin ones. Chrome CDP `getPlatformFontsForNode`: "Parts list" and "Start assembly" in Archivo, "43 to print · 17
+  files" in Plex Mono, "Layout valid" and the step text in Plex Sans, every glyph but the arrow.
+- **The licence.** All three are SIL OFL 1.1 (each file's name table points there; the repositories' own texts):
+  - free to use, bundle and serve, commercially too, and not to be sold on their own;
+  - every copy carries the copyright and the licence. The files carry only a link, so the texts now ship beside them
+    (`fonts/OFL-IBM-Plex.txt`, `fonts/OFL-Archivo.txt`; `fonts/README.md` says so);
+  - IBM Plex has the Reserved Font Name "Plex". These are Google's files unchanged; a version re-subset or edited here
+    could not keep that name. Archivo reserves none.
+- **What moved.** Archivo and Plex are a little wider than Segoe UI and Roboto:
+  - the phone bar's build name shortens sooner ("185...");
+  - Assemble's kit title wraps at its hyphen at 360 px ("3W-" / "2H");
+  - desktop layouts are much the same, only the faces differ.
+
+  Before / after shots (phone Build, Parts and Assemble, 780x260 Build, desktop Build and Parts) went to Joey.
+- **Checks.** The full e2e on SwiftShader with the new fonts, six shards in two streams: 111 of 112 green. The one
+  failure, "the Label plate: a faceplate switch with the plate open...", timed out on a click under the double load
+  (47 s) and passed alone (15 s). After the review's one-face change: the phone tour, the phone on its side, the Room |
+  Neutral switch fits, the label editor and the boot cases, 5/5.
