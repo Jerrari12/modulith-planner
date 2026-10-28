@@ -5874,3 +5874,15 @@ other marker took the pointer, and back. A click took whichever held it.
 Tests: `stand.test.mjs` runs Joey's build (standUp's slots, the shared marker point, armedSpots' result); the e2e case arms
 a 1W·3H shelf on it, finds one spot in the void, holds the pointer on its "+" through twelve one-pixel nudges and clicks:
 a 1W·3H shelf at (2, 8) with its front lip. Against the old spot list it fails (three red slots and the shelf's spot).
+
+## 2026-10-28 · A label stripe's colour has its spool in the room
+
+Joey, in the room on his yellow build: "we are using the blue accent color in the label but it's not adding to our filament
+stack." A label's stripe prints from its own spool and the dock already counted it among the build's filaments, but the
+room's spools left stripes out (`done.js spoolColours` filtered `!u.stripe` since the spools were built). They are in now.
+A click on a stripe's spool opens no picker (a stripe is no region: its colour is set on each label), so it says that
+instead of doing nothing. The stripe stays a colour, not a spool of the build's choosing, until the label palette lands.
+
+Tests: a new e2e case (an EdgeLabel build with a Metric-striped label: the room stacks a #56b4e9 spool; it fails with the
+old filter); the Assemble spool case reads the same list. Terra 01a18305: one finding, discarded (past the 32-spool cap a
+stripe may take another colour's place - the cap's sort order decides which fall off, as it always has).

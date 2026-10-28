@@ -3256,7 +3256,7 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
     const clear = d.spools.placed.map((x) => props.filter((pr) => new T.Box3(new T.Vector3(x.box.min.x, x.box.min.y, x.box.min.z), new T.Vector3(x.box.max.x, x.box.max.y, x.box.max.z)).intersectsBox(pr.box)).map((pr) => pr.name));
     const room = v.scene.getObjectByName('done-room'), groupOf = (name) => { const out = []; room.traverse((o) => { if (o.userData.group === name || (o.userData.slot && o.name && (o.userData.group || o.name) === name)) out.push(o.visible); }); return out; };
     const cleared = d.spools.cleared.map((name) => ({ name, props: groupOf(name), shadows: d.shadows.filter((q) => q.group === name).map((q) => q.visible) }));
-    return { ...d.spools, clearedState: cleared, monitor: groupOf('monitor'), hexes: [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)].map((h) => h.toLowerCase()), build: { x0: bb.min.x, x1: bb.max.x, z0: bb.min.z }, clear, shadowTier: !!(v.QUALITY[v.quality] || {}).shadow };
+    return { ...d.spools, clearedState: cleared, monitor: groupOf('monitor'), hexes: [...f.filaments.map((x) => x.hex), ...f.unpicked.map((u) => u.hex)].map((h) => h.toLowerCase()), build: { x0: bb.min.x, x1: bb.max.x, z0: bb.min.z }, clear, shadowTier: !!(v.QUALITY[v.quality] || {}).shadow };
   });
   assert.ok(sp.plan.groups.length >= 1, `the kit's plan has spools (${JSON.stringify(sp.plan)})`);
   assert.ok(sp.placed.length >= 1, `at least one group stood (${sp.placed.length} of ${sp.plan.groups.length})`);
@@ -3278,7 +3278,7 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
   /* THE SPOOLS FOLLOW THE BUILD (the Colors workspace's Room stage calls refreshSpools on each commit; Joey 2026-10-26: "so
      i added a blue filament, should we stack another filament on top of the stack when we do that"): a spool a filament */
   const groupsNow = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-spools') out.push({ kind: o.userData.spoolGroup.kind, colours: o.children.filter((s) => s.userData.setColor).map((s) => String(s.userData.spool.color).toLowerCase()), ys: o.children.filter((s) => s.userData.setColor).map((s) => +s.position.y.toFixed(1)) }); }); return out; });
-  const wears = () => page.evaluate(() => { const f = window.__GEN2_VIEWER__.filamentsInBuild(); return [...new Set([...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)].map((h) => h.toLowerCase()))].sort(); });
+  const wears = () => page.evaluate(() => { const f = window.__GEN2_VIEWER__.filamentsInBuild(); return [...new Set([...f.filaments.map((x) => x.hex), ...f.unpicked.map((u) => u.hex)].map((h) => h.toLowerCase()))].sort(); });   // a label stripe's colour too (2026-10-28)
   const onePer = (gs, w, label) => { const all = gs.flatMap((g) => g.colours).sort(); assert.deepEqual(all, w.slice(0, 32), `${label}: a spool for each filament the build wears, each once (${JSON.stringify(gs)})`); };
   const g0 = await groupsNow();
   // one filament over the whole build (the feet keep their TPU): one spool each for it and the TPU, the spares off the desk
@@ -3478,6 +3478,28 @@ test('Colors: the Room | Neutral switch is absent with ?done=off; for every visi
   await settle(page, 1500);
   assert.equal(await seg('Neutral').getAttribute('aria-pressed'), 'true', 'Neutral, as picked, after a reload');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.done || null), null, 'and no room loaded');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A LABEL STRIPE'S SPOOL (Joey 2026-10-28: "we are using the blue accent color in the label but it's not adding to our
+   filament stack"). The stripe prints from its own spool and the dock counted it, but the room's spools left stripes out
+   (done.js spoolColours). An EdgeLabel build whose drawer carries a Metric-striped label: the room stacks a spool of its
+   blue. */
+test('Colors: a label stripe\'s colour has its spool in the room', { skip: ROOM_SOFT_SKIP }, async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 6, gridH: 2, nextId: 3, labelStyle: null, buildId: 'e2estripespool', sideCovers: true, plateParts: {},
+    placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'Screws' }, { id: 2, x: 2, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0 }],
+    labelList: { format: 'modulith-labels', version: 1, labels: [{ text: 'Screws', id: 'e2estripelab01', colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } }] },
+    labelAssign: { 1: 'e2estripelab01' } };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('colors', { visitor: true, query: `&spools=plan#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__?.filamentsInBuild?.().unpicked.some((u) => u.stripe && u.hex.toLowerCase() === '#56b4e9'), null, { timeout: 90_000 })
+    .catch(() => assert.fail('the label stripe never reached the build filaments'));
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__?.spools?.placed?.length, null, { timeout: 60_000 }).catch(() => assert.fail('no spools in the room'));
+  await page.evaluate(() => window.__GEN2_DONE__.refreshSpools());
+  const colours = await page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.spool && o.userData.setColor) out.push(String(o.userData.spool.color).toLowerCase()); }); return out; });
+  assert.ok(colours.includes('#56b4e9'), `a spool of the stripe's blue (${JSON.stringify(colours)})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
