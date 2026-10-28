@@ -5530,6 +5530,9 @@ EdgeLabel's, so one failed file would have blanked EdgeLabel labels too; both no
 Pro labels blank, or its part labels in words). E2E "Classic Pro core refused: an EdgeLabel label still shows its words"
 (the coupled load fails it). The frame order, the caches, the one icon catalog and the dropped stripe were confirmed.
 
+- **Live 2026-10-27 at `280de16`** (run 40604160330 green). Checked on the live planner (`classicpro-text-prod.mjs`):
+  a Classic Pro drawer labelled "M3-10 screw" shows "M3-10 SCREW" on its label, left to right; no page errors.
+
 ## 2026-10-27 · Parts: a part render on every row
 
 Joey, from the live planner's Parts list on a Classic Pro 185 tabletop build: "i like the colors around the blank square,
@@ -5675,6 +5678,9 @@ Any equivalent hardware from any store works."
   (the old code fails it); the six peek cases pass. Terra 01a1800c: one finding discarded (the 'none' mode is already refused
   first thing in peekPillsFit; the existing desktop Colors case holds it), the centring approved.
 
+- **Live 2026-10-27 at `42ab09c`** (run 40616559063 green). Checked on the live planner: the toolbar row's centre equals
+  the tabs' in all five workspaces at 1280, 1440, 1600 and 1920 px; no page errors.
+
 ## 2026-10-27 · Classic Pro part labels carry the screw and nut drawings
 
 Joey, looking at Classic Pro drawers labelled from the Part Picker ("M3 SHCS × 6 NYLON", words only): "these labels are
@@ -5695,6 +5701,11 @@ size.
 - **The planner** copies the two files (test/label-hardware-vendor.test.mjs pins them), so a Classic Pro drawer's part label
   on the model shows the drawing (label-text.js `partLabelGeometry(..., 'classicpro')`); the Labels settings on a Classic Pro
   build keep the "Screw and nut drawings" switch, with a line that the stripe is EdgeLabel's.
+
+- **Live 2026-10-27**: the Label Studio first (public main `6fd9313c` with the label-audit release, on Joey's "Push it";
+  live hardware-layout.js `0c416fc5`, label-hardware.js `9bd3a241`), then the planner at `42ab09c` (run 40616559063).
+  Checked on the live planner: an M5 x 20 socket-cap part label on a Classic Pro drawer shows the size, the head-on view
+  and side profile and "A2", centred.
 
 ## 2026-10-27 - The room: matte black is the floor for the wall and the desk
 
