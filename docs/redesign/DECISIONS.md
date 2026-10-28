@@ -5874,3 +5874,51 @@ other marker took the pointer, and back. A click took whichever held it.
 Tests: `stand.test.mjs` runs Joey's build (standUp's slots, the shared marker point, armedSpots' result); the e2e case arms
 a 1W·3H shelf on it, finds one spot in the void, holds the pointer on its "+" through twelve one-pixel nudges and clicks:
 a 1W·3H shelf at (2, 8) with its front lip. Against the old spot list it fails (three red slots and the shelf's spot).
+
+## 2026-10-28 · Silk filaments look like silk on the model
+
+Joey, on his yellow 185 Tabletop 2W-2H in Panchroma Yellow, then Silk Brass, then Silk Gold: "are we doing anything
+different to represent silk colors? they still feel way too much like regular filaments ... they almost look the same."
+They were the same: a silk filament differed from a matte one only by its catalog hex. The picker's swatches have shown a
+sheen since 2026-10-21; the model now does too.
+
+- WHICH FILAMENTS: the catalog decides. `filament-db.js` marks every colour of the Panchroma Silk PLA line `finish: 'silk'`
+  (the shop's product family, like the Translucent line's `translucent`), and `finishOfLabel` reads it; a name is never
+  what decides. All 24, nothing else. The picker's word rule agrees on every catalog label (a unit test).
+- THE FINISH: `part-material.js SILK_APPROX` (roughness 0.2, metalness 0.75, anisotropy 0.4), below an authored profile
+  (a real profile still wins) and below the holographic plate. An AUTHORED APPROXIMATION, visually tuned in this viewer's
+  room, not measured and not a profile. Contract 2 -> 3: a consumer written for 2 would draw a silk label as an isotropic
+  pseudo-metal. The metalness is an artistic compromise (silk PLA is a dielectric): it is what makes the highlights wear
+  the filament's own hue, which keeps Silk Brass and Silk Gold apart.
+- THE DIRECTION (`js/silk-axis.js`): three's anisotropy, its rough axis pointed across the printed layers (the build axis
+  projected on the surface, through normalMatrix: a layer-plane normal) so a wall's highlight runs along the build axis,
+  as the Lab's upright silk vase shows it; on a face within 15 degrees of the axis (a top skin, a face-down first layer)
+  across an ASSUMED 45 degree skin line instead, blended by 30. Every projection's normalise is guarded.
+- WHY THAT WAS NOT ENOUGH, MEASURED: an upright face of the build mirrors the plain desk, so on the 2W-2H's fronts even
+  the calipers' own settings (metalness 1, roughness 0.1) rendered as flat gold, on both plates and at three orbit
+  angles - the same reason the Lab's silk lobes measured dead under this rig (Lab RENDERING.md 1.4i). The calipers read as
+  metal because they lie flat under the sunlit wall: they reflect contrast. So two AUTHORED devices carry the look, on
+  silk parts only: a SILK STUDIO the part reflects in place of the room (`main.js SILK_STUDIO`: a dark surround ringed by
+  five tall soft strips; Joey's pick, "Try studio reflection"), and a SILK LIGHT, a specular-only point riding above and
+  left of the camera (`SILK_LIGHT`), both world- or camera-fixed so the sheen slides as the view turns.
+- TWO STRENGTHS: Fast draws without tone mapping, and at the tone-mapped strengths a Silk Gold front clipped to flat
+  yellow. Where a tier does not tone-map the light drops to 1 and the studio's reflection to 0.3 (`silkTier`, set in
+  applyQuality through one shared uniform).
+- Comparison arms, not settings: `?silk=off` (the old finish), `iso`, `rot` (the sheen turned 90 degrees), `nolight`,
+  `nostudio`.
+- COST, the worst case (every printed region of the 2W-2H silk, against the same regions in plain Panchroma), the stage's
+  own scene drawn 60 times a sample with a GPU sync, 7 interleaved rounds on the laptop GPU (idle before, `nvidia-smi`):
+  Very High at 3200x1800 1.155 against 1.078 ms a draw, median +0.05 ms, 6 of 7 rounds positive; Fast at 1600x900 0.967
+  against 0.897 ms, median +0.065 ms, 5 of 7. A non-silk part compiles none of it. A silk filament's first appearance on a
+  kind of part compiles one program variant (the look-card case now warms the presets' finishes, then requires their
+  recoloured looks to compile nothing). `D:\Claude - Output\silk-finish-2026-10-28\bench.mjs`, `bench-*.json`.
+
+Joey on the powder-coated shots: "wow these are starting to read really well like silk, even as powdercoated". The
+EdgeLabel build (his suggestion) shows all three surfaces at once: the face-down accents glitter (the powder grain's
+facets catch the studio), the face-up label wedges are smooth lustrous metal, the angled grips catch the strips.
+
+Not done here, on purpose: the Lab's copies of `part-material.js` (contract 3) and `filament-db.js` are re-vendored after
+the deploy, so the Lab never pins a finish that is not live; the Lab's own pane calls the spec without a label and is
+unchanged.
+
+Reviews: Sol 01a182f6 (design), Sol 01a18343 (code: the bevel seam, the studio scale split from the light, the debug rebuild hook dropped). Tests: unit 720 pass; the silk and look-card e2e cases pass on the GPU and under E2E_SOFT (the soft Colors run: 29 passed, 2 skipped, the look-card case failed until its rewrite above and passes since). Shots: `D:\Claude - Output\silk-finish-2026-10-28` (`shoot.mjs`, `tune.mjs`).

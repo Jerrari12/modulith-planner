@@ -199,6 +199,10 @@ jobs:
           # line here fails the deploy rather than shipping a module that caches independently of
           # the importer that reads it.
           sed -i "s|'./filament-profiles.js'|'./filament-profiles.js?v=$V'|" js/part-material.js
+          # and the catalog, since the silk approximation (2026-10-28): part-material.js reads a label's finish family
+          sed -i "s|'./filament-db.js'|'./filament-db.js?v=$V'|" js/part-material.js
+          # the silk parts' sheen frame and silk light (2026-10-28) - a main.js import
+          sed -i "s|'./silk-axis.js'|'./silk-axis.js?v=$V'|" js/main.js
           # the build plate's bed-surface finish (2026-09-14) - a main.js import like the rest
           sed -i "s|'./bed-finish.js'|'./bed-finish.js?v=$V'|" js/main.js
           # the cover tiles' shading-only edge (2026-10-21) - a main.js import too

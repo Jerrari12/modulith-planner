@@ -22,11 +22,12 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const main = readFileSync(join(root, 'js', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 
 test('the contract version is pinned - the Lab refuses a mismatch', () => {
-  /* ⚠ 2 SINCE 2026-09-07. Version 1 answered a part key with a fixed finish; version 2 answers a
-     part key AND a filament label, and can return values the Lab authored. A consumer written
-     against 1 would ignore ctx.label and render every profiled filament at the base - a wrong
-     picture with no error, which is what a version exists to turn into a failing test. */
-  assert.equal(PART_MATERIAL_CONTRACT_VERSION, 2);
+  /* ⚠ 3 SINCE 2026-10-28. Version 1 answered a part key with a fixed finish; version 2 answers a
+     part key AND a filament label, and can return values the Lab authored; version 3 can also return
+     `anisotropy` and `silk` for the catalog's silk family. A consumer written against 2 would render a
+     silk label as an isotropic pseudo-metal - a wrong picture with no error, which is what a version
+     exists to turn into a failing test. test/silk.test.mjs pins the silk branch itself. */
+  assert.equal(PART_MATERIAL_CONTRACT_VERSION, 3);
 });
 
 test('an ordinary printed part is 0.55 / 0.05 physical', () => {

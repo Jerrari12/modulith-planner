@@ -5650,18 +5650,26 @@ test('Colors step 2: a look card of this build compiles no shader program after 
   const r = await page.evaluate(async () => {
     const v = window.__GEN2_VIEWER__;
     const diff = (c) => { const d = []; for (let i = 0; i < c.pixels.length; i += 4) { if (c.pixels[i + 3] < 250) continue; d.push(Math.max(Math.abs(c.pixels[i] - c.cmp[i]), Math.abs(c.pixels[i + 1] - c.cmp[i + 1]), Math.abs(c.pixels[i + 2] - c.cmp[i + 2]))); } d.sort((a, b) => a - b); return { pixels: d.length, median: d[Math.floor(d.length / 2)], p95: d[Math.floor(d.length * 0.95)] }; };
+    /* ⚠ A FINISH IS A PROGRAM, A COLOUR IS NOT (2026-10-28). A silk filament compiles its own variant (the silk frame, light
+       and studio) the first time a look puts it on a kind of part, so the presets are drawn once to warm every finish they
+       use, and then AGAIN with every colour changed and every filament kept: that second pass is a gallery of new looks,
+       and it must compile nothing. The warm-up's own programs are bounded by the finishes, not the looks. */
     const looks = v.PRESETS.map((p) => ({ colors: p.colors, over: {} }));
     await v.lookCard(looks[0]);
-    const afterFirst = v.probe().programs;
+    const atFirst = v.probe().programs;
     for (const l of looks) await v.lookCard(l);
+    const afterFirst = v.probe().programs;
+    const shade = (hex) => '#' + hex.slice(1).match(/../g).map((c) => (parseInt(c, 16) ^ 0x1f).toString(16).padStart(2, '0')).join('');
+    for (const l of looks) await v.lookCard({ colors: Object.fromEntries(Object.entries(l.colors).map(([k, f]) => [k, { ...f, hex: shade(f.hex) }])), over: {} });
     const afterAll = v.probe().programs;
     const pal = v.palette(), chosen = { colors: pal.colors, over: pal.over };
     const card = diff(await v.lookCard(chosen, { compare: 'canvas' }));
     const plain = diff(await v.lookCard(chosen, { xr: false, linear: false, compare: 'canvas' }));   // the control: an ordinary target
-    return { tier: v.quality, afterFirst, afterAll, card, plain };
+    return { tier: v.quality, atFirst, afterFirst, afterAll, card, plain };
   });
   assert.equal(r.tier, 'balanced', 'the case runs on a tone-mapped tier');
-  assert.equal(r.afterAll, r.afterFirst, 'four more looks compile no shader program');
+  assert.ok(r.afterFirst - r.atFirst <= 4, `the presets' finishes compile a few variants, not one per look: ${r.atFirst} -> ${r.afterFirst}`);
+  assert.equal(r.afterAll, r.afterFirst, 'the presets again in new colours compile no shader program');
   assert.ok(r.card.pixels > 1000, `the card shows the build (${r.card.pixels} pixels)`);
   assert.ok(r.card.median <= 6 && r.card.p95 <= 32, `the card matches the screen: median ${r.card.median}, p95 ${r.card.p95}`);
   assert.ok(r.plain.median > 12, `the control: an ordinary render target misses the tone mapping (median ${r.plain.median})`);
@@ -6908,6 +6916,49 @@ test('Colors: silk filaments wear a sheen in the picker and in the rows, plain o
   await page.locator('#ws-picker .brands .sw[aria-label="Panchroma Silk Gold"]').click();
   await page.waitForFunction(() => !!document.querySelector('#ws-colors .crow .sw.silk') && !!document.querySelector('#ws-picker .brands .sw.silk[aria-label="Panchroma Silk Gold"][title*="already in this build"]'), null, { timeout: 15_000 })
     .catch(() => assert.fail('the picked silk does not show its sheen in the row and the In this build swatches'));
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* SILK ON THE MODEL (Joey, 2026-10-28: silk filaments "still feel way too much like regular filaments"). A silk pick gives the
+   region's live material part-material.js's SILK_APPROX, the silk frame's anisotropy, the silk light and the silk studio;
+   a plain pick on the same region takes every one of them away again, on the same material (the palette repaints, it does
+   not rebuild). The look itself is judged on the comparison shots; this guards the wiring. */
+test('Colors: a silk pick makes the region silk on the model, and a plain pick puts it back', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  const finishOf = (hex) => page.evaluate((hex) => {
+    const v = window.__GEN2_VIEWER__, want = new v.THREE.Color(hex), seen = new Map();
+    v.scene.traverse((o) => { const m = o.isMesh && o.material; if (m && m.isMeshPhysicalMaterial && m.color.equals(want)) seen.set(m.uuid, m); });
+    return [...seen.values()].map((m) => ({ uuid: m.uuid, roughness: +m.roughness.toFixed(3), metalness: +m.metalness.toFixed(3), anisotropy: m.anisotropy,
+      sheen: 'SILK_SHEEN' in (m.defines || {}) && 'SILK_ENV' in (m.defines || {}), env: !!m.envMap, axis: !!m.userData.silkAxis }));
+  }, hex);
+  /* the parts wearing one colour that carry an anisotropy - by colour, because the default palette's grip-accent rods are
+     already Silk Silver (Joey's), and they stay silk throughout */
+  const anisoOf = (hex) => page.waitForFunction((hex) => { const v = window.__GEN2_VIEWER__, want = new v.THREE.Color(hex); let n = 0, all = 0;
+    v.scene.traverse((o) => { const m = o.isMesh && o.material; if (m && m.color && m.color.equals(want)) { all++; if (m.anisotropy > 0) n++; } });
+    return all > 0 && { n, all }; }, hex, { timeout: 15_000 }).then((h) => h.jsonValue());
+  await page.locator('#ws-picker .brands .sw[aria-label="Panchroma Silk Gold"]').click();
+  const gold = await anisoOf('#d9b13b');
+  assert.equal(gold.n, gold.all, `every Silk Gold mesh takes the silk anisotropy: ${JSON.stringify(gold)}`);
+  const silk = await finishOf('#d9b13b');
+  assert.ok(silk.length > 0, 'nothing on the stage wears Silk Gold');
+  for (const s of silk) {
+    assert.equal(s.roughness, 0.2, 'silk roughness'); assert.equal(s.metalness, 0.75, 'silk metalness');
+    assert.equal(s.anisotropy, 0.4, 'silk anisotropy (the region\'s build axis is known)');
+    assert.ok(s.sheen && s.env && s.axis, `the silk light, the studio and the frame: ${JSON.stringify(s)}`);
+  }
+  await page.locator('#ws-picker .brands .sw[aria-label="Panchroma Yellow"]').click();
+  const yellow = await anisoOf('#f5c542');
+  assert.equal(yellow.n, 0, `a Panchroma Yellow mesh kept the silk anisotropy: ${JSON.stringify(yellow)}`);
+  const plain = await finishOf('#f5c542');
+  for (const s of silk) {
+    const p = plain.find((x) => x.uuid === s.uuid);
+    assert.ok(p, 'the region was rebuilt rather than repainted (or did not take the plain pick)');
+    assert.deepEqual({ roughness: p.roughness, metalness: p.metalness, anisotropy: p.anisotropy, sheen: p.sheen, env: p.env },
+      { roughness: 0.55, metalness: 0.05, anisotropy: 0, sheen: false, env: false });
+  }
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

@@ -145,7 +145,10 @@ const FILAMENT_DB = [
     { name: 'Silk Periwinkle',    hex: '#8a96dc', id: 43637561557049 },
     { name: 'Silk Dark Blue',     hex: '#2b4a8c', id: 43637561589817 },
     { name: 'Silk Gunmetal Grey', hex: '#6a6f78', id: 43637561622585 },
-  ].map(f => ({ ...f, label: `Panchroma ${f.name}`, url: PM_SILK })) },
+  /* ⚠ `finish: 'silk'` IS THE PRODUCT FAMILY THE SHOP PUBLISHES (its own Silk PLA page), not a measurement - the same
+     kind of field as the Translucent line's `translucent`. part-material.js reads it to give these filaments the
+     AUTHORED silk approximation (2026-10-28); a filament's name is never what decides it. */
+  ].map(f => ({ ...f, finish: 'silk', label: `Panchroma ${f.name}`, url: PM_SILK })) },
   // Polymaker PETG — feed handle petg, all 25 real 1.75mm/1kg variants
   // (variant ids scraped from the shop's product JSON 2026-08-07, shop order,
   // Galaxy/Clear/Army Brown included; hexes approximated like every section).
@@ -352,4 +355,9 @@ const FILAMENT_DB = [
   ].map(f => ({ ...f, label: `Polar ${f.name}` })) },
 ];
 
-export { FILAMENT_DB };
+/* The surface family a label's filament belongs to ('silk'), or null for an ordinary one and for a label the catalog does
+   not hold (a saved palette can name a filament that has since left it). */
+const FINISH_OF = new Map(FILAMENT_DB.flatMap(b => b.colors.filter(c => c.finish).map(c => [c.label, c.finish])));
+const finishOfLabel = (label) => FINISH_OF.get(label) || null;
+
+export { FILAMENT_DB, finishOfLabel };

@@ -17,6 +17,7 @@ import { lensDisk, lensShear, lightStride } from './lens.js';   // Very High's t
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
+import { createSilkUniforms, applySilkAxis, silkTier } from './silk-axis.js';
 import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
@@ -726,6 +727,37 @@ function studioEnv() {
   room.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
   return studioEnvTex;
 }
+/* THE SILK STUDIO (2026-10-28, Joey's pick: "Try studio reflection"): what a silk part reflects, in place of the room.
+   ⚠ AN AUTHORED DEVICE, AND WHY IT EXISTS WAS MEASURED. An upright face of the build mirrors the plain desk in front of
+   it, so in the room even the caliper's own settings (metalness 1, roughness 0.1) render a silk front as flat gold
+   (D:\Claude - Output\silk-finish-2026-10-28). The caliper reads as metal because it lies flat under the sunlit wall:
+   it reflects contrast. So a silk part reflects a photo studio instead - a dim surround ringed with tall soft strips -
+   whose bands slide across its faces as the view turns, the way silk shimmers. World-fixed, like any reflection.
+   SILK_STUDIO is the art: strip count, the strips' width and height, their brightness, the surround's. */
+const SILK_STUDIO = { strips: 5, w: 3, h: 28, r: 9, boost: 4.5, surround: 0x15141a, top: 1.6, sigma: 0.02 };
+let silkEnvTex = null;
+function silkStudioRoom() {
+  const S = SILK_STUDIO, room = new THREE.Scene();
+  room.add(new THREE.Mesh(new THREE.BoxGeometry(30, 30, 30), new THREE.MeshBasicMaterial({ color: S.surround, side: THREE.BackSide })));
+  for (let k = 0; k < S.strips; k++) {
+    const a = ((k + 0.5) / S.strips) * Math.PI * 2;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffffff).multiplyScalar(S.boost), side: THREE.DoubleSide }));
+    m.position.set(Math.cos(a) * S.r, 0, Math.sin(a) * S.r); m.lookAt(0, 0, 0); room.add(m);
+  }
+  const top = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffffff).multiplyScalar(S.top), side: THREE.DoubleSide }));
+  top.position.set(0, S.r, 0); top.lookAt(0, 0, 0); room.add(top);
+  return room;
+}
+function silkEnv() {
+  if (silkEnvTex) return silkEnvTex;
+  const room = silkStudioRoom();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  silkEnvTex = pmrem.fromScene(room, SILK_STUDIO.sigma).texture;
+  pmrem.dispose();
+  room.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+  return silkEnvTex;
+}
 // Shipped light rig vs the key-dominant one. Key-dominant is what makes a shadow
 // read at all — with the shipped near-even lighting the shadow is washed out.
 const LIGHT_RIG = {
@@ -750,6 +782,8 @@ function applyQuality(name) {
   const q = QUALITY[quality];
 
   renderer.toneMapping = q.tone ? THREE.NeutralToneMapping : THREE.NoToneMapping;
+  // the silk light and studio at the strengths this tone mapping can hold (silk-axis.js silkTier); unset on the first call
+  if (silkU) { const st = silkTier(!!q.tone); silkU.uSilkLight.value = st.light; silkU.uSilkEnv.value = st.env; }
   // ⚠ NOT ACES. Measured median hue error: none 0.9 deg, Khronos Neutral 2.5 deg,
   // ACES 5.3 deg. Neutral exists for product rendering where colour is a promise.
 
@@ -4250,20 +4284,72 @@ function withLayerDetail(m, key) {
   return m;
 }
 
+/* SILK (2026-10-28, js/silk-axis.js): a catalog silk filament wears part-material.js's SILK_APPROX, whose anisotropy
+   needs to know which way the part grew. Every physical part material carries the frame patch - it compiles to nothing
+   for a filament that is not silk - so a live pick of a silk filament needs no rebuild, only the scalars and defines.
+   ?silk=off renders silk filaments as before (the ordinary finish), ?silk=iso without the anisotropy, ?silk=rot with
+   the sheen turned 90 degrees, ?silk=nolight without the silk light, ?silk=nostudio reflecting the room: comparison
+   arms, not settings (Sol 01a182f6).
+   `var`, like sceneHold: applyQuality runs at module evaluation and sets the tier's strengths on it (silkTier). */
+var SILK_ARM = (() => { const v = new URLSearchParams(location.search).get('silk'); return ['off', 'iso', 'rot', 'nolight', 'nostudio'].includes(v) ? v : null; })();
+var silkU = createSilkUniforms({ rot: SILK_ARM === 'rot', tone: !!QUALITY[quality].tone });
+function withSilkAxis(m, key) {
+  // an unknown axis still gets the patch, for the silk light; silkFinish keeps its anisotropy at 0, so the axis is unread
+  return applySilkAxis(m, { up: buildAxisForKey(key) || [0, 1, 0], uniforms: silkU });
+}
+/* The spec as this viewer can draw it: no anisotropy where the build axis is unknown (a direction on a guessed axis is
+   a print that does not exist - the relief's rule), and the comparison arms. Every path that paints a finish goes
+   through here and then applyFinish, so a repaint can never leave a stale anisotropy behind. */
+function silkFinish(key, spec) {
+  if (!spec.silk) return spec;
+  if (SILK_ARM === 'off') return partMaterialSpec(key);
+  if (SILK_ARM === 'iso' || !buildAxisForKey(key)) return { ...spec, anisotropy: 0 };
+  return spec;
+}
+/* the scalars a finish carries onto a live material; an absent anisotropy is 0 (a profile replaces silk outright) */
+function applyFinish(m, spec) {
+  m.roughness = spec.roughness;
+  m.metalness = spec.metalness;
+  if (!m.isMeshPhysicalMaterial) return;
+  m.anisotropy = spec.anisotropy || 0;   // three recompiles by itself when this crosses 0
+  // the silk light (silk-axis.js SILK_LIGHT) and the studio's strength, each a define: a program of their own
+  const studio = !!spec.silk && SILK_ARM !== 'nostudio';
+  setDefine(m, 'SILK_SHEEN', !!spec.silk && SILK_ARM !== 'nolight');
+  setDefine(m, 'SILK_ENV', studio);
+  // the silk studio (SILK_STUDIO): a silk part reflects it in place of the scene's environment, on every tier
+  const env = studio ? silkEnv() : null;
+  if (m.envMap !== env && (env || m.envMap === silkEnvTex)) { if (!m.envMap !== !env) m.needsUpdate = true; m.envMap = env; }
+}
+function setDefine(m, name, on) {
+  if (!!(m.defines && name in m.defines) === on) return;
+  const d = { ...(m.defines || {}) };
+  if (on) d[name] = ''; else delete d[name];
+  m.defines = d; m.needsUpdate = true;
+}
+/* a clone that follows its source's finish (the planned ghosts): the scalars, and the silk light and studio with them */
+function copyFinish(dst, src) {
+  dst.roughness = src.roughness; dst.metalness = src.metalness;
+  if (!dst.isMeshPhysicalMaterial) return;
+  dst.anisotropy = src.anisotropy;
+  for (const name of ['SILK_SHEEN', 'SILK_ENV']) setDefine(dst, name, !!(src.defines && name in src.defines));
+  if (!dst.envMap !== !src.envMap) dst.needsUpdate = true;
+  dst.envMap = src.envMap;
+}
+
 function newPartMaterial(key) {
   const plateContact = plateContactKey(key);
-  const spec = partMaterialSpec(key, {
+  const spec = silkFinish(key, partMaterialSpec(key, {
     holographicPlate: plateActive(), plateContact, label: activeLabel(key),
-  });
+  }));
   const color = new THREE.Color(activeHex(key));
 
   if (spec.kind === 'physical') {
     const m = new THREE.MeshPhysicalMaterial({
       color,
-      metalness: spec.metalness, roughness: spec.roughness,
       clearcoat: spec.clearcoat, clearcoatRoughness: spec.clearcoatRoughness,
       envMapIntensity: spec.envMapIntensity,
     });
+    applyFinish(m, spec);   // roughness, metalness, anisotropy and the silk light, the way every repaint sets them
     /* ⚠ SEPARATE STATEMENTS, NOT ONE NESTED CALL, AND THE ORDER IS THE WHOLE POINT. attachHolo
        ASSIGNS onBeforeCompile; withLayerDetail CHAINS onto it; withBedFinish CHAINS onto that.
        Written as `withLayerDetail(attachHolo(m), key)` the text reads in the opposite order to the
@@ -4277,6 +4363,7 @@ function newPartMaterial(key) {
     }
     withLayerDetail(m, key);
     recordAxis(m, key);   // withBedFinish merges userData, so the record survives it
+    withSilkAxis(m, key);   // chains, and draws after lights_physical_fragment whatever order the patches ran in
     return withBedFinish(m, key, spec);
   }
   const m = new THREE.MeshStandardMaterial(
@@ -6616,8 +6703,7 @@ function overrideMatFor(key, ov, zone, alt) {
   const k = key + '|' + ov.hex + '|' + (ov.name || '') + (alt && !zone ? '|alt' : '');
   if (!overrideMats[k]) {
     const m = cloneMaterial(base); m.color.set(ov.hex);
-    const spec = partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label: ov.name || null });
-    m.roughness = spec.roughness; m.metalness = spec.metalness;
+    applyFinish(m, silkFinish(key, partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label: ov.name || null })));
     overrideMats[k] = m;
   }
   return overrideMats[k];
@@ -7949,22 +8035,20 @@ const activeLabel = key => {
  * something happens to rebuild the scene. The part would look right in the picker and wrong on the
  * model, which is the failure this whole transport exists to produce correctly.
  */
-const finishFor = key => partMaterialSpec(key, {
+const finishFor = key => silkFinish(key, partMaterialSpec(key, {
   holographicPlate: plateActive(), plateContact: plateContactKey(key), label: activeLabel(key),
-});
+}));
 
 function applyPalette() {
-  /* ⚠ COLOUR AND FINISH, SINCE 2026-09-07. See finishFor. Only roughness and metalness move:
-     they are the whole of what a profile carries, and they are plain uniforms, so no material needs
-     recompiling. Anything structural — the clearcoat the holographic plate transfers, the material
-     CLASS — still comes from a rebuild, exactly as it did before, because nothing here can change
-     it without one. */
+  /* ⚠ COLOUR AND FINISH, SINCE 2026-09-07. See finishFor. Roughness, metalness and (since 2026-10-28,
+     silk) anisotropy move: the first two are plain uniforms, and the anisotropy's frame patch is on every
+     part material already (withSilkAxis), so crossing 0 costs one recompile three schedules itself.
+     Anything else structural — the clearcoat the holographic plate transfers, the material CLASS — still
+     comes from a rebuild, exactly as it did before, because nothing here can change it without one. */
   syncSeeIntoComponents();   // a translucent filament arriving on (or leaving) a supported component rebuilds it first
   const repaint = (type, mat) => {
     mat.color.set(activeHex(type));
-    const spec = finishFor(type);
-    mat.roughness = spec.roughness;
-    mat.metalness = spec.metalness;
+    applyFinish(mat, finishFor(type));
   };
   for (const [type, mat] of Object.entries(materials)) repaint(type, mat);
   for (const [type, mat] of Object.entries(highlightMats)) repaint(type, mat);
@@ -7974,8 +8058,8 @@ function applyPalette() {
   for (const [type, mat] of Object.entries(altMaterials)) { repaint(type, mat); mat.color.lerp(new THREE.Color('#ffffff'), altLerp(type)); }
   for (const [type, mat] of Object.entries(altHighlightMats)) { repaint(type, mat); mat.color.lerp(new THREE.Color('#ffffff'), altLerp(type)); }
   // planned (translucent) clones take their source's colour AND finish, after both moved
-  for (const e of Object.values(plannedMats)) { e.mat.color.copy(e.src.color); e.mat.roughness = e.src.roughness; e.mat.metalness = e.src.metalness; }
-  for (const e of Object.values(plannedHighlightMats)) { e.mat.color.copy(e.src.color); e.mat.roughness = e.src.roughness; e.mat.metalness = e.src.metalness; }
+  for (const e of Object.values(plannedMats)) { e.mat.color.copy(e.src.color); copyFinish(e.mat, e.src); }
+  for (const e of Object.values(plannedHighlightMats)) { e.mat.color.copy(e.src.color); copyFinish(e.mat, e.src); }
   renderChecklist();
   updateColorToggle();
   renderPresets(); // keep the active preset / My-palette chip highlight in step
@@ -9667,8 +9751,7 @@ function lookMaterialFor(look, it) {
     m = cloneMaterial((it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone));
     m.color.set(hex);
     if (alt) m.color.lerp(new THREE.Color('#ffffff'), ALT_LIGHTEN);
-    const spec = partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label });
-    m.roughness = spec.roughness; m.metalness = spec.metalness;
+    applyFinish(m, silkFinish(key, partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label })));
     lookMats.set(k, m);
   }
   return m;
@@ -11862,6 +11945,9 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the Very High accumulation state and the live tier, so a screenshot harness (tools/golden-shots.mjs) can
     // wait for a CONVERGED frame (acc.n reaches ACC_SAMPLES) and prove the tier it asked for is the one drawing
     acc, ACC_SAMPLES, get quality() { return quality; },
+    // the silk light's shared uniforms (silk-axis.js), so a comparison harness can set it without a rebuild. The studio
+    // has no such hook: it is built once (a rebuild would have to reach every material cache - Sol 01a18343)
+    silkU,
     // what a probe reads beside the JS heap: the renderer's live resource counts and the camera's place (tools/perf-probe.mjs)
     probe: () => ({ geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, programs: (renderer.info.programs || []).length, camera: camera.position.toArray().map((v) => +v.toFixed(2)) }),
     // for the workspaces (phase 0): select a part by instance id (null deselects), and read the build and selection
