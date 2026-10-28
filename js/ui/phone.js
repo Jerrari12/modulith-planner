@@ -31,7 +31,8 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
   // on its side, read off the dock (or the player) itself: it sits 8 px up plus the screen's bottom inset (app.css), which
   // the script cannot know (Sol 01a17da4: an iPhone's 21 px would put the sheets over it)
   const floorTop = () => { const f = [...root.querySelectorAll('#ws-dock, #ws-player')].find((e) => !e.hidden && e.getClientRects().length); return f ? Math.round(innerHeight - f.getBoundingClientRect().top) : 8 + dockH(); };
-  const base = () => (isSideways() ? floorTop() : TABBAR + dockH()) + 6;   // where the lowest sheet's bottom edge sits
+  // where the lowest sheet's bottom edge sits; with the tab bar put away (stack), on the dock or the player in its place
+  const base = () => (isSideways() || root.classList.contains('bar-off') ? floorTop() : TABBAR + dockH()) + 6;
   const openHeight = () => isSideways() ? Math.max(88, innerHeight - base() - ROW) : Math.max(160, Math.min(Math.round(innerHeight * 0.56), innerHeight - base() - 110));
   const badges = (typeof ctx.badges === 'function' ? ctx.badges() : ctx.badges) || {};
   const bar = el('nav.glass', { id: 'ws-tabbar', 'aria-label': 'Workspaces' });
@@ -59,6 +60,11 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
      (Sol 01a13367); an open sheet rises from the dock over them */
   const collapsedHeight = (e) => HANDLE + (e.peek && e.peek() ? 40 : 0);
   function stack() {
+    const anyOpen = [...sheets.values()].some((e) => e.open && !e.el.hidden);
+    /* upright, an open sheet puts the tab bar away and the dock (or the player) drops into its place, so the model keeps
+       about twice the strip over the sheet (Joey 2026-10-28: 61 px of model at his 360x675); collapsing the sheet brings
+       the tabs back. On its side the tabs are a rail beside the sheets and stay */
+    root.classList.toggle('bar-off', anyOpen && !isSideways());
     let off = 0; const b = base();
     // on its side, with under 160 px left above the dock (the S23's 260 px tall screen), an open sheet takes the whole
     // column, over the dock (11 under the sheet's 13); collapsed, the dock is back
@@ -75,7 +81,6 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     root.style.setProperty('--sheet-stack', `${b + off}px`);
     // an open sheet covers the collapsed handles (and, over, the dock): its glass showed their words through it (the phone
     // tour, 2026-10-27: "Add units" under the unit's sheet, "Layout valid" under the Labels sheet), so they step out
-    const anyOpen = [...sheets.values()].some((e) => e.open && !e.el.hidden);
     root.classList.toggle('sheet-open', anyOpen);
     root.classList.toggle('sheet-over', anyOpen && over);
     // on its side the tools start where the bar ends (app.css), whatever the build name and the mount chip make of it
@@ -142,6 +147,6 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     left: () => (isSideways() ? Math.round(bar.getBoundingClientRect().width) + 8 : 8),
     right: () => (isSideways() ? Math.round(sideWidth()) + 8 : 8),
     onLayout: (fn) => { onLayout = fn; },
-    destroy() { clearTimeout(nudgeTimer); bar.remove(); root.classList.remove('sheet-open', 'sheet-over'); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
+    destroy() { clearTimeout(nudgeTimer); bar.remove(); root.classList.remove('sheet-open', 'sheet-over', 'bar-off'); for (const e of sheets.values()) { e.mo.disconnect(); e.handle.remove(); e.el.querySelector(':scope > .sheet-peek')?.remove(); e.el.classList.remove('sheet', 'open'); e.el.style.bottom = ''; e.el.style.maxHeight = ''; } sheets.clear(); },
   };
 }

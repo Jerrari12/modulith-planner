@@ -2896,7 +2896,11 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
       // the strip as printed: a pixel of the card's own texture, 1.5 mm up from its foot
       const im = card.material.map.image, px = im.getContext('2d').getImageData(Math.floor(im.width / 2), im.height - 16, 1, 1).data;
       const strip = '#' + [px[0], px[1], px[2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+      // how far round from the coil's front (the room's +z, square to the axis) the wire leaves it, about the axis, in degrees
+      const lying = Math.abs(A.y) > 0.7, ua = lying && A.y < 0 ? A.clone().negate() : A, fr = new T.Vector3(0, 0, 1).addScaledVector(ua, -ua.z).normalize(), rd = sp.clone().addScaledVector(ua, -sp.dot(ua)).normalize();
+      const yaw = Math.atan2(ua.dot(new T.Vector3().crossVectors(fr, rd)), fr.dot(rd)) * 180 / Math.PI;
       out.push({ ...o.userData.tag, spool: String(s.userData.spool.color).toLowerCase(), strip, rot: [pv.rotation.x, pv.rotation.y, pv.rotation.z], front: tie.z - c.z, below: tie.y - cc.y, clips,
+        lying, yaw: +yaw.toFixed(2), stack: s.parent.uuid, at: s.parent.children.indexOf(s),
         strand: { metal: strand.material.metalness, thick: 2 * strand.geometry.parameters.radius, r: +sp.clone().addScaledVector(A, -sax).length().toFixed(2), ax: +sax.toFixed(2) } });
     });
     return out.sort((a, b) => a.spool.localeCompare(b.spool));
@@ -2921,14 +2925,26 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
   const t0 = await tags(page);
   // the words in Astra's order: the material, then its grade or finish and colour, then its maker and line
   assert.deepEqual(t0.map((t) => [t.spool, t.material, t.accent, t.detail, t.maker, String(t.hex).toLowerCase()]), [['#16161a', 'TPU', '#1b7a50', '95A · BLACK', 'POLYMAKER · POLYFLEX', '#16161a'], ['#1c1d20', 'PLA', '#2a64c4', 'BLACK', 'ELEGOO', '#1c1d20']], 'his two black spools: a PLA tag and a TPU tag, each ring in its material\'s colour, "95A · BLACK" / "POLYMAKER · POLYFLEX", its strip the filament\'s own colour');
+  /* staggered (Joey 2026-10-28: a stack's tags hung "perfectly in a vertical column ... as if you rotated the spools a few
+     degrees to the left or right ... but mostly still visible from the front"): a lying spool's wire 5 to 20 deg round from
+     the coil's front, and 10 or more from the tag before it in its stack; a spool on its rim, at its front */
+  const staggered = (list) => {
+    for (const t of list) assert.ok(t.lying ? Math.abs(t.yaw) >= 4.9 && Math.abs(t.yaw) <= 20.1 : Math.abs(t.yaw) < 1, `${t.spool}: ${t.lying ? 'lying, turned 5 to 20 deg' : 'on its rim, at the front'} (${t.yaw} deg)`);
+    const stacks = new Map(); for (const t of list.filter((x) => x.lying)) stacks.set(t.stack, [...(stacks.get(t.stack) || []), t]);
+    let pairs = 0;
+    for (const s of stacks.values()) { s.sort((a, b) => a.at - b.at); for (let i = 1; i < s.length; i++, pairs++) assert.ok(Math.abs(s[i].yaw - s[i - 1].yaw) >= 9.9, `no two tags in a column: ${s[i - 1].spool} ${s[i - 1].yaw} deg, ${s[i].spool} ${s[i].yaw} deg`); }
+    return pairs;
+  };
+  staggered(t0);
   for (const t of t0) {
-    assert.ok(t.front > 85, `the tag hangs at the spool's front (${t.front.toFixed(1)} mm out)`);
+    assert.ok(t.front > 80, `the tag hangs at the spool's front (${t.front.toFixed(1)} mm out)`);
     assert.ok(t.below > 20, `the card below where its strand leaves the coil (${t.below.toFixed(1)} mm)`);
     assert.ok(t.strand.metal === 1 && t.strand.thick <= 0.8, `a thin metal wire, not a strand of filament (${JSON.stringify(t.strand)})`);
     assert.equal(t.strip, t.spool, 'the tag\'s foot printed in the filament\'s exact colour (Joey: "a color strip of the exact color")');
     assert.ok(t.strand.r > 89 && t.strand.r <= 91 && Math.abs(t.strand.ax) < 27.5, `the wire tucked into the coil, under its 91 mm surface, between the flanges (${JSON.stringify(t.strand)})`);
     assert.deepEqual(t.clips, [], `no point of the card inside the coil or a flange (Joey: "so it doesn't run the risk of clipping")`);
-    assert.ok(Math.abs(t.rot[1]) >= 0.2 && Math.abs(t.rot[2]) >= 0.08 && t.rot[0] < 0, `turned on its string, swung, its foot off the coil: never straight (${t.rot.map((r) => r.toFixed(2))})`);
+    // its twist on the wire counted from where the wire leaves the coil (the card turns with a staggered wire)
+    assert.ok(Math.abs(t.rot[1] - t.yaw * Math.PI / 180) >= 0.2 && Math.abs(t.rot[2]) >= 0.08 && t.rot[0] < 0, `turned on its string, swung, its foot off the coil: never straight (${t.rot.map((r) => r.toFixed(2))}, wire ${t.yaw} deg)`);
   }
   assert.notDeepEqual(t0[0].rot, t0[1].rot, 'each tag hangs its own way');
   // a refresh (a pick in the Colors room): the tags made again, hung the same, and the groups' boxes (what the mugs and the
@@ -2997,6 +3013,17 @@ test('Assemble: the Done scene\'s spools each hang a tag with their material, it
     assert.ok(k.radial > 0.999, `square to the spool's centre, its words along the circle (${k.radial})`);
     assert.ok(k.upright >= Math.cos(Math.PI / 6) - 1e-3, `never more than 30 deg off upright (${(Math.acos(Math.min(1, k.upright)) * 180 / Math.PI).toFixed(0)} deg)`);
   }
+  // a stack of several colours (Joey's five, 2026-10-28): staggered, none in a column with the one under it
+  const many = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, ks = v.keysInBuild().filter((e) => !e.locked && !e.zone);
+    const fs = [['Elegoo PLA Black', '#1c1d20'], ['Polymaker PolyFlex TPU95 Black', '#16161a'], ['Panchroma Grey', '#9a9da3'], ['Elegoo PETG Black', '#232427'], ['Panchroma Silk Black', '#3a3b40']];
+    ks.slice(0, fs.length).forEach((e, i) => v.setColor(e.key, { name: fs[i][0], hex: fs[i][1] }));
+    window.__GEN2_DONE__.refreshSpools();
+    return Math.min(ks.length, fs.length);
+  });
+  const t5 = await tags(page);
+  assert.ok(staggered(t5) >= 1, `a stack with two tags or more to stagger (${many} colours; ${JSON.stringify(t5.map((t) => [t.spool, t.lying, t.yaw, t.at, t.stack.slice(0, 4)]))})`);
+  assert.ok(t5.every((t) => !t.clips.length), `none clips, turned (${JSON.stringify(t5.map((t) => t.clips))})`);
   assert.deepEqual(clean(errors), [], 'no errors');
   await ctx.close();
   // ?spooltag=off: the spools, no tags
@@ -4152,6 +4179,8 @@ test('the phone on its side: the tabs a rail, the bar and the tools one row, the
     await settle(page, 700);
     const o = (await sideLayout(page)).sheets.find((s) => s.open);
     assert.ok(o && o.t >= m.top.b && o.h >= 180 && o.l >= col - 1, `${ws}: an open sheet fills the column under the row (${JSON.stringify(o)})`);
+    // and the rail stays beside it: upright an open sheet puts the tab bar away (phone.js bar-off), on its side it does not
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#ws-tabbar')).visibility + '|' + document.getElementById('ws').classList.contains('bar-off')), 'visible|false', `${ws}: the rail beside an open sheet`);
     if (ws === 'colors') {
       // turning the phone upright and back: the bar goes to the bottom, then back to the rail
       await page.setViewportSize({ width: 360, height: 675 });
@@ -5475,6 +5504,9 @@ test('the phone: the Build library sheet opens on its handle; the Labels sheet c
   const { ctx, page, errors } = await open('build', { phone: true });
   await page.click('#ws-lib .sheet-handle');
   await page.waitForFunction(() => document.querySelector('#ws-lib').classList.contains('open'), null, { timeout: 30_000 });   // the library sheet opened
+  // the open sheet put the tabs away: its handle collapses it and they come back
+  await page.click('#ws-lib .sheet-handle');
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ws-tabbar')).visibility === 'visible', null, { timeout: 15_000 }).catch(() => assert.fail('collapsing the library did not bring the tab bar back'));
   await page.click('#ws-tabbar .tab:has-text("Labels")');
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
@@ -5485,6 +5517,40 @@ test('the phone: the Build library sheet opens on its handle; the Labels sheet c
   assert.match(await text(page, '#ws-labels .sheet-handle .ttl'), /Placing/);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* THE TAB BAR STEPS OUT FOR AN OPEN SHEET (Joey 2026-10-28, yes to it: at his 360 x 675 an open sheet left 61 px of model
+   between the top chrome and the sheet). Upright, the bar goes, the dock (Assemble: the player) drops into its place 6 px
+   off the bottom, the sheet sits 6 px over it, and the model's strip about doubles; the sheet collapsed, all of it is back. */
+test('the phone: an open sheet puts the tab bar away, the dock or the player takes its place, and collapsing brings the tabs back', async () => {
+  const viewport = { width: 360, height: 675 };
+  const measure = (page, sheet, floor) => page.evaluate(([s, f]) => {
+    const r = (q) => { const e = document.querySelector(q), b = e.getBoundingClientRect(); return { top: Math.round(b.top), bottom: Math.round(b.bottom), vis: getComputedStyle(e).visibility }; };
+    return { vh: innerHeight, tab: r('#ws-tabbar'), floor: r(f), sheet: r(s), open: document.querySelector(s).classList.contains('open') };
+  }, [sheet, floor]);
+  for (const [ws, sheet, floor] of [['build', '#ws-lib', '#ws-dock'], ['assemble', '#ws-steps', '#ws-player']]) {
+    const { ctx, page, errors } = await open(ws, { phone: true, viewport });
+    await page.waitForSelector(`${sheet}.sheet > .sheet-handle`, { timeout: 60_000 });
+    if (await page.evaluate((s) => document.querySelector(s).classList.contains('open'), sheet)) { await page.click(`${sheet} .sheet-handle`); await settle(page, 500); }
+    const down = await measure(page, sheet, floor);
+    assert.ok(!down.open && down.tab.vis === 'visible' && down.vh - down.floor.bottom === 70, `${ws}, collapsed: the tab bar up, the ${floor} on it (${JSON.stringify(down)})`);
+    await page.click(`${sheet} .sheet-handle`);
+    await page.waitForFunction((s) => document.querySelector(s).classList.contains('open'), sheet, { timeout: 15_000 });
+    await settle(page, 600);
+    const up = await measure(page, sheet, floor);
+    assert.ok(up.tab.vis === 'hidden', `${ws}, open: the tab bar put away (${JSON.stringify(up)})`);
+    assert.ok(up.vh - up.floor.bottom === 6, `${ws}, open: the ${floor} dropped to 6 px off the bottom (${JSON.stringify(up)})`);
+    assert.ok(Math.abs(up.floor.top - 6 - up.sheet.bottom) <= 1, `${ws}, open: the sheet sits 6 px over the ${floor} (${JSON.stringify(up)})`);
+    // the model's strip between the top chrome (110 px, phone.js top) and the open sheet: 61 px with the bar, ~119 without
+    if (ws === 'build') assert.ok(up.sheet.top - 110 >= 110, `${ws}, open: the model keeps about twice its strip (${up.sheet.top - 110} px; ${JSON.stringify(up)})`);
+    await page.click(`${sheet} .sheet-handle`);
+    await page.waitForFunction((s) => !document.querySelector(s).classList.contains('open'), sheet, { timeout: 15_000 });
+    await settle(page, 500);
+    const back = await measure(page, sheet, floor);
+    assert.ok(back.tab.vis === 'visible' && back.vh - back.floor.bottom === 70, `${ws}, collapsed again: the tabs back, the ${floor} on them (${JSON.stringify(back)})`);
+    assert.deepEqual(clean(errors), []);
+    await ctx.close();
+  }
 });
 
 /* THE PHONE'S LABEL EDITOR (the spacing audit, 2026-10-15): the pencil left the editor's sheet collapsed behind the open
@@ -6969,7 +7035,10 @@ test('the phone journey: a look from the gallery, a part tapped and recoloured (
   const named = await page.evaluate(() => { const out = new Set(); for (const l of document.querySelectorAll('#ws-parts .printin')) { const t = l.textContent.replace(/^Print in /, ''); if (/^No filament/.test(t)) continue; for (const part of t.split(' · ')) for (const nm of part.replace(/^[a-z][a-z ]*?(?= [A-Z])/, '').trim().split(' / ')) out.add(nm.trim()); } return [...out]; });
   const shortNames = c4.names.map((s) => s.replace('Panchroma ', ''));
   assert.deepEqual(named.sort(), [...shortNames].sort(), 'the Parts list prints in exactly the filaments the Colors Dock counted');
-  // 12 back to the model: Build from the tab bar, its sheets down; Undo there takes Simplify back
+  // 12 back to the model: the Parts sheet down (an open sheet puts the tab bar away), Build from the tab bar, its sheets
+  // down; Undo there takes Simplify back
+  await page.locator('#ws-parts .sheet-handle .ttl').tap();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ws-tabbar')).visibility === 'visible', null, { timeout: 15_000 }).catch(() => assert.fail('collapsing the Parts sheet did not bring the tab bar back'));
   await page.locator('#ws-tabbar .tab:has-text("Build")').tap();
   await page.waitForSelector('#ws-lib', { timeout: 30_000 });
   await settle(page, 800);

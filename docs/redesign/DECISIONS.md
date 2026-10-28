@@ -6067,3 +6067,37 @@ black spools but one is PLA black and the other is TPU black, but at a glance th
     metal wires;
   - the stack's top spool's sticker "PLA / BLACK";
   - marks drawn once, no page errors.
+
+## 2026-10-28 · On a phone an open sheet puts the tab bar away; a stack's tags are staggered
+
+**The tab bar.** Joey, asked whether to hide the bottom bar while a sheet is open on his phone (at his 360 x 675 an
+open sheet left 61 px of model between the top chrome and the sheet): "yes".
+- Upright, while a sheet is open, the tab bar steps out (`#ws.bar-off`, phone.js `stack`). The dock, or Assemble's
+  player, drops into its place, 6 px off the bottom plus the screen's inset, and the sheet sits 6 px over it (`base`
+  reads the dock's own top, as on its side). The model's strip about doubles: 61 to 119 px at 360 x 675.
+- Collapsing the sheet (its handle) brings the tabs back. A workspace that opens a sheet on arrival (Colors, Parts)
+  shows no tabs until it is collapsed: the trade accepted.
+- On its side the tabs are a rail beside the sheets, and stay.
+- A sheet's `bottom` now moves with its slide (`transition`). Done at once, a sheet collapsing as the bar came back rose
+  58 px over the model for the slide's first frames. A tap on a part in Colors collapses the sheet, and the tap's click,
+  about 110 ms later, landed on the rising handle and opened it again: the phone journey and the part-card case caught
+  it, and a toggle trace found the click on the handle's title.
+
+**The tags, staggered.** Joey, on a five-spool stack: the tags hung "perfectly in a vertical column ... randomize them
+slightly ... as if you rotated the spools a few degrees to the left or right ... but mostly still visible from the front".
+- A lying spool's wire leaves the coil 5 to 20 deg round from its front, either way, seeded by the spool apart from the
+  card's hang (done.js `placeSpoolMarks`). It is at least 10 deg off the tag before it in the stack, re-drawn up to eight
+  times, then put on the other side (Terra 01a183f3).
+- The card turns with its wire (the pivot's twist). Left square to the room, its corner on the turned side swung into the
+  coil (the e2e's clip check: r 90.6 of 91.5).
+- A spool on its rim is not turned: its front is the coil's furthest-forward line, and turned, the card would hang up
+  or down the coil, toward it.
+
+**Checks.**
+- E2E "the phone: an open sheet puts the tab bar away, the dock or the player takes its place, and collapsing brings
+  the tabs back" (360 x 675, Build and Assemble). The Build library case and the phone journey collapse their sheet
+  before a tab.
+- The tag case: every lying tag 5 to 20 deg round, a standing one at the front, neighbours 10 deg or more apart (a
+  five-colour stack has a pair), no clip, the twist counted from the wire.
+- All 24 phone cases and the tag cases green on SwiftShader.
+- Terra 01a183d2 (the bar, then the bottom transition): no findings. Terra 01a183f3 (the stagger): one finding, fixed.

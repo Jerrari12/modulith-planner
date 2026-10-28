@@ -1041,7 +1041,10 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws-dock .pbar .short { display: block; }
   /* sheets: the handle stays put while the sheet scrolls under it; the sheet manager sets bottom and max-height
      inline from the live dock height (the Assemble player is taller than the dock) */
-  #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px) - var(--nudge, 0px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px) - var(--nudge, 0px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
+  #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px) - var(--nudge, 0px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px) - var(--nudge, 0px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out), bottom var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
+  /* bottom moves with the slide: a sheet collapsing as the tab bar comes back (phone.js bar-off) rises 58 px, and done at once
+     it rose over the model for the slide's first frames, and a tap's click on the model, ~110 ms after it collapsed the
+     Colors sheet, landed on its handle and opened it again (the phone journey, 2026-10-28) */
   #ws .sheet.open { transform: none; clip-path: inset(0); overflow-y: auto; z-index: 13; }
   /* THE ONE-TIME NUDGE (Joey 2026-10-28: a collapsed bar "looks kind of like just a static bar until i click it"): once per
      browser, a second after load, the top collapsed sheet lifts 14 px - a glimpse of what is under its handle - and settles
@@ -1052,6 +1055,10 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   /* what an open sheet covers steps out, or its words read through the glass (phone.js stack): the collapsed handles, and
      on a short phone on its side the dock or the player under a sheet that takes the whole column */
   #ws.sheet-open .sheet:not(.open), #ws.sheet-over #ws-dock, #ws.sheet-over #ws-player { visibility: hidden; }
+  /* upright, an open sheet puts the tab bar away and the dock or the player takes its place (phone.js stack); the sheet's
+     handle collapses it and the tabs come back */
+  #ws.bar-off #ws-tabbar { visibility: hidden; }
+  #ws.bar-off #ws-dock, #ws.bar-off #ws-player { bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
   /* the label editor's title row goes, as the picker's: the handle names it and carries the × (labels.js) */
   #ws .sheet#ws-labeledit > .head { display: none; }
   #ws .sheet#ws-labels .srow .seg.sm { height: 32px; }   /* Label settings' Off / On: 26 px is a mouse's, not a finger's */

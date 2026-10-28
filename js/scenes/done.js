@@ -1111,6 +1111,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (tagsOff() || !parts.spools) return;
     parts.marksDrawn = (parts.marksDrawn || 0) + 1;   // for a reader of the scene (the e2e suite: the redraw for the font)
     const mats = spoolMaterials(), F = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0);
+    const lastYaw = new Map();   // per stack, the turn of the tag before (below)
     for (const s of parts.spools.groups.flatMap(spoolsOf)) {
       const info = tagInfo(mats.get(lower(s.userData.spool.color)));
       if (!info) continue;
@@ -1122,11 +1123,27 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (lying && A.y < 0) A.negate();   // the top flange
       if (!lying && A.dot(F) < 0) A.negate();   // the flange on the camera's side (a spool on its rim faces sideways: either)
       /* the wire leaves the coil at its front, tucked just under the surface (90.5 of the coil's 91 mm; spool.js ON A
-         WIRE FROM THE COIL): lying, toward the top of the coil (20 mm up its 27.5), straight out at the front; on its
+         WIRE FROM THE COIL): lying, toward the top of the coil (20 mm up its 27.5), out at the front, a little turned; on its
          rim, at the coil's front a little over the axle (a standing coil is furthest forward at mid-height, so a card
          hanging there stays in front of it), toward the outer flange. Either way the card hangs 100 mm out, in front of
          the coil (91) and between the flanges (27.5) */
       const out = F.clone().addScaledVector(A, -F.dot(A)).normalize();   // the coil's front, square to its axis
+      /* lying, that front turned 5 to 20 deg either way about the axis, as if the spool had been set down a little turned
+         (Joey 2026-10-28: a stack's tags hung "perfectly in a vertical column"), and at least 10 deg off the tag before it in
+         the stack, so no two line up; all still facing the room. Seeded apart from the hang below, which stays as it was.
+         On its rim the front is the coil's furthest-forward line, at mid-height: turned, it would hang the card up or down
+         the coil, toward it, so it is not turned. The card turns with its wire (the pivot's twist below): hung square to the
+         room, its corner on the turned side swung into the coil */
+      let yaw = 0;
+      if (lying) {
+        const yr = rngFrom(hashSeed(`tagyaw|${lower(s.userData.spool.color)}|${s.parent ? s.parent.children.indexOf(s) : 0}`));
+        const prev = lastYaw.get(s.parent);
+        for (let i = 0; i < 8; i++) { yaw = (yr() < 0.5 ? -1 : 1) * (0.087 + yr() * 0.262); if (prev == null || Math.abs(yaw - prev) >= 0.175) break; }
+        // eight draws all close to it (a seed is a seed, Terra 01a183f3): the other side of it, 0.1 or more round
+        if (prev != null && Math.abs(yaw - prev) < 0.175) yaw = -Math.sign(prev) * Math.max(0.1, Math.abs(yaw));
+        lastYaw.set(s.parent, yaw);
+        out.applyAxisAngle(A, yaw);
+      }
       const at = C.clone().addScaledVector(out, 90.5).addScaledVector(lying ? A : UP, lying ? 20 : 12);
       if (!lying) at.addScaledVector(A, 10);
       const mark = makeTag(info, accent, out);
@@ -1138,7 +1155,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       const rnd = rngFrom(hashSeed(`tag|${lower(s.userData.spool.color)}|${s.parent ? s.parent.children.indexOf(s) : 0}`));
       const either = (lo, hi) => (rnd() < 0.5 ? -1 : 1) * (lo + rnd() * (hi - lo));
       const twist = either(0.21, 0.61), swing = either(0.09, 0.28), lean = -(0.07 + rnd() * 0.14);
-      mark.userData.pivot.rotation.set(lean, twist, swing, 'YXZ');
+      mark.userData.pivot.rotation.set(lean, yaw + twist, swing, 'YXZ');
       mark.userData.spoolMark = true;
       scene.add(mark); mark.updateMatrixWorld(true);
       s.attach(mark);   // kept where it is, and moved with the spool from now on
