@@ -5850,3 +5850,7 @@ only an open sheet showed one.
 Tests: the new e2e case (the collapsed caret's symbol is in the served sprite; a first visit nudges and remembers; a reload
 does not; reduced motion never); every other e2e case marks the nudge played, so no sheet moves under a tap. All 23 phone
 cases and 707 unit tests pass. Shots: `D:\Claude - Output\sheet-hint-2026-10-28`.
+
+Live 2026-10-28 10:10 as 58a04e6f: `sheet-hint-prod.mjs` green (twice) - on a fresh phone visit to Build the collapsed
+library's caret-up is a symbol of the served sprite, the nudge plays and is remembered, a reload does not nudge, no page
+errors. The same check failed on b2e27a22, before the deploy (no caret symbol, no nudge).
