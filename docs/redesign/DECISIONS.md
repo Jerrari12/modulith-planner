@@ -5995,3 +5995,68 @@ roughness 0.2, metalness 0.75, anisotropy 0.4, the SILK_SHEEN and SILK_ENV defin
 Yellow pick takes every one away on the same material; the tier strengths read 1 / 0.3 on Fast and 6 / 1 on Very High. The
 same check failed on 53c2a639, before the deploy. The Lab's re-vendor is still owed (its drift gate's upstream is the old
 viewer checkout, which stopped at the 2026-10-21 catalog).
+
+## 2026-10-28 - The final scene's spools say what they are: a tag on a wire, a sticker on the flange
+
+Joey (relayed by planner-2, 2026-10-27): "a way to identify if they are pla, petg, tpu ... like maybe a paper tag ... two
+black spools but one is PLA black and the other is TPU black, but at a glance they look identical."
+
+- **The route there.** Three mock-ups (a hanging tag, a flange sticker, banded rims): he chose the tag. Then, in turn:
+  - a kraft shipping tag ("hanging more randomly ... twisted slightly ... partly sideways");
+  - hung lower and smaller, so it cannot clip the coil or flange; white paper; "tiny text with brand name ... silk, high
+    temp, carbon fiber"; a foot strip "of the exact color";
+  - hung from the coil rather than the flange (Sunlu's anti-tangle tag as the reference);
+  - "a thin metal wire instead" of a strand of filament.
+
+  Then Astra's review, which he brought: a flange sticker for the views the tag misses, one order of words, and a picked
+  row lighting its spool. Last, his four photos of real spools: "make the label aligned to the center of the spool ...
+  centered between the oval slots ... just don't want the text to be completely sideways or upsidedown".
+- **The words** (main.js `materialOfFilament`, on `filamentsInBuild`'s filament records):
+  - a catalogue label's material, read as colors/materials.js reads it;
+  - its brand, and its line without the ™ or material words;
+  - its colour's own name;
+  - the properties its line and name carry: SILK, MATTE, TRANSLUCENT, CARBON FIBRE, HIGH TEMP, HIGH SPEED, GLOW, MARBLE,
+    WOOD, SPARKLE, MULTICOLOUR, and TPU hardness "95A" (from "TPU95" or "TPU 95A");
+  - a name the catalogue lacks is read by its own words.
+
+  spool.js `tagInfo` orders them: the material; `detail` (grade or finish · colour, "95A · BLACK"); `maker` (brand ·
+  line, "POLYMAKER · POLYFLEX").
+- **The tag** (spool.js `makeTag`):
+  - a white card 20 x 36 mm with its top corners clipped and a 1.9 mm hole, its reinforcement ring in the material's
+    colour (the picker's tags: PLA blue, PETG amber, TPU green);
+  - the three lines, and a 7 mm foot strip in the filament's exact hex;
+  - hung on a 0.6 mm bare-steel wire that leaves the coil just under its surface (90.5 of 91 mm), toward its top front,
+    and arches 10 mm out into the hole;
+  - the card pivots at the hole, seeded by the spool: twisted 12 to 35 deg, swung 5 to 16, leaning 4 to 12, never
+    straight;
+  - no point of the card is inside the coil or a flange (the e2e reads its corners).
+- **The sticker** (spool.js `makeSticker`, done.js `placeSpoolMarks`):
+  - 44 x 24 mm, a band of the filament's colour, the same three lines;
+  - on a standing spool's camera-side flange, and on a stack's top spool's top flange (the faces under a spool are hidden);
+  - centred in a clear sector between two of the flange's three slots. The slots were measured by rays on the spool mesh
+    (2026-10-28): at 90, 210 and 330 deg, 10 deg wide, from the bore to 90 mm. The sticker sits 65 mm out, square to the
+    centre;
+  - of the six choices (three sectors, words out or in), the one reading most upright from the front: never more than 30
+    deg off, the spool's own turn setting how far;
+  - fixed in the spool's frame.
+- **A shared colour** (Sol 01a1839e): spools are one per hex, and the catalogue has filaments sharing one. Panchroma Grey
+  (PLA) and Polymaker PETG Grey are both #9a9da3, and TPU95 and TPU90 Black both #16161a. Such a spool's words say every
+  filament on it ("PLA / PETG", both makers), with a neutral ring. Giving each filament its own spool is not done.
+- **The font** (Sol): the words are drawn into canvases in Archivo. When the face is not ready yet, the marks are drawn
+  again once `document.fonts.load` resolves, if the scene is still on.
+- **Colors**: a region's row picked lights the spool it prints in (`selectSpool(activeHex(key))`), as a spool's own picker
+  already did. A click on a tag or a sticker is a click on its spool.
+- **Lifecycle**: the marks are made after the spools are posed and again at the end of every `refreshSpools`. They are
+  cleared before the groups' boxes are measured (the shadow fit and the mugs see only spools) and on leave. ?spooltag=off
+  (debug) compares.
+- **Checks.**
+  - E2E "the Done scene's spools each hang a tag with their material ...": the words, the ring and the strip's pixel; the
+    wire (metal, 0.6, tucked); no clip; never straight; the same after a refresh; the boxes unchanged; the silk, the
+    two-material line, the shared grey and an unknown TPU 95A; every sticker on its face, in a sector, square to the
+    centre, <= 30 deg off upright, no corner on a slot; the font redraw; ?spooltag=off.
+  - E2E "Colors: a region's row picked lights the spool it prints in".
+  - 23 mutants, each failing one or the other.
+  - Unit 722/722; the spool placement, label-palette stripe, floor and boot cases green on SwiftShader; the two room
+    cases skipped there green on the GPU.
+  - Sol 01a1839e: three findings, fixed; round 2 no objection (its font-weight caveat discarded: Archivo is one variable
+    file, 400 to 900).
