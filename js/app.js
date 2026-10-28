@@ -17,6 +17,7 @@ import { isPhone, PHONE_MAX } from './ui/phone.js';
 import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
+import { readLabelDefaults, paletteOfDefaults, urlFor } from './label-palette.js';   // the label palette's defaults for new builds (2026-10-28)
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
@@ -136,6 +137,9 @@ export async function boot() {
     // and the per-part finishes (2026-10-26), the same kind of field: the generator never reads them either
     if (stage.build && JSON.stringify(state.plateParts || {}) !== JSON.stringify(stage.build.plateParts || {})) stage.setPartPlates(state.plateParts || {}, { quiet: true });
   });
+  /* the label palette (2026-10-28, docs/redesign/LABEL-PALETTE.md): the stage keeps its own copy, handed over on EVERY store
+     change - an edit, an undo or a redo, a load - and only repainted (setLabelPalette compares first) */
+  store.subscribe((state) => stage.setLabelPalette?.(state.labelPalette));
   /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
      silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
   let capPending = null;   // { drop: entry } while a new build is held back by the cap
@@ -246,7 +250,18 @@ export async function boot() {
   const wsNow = () => document.documentElement.dataset.ws || 'build';
   /* a shared scheme (#scheme= beside #build=, the Colors workspace's Share): applied once, then dropped from the address */
   { const m = /[#&]scheme=([^&]+)/.exec(location.hash); if (m) { try { const colors = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); stage.setPalette({ colors, on: true }); } catch { /* a damaged scheme link: the build still opens */ } history.replaceState(history.state, '', location.href.replace(/[#&]scheme=[^&]+/, (x) => x.startsWith('#') ? '#' : '').replace(/#&/, '#').replace(/#$/, '')); } }
+  /* a NEW build takes the visitor's label defaults (2026-10-28): the six spools into its record, the body and the text onto
+     its Colors palette - before the store's baseline, so they are where the build starts, not an undo step. Only a fresh
+     build: one opened from a link, a file, Recent or a kit keeps the palette it has (the panel may offer the defaults). */
+  if ((FRESH || SETUP) && stage.build) {
+    const d = readLabelDefaults((() => { try { return localStorage; } catch { return null; } })());
+    if (d) {
+      stage.build.labelPalette = paletteOfDefaults(d);
+      for (const [key, sp] of [['Label', d.body], ['Label:TEXT', d.text]]) if (sp) stage.setColor(key, { name: sp.name, hex: sp.hex, url: urlFor(sp.name) });
+    }
+  }
   if (stage.build) store.load(stage.build);
+  stage.setLabelPalette?.(store.state.labelPalette);
   if (QS.get('debug')) { window.__GEN2_STORE__ = store; window.__GEN2_CTX__ = () => ctx; }   // for the shot tool and end-to-end checks, like the stage's own hook
   let kitTitle = stage.manifest?.title || null;
   if (KIT && location.hash.startsWith('#build=')) { try { kitTitle = (await (await fetch(`builds/${encodeURIComponent(KIT)}.json`)).json()).title || kitTitle; document.title = tabTitle(kitTitle); } catch { /* the hash's own name stands */ } }

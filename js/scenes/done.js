@@ -981,9 +981,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      `refreshSpools` repaints them when the build's colours change (the Colors workspace's Room stage). */
   const SPOOL_FOOT = 108;   // a spool's footprint radius, mm: its 100 mm flange and a margin
   const SPOOL_CLEAR = ['notebook', 'calipers'];   // the props that may leave the desk for spools (the plant only where nothing fits without it: Joey, "I'd like to keep the plant in there when we can")
+  // a label stripe's colour too (Joey 2026-10-28: "we are using the blue accent color in the label but it's not adding to our
+  // filament stack"): the stripe prints from its own spool, and the dock already counts it among the build's filaments
   function spoolColours() {
     const f = stage.filamentsInBuild ? stage.filamentsInBuild() : { filaments: [], unpicked: [] };
-    return [...f.filaments.map((x) => x.hex), ...f.unpicked.filter((u) => !u.stripe).map((u) => u.hex)];
+    return [...f.filaments.map((x) => x.hex), ...f.unpicked.map((u) => u.hex)];
   }
   function makeSpools(group, geo) {
     parts.spools = { groups: [], discs: [], plan: null, geo };

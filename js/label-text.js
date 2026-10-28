@@ -216,8 +216,9 @@ export function loadLabelParts(need) {
   return partsLoading;
 }
 
-/* The body pieces of a stripe, in the model's frame: [{ piece: 'base'|'band'|'accent', geo, hex }] (hex null = the label's
-   base colour, i.e. its Body), or null (no band data, an unknown position). `colours` = a CLEANED { band, band_accent }
+/* The body pieces of a stripe, in the model's frame: [{ piece: 'base'|'band'|'accent', geo, hex, colour }] (hex null = the
+   label's base colour, i.e. its Body; colour = the slot's colour key, the label palette's meaning: label-look.js
+   stripePieceZone), or null (no band data, an unknown position). `colours` = a CLEANED { band, band_accent }
    (parts.colours). The geometries are translated COPIES of label-hardware.js's own (it hands out one shared geometry per
    piece and would be the one to dispose it), cached here for the page's life: 3 positions x 2 patterns x 3 pieces at most,
    and Classic Pro's one position x 2 x 3.
@@ -240,7 +241,7 @@ function stripePieces(position, colours, type = 'edgelabel') {
       g.computeBoundingBox();
       pieceCache.set(key, g);
     }
-    return { piece: p.piece, geo: pieceCache.get(key), hex: p.colour ? p.colour.hex.toLowerCase() : null };
+    return { piece: p.piece, geo: pieceCache.get(key), hex: p.colour ? p.colour.hex.toLowerCase() : null, colour: p.colour ? p.colour.colour : null };
   });
 }
 /* An ordinary label's stripe (label-look.js kind 'stripe'): its body pieces, or null when the band data has not loaded. */
@@ -325,7 +326,7 @@ export function stripePieces2d(position, colours) {
   return bp.map((p) => {
     const key = position + '/' + kind + '/' + p.piece;
     if (!flatPieceCache.has(key)) flatPieceCache.set(key, topTriangles(p.geo, 0, 0));   // label-hardware.js builds in the label frame
-    return { piece: p.piece, tris: flatPieceCache.get(key), hex: p.colour ? p.colour.hex.toLowerCase() : null };
+    return { piece: p.piece, tris: flatPieceCache.get(key), hex: p.colour ? p.colour.hex.toLowerCase() : null, colour: p.colour ? p.colour.colour : null };
   });
 }
 /* The cleaned stripe colours for `colours` (label-hardware.js colour()), or null before the band data has loaded. */

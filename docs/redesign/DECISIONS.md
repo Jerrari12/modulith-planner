@@ -5875,6 +5875,73 @@ Tests: `stand.test.mjs` runs Joey's build (standUp's slots, the shared marker po
 a 1W·3H shelf on it, finds one spot in the void, holds the pointer on its "+" through twelve one-pixel nudges and clicks:
 a 1W·3H shelf at (2, 8) with its front lip. Against the old spot list it fails (three red slots and the shelf's spot).
 
+## 2026-10-28 · A label stripe's colour has its spool in the room
+
+Joey, in the room on his yellow build: "we are using the blue accent color in the label but it's not adding to our filament
+stack." A label's stripe prints from its own spool and the dock already counted it among the build's filaments, but the
+room's spools left stripes out (`done.js spoolColours` filtered `!u.stripe` since the spools were built). They are in now.
+A click on a stripe's spool opens no picker (a stripe is no region: its colour is set on each label), so it says that
+instead of doing nothing. The stripe stays a colour, not a spool of the build's choosing, until the label palette lands.
+
+Tests: a new e2e case (an EdgeLabel build with a Metric-striped label: the room stacks a #56b4e9 spool; it fails with the
+old filter); the Assemble spool case reads the same list. Terra 01a18305: one finding, discarded (past the 32-spool cap a
+stripe may take another colour's place - the cap's sort order decides which fall off, as it always has).
+
+Live 2026-10-28 11:16 as b3b99056 (with 610ecee, whose own run had failed on an unrelated case - "Colors: on Very High at
+rest the steam keeps rising", "the room did not come on within 60 s" on the runner; it passed locally and in this run):
+`void-prod.mjs` green (one "+" in Joey's void, the hover held through twelve nudges, the 1W·3H shelf placed with lip
+'front'; on 58a04e6f it failed, the hover swapping between a red slot and the shelf's spot on every move) and
+`stripe-spool-prod.mjs` green (a #56b4e9 spool for a Metric-striped label; on 58a04e6f six spools and no blue).
+
+## 2026-10-28 · The label palette: a stripe colour is a meaning, printed in the spool you have
+
+Joey, of the label sheets of 2026-10-28: a stripe's colour is a suggestion. People print Metric in whatever blue they own,
+and they keep one set of label spools across builds. Sol (01a1825f) rejected a live per-browser map, because shared links
+would drift and a remap would recolour old builds. Astra refined Sol's option 1, and Joey settled it: a ready-made palette
+with no setup, optional "Use my filaments", a per-browser default for new builds, and the palette saved with the build.
+Design note: `docs/redesign/LABEL-PALETTE.md`.
+
+- **A stripe stores its meaning, as before.** The label keeps the Label Studio's `colours` (`sky-blue`, `#56B4E9`, Metric),
+  so the Studio round trip is unchanged. The build's new record field `labelPalette` (`{ v: 1, spools: { <meaning>:
+  { name, hex } } }`, cleaned in schema.js) says which spool prints each of the six meanings. `null`, and every older
+  record, reads as the frozen v1 suggestions in `js/label-palette.js`.
+- **The suggested spools** are the nearest plain PLA in the catalog by ΔE00 to the scheme colour: Metric is Polar Light
+  Blue (5.6), SAE / inch Printed Solid Safety Orange (8.8), Yellow Panchroma Lemon Yellow (3.0), White Printed Solid White
+  (1.87), Green Polar Seafoam (1.8), and Purple Panchroma Pink (12.2, because the scheme's purple is a pink). The body and
+  text are the first preset's picks. A test re-runs the rule and fails on catalog drift; it never rewrites v1.
+- **Drawing.** A stripe piece in one of the six meanings wears the zone `STRIPE@<meaning>`, and `activeHex` gives it the
+  build's spool in every colour mode. A colour the page does not offer keeps `STRIPE#hex`, as before. A palette change
+  repaints; it never regenerates. The stage keeps its own copy, handed over by app.js on every store change.
+  Classic Pro's bottom stripe (b2e27a2, merged in) draws through the same pieces, so it wears the palette too, and the
+  section shows on both label families.
+- **Body and text stay the Colors palette's `Label` / `Label:TEXT` picks.** The panel shows them and edits them there, so
+  there is one source of truth. Gap, and Joey's call: these two, like every Colors pick, do not ride in `#build=`.
+- **Defaults** (`gen2-label-palette`, try-guarded) seed only a fresh build (`?new` / setup). Any other build is offered them
+  ("Your default label filaments differ · Use them here", one undo step), never changed by them silently.
+- **Warnings, computed and gentle:** two meanings in one spool; ΔE00 < 15 between two meanings; a meaning at ΔE00 < 10 from
+  the body; text contrast < 3. The v1 set warns once: White on the Cold White body, ΔE 4.1, the measured invisible patch.
+  How to fix that patch is still Joey's open call.
+- **Lists name the spool by identity.** `filamentsInBuild` wears a stripe as its spool (by name, buy link from the catalog),
+  so the Colors list, the Dock count and the Parts Label row name it. The room's spool swap leaves stripes alone.
+- **One visual change, once:** a build that already had a stripe (stripes exist since 2026-10-27) now draws it in the v1
+  spool's hex instead of the scheme's, for example Metric #14ADDB instead of #56B4E9.
+
+Reviews: Sol 01a1827b on the design (approve with changes; 9 findings folded in, 2 discarded with reasons in the note §9),
+Sol 01a182a1 on the code (one finding, the defaults offer compared body/text by name only; fixed).
+
+Before the deploy (Joey: "Fix names, then deploy"): the rows show every spool name whole, wrapping to a second line when
+it must, with "suggested" as a small tag under the name (measured at 290 px desktop and 360 px phone with the catalog's
+longest names: none clipped, nothing overlapping). And main's room spool for a stripe (b3b9905) meets the palette: a
+meaning's stripe is a named spool, so its room spool is that spool's colour (Polar Light Blue #14ADDB, not the nominal
+#56B4E9), and a tap on it opens Labels on that meaning's row with its picker (the sheet open on a phone; a spool two
+meanings share opens the rows, none guessed). A stripe in a colour the palette does not hold keeps main's sentence. Terra
+01a1832d: one finding taken (the shared spool), one discarded (ctx.memo always exists).
+
+Live 2026-10-28 as 53c2a639 (main 53c2a63, fast-forward from 9335d95). `label-palette-prod.mjs` green: a build with no
+palette draws its Metric band in zone STRIPE@sky-blue at #14addb with the record null, the Label colours section lists its
+eight rows and the White note, and the same build carrying Metric = Panchroma Blue draws #2f6fbe. `stripe-spool-prod.mjs`
+(updated) green: the room's spool is #14addb, not #56b4e9, and its tap opens the Metric row in Labels.
+
 ## 2026-10-28 · Silk filaments look like silk on the model
 
 Joey, on his yellow 185 Tabletop 2W-2H in Panchroma Yellow, then Silk Brass, then Silk Gold: "are we doing anything

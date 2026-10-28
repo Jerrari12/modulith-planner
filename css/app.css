@@ -1306,3 +1306,31 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
   html[data-ws="parts"] #ws-parts .thead, html[data-ws="parts"] #ws-parts .prow.trow { grid-template-columns: 14px minmax(0, 1fr) 64px 118px 118px 90px 120px !important; }
   html[data-ws="parts"] #ws-parts .progress { padding-left: 58px; }
 }
+/* the label colours (labels.js renderPalette, the label palette 2026-10-28): collapsed like the settings, the six stripe
+   spools as chips in its summary; rows of swatch, meaning and spool; a note under a row that needs one */
+#ws-labels .palette summary { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; cursor: pointer; list-style: none; padding: 4px 0; }
+#ws-labels .palette summary::-webkit-details-marker { display: none; }
+#ws-labels .palette summary .chips { margin-left: auto; display: inline-flex; gap: 3px; }
+#ws-labels .palette .sw { display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(128,128,128,.45); background: var(--sw); }
+#ws-labels .palette summary .sw { width: 10px; height: 10px; border-radius: 3px; }
+#ws-labels .palette .warndot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn-fg); }
+#ws-labels .palette .intro { margin: 2px 0 8px; font-size: 12px; line-height: 1.4; }
+#ws-labels .palette .offer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 12px; }
+#ws-labels .palette .prows { display: flex; flex-direction: column; gap: 6px; }
+#ws-labels .palette .prow { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px; box-sizing: border-box; width: 100%; border-radius: 8px; font: inherit; font-size: 12px; color: var(--ink); text-align: left; }
+#ws-labels .palette button.prow { border: 1px solid var(--hair); background: transparent; cursor: pointer; }
+#ws-labels .palette button.prow:hover, #ws-labels .palette button.prow.on { background: var(--track); }
+#ws-labels .palette .prow .mean { flex: none; width: 76px; font-weight: 600; }
+#ws-labels .palette .prow .spoolcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+#ws-labels .palette .prow .spool { overflow-wrap: anywhere; line-height: 1.3; }   /* the whole name, on two lines when it must */
+#ws-labels .palette .prow .sugg { font-size: 10.5px; line-height: 1.2; }
+#ws-labels .palette .pnote { margin: 0 0 4px 28px; font-size: 11.5px; line-height: 1.35; color: var(--warn-fg); }
+#ws-labels .palette .pacts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
+#ws-labels .palette .mydefaults { width: 100%; }
+#ws-labels .palette .ppick { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 6px; padding: 6px; border-radius: 10px; background: var(--track); }
+#ws-labels .palette .ppick .search { height: 28px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 12px; }
+#ws-labels .palette .pitems { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; }
+#ws-labels .palette .pitem { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+#ws-labels .palette .pitem:hover { background: var(--key-bg); }
+#ws-labels .palette .pitem.on { outline: 2px solid var(--orange); outline-offset: -2px; }
+#ws-labels .palette .pitem .own { margin-left: auto; font-size: 11px; }

@@ -12,7 +12,8 @@ import { createRequire } from 'node:module';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cleanPartItem, stripeColour, cleanStripe, stripePositionOf, assignedLabelOf, wornLabelOf, labelLookOf, labelLooksKey, labelLookNeeds,
-  stripeZone, isStripeZone, stripeHexOfKey, STRIPE_POSITIONS, STRIPE_COLOURS, stripeFor } from '../js/label-look.js';
+  stripeZone, isStripeZone, stripeHexOfKey, stripeMeaningOfKey, STRIPE_POSITIONS, STRIPE_COLOURS, stripeFor } from '../js/label-look.js';
+import { spoolFor, SUGGESTED_V1 } from '../js/label-palette.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STUDIO = process.env.GEN2_LABELSTUDIO_ROOT
@@ -139,13 +140,23 @@ function declAt(src, needle) {
   assert.fail('unterminated ' + needle);
 }
 test('activeHex / activeLabel (main.js, executed): a stripe wears its own colour, never a filament; other keys are unchanged', () => {
-  const make = (name) => new Function('stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest', 'previewLook',
+  /* the label palette's two (2026-10-28) come after the original eight: a meaning's stripe ('Label:STRIPE@sky-blue') wears
+     the build's spool for it, whatever the Colors palette or a shown look says; a stripe of any other colour, its own */
+  const make = (name, labelPalette = null) => new Function('stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest', 'previewLook',
+    'stripeMeaningOfKey', 'spoolFor', 'labelPalette',
     `${declAt(mainSrc, `const ${name} =`)} return ${name};`);
-  const ctx = [stripeHexOfKey, true, { Label: { hex: '#123456', name: 'Some PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' } },
-    () => false, 'light', { Case: '#dfe3ec' }, { colors: { Label: '#eef0f4' } }, null];
+  const ctx = [stripeHexOfKey, true, { Label: { hex: '#123456', name: 'Some PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' }, 'Label:STRIPE@sky-blue': { hex: '#000000', name: 'Black' } },
+    () => false, 'light', { Case: '#dfe3ec' }, { colors: { Label: '#eef0f4' } }, null, stripeMeaningOfKey, spoolFor, null];
   const activeHex = make('activeHex')(...ctx), activeLabel = make('activeLabel')(...ctx);
+  assert.equal(activeHex('Label:STRIPE@sky-blue'), SUGGESTED_V1['sky-blue'].hex, 'no palette: the suggested spool, whatever the Colors palette has for the key');
+  assert.equal(activeLabel('Label:STRIPE@sky-blue'), SUGGESTED_V1['sky-blue'].name, 'and it lends its finish (a filament, by name)');
+  const own = [...ctx.slice(0, 10), { v: 1, spools: { 'sky-blue': { name: 'Panchroma Aqua Blue', hex: '#5cc6e0' } } }];
+  assert.equal(make('activeHex')(...own)('Label:STRIPE@sky-blue'), '#5cc6e0', 'the build\'s spool');
+  assert.equal(make('activeLabel')(...own)('Label:STRIPE@sky-blue'), 'Panchroma Aqua Blue');
+  const offShown = [...ctx.slice(0, 1), false, ...ctx.slice(2, 7), { colors: { 'Label:STRIPE@sky-blue': { hex: '#000000', name: 'Black' } }, over: {} }, ...ctx.slice(8, 10), own[10]];
+  assert.equal(make('activeHex')(...offShown)('Label:STRIPE@sky-blue'), '#5cc6e0', 'the Colors palette off and a look shown: still the spool');
   // a look being shown (previewLook) stands in for the palette, even with the palette off, and a stripe still wears its own colour
-  const shown = [...ctx.slice(0, 1), false, ...ctx.slice(2, 7), { colors: { Label: { hex: '#654321', name: 'Shown PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' } }, over: {} }];
+  const shown = [...ctx.slice(0, 1), false, ...ctx.slice(2, 7), { colors: { Label: { hex: '#654321', name: 'Shown PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' } }, over: {} }, ...ctx.slice(8)];
   assert.equal(make('activeHex')(...shown)('Label'), '#654321', 'the shown look paints the body');
   assert.equal(make('activeLabel')(...shown)('Label'), 'Shown PLA', 'and lends it its filament');
   assert.equal(make('activeHex')(...shown)('Label:STRIPE#56b4e9'), '#56b4e9', 'a stripe ignores a shown look too');

@@ -39,7 +39,9 @@ export const STRIPE_DEFAULTS = Object.freeze({ part: 'bottom', ordinary: 'end' }
 /* The stripe colours a typed label can be given here (Joey 2026-10-27: "if i'm manually typing a label i don't see how to set a
    color for the label stripe"): the Label Studio's own menu, label-stripes.js COLOURS (the Part Picker's colour-blind-safe
    pair, then yellow, white, green, purple), so a stripe picked here and one picked in the Studio are the same stored value
-   and share one line in the filament list. `name` is the menu word, `label` what the label stores. */
+   and share one line in the filament list. `name` is the menu word, `label` what the label stores. Each `colour` is a
+   MEANING the build's label palette prints in a spool of its own (js/label-palette.js, 2026-10-28); `hex` is the Studio's
+   scheme colour, what the label stores and the Studio draws, never the planner's drawn colour. */
 export const STRIPE_COLOURS = Object.freeze([
   Object.freeze({ colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', name: 'Metric' }),
   Object.freeze({ colour: 'red', hex: '#D55E00', label: 'Inch (SAE)', name: 'SAE / inch' }),
@@ -179,15 +181,31 @@ export function labelLookNeeds(build) {
 }
 
 /* ---- the stripe's colour zone -----------------------------------------------------------------------------------------
-   A stripe piece is drawn in the stripe's own colour - the label's, never a filament pick - through the ordinary material
-   registry, as a ZONE of the Label type whose name carries the colour: 'STRIPE#56b4e9'. So fades, the selection glow, the
-   build-plate finish and the printed layer lines treat it like any other zone of the label, and main.js's activeHex reads the
-   colour off the key (stripeHexOfKey) - no palette entry, no filament, no identify-card chip. */
+   A stripe piece is drawn through the ordinary material registry, as a ZONE of the Label type, so fades, the selection glow,
+   the build-plate finish and the printed layer lines treat it like any other zone of the label. Since the label palette
+   (2026-10-28, docs/redesign/LABEL-PALETTE.md) the zone names what the piece prints in:
+   - 'STRIPE@sky-blue': one of the six MEANINGS (STRIPE_COLOURS). main.js's activeHex draws it in the spool the build's
+     label palette gives that meaning (js/label-palette.js spoolFor), and the filament list names that spool. A palette
+     change repaints it; the zone, and so the label's geometry, stay as they are.
+   - 'STRIPE#56b4e9': any other colour (one the Label Studio has and this page does not offer), drawn in its own hex, as
+     every stripe was before the palette. activeHex reads the colour off the key (stripeHexOfKey).
+   Neither is a part colour pick: no Colors row, no identify-card chip. */
 export const STRIPE_ZONE_PREFIX = 'STRIPE#';
+export const STRIPE_MEANING_PREFIX = 'STRIPE@';
 export const stripeZone = (hex) => STRIPE_ZONE_PREFIX + String(hex).replace(/^#/, '').toLowerCase();
-export const isStripeZone = (z) => typeof z === 'string' && /^STRIPE#[0-9a-f]{6}$/.test(z);
+export const stripeMeaningZone = (key) => STRIPE_MEANING_PREFIX + key;
+const isMeaningKey = (k) => STRIPE_COLOURS.some((c) => c.colour === k);
+export const isStripeZone = (z) => typeof z === 'string' && (/^STRIPE#[0-9a-f]{6}$/.test(z) || (z.startsWith(STRIPE_MEANING_PREFIX) && isMeaningKey(z.slice(STRIPE_MEANING_PREFIX.length))));
 /* '#56b4e9' for a stripe key ('Label:STRIPE#56b4e9') or a stripe zone, else null. */
 export function stripeHexOfKey(key) {
   const m = typeof key === 'string' ? /(?:^|:)STRIPE#([0-9a-f]{6})$/.exec(key) : null;
   return m ? '#' + m[1] : null;
 }
+/* 'sky-blue' for a meaning's stripe key ('Label:STRIPE@sky-blue') or zone, else null (an unknown key is no meaning). */
+export function stripeMeaningOfKey(key) {
+  const m = typeof key === 'string' ? /(?:^|:)STRIPE@([a-z-]{1,30})$/.exec(key) : null;
+  return m && isMeaningKey(m[1]) ? m[1] : null;
+}
+/* the zone a stripe piece wears: its meaning's when its colour key is one of the six, else its own hex's, else none (the
+   piece is the Body: an unassigned slot, printed in the base colour) */
+export const stripePieceZone = (colourKey, hex) => (isMeaningKey(colourKey) ? stripeMeaningZone(colourKey) : hex ? stripeZone(hex) : '');

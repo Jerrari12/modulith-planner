@@ -38,6 +38,7 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { surprise, LOCKS, CAPS, shortName } from '../colors/surprise.js';
 import { STYLES } from '../colors/styles.js';
 import { readOwned, writeOwned } from '../state/owned.js';
+import { STRIPE_COLOURS } from '../label-look.js';   // a stripe meaning's word (the label palette, 2026-10-28)
 import { simplify, worn as wornLook, byFilament, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
 import { lineMaterials, materialsIn, filterByMaterial, labelMaterials, wordMaterial } from '../colors/materials.js';
 
@@ -51,7 +52,9 @@ const HINTS = {
 };
 const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 /* ZONE_LABEL, isPaid and short are exported: the Parts list words a row's zones, filament names and buy links as this tab does */
-export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : z.charAt(0) + z.slice(1).toLowerCase();
+// a label stripe's zone names its meaning ('STRIPE@sky-blue': label-look.js stripePieceZone) and reads as "Metric stripe"
+const stripeWord = (z) => { const c = /^STRIPE@/.test(z) ? STRIPE_COLOURS.find((x) => 'STRIPE@' + x.colour === z) : null; return c ? c.name + ' stripe' : null; };
+export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : stripeWord(z) || z.charAt(0) + z.slice(1).toLowerCase();
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
 const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', SideCover: 'side covers', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
 const typePlural = (key) => TYPE_PLURAL[key.split(':')[0]] || (key.split(':')[0].toLowerCase() + 's');
@@ -782,12 +785,29 @@ export function mountColors(stage, ctx) {
   function swapTarget(hex) {
     const h = String(hex).toLowerCase(), fc = stage.filamentsInBuild();
     const fil = fc.filaments.filter((f) => f.hex.toLowerCase() === h), bare = fc.unpicked.filter((u) => !u.stripe && u.hex.toLowerCase() === h);
-    const keys = [...new Set([...fil.flatMap((f) => f.keys), ...bare.map((u) => u.key)])];
+    // a label stripe's spool is the label palette's (the Labels workspace), not a Colors pick: never swapped from here
+    const keys = [...new Set([...fil.flatMap((f) => f.keys), ...bare.map((u) => u.key)])].filter((k) => !/:STRIPE@/.test(k));
     if (!keys.length) return null;
     const feet = keys.every(isFeet);
     return { hex: h, names: fil.map((f) => f.name), bare: bare.map((u) => u.key).filter((k) => isFeet(k) === feet), keys: keys.filter((k) => isFeet(k) === feet), feet, url: fil.length ? fil[0].url : null };
   }
-  function openSwap(hex) { const t = swapTarget(hex); if (!t) return; st.swap = t; st.key = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }
+  function openSwap(hex) {
+    const t = swapTarget(hex);
+    if (!t) {
+      const h = String(hex).toLowerCase(), fc = stage.filamentsInBuild();
+      /* a spool that prints only label stripes is the LABEL PALETTE's (2026-10-28): its meaning's row opens in Labels, the
+         spool's picker open, so the spool is changed where every stripe of that meaning takes it */
+      const sp = fc.filaments.find((f) => f.hex.toLowerCase() === h && f.keys.some((k) => /:STRIPE@/.test(k)));
+      const ms = sp ? [...new Set(sp.keys.map((k) => (/:STRIPE@([a-z-]+)$/.exec(k) || [])[1]).filter(Boolean))] : [];
+      // one meaning: its row's picker; a spool two meanings share: the rows, none guessed (the palette says they share it)
+      if (ms.length) { if (ctx.memo) ctx.memo.labelPalette = { pick: ms.length === 1 ? ms[0] : null }; ctx.switchTo('labels'); return; }
+      // a stripe in a colour the palette does not hold (one the Label Studio has and the planner does not offer): its own
+      if (fc.unpicked.some((u) => u.stripe && u.hex.toLowerCase() === h)) say('That spool prints the label stripes: their colour is set on each label, in Labels.');
+      return;
+    }
+    st.swap = t; st.key = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker);
+  }
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_SPOOL_TAP__ = openSwap;   // the room's spool tap, for checks (done.js onSpool)
   function swapTo(f) {
     const t = st.swap; if (!t) return;
     const fil = { name: f.label || f.name, hex: f.hex, url: f.url };
@@ -1037,7 +1057,7 @@ export function mountColors(stage, ctx) {
       if (phone && sel && !phone.isOpen(picker)) phone.collapse();
       renderAll();
     },
-    unmount() { leaveRoom(); ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace, nor does the room
+    unmount() { if (window.__GEN2_SPOOL_TAP__ === openSwap) delete window.__GEN2_SPOOL_TAP__; leaveRoom(); ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace, nor does the room
     get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
     get tray() { return trayLooks.map((t) => t.name); },   // the finalists, for a check
     get surprise() { return { names: sp.cands.map((c) => c.name), colors: sp.cands.map((c) => c.colors), style: sp.style, cap: sp.cap, ownedOnly: sp.ownedOnly, locks: Object.keys(sp.locks), short: sp.short, seed: sp.seed }; },   // the candidates, for a check

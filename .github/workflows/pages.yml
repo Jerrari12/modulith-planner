@@ -237,6 +237,12 @@ jobs:
           # label-preview.js imports label-text.js - stamped like main.js's, so all three share ONE label-text.js instance
           sed -i "s|'../label-look.js'|'../label-look.js?v=$V'|; s|'../label-preview.js'|'../label-preview.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./label-text.js'|'./label-text.js?v=$V'|" js/label-preview.js
+          # the label palette (2026-10-28): imported by main.js, app.js and labels.js; it imports label-look.js, the catalog,
+          # the colour maths and the schema (its record cleaner); labels.js reads the owned list, colors.js the stripe words
+          sed -i "s|'./label-palette.js'|'./label-palette.js?v=$V'|" js/main.js js/app.js
+          sed -i "s|'../label-palette.js'|'../label-palette.js?v=$V'|; s|'../state/owned.js'|'../state/owned.js?v=$V'|" js/workspaces/labels.js
+          sed -i "s|'./label-look.js'|'./label-look.js?v=$V'|; s|'./filament-db.js'|'./filament-db.js?v=$V'|; s|'./colors/colour.js'|'./colors/colour.js?v=$V'|; s|'./rules/schema.js'|'./rules/schema.js?v=$V'|" js/label-palette.js
+          sed -i "s|'../label-look.js'|'../label-look.js?v=$V'|" js/workspaces/colors.js
           # ⚠ The Label Studio's part-label files (js/vendor/label-hardware.js, hardware-layout.js, hardware-data.js,
           # hardware-v5-data.js, hardware-band-data.js, and Classic Pro's hardware-data-classicpro.js and classicpro-core.js) need NO line here: like the core and the icon catalog they are CLASSIC
           # scripts label-text.js loads itself (vendorUrl), by URL relative to its import.meta.url and carrying ITS OWN ?v=
