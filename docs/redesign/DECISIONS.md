@@ -6182,6 +6182,13 @@ Reviews: Sol 01a183fd (code: the field's range checked at ship, an unfitted isla
 0.25 degrees, central differences for the outline's direction). Tests: unit 735 pass; the e2e silk and skin-map cases
 pass. Shots: `D:\Claude - Output\vector-skin-2026-10-28` (`closeup.mjs`; proof-first-layer-b.png, first-layer-closeup.png).
 
+- **Live 2026-10-28 at `08db6c6`** (published by planner-2 on Joey's go: gen2-parts `522bce5` first, 434 `first` blocks
+  added and no existing index entry changed; then silk-finish merged with main and with the floating fix; pushed 16:40,
+  live 17:00). `firsts-prod.mjs` on the live planner, the 185 2W-2H at Very High, EdgeLabel on the Smooth plate:
+  `skinMap.status().firsts` = Accent_EdgeLabel_1W-1H, Accent_EdgeLabel_2W-1H, Faceplate_EdgeLabel_1W-1H,
+  Faceplate_EdgeLabel_2W-1H, CU-185-2W, FR-U_185-2W, DecorDrawer_185-1W-1H and 2W-1H; ten .first.png fetched, all 200; no
+  page errors. The same check on 6c491533 listed none.
+
 ## 2026-10-28 · A tabletop build read back with a rounded-up grid still stands on the table
 
 Joey: "we keep randomly running into this 'issue' on the build, nothing changed, I just went between tabs ... In the 2d
@@ -6206,4 +6213,10 @@ ends", and `syncTabletopGrid` kept the gap because it counts the headroom from t
 Tests: `store.test.mjs` loads Joey's 19 units at 7.5H with a 1H and a 0.5H size armed, twice through the share hash: the
 bottom row on the table, nothing unsupported. Against main it fails (6 unsupported). Unit suite and the e2e cases a
 tabletop grid touches (the wall "+" spots, the void, gravity's ghost, the spot left of the starter, the setup sheet's
-switch to Tabletop and its default starter) green on SwiftShader. Terra 01a183ea: no findings.
+switch to Tabletop and its default starter) green on SwiftShader. Parity 147,879 comparisons, 0 differ; with the
+headroom mutated to ignore the palette, 485 differ. Terra 01a183ea: round 1 no findings; round 2 one finding (the parity
+normalisation), fixed as `standTheirs`.
+
+- **Live 2026-10-28 at `08db6c6`** (with the vector first layer; pushed 16:40, live 17:00). `float-prod.mjs` on the live
+  planner: Joey's record (gridH 7.5) opens at 8H with the bottom row on the table and nothing unsupported (the same check
+  failed on 6c491533, units 1, 3, 5, 6, 7, 8); re-opened from its own share hash, the same. No page errors.
