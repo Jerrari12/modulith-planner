@@ -5651,3 +5651,9 @@ Any equivalent hardware from any store works."
 - **Review:** Terra `01a17fa7` (routine): one finding, discarded as decided - a list with Amazon links and no Polymaker
   link now shows only Amazon's sentence, no separate plain commission sentence. That is option A's text exactly as Joey
   picked it, and the Colors tab's rule for Amazon-only links since 2026-10-24 (Sol `01a16c4a`).
+- **Live 2026-10-27 at `298ebef`** (pushed 21:17, live 21:40). `disclosure-once-prod.mjs 298ebef` passes 6 of 6 on the live
+  planner: the Parts foot reads "As an Amazon Associate I earn from qualifying purchases. Polymaker links apply the JERRARI
+  discount and earn me a small commission. Any equivalent hardware works." (the kit has Polymaker "Print in" links), no
+  `.commission` element and "commission" only in that sentence, the foot last and right under the last hardware group,
+  Amazon's sentence once with every Amazon link `rel="noopener sponsored"`, and the looks' Shop lists showing only the new
+  sentences; no page errors. The same script failed three of its checks on `9b5fca99` before the deploy.
