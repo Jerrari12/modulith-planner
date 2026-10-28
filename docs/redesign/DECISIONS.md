@@ -6140,3 +6140,11 @@ slightly ... as if you rotated the spools a few degrees to the left or right ...
 - All 24 phone cases and the tag cases green on SwiftShader. The tag case runs about 5 min here under load; its new
   five-colour step is 3.3 s of it, and the rest is its three fresh entries, as before.
 - Terra 01a183d2 (the bar, then the bottom transition): no findings. Terra 01a183f3 (the stagger): one finding, fixed.
+
+- **Live 2026-10-28 at `6c49153`** (merged with share-look 02f6a55; pushed 16:13, live 16:32, run 40761279198). Checked on
+  the live planner (`baroff-live.mjs`):
+  - at 360 x 675, Build's library sheet open: the tab bar hidden, the dock 6 px off the bottom, the sheet 6 px over it,
+    the model's strip 121 px; collapsed, the bar back and the dock 70 px up;
+  - Assemble's final scene in five colours: seven lying tags, each 5.6 to 19.5 deg round from its coil's front,
+    neighbours in a stack 10 deg or more apart (five pairs);
+  - no page errors.
