@@ -799,7 +799,7 @@ export function mountLabels(stage, ctx) {
       attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
       pairs.length ? null : el('span.why', { text: !faceOk ? 'Needs an EdgeLabel or Classic Pro faceplate' : !ready.length ? 'No labels ready to place' : 'No empty drawers' }),
     ]));
-    if (S().faceStyle !== 'classicpro') foot.appendChild(renderPalette());
+    foot.appendChild(renderPalette());
     foot.appendChild(renderSettings());
     if (st.status) foot.appendChild(el('p.status' + (st.warn ? '.warn' : ''), { role: 'status', text: st.status }));
     panel.appendChild(foot);
@@ -845,12 +845,15 @@ export function mountLabels(stage, ctx) {
     det.appendChild(el('p.sub', { text: 'Printing part labels' }));
     const drawingsRow = () => el('label.srow', {}, [el('span', { text: 'Screw and nut drawings' }), el('div.track.seg2', { role: 'group', 'aria-label': 'Screw and nut drawings' }, [false, true].map((v) => el('button.seg.sm' + (st.print.drawings === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(st.print.drawings === v), onclick: () => { setPrint({ drawings: v }); renderAll(); } })))]);
     /* Classic Pro part labels print the words, the part's icon and, since 2026-10-27, the screw and nut drawings, every row
-       centred (the Label Studio's rule); the stripe stays EdgeLabel's. Its positions were EdgeLabel's edges and slanted end,
-       which read oddly over a Classic Pro label (Joey 2026-10-27), so a Classic Pro build gets the drawings switch and a line
-       for the stripe instead; the browser's stripe choice stays as it was for EdgeLabel builds */
+       centred (the Label Studio's rule). EdgeLabel's stripe positions (its edges and slanted end) read oddly over a Classic Pro
+       label (Joey 2026-10-27), and since 2026-10-28 Classic Pro has its own ONE place, the bottom edge between the slits: so
+       the stripe is a plain On / Off here. On keeps an EdgeLabel position already chosen (the Label Studio draws any of them at
+       Classic Pro's bottom); turning it on from Off picks the bottom edge */
     if (S().faceStyle === 'classicpro') {
+      const on = st.print.band !== 'off';
+      det.appendChild(el('label.srow', {}, [el('span', { text: 'Part label stripe' }), el('div.track.seg2', { role: 'group', 'aria-label': 'Part label stripe' }, [false, true].map((v) => el('button.seg.sm' + (on === v ? '.on' : ''), { text: v ? 'On' : 'Off', 'aria-pressed': String(on === v), onclick: () => { if (on !== v) setPrint({ band: v ? 'bottom' : 'off' }); renderAll(); } })))]));
       det.appendChild(drawingsRow());
-      det.appendChild(el('p.dim', { text: 'Classic Pro part labels print the words and the part’s drawing, centred. They take no stripe: that is EdgeLabel’s.' }));
+      det.appendChild(el('p.dim', { text: 'Classic Pro part labels print the words and the part’s drawing, centred.' + (on ? ' The stripe runs along the bottom edge, between the springy slits.' : ' Off: they print in two filaments, the base and the words.') }));
       return det;
     }
     const bandSel = el('select', { 'aria-label': 'Part label stripe' }, [['bottom', 'Bottom edge'], ['end', 'End stripe'], ['wedge', '45° end'], ['off', 'Off · two filaments']].map(([v, t]) => el('option', { value: v, text: t, selected: st.print.band === v ? '' : null })));
@@ -865,7 +868,8 @@ export function mountLabels(stage, ctx) {
      prints in for THIS build (the record's labelPalette; null = the suggested spools), and the label body and text, which
      are this build's Colors picks for Label and Label:TEXT. Ready-made: nothing needs choosing. "Use my filaments" opens
      the rows; each pick is one undo step. The defaults for new builds sit in this browser and never change a build by
-     themselves: when they differ from this one, a line offers them. EdgeLabel only, as the editor's Stripe row. */
+     themselves: when they differ from this one, a line offers them. Both label families: Classic Pro takes its stripe too
+     (along the bottom edge, b2e27a2), through the same pieces and zones. */
   const storage = () => { try { return localStorage; } catch { return null; } };
   const CATALOG_LABELS = new Set(CATALOG.map((c) => c.label));
   // the body or the text as a spool: the build's Colors pick, or null when the Colors palette is off or has none
@@ -1044,8 +1048,9 @@ export function mountLabels(stage, ctx) {
        (label-look.js STRIPE_COLOURS), stored on the label as `colours` as the Studio stores it. A typed label's runs along its
        left end, the one place its words never reach; a part label's goes where the stripe setting says, its words laid out
        clear of it, and it may keep the Part Picker's own colours (no `colours`), take none (`colours: null`, the Studio's "no
-       stripe" for a part label) or one of these. EdgeLabel only: Classic Pro prints no stripe yet (the Studio's rule) */
-    if (S().faceStyle !== 'classicpro') {
+       stripe" for a part label) or one of these. On Classic Pro (since 2026-10-28) every stripe runs along the bottom edge,
+       between the slits (the Studio's rule; main.js labelLookFor) */
+    {
       const part = R.isPartLabel(l), own = part && l.hardware && l.hardware.colours && l.hardware.colours.band;
       const ownHex = own && typeof own.hex === 'string' ? own.hex : null;
       const on = l.colours === null ? 'none' : cleanStripe(l.colours, false)?.band.colour || (ownHex ? 'picker' : 'none');

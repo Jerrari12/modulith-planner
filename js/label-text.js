@@ -220,17 +220,24 @@ export function loadLabelParts(need) {
    label's base colour, i.e. its Body; colour = the slot's colour key, the label palette's meaning: label-look.js
    stripePieceZone), or null (no band data, an unknown position). `colours` = a CLEANED { band, band_accent }
    (parts.colours). The geometries are translated COPIES of label-hardware.js's own (it hands out one shared geometry per
-   piece and would be the one to dispose it), cached here for the page's life: 3 positions x 2 patterns x 3 pieces at most. */
+   piece and would be the one to dispose it), cached here for the page's life: 3 positions x 2 patterns x 3 pieces at most,
+   and Classic Pro's one position x 2 x 3.
+   CLASSIC PRO (2026-10-28, the Label Studio's bottom stripe between the slits): `type` 'classicpro' cuts ITS body
+   (label-hardware.js bandParts' third argument - without it the pieces would be EdgeLabel's, Sol 01a18294), and the pieces,
+   built from the bed (z 0) like the body they replace, take CLASSICPRO_FRAME's turn and move without its LABEL_HT lift (that
+   lift puts the ink, built at z 0, on the top face). */
 const pieceCache = new Map();
-function stripePieces(position, colours) {
-  const bp = parts.bandParts(position, colours);
+function stripePieces(position, colours, type = 'edgelabel') {
+  const cp = type === 'classicpro';
+  const bp = parts.bandParts(position, colours, cp ? 'classicpro' : 'edgelabel');
   if (!bp) return null;
   const kind = colours.band && colours.band.pattern === 'dashed' ? 'dashed' : 'solid';
   return bp.map((p) => {
-    const key = position + '/' + kind + '/' + p.piece;
+    const key = (cp ? 'classicpro/' : '') + position + '/' + kind + '/' + p.piece;
     if (!pieceCache.has(key)) {
       const g = p.geo.clone();
-      g.translate(frame[0], frame[1], frame[2] - core.LABEL_HT);
+      if (cp) { g.rotateX(CLASSICPRO_FRAME.rotX); g.translate(0, CLASSICPRO_FRAME.ty, CLASSICPRO_FRAME.tz); }
+      else g.translate(frame[0], frame[1], frame[2] - core.LABEL_HT);
       g.computeBoundingBox();
       pieceCache.set(key, g);
     }
@@ -238,17 +245,18 @@ function stripePieces(position, colours) {
   });
 }
 /* An ordinary label's stripe (label-look.js kind 'stripe'): its body pieces, or null when the band data has not loaded. */
-export function stripeGeometry(colours, position) {
+export function stripeGeometry(colours, position, type = 'edgelabel') {
   if (!parts || !partsHave.bands || !core) return null;
-  return stripePieces(position, parts.colours(colours || {}));
+  return stripePieces(position, parts.colours(colours || {}), type);
 }
 
 /* A PART label as the Label Studio prints it: { parts: [{ part: 'ink', geo }], pieces | null, record, shown }, or null when the
    layout cannot print it (the Label Studio's red row note: not ready, or it does not fit) - the caller then shows the drawer's
    words instead. Laid out on EdgeLabel with the screw and nut drawings on (the Label Studio's default), the stripe at
    `position` (null: none); the ink stands 0.45 mm proud (the part label's own depth, not the build's text depth). On Classic
-   Pro (`type` 'classicpro') it is laid out on that face as the Label Studio lays it out there: the words and the part's icon,
-   every row centred, no drawing and no stripe (label-hardware.js layoutFor, typeSkips), the ink on its label's top face. */
+   Pro (`type` 'classicpro') it is laid out on that face as the Label Studio lays it out there: the words, the part's drawing
+   where it fits (2026-10-27), every row centred, and since 2026-10-28 its stripe along the bottom edge between the slits
+   (label-hardware.js layoutFor: any position but off is that one), the ink on its label's top face. */
 const partCache = new Map();
 /* The part label's LAYOUT - the Label Studio's layOut result: { elements, band, colours, record, ... } (elements null when it
    cannot print) - shared by the 3D ink below and the panel's 2D preview (js/label-preview.js), so the two are drawn from one
@@ -271,7 +279,7 @@ export function partLabelGeometry(item, position, type = 'edgelabel') {
     const ink = parts.inkGeometry(r.elements, r.inkDepth);
     const list = [];
     if (ink) { toModel(ink, type); ink.computeBoundingBox(); list.push({ part: 'ink', geo: ink }); }
-    out = { parts: list, pieces: r.band ? stripePieces(r.band, r.colours) : null, record: r.record,
+    out = { parts: list, pieces: r.band ? stripePieces(r.band, r.colours, r.type || type) : null, record: r.record,
             shown: (r.record.main_lines || [r.record.main || '']).join(' ') };
   }
   else console.warn(`[label text] a part label could not be laid out (${r.record.not_ready || r.record.nonfit}) - its words are shown`);

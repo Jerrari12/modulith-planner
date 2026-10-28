@@ -5802,6 +5802,33 @@ Live 2026-10-27 23:25 as 688243e7; `feet-prod.mjs` green: a lone 2W-2H and a lon
 bills 4, the step says "insert the 4 feet"), two 1W cases still stand on a foot rail with 6. The same check on aadfa1de
 failed (6 and 10), so it can tell. Vault `rules.md` 98da1dd.
 
+## 2026-10-28 · Classic Pro labels take their stripe along the bottom edge
+
+Joey looked at the label sheets (`D:\Claude - Output\label-variants-2026-10-28`) and sent Astra's reading of them: the bottom
+stripe is Classic Pro's strongest default, alternate positions belong under advanced options, and the slit clearance should
+be fixed in the layout. The Label Studio made it first (labels-public b18cada7, planner-plate 26b342a8); this copies it.
+
+- Every Classic Pro stripe runs along the bottom edge, between the two springy slits (|x| <= 20.51, 0.5 mm clear of each),
+  as a 0.5 mm inlay, with the 8 mm material patch at its left end. Any stripe a label carries there (a typed label's end
+  stripe, a part label's position) draws at the bottom (`main.js labelLookFor`); a label with none stays plain.
+- `label-text.js` cuts Classic Pro's own body for it (`bandParts(position, colours, 'classicpro')` - with two arguments the
+  pieces would be EdgeLabel's, Sol 01a18294) and places the pieces by `CLASSICPRO_FRAME`'s turn without the ink's lift.
+- The label editor offers the stripe row on Classic Pro too; the settings give a plain On / Off stripe switch (never
+  EdgeLabel's position names, which read oddly there, 2026-10-27) beside the drawings switch.
+- Classic Pro's word layout (the vendored core) keeps the face's 1.8 mm margin from the slits (|x| <= 19.2121, was 20.2121)
+  and measures a text block by its ink, descenders included. 600 random typed labels: before, 31 came within 0.45 mm of the
+  stripe (worst 1.4 mm onto it, one past the face's edge) and 97 within 1.8 mm of a slit; after, none (worst 0.61 mm).
+
+Tests: the vendor pins move; the Classic Pro e2e case now expects three stripe pieces filling the model body's box, the band
+between the slits, the typed label's green and the part label's metric band with its stainless patch (a flipped frame fails
+it); the editor case expects the stripe row and the On / Off switch on Classic Pro. Not deployed until the Label Studio's
+public push, so the stage never shows a stripe the Studio does not print.
+
+Live 2026-10-28 09:29 as b2e27a22, after the Label Studio's public push (b18cada7, served 09:13): `cp-stripe-prod.mjs` green -
+a typed Classic Pro label's green stripe and an M5 x 20 part label's metric band with its stainless patch, each three pieces
+filling the model body's box (0.0006 mm), the band at |x| 20.512 between the slits, no page errors. The same check failed on
+688243e7, before the deploy.
+
 ## 2026-10-28 · The label palette: a stripe colour is a meaning, printed in the spool you have
 
 Joey, of the label sheets of 2026-10-28: a stripe's colour is a suggestion. People print Metric in whatever blue they own,
@@ -5821,6 +5848,8 @@ Design note: `docs/redesign/LABEL-PALETTE.md`.
 - **Drawing.** A stripe piece in one of the six meanings wears the zone `STRIPE@<meaning>`, and `activeHex` gives it the
   build's spool in every colour mode. A colour the page does not offer keeps `STRIPE#hex`, as before. A palette change
   repaints; it never regenerates. The stage keeps its own copy, handed over by app.js on every store change.
+  Classic Pro's bottom stripe (b2e27a2, merged in) draws through the same pieces, so it wears the palette too, and the
+  section shows on both label families.
 - **Body and text stay the Colors palette's `Label` / `Label:TEXT` picks.** The panel shows them and edits them there, so
   there is one source of truth. Gap, and Joey's call: these two, like every Colors pick, do not ride in `#build=`.
 - **Defaults** (`gen2-label-palette`, try-guarded) seed only a fresh build (`?new` / setup). Any other build is offered them

@@ -26,11 +26,11 @@ const STUDIO = process.env.GEN2_LABELSTUDIO_ROOT
 const STUDIO_ROOT = STUDIO.find((d) => existsSync(join(d, 'label-hardware.js')));
 const PINS = {
   // 2026-10-27: Classic Pro part labels take the screw and nut drawings, rows centred (Studio labels-public 6fd9313c)
-  'label-hardware.js': '9bd3a241c77e46eb7ee33c7ea6842b7737af01541e896ee1853faad433a5861b',
+  'label-hardware.js': '4fe8c8ef194b21dae0aeb68321e6ef76306527a830bea2e7fb717e90f76a3449',
   'hardware-layout.js': '0c416fc507fe45fb3ef9f5e53a1b2c6f22addd927e50dfa4296dde2b9352ab43',
   'hardware-data.js': 'b97c422e90699c1e9dafc610292f44bf1341cbd3a4d1e12fbedd2a5be1c75d2d',
   'hardware-v5-data.js': '73b3895d8865dfc2c91a215405e78d597dc6dd9f7dda9cfaf4ee6034dc3224e8',
-  'hardware-band-data.js': '865744a360b3816b2f8b28a69ae6fc907e6d8306edaf0abca4091f47184b3a78',
+  'hardware-band-data.js': 'b15db3890482f58d783ac77a9e7e5589a02cf22220c7793a3562bee9d1e016cb',
   // Classic Pro's face (2026-10-27): a part label on a Classic Pro drawer is laid out on it, as the Studio lays it out there
   'hardware-data-classicpro.js': '6a5c24319af87215c2d61e8eb7163c8d41fece911e404323c56d1a85905c66bd',
 };

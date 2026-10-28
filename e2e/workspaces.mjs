@@ -730,8 +730,10 @@ test('Colors: a preset applied from the gallery recolours the model as one histo
    label's own frame (its inner group): the generator's flat top face, mapped by the frame, lands on the model's own corner
    vertices; every vertex of the words lies on that face, no deeper than the text depth and inside it; the badge sits LEFT of
    the words, as the generator centres badge + text (a mirrored frame would put it right); a part label is laid out on Classic
-   Pro's own face with no stripe pieces; and a stripe on a typed label is not drawn (Classic Pro prints none). */
-test('Classic Pro: a typed label and a part label draw on the Classic Pro label in its measured frame; no stripe there', async () => {
+   Pro's own face. SINCE 2026-10-28 both carry their stripe (the Label Studio's Classic Pro stripe, along the bottom edge
+   between the slits): three body pieces in place of the model's own body, which together fill exactly the body's box (the
+   pieces are in the same frame), the band and its patch spanning the bottom edge between the slits (|x| <= 20.5121). */
+test('Classic Pro: a typed label and a part label draw on the Classic Pro label in its measured frame, each with its bottom stripe', async () => {
   const ref = JSON.parse(await readFile(join(root, 'test', 'golden', 'part-label-ref.json'), 'utf8')).items[0].item;
   const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'classicpro', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
     removedStoppers: [], gridW: 6, gridH: 2, nextId: 3, labelStyle: null, buildId: 'e2ecptext0001', sideCovers: true, plateParts: {},
@@ -771,8 +773,15 @@ test('Classic Pro: a typed label and a part label draw on the Classic Pro label 
         }
         cx[o.name] = sx / ps.length;
       }
+      // the stripe: its pieces' box against the model body's own box (the same frame fills the same box), and where the band runs
+      const box = (vs) => { const b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity]; for (const v of vs) { b[0] = Math.min(b[0], v.x); b[1] = Math.min(b[1], v.y); b[2] = Math.min(b[2], v.z); b[3] = Math.max(b[3], v.x); b[4] = Math.max(b[4], v.y); b[5] = Math.max(b[5], v.z); } return b; };
+      const pieceMeshes = inner.children.filter((o) => o.name === 'LabelPiece');
+      const pb = box(pieceMeshes.flatMap(pts)), bb = box(body);
+      const bandX = box(pieceMeshes.filter((o) => o.userData.labelPiece !== 'base').flatMap(pts));
+      const shown = []; inner.traverse((o) => { if (o.isMesh && !['LabelText', 'LabelBadge', 'LabelPiece'].includes(o.name) && o.visible) shown.push(o.name); });
       return { unit: S.instances.get(inst.cfg.rides)?.cfg.owner, corners, dMin: +dMin.toFixed(3), dMax: +dMax.toFixed(3), x: [+xMin.toFixed(2), +xMax.toFixed(2)], inPlane, cx,
-        part: ink.some((o) => o.userData.partLabel), pieces: inner.children.filter((o) => o.name === 'LabelPiece').length, words: ink.map((o) => o.userData.labelText)[0] };
+        part: ink.some((o) => o.userData.partLabel), pieces: pieceMeshes.map((o) => o.userData.labelPiece + ':' + (o.userData.zone || 'body')).join(','), words: ink.map((o) => o.userData.labelText)[0],
+        boxGap: +Math.max(...pb.map((v, k) => Math.abs(v - bb[k]))).toFixed(4), bandX: [+bandX[0].toFixed(3), +bandX[3].toFixed(3)], bodyShown: shown.length };
     });
   });
   const typed = r.find((x) => !x.part), part = r.find((x) => x.part);
@@ -781,8 +790,12 @@ test('Classic Pro: a typed label and a part label draw on the Classic Pro label 
   for (const x of r) {
     assert.ok(x.corners.every((d) => d < 0.02), `the generator's top-face corners land on the model's own vertices (${j})`);
     assert.ok(x.dMin > -0.01 && x.dMax < 0.8 && x.inPlane, `the ink stands on the label's face, inside it (${j})`);
-    assert.equal(x.pieces, 0, `no stripe pieces on Classic Pro (${j})`);
+    assert.ok(x.boxGap < 0.01 && x.bodyShown === 0, `the stripe's three pieces stand in for the model body, filling its box (${j})`);
+    assert.ok(x.bandX[0] >= -20.52 && x.bandX[1] <= 20.52 && x.bandX[1] > 20.4, `the band runs the bottom edge between the slits (${j})`);
   }
+  // the stripe zones name their meanings since the label palette (2026-10-28): drawn in this build's spool for each
+  assert.equal(typed.pieces, 'base:body,band:STRIPE@green,accent:STRIPE@green', `the typed label's green stripe (${j})`);
+  assert.equal(part.pieces, 'base:body,band:STRIPE@sky-blue,accent:STRIPE@white', `the part label's Picker colours: metric band, stainless patch (${j})`);
   assert.ok(typed.words === 'TORX BITS' && typed.cx.LabelBadge < typed.cx.LabelText, `the typed label: its words, the predicted badge LEFT of them (${j})`);
   assert.ok(part.dMax < 0.5, `the part label's ink at its own depth (0.45 mm) (${j})`);
   assert.deepEqual(clean(errors), []);
@@ -954,9 +967,9 @@ test('Labels: a shared link shows the sender\'s label palette; the recipient\'s 
 /* A TYPED LABEL'S STRIPE, AND CLASSIC PRO'S PRINT SETTINGS (Joey 2026-10-27: "if i'm manually typing a label i don't see how to
    set a color for the label stripe"; the part label stripe's wording "feels specific to edgelabel labels and odd for this
    classic pro label"). The editor's Stripe row: the Label Studio's colours, stored on the label as the Studio stores it, and
-   None takes it off. On Classic Pro, which prints no stripe, the row is not offered, and the settings say what its part
-   labels print in place of the EdgeLabel stripe and drawings controls */
-test('Labels: a typed label takes a stripe colour in the editor and None takes it off; Classic Pro offers no stripe and says what its part labels print', async () => {
+   None takes it off. On Classic Pro the row is offered too since 2026-10-28 (its one stripe, along the bottom edge), and the
+   settings give a plain On / Off stripe switch - never EdgeLabel's position names - beside the drawings switch */
+test('Labels: a typed label takes a stripe colour in the editor and None takes it off; Classic Pro offers the stripe with an On / Off switch', async () => {
   const { ctx, page, errors } = await open('labels');
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
@@ -977,16 +990,25 @@ test('Labels: a typed label takes a stripe colour in the editor and None takes i
   await page.locator('#ws-labeledit button[aria-label="No stripe"]').click();
   await page.waitForFunction(() => !('colours' in window.__GEN2_STORE__.state.labelList.labels[0]), null, { timeout: 15_000 })
     .catch(async () => assert.fail(`None left a stripe (${JSON.stringify(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels[0]))})`));
-  // Classic Pro: the same label's editor has no stripe row, the settings no stripe or drawings controls
+  // Classic Pro: the same label's editor offers the stripe row; the settings an On / Off stripe switch, not the position select
   await page.evaluate(async () => { const v = window.__GEN2_VIEWER__; await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === 'classicpro')); v.setDims(false); window.__GEN2_STORE__.load(v.build, 'adopt'); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro', null, { timeout: 60_000 });
   await page.locator('#ws-labels button.mini[title="Edit this label"]').first().click();
   await page.waitForSelector('#ws-labeledit input.words', { timeout: 15_000 });
   await page.locator('#ws-labels details.settings summary').click();
-  const cp = await page.evaluate(() => ({ swatches: !!document.querySelector('#ws-labeledit .swatches'), band: !!document.querySelector('#ws-labels select[aria-label="Part label stripe"]'),
+  const cp = await page.evaluate(() => ({ swatches: document.querySelectorAll('#ws-labeledit .swatches button').length, select: !!document.querySelector('#ws-labels select[aria-label="Part label stripe"]'),
+    onOff: [...document.querySelectorAll('#ws-labels [role="group"][aria-label="Part label stripe"] button')].map((b) => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')),
     drawings: !!document.querySelector('#ws-labels [aria-label="Screw and nut drawings"]'), note: document.querySelector('#ws-labels details.settings').textContent }));
-  // since 2026-10-27 Classic Pro prints the drawings too: their switch stays, the stripe gives way to a line
-  assert.ok(!cp.swatches && !cp.band && cp.drawings && /Classic Pro part labels print the words and the part’s drawing/.test(cp.note), `Classic Pro: no stripe controls, the drawings switch and the line (${JSON.stringify(cp)})`);
+  assert.ok(cp.swatches === 7 && !cp.select && cp.drawings && /Classic Pro part labels print the words and the part’s drawing/.test(cp.note) && /along the bottom edge, between the springy slits/.test(cp.note),
+    `Classic Pro: the stripe row, the drawings switch and the bottom-edge line, no position select (${JSON.stringify(cp)})`);
+  assert.deepEqual(cp.onOff, ['Off', 'On*'], `the stripe On by default (${JSON.stringify(cp)})`);
+  await page.locator('#ws-labeledit button[aria-label="Stripe: Green"]').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelList.labels[0].colours?.band?.hex === '#009E73', null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`Green did not land on the Classic Pro label (${JSON.stringify(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels[0]))})`));
+  // Off from the switch: the browser's printing choice, and the line says so
+  await page.locator('#ws-labels [role="group"][aria-label="Part label stripe"] button', { hasText: 'Off' }).click();
+  await page.waitForFunction(() => /two filaments, the base and the words/.test(document.querySelector('#ws-labels details.settings')?.textContent || ''), null, { timeout: 15_000 })
+    .catch(async () => assert.fail(`Off did not take (${await page.evaluate(() => document.querySelector('#ws-labels details.settings')?.textContent)})`));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

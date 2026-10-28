@@ -17,7 +17,8 @@ required. Joey settled it on 2026-10-28 (his words, with Astra's refinement):
 - The Parts filament list names the chosen spool by identity, not by matching hexes.
 
 Out of scope: how to fix the white stainless patch on a white body (outline it, or make it optional). Joey has not decided.
-The palette only *warns* about it. Also out of scope: Classic Pro stripes (another session) and the vendored `js/vendor` label files.
+The palette only *warns* about it. Also out of scope: the vendored `js/vendor` label files. Classic Pro stripes (another session, live as b2e27a2 the same
+day) draw through the same pieces, so they wear the palette too; the panel shows on both label families.
 
 ## 1. What a meaning is, and what stays the same
 
@@ -147,8 +148,8 @@ which is the real number of spools.
 
 ## 7. The panel and the warnings
 
-**Where it lives:** the Labels workspace, as a "Label colours" section in its sheet, under the label list. EdgeLabel only, as
-the Stripe row is (Classic Pro prints no stripe yet; the other session owns that).
+**Where it lives:** the Labels workspace, as a "Label colours" section in its sheet, under the label list, on EdgeLabel and
+Classic Pro builds alike (Classic Pro's bottom stripe, b2e27a2, draws through the same pieces and zones).
 
 - **The default state is compact.** Astra's wording sits on top: "Use the colours you have. These are suggested filament
   matches. Similar colours from other brands work too—keep your colour coding consistent and easy to tell apart." Then eight
