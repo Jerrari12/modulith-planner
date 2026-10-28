@@ -2608,6 +2608,51 @@ test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark
   await ctx.close();
 });
 
+/* MATTE BLACK IS THE FLOOR (Joey 2026-10-27: a black wall and the Black desk with an all-black build left the room nearly
+   black and the build gone, "maybe we can limit how black is black"; his pick of four renders, the floor alone). No wall
+   or desk colour draws darker than #38393b: a black wall of the visitor's own draws as a #38393b one, the Black desk
+   preset as a #38393b desk of the visitor's own, and a black desk the same; the swatches show the floor, and the own
+   chip says it lifted the pick. Read off the materials as drawn (done.js colours) and the panel. */
+test('Assemble: the Done scene\'s room has a floor at matte black: a black wall, a black desk and the Black preset draw as #38393b, and their swatches show it', async () => {
+  const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
+  const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => { const d = window.__GEN2_DONE__; return d && d.sequence.on && !d.sequence.entering; }, null, { timeout: 60_000 });
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 1e9, maxFrameMs: 1e9, seed: 1, hold: true }));
+  await btn(page, 'Wall & desk', '#ws-scene').click();
+  const P = '#ws-scene-colours';
+  const read = async () => { await settle(page, 400); return page.evaluate(() => window.__GEN2_DONE__.colours); };
+  const own = (i) => page.locator(`${P} label.own input`).nth(i);
+  // the walls: black of the visitor's own draws exactly as the floor's own colour does
+  await own(0).fill('#38393b'); const floorWall = await read();
+  await own(0).fill('#000000'); const blackWall = await read();
+  assert.equal(blackWall.wall, '#000000', 'the choice is the visitor\'s, remembered as picked');
+  for (let i = 0; i < 3; i++) near(blackWall.wallColor[i], floorWall.wallColor[i], 1e-9, `a black wall draws as matte black (${'rgb'[i]})`);
+  assert.ok(blackWall.wallColor.every((v) => v > 0.01), `and is not black (${blackWall.wallColor})`);
+  const chip = await page.evaluate((P) => { const l = document.querySelector(`${P} label.own`); return { c: l.style.getPropertyValue('--c').trim(), title: l.title }; }, P);
+  assert.equal(chip.c, '#38393b', 'the own chip shows the colour it draws, not the black picked');
+  assert.match(chip.title, /lifted to #38393b/, 'and says it lifted the pick');
+  // the desk (a plain colour needs the bake's light-only map): the Black preset, a black desk of the visitor's own and a
+  // #38393b one all draw alike; the Black swatch shows the floor
+  assert.equal(await page.evaluate(() => window.__GEN2_DONE__.colours.plainDesk), true, 'the room ships its light-only desk map (plain desks)');
+  await page.locator(`${P} button[aria-label="Desk: Black"]`).click(); const preset = await read();
+  await own(1).fill('#38393b'); const floorDesk = await read();
+  await own(1).fill('#000000'); const blackDesk = await read();
+  assert.deepEqual([preset.deskMap, blackDesk.deskMap], ['light', 'light'], 'plain desks, from the light-only map');
+  for (let i = 0; i < 3; i++) { near(preset.deskColor[i], floorDesk.deskColor[i], 1e-9, `the Black preset draws as matte black (${'rgb'[i]})`); near(blackDesk.deskColor[i], floorDesk.deskColor[i], 1e-9, `so does a black desk of the visitor's own (${'rgb'[i]})`); }
+  assert.equal(await page.evaluate((P) => document.querySelector(`${P} button[aria-label="Desk: Black"]`).style.getPropertyValue('--c').trim(), P), '#38393b', 'the Black swatch shows the floor it draws (#2a2b2d before)');
+  // a colour over the floor is its own: charcoal's swatch is its hex
+  assert.equal(await page.evaluate((P) => document.querySelector(`${P} button[aria-label="Wall: Charcoal"]`).style.getPropertyValue('--c').trim(), P), '#47494d', 'charcoal, over the floor, untouched');
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
+});
+
 /* THE SHADOWS RUN FROM THE DESK ONTO THE WALL (2026-10-25; Joey: "the way the shadows cut off or start right at where the
    table is nearest the wall, i see it for both the plant and build shadows"). The desk stands 20 mm off the wall, and the
    sun reaches a strip of wall under the desk top through that gap; the build's wall catcher and the props' wall masks

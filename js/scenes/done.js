@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool } from './spool.js';
-import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook } from './done-fit.js';
+import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook, roomFloor } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -1336,13 +1336,14 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     return { wall: colours.wall, desk: colours.desk };
   }
   /* the presets as the visitor's swatches: the bake's own paint and its oak in their baked colours (room.json), the desk
-     finishes the bake cannot draw (no light-only map) left out */
+     finishes the bake cannot draw (no light-only map) left out; each colour as it renders, floored at matte black
+     (done-fit.js roomFloor: the Black desk's #2a2b2d draws as the floor) */
   function roomPresets() {
     const lt = roomLight.desk_top, plain = !!(lt && lt.tex);
     const oak = lt && Array.isArray(lt.albedo) ? linearToHex(lt.albedo) : '#d9c4a6';
     return {
-      walls: WALL_PAINTS.map((p) => ({ id: p.id, name: p.name, swatch: p.hex || (json && json.colours && json.colours.wall) || '#e2e4e1' })),
-      desks: DESK_FINISHES.filter((p) => p.kind === 'bake' || plain).map((p) => ({ id: p.id, name: p.name, swatch: p.hex || oak })),
+      walls: WALL_PAINTS.map((p) => ({ id: p.id, name: p.name, swatch: p.hex ? roomFloor(p.hex) : (json && json.colours && json.colours.wall) || '#e2e4e1' })),
+      desks: DESK_FINISHES.filter((p) => p.kind === 'bake' || plain).map((p) => ({ id: p.id, name: p.name, swatch: p.hex ? roomFloor(p.hex) : oak })),
       ownDesk: plain,
     };
   }
@@ -1361,7 +1362,13 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
         if (!rows[key]) continue;
         for (const b of rows[key].querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.id === colours[key]));
         const lab = rows[key].querySelector('label.own');
-        if (lab) { lab.classList.toggle('on', own(colours[key])); if (own(colours[key])) lab.style.setProperty('--c', colours[key]); }
+        // the own-colour chip shows the colour as it renders: a pick under matte black, the floor it lifts to, and says so
+        if (lab) {
+          lab.classList.toggle('on', own(colours[key]));
+          const shown = own(colours[key]) ? roomFloor(colours[key]) : null;
+          if (shown) lab.style.setProperty('--c', shown);
+          lab.title = shown && shown !== colours[key].toLowerCase() ? `Your own colour, lifted to ${shown}: no room paint is darker than matte black` : 'Your own colour';
+        }
       }
     };
     for (const [key, list, label] of [['wall', p.walls, 'Wall'], ['desk', p.desks, 'Desk']]) {

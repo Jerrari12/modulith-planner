@@ -328,11 +328,28 @@ export function hexToLinear(hex) {
 export function linearToHex(lin) {
   return '#' + lin.map((v) => { const c = Math.min(1, Math.max(0, v)); const s = c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055; return Math.round(s * 255).toString(16).padStart(2, '0'); }).join('');
 }
+/* MATTE BLACK IS THE FLOOR (Joey 2026-10-27: a black wall, the Black desk and an all-black build on the smooth plate left
+ * the room nearly black and the build gone - "maybe we can limit how black is black"; of four renders he picked the
+ * floor alone, no extra light on the build). No wall paint or desk laminate reflects much under 3 to 5 %; #38393b is about
+ * 4 %. A colour whose luminance (linear, Rec. 709) is under the floor's is lifted by the floor's own colour times the
+ * shortfall, so it lands on the floor's luminance: black becomes #38393b, a dark navy stays blue-grey rather than going
+ * grey, and a colour at or over the floor is left alone. Presets and the visitor's own colours alike (wallFactor,
+ * deskLook), and the swatches show it (done.js roomPresets, the own-colour chip). */
+export const ROOM_FLOOR_HEX = '#38393b';
+const luminance = (l) => 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+export function roomFloor(hex) {
+  const c = hexToLinear(hex);
+  if (!c) return hex;
+  const f = hexToLinear(ROOM_FLOOR_HEX), yf = luminance(f), y = luminance(c);
+  if (y >= yf) return hex.toLowerCase();
+  const k = (yf - y) / yf;
+  return linearToHex(c.map((v, i) => v + k * f[i]));
+}
 /* the wall's texture factor for a choice: null for the bake's own paint (or a bake that does not say its paint), else the
-   new paint over the baked one, per channel */
+   new paint (floored at matte black) over the baked one, per channel */
 export function wallFactor(choice, bakedHex) {
   const preset = WALL_PAINTS.find((p) => p.id === choice);
-  const hex = preset ? preset.hex : choice;
+  const hex = roomFloor(preset ? preset.hex : choice);
   const to = hexToLinear(hex), from = hexToLinear(bakedHex);
   if (!to || !from) return null;
   return to.map((v, i) => v / from[i]);
@@ -365,7 +382,7 @@ export function bounceK(bounceFactor, weight, scale) {
 export function deskLook(choice, light, share = null) {
   const preset = DESK_FINISHES.find((p) => p.id === choice) || (HEX.test(choice || '') ? { kind: 'plain', hex: choice } : null);
   if (!preset || preset.kind === 'bake') return { use: 'bake', factor: [1, 1, 1], weight: [1, 1, 1] };
-  const lin = hexToLinear(preset.hex);
+  const lin = hexToLinear(roomFloor(preset.hex));   // floored at matte black, as the wall
   if (!lin || !light) return null;
   const c = Array.isArray(share) && share.length === 3 && share.every((v) => v > 0) ? share : [1, 1, 1];
   const albedo = Array.isArray(light.albedo) && light.albedo.every((v) => v > 0) ? light.albedo : null;

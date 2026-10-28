@@ -5695,3 +5695,35 @@ size.
 - **The planner** copies the two files (test/label-hardware-vendor.test.mjs pins them), so a Classic Pro drawer's part label
   on the model shows the drawing (label-text.js `partLabelGeometry(..., 'classicpro')`); the Labels settings on a Classic Pro
   build keep the "Screw and nut drawings" switch, with a line that the stripe is EdgeLabel's.
+
+## 2026-10-27 - The room: matte black is the floor for the wall and the desk
+
+Joey (relayed by the planner-2 session): in the Colors room, a wall of his own in #000000 and the Black desk, with an
+all-black build on the smooth plate, left the room nearly black and the build gone. "Maybe we can limit how black is
+black". Of four renders of the same shot (planner-2, `D:\Claude - Output\black-room-2026-10-27`) he picked B: "maybe b?".
+B is wall and desk floored at a real matte black, with no extra fill light on the build.
+
+- **done-fit.js `roomFloor`.** No wall paint or desk laminate reflects much under 3 to 5 %; `ROOM_FLOOR_HEX` #38393b is
+  about 4 %. A colour whose luminance (linear, Rec. 709) is under the floor's is lifted by the floor's own colour times
+  the shortfall, so it lands on the floor's luminance:
+  - #000000 and the Black desk's #2a2b2d become #38393b;
+  - a dark navy #101830 becomes #353947 and stays blue;
+  - a dark green #1d3b2a becomes #243f2f;
+  - a colour at or over the floor is left alone (Navy #3b4b5e and Charcoal #47494d are).
+
+  `wallFactor` and `deskLook` take every choice through it, presets and the visitor's own alike, so the bounce weights
+  follow. Black walls keep the floor's share of the walls' bounce, not none: the old unit assertion now says so.
+- **The swatches show what renders.** `roomPresets` floors each preset's swatch (the Black desk's chip is #38393b). The
+  own-colour chip shows the floored colour, and when it lifted the pick its title says "lifted to #38393b". The choice
+  is stored as picked.
+- **Checks.**
+  - A unit test: black, dark navy, dark red and dark green land on the floor's luminance within 0.0015, navy stays blue,
+    colours at or over the floor are untouched, and the Black preset and a black desk of one's own draw as the floor.
+  - E2E "the Done scene's room has a floor at matte black": a black wall draws exactly as a #38393b one, the Black preset
+    and a black desk exactly as a #38393b desk, the chips read #38393b, and Charcoal is untouched.
+  - Seven mutants each fail one or the other: the wall unfloored, the desk unfloored, the floor off, a plain grey lift,
+    the raw preset swatch, the raw own chip, no "lifted" title.
+  - Terra 01a1803a: no objection. Its two notes were discarded: 8-bit rounding can leave a lift a hair under the floor
+    (negligible at "about 4 %"), and the additive lift nudges toward the floor's slight blue-grey rather than keeping the
+    exact hue (the ask was "stays navy", and scaling has no answer for black).
+  - A Very High render of his setup on this code draws like his pick B (scratchpad `floor-renders`).

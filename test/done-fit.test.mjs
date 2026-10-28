@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, SPOOL_HIGH, SPOOL_STEP, SPOOL_HEADROOM, stackCap, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, SPOOL_HIGH, SPOOL_STEP, SPOOL_HEADROOM, stackCap, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook, roomFloor, ROOM_FLOOR_HEX } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -649,8 +649,31 @@ test('room colours: the wall is the new paint over the baked one per channel, it
   for (let i = 0; i < 3; i++) close(navy[i], lin[i] / base[i], 1e-12, 'navy over the baked paint');
   assert.deepEqual(wallFactor('#3b4b5e', BAKED_WALL), navy, 'a hex of the visitor\'s own is the same as its preset');
   assert.deepEqual(wallWeight('white', BAKED_WALL), [1, 1, 1], 'the bake\'s own paint keeps all its bounce');
-  assert.deepEqual(wallWeight('#000000', BAKED_WALL), [0, 0, 0], 'black keeps none');
+  // black is floored at matte black (roomFloor, below): it keeps the floor's share of the bounce, not none
+  const floorW = wallWeight(ROOM_FLOOR_HEX, BAKED_WALL);
+  assert.deepEqual(wallWeight('#000000', BAKED_WALL), floorW, 'black weighs as matte black');
+  assert.ok(floorW.every((v) => v > 0.03 && v < 0.1), `matte black keeps a few % of the bounce (${floorW})`);
   assert.deepEqual(wallWeight('navy', BAKED_WALL), navy, 'the weight is the paint ratio');
+});
+
+/* MATTE BLACK IS THE FLOOR (Joey 2026-10-27, "maybe we can limit how black is black", his pick B of four renders): no
+   wall or desk colour, preset or the visitor's own, draws darker than #38393b's luminance; a colour at or over it is
+   untouched, a darker one lands on it, a dark colour keeps its hue */
+test('room colours: matte black is the floor - black lifts to it, a dark navy stays blue on it, the rest is left alone', () => {
+  const Y = (h) => { const l = hexToLinear(h); return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2]; };
+  assert.equal(roomFloor('#000000'), ROOM_FLOOR_HEX, 'black becomes the floor itself');
+  assert.equal(roomFloor('#2A2B2D'), roomFloor('#2a2b2d'), 'case does not matter');
+  for (const h of ['#000000', '#101830', '#2a2b2d', '#1a0505', '#000a00']) close(Y(roomFloor(h)), Y(ROOM_FLOOR_HEX), 0.0015, `${h} lands on the floor's luminance (${roomFloor(h)})`);
+  for (const h of [ROOM_FLOOR_HEX, '#3b4b5e', '#47494d', '#f0efea', '#6b4a35', '#ffffff']) assert.equal(roomFloor(h), h, `${h} is at or over the floor: untouched`);
+  const nv = hexToLinear(roomFloor('#101830'));
+  assert.ok(nv[2] > nv[1] * 1.3 && nv[2] > nv[0] * 1.5, `a dark navy stays blue (${roomFloor('#101830')})`);
+  assert.equal(roomFloor('#zzzzzz'), '#zzzzzz', 'a bad value passes through (wallFactor and deskLook refuse it)');
+  assert.equal(roomFloor(null), null);
+  // the paths: the Black desk preset and a black wall of the visitor's own draw at the floor
+  const black = deskLook('black', DESK_LIGHT), fl = hexToLinear(ROOM_FLOOR_HEX);
+  for (let i = 0; i < 3; i++) close(black.colour[i], fl[i], 1e-3, 'the Black desk draws as matte black');
+  assert.deepEqual(deskLook('#000000', DESK_LIGHT).colour, black.colour, 'and so does a black desk of the visitor\'s own');
+  assert.deepEqual(wallFactor('#000000', BAKED_WALL), wallFactor(ROOM_FLOOR_HEX, BAKED_WALL), 'a black wall draws as matte black');
 });
 
 test('room colours: a surface loses (1 - weight) of its bounce, scaled by what multiplies its light and the tile\'s scale', () => {
