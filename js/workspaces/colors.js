@@ -793,10 +793,21 @@ export function mountColors(stage, ctx) {
   }
   function openSwap(hex) {
     const t = swapTarget(hex);
-    // a label stripe's spool (done.js spoolColours, since 2026-10-28): its colour is set on the labels, in Labels, not here
-    if (!t) { const h = String(hex).toLowerCase(); if (stage.filamentsInBuild().unpicked.some((u) => u.stripe && u.hex.toLowerCase() === h)) say('That spool prints the label stripes: their colour is set on each label, in Labels.'); return; }
+    if (!t) {
+      const h = String(hex).toLowerCase(), fc = stage.filamentsInBuild();
+      /* a spool that prints only label stripes is the LABEL PALETTE's (2026-10-28): its meaning's row opens in Labels, the
+         spool's picker open, so the spool is changed where every stripe of that meaning takes it */
+      const sp = fc.filaments.find((f) => f.hex.toLowerCase() === h && f.keys.some((k) => /:STRIPE@/.test(k)));
+      const ms = sp ? [...new Set(sp.keys.map((k) => (/:STRIPE@([a-z-]+)$/.exec(k) || [])[1]).filter(Boolean))] : [];
+      // one meaning: its row's picker; a spool two meanings share: the rows, none guessed (the palette says they share it)
+      if (ms.length) { if (ctx.memo) ctx.memo.labelPalette = { pick: ms.length === 1 ? ms[0] : null }; ctx.switchTo('labels'); return; }
+      // a stripe in a colour the palette does not hold (one the Label Studio has and the planner does not offer): its own
+      if (fc.unpicked.some((u) => u.stripe && u.hex.toLowerCase() === h)) say('That spool prints the label stripes: their colour is set on each label, in Labels.');
+      return;
+    }
     st.swap = t; st.key = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker);
   }
+  if (new URLSearchParams(location.search).get('debug')) window.__GEN2_SPOOL_TAP__ = openSwap;   // the room's spool tap, for checks (done.js onSpool)
   function swapTo(f) {
     const t = st.swap; if (!t) return;
     const fil = { name: f.label || f.name, hex: f.hex, url: f.url };
@@ -1046,7 +1057,7 @@ export function mountColors(stage, ctx) {
       if (phone && sel && !phone.isOpen(picker)) phone.collapse();
       renderAll();
     },
-    unmount() { leaveRoom(); ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace, nor does the room
+    unmount() { if (window.__GEN2_SPOOL_TAP__ === openSwap) delete window.__GEN2_SPOOL_TAP__; leaveRoom(); ac.abort(); unsub(); stage.endPreview?.(); stage.setSelected(null); stage.setSafeArea(null); if (phone) phone.destroy(); document.documentElement.classList.remove('ws-gallery'); root.remove(); },   // a look being shown never outlives the workspace, nor does the room
     get cardsPending() { return cards.pending; },   // for the pacing check: how many cards the gallery still owes
     get tray() { return trayLooks.map((t) => t.name); },   // the finalists, for a check
     get surprise() { return { names: sp.cands.map((c) => c.name), colors: sp.cands.map((c) => c.colors), style: sp.style, cap: sp.cap, ownedOnly: sp.ownedOnly, locks: Object.keys(sp.locks), short: sp.short, seed: sp.seed }; },   // the candidates, for a check

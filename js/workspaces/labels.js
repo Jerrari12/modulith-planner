@@ -120,6 +120,8 @@ export function mountLabels(stage, ctx) {
   const store = ctx.store;
   const S = () => store.state;
   const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null, fresh: null, view: 'build', selLabel: null };
+  // a label stripe's spool tapped in the Colors room (colors.js openSwap): the Label colours open on that meaning's picker
+  if (ctx.memo && ctx.memo.labelPalette) { const p = ctx.memo.labelPalette; delete ctx.memo.labelPalette; Object.assign(st, { palette: true, palEdit: true, palPick: p.pick || null, palQ: '' }); }
   let L = null;   // the label-list module once loaded
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -919,7 +921,8 @@ export function mountLabels(stage, ctx) {
     const notesFor = (key) => warns.filter((w) => (key === 'text' ? w.kind === 'text' : w.kind !== 'text' && w.keys[0] === key)).map(warningText);
     const row = (key, sp, suggested) => {
       const open = st.palEdit && st.palPick === key, word = meaningWord(key);
-      const label = [el('span.sw', { style: `--sw:${sp.hex}` }), el('span.mean', { text: word }), el('span.spool', { text: sp.name }), suggested ? el('span.dim.sugg', { text: 'suggested' }) : null];
+      // the spool's whole name, wrapping when it must, and "suggested" as a small tag under it (Joey 2026-10-28: no cut names)
+      const label = [el('span.sw', { style: `--sw:${sp.hex}` }), el('span.mean', { text: word }), el('span.spoolcol', {}, [el('span.spool', { text: sp.name }), suggested ? el('span.dim.sugg', { text: 'suggested' }) : null])];
       const head = st.palEdit
         ? el('button.prow.pick' + (open ? '.on' : ''), { 'data-key': key, 'aria-expanded': String(open), 'aria-label': `${word}: ${sp.name}. Change the spool`, onclick: () => { st.palPick = open ? null : key; st.palQ = ''; renderAll(); } }, label)
         : el('div.prow', { 'data-key': key }, label);
@@ -1129,7 +1132,7 @@ export function mountLabels(stage, ctx) {
   /* ---------------- layout ---------------- */
   const narrow = () => innerWidth < 1280;
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'labels', soon }, { panels: [
-    { el: panel, title: () => { if (!L) return 'Labels'; const r = R.waiting(L, S()).length; return st.pick ? `Placing ${quote(R.labelById(S(), st.pick))} · tap a drawer` : r ? `Labels · ${r} ready to place` : 'Labels'; }, open: false },
+    { el: panel, title: () => { if (!L) return 'Labels'; const r = R.waiting(L, S()).length; return st.pick ? `Placing ${quote(R.labelById(S(), st.pick))} · tap a drawer` : r ? `Labels · ${r} ready to place` : 'Labels'; }, open: !!st.palEdit },   // open when a stripe's spool tapped in Colors brought the visitor here (its rows are in this sheet)
     // its own title row is hidden on the phone (app.css): the handle names the label and carries the × (the phone tour,
     // 2026-10-27: the two rows took 100 of the 190 px a phone on its side has)
     { el: editor, title: () => { const l = st.edit && R.labelById(S(), st.edit.id); return l ? `${R.isPartLabel(l) ? 'Part label' : 'Edit'} · ${quote(l)}` : 'Edit label'; }, close: () => closeEdit() },

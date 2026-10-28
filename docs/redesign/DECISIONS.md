@@ -5928,3 +5928,11 @@ Design note: `docs/redesign/LABEL-PALETTE.md`.
 
 Reviews: Sol 01a1827b on the design (approve with changes; 9 findings folded in, 2 discarded with reasons in the note §9),
 Sol 01a182a1 on the code (one finding, the defaults offer compared body/text by name only; fixed).
+
+Before the deploy (Joey: "Fix names, then deploy"): the rows show every spool name whole, wrapping to a second line when
+it must, with "suggested" as a small tag under the name (measured at 290 px desktop and 360 px phone with the catalog's
+longest names: none clipped, nothing overlapping). And main's room spool for a stripe (b3b9905) meets the palette: a
+meaning's stripe is a named spool, so its room spool is that spool's colour (Polar Light Blue #14ADDB, not the nominal
+#56B4E9), and a tap on it opens Labels on that meaning's row with its picker (the sheet open on a phone; a spool two
+meanings share opens the rows, none guessed). A stripe in a colour the palette does not hold keeps main's sentence. Terra
+01a1832d: one finding taken (the shared spool), one discarded (ctx.memo always exists).

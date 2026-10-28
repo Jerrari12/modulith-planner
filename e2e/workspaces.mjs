@@ -3586,7 +3586,8 @@ test('Colors: the Room | Neutral switch is absent with ?done=off; for every visi
 /* A LABEL STRIPE'S SPOOL (Joey 2026-10-28: "we are using the blue accent color in the label but it's not adding to our
    filament stack"). The stripe prints from its own spool and the dock counted it, but the room's spools left stripes out
    (done.js spoolColours). An EdgeLabel build whose drawer carries a Metric-striped label: the room stacks a spool of its
-   blue. */
+   blue - since the label palette (2026-10-28) the spool that prints Metric in this build, the suggested Polar Light Blue
+   (#14ADDB), not the Studio's nominal #56B4E9 - and a tap on that spool opens Labels on the Metric row's picker. */
 test('Colors: a label stripe\'s colour has its spool in the room', { skip: ROOM_SOFT_SKIP }, async () => {
   const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
     removedStoppers: [], gridW: 6, gridH: 2, nextId: 3, labelStyle: null, buildId: 'e2estripespool', sideCovers: true, plateParts: {},
@@ -3595,12 +3596,18 @@ test('Colors: a label stripe\'s colour has its spool in the room', { skip: ROOM_
     labelAssign: { 1: 'e2estripelab01' } };
   const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
   const { ctx, page, errors } = await open('colors', { visitor: true, query: `&spools=plan#build=${b64}` });
-  await page.waitForFunction(() => window.__GEN2_VIEWER__?.filamentsInBuild?.().unpicked.some((u) => u.stripe && u.hex.toLowerCase() === '#56b4e9'), null, { timeout: 90_000 })
-    .catch(() => assert.fail('the label stripe never reached the build filaments'));
+  await page.waitForFunction(() => window.__GEN2_VIEWER__?.filamentsInBuild?.().filaments.some((f) => f.keys.includes('Label:STRIPE@sky-blue') && f.name === 'Polar Light Blue'), null, { timeout: 90_000 })
+    .catch(() => assert.fail('the label stripe never reached the build filaments as its spool'));
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__?.spools?.placed?.length, null, { timeout: 60_000 }).catch(() => assert.fail('no spools in the room'));
   await page.evaluate(() => window.__GEN2_DONE__.refreshSpools());
   const colours = await page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.userData.spool && o.userData.setColor) out.push(String(o.userData.spool.color).toLowerCase()); }); return out; });
-  assert.ok(colours.includes('#56b4e9'), `a spool of the stripe's blue (${JSON.stringify(colours)})`);
+  assert.ok(colours.includes('#14addb'), `a spool of the stripe's spool, Polar Light Blue (${JSON.stringify(colours)})`);
+  assert.ok(!colours.includes('#56b4e9'), 'not the nominal scheme blue');
+  // the spool's tap (done.js onSpool -> colors.js openSwap): Labels, the Label colours open on the Metric row's picker
+  await page.evaluate(() => window.__GEN2_SPOOL_TAP__('#14ADDB'));
+  await page.waitForSelector('#ws-labels .palette button.prow.on[data-key="sky-blue"]', { timeout: 30_000 })
+    .catch(() => assert.fail('the stripe spool\'s tap did not open the Metric row in Labels'));
+  assert.ok(await page.locator('#ws-labels .palette .ppick input.search').isVisible(), 'the spool picker is open');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
