@@ -6061,6 +6061,13 @@ black spools but one is PLA black and the other is TPU black, but at a glance th
   - Sol 01a1839e: three findings, fixed; round 2 no objection (its font-weight caveat discarded: Archivo is one variable
     file, 400 to 900).
 
+- **Live 2026-10-28 at `66b7914`** (pushed 14:08, live 14:27). Checked on the live planner (`tags-live.mjs`, Assemble's
+  final scene, the build in Elegoo PLA Black):
+  - tags "PLA / BLACK / ELEGOO" (ring #2a64c4) and "TPU / 95A · BLACK / POLYMAKER · POLYFLEX" (ring #1b7a50), both on
+    metal wires;
+  - the stack's top spool's sticker "PLA / BLACK";
+  - marks drawn once, no page errors.
+
 ## 2026-10-28 · A shared build carries its colours
 
 Astra, after the label palette went live: "Users reasonably expect 'Share build' to share what they see. Carrying the
