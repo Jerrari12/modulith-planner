@@ -5782,3 +5782,15 @@ E2E "Labels: a part label's stripe - its own colours, None or one of the six - i
 model a part label with its own colours draws the stripe pieces, the same part with `colours: null` none; the editor lists
 own (pressed), None and the six, and each click stores what the Studio stores (a mutant that skips the null fails it).
 Label unit tests 63/63. Terra 01a1806b: approved.
+
+## 2026-10-27 · A lone case stands on four feet, one per corner
+
+Joey, from a lone 2W-2H Decor drawer on the Tabletop: "since we aren't using a foot rail, there's really no point in adding
+6 feet, i would only add 4, one per corner". A tabletop build whose bottom row is ONE case puts its feet in that case's own
+underside slots. `generate.js` filled every 1W slot pair (dropping a slot within 30 mm of the last), so a lone 2W case
+took 6 feet, a 3W 8 and a 4W 10. It now takes the outermost slot on each side, front and back: four feet at any width,
+and the same four for adhesive feet. A 1W case is unchanged. Foot-rail builds keep 2 x (run width + 1); the official
+kits stand on rails, so their goldens do not move. The vault's `rules.md` says the same.
+
+Test `feet-option.test.mjs`: the count is 4 (printed and adhesive, the step titles too), and a new case puts a lone 1W to
+4W case on exactly the two corner slots, front and back. Terra 01a18078: no findings.

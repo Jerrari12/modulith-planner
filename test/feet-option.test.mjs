@@ -29,24 +29,38 @@ const build = (extra) => Object.assign({
 const gen = (b) => { const r = generateManifest(b); assert.deepEqual(r.errors, []); return r.manifest; };
 const feetRows = (m) => (m.parts || []).filter(p => p.type === 'Foot' || p.type === 'FootAdhesive');
 
-test('default: six printed TPU feet on a single 2W bottom case, nothing to buy', () => {
+test('default: four printed TPU feet on a single 2W bottom case, nothing to buy', () => {
   const m = gen(build({}));
   const r = feetRows(m);
   assert.equal(r.length, 1);
   assert.equal(r[0].node, 'Tabletop-Kit-Foot');
   assert.equal(r[0].label, 'Tabletop Kit Foot');
-  assert.equal(r[0].qty, 6);                 // 2 x (2 + 1): the one-case rule
+  assert.equal(r[0].qty, 4);                 // one per corner: the one-case rule (Joey 2026-10-27)
   assert.equal(r[0].purchased, undefined);
-  assert.ok(m.steps.some(s => /insert the 6 feet/.test(s.title)));
+  assert.ok(m.steps.some(s => /insert the 4 feet/.test(s.title)));
 });
 
-test('adhesive: the same six feet as a purchased, required row - and no printed row', () => {
+test('a lone case stands on one foot per corner at every width', () => {
+  // Joey 2026-10-27: with no foot rail, feet past the four corners add nothing.
+  // The outermost slot each side (11.5 in from the left edge, 76.5 into the last 1W), front and back.
+  for (const w of [1, 2, 3, 4]) {
+    const feet = (gen(build({ placed: [{ id: 1, x: 0, y: 6, w, hh: 2, fill: 'classic', shelves: 0, closure: 'none' }] })).instances || [])
+      .filter(i => i.node === 'Tabletop-Kit-Foot');
+    assert.equal(feet.length, 4, `${w}W: ${feet.length} feet`);
+    const xs = [...new Set(feet.map(i => i.pos[0]))].sort((a, b) => a - b);
+    const left = -w * 44;                     // the build is centred on its own width
+    assert.deepEqual(xs, [left + 11.5, left + (w - 1) * 88 + 76.5], `${w}W: the corner slots`);
+    assert.equal(new Set(feet.map(i => i.pos[2])).size, 2, `${w}W: a front and a back pair`);
+  }
+});
+
+test('adhesive: the same four feet as a purchased, required row - and no printed row', () => {
   const m = gen(build({ feet: 'adhesive' }));
   const r = feetRows(m);
   assert.equal(r.length, 1);
   assert.equal(r[0].node, 'Adhesive-Foot');
   assert.equal(r[0].label, 'Adhesive rubber foot');
-  assert.equal(r[0].qty, 6);                 // one-for-one: the same count
+  assert.equal(r[0].qty, 4);                 // one-for-one: the same count
   assert.equal(r[0].purchased, true);
   assert.equal(r[0].required, true);         // a tabletop build cannot stand without feet
   assert.equal(r[0].links.buy[0].id, 'rubber-feet');   // mirrors the planner's HARDWARE_BUY id
@@ -56,8 +70,8 @@ test('adhesive: the same six feet as a purchased, required row - and no printed 
 test('adhesive feet sit at exactly the printed feet positions', () => {
   const adhesive = (gen(build({ feet: 'adhesive' })).instances || []).filter(i => i.node === 'Adhesive-Foot');
   const printed = (gen(build({})).instances || []).filter(i => i.node === 'Tabletop-Kit-Foot');
-  assert.equal(adhesive.length, 6);
-  assert.equal(printed.length, 6);
+  assert.equal(adhesive.length, 4);
+  assert.equal(printed.length, 4);
   assert.deepEqual(adhesive.map(i => i.pos), printed.map(i => i.pos));
   assert.deepEqual(adhesive.map(i => i.yaw), printed.map(i => i.yaw));
 });
@@ -75,7 +89,7 @@ test('the adhesive foot is a real bought part, not a placement marker', () => {
   assert.equal(r.img, undefined, 'the adhesive row shows no render (there is no photo of the bought part)');
   assert.ok(feetRows(gen(build({})))[0].img, 'the printed row keeps its render');
   // pressed on, not slid in: it has no rail to enter a slot with
-  const step = m.steps.find(s => /stick on the 6 feet/.test(s.title));
+  const step = m.steps.find(s => /stick on the 4 feet/.test(s.title));
   assert.ok(step, 'the adhesive step is titled "stick on"');
   assert.ok(/same height/.test(step.note), 'the note states the height is unchanged');
   assert.ok(step.phases.every(p => p.enter && !p.fade), 'the adhesive step presses the feet on');

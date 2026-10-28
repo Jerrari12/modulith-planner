@@ -1235,17 +1235,15 @@ export function generateManifest(build, opts = {}) {
         'Hardware store item · length and anchors depend on the wall material; the 1-1/4" screw shown is an illustration.'); // purchased + core: nothing hangs without them
     }
   } else if (caseFeet) {
-    // feet slide into the bottom case's own underside slots: 4 per 1W, running
-    // LENGTHWISE (front feet snap in back->front, rear feet front->back).
-    // Slot x per 1W (11.5 / 76.5 from the left edge) ESTIMATED by symmetry with
-    // the rail inset; where adjacent 1W slots crowd (<30 mm), fill just one per
-    // row — same dedup rule as rail junctions.
+    // feet slide into the bottom case's own underside slots, running LENGTHWISE
+    // (front feet snap in back->front, rear feet front->back). Every 1W has a
+    // slot pair (11.5 / 76.5 from its left edge, ESTIMATED by symmetry with the
+    // rail inset), but a lone case takes ONE FOOT PER CORNER whatever its width
+    // (Joey 2026-10-27: with no foot rail, feet past the four corners add
+    // nothing). So the outermost slot each side.
     const u0 = bottomUnits[0];
     const leftEdge = (u0.col - totalW / 2) * PITCH_X;
-    const xs = [];
-    for (let i = 0; i < u0.w; i++) xs.push(leftEdge + i * PITCH_X + 11.5, leftEdge + i * PITCH_X + 76.5);
-    const slots = [];
-    for (const x of xs) if (!slots.length || x - slots[slots.length - 1] >= 30) slots.push(x);
+    const slots = [leftEdge + 11.5, leftEdge + (u0.w - 1) * PITCH_X + 76.5];
     for (const x of slots) for (const z of [-73 + dz, 81.15 - dz]) {
       const id2 = `f${inst.length}`;
       feetIds[z < 0 ? 'back' : 'front'].push(id2);
