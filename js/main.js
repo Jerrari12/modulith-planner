@@ -7985,7 +7985,13 @@ const persistColors = () => {
   try { localStorage.setItem(COLOR_STORE_KEY, JSON.stringify({ colors: customColors, on: useCustom, user: userPalette, over: overrides, t: colorsT })); }
   catch (e) { /* storage unavailable (private mode) — the planner relay still works */ }
 };
-const saveColors = () => { colorsT = Date.now(); persistColors(); postColorsToPlanner(); };
+const saveColors = () => { heldOn = null; colorsT = Date.now(); persistColors(); postColorsToPlanner(); };
+/* THE CHOSEN `on`, for a shared look (docs/redesign/SHARE-LOOK.md, 2026-10-28): Assemble shows "Part colors" by setting the
+   stage's useCustom without saving it, and sets it back on leave. heldOn remembers the build's chosen value while such a
+   temporary view is on (the setter below, its only writer), and every real palette change - each ends in saveColors -
+   forgets it. look() and the history read the chosen value, so the temporary view is never shared or undone into. */
+let heldOn = null;
+function look() { return { v: 1, on: heldOn !== null ? heldOn : useCustom, colors: structuredClone(customColors), over: structuredClone(overrides) }; }
 // call after any HAND edit to the palette (never after a preset)
 const snapshotUserPalette = () => { userPalette = structuredClone(customColors); };
 // purchased hardware (wood screws, magnets — every row of the type is `purchased`)
@@ -11959,7 +11965,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     /* ⚠ `useCustom` IS THE GATE, and without it `customColors` is inert. A test
        that assigned customColors and called applyPalette repainted NOTHING and
        produced eighteen identical arms that looked like a working matrix. */
-    get useCustom() { return useCustom; }, set useCustom(v) { useCustom = !!v; },
+    get useCustom() { return useCustom; }, set useCustom(v) { v = !!v; if (v === useCustom) return; if (heldOn === null) heldOn = useCustom; useCustom = v; if (useCustom === heldOn) heldOn = null; },   // a temporary view (Assemble's Part colors): the chosen value is held (look)
+    look,   // the build's colours as chosen, for the record and the history (SHARE-LOOK.md)
     // the relief lever, for the tier gate: `reliefWanted` is the constant AND the tier
     LAYER_DETAIL_ENABLED, reliefWanted,
     // the print pose's axis per material key - a buried-infill experiment needs

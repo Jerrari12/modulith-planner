@@ -6060,3 +6060,31 @@ black spools but one is PLA black and the other is TPU black, but at a glance th
     cases skipped there green on the GPU.
   - Sol 01a1839e: three findings, fixed; round 2 no objection (its font-weight caveat discarded: Archivo is one variable
     file, 400 to 900).
+
+## 2026-10-28 · A shared build carries its colours
+
+Astra, after the label palette went live: "Users reasonably expect 'Share build' to share what they see. Carrying the
+stripe while dropping the label background can change both its appearance and readability." The requirement: opening a
+shared build in a fresh browser reproduces its colours, label bodies, text and stripes included, without inheriting the
+recipient's unrelated preferences; old links keep their fallback. Design note `docs/redesign/SHARE-LOOK.md`.
+
+- **The record carries its look:** a new field `look` = `{ v: 1, on, colors, over }`, the Colors palette as chosen (every
+  part pick, the per-unit picks, the label body and text). The store stamps it at every serialisation, so the address (what
+  Share copies), Undo's write-back, Recent, the slot and a file all carry the current colours.
+- **The boot applies it** once, through one gate (decode, `buildTooNew`, the schema's `cleanLook`), in place of this
+  browser's palette for the build and of the first preset; a look of instruction colours stays one. A record with no look
+  (every link and file before today) opens exactly as before. A `#scheme=` beside the link still applies after it.
+- **The recipient keeps their own:** label defaults, saved schemes, the owned list and "★ My palette" are untouched.
+- **The chosen `on`, never Assemble's Part colors:** the stage holds the chosen value while that temporary view is on, and
+  both the look and the history read it.
+- **Outside data:** names are strings of at most 80 characters, hexes have 3, 4, 6 or 8 digits, links are http(s) of at
+  most 500 characters, plain objects only, no prototype keys; past 256 KB of UTF-8 the per-unit layer is dropped and the
+  build-wide colours stay (a fully picked build is under 4 KB).
+
+Tests: `test/share-look.test.mjs` (the cleaner, the cap in UTF-8 bytes, the round trip, the store stamping and Undo); E2E
+"Share: ..." x3 (a fresh context with its own same-id palette, defaults, schemes and owned list gets the sender's body, text,
+part, unit pick and stripe, its own settings unchanged; `on: false`, the no-look fallbacks and `#scheme=`; Assemble's Part
+colors never shared or undone into). Mutants: the boot apply disabled fails two cases; `look()` reading the live flag
+fails the Assemble case. Unit 736/736, e2e 95/95 (Colors, Assemble, Share, Labels, Parts, presets,
+undo). Reviews: Sol 01a183be (design: reject, nine changes folded in, three discarded with reasons in the note), Sol
+01a183df (code: the cap counted UTF-16 units; now UTF-8 bytes). Not deployed: a new feature, waiting on Joey's go.

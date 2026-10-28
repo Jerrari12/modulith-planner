@@ -1007,6 +1007,89 @@ test('Labels: a shared link shows the sender\'s label palette; the recipient\'s 
   await ctx.close();
 });
 
+/* A SHARED BUILD CARRIES ITS COLOURS (2026-10-28, docs/redesign/SHARE-LOOK.md; Astra: "opening a shared build in a fresh
+   browser reproduces its colours, including label bodies, text and stripes, without inheriting the recipient's unrelated
+   preferences"). The record's `look` rides in the address; the boot applies it in place of this browser's palette for the
+   build and of the first preset; the recipient's own label defaults, saved schemes, owned list and "My palette" stay. */
+const lookRec = (id, extra = {}) => ({ mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+  removedStoppers: [], gridW: 4, gridH: 2, nextId: 2, labelStyle: null, buildId: id, sideCovers: true, plateParts: {}, labelPalette: null,
+  placed: [{ id: 1, x: 0, y: 2, w: 2, hh: 2, fill: 'decor', shelves: 0, label: 'M3 screws' }],
+  labelList: { format: 'modulith-labels', version: 1, labels: [{ text: 'M3 screws', id: id + 'a', colours: { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } } }] },
+  labelAssign: { 1: id + 'a' }, ...extra });
+const b64rec = (r) => Buffer.from(JSON.stringify(r), 'utf8').toString('base64');
+
+test('Share: a build\'s colours ride in its link - body, text, a part, a unit\'s own pick and the stripe - and the recipient\'s own settings stay', async () => {
+  const id = 'e2esharelook01';
+  const { ctx, page, errors } = await open('labels', { query: `&done=off#build=${b64rec(lookRec(id))}` });
+  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  // the sender picks, each as the workspaces commit a pick (one store entry)
+  await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, st = window.__GEN2_STORE__;
+    const pick = (fn) => { st.flush(); fn(); st.commit(() => {}, 'palette'); st.flush(); };
+    pick(() => v.setColor('Label', { name: 'Panchroma Cream', hex: '#f1e7cf' }));
+    pick(() => v.setColor('Label:TEXT', { name: 'Panchroma Navy', hex: '#1f2a44' }));
+    pick(() => v.setColor('Faceplate', { name: 'Polar Seafoam', hex: '#00A37A' }));
+    pick(() => v.setOverride(1, 'Accent', { name: 'Panchroma Lemon Yellow', hex: '#f8e35a' }));
+    st.flush(); st.commit((s) => { s.labelPalette = { v: 1, spools: { 'sky-blue': { name: 'Panchroma Blue', hex: '#2f6fbe' } } }; }, 'label-palette'); st.flush();
+  });
+  const link = await page.evaluate(() => location.href);
+  const sent = JSON.parse(Buffer.from(/#build=([^&]+)/.exec(link)[1], 'base64').toString('utf8'));
+  assert.equal(sent.look && sent.look.colors.Label.name, 'Panchroma Cream', 'the address carries the look');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  // the recipient: a fresh browser with its own palette saved for THIS build id, its own label defaults, schemes and owned list
+  const SAVED = { colors: { Label: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, on: true, user: { Case: { name: 'Panchroma Tan', hex: '#c8a77c' } }, over: {}, t: 1 };
+  const MINE = { 'gen2-label-palette': JSON.stringify({ v: 1, spools: { red: { name: 'Polar Rocket Red', hex: '#FF1900' } } }), 'gen2-schemes': JSON.stringify([{ name: 'My scheme', colors: { Case: { name: 'Panchroma Tan', hex: '#c8a77c' } } }]), 'gen2-owned': JSON.stringify({ v: 1, labels: ['Elegoo PLA Black'] }) };
+  const rctx = await freshContext();
+  await rctx.addInitScript(([key, saved, mine]) => { try { if (!sessionStorage.getItem('e2e-seeded')) { localStorage.setItem(key, saved); for (const [k, v] of Object.entries(mine)) localStorage.setItem(k, v); sessionStorage.setItem('e2e-seeded', '1'); } } catch {} }, ['gen2-colors:build-' + id, JSON.stringify(SAVED), MINE]);
+  const { page: rp, errors: rerr } = await open('labels', { context: rctx, query: '&done=off#' + link.split('#')[1] });
+  await rp.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  const got = await rp.evaluate(() => { const v = window.__GEN2_VIEWER__, p = v.palette();
+    return { body: p.colors.Label?.name, text: p.colors['Label:TEXT']?.name, face: p.colors.Faceplate?.name, own: v.overrideFor(1, 'Accent')?.name, on: p.on, bodyHex: v.activeHex('Label'), stripe: v.activeHex('Label:STRIPE@sky-blue'), user: p.user?.Case?.name,
+      mine: ['gen2-label-palette', 'gen2-schemes', 'gen2-owned'].map((k) => localStorage.getItem(k)) }; });
+  assert.deepEqual([got.body, got.text, got.face, got.own, got.on], ['Panchroma Cream', 'Panchroma Navy', 'Polar Seafoam', 'Panchroma Lemon Yellow', true], `the sender's colours (${JSON.stringify(got)})`);
+  assert.equal(got.bodyHex, '#f1e7cf', 'the label body is drawn in them');
+  assert.equal(got.stripe, '#2f6fbe', 'and the stripe in the sender\'s spool');
+  assert.equal(got.user, 'Panchroma Tan', 'the recipient\'s "My palette" for the build stays');
+  assert.deepEqual(got.mine, Object.values(MINE), 'the recipient\'s label defaults, schemes and owned list are untouched');
+  assert.deepEqual(clean(rerr), []);
+});
+
+test('Share: a look of instruction colours stays one; a link without a look opens as before; a #scheme= beside the link still wins', async () => {
+  const ctx = await freshContext();
+  // on: false - not replaced by the first preset
+  const { page, errors } = await open('build', { context: ctx, query: `&done=off#build=${b64rec(lookRec('e2esharelook02', { look: { v: 1, on: false, colors: {}, over: {} } }))}` });
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.useCustom), false, 'the instruction colours, as chosen');
+  // no look, nothing saved: the first preset, as before
+  const p2 = await ctx.newPage();
+  await p2.goto(`${base}/index.html?ws=build&debug=1&done=off#build=${b64rec(lookRec('e2esharelook03'))}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p2);
+  assert.deepEqual(await p2.evaluate(() => [window.__GEN2_VIEWER__.useCustom, window.__GEN2_VIEWER__.palette().colors.Label?.name]), [true, 'Panchroma Cold White'], 'the first preset');
+  // no look, a palette saved for the id: that palette, as before
+  await p2.evaluate(() => localStorage.setItem('gen2-colors:build-e2esharelook04', JSON.stringify({ colors: { Label: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, on: true, user: {}, over: {}, t: 1 })));
+  const p3 = await ctx.newPage();
+  await p3.goto(`${base}/index.html?ws=build&debug=1&done=off#build=${b64rec(lookRec('e2esharelook04'))}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p3);
+  assert.equal(await p3.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Elegoo PLA Black', 'this browser\'s palette for the build');
+  // a look and a #scheme=: the scheme, an explicit choice, applies after it
+  const scheme = Buffer.from(JSON.stringify({ Label: { name: 'Panchroma Lemon Yellow', hex: '#f8e35a' } }), 'utf8').toString('base64');
+  const p4 = await ctx.newPage();
+  await p4.goto(`${base}/index.html?ws=build&debug=1&done=off#build=${b64rec(lookRec('e2esharelook05', { look: { v: 1, on: true, colors: { Label: { name: 'Panchroma Cream', hex: '#f1e7cf' } }, over: {} } }))}&scheme=${scheme}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p4);
+  assert.equal(await p4.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Panchroma Lemon Yellow');
+  assert.deepEqual(clean(errors), []);
+});
+
+test('Share: while Assemble shows Part colors, the build\'s chosen colours are what a save carries and what Undo restores', async () => {
+  const look = { v: 1, on: true, colors: { Label: { name: 'Panchroma Cream', hex: '#f1e7cf' } }, over: {} };
+  const { ctx, page, errors } = await open('assemble', { query: `&done=off#build=${b64rec(lookRec('e2esharelook06', { look }))}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.useCustom === false, null, { timeout: 30_000 }).catch(() => assert.fail('Assemble did not switch to Part colors'));
+  const r = await page.evaluate(() => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { s.labelStyle = { ...(s.labelStyle || {}), bold: !(s.labelStyle && s.labelStyle.bold) }; }, 'label-style'); st.flush();
+    const sent = JSON.parse(decodeURIComponent(escape(atob(/#build=([^&]+)/.exec(location.hash)[1]))));
+    st.undo(); return { addressOn: sent.look && sent.look.on, viewOn: window.__GEN2_VIEWER__.useCustom, lookOn: window.__GEN2_VIEWER__.look().on }; });
+  assert.equal(r.addressOn, true, 'the address carries the chosen colours, not the temporary Part colors');
+  assert.equal(r.lookOn, true, 'and after Undo the build\'s choice is still on');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* A TYPED LABEL'S STRIPE, AND CLASSIC PRO'S PRINT SETTINGS (Joey 2026-10-27: "if i'm manually typing a label i don't see how to
    set a color for the label stripe"; the part label stripe's wording "feels specific to edgelabel labels and odd for this
    classic pro label"). The editor's Stripe row: the Label Studio's colours, stored on the label as the Studio stores it, and
