@@ -5563,3 +5563,9 @@ the row and the badge beside the link). Mutant: the phone rules taken out, it fa
 test/parts-thumbs.test.mjs maps every row name the BOM bills, over every mount, length, style, handle, foot and size, to
 a file in the parts pool, and keeps the known-gap list honest. Terra 01a17fae: one finding (on the phone with tracking
 on, the counters' line split the badge from the link), fixed; the fix also found the counters overflowing at 360 px.
+
+- **Live 2026-10-27 at `9b5fca9`** (run 40608746279 green). The first push, `ff33530` (run 40606460749), passed every test
+  and was refused at the module-graph guard: parts.js's new `'../config.js'` import had no stamping line in pages.yml; it
+  has one now. Checked on the live planner (`thumbs-prod.mjs`, ?done=off, analytics blocked), desktop and 360x675: 21 rows,
+  a frame on each, 18 renders loaded, the three without one the M3 socket screws and the hex nut; names 127 px and up on
+  the desktop, 190 px and up on the phone; nothing wider than the panel; no page errors.
