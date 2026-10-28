@@ -88,7 +88,7 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
    page renders at its default quality, and on the CI runner's software rasteriser that kept the main thread so busy that
    a click outlived its 30 s (deploy run 38981210610: "the redesign follow-up: a gap build…" - locator.click: Timeout
    30000ms exceeded; this suite passed locally on a real GPU every time) */
-const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} };
+const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} };   // no sheet nudge (open() says why)
 async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
 async function open(ws, { query = '', phone = false, context = null, visitor = false, viewport = null } = {}) {   // viewport: a phone's own size (390 x 844 when not given)
   /* the room is on for everyone (Joey 2026-10-26): a case about something else keeps the studio it was written for
@@ -101,7 +101,9 @@ async function open(ws, { query = '', phone = false, context = null, visitor = f
   if (roomy && !/spools=/.test(query)) query += '&spools=off';   // and no spools, unless it asks (?spools=plan)
   const ctx = context || await browser.newContext(phone ? { viewport: viewport || { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
-  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
+  // the phone sheets' one-time nudge stays out of every case but its own: a sheet lifting a second after load moves what a
+  // case taps or measures
+  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
   const page = await ctx.newPage();
   // E2E_THROTTLE=n slows this machine's CPU n times (Chrome's own throttling), towards the CI runner's speed: the
   // follow-up cases of 2026-10-16 passed here, soft rendering included, and failed there twice
@@ -3645,6 +3647,48 @@ test('Assemble: the Done scene\'s moving AO leaves a gap under a texel unocclude
   assert.ok(rest.passes > 2 && rest.crack === 0, `at rest the passes accumulate with the check off (${JSON.stringify(rest)})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* A COLLAPSED SHEET SAYS IT OPENS (Joey 2026-10-28: the bar "looks kind of like just a static bar until i click it ... there's
+   nothing about it that says expand me"). Its caret is drawn - the sprite lacked caret-up, so a collapsed handle showed
+   none - and once per browser the top collapsed sheet nudges up a second after load (phone.js, the one-time nudge): it plays on a first
+   visit, not again on a reload, and never under reduced motion. Every other case marks it played (open(), FAST) */
+test('Phone sheets: a collapsed handle shows its up caret, and the one-time nudge plays once - not on reload, not under reduced motion', async () => {
+  const phoneCtx = async (o = {}) => {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, ...o }); contexts.add(c);
+    await c.addInitScript(() => {
+      try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {}
+      window.__nudges = 0;   // every sheet that takes the nudge class, from the first paint on
+      new MutationObserver((ms) => { for (const m of ms) if (m.target.classList?.contains('nudge') && !(m.oldValue || '').includes('nudge')) window.__nudges++; })
+        .observe(document, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+    });
+    return c;
+  };
+  const ctx = await phoneCtx();
+  // Build: the first workspace a visitor meets, its library sheet collapsed (Colors and Parts open theirs: nothing to nudge)
+  const { page, errors } = await open('build', { phone: true, context: ctx });
+  await page.waitForFunction(() => document.querySelector('#ws .sheet:not(.open) > .sheet-handle .chev use'), null, { timeout: 60_000 });
+  // the caret it points at is in the sprite the page is served (a <use> of a missing symbol draws nothing, silently)
+  const chev = await page.evaluate(async () => { const u = document.querySelector('#ws .sheet:not(.open) > .sheet-handle .chev use'); const href = u.getAttribute('href');
+    const [file, id] = href.split('#'); const svg = await (await fetch(file)).text(); return { id, inSprite: svg.includes(`<symbol id="${id}"`) }; });
+  assert.deepEqual(chev, { id: 'ph-caret-up', inSprite: true }, 'the collapsed handle draws its up caret');
+  const played = await page.waitForFunction(() => window.__nudges > 0 && localStorage.getItem('gen2-sheet-nudged') === '1', null, { timeout: 6_000 }).then(() => true).catch(() => false);
+  assert.ok(played, 'a first visit: the top collapsed sheet nudges and the browser remembers it');
+  await page.waitForFunction(() => !document.querySelector('#ws .sheet.nudge'), null, { timeout: 5_000 }).catch(() => assert.fail('the nudge class stayed on'));
+  // a reload: remembered, so no nudge
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('#ws .sheet > .sheet-handle'), null, { timeout: 60_000 });
+  await settle(page, 2500);
+  assert.equal(await page.evaluate(() => window.__nudges), 0, 'no nudge on a reload');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  // reduced motion: never, and nothing remembered
+  const rctx = await phoneCtx({ reducedMotion: 'reduce' });
+  const r = await open('build', { phone: true, context: rctx });
+  await r.page.waitForFunction(() => document.querySelector('#ws .sheet > .sheet-handle'), null, { timeout: 60_000 });
+  await settle(r.page, 2500);
+  assert.deepEqual(await r.page.evaluate(() => [window.__nudges, localStorage.getItem('gen2-sheet-nudged')]), [0, null], 'no nudge under reduced motion');
+  await rctx.close();
 });
 
 /* THE PICKER'S FILAMENTS ON A PHONE (Joey 2026-10-26, live: "I don't think filament colors actually show up on mobile at

@@ -5828,3 +5828,25 @@ Live 2026-10-28 09:29 as b2e27a22, after the Label Studio's public push (b18cada
 a typed Classic Pro label's green stripe and an M5 x 20 part label's metric band with its stainless patch, each three pieces
 filling the model body's box (0.0006 mm), the band at |x| 20.512 between the slits, no page errors. The same check failed on
 688243e7, before the deploy.
+
+## 2026-10-28 · A collapsed phone sheet says it opens
+
+Joey, of the collapsed Colors bar on a phone: it "looks kind of like just a static bar until i click it ... there's nothing
+about it that says expand me", suggesting an up icon, "a slight movement up animation right after page load", or a hover
+change. The cause of most of it: `phone.js` has asked for a `caret-up` on every collapsed handle since the sheets were built,
+and the icon sprite had none (only `caret-down`, `caret-right`), so a collapsed handle drew a blank where its arrow goes and
+only an open sheet showed one.
+
+- **The arrow.** `caret-up` added to `tools/make-icons.mjs` and the sprite rebuilt (one new symbol); the caret drawn at the
+  title's strength (`--ink-2`, was `--ink-3`). `test/icon-sprite.test.mjs` now reads every icon named in an `icon(...)` call
+  (ternaries too) against the sprite: it fails on the old sprite, on `caret-up`.
+- **The hover.** With a mouse (`hover: hover`), the handle's glass lightens, the grab bar brightens and the caret steps 2 px
+  its way (up collapsed, down open).
+- **The nudge.** Once per browser, 1.1 s after the phone chrome comes up, the top collapsed sheet lifts 14 px and settles
+  (a registered `--nudge` length added into the sheet's transform and clip, so the lift shows a glimpse under the handle).
+  Not under reduced motion, not while a sheet is open, and never again once it has played or a sheet was opened
+  (`gen2-sheet-nudged`). Build is where it plays first: its library starts collapsed (Colors and Parts open theirs).
+
+Tests: the new e2e case (the collapsed caret's symbol is in the served sprite; a first visit nudges and remembers; a reload
+does not; reduced motion never); every other e2e case marks the nudge played, so no sheet moves under a tap. All 23 phone
+cases and 707 unit tests pass. Shots: `D:\Claude - Output\sheet-hint-2026-10-28`.

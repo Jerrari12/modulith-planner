@@ -18,7 +18,7 @@ const ICONS = {
   'cube': ['regular', 'fill'], 'palette': ['regular', 'fill'], 'tag': ['regular', 'fill'],
   'list-checks': ['regular', 'fill'], 'wrench': ['regular', 'fill'],
   // top bar
-  'folder-simple': ['regular'], 'caret-down': ['regular'], 'caret-right': ['regular'], 'sun': ['regular'], 'moon': ['regular', 'fill'],
+  'folder-simple': ['regular'], 'caret-down': ['regular'], 'caret-up': ['regular'], 'caret-right': ['regular'], 'sun': ['regular'], 'moon': ['regular', 'fill'],
   'share-network': ['regular'], 'chat-circle-dots': ['regular'], 'ruler': ['regular'],
   'desk': ['regular'], 'wall': ['regular'], 'table': ['regular'],
   // library + inspector

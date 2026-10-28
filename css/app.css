@@ -3,6 +3,10 @@
    the brief's tokens (css/tokens.css) where the two disagree (glass .84, not .9). Everything here is
    scoped to html[data-ws], so the old viewer page without a workspace is untouched. */
 
+/* a phone sheet's one-time nudge (the sheets' rules below): a REGISTERED length, so it animates and 0px is its default */
+@property --nudge { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@keyframes sheet-nudge { 0% { --nudge: 0px; } 32% { --nudge: 14px; } 62% { --nudge: 0px; } 78% { --nudge: 4px; } 100% { --nudge: 0px; } }
+
 /* ---- the artboard's extras beyond the brief's tokens ---- */
 :root, [data-mode="light"] {
   --hair: rgba(29,30,32,.12);
@@ -1037,8 +1041,13 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws-dock .pbar .short { display: block; }
   /* sheets: the handle stays put while the sheet scrolls under it; the sheet manager sets bottom and max-height
      inline from the live dock height (the Assemble player is taller than the dock) */
-  #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
+  #ws .sheet { position: absolute; left: 0; right: 0; top: auto; bottom: 126px; width: auto; max-height: 56vh; box-sizing: border-box; border-radius: 18px 18px 0 0; padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; transform: translateY(calc(100% - var(--peek, 44px) - var(--nudge, 0px))); clip-path: inset(0 0 calc(100% - var(--peek, 44px) - var(--nudge, 0px)) 0); transition: transform var(--d-pop) var(--ease-out), clip-path var(--d-pop) var(--ease-out); z-index: 10; animation: none; }   /* collapsed: only the peek shows; the rest is clipped, not just slid behind the dock (it showed through the Assemble player's glass) */
   #ws .sheet.open { transform: none; clip-path: inset(0); overflow-y: auto; z-index: 13; }
+  /* THE ONE-TIME NUDGE (Joey 2026-10-28: a collapsed bar "looks kind of like just a static bar until i click it"): once per
+     browser, a second after load, the top collapsed sheet lifts 14 px - a glimpse of what is under its handle - and settles
+     (phone.js, the one-time nudge; never under reduced motion). --nudge is a registered length (top of this file) so it animates, and every use falls back to 0px (a browser without @property would otherwise drop the whole transform, Terra 01a182c4); the
+     transform's own transition is off meanwhile, or it would chase every frame */
+  #ws .sheet.nudge:not(.open) { animation: sheet-nudge 1.1s var(--ease-out) 1; transition: none; }
   #ws .sheet[hidden] { display: none; }
   /* what an open sheet covers steps out, or its words read through the glass (phone.js stack): the collapsed handles, and
      on a short phone on its side the dock or the player under a sheet that takes the whole column */
@@ -1070,9 +1079,18 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   /* the handle's glass is tripled (99 % cover): at the sheet's one layer the rows scrolled under it read through its title
      (the phone tour, 2026-10-27: "Classic drawer · Decor drawer" under "Unit 1 · 1W·1H Decor Drawer"), and still faintly at two */
   #ws .sheet-handle { position: sticky; top: 0; z-index: 2; flex: none; display: flex; align-items: center; gap: 10px; height: 44px; margin: 0 -14px; padding: 0 16px; background: linear-gradient(var(--glass-bg), var(--glass-bg)), linear-gradient(var(--glass-bg), var(--glass-bg)), var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); cursor: pointer; user-select: none; -webkit-user-select: none; touch-action: none; }
-  #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; }
+  #ws .sheet-handle .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--ink-3); opacity: .5; transition: opacity var(--d-pop) var(--ease-out); }
   #ws .sheet-handle .ttl { flex: 1; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #ws .sheet-handle .chev { color: var(--ink-3); display: inline-flex; }
+  /* the caret says which way the sheet goes (up collapsed, down open; the up one was missing from the sprite until
+     2026-10-28, so a collapsed bar showed none - Joey: "nothing about it that says expand me"), at the title's strength */
+  #ws .sheet-handle .chev { color: var(--ink-2); display: inline-flex; transition: transform var(--d-pop) var(--ease-out); }
+  /* with a mouse, the handle answers the pointer: a lighter glass, a brighter grab bar, the caret a step its way */
+  @media (hover: hover) {
+    #ws .sheet-handle:hover { box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--ink) 6%, transparent); }
+    #ws .sheet-handle:hover .grab { opacity: .9; }
+    #ws .sheet:not(.open) > .sheet-handle:hover .chev { transform: translateY(-2px); }
+    #ws .sheet.open > .sheet-handle:hover .chev { transform: translateY(2px); }
+  }
   #ws .sheet-peek { flex: none; height: 40px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
   #ws .sheet > .tabs { margin-top: 0; }
   #ws .sheet .collapse, #ws .sheet.rail .expand, #ws .sheet .railbtn { display: none; }
