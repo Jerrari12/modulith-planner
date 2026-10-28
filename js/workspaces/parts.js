@@ -201,7 +201,8 @@ const remaining = (r, p) => Math.max(0, r.qty - (p?.had || 0) - (p?.made || 0));
    (generate.js imgFor). The vendored catalog's partImage() is the OLD planner's map - img/parts/185/..., GEN2_..._256p -
    a layout the host does not have, so this maps the BOM's own names onto the host's files instead. Dots drop from a size
    (0.5H -> 05H) as in every render name. A row with no render answers null and keeps an empty frame: the M3 socket screws,
-   the hex nut and the adhesive feet have no photograph (generate.js: no stand-in for a bought part), and a few render
+   the hex nut and the adhesive feet have no photograph (generate.js: no stand-in for a bought part), nor does the
+   Essential faceplate (below), and a few render
    batches have gaps (the img onerror empties the frame). BlockBar and Crystal show their A style, the series' own
    render in the generator. */
 const HW_THUMB = { 'M3×6mm button head screw': 'ButtonHeadScrew_M3-6.png', 'Magnets 10×2mm or 6×2mm': 'Magnets.png', 'Countersunk wood screws (#6/#8)': 'WoodScrew_No6-19mm.png' };
@@ -215,9 +216,11 @@ export function partThumb(name, variant) {
     if ((m = /^GEN2 (\d+) Case - (\dW-[\d.]+H)$/.exec(name))) return `Case ${m[1]}-${d(m[2])}.png`;
     if ((m = /^GEN2 (\d+) Side Cover - ([\d.]+H)$/.exec(name))) return `SideCover_${m[1]}-${d(m[2])}.png`;
     // "Classic Pro" before "Classic", as in partImage: the alternation is leftmost-first
-    if ((m = /^GEN2 (Essential|EdgeLabel|Classic Pro|Classic|Chevron) Decor Faceplate - (.+)$/.exec(name))) {
-      const fam = { Essential: null, EdgeLabel: 'EdgeLabel', 'Classic Pro': 'ClassicPro', Classic: 'ClassicDecor', Chevron: 'Chevron' }[m[1]];
-      return fam ? `${fam}_${d(m[2])}.png` : 'Faceplate-Essential.jpg';
+    /* Essential has no per-size render, and its card art (Faceplate-Essential.jpg) is a photograph of a Decor drawer half
+       open under a desk: never shipped as a part's render (vault decisions.md, 2026-09-13), so its rows keep the empty frame */
+    if ((m = /^GEN2 (EdgeLabel|Classic Pro|Classic|Chevron) Decor Faceplate - (.+)$/.exec(name))) {
+      const fam = { EdgeLabel: 'EdgeLabel', 'Classic Pro': 'ClassicPro', Classic: 'ClassicDecor', Chevron: 'Chevron' }[m[1]];
+      return `${fam}_${d(m[2])}.png`;
     }
     if ((m = /^GEN2 Decor Faceplate Back Cover - (.+)$/.exec(name))) return `BackCover_${d(m[1])}.png`;
     if ((m = /^GEN2 Decor Handles - (\w+) Series$/.exec(name))) return m[1] === 'Deco' ? 'Handle_Deco.png' : `Handle_${m[1]}_A.png`;

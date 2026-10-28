@@ -1470,7 +1470,7 @@ test('Parts: a part render beside every row\'s chip, loaded; the phone sheet hol
   };
   const check = (v, size, where) => {
     assert.ok(v.rows.length >= 5, `${where}: rows listed`);
-    const bad = v.rows.filter((r) => !r.thumb || r.w !== size || r.gap < 8 || !r.inside || (r.img ? !r.loaded : !(r.buy && NO_RENDER.test(r.name))));
+    const bad = v.rows.filter((r) => !r.thumb || r.w !== size || r.gap < 8 || !r.inside || (r.img ? !r.loaded : !((r.buy && NO_RENDER.test(r.name)) || /^Essential Decor Faceplate - /.test(r.name))));
     assert.deepEqual(bad, [], `${where}: a ${size} px frame on every row, 8 px from the chip, inside the row; a render loaded on every row but the unphotographed bought parts`);
     assert.ok(v.rows.filter((r) => r.loaded).length >= v.rows.length - 4, `${where}: renders on all but a few bought parts (${v.rows.filter((r) => !r.loaded).map((r) => r.name)})`);
     assert.ok(v.overflow <= 1, `${where}: the list no wider than its panel (${v.overflow} px over)`);

@@ -5545,6 +5545,9 @@ but why not include BOM thumbnail images for each part, we should have them?"
   checklist), and the host lacks three renders - Decor Drawer 270-4W-1H and the 59 Side Covers 2H and 3H (404 on the live
   host). A missing file empties its frame rather than showing a broken image. BlockBar and Crystal handles show their A
   style, the series' render in the generator.
+- **The Essential faceplates keep the empty frame too** (follow-up the same day): their only picture, the card art
+  `Faceplate-Essential.jpg`, is a photograph of a Decor drawer half open under a desk, and the vault's settled rule is that
+  a photograph is never shipped as a part's render (MODULITH decisions.md, 2026-09-13). The first push showed it.
 - **On a phone the badge and the link move under the name**, right-aligned. With the render beside the chip, a row with
   both had 60 px of the 360 px sheet for its name (it was about 100 before); the landscape column (780x260) is as narrow.
   Every row's name now has 120 px or more at both sizes. The break is a zero-height flex item ordered after the name, not

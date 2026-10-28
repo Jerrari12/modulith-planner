@@ -48,7 +48,9 @@ test('every BOM row maps to a render the parts host has, but the unphotographed 
   const rows = allRows();
   assert.ok(rows.length > 500, `the enumeration reaches the catalog (${rows.length} rows)`);
   const unmapped = rows.filter((r) => !partThumb(r.name, r.variant)).map((r) => r.name);
-  assert.deepEqual([...new Set(unmapped)].sort(), [...NO_PHOTO].sort(), 'only the bought parts without a photograph have no render');
+  const essential = unmapped.filter((n) => /^GEN2 Essential Decor Faceplate - /.test(n));
+  assert.equal(new Set(essential).size, 18, 'the 18 Essential faceplates have no render (their card art is a photograph of a drawer)');
+  assert.deepEqual([...new Set(unmapped.filter((n) => !essential.includes(n)))].sort(), [...NO_PHOTO].sort(), 'else only the bought parts without a photograph have no render');
   const absent = [...new Set(rows.map((r) => partThumb(r.name, r.variant)).filter(Boolean).filter((p) => !existsSync(join(root, p))))].sort();
   assert.deepEqual(absent, [...KNOWN_GAPS].sort(), 'every mapped file is on the host, but the known gaps (a gap that got its render leaves the list)');
 });
@@ -62,4 +64,5 @@ test('the names map as the host spells its files', () => {
   assert.equal(partThumb('GEN2 Wall Mount Kit - Lite - 185', '2W section'), 'img/parts/WallMount_Lite_2W.png');
   assert.equal(partThumb('GEN2 Decor Handles - BlockBar Series'), 'img/parts/Handle_BlockBar_A.png');
   assert.equal(partThumb('M3 hex nut'), null);
+  assert.equal(partThumb('GEN2 Essential Decor Faceplate - 1W-1H'), null, 'never the Essential photograph');
 });
