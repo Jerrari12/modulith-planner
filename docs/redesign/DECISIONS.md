@@ -6270,3 +6270,14 @@ of it still reads v2; the defaults sit over v2). e2e: a new build starts on v2 (
 older record opens on v1 (#f0a4c0, #efefea); a new build with defaults is set 2 with v2's purple. Sol 01a18540: round 1
 fix first, two findings (the born predicate trusted `?new=1` beside a `#build=` record; a set-2 palette not written whole
 read v1 in an old tab), both fixed; round 2 ship.
+
+- **Live 2026-10-29 at `8acbc842`** (re-land 8acbc84, run 40816411546 all green). The first landing (e9029b0, c4ba965)
+  failed CI three times on two fresh-page cases (the Very High steam case's room-on wait, 3 of 3; the idle gate's edit, 2
+  of 3) that passed locally, and was reverted (e2161d1) so silk spools could deploy. The re-land adds: `setLabelPalette`
+  repaints only when a stripe is drawn (with v2 every fresh page reached the stage with a palette at boot and ran
+  `applyPalette`; the suspected cause of the idle gate, not proven); the steam case's room wait 60 s -> 180 s (done-scene's
+  timing: room-on 31.4 s with v2 vs 31.6 s without, under E2E_SOFT; v2's new cases moved it behind a long case in its shard
+  on a runner ~2.1x slower); both cases print page errors and state on failure. `label-v2-prod.mjs` on the live planner: a
+  New build and a first visit are set 2 (Purple #7a4fb0, White #787e82, rows "suggested"), an older record stays v1
+  (#f0a4c0, #efefea), a set-2 link opens whole; no page errors. label-palette-prod, stripe-spool-prod and share-look-prod
+  green on the same stamp.
