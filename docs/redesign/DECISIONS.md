@@ -6207,3 +6207,23 @@ Tests: `store.test.mjs` loads Joey's 19 units at 7.5H with a 1H and a 0.5H size 
 bottom row on the table, nothing unsupported. Against main it fails (6 unsupported). Unit suite and the e2e cases a
 tabletop grid touches (the wall "+" spots, the void, gravity's ghost, the spot left of the starter, the setup sheet's
 switch to Tabletop and its default starter) green on SwiftShader. Terra 01a183ea: no findings.
+
+## 2026-10-28 · A silk spool shines like the silk parts
+
+Joey, of a Silk Gold spool in the Colors room at Very High: "do silk spools also reflect like the printed parts? it looks
+mostly flat like a yellow". (Relayed by the done-scene session; the coil had only ever taken a colour.)
+
+- A spool whose filament is silk (done.js spoolMaterials, the same `silk` the tags read) wears the printed parts' silk:
+  `part-material.js SILK_APPROX` (roughness 0.2, metalness 0.75, anisotropy 0.4), its anisotropy's rough axis ACROSS the
+  strands (along the spool's axis on the drum, outward on its sides), and the same silk studio the silk parts reflect
+  (`stage.silkEnv`), at the parts' tier-scaled strength (`silkU.uSilkEnv`: 0.3 on Fast, where it clipped). Of the room and
+  the studio (shots: room, middle; studio, right) the studio was recommended for matching the parts, and Joey's "Proceed
+  with them all" (relayed by planner-2) took it.
+- The coil is a MeshPhysicalMaterial now (three's STANDARD and PHYSICAL defines kept beside COIL_SIDE; the old assignment
+  dropped STANDARD); at anisotropy 0 every plain spool draws what it drew. The studio is built only once a spool is silk.
+- `spool.js` imports `../part-material.js`: a new import edge, stamped in pages.yml (the module-graph guard replayed OK).
+
+Tests: unit 741 pass; the new e2e case (a Silk Gold pick puts its spool's coil in silk with the studio, a Panchroma Yellow
+pick puts the plain coil back) passes and fails with the call removed; the row-lights-its-spool case passes. Review: Terra
+01a18533 (the physical defines, the Fast strength, the studio built only for silk). Shots: `D:\Claude - Output\silk-finish-2026-10-28`
+(spool-cmp2.png, spool-cmp3.png; spools.mjs).

@@ -12020,6 +12020,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the silk light's shared uniforms (silk-axis.js), so a comparison harness can set it without a rebuild. The studio
     // has no such hook: it is built once (a rebuild would have to reach every material cache - Sol 01a18343)
     silkU,
+    // the silk studio itself, for the Done room's silk spools (scenes/done.js silkSpools): what the parts reflect, they do
+    silkEnv,
     // what a probe reads beside the JS heap: the renderer's live resource counts and the camera's place (tools/perf-probe.mjs)
     probe: () => ({ geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures, programs: (renderer.info.programs || []).length, camera: camera.position.toArray().map((v) => +v.toFixed(2)) }),
     // for the workspaces (phase 0): select a part by instance id (null deselects), and read the build and selection

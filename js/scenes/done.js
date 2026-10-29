@@ -1106,8 +1106,21 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function clearSpoolMarks() {
     for (const s of parts.spools ? parts.spools.groups.flatMap(spoolsOf) : []) for (const o of s.children.filter((c) => c.userData.spoolMark)) { disposeMark(o); o.removeFromParent(); }
   }
+  /* A SILK SPOOL (spool.js; Joey 2026-10-28: a Silk Gold spool "looks mostly flat like a yellow"): a spool whose filament is
+     silk wears the parts' silk, every other spool its plain coil - set wherever the spools' colours were (re)made, which is
+     where their words are, and whether or not the tags are drawn */
+  function silkSpools() {
+    if (!parts.spools) return;
+    const mats = spoolMaterials();
+    for (const s of parts.spools.groups.flatMap(spoolsOf)) {
+      const silk = !!(mats.get(lower(s.userData.spool.color)) || {}).silk;
+      // the studio is built only once a silk spool needs it (Terra 01a18533)
+      if (s.userData.setSilk) s.userData.setSilk(silk, silk && stage.silkEnv ? stage.silkEnv() : null);
+    }
+  }
   function placeSpoolMarks() {
     clearSpoolMarks();
+    silkSpools();
     if (tagsOff() || !parts.spools) return;
     parts.marksDrawn = (parts.marksDrawn || 0) + 1;   // for a reader of the scene (the e2e suite: the redraw for the font)
     const mats = spoolMaterials(), F = new THREE.Vector3(0, 0, 1), UP = new THREE.Vector3(0, 1, 0);
@@ -1255,7 +1268,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   function selectSpool(hex) { parts.selectedHex = hex ? lower(hex) : null; glowSpools(); }
   function newSpool(c) {
-    const s = makeSpool(parts.spools.geo, c);
+    const s = makeSpool(parts.spools.geo, c, { silkEnv: stage.silkU ? stage.silkU.uSilkEnv : null });   // the parts' tier-scaled studio strength (A SILK SPOOL)
     s.traverse((m) => { if (m.isMesh) m.userData.doneRoom = true; });
     return s;
   }

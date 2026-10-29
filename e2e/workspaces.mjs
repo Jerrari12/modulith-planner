@@ -3149,6 +3149,37 @@ test('Colors: a region\'s row picked lights the spool it prints in, in the room;
   await ctx.close();
 });
 
+/* A SILK SPOOL (spool.js; Joey 2026-10-28, of a Silk Gold spool: "it looks mostly flat like a yellow"): a region picked in a
+   silk filament puts its spool's coil in the parts' silk (part-material.js SILK_APPROX, the anisotropy across the strands,
+   the silk studio the printed silk parts reflect), and a plain pick puts the plain coil back. */
+test('Colors: a silk pick puts its spool\'s coil in silk, in the room; a plain pick puts the plain coil back', async () => {
+  const { ctx, page, errors } = await open('colors', { query: '&done=room&spools=plan' });
+  const room = page.locator('#ws-tools .backdrop button:has-text("Room")');
+  if (await room.count() && (await room.getAttribute('aria-pressed')) !== 'true') await room.click();
+  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.spools && window.__GEN2_DONE__.spools.placed.length, null, { timeout: 90_000 }).catch(() => assert.fail('no spools in the room within 90 s'));
+  /* the spool of one colour: its silk flag and its two coil materials' finish */
+  const coilOf = (hex) => page.waitForFunction((hex) => {
+    let hit = null;
+    window.__GEN2_VIEWER__.scene.traverse((o) => { if (!hit && o.userData.setSilk && o.userData.spool && String(o.userData.spool.color).toLowerCase() === hex) hit = o; });
+    if (!hit) return false;
+    const coil = hit.userData.spool.materials.slice(1);
+    return { silk: !!hit.userData.spool.silk, coil: coil.map((m) => ({ r: +m.roughness.toFixed(3), mt: +m.metalness.toFixed(3), a: m.anisotropy, env: !!m.envMap, phys: !!m.isMeshPhysicalMaterial })) };
+  }, hex, { timeout: 20_000 }).then((h) => h.jsonValue());
+  const i = await page.evaluate(() => window.__GEN2_VIEWER__.keysInBuild().findIndex((k) => !k.locked && !/^Foot/.test(k.key)));
+  await page.locator('#ws-colors button.crow').nth(i).click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  await page.locator('#ws-picker .brands .sw[aria-label="Panchroma Silk Gold"]').click();
+  const silk = await coilOf('#d9b13b').catch(() => assert.fail('no Silk Gold spool in the room after the pick'));
+  assert.equal(silk.silk, true, 'the Silk Gold spool is not silk');
+  for (const m of silk.coil) assert.deepEqual(m, { r: 0.2, mt: 0.75, a: 0.4, env: true, phys: true }, 'a silk coil wears the parts\' silk and the studio');
+  await page.locator('#ws-picker .brands .sw[aria-label="Panchroma Yellow"]').click();
+  const plain = await coilOf('#f5c542').catch(() => assert.fail('no Panchroma Yellow spool in the room after the pick'));
+  assert.equal(plain.silk, false, 'the Panchroma Yellow spool kept the silk');
+  for (const m of plain.coil) assert.deepEqual(m, { r: 0.38, mt: 0, a: 0, env: false, phys: true }, 'a plain coil is the coil it always was');
+  assert.deepEqual(clean(errors), [], 'no errors');
+  await ctx.close();
+});
+
 /* THE SHADOWS RUN FROM THE DESK ONTO THE WALL (2026-10-25; Joey: "the way the shadows cut off or start right at where the
    table is nearest the wall, i see it for both the plant and build shadows"). The desk stands 20 mm off the wall, and the
    sun reaches a strip of wall under the desk top through that gap; the build's wall catcher and the props' wall masks
