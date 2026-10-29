@@ -14,22 +14,19 @@
 import { STRIPE_COLOURS } from './label-look.js';
 import { FILAMENT_DB } from './filament-db.js';
 import { dE, contrast } from './colors/colour.js';
-import { cleanLabelPalette } from './rules/schema.js';
+import { cleanLabelPalette, SUGGESTED_V1, SUGGESTED_V2 } from './rules/schema.js';
 export { cleanLabelPalette };   // the record field's cleaner lives with the schema; main.js takes it from here
 
 export const LABEL_MEANINGS = Object.freeze(STRIPE_COLOURS.map((c) => c.colour));
 
-/* The suggested spools, version 1 (2026-10-28): for each meaning the nearest plain PLA in the catalog by CIEDE2000 to the
-   scheme's hex (suggestFor). Purple's scheme colour is Okabe-Ito's reddish purple, so its nearest PLA is a pink (ΔE 12.2,
-   the weakest match). Body and text are the first preset's picks (main.js PRESETS[0]). */
-export const SUGGESTED_V1 = Object.freeze({
-  'sky-blue': Object.freeze({ name: 'Polar Light Blue', hex: '#14ADDB' }),
-  red: Object.freeze({ name: 'Printed Solid Safety Orange', hex: '#F04000' }),
-  yellow: Object.freeze({ name: 'Panchroma Lemon Yellow', hex: '#f8e35a' }),
-  white: Object.freeze({ name: 'Printed Solid White', hex: '#EFEFEA' }),
-  green: Object.freeze({ name: 'Polar Seafoam', hex: '#00A37A' }),
-  purple: Object.freeze({ name: 'Panchroma Pink', hex: '#f0a4c0' }),
-});
+/* the suggested spools, versions 1 and 2: literals in js/rules/schema.js beside the record's cleaner, which needs v2 to write
+   a set-2 palette out whole (Sol 01a18540); body and text are the first preset's picks (main.js PRESETS[0]) */
+export { SUGGESTED_V1, SUGGESTED_V2 };
+/* the suggestion sets by number; a record palette's `set` (absent = 1) picks the one its rows fall back to and compare to */
+export const SUGGESTED = Object.freeze({ 1: SUGGESTED_V1, 2: SUGGESTED_V2 });
+export const NEW_SET = 2;   // the set a new build is born on
+export const setOf = (pal) => (pal && pal.set === 2 ? 2 : 1);
+export const suggestionsOf = (pal) => SUGGESTED[setOf(pal)];
 export const SUGGESTED_BODY_TEXT = Object.freeze({
   body: Object.freeze({ name: 'Panchroma Cold White', hex: '#eef1f4' }),
   text: Object.freeze({ name: 'Elegoo PLA Black', hex: '#1c1d20' }),
@@ -57,10 +54,10 @@ export function suggestFor(hex, catalog = CATALOG) {
 const schemeOf = (key) => STRIPE_COLOURS.find((c) => c.colour === key) || null;
 export const isMeaning = (key) => LABEL_MEANINGS.includes(key);
 
-/* the spool a meaning prints in under a (cleaned) palette: the build's own, else the suggestion. { name, hex, suggested } -
-   `suggested` whenever it IS the suggestion (a palette stores all six once one is changed) */
+/* the spool a meaning prints in under a (cleaned) palette: the build's own, else its set's suggestion. { name, hex, suggested }
+   - `suggested` whenever it IS that set's suggestion (a palette stores all six once one is changed) */
 export function spoolFor(pal, key) {
-  const own = pal && pal.spools && pal.spools[key], s = SUGGESTED_V1[key];
+  const own = pal && pal.spools && pal.spools[key], s = suggestionsOf(pal)[key];
   if (own) return { name: own.name, hex: own.hex, suggested: !!s && own.name === s.name && own.hex.toLowerCase() === s.hex.toLowerCase() };
   return s ? { name: s.name, hex: s.hex, suggested: true } : null;
 }
@@ -68,13 +65,19 @@ export function spoolFor(pal, key) {
 export function spoolsOf(pal) {
   return STRIPE_COLOURS.map((c) => ({ key: c.colour, meaning: c.name, scheme: c.hex, ...spoolFor(pal, c.colour) }));
 }
-/* the six spools as a record palette, or null when they are exactly the suggestions (the record then stays null) */
-export function paletteOf(spools) {
-  const out = {};
-  for (const k of LABEL_MEANINGS) { const s = spools && spools[k]; if (s && s.name && s.hex) out[k] = { name: s.name, hex: s.hex }; }
-  const same = LABEL_MEANINGS.every((k) => out[k] && out[k].name === SUGGESTED_V1[k].name && out[k].hex === SUGGESTED_V1[k].hex);
+/* the six spools as a record palette on suggestion set `set`. Set 1: null when they are exactly v1 (the record then stays
+   null, as every older record is). Set 2: always the whole palette, the six spools written out, so a planner older than
+   the set (a tab left open across the deploy) still draws them; a missing slot takes v2's. */
+export function paletteOf(spools, set = 1) {
+  const out = {}, base = SUGGESTED[set] || SUGGESTED_V1;
+  for (const k of LABEL_MEANINGS) { const s = (spools && spools[k]) || (set === 2 ? base[k] : null); if (s && s.name && s.hex) out[k] = { name: s.name, hex: s.hex }; }
+  if (set === 2) return { v: 1, set: 2, spools: out };
+  const same = LABEL_MEANINGS.every((k) => out[k] && out[k].name === base[k].name && out[k].hex === base[k].hex);
   return same || !Object.keys(out).length ? null : { v: 1, spools: out };
 }
+/* a set's own suggestions as a record palette (set 1: null) - "Use the suggested filaments", and a new build's start */
+export const suggestedPalette = (set = 1) => paletteOf(SUGGESTED[set] || SUGGESTED_V1, set);
+export const newBuildPalette = () => suggestedPalette(NEW_SET);
 /* the same six spools (name and hex) under two palettes */
 export function samePalette(a, b) {
   return LABEL_MEANINGS.every((k) => { const x = spoolFor(a, k), y = spoolFor(b, k); return x.name === y.name && x.hex.toLowerCase() === y.hex.toLowerCase(); });
@@ -137,5 +140,6 @@ export function readLabelDefaults(storage) {
 export function writeLabelDefaults(storage, d) {
   try { const c = cleanDefaults(d); if (c) storage.setItem(LABEL_DEFAULTS_KEY, JSON.stringify(c)); else storage.removeItem(LABEL_DEFAULTS_KEY); return true; } catch { return false; }   // private mode: the defaults last the page
 }
-/* the record palette the defaults give a build (null = the suggestions) */
-export const paletteOfDefaults = (d) => (d ? paletteOf(Object.fromEntries(LABEL_MEANINGS.map((k) => [k, (d.spools && d.spools[k]) || SUGGESTED_V1[k]]))) : null);
+/* the record palette the defaults give a build on suggestion set `set` (a slot the defaults lack takes that set's
+   suggestion); no defaults = that set's suggestions */
+export const paletteOfDefaults = (d, set = 1) => (d ? paletteOf(Object.fromEntries(LABEL_MEANINGS.map((k) => [k, (d.spools && d.spools[k]) || (SUGGESTED[set] || SUGGESTED_V1)[k]])), set) : suggestedPalette(set));

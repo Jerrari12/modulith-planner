@@ -6242,3 +6242,26 @@ Tests: unit 741 pass; the new e2e case (a Silk Gold pick puts its spool's coil i
 pick puts the plain coil back) passes and fails with the call removed; the row-lights-its-spool case passes. Review: Terra
 01a18533 (the physical defines, the Fast strength, the studio built only for silk). Shots: `D:\Claude - Output\silk-finish-2026-10-28`
 (spool-cmp2.png, spool-cmp3.png; spools.mjs).
+
+## 2026-10-28 · Label palette v2: a real purple and a grey stainless, for new builds only (Astra; Joey: "Proceed with them all")
+
+Astra's step 2 after the shared look: stable default mappings, chosen deliberately, without recolouring anything that
+exists. `docs/redesign/LABEL-PALETTE.md` §3b. v2 = v1 with Purple → **Panchroma Purple** (#7a4fb0; v1's rule gave
+Panchroma Pink) and White, the stainless patch → **Polar Spaceship Steel** (#787E82, measured; ΔE00 31.6 on the light
+body, 32.9 on the dark one, where v1's white is 4.1 on the white body).
+
+- A build born on the page (no `#build=` record once the boot's reopen has run) starts on v2, its record saying so:
+  `labelPalette = { v: 1, set: 2, spools: { all six } }`. Every record without `set` is v1, unchanged.
+- The cleaner writes a set-2 palette whole (v2 in every missing or dropped slot), so a tab older than the field still
+  draws v2; v2 never collapses to `null` (= v1). Swaps keep the set; "Use the suggested filaments" returns to the
+  build's own set.
+- The v1 and v2 tables moved into `js/rules/schema.js` (re-exported by `js/label-palette.js`): no new module, no new
+  import edge.
+
+Tests: `test/label-palette.test.mjs` 17 (v2's values are catalog plain PLA and nothing else moved; no warning on either
+body; the set survives the record; anything but `set: 2` is v1; a set-2 palette is cleaned whole and an old cleaner's view
+of it still reads v2; the defaults sit over v2). e2e: a new build starts on v2 (Purple #7a4fb0, White #787e82, rows
+"suggested", no body note), a swap keeps the set, "Use the suggested filaments" returns to v2, a reload keeps it, and an
+older record opens on v1 (#f0a4c0, #efefea); a new build with defaults is set 2 with v2's purple. Sol 01a18540: round 1
+fix first, two findings (the born predicate trusted `?new=1` beside a `#build=` record; a set-2 palette not written whole
+read v1 in an old tab), both fixed; round 2 ship.

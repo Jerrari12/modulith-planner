@@ -8,7 +8,7 @@ import { STRIPE_COLOURS, stripePieceZone, stripeMeaningOfKey, stripeHexOfKey, is
 import { LABEL_PALETTE_KEYS, cleanLabelPalette, sanitizeBuild, serializeBuild, BUILD_FIELDS } from '../js/rules/schema.js';
 import { LABEL_MEANINGS, SUGGESTED_V1, SUGGESTED_BODY_TEXT, CATALOG, suggestFor, isPlainPla, spoolFor, spoolsOf, paletteOf, samePalette,
   paletteWarnings, warningText, rankSpools, urlFor, ALIKE_DE, BODY_DE, TEXT_CONTRAST, LABEL_DEFAULTS_KEY, cleanDefaults,
-  readLabelDefaults, writeLabelDefaults, paletteOfDefaults } from '../js/label-palette.js';
+  readLabelDefaults, writeLabelDefaults, paletteOfDefaults, SUGGESTED_V2, SUGGESTED, NEW_SET, setOf, suggestedPalette, newBuildPalette } from '../js/label-palette.js';
 import { dE, contrast } from '../js/colors/colour.js';
 
 const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), m }; };
@@ -154,4 +154,62 @@ test('a stripe zone names its meaning; any other colour keeps its own hex; the S
   assert.equal(stripeHexOfKey('Label:STRIPE@red'), null);
   assert.ok(isStripeZone('STRIPE@green') && isStripeZone('STRIPE#00ff00') && !isStripeZone('STRIPE@pink') && !isStripeZone('TEXT'));
   assert.deepEqual(stripeFor('sky-blue'), { band: { colour: 'sky-blue', hex: '#56B4E9', label: 'Metric', pattern: 'solid' } }, 'the label still stores the Studio\'s scheme hex');
+});
+
+/* ---- v2 (Astra's review, Joey's go 2026-10-28): chosen suggestions for NEW builds only; every older record stays on v1 ---- */
+test('v2 is v1 with a real purple and a grey stainless, both catalog plain PLA, nothing else moved; v1 is untouched', () => {
+  assert.deepEqual(Object.keys(SUGGESTED_V2), LABEL_MEANINGS);
+  for (const k of LABEL_MEANINGS) if (k !== 'white' && k !== 'purple') assert.deepEqual(SUGGESTED_V2[k], SUGGESTED_V1[k], k);
+  assert.deepEqual(SUGGESTED_V2.purple, { name: 'Panchroma Purple', hex: '#7a4fb0' });
+  assert.deepEqual(SUGGESTED_V2.white, { name: 'Polar Spaceship Steel', hex: '#787E82' });
+  for (const k of ['white', 'purple']) { const c = CATALOG.find((x) => x.label === SUGGESTED_V2[k].name); assert.ok(c && isPlainPla(c) && c.hex === SUGGESTED_V2[k].hex, k); }
+  assert.deepEqual(SUGGESTED_V1.purple, { name: 'Panchroma Pink', hex: '#f0a4c0' });
+  assert.deepEqual(SUGGESTED_V1.white, { name: 'Printed Solid White', hex: '#EFEFEA' });
+  assert.equal(NEW_SET, 2); assert.equal(SUGGESTED[1], SUGGESTED_V1); assert.equal(SUGGESTED[2], SUGGESTED_V2);
+});
+test('v2 reads on both bodies: no warning on the light body or a dark one, and the grey sits mid-way (stated dE)', () => {
+  const v2 = newBuildPalette();
+  for (const body of [SUGGESTED_BODY_TEXT.body.hex, SUGGESTED_BODY_TEXT.text.hex]) assert.deepEqual(paletteWarnings(v2, body, null), [], body);
+  assert.ok(Math.abs(dE(SUGGESTED_V2.white.hex, '#eef1f4') - 31.6) < 0.05 && Math.abs(dE(SUGGESTED_V2.white.hex, '#1c1d20') - 32.9) < 0.05);
+  assert.deepEqual(paletteWarnings(null, SUGGESTED_BODY_TEXT.body.hex, null).map((w) => w.kind + ':' + w.keys.join()), ['body:white'], 'v1 keeps its white-patch note');
+});
+test('the set: a new build is a full v2 palette marked set 2; it survives the record; absent or anything else is v1', () => {
+  const nb = newBuildPalette();
+  assert.deepEqual(nb, { v: 1, set: 2, spools: { ...SUGGESTED_V2 } });
+  assert.deepEqual(cleanLabelPalette(nb), nb);
+  // written out WHOLE (Sol 01a18540): an older planner drops `set` and reads the spools, so a set-2 palette must name all six
+  assert.deepEqual(cleanLabelPalette({ v: 1, set: 2 }), nb, 'set 2 with no spools is the v2 suggestions, written out');
+  const part = cleanLabelPalette({ v: 1, set: 2, spools: { red: { name: 'Polar Candy Red', hex: '#BB3638' }, purple: { name: 'Bad', hex: 'purple' } } });
+  assert.deepEqual(part.spools, { ...SUGGESTED_V2, red: { name: 'Polar Candy Red', hex: '#BB3638' } }, "a missing or dropped slot takes v2's spool");
+  assert.deepEqual(cleanLabelPalette({ v: 1, spools: part.spools }).spools.purple, SUGGESTED_V2.purple, 'and an old cleaner, set dropped, still reads v2 purple');
+  for (const s of [1, 3, '2', null]) assert.equal(setOf(cleanLabelPalette({ v: 1, set: s, spools: { red: { name: 'X', hex: '#123456' } } })), 1, String(s));
+  assert.equal(cleanLabelPalette({ v: 1, set: 1 }), null);
+  const G = { mounts: [{ id: 'tabletop' }], lengths: [{ id: 185 }], printers: [{ id: 'any' }], faceplateStyles: [{ id: 'edgelabel' }], doorStyles: [{ id: 'essential' }], handleStyles: [{ id: 'deco' }], labelSpec: { limits: {}, flags: [], charMax: 3 }, caseHeights: [], drawerHeights: [], collectionCases: {}, unavailableSizes: [] };
+  const rec = { mount: 'tabletop', length: 185, placed: [], gridW: 2, gridH: 2, labelPalette: nb };
+  sanitizeBuild(rec, G); assert.deepEqual(rec.labelPalette, nb);
+  assert.deepEqual(serializeBuild(rec).labelPalette, nb);
+  assert.equal(setOf(null), 1); assert.equal(setOf(nb), 2);
+});
+test('spoolFor on set 2 falls back to v2 and calls v2 "suggested"; on v1 a v2 spool is the build\'s own', () => {
+  const p = cleanLabelPalette({ v: 1, set: 2, spools: { red: { name: 'Polar Candy Red', hex: '#BB3638' } } });
+  assert.deepEqual(spoolFor(p, 'purple'), { ...SUGGESTED_V2.purple, suggested: true });
+  assert.deepEqual(spoolFor(p, 'red'), { name: 'Polar Candy Red', hex: '#BB3638', suggested: false });
+  assert.deepEqual(spoolFor(null, 'purple'), { ...SUGGESTED_V1.purple, suggested: true });
+  assert.equal(spoolFor(pal({ purple: SUGGESTED_V2.purple }), 'purple').suggested, false);
+});
+test('paletteOf / suggestedPalette keep the build\'s set: v2 never collapses to null, v1 still does', () => {
+  assert.equal(suggestedPalette(1), null);
+  assert.deepEqual(suggestedPalette(2), newBuildPalette());
+  assert.deepEqual(paletteOf({ ...SUGGESTED_V2 }, 2), newBuildPalette());
+  assert.deepEqual(paletteOf({ red: { name: 'Polar Candy Red', hex: '#BB3638' } }, 2).spools.purple, SUGGESTED_V2.purple, 'a missing slot takes v2');
+  assert.equal(paletteOf({ ...SUGGESTED_V1 }, 1), null);
+  assert.ok(samePalette(newBuildPalette(), suggestedPalette(2)) && !samePalette(newBuildPalette(), null));
+});
+test('the defaults on a new build sit over v2; with none, a new build is the v2 suggestions', () => {
+  assert.deepEqual(paletteOfDefaults(null, 2), newBuildPalette());
+  assert.equal(paletteOfDefaults(null, 1), null);
+  const d = cleanDefaults({ v: 1, spools: { purple: { name: 'Polar Lavender', hex: '#D696EE' } } });
+  const p = paletteOfDefaults(d, 2);
+  assert.equal(p.set, 2); assert.deepEqual(p.spools.purple, { name: 'Polar Lavender', hex: '#D696EE' }); assert.deepEqual(p.spools.white, SUGGESTED_V2.white);
+  assert.deepEqual(paletteOfDefaults(d, 1).spools.white, SUGGESTED_V1.white, 'on a v1 build the defaults fill from v1');
 });
