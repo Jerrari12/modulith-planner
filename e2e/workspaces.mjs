@@ -690,7 +690,9 @@ test('the idle gate: a still view stops drawing, an edit draws again at once, a 
   const w0 = (await page.evaluate(() => window.__GEN2_VIEWER__.idleStats())).woken;
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; const right = Math.max(...s.placed.map((p) => p.x + p.w)); s.placed.push({ id: s.nextId++, x: right, y, w: 1, hh: 2, fill: 'decor', shelves: 0 }); s.gridW = right + 1; }, 'edit'));
   const woke = await page.waitForFunction((w0) => window.__GEN2_VIEWER__.idleStats().woken > w0, w0, { timeout: 60_000, polling: 100 }).then(() => true, () => false);
-  assert.ok(woke, `an edit is drawn at once (the gate wakes for it), not only by the next safety-net frame: ${JSON.stringify(await page.evaluate(() => window.__GEN2_VIEWER__.idleStats()))}`);
+  // on a failure, what the page said and how far the edit got (2026-10-28: this failed on CI only, with nothing to go on)
+  assert.ok(woke, `an edit is drawn at once (the gate wakes for it), not only by the next safety-net frame: ${JSON.stringify(await page.evaluate(() => ({ ...window.__GEN2_VIEWER__.idleStats(),
+    placed: window.__GEN2_STORE__.state.placed.length, instances: window.__GEN2_VIEWER__.instances.size })))} errors ${JSON.stringify(clean(errors))}`);
   // reading the canvas after a skipped frame returns the picture, not an empty buffer
   await settle(page, 2500);
   const png = await page.evaluate(() => document.querySelector('canvas').toDataURL('image/png').length);
@@ -1043,6 +1045,16 @@ test('Labels: a new build starts on the v2 suggestions and keeps them; an older 
   await page.reload({ waitUntil: 'load' });
   await waitBoot(page);
   assert.equal(await hexOf(page, 'purple'), '#7a4fb0', 'the reload kept v2');
+  // a stripe drawn AFTER the palette arrived wears it: the stage takes a palette with no stripe drawn yet without
+  // repainting (main.js setLabelPalette), so each stripe's material takes it when it is made - a set-2 record whose stripes
+  // are drawn after the boot: Metric in v2's (= v1's) blue, the stainless White in v2's grey
+  const later = await ctx.newPage(); later.on('pageerror', (e) => errors.push(e.message));
+  await later.goto(`${base}/index.html?ws=labels&debug=1&done=off${hashOfRec(paletteRec('e2elabpalv2', { v: 1, set: 2, spools: {} }))}`, { waitUntil: 'load', timeout: 90_000 });
+  await waitBoot(later);
+  await waitBands(later);
+  assert.deepEqual(await bandOf(later, 2), { zone: 'STRIPE@white', hex: '787e82' }, 'the stainless stripe drawn after the boot is v2\'s grey');
+  assert.equal((await bandOf(later, 1)).hex, '14addb', 'and Metric v2\'s blue');
+  await later.close();
   // a record from before the set opens on v1, untouched
   const old = await ctx.newPage(); old.on('pageerror', (e) => errors.push(e.message));
   await old.goto(`${base}/index.html?ws=labels&debug=1&done=off${hashOfRec(paletteRec('e2elabpalv1'))}`, { waitUntil: 'load', timeout: 90_000 });
@@ -4553,7 +4565,8 @@ test('Colors: on Very High at rest the steam keeps rising over the still picture
   const vctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await vctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const { ctx, page, errors } = await open('colors', { visitor: true, context: vctx });
-  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__ && window.__GEN2_DONE__.steam, null, { timeout: 60_000 }).catch(() => assert.fail('the room did not come on within 60 s'));
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__ && window.__GEN2_DONE__.steam, null, { timeout: 60_000 })
+    .catch(async () => assert.fail(`the room did not come on within 60 s (done=${await page.evaluate(() => document.documentElement.dataset.done)}, errors ${JSON.stringify(clean(errors))})`));   // what the page said, for a CI-only failure (2026-10-28)
   const conv = await page.evaluate(async () => {
     const v = window.__GEN2_VIEWER__, t0 = performance.now();
     while (performance.now() - t0 < 90_000 && !(v.acc.ok && v.acc.n >= v.accTotal())) await new Promise((r) => setTimeout(r, 100));

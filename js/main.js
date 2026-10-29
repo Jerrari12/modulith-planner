@@ -26,7 +26,7 @@ import { createSettleBench } from './settle-bench.js';
 import { parseSeeInto, parseSeeIntoSkip, parseSeeIntoLattice, createSeeInto } from './see-into.js';
 import { LABEL_TEXT_DEFAULTS, LABEL_TEXT_NODES, LABEL_TYPE_OF_NODE, labelFontReady, loadLabelFont, labelGeometry, labelCore, labelIcons,
   labelPartsReady, loadLabelParts, partLabelGeometry, stripeGeometry } from './label-text.js';
-import { labelLookOf, labelLooksKey, labelLookNeeds, stripePieceZone, isStripeZone, stripeHexOfKey, stripeMeaningOfKey } from './label-look.js';
+import { labelLookOf, labelLooksKey, labelLookNeeds, stripePieceZone, isStripeZone, stripeHexOfKey, stripeMeaningOfKey, STRIPE_MEANING_PREFIX } from './label-look.js';
 import { spoolFor, urlFor, cleanLabelPalette } from './label-palette.js';   // the label palette (2026-10-28); stamped in pages.yml
 import { LABEL_SPEC, LABEL_TEXT_MAX, cleanLabelText, cleanLabelBadge, cleanLabelStyle } from './label-spec.js';
 import { LABEL_STYLE_ROWS, labelOrder, effectiveStyle, labelOptsOf, labelOptsChanges, applyLabelOpts, labelOnlyDiff, copyLabelFields,
@@ -9941,12 +9941,18 @@ function clearOverrides(uid = null, key = null) {   // every unit's own pick for
   saveColors(); applyPalette(); refreshMaterials();
 }
 /* the build's label palette (the record's `labelPalette`): a repaint, never a regenerate - the stripe zones name meanings,
-   so only their colour moves. Returns whether it changed. */
+   so only their colour moves. Returns whether it changed. Only a stripe that is DRAWN wears the palette: with no stripe
+   material yet the palette is just kept (a stripe made later takes it in newPartMaterial, through activeHex), so a build
+   without stripes - every fresh page, now born on the v2 suggestions - costs the stage nothing. applyPalette is not a plain
+   repaint (it re-checks the see-into components); at the boot of every fresh page it was the one stage-side change v2
+   made, and two CI cases on fresh pages failed on every run that carried v2 (2026-10-28: the room's entry, and an edit
+   never reaching the stage) while passing locally - the suspected cause, not a proven one. */
 function setLabelPalette(p) {
   const next = cleanLabelPalette(p);
   if (JSON.stringify(next) === JSON.stringify(labelPalette)) return false;
   labelPalette = next;
-  applyPalette(); invalidateFrame();
+  const drawn = (mats) => Object.keys(mats).some((k) => k.includes(':' + STRIPE_MEANING_PREFIX));
+  if (drawn(materials) || drawn(highlightMats) || drawn(overrideMats)) { applyPalette(); invalidateFrame(); }
   return true;
 }
 function setColorStoreKey(key) { if (!key || key === COLOR_STORE_KEY) return; COLOR_STORE_KEY = key; persistColors(); }
