@@ -21,7 +21,7 @@ import { loadLabelFont, loadLabelParts, labelIcons } from '../label-text.js';
 import { labelLookOf, labelLookOfLabel, cleanStripe, STRIPE_COLOURS, stripeFor } from '../label-look.js';
 import { labelPreviewUrl, previewNeeds, previewReady } from '../label-preview.js';
 import { LABEL_MEANINGS, SUGGESTED_BODY_TEXT, CATALOG, spoolsOf, spoolFor, paletteOf, samePalette, paletteWarnings, warningText, rankSpools, urlFor,
-  readLabelDefaults, writeLabelDefaults, paletteOfDefaults } from '../label-palette.js';
+  readLabelDefaults, writeLabelDefaults, paletteOfDefaults, setOf, suggestedPalette } from '../label-palette.js';
 import { readOwned } from '../state/owned.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
@@ -893,7 +893,7 @@ export function mountLabels(stage, ctx) {
     }
     const spools = Object.fromEntries(LABEL_MEANINGS.map((k) => [k, spoolFor(S().labelPalette, k)]));
     spools[key] = { name: sp.name, hex: sp.hex };
-    paletteCommit(paletteOf(spools), `${meaningWord(key)} prints in ${sp.name}.`);
+    paletteCommit(paletteOf(spools, setOf(S().labelPalette)), `${meaningWord(key)} prints in ${sp.name}.`);   // the build's own suggestion set
   }
   /* the visitor's defaults, applied to this build: the six spools into the record, the body and text onto the Colors palette,
      ONE history entry (flushed around; the Colors palette rides in the same entry as the record) */
@@ -901,11 +901,11 @@ export function mountLabels(stage, ctx) {
     if (ctx.ownPaletteKey && (d.body || d.text)) ctx.ownPaletteKey();
     store.flush();
     for (const k of ['body', 'text']) if (d[k]) stage.setColor(REGION[k], { name: d[k].name, hex: d[k].hex, url: urlFor(d[k].name) });
-    store.commit((x) => { x.labelPalette = paletteOfDefaults(d); }, 'label-palette');
+    store.commit((x) => { x.labelPalette = paletteOfDefaults(d, setOf(x.labelPalette)); }, 'label-palette');
     store.flush();
     status('This build uses your label filaments.'); renderAll();
   }
-  const defaultsDiffer = (d) => !!d && (!samePalette(paletteOfDefaults(d), S().labelPalette) ||
+  const defaultsDiffer = (d) => !!d && (!samePalette(paletteOfDefaults(d, setOf(S().labelPalette)), S().labelPalette) ||
     ['body', 'text'].some((k) => { const o = regionSpool(REGION[k]); return d[k] && (!o || o.name !== d[k].name || o.hex.toLowerCase() !== d[k].hex.toLowerCase()); }));   // a spool is its name AND its colour (Sol 01a182a1)
   function renderPalette() {
     const pal = S().labelPalette, rows = spoolsOf(pal);
@@ -939,7 +939,8 @@ export function mountLabels(stage, ctx) {
     det.appendChild(list);
     const acts = el('div.pacts');
     acts.appendChild(el('button.key.sm.mine' + (st.palEdit ? '.on' : ''), { 'aria-pressed': String(!!st.palEdit), onclick: () => { st.palEdit = !st.palEdit; st.palPick = null; renderAll(); } }, [icon(st.palEdit ? 'check' : 'pencil-simple', { size: 14 }), st.palEdit ? 'Done' : 'Use my filaments']));
-    if (pal) acts.appendChild(el('button.key.sm.suggested', { title: 'The suggested spools for the six stripe colours (the body and the text stay as they are)', onclick: () => paletteCommit(null, 'The stripes use the suggested filaments.') }, ['Use the suggested filaments']));
+    // back to the suggestions of the build's OWN set: a build born on v2 keeps v2, an older one v1 (never moved to newer ones)
+    if (!samePalette(pal, suggestedPalette(setOf(pal)))) acts.appendChild(el('button.key.sm.suggested', { title: 'The suggested spools for the six stripe colours (the body and the text stay as they are)', onclick: () => paletteCommit(suggestedPalette(setOf(pal)), 'The stripes use the suggested filaments.') }, ['Use the suggested filaments']));
     det.appendChild(acts);
     det.appendChild(el('button.key.sm.wide.mydefaults', { title: 'Kept in this browser. New builds start with these; a build you already have keeps its own.', onclick: () => {
       const def = { v: 1, spools: Object.fromEntries(rows.map((r) => [r.key, { name: r.name, hex: r.hex }])) };
