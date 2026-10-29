@@ -1004,53 +1004,6 @@ test('Labels: a shared link shows the sender\'s label palette; the recipient\'s 
   assert.equal(st.labelPalette?.spools?.['sky-blue']?.name, 'Panchroma Azure Blue', 'a new build takes the default Metric spool');
   assert.equal(st.labelPalette?.spools?.red?.name, 'Printed Solid Safety Orange', 'and the suggestion where the defaults name none');
   assert.equal(await fresh.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Panchroma Cream', 'and the default body');
-  assert.equal(st.labelPalette?.set, 2, 'a new build is born on the v2 suggestions, the defaults over them');
-  assert.equal(st.labelPalette?.spools?.purple?.name, 'Panchroma Purple', "v2's purple where the defaults name none");
-  await ctx.close();
-});
-
-/* THE v2 SUGGESTIONS (Astra's review, Joey's go 2026-10-28): a build born on this page (New build, a first visit) starts on
-   v2 - Panchroma Purple, and Polar Spaceship Steel for the stainless patch - and its record says so (`set: 2`); "Use the
-   suggested filaments" returns it to v2, and the address keeps it. A record from before (no `set`) stays on v1. */
-test('Labels: a new build starts on the v2 suggestions and keeps them; an older build stays on v1', async () => {
-  const { ctx, page, errors } = await open('labels', { query: '&done=off&new=1' });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  const hexOf = (p, k) => p.evaluate((key) => window.__GEN2_VIEWER__.activeHex('Label:STRIPE@' + key).toLowerCase(), k);
-  const st = await S(page);
-  assert.equal(st.labelPalette?.set, 2, `born on v2 (${JSON.stringify(st.labelPalette)})`);
-  assert.equal(await hexOf(page, 'purple'), '#7a4fb0', 'Purple draws in Panchroma Purple');
-  assert.equal(await hexOf(page, 'white'), '#787e82', 'the stainless patch draws in Polar Spaceship Steel');
-  await page.locator('#ws-labels details.palette summary').click();
-  assert.match(await page.locator('#ws-labels .palette .prow[data-key="purple"]').textContent(), /Panchroma Purple.*suggested/);
-  assert.match(await page.locator('#ws-labels .palette .prow[data-key="white"]').textContent(), /Polar Spaceship Steel.*suggested/);
-  assert.equal(await page.locator('#ws-labels .palette .pnote').count(), 0, 'the grey patch reads on the white body: no note');
-  assert.equal(await page.locator('#ws-labels .palette button.suggested').count(), 0, 'already the suggestions');
-  // a swap, then back to the suggestions: v2's, not v1's
-  await page.locator('#ws-labels .palette button.mine').click();
-  await page.locator('#ws-labels .palette button.prow[data-key="purple"]').click();
-  await page.locator('#ws-labels .palette .ppick input.search').fill('Lavender');
-  await page.locator('#ws-labels .palette .pitem[title="Polar Lavender"]').click();
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelPalette?.spools?.purple?.name === 'Polar Lavender', null, { timeout: 15_000 })
-    .catch(async () => assert.fail(`the swap did not reach the record (${JSON.stringify((await S(page)).labelPalette)})`));
-  assert.equal((await S(page)).labelPalette.set, 2, "a swap keeps the build's set");
-  await page.locator('#ws-labels .palette button.suggested').click();
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.labelPalette?.spools?.purple?.name === 'Panchroma Purple', null, { timeout: 15_000 })
-    .catch(async () => assert.fail(`not back to v2 (${JSON.stringify((await S(page)).labelPalette)})`));
-  assert.equal((await S(page)).labelPalette.set, 2);
-  // the address keeps the set: a reload (a record in the address, so not born again) is still v2
-  await page.waitForFunction(() => { const m = /#build=([^&]+)/.exec(location.hash); if (!m) return false; try { return JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))).labelPalette?.set === 2; } catch { return false; } }, null, { timeout: 15_000 })
-    .catch(() => assert.fail('the address does not carry the set'));
-  await page.reload({ waitUntil: 'load' });
-  await waitBoot(page);
-  assert.equal(await hexOf(page, 'purple'), '#7a4fb0', 'the reload kept v2');
-  // a record from before the set opens on v1, untouched
-  const old = await ctx.newPage(); old.on('pageerror', (e) => errors.push(e.message));
-  await old.goto(`${base}/index.html?ws=labels&debug=1&done=off${hashOfRec(paletteRec('e2elabpalv1'))}`, { waitUntil: 'load', timeout: 90_000 });
-  await waitBoot(old);
-  assert.equal((await S(old)).labelPalette, null, 'an older record keeps no palette');
-  assert.equal(await hexOf(old, 'purple'), '#f0a4c0', "and its Purple stays v1's Panchroma Pink");
-  assert.equal(await hexOf(old, 'white'), '#efefea', "and its White stays v1's");
-  assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
 

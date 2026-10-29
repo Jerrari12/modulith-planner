@@ -100,33 +100,6 @@ Two things to note:
   one-time visual change, and only for builds that already have stripes. Typed-label and part-label stripes have existed in
   the planner since 2026-10-27, so very few builds carry one.
 
-## 3b. The suggested palette, version 2: new builds only (Astra's review, Joey's go, 2026-10-28)
-
-v1 stays exactly as above, frozen, for every build that exists. v2 is **chosen, not computed**: v1 with two changes.
-
-| Meaning | v1 | v2 | Why |
-|---|---|---|---|
-| Purple (`purple`, black oxide) | Panchroma Pink #f0a4c0 | **Panchroma Purple #7a4fb0** | a real purple; the rule's pink was its honest answer to Okabe-Ito's reddish purple, not a purple |
-| White (`white`, the stainless patch) | Printed Solid White #EFEFEA | **Polar Spaceship Steel #787E82** | a measured mid grey (filamentcolors.xyz): ΔE00 31.6 from Panchroma Cold White and 32.9 from Elegoo PLA Black, so it reads on a light body and a dark one alike; v1's white is ΔE 4.1 from the white body |
-
-Grey is a default, not a rule: anyone may print stainless in white. Spaceship Steel was picked from the catalog's plain PLA
-greys as the most even on both bodies (Panchroma Steel Grey 36.2 / 28.3, Polar Regulation Gray 35.0 / 29.5, Panchroma
-Grey 21.1 / 46.0); it is ΔE ≥ 23 from every other v2 meaning. Polar is Joey's local maker and already prints two of the six.
-
-- **Which builds.** A build BORN on the page: no `#build=` record in the address once the boot's reopen of this browser's
-  Recent build has run, so New build and the setup sheet (whose links carry none), a first visit and an official kit's own
-  page. A record from the address (a link, a file, Recent, the reopen, even a `?new=1` typed beside a `#build=`) keeps its
-  own palette (Sol 01a18540). The visitor's defaults apply over v2 on New build and the setup sheet, as before.
-- **The record says so:** `labelPalette = { v: 1, set: 2, spools: { all six } }`. A palette without `set` (every record
-  before, and every one a v1 build writes) is on v1. `cleanLabelPalette` writes a set-2 palette out WHOLE, v2's spool in
-  every slot it lacks or drops, so a planner older than the field (a tab open across the deploy), which drops `set` and
-  reads the spools, still draws v2 (Sol 01a18540). A set-2 palette is never collapsed to `null`, which means v1.
-- **The set travels and stays:** in share links, files, Recent and Undo, as part of the record. A swap keeps the build's
-  set; "Use the suggested filaments" returns the build to ITS set's suggestions (v2 to v2, v1 to `null`) and shows only
-  when the build differs from them; the "suggested" tag compares against the build's set. An existing build is never moved
-  to v2 by anything but the visitor's own picks.
-- The tables are literals in `js/rules/schema.js` (the cleaner needs v2), re-exported by `js/label-palette.js`.
-
 ## 4. Per-browser defaults: `gen2-label-palette`
 
 The key sits beside `gen2-owned`: `{ v: 1, spools: { <six keys>: {name, hex} }, body: {name, hex}, text: {name, hex} }`. A

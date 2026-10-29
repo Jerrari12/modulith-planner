@@ -68,29 +68,6 @@ export function cleanPlateParts(v) {
    identity, 1-80 characters) and the colour it draws in. `v` must be 1. Anything else is dropped, never guessed; no spool
    left is null, which reads as the suggested spools. */
 export const LABEL_PALETTE_KEYS = ["sky-blue", "red", "yellow", "white", "green", "purple"];
-/* The suggested spools, version 1 (2026-10-28): for each meaning the nearest plain PLA in the catalog by CIEDE2000 to the
-   scheme's hex (js/label-palette.js suggestFor; its test re-derives them). Purple's scheme colour is Okabe-Ito's reddish
-   purple, so its nearest PLA is a pink (ΔE 12.2, the weakest match). */
-export const SUGGESTED_V1 = Object.freeze({
-  "sky-blue": Object.freeze({ name: "Polar Light Blue", hex: "#14ADDB" }),
-  red: Object.freeze({ name: "Printed Solid Safety Orange", hex: "#F04000" }),
-  yellow: Object.freeze({ name: "Panchroma Lemon Yellow", hex: "#f8e35a" }),
-  white: Object.freeze({ name: "Printed Solid White", hex: "#EFEFEA" }),
-  green: Object.freeze({ name: "Polar Seafoam", hex: "#00A37A" }),
-  purple: Object.freeze({ name: "Panchroma Pink", hex: "#f0a4c0" }),
-});
-/* The suggested spools, version 2 (Astra's review, Joey's go 2026-10-28): chosen, not computed. v1 with two changes -
-   - Purple: Panchroma Purple, a real purple (v1's rule gave a pink, Panchroma Pink, for Okabe-Ito's reddish purple).
-   - White (the stainless patch): Polar Spaceship Steel, a MEASURED mid grey (filamentcolors.xyz), visible on a light label
-     body and a dark one alike (ΔE00 31.6 from Panchroma Cold White, 32.9 from Elegoo PLA Black); v1's white vanished on the
-     white body (ΔE 4.1). Grey is a default, not a rule: anyone may print stainless in white.
-   NEW BUILDS ONLY: a build is born on v2 (js/label-palette.js newBuildPalette, js/app.js), and its record says so
-   (`set: 2`). Every record without `set` - every build and link from before - stays on v1, so nothing recolours. */
-export const SUGGESTED_V2 = Object.freeze({
-  ...SUGGESTED_V1,
-  white: Object.freeze({ name: "Polar Spaceship Steel", hex: "#787E82" }),
-  purple: Object.freeze({ name: "Panchroma Purple", hex: "#7a4fb0" }),
-});
 export function cleanSpool(s) {
   if (!s || typeof s !== "object" || Array.isArray(s) || typeof s.name !== "string" || typeof s.hex !== "string") return null;
   const name = s.name.trim();
@@ -101,10 +78,6 @@ export function cleanLabelPalette(v) {
   const src = v.spools && typeof v.spools === "object" && !Array.isArray(v.spools) ? v.spools : {};
   const spools = {};
   for (const k of LABEL_PALETTE_KEYS) { const s = cleanSpool(src[k]); if (s) spools[k] = s; }
-  // `set` (2026-10-28): the suggestion set the rows fall back to - 2 for a build born on v2, absent (1) for every other. A
-  // set-2 palette is always written out WHOLE, v2's spool in every slot it lacks (or had dropped here), so a planner older
-  // than `set` (it drops the field and reads the spools) still draws v2, never v1 (Sol 01a18540)
-  if (v.set === 2) return { v: 1, set: 2, spools: Object.fromEntries(LABEL_PALETTE_KEYS.map((k) => [k, spools[k] || { ...SUGGESTED_V2[k] }])) };
   return Object.keys(spools).length ? { v: 1, spools } : null;
 }
 /* the look, cleaned (2026-10-28, the planner's own field): outside data, so as strict as the stage's own cleaner and

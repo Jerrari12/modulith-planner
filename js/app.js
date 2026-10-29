@@ -17,7 +17,7 @@ import { isPhone, PHONE_MAX } from './ui/phone.js';
 import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
-import { readLabelDefaults, paletteOfDefaults, urlFor, NEW_SET } from './label-palette.js';   // the label palette's defaults and suggestion set for new builds (2026-10-28)
+import { readLabelDefaults, paletteOfDefaults, urlFor } from './label-palette.js';   // the label palette's defaults for new builds (2026-10-28)
 import { cleanLook, buildTooNew } from './rules/schema.js';   // a shared build's look, cleaned once at the boot (SHARE-LOOK.md)
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
@@ -106,11 +106,6 @@ export async function boot() {
     const cur = await builds.get(builds.currentId); const rec = cur ? cur.record : builds.readSlot();
     if (rec) { entry = cur; history.replaceState(history.state, '', location.pathname + location.search + hashOf(rec) + (location.hash ? '&' + location.hash.slice(1) : '')); }
   }
-  /* a build BORN on this page: no record in the address once the slot's reopen above has run - New build and the setup
-     sheet (whose links carry none), a first visit, an official kit's own page. Only such a build starts on the newest label
-     suggestions; a record from the address (a link, Recent, the reopen, a ?new=1 typed beside a #build=) keeps its own
-     (Sol 01a18540). */
-  const BORN = !/(^#|&)build=/.test(location.hash);
   let stood = null;   // the boot slid a saved layout onto its surface (standRecord adds nothing): said once the workspace is up
   const stage = await createStage(document, {
     repair: (rec) => standRecord(rec, G, { tabletop: globalThis.GEN2_TABLETOP }),
@@ -270,13 +265,13 @@ export async function boot() {
   { const m = /[#&]scheme=([^&]+)/.exec(location.hash); if (m) { try { const colors = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); stage.setPalette({ colors, on: true }); } catch { /* a damaged scheme link: the build still opens */ } history.replaceState(history.state, '', location.href.replace(/[#&]scheme=[^&]+/, (x) => x.startsWith('#') ? '#' : '').replace(/#&/, '#').replace(/#$/, '')); } }
   /* a NEW build takes the visitor's label defaults (2026-10-28): the six spools into its record, the body and the text onto
      its Colors palette - before the store's baseline, so they are where the build starts, not an undo step. Only a fresh
-     build: one opened from a link, a file, Recent or a kit keeps the palette it has (the panel may offer the defaults).
-     Every build BORN here starts on the newest suggestion set (v2: Panchroma Purple, a grey stainless; Astra 2026-10-28),
-     the defaults over it; a record from the address keeps its own, and one without the set stays on v1. */
-  if (BORN && stage.build) {
-    const d = FRESH || SETUP ? readLabelDefaults((() => { try { return localStorage; } catch { return null; } })()) : null;
-    stage.build.labelPalette = paletteOfDefaults(d, NEW_SET);
-    if (d) for (const [key, sp] of [['Label', d.body], ['Label:TEXT', d.text]]) if (sp) stage.setColor(key, { name: sp.name, hex: sp.hex, url: urlFor(sp.name) });
+     build: one opened from a link, a file, Recent or a kit keeps the palette it has (the panel may offer the defaults). */
+  if ((FRESH || SETUP) && stage.build) {
+    const d = readLabelDefaults((() => { try { return localStorage; } catch { return null; } })());
+    if (d) {
+      stage.build.labelPalette = paletteOfDefaults(d);
+      for (const [key, sp] of [['Label', d.body], ['Label:TEXT', d.text]]) if (sp) stage.setColor(key, { name: sp.name, hex: sp.hex, url: urlFor(sp.name) });
+    }
   }
   if (stage.build) store.load(stage.build);
   stage.setLabelPalette?.(store.state.labelPalette);
