@@ -17,6 +17,8 @@ on:
     # README files inside served folders are NOT on it - each can change what a visitor gets, or is published. A push
     # mixing a docs file with anything else runs everything. The deploy job's freshness check reads the SAME two
     # patterns; change them together. workflow_dispatch ignores this filter, so a manual run always tests and deploys.
+    # ⚠ AN EMPTY COMMIT RUNS NOTHING EITHER (2026-10-28): it changes no file, so no file escapes the filter, and 4f199b8,
+    # pushed to re-run a red deploy, started no run at all. Re-run with workflow_dispatch, or a real change outside docs/.
     paths-ignore:
       - 'docs/**'
       - '*.md'
