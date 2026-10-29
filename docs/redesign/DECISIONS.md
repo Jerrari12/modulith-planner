@@ -6243,6 +6243,11 @@ pick puts the plain coil back) passes and fails with the call removed; the row-l
 01a18533 (the physical defines, the Fast strength, the studio built only for silk). Shots: `D:\Claude - Output\silk-finish-2026-10-28`
 (spool-cmp2.png, spool-cmp3.png; spools.mjs).
 
+Live 2026-10-29 00:10 as e2161d1e (main e2161d1, run 40814477596; the spools, 160e356, sat on top of label palette v2, and the
+run carrying both (0a407b5) failed on the steam case; they went out with v2's revert). `silk-spool-prod.mjs` green: a Silk Gold pick puts its spool's
+coil at roughness 0.2, metalness 0.75, anisotropy 0.4 with the studio; a Panchroma Yellow pick puts back 0.38 / 0 / 0 with no
+studio; no page errors. The same check failed on 08db6c6b, before the deploy.
+
 ## 2026-10-28 · Label palette v2: a real purple and a grey stainless, for new builds only (Astra; Joey: "Proceed with them all")
 
 Astra's step 2 after the shared look: stable default mappings, chosen deliberately, without recolouring anything that
