@@ -6,10 +6,12 @@
  * whose shader draws the winding: each pixel's normal bent over a round strand of the measured winding (right-handed,
  * 1.80 mm pitch, the strands' crests at 91.4 mm), a crease darkening between strands, and the pattern easing to its flat
  * average where a strand is under a pixel (no shimmer at a distance). Lit by the stage's own lights like the build
- * (MeshStandardMaterial), so the spool reads as the build's plastic in the room and in the studio, and casts its shadow.
+ * (MeshPhysicalMaterial, its defaults: a standard material, until a silk filament gives it A SILK SPOOL), so the spool reads
+ * as the build's plastic in the room and in the studio, and casts its shadow.
  * Millimetres, the spool's axis along +Y, its centre at the origin. */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { SILK_APPROX } from '../part-material.js';   // a silk spool wears the printed parts' silk (A SILK SPOOL); stamped in pages.yml
 
 export const SPOOL = {
   glb: 'scenes/props/spool.glb',
@@ -78,14 +80,45 @@ const COIL_COLOR = '#include <color_fragment>\n'
   + '\t{ float s = coilU(), w = ' + COIL_FADE.replace('%s', 's') + ', t = abs( 2.0 * fract( s ) - 1.0 );\n'
   + '\t  diffuseColor.rgb *= mix( 0.9, mix( 1.0, 0.55, smoothstep( 0.6, 1.0, t ) ), w ); }   // the crease between strands\n';
 
-function coilMaterial(side, color) {
-  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.38, metalness: 0 });
-  m.defines = { COIL_SIDE: side };
-  m.userData.coil = { uPitch: { value: SPOOL.pitch }, uR0: { value: SPOOL.rInner } };
+/* A SILK SPOOL (Joey 2026-10-28, of a Silk Gold spool in the Colors room: "do silk spools also reflect like the printed
+   parts? it looks mostly flat like a yellow"). A silk filament's coil wears the printed parts' silk finish (part-material.js
+   SILK_APPROX: glossier, part-metallic so its reflections carry the filament's colour, anisotropic), the anisotropy's rough
+   axis ACROSS the strands - along the spool's axis on the drum, outward on its sides - so the highlight streaks across the
+   winding the way a real silk spool's band of light does, and the curved coil gives the room's reflections something to
+   bend. Physical rather than standard so it can: at anisotropy 0 (every other filament) it draws what the standard
+   material drew. The frame replaces three's UV one after lights_physical_fragment, as silk-axis.js does for the parts. */
+const COIL_SILK = '#include <lights_physical_fragment>\n'
+  + '#ifdef USE_ANISOTROPY\n'
+  + '{\n'
+  + '#if COIL_SIDE == 0\n'
+  + '\tvec3 cA = normalize( vCoilA );\n'
+  + '#else\n'
+  + '\tvec3 cA = normalize( vCoilR );\n'
+  + '#endif\n'
+  + '\tvec3 cT = cA - normal * dot( cA, normal );\n'
+  + '\tfloat cL = length( cT );\n'
+  + '\tvec3 cAny = abs( normal.x ) < 0.9 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );\n'
+  + '\tvec3 cDir = cL > 1e-4 ? cT / cL : normalize( cross( cAny, normal ) );\n'
+  + '\tmaterial.anisotropyT = cDir;\n'
+  + '\tmaterial.anisotropyB = cross( normal, cDir );\n'
+  + '}\n'
+  + '#endif\n';
+/* the silk studio's strength, after the environment's specular is gathered: on a silk coil only (the anisotropy is how the
+   shader knows), by the parts' own tier-scaled uniform (silk-axis.js silkTier: 0.3 where the tier does not tone-map, or a
+   Silk Gold coil clips on Fast as a Silk Gold front did - Terra 01a18533) */
+const COIL_SILK_ENV = '#include <lights_fragment_end>\n#ifdef USE_ANISOTROPY\n\treflectedLight.indirectSpecular *= uSilkEnv;\n#endif\n';
+export const COIL_PLAIN = Object.freeze({ roughness: 0.38, metalness: 0, anisotropy: 0 });
+
+/* `silkEnv`: the parts' studio-strength uniform (main.js silkU.uSilkEnv), shared so a tier change reaches the coil too */
+function coilMaterial(side, color, silkEnv) {
+  const m = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(color), ...COIL_PLAIN });
+  m.defines = { ...m.defines, COIL_SIDE: side };   // three's own STANDARD and PHYSICAL kept (Terra 01a18533)
+  m.userData.coil = { uPitch: { value: SPOOL.pitch }, uR0: { value: SPOOL.rInner }, uSilkEnv: silkEnv || { value: 1 } };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, m.userData.coil);
     sh.vertexShader = COIL_VERT_PARS + sh.vertexShader.replace('#include <begin_vertex>', COIL_VERT);
-    sh.fragmentShader = COIL_FRAG_PARS + sh.fragmentShader.replace('#include <normal_fragment_maps>', COIL_NORMAL).replace('#include <color_fragment>', COIL_COLOR);
+    sh.fragmentShader = COIL_FRAG_PARS + 'uniform float uSilkEnv;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', COIL_NORMAL).replace('#include <color_fragment>', COIL_COLOR)
+      .replace('#include <lights_physical_fragment>', COIL_SILK).replace('#include <lights_fragment_end>', COIL_SILK_ENV);
   };
   m.customProgramCacheKey = () => 'spool-coil-' + side;
   return m;
@@ -114,12 +147,12 @@ const CASTER = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: fals
 
 /* one spool of `color` (a hex): the flanges (`geo`, from loadSpool) in the spool's plastic, the wound drum in the colour.
    Returns the group (its axis along +Y) and a `setColor`. */
-export function makeSpool(geo, color, { plastic = SPOOL.plastic } = {}) {
+export function makeSpool(geo, color, { plastic = SPOOL.plastic, silkEnv = null } = {}) {   // silkEnv: A SILK SPOOL's studio strength
   const g = new THREE.Group();
   g.name = 'spool';
   const fm = new THREE.MeshStandardMaterial({ color: new THREE.Color(plastic), roughness: 0.45, metalness: 0 });
   const f = new THREE.Mesh(geo, fm);
-  const d = drumGeometry(), outer = coilMaterial(0, color), sides = coilMaterial(1, color);
+  const d = drumGeometry(), outer = coilMaterial(0, color, silkEnv), sides = coilMaterial(1, color, silkEnv);
   const o = new THREE.Mesh(d.outer, outer);
   const s = d.sides.map((sg) => new THREE.Mesh(sg, sides));
   for (const m of [f, o, ...s]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
@@ -142,6 +175,17 @@ export function makeSpool(geo, color, { plastic = SPOOL.plastic } = {}) {
   };
   g.userData.setGlow = glow;
   g.userData.setColor = (hex) => { outer.color.set(hex); sides.color.set(hex); g.userData.spool.color = hex; glow(g.userData.glow || 0); };
+  /* a silk filament's coil (A SILK SPOOL); false puts the plain coil back. `env`: the silk studio the printed silk parts
+     reflect (main.js silkEnv), so a silk spool and a silk part shine alike; without it the coil reflects the room. three
+     recompiles by itself when the anisotropy crosses 0; an environment arriving or leaving needs telling */
+  g.userData.setSilk = (on, env = null) => {
+    const f = on ? SILK_APPROX : COIL_PLAIN, e = on ? env : null;
+    for (const m of [outer, sides]) {
+      m.roughness = f.roughness; m.metalness = f.metalness; m.anisotropy = f.anisotropy;
+      if (m.envMap !== e) { if (!m.envMap !== !e) m.needsUpdate = true; m.envMap = e; }
+    }
+    g.userData.spool.silk = !!on;
+  };
   return g;
 }
 

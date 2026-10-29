@@ -6221,6 +6221,28 @@ normalisation), fixed as `standTheirs`.
   planner: Joey's record (gridH 7.5) opens at 8H with the bottom row on the table and nothing unsupported (the same check
   failed on 6c491533, units 1, 3, 5, 6, 7, 8); re-opened from its own share hash, the same. No page errors.
 
+switch to Tabletop and its default starter) green on SwiftShader. Terra 01a183ea: no findings.
+
+## 2026-10-28 · A silk spool shines like the silk parts
+
+Joey, of a Silk Gold spool in the Colors room at Very High: "do silk spools also reflect like the printed parts? it looks
+mostly flat like a yellow". (Relayed by the done-scene session; the coil had only ever taken a colour.)
+
+- A spool whose filament is silk (done.js spoolMaterials, the same `silk` the tags read) wears the printed parts' silk:
+  `part-material.js SILK_APPROX` (roughness 0.2, metalness 0.75, anisotropy 0.4), its anisotropy's rough axis ACROSS the
+  strands (along the spool's axis on the drum, outward on its sides), and the same silk studio the silk parts reflect
+  (`stage.silkEnv`), at the parts' tier-scaled strength (`silkU.uSilkEnv`: 0.3 on Fast, where it clipped). Of the room and
+  the studio (shots: room, middle; studio, right) the studio was recommended for matching the parts, and Joey's "Proceed
+  with them all" (relayed by planner-2) took it.
+- The coil is a MeshPhysicalMaterial now (three's STANDARD and PHYSICAL defines kept beside COIL_SIDE; the old assignment
+  dropped STANDARD); at anisotropy 0 every plain spool draws what it drew. The studio is built only once a spool is silk.
+- `spool.js` imports `../part-material.js`: a new import edge, stamped in pages.yml (the module-graph guard replayed OK).
+
+Tests: unit 741 pass; the new e2e case (a Silk Gold pick puts its spool's coil in silk with the studio, a Panchroma Yellow
+pick puts the plain coil back) passes and fails with the call removed; the row-lights-its-spool case passes. Review: Terra
+01a18533 (the physical defines, the Fast strength, the studio built only for silk). Shots: `D:\Claude - Output\silk-finish-2026-10-28`
+(spool-cmp2.png, spool-cmp3.png; spools.mjs).
+
 ## 2026-10-28 · Label palette v2: a real purple and a grey stainless, for new builds only (Astra; Joey: "Proceed with them all")
 
 Astra's step 2 after the shared look: stable default mappings, chosen deliberately, without recolouring anything that
