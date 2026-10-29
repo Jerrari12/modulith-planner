@@ -4565,8 +4565,8 @@ test('Colors: on Very High at rest the steam keeps rising over the still picture
   const vctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await vctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'veryhigh'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
   const { ctx, page, errors } = await open('colors', { visitor: true, context: vctx });
-  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__ && window.__GEN2_DONE__.steam, null, { timeout: 60_000 })
-    .catch(async () => assert.fail(`the room did not come on within 60 s (done=${await page.evaluate(() => document.documentElement.dataset.done)}, errors ${JSON.stringify(clean(errors))})`));   // what the page said, for a CI-only failure (2026-10-28)
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && window.__GEN2_DONE__ && window.__GEN2_DONE__.steam, null, { timeout: 180_000 })   // 180 s (done-scene, 2026-10-28): room-on needs ~22 s here and the runner is ~2.1x slower; 60 s failed behind a long case in its shard
+    .catch(async () => assert.fail(`the room did not come on within 180 s (done=${await page.evaluate(() => document.documentElement.dataset.done)}, errors ${JSON.stringify(clean(errors))})`));   // what the page said, for a CI-only failure (2026-10-28)
   const conv = await page.evaluate(async () => {
     const v = window.__GEN2_VIEWER__, t0 = performance.now();
     while (performance.now() - t0 < 90_000 && !(v.acc.ok && v.acc.n >= v.accTotal())) await new Promise((r) => setTimeout(r, 100));
