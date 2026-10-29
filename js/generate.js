@@ -208,7 +208,8 @@ export const isGridfinity = (L, u) => gridfinitySizeOk(L, u) && u.variant === 'g
 
 // Shared-hardware pages (same for every collection). Per-length pages live in
 // LINKS_BY_LEN below. All URLs mirror the planner's verified LINK_OVERRIDES
-// (gen2-planner-main/js/data.js is the source of truth — update both together).
+// (js/catalog/data.js is the source of truth since 2026-10-29 - the old planner's
+// copy froze at the cutover - so update both together).
 const LINKS = {
   hw:    { p: 'https://www.printables.com/model/1012796-gen2-hardware', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20Hardware-1141439' },
   fp:    { p: 'https://www.printables.com/model/964559-gen2-decor-faceplates-essential-series', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20Decor%20-%20Faceplates%20-%20Essential%20Series-1116946' },
