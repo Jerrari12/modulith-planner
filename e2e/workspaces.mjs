@@ -686,7 +686,12 @@ test('the idle gate: a still view stops drawing, an edit draws again at once, a 
   // few frames can still straddle the 600 ms settle time on a slow runner (Terra 01a15c53). Known limits (Terra's second
   // round): a working gate would miss this only with drawn frames over 600 ms apart (measured ~300 ms on SwiftShader at a
   // 4x CPU throttle), and a wake from something unrelated during the wait could pass a broken one (the view was just
-  // measured still for 3 s).
+  // measured still for 3 s). The first limit is gone (2026-10-29, run 40915714215: the rebuild stalled the runner's page past
+  // the safety net's second, so no frame in the settle window was counted, though the edit had reached the stage - placed 4,
+  // instances 61): a frame counts when the gate's wake (not the safety net alone) drew it inside a change's settle window,
+  // whether or not the safety net was due as well. A gate whose signature missed the edit counts nothing for it; one whose
+  // wake ignores the settle window can still pass while the rebuild keeps the gate busy (a known survivor, under the old
+  // count too; Terra 01a188bb).
   const w0 = (await page.evaluate(() => window.__GEN2_VIEWER__.idleStats())).woken;
   await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { const y = s.gridH * 2 - 2; const right = Math.max(...s.placed.map((p) => p.x + p.w)); s.placed.push({ id: s.nextId++, x: right, y, w: 1, hh: 2, fill: 'decor', shelves: 0 }); s.gridW = right + 1; }, 'edit'));
   const woke = await page.waitForFunction((w0) => window.__GEN2_VIEWER__.idleStats().woken > w0, w0, { timeout: 60_000, polling: 100 }).then(() => true, () => false);

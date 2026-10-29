@@ -11818,8 +11818,13 @@ function idleFrame(now) {
     + '|' + canvas.width + 'x' + canvas.height + '|' + accRev + '|' + ao.rev + '|' + instances.size + '|' + cur + '|' + quality + '|' + stageTheme + '|' + idle.inputRev;
   if (sig !== idle.sig) { idle.sig = sig; idle.changedAt = now; }
   const busy = tweens.size > 0 || cinema.on || !!orbitBench || !!settleBench || perf.moving || !!plateStage.ringMat || idleSettling();
-  if (idle.force || busy || now - idle.changedAt < IDLE_SETTLE_MS || now - idle.drawnAt >= IDLE_KEEPALIVE_MS) {
-    if (now - idle.changedAt < IDLE_SETTLE_MS && now - idle.drawnAt < IDLE_KEEPALIVE_MS) idle.woken++;   // drawn because something changed, not by the safety net
+  const wake = idle.force || busy || now - idle.changedAt < IDLE_SETTLE_MS;   // what draws a frame, the safety net aside
+  if (wake || now - idle.drawnAt >= IDLE_KEEPALIVE_MS) {
+    /* drawn by the wake (not the safety net alone) inside a change's settle window - busy and force included, and whether or
+       not the safety net was due too (Terra 01a188bb: so not strictly "because of the change"): on the CI runner every frame in an edit's settle window came a second or more after the last draw (inferred from
+       its counts: the edit reached the stage, nothing was counted), and a count that asked for an early frame counted none
+       (run 40915714215, 2026-10-29). The tick that first sees a change is always inside its window, so it always counts */
+    if (wake && now - idle.changedAt < IDLE_SETTLE_MS) idle.woken++;
     idle.force = false; idle.drawnAt = now; idle.drawn++; return false;
   }
   idle.skipped++;
