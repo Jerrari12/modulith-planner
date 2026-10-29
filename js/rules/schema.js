@@ -66,8 +66,7 @@ export function cleanPlateParts(v) {
 /* the label palette, cleaned (2026-10-28, the planner's own field): the six stripe meanings - the Label Studio's colour keys
    (label-look.js STRIPE_COLOURS, a test pins the two lists equal) - each to a spool { name, hex }: the catalog's label (the
    identity, 1-80 characters) and the colour it draws in. `v` must be 1. Anything else is dropped, never guessed; no spool
-   left is null, which reads as the v1 suggestions - except a palette on suggestion set 2 (`set: 2`, a build born on v2),
-   which is kept, written out whole with v2's spool in each empty slot (below). */
+   left is null, which reads as the suggested spools. */
 export const LABEL_PALETTE_KEYS = ["sky-blue", "red", "yellow", "white", "green", "purple"];
 /* The suggested spools, version 1 (2026-10-28): for each meaning the nearest plain PLA in the catalog by CIEDE2000 to the
    scheme's hex (js/label-palette.js suggestFor; its test re-derives them). Purple's scheme colour is Okabe-Ito's reddish
