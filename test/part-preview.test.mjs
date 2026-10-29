@@ -75,7 +75,9 @@ test('every production slug is accounted for — resolved or intentionally unsup
   // with the viewer's 2026-09-18 deploy, so every one previews
   // 2026-09-19: +9 handles (573 → 582) - the nine bolt-on handle variants become
   // nine product pages; the GLBs have shipped in every collection pool since 2026-07-20
-  assert.equal(supported, 582, 'supported preview count');
+  // 2026-10-29: +27 side covers (582 → 609) - released 2026-10-10, GLBs in every collection pool since the stage
+  // drew them (2026-10-17); the site mints their part pages once this manifest carries them
+  assert.equal(supported, 609, 'supported preview count');
   assert.equal(unsupported, 4, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware)');
 });
 
@@ -279,8 +281,8 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
   // full census: 94 cases + 94 classic + 94 decor + 60 Gridfinity decor + 90
   // faceplates + 4 hardware + 24 covers + 20 foot rails + 24 under-table rails
   // + 22 case extenders + 22 shelf inserts + 4 shelf lips + 18 back covers + 3
-  // wall brackets + 1 Deco handle
-  assert.equal(caps.filter(r => r.part.platePreview).length, 574, 'plate-capable slug count');
+  // wall brackets + 1 Deco handle + 27 side covers (face-down, the plateRot entry's release notes)
+  assert.equal(caps.filter(r => r.part.platePreview).length, 601, 'plate-capable slug count');
 
   // sweep EVERY plate-capable slug's plate boot (not just samples): the bare
   // print JOB (one body, or every member of a handed set), rotations matching
@@ -296,6 +298,7 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
       : /-shelf-insert-|^shelf-lip-/.test(s) ? [180, 0, 0]
       : /^faceplate-back-cover-|^wall-mount-bracket-/.test(s) ? [-90, 0, 0]
       : s === 'deco-handle' ? [180, 0, 0]
+      : /-side-cover-/.test(s) ? [0, 0, 90]
       : undefined;
   for (const [s, r] of resolved) {
     if (r.fail || !r.part.platePreview) continue;

@@ -186,10 +186,9 @@ const rowName = (r) => partName(r.name) + (r.variant ? ` · ${r.variant}` : '');
 /* the four numbers of one row, from the stored progress */
 const rowKey = (r) => `${r.section}|${r.name}${r.variant ? `|${r.variant}` : ''}`;
 /* SIDE COVERS ARE RELEASED (v2609, 2026-10-10: Printables and Thangs pages live, one per collection; the site ticket
-   TICKET-side-covers-2026-10-10.md carries the ids). The planner's catalog, vendored here verbatim and sha-pinned,
-   still lists `sideCover` under `unreleased` until the planner's own commit lands and the catalog is re-vendored
-   (tools/port-rules.mjs + test/catalog-vendor.test.mjs). Until then this override, and nothing else, says so: the row
-   loses SOON and "Not released", links to the live pages, and counts as available. Delete it with the re-vendor. */
+   TICKET-side-covers-2026-10-10.md carries the ids). Since 2026-10-29 the catalog says so too (`sideCover` left
+   GEN2.unreleased in js/catalog/data.js), so the row is released on its own; this override now only supplies the
+   exact store pages, which the catalog's LINK_OVERRIDES does not carry (without it a row would link a search). */
 const SIDE_COVER_PAGES = {
   59: { printables: 'https://www.printables.com/model/1872093-modulith-59-side-covers', thangs: 'https://than.gs/m/1619983' },
   115: { printables: 'https://www.printables.com/model/1872105-modulith-115-side-covers', thangs: 'https://than.gs/m/1619981' },

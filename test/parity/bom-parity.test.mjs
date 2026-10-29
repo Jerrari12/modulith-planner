@@ -27,12 +27,18 @@ test('the ported computeBom matches the planner on the official kits and on seed
      The port's own list, which puts these edits into bom.js, is tools/port-ahead.mjs; this one holds only the ones the
      draws below reach (the per-run side covers need a gap, the toggle a record the old planner never makes).
      - 2026-10-20: the back cover row says the v2609 drawer's tear-away front comes out first (DECISIONS.md of that
-       date; test/back-cover-tearaway.test.mjs pins the words). The old planner's note (app.js 5402 at 7beb165) does not. */
+       date; test/back-cover-tearaway.test.mjs pins the words). The old planner's note (app.js 5402 at 7beb165) does not.
+     - 2026-10-29: the CATALOG moved ahead - `sideCover` left GEN2.unreleased in js/catalog/data.js (the old planner's
+       copy froze at 92c055d still listing it), so the port bills a side cover row released and the old planner bills
+       it unreleased (computeBom's rows carry no links; those are attached later, where an unreleased row gets none). */
   const AHEAD = [
     { name: /Faceplate Back Cover/, strip: " Take the drawer's tear-away front out first - left in, it and the cover interfere." },
+    { name: /^GEN2 \d+ Side Cover - /, set: { unreleased: true } },
   ];
   const asOld = (sections) => sections.map((sec) => ({ ...sec, items: sec.items.map((it) => {
-    const a = AHEAD.find((x) => x.name.test(it.name) && typeof it.note === 'string' && it.note.includes(x.strip));
+    const s = AHEAD.find((x) => x.set && x.name.test(it.name));
+    if (s) return { ...it, ...s.set };
+    const a = AHEAD.find((x) => x.strip && x.name.test(it.name) && typeof it.note === 'string' && it.note.includes(x.strip));
     return a ? { ...it, note: it.note.replace(a.strip, '') } : it;
   }) }));
   const compare = (label) => {

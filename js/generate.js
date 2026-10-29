@@ -2877,6 +2877,8 @@ function previewColors(L) {
     // ShelfInsert is collection-scoped like the extender (`ShelfInsert_<L>-<w>W`);
     // the universal lip wears its poster render's navy-slate body hue
     ShelfInsert: lc, ShelfLip: '#313d4f',
+    // SideCover is collection-scoped too (`SideCover_<L>-<h>H`) and its poster wears the collection hue (2026-10-29)
+    SideCover: lc,
     // universal parts wear their poster-render hues (faceplates: dark
     // navy-charcoal body + the render palette's orange grip/face + silver rod)
     Faceplate: '#31333f',
@@ -2999,6 +3001,12 @@ function previewProbe(slug) {
      needed the way the extenders' comment explains. */
   if ((m = s.match(/^(\d+)-shelf-insert-([1-4])w$/)))
     return { build: one(+m[1], +m[2], 2, 'shelf'), pick: { type: 'ShelfInsert' } };
+  /* Side covers (v2609, released 2026-10-10; site slugs `<L>-side-cover-<h>h`, 27 of them). A cover fits any width,
+     so the probe is a 1W unit of that height: both its walls are exposed and the bill folds the two covers into ONE
+     SideCover row (qty 2), which keeps the type pick unambiguous. A height the collection's covers do not come in
+     (sideCoverHH: the 59 stops at 1H) is refused by the generator or bills no cover, so the slug fails closed. */
+  if ((m = s.match(new RegExp(`^(\\d+)-side-cover-${H}h$`))))
+    return { build: one(+m[1], 1, H_FROM_SLUG[m[2]]), pick: { type: 'SideCover' } };
   if ((m = s.match(new RegExp(`^(\\d+)-case-([1-4])w-${H}h$`))))
     return { build: one(+m[1], +m[2], H_FROM_SLUG[m[3]]), pick: { type: 'Case' } };
   if ((m = s.match(new RegExp(`^(\\d+)-(classic|decor)-drawer-([1-4])w-${H}h$`))))

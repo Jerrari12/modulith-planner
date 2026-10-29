@@ -1,13 +1,13 @@
-/* THE CATALOG IS THE PLANNER'S, BYTE FOR BYTE, UNTIL CUTOVER.
+/* THE CATALOG IS THE PLANNER'S, BYTE FOR BYTE, UNTIL CUTOVER - AND THIS REPO'S SINCE.
  *
- * js/catalog/data.js is gen2-planner-main/js/data.js copied verbatim (the approved merge plan,
+ * js/catalog/data.js was gen2-planner-main/js/data.js copied verbatim (the approved merge plan,
  * §1.5: "data.js stays verbatim and sha-pinned until cutover makes the merged repo the source").
- * The planner is still live and still edits its copy, so this pin is what notices: a planner
- * change fails here until the file is re-copied and the pin bumped, and an edit on THIS side
- * fails the byte comparison whenever the planner checkout is present. Same chain as the other
- * vendor pins (tabletop-completion, requirement-scope).
- *
- * Re-vendor: copy the planner's js/data.js here, bump PINNED_SHA256 and SOURCE below.
+ * The cutover ran 2026-10-23: the old planner is a forward page, its data.js frozen at 92c055d.
+ * From 2026-10-29 (sideCover released) the catalog is edited HERE, and the MODULITH site
+ * re-vendors this file. The pin stays as a change detector, so an edit is a deliberate act:
+ * edit this file, bump PINNED_SHA256 and SOURCE, re-vendor the site.
+ * The old byte comparison against the frozen copy is gone; the BOM parity oracle
+ * (test/parity) still runs the old planner, and lists where this catalog moved ahead.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,11 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDORED = join(root, 'js', 'catalog', 'data.js');
-const UPSTREAM = process.env.GEN2_PLANNER_ROOT
-  ? join(process.env.GEN2_PLANNER_ROOT, 'js', 'data.js')
-  : join(root, '..', 'GEN2 Planner', 'gen2-planner-main', 'js', 'data.js');
-const PINNED_SHA256 = 'da5c8f2f5ba4a3a3044e7bea644262b2225e1b42744b05ad4179bcfdd3bac0d6';
-const SOURCE = 'gen2-planner-main 92c055d (2026-10-21: faceplate, not plate, in two strings)';
+const PINNED_SHA256 = '273227dbbb4d2ac4c7ecf00d7bdf72863aca43553f1a9dac835e9b9c02cdc5a4';
+const SOURCE = 'this repo, 2026-10-29: sideCover released (was gen2-planner-main 92c055d)';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 test(`the vendored catalog matches its pin (${SOURCE})`, () => {
@@ -30,13 +27,7 @@ test(`the vendored catalog matches its pin (${SOURCE})`, () => {
   const actual = sha(VENDORED);
   assert.equal(actual, PINNED_SHA256,
     `js/catalog/data.js changed (sha256 ${actual.slice(0, 16)}…).\n` +
-    '  Edit the PLANNER source, copy it here, then bump PINNED_SHA256 and SOURCE.');
-});
-
-test('the vendored catalog is byte-identical to the planner source (when the planner is checked out)', (t) => {
-  if (!existsSync(UPSTREAM)) { t.skip('planner checkout not present - pin-only'); return; }
-  assert.equal(readFileSync(VENDORED, 'utf8'), readFileSync(UPSTREAM, 'utf8'),
-    'js/catalog/data.js differs from the planner source - re-copy it and bump the pin');
+    '  A deliberate edit? Bump PINNED_SHA256 and SOURCE, then re-vendor the MODULITH site.');
 });
 
 test('the catalog is a classic script that defines GEN2 with the keys the Build workspace reads', () => {

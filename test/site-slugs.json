@@ -1,6 +1,6 @@
 {
  "_meta": {
-  "source": "MODULITH repo dist/search-index.json - a LOCAL site build of 2026-09-18 that adds the 60 Gridfinity Decor Drawer pages (not deployed yet); every other slug is the production catalog. PLUS the nine handle slugs appended at the end 2026-09-19: those pages do not exist on the site in ANY build yet - they are the site session's minted list (D:/Claude - Output/modulith-handles-as-parts-2026-09-19/handle-site-slugs.json), vendored here first because the site will not create the pages until this viewer's support manifest carries the slugs. RE-VENDOR from a real site build once it does.",
+  "source": "MODULITH repo dist/search-index.json - a LOCAL site build of 2026-09-18 that adds the 60 Gridfinity Decor Drawer pages (not deployed yet); every other slug is the production catalog. PLUS the nine handle slugs appended at the end 2026-09-19: those pages do not exist on the site in ANY build yet - they are the site session's minted list (D:/Claude - Output/modulith-handles-as-parts-2026-09-19/handle-site-slugs.json), vendored here first because the site will not create the pages until this viewer's support manifest carries the slugs. RE-VENDOR from a real site build once it does. PLUS the 27 side-cover slugs appended 2026-10-29 (`<L>-side-cover-<h>h`, the site's own spelling in build-registry.js), vendored here first for the same reason as the handles: the site will not mint the part pages until this support manifest carries them.",
   "release": "v2608",
   "extracted": "2026-09-19",
   "note": "Frozen by the site URL-permanence law. Re-vendor when the site catalog grows; part-preview.test.mjs sweeps every entry."
@@ -591,6 +591,33 @@
   "blockbar-handle-e",
   "blockbar-handle-f",
   "crystal-handle-a",
-  "crystal-handle-b-wide"
+  "crystal-handle-b-wide",
+  "59-side-cover-0-5h",
+  "59-side-cover-1h",
+  "115-side-cover-0-5h",
+  "115-side-cover-1h",
+  "115-side-cover-1-5h",
+  "115-side-cover-2h",
+  "115-side-cover-3h",
+  "165-side-cover-0-5h",
+  "165-side-cover-1h",
+  "165-side-cover-1-5h",
+  "165-side-cover-2h",
+  "165-side-cover-3h",
+  "185-side-cover-0-5h",
+  "185-side-cover-1h",
+  "185-side-cover-1-5h",
+  "185-side-cover-2h",
+  "185-side-cover-3h",
+  "240-side-cover-0-5h",
+  "240-side-cover-1h",
+  "240-side-cover-1-5h",
+  "240-side-cover-2h",
+  "240-side-cover-3h",
+  "270-side-cover-0-5h",
+  "270-side-cover-1h",
+  "270-side-cover-1-5h",
+  "270-side-cover-2h",
+  "270-side-cover-3h"
  ]
 }

@@ -579,7 +579,10 @@ const GEN2 = {
   // style's series page via linkAs.)
   // (gridfinityDrawer left this list 2026-10-03 — the five MODULITH Gridfinity
   // Decor Drawers pages went live 2026-09-24, on Thangs and Printables.)
-  unreleased: ["door", "hinge", "latch", "sideCover"],
+  // (sideCover left this list 2026-10-29 — the six MODULITH Side Covers pages
+  // went live 2026-10-10, on Printables and Thangs; first edit made here, in the
+  // merged planner, after the old planner became a forward page at cutover.)
+  unreleased: ["door", "hinge", "latch"],
 
   /* Gridfinity Decor drawers (v2609, 2026-09-18). A Decor drawer with a 42 mm
      Gridfinity grid in its floor, a half-grid channel down the right side, four

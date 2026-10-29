@@ -5376,5 +5376,194 @@
         ]
       }
     ]
+  },
+  "59-side-cover-0-5h": {
+    "node": "SideCover_59-05H",
+    "collection": "59",
+    "type": "SideCover",
+    "label": "Side Cover 59-05H",
+    "platePreview": true
+  },
+  "59-side-cover-1h": {
+    "node": "SideCover_59-1H",
+    "collection": "59",
+    "type": "SideCover",
+    "label": "Side Cover 59-1H",
+    "platePreview": true
+  },
+  "115-side-cover-0-5h": {
+    "node": "SideCover_115-05H",
+    "collection": "115",
+    "type": "SideCover",
+    "label": "Side Cover 115-05H",
+    "platePreview": true
+  },
+  "115-side-cover-1h": {
+    "node": "SideCover_115-1H",
+    "collection": "115",
+    "type": "SideCover",
+    "label": "Side Cover 115-1H",
+    "platePreview": true
+  },
+  "115-side-cover-1-5h": {
+    "node": "SideCover_115-15H",
+    "collection": "115",
+    "type": "SideCover",
+    "label": "Side Cover 115-15H",
+    "platePreview": true
+  },
+  "115-side-cover-2h": {
+    "node": "SideCover_115-2H",
+    "collection": "115",
+    "type": "SideCover",
+    "label": "Side Cover 115-2H",
+    "platePreview": true
+  },
+  "115-side-cover-3h": {
+    "node": "SideCover_115-3H",
+    "collection": "115",
+    "type": "SideCover",
+    "label": "Side Cover 115-3H",
+    "platePreview": true
+  },
+  "165-side-cover-0-5h": {
+    "node": "SideCover_165-05H",
+    "collection": "165",
+    "type": "SideCover",
+    "label": "Side Cover 165-05H",
+    "platePreview": true
+  },
+  "165-side-cover-1h": {
+    "node": "SideCover_165-1H",
+    "collection": "165",
+    "type": "SideCover",
+    "label": "Side Cover 165-1H",
+    "platePreview": true
+  },
+  "165-side-cover-1-5h": {
+    "node": "SideCover_165-15H",
+    "collection": "165",
+    "type": "SideCover",
+    "label": "Side Cover 165-15H",
+    "platePreview": true
+  },
+  "165-side-cover-2h": {
+    "node": "SideCover_165-2H",
+    "collection": "165",
+    "type": "SideCover",
+    "label": "Side Cover 165-2H",
+    "platePreview": true
+  },
+  "165-side-cover-3h": {
+    "node": "SideCover_165-3H",
+    "collection": "165",
+    "type": "SideCover",
+    "label": "Side Cover 165-3H",
+    "platePreview": true
+  },
+  "185-side-cover-0-5h": {
+    "node": "SideCover_185-05H",
+    "collection": "185",
+    "type": "SideCover",
+    "label": "Side Cover 185-05H",
+    "platePreview": true
+  },
+  "185-side-cover-1h": {
+    "node": "SideCover_185-1H",
+    "collection": "185",
+    "type": "SideCover",
+    "label": "Side Cover 185-1H",
+    "platePreview": true
+  },
+  "185-side-cover-1-5h": {
+    "node": "SideCover_185-15H",
+    "collection": "185",
+    "type": "SideCover",
+    "label": "Side Cover 185-15H",
+    "platePreview": true
+  },
+  "185-side-cover-2h": {
+    "node": "SideCover_185-2H",
+    "collection": "185",
+    "type": "SideCover",
+    "label": "Side Cover 185-2H",
+    "platePreview": true
+  },
+  "185-side-cover-3h": {
+    "node": "SideCover_185-3H",
+    "collection": "185",
+    "type": "SideCover",
+    "label": "Side Cover 185-3H",
+    "platePreview": true
+  },
+  "240-side-cover-0-5h": {
+    "node": "SideCover_240-05H",
+    "collection": "240",
+    "type": "SideCover",
+    "label": "Side Cover 240-05H",
+    "platePreview": true
+  },
+  "240-side-cover-1h": {
+    "node": "SideCover_240-1H",
+    "collection": "240",
+    "type": "SideCover",
+    "label": "Side Cover 240-1H",
+    "platePreview": true
+  },
+  "240-side-cover-1-5h": {
+    "node": "SideCover_240-15H",
+    "collection": "240",
+    "type": "SideCover",
+    "label": "Side Cover 240-15H",
+    "platePreview": true
+  },
+  "240-side-cover-2h": {
+    "node": "SideCover_240-2H",
+    "collection": "240",
+    "type": "SideCover",
+    "label": "Side Cover 240-2H",
+    "platePreview": true
+  },
+  "240-side-cover-3h": {
+    "node": "SideCover_240-3H",
+    "collection": "240",
+    "type": "SideCover",
+    "label": "Side Cover 240-3H",
+    "platePreview": true
+  },
+  "270-side-cover-0-5h": {
+    "node": "SideCover_270-05H",
+    "collection": "270",
+    "type": "SideCover",
+    "label": "Side Cover 270-05H",
+    "platePreview": true
+  },
+  "270-side-cover-1h": {
+    "node": "SideCover_270-1H",
+    "collection": "270",
+    "type": "SideCover",
+    "label": "Side Cover 270-1H",
+    "platePreview": true
+  },
+  "270-side-cover-1-5h": {
+    "node": "SideCover_270-15H",
+    "collection": "270",
+    "type": "SideCover",
+    "label": "Side Cover 270-15H",
+    "platePreview": true
+  },
+  "270-side-cover-2h": {
+    "node": "SideCover_270-2H",
+    "collection": "270",
+    "type": "SideCover",
+    "label": "Side Cover 270-2H",
+    "platePreview": true
+  },
+  "270-side-cover-3h": {
+    "node": "SideCover_270-3H",
+    "collection": "270",
+    "type": "SideCover",
+    "label": "Side Cover 270-3H",
+    "platePreview": true
   }
 }

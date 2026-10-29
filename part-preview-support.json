@@ -2345,6 +2345,114 @@
     "crystal-handle-b-wide": {
       "preview": true,
       "platePreview": false
+    },
+    "59-side-cover-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "59-side-cover-1h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "115-side-cover-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "115-side-cover-1h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "115-side-cover-1-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "115-side-cover-2h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "115-side-cover-3h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "165-side-cover-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "165-side-cover-1h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "165-side-cover-1-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "165-side-cover-2h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "165-side-cover-3h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "185-side-cover-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "185-side-cover-1h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "185-side-cover-1-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "185-side-cover-2h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "185-side-cover-3h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "240-side-cover-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "240-side-cover-1h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "240-side-cover-1-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "240-side-cover-2h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "240-side-cover-3h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "270-side-cover-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "270-side-cover-1h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "270-side-cover-1-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "270-side-cover-2h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "270-side-cover-3h": {
+      "preview": true,
+      "platePreview": true
     }
   }
 }
