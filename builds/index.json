@@ -196,5 +196,49 @@
     "drawers": 5,
     "units": 5,
     "dims": "264 × 119 × 230 mm"
+  },
+  {
+    "id": "59-wall-2w2h",
+    "title": "59 Wall Kit 2W-2H",
+    "tagline": "Three shallow drawers on the wall for cards, bits and screws - two narrow cases on top, one wide below.",
+    "mount": "wall",
+    "tier": "starter",
+    "length": 59,
+    "drawers": 3,
+    "units": 3,
+    "dims": "176 × 122 × 89 mm"
+  },
+  {
+    "id": "59-wall-3w2h",
+    "title": "59 Wall Kit 3W-2H",
+    "tagline": "Five shallow drawers on the wall for cards, bits and small flat parts - three narrow cases on top, a wide and a narrow below.",
+    "mount": "wall",
+    "tier": "next",
+    "length": 59,
+    "drawers": 5,
+    "units": 5,
+    "dims": "264 × 122 × 89 mm"
+  },
+  {
+    "id": "59-undertable-2w2h",
+    "title": "59 Under-Table Kit 2W-2H",
+    "tagline": "Three shallow drawers under the table for cards, bits and screws - two narrow cases on top, one wide below.",
+    "mount": "under-table",
+    "tier": "starter",
+    "length": 59,
+    "drawers": 3,
+    "units": 3,
+    "dims": "176 × 119 × 104 mm"
+  },
+  {
+    "id": "59-undertable-3w2h",
+    "title": "59 Under-Table Kit 3W-2H",
+    "tagline": "Five shallow drawers under the table for cards, bits and small flat parts - three narrow cases on top, a wide and a narrow below.",
+    "mount": "under-table",
+    "tier": "next",
+    "length": 59,
+    "drawers": 5,
+    "units": 5,
+    "dims": "264 × 119 × 104 mm"
   }
 ]

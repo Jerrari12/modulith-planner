@@ -6373,7 +6373,9 @@ after we built the modulith website that essentially gave organizing kits a new 
   and go to the site.
 - **Shapes:** 2W-2H is 1W+1W on top with 2W below. 3W-2H is 1W+1W+1W on top with 2W+1W below. The planner's rules pass
   narrow-top and wide-top alike, so the preference rests on the vault's "Put narrower cases nearest the support".
-- **First set:** 165 and 185, both mounts, 8 kits. The other lengths warn that hardware positions are scaled from the 185.
+- **The set:** 59, 165 and 185, both mounts, 12 kits (Joey added the 59: "the under table and wall mount kits should include 59
+  series"; it hangs only, so it has no tabletop kit). 115, 240 and 270 are not done. Every 59 build carries the generator's
+  warning that its hardware positions are scaled from the 185 calibration, the 59 kits included, and their test expects it.
 - **The pages are the site's** (its branch `hanging-kits`): what to buy, the no-load-rating note, the bracket or rail listing.
   No new listings.
 - **A wrong instruction fixed for every wall build:** the bracket step told people to leave the screw heads "just proud",
@@ -6392,7 +6394,7 @@ after we built the modulith website that essentially gave organizing kits a new 
   does the lower 2W slide across two seated 1Ws without binding, and how does a top 1W come off when a 2W bridges below it.
   Merging this publishes the kit files, so the merge waits for that and for his go; deploy the planner first, then the site.
 
-Checks: `test/hanging-kits.test.mjs` and `test/kit-gallery-page.test.mjs`, new goldens for the 8 kits (8 manifests, 48 shots), unit suite 784
+Checks: `test/hanging-kits.test.mjs` and `test/kit-gallery-page.test.mjs`, new goldens for the 12 kits (12 manifests, 72 shots), unit suite 784
 pass, 5 skipped, and `M28` in `test/simplify.test.mjs`, a timing gate that failed while GPU captures ran and passes alone. The site's BOM
 parity test passes against the site branch. An earlier note here that it fails on main was wrong: the site checkout beside this repo was
 two commits behind. E2E: the error-page case. In a browser the old address lands on `modulith.systems/builds/`. Sol 01a18eb6, then the

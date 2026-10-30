@@ -22,8 +22,8 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const items = (rec) => { const d = clone(rec); sanitizeBuild(d, GEN2); return computeBom(d, GEN2).flatMap((s) => s.items); };
 const qty = (list, re) => list.filter((i) => re.test(i.name)).reduce((a, i) => a + i.qty, 0);
 
-test('the first set: 165 and 185, wall and under-table, both shapes', () => {
-  const want = [165, 185].flatMap((l) => ['wall', 'undertable'].flatMap((m) => ['2w2h', '3w2h'].map((s) => `${l}-${m}-${s}`)));
+test('the set: 59, 165 and 185, wall and under-table, both shapes', () => {
+  const want = [59, 165, 185].flatMap((l) => ['wall', 'undertable'].flatMap((m) => ['2w2h', '3w2h'].map((s) => `${l}-${m}-${s}`)));
   assert.deepEqual(hanging.map((k) => k.id).sort(), want.sort());
 });
 
@@ -58,7 +58,9 @@ for (const row of hanging) {
     assert.equal(Rs.instructionsBlockReason(), null);
     const gen = generateManifest(migrateOfficialBuild(readKit(`${row.id}.json`).build, 1));
     assert.ok(gen.manifest, (gen.errors || []).join('; '));
-    assert.deepEqual(gen.warnings, [], 'no warning: 165 and 185 hardware positions are measured, not scaled');
+    // 165 and 185 hardware positions are measured; the 59's are scaled, and the planner says so on every 59 build
+    if (row.length === 59) assert.match(gen.warnings.join(' '), /scaled from the 185 calibration/);
+    else assert.deepEqual(gen.warnings, []);
   });
 
   test(`${row.id}: the BOM bills what the kit page tells a buyer`, () => {
