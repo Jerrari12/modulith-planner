@@ -6312,3 +6312,25 @@ Tests: unit suite green (parity/site-boms green once the site re-vendored); gold
 Live 2026-10-29 as f793fcd3 (run 40989052577). `side-cover-preview-prod.mjs` green: all 27 side covers in the deployed
 manifest (613 previews), and 185-1H, 59-0.5H and 240-3H (plate) render alone with no page errors; the same check failed on
 8acbc842, before. https://modulith.systems/parts/185-side-cover-1h/ shows the 3D preview from this deploy.
+
+## 2026-10-29 · The idle gate counts a wake-drawn frame in a change's window, even when the safety net was due too
+
+The e2e "an edit draws again at once" failed on CI four times (e9029b0 and c4ba965 with label v2, then 5b8d42f and
+aef2c8f with no stage code), each time with the edit on the stage (run 40915714215: placed 4, instances 61, the post-edit
+values) and `idleStats().woken` unmoved for 60 s. The count asked for a frame within IDLE_SETTLE_MS of the change AND within
+IDLE_KEEPALIVE_MS of the last draw; on the runner every frame in the window evidently came a second or more after the last
+(inferred from those counts; not reproducible here: a stall injected into the page did not move Chrome's frame timestamps).
+
+- `idleFrame` (main.js): the draw decision is unchanged (`wake || keepalive`, `wake = force || busy || in the settle window`);
+  `woken` now counts a draw when `wake` holds inside a change's window, whether or not the safety net was due as well. The
+  tick that first sees a change is always inside its window, so a gate that sees the edit always counts it.
+- What the case can still miss (Terra 01a188bb): `woken` means "a wake-drawn frame in a change's window", busy and force
+  included, so a wake that ignores the settle window survives while the rebuild keeps the gate busy - as it did under the
+  old count.
+
+Tests: the case passes at 0x and 6x throttle under E2E_SOFT. Mutants, each against the new count and the old: a blind gate
+(changedAt never moves) killed under both; a wake without the settle window survives both. Review: Terra 01a188bb (two
+comment corrections taken).
+
+Live 2026-10-29 as f793fcd3 (main f793fcd, run 40989052577 all green, shard 4 included; it carried the side covers). Live
+check on the stamp: the phone tab bar and the staggered spool tags (baroff-live), no page errors.
