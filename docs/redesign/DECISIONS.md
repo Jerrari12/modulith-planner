@@ -6286,3 +6286,29 @@ read v1 in an old tab), both fixed; round 2 ship.
   counter missed it, the case's documented limit; done-scene fixed the case (deployed with f793fcd3). The steam case was
   the shard reshuffle against its 60 s wait (now 180 s). The boot-repaint guard in `setLabelPalette` was not needed for
   either; it stays as a harmless saving.
+
+## 2026-10-29 · Side covers are catalog parts: released in the catalog, a part preview each
+
+Joey: "we need to add side covers to the catalog, they are in the planner, as well as on printables and thangs". The
+planner already drew, billed and coloured side covers (since 2026-10-17), but the MODULITH site could not list their 27
+sizes as parts: its registry waits for the catalog to release `sideCover` and for this repo's part-preview manifest to
+carry every slug, and neither was true.
+
+- **The catalog** (`js/catalog/data.js`): `sideCover` leaves GEN2.unreleased (the six Printables and Thangs pages went
+  live 2026-10-10). This is the first catalog edit made in this repo: since the cutover the old planner is a forward page
+  and its data.js froze at 92c055d, so `test/catalog-vendor.test.mjs` keeps the sha pin as a change detector and drops the
+  byte comparison against the frozen copy (the merge plan's own "until cutover makes the merged repo the source"). The
+  BOM parity oracle lists the catalog's lead as an AHEAD `set` entry. The Parts list's side-cover override stays: it is
+  the only source of the exact store pages (LINK_OVERRIDES carries none).
+- **The part preview** (`previewProbe`): `<L>-side-cover-<h>h` probes a 1W unit of that height (the bill folds its two
+  covers into one SideCover row), in the collection hue, with the existing face-down plate pose (checked by eye: face on
+  the plate, dovetails up; a 270 1.5H is correctly too big for a 256 plate). part-preview-support.json 586 -> 613.
+- **Deploy**: 5b8d42f and its re-trigger aef2c8f each failed CI on the idle-gate case only (runner timing: rebuild frames
+  over 1 s on the runner looked like the safety net); it went out with done-scene's fix f793fcd.
+
+Tests: unit suite green (parity/site-boms green once the site re-vendored); goldens only gained entries. Review: Sol
+01a1886f (no objections). The site's 27 part pages (modulith-site 5e69e44, with sliced print estimates) went live after.
+
+Live 2026-10-29 as f793fcd3 (run 40989052577). `side-cover-preview-prod.mjs` green: all 27 side covers in the deployed
+manifest (613 previews), and 185-1H, 59-0.5H and 240-3H (plate) render alone with no page errors; the same check failed on
+8acbc842, before. https://modulith.systems/parts/185-side-cover-1h/ shows the 3D preview from this deploy.
