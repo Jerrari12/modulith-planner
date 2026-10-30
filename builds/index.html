@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GEN2 Starter Kits — 3D Build Studio</title>
-<meta name="description" content="Ready-made GEN2 builds with interactive LEGO-style 3D assembly instructions. Print a starter kit, follow the steps, then expand it in the planner.">
+<title>MODULITH Starter Kits</title>
+<meta name="description" content="Ready-made MODULITH builds with interactive step-by-step 3D assembly instructions. Print a starter kit, follow the steps, then expand it in the planner.">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -91,7 +91,7 @@ a { color: var(--accent); }
 .hero .brand-link { color: #d7d8db; }
 .hero .brand-link:hover { color: var(--accent); }
 .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; }
-.brand-logo { height: 44px; width: auto; flex-shrink: 0; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.55)); }
+.brand-logo { height: 34px; width: auto; flex-shrink: 0; filter: drop-shadow(0 1px 4px rgba(0,0,0,0.55)); }
 .brand-mark {
   font-weight: 800;
   font-size: 1.5rem;
@@ -358,10 +358,10 @@ html[data-theme="dark"] .filter-chip.on { color: #180d20; }
   .hero-tagline h1 { font-size: 1.2rem; }
   .hero-bar { padding: 14px 18px; }
   .hero-tagline { left: 18px; right: 18px; }
-  /* the bar runs out of room with brand + 2 links; jerrari3d.com also lives in
+  /* the bar runs out of room with brand + 2 links; modulith.systems also lives in
      the footer, so it's the one that goes */
   .hero-bar-actions .brand-link { display: none; }
-  .brand-logo { height: 34px; }
+  .brand-logo { height: 24px; }
   .brand-mark { font-size: 1.2rem; }
   .brand-sub { letter-spacing: 0.2em; font-size: 0.8rem; }
   #kits { padding-left: 18px; padding-right: 18px; }
@@ -377,8 +377,8 @@ html[data-theme="dark"] .filter-chip.on { color: #180d20; }
   <div class="hero-shade"></div>
   <div class="hero-bar">
     <a class="brand" id="brand-home" href="../?ws=build">
-      <img class="brand-logo" src="../img/jerrari-logo.svg" alt="Jerrari Design" width="26" height="44" onerror="this.remove()">
-      <span class="brand-word"><span class="brand-mark">GEN2</span><span class="brand-sub">KITS</span></span>
+      <img class="brand-logo" src="../img/modulith-logo.svg" alt="MODULITH" width="157" height="34" onerror="this.remove()">
+      <span class="brand-word"><span class="brand-sub">KITS</span></span>
     </a>
     <span class="hero-bar-actions">
       <button id="theme-toggle" type="button" role="switch" aria-checked="false" aria-label="Dark mode" title="Dark mode">
@@ -386,12 +386,12 @@ html[data-theme="dark"] .filter-chip.on { color: #180d20; }
         <svg class="tt-moon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.6 14.2A8.6 8.6 0 0 1 9.8 3.4a8.6 8.6 0 1 0 10.8 10.8z"/></svg>
         <span class="tt-knob"></span>
       </button>
-      <a class="nav-pill planner-link" href="../?ws=build">&#8592; GEN2 Planner</a>
-      <a class="brand-link" href="https://www.jerrari3d.com/gen2-modular-system" target="_blank" rel="noopener">JERRARI3D.com →</a>
+      <a class="nav-pill planner-link" href="../?ws=build">&#8592; Planner</a>
+      <a class="brand-link" href="https://modulith.systems" target="_blank" rel="noopener">modulith.systems →</a>
     </span>
   </div>
   <div class="hero-tagline">
-    <h1>GEN2 starter kits &middot; lay the first brick.</h1>
+    <h1>MODULITH starter kits &middot; your first build.</h1>
     <p>A ready-made build to get you going - follow the interactive 3D guide step by step, with every part, quantity and download link included. Expand it or make it your own in the planner whenever you're ready.</p>
     <div class="hero-chips"><span>Nothing to design</span><span>Interactive 3D guide</span><span>Full parts list</span></div>
   </div>
@@ -400,10 +400,10 @@ html[data-theme="dark"] .filter-chip.on { color: #180d20; }
 <div id="kits"><div id="empty">Loading kits…</div></div>
 
 <footer class="footer">
-  GEN2 QuickLock Modular System by <a href="https://www.jerrari3d.com" target="_blank" rel="noopener">JERRARI3D</a>
+  <a href="https://modulith.systems" target="_blank" rel="noopener">MODULITH</a> by Jerrari
   · Models on <a href="https://www.printables.com/@Jerrari" target="_blank" rel="noopener">Printables</a>
   and <a href="https://thangs.com/designer/Jerrari" target="_blank" rel="noopener">Thangs</a>
-  · <a class="planner-link" href="../?ws=build">GEN2 Planner</a>
+  · <a class="planner-link" href="../?ws=build">Planner</a>
 </footer>
 
 <script>
@@ -539,7 +539,7 @@ const TIERS = [
   // its grip in, so the handles and their screws left the list — 42 -> 39 and
   // 68 -> 63, and there is no longer anything to buy).
   { key: 'starter', label: '2W-2H', blurb: 'Start here - 3 drawers, 39 printed parts and nothing to buy.' },
-  { key: 'next',    label: '3W-2H', blurb: 'One column wider - 5 drawers, 63 printed parts, and the covers stagger brick-style.' },
+  { key: 'next',    label: '3W-2H', blurb: 'One column wider - 5 drawers, 63 printed parts, and staggered covers.' },
 ];
 
 let ALL_KITS = [];
@@ -624,7 +624,7 @@ function renderCards(kits, main) {
     }
     const title = document.createElement('h2');
     title.className = 'kit-title';
-    title.textContent = k.title;
+    title.textContent = String(k.title).replace(/^GEN2\s+/, '');   // shown without GEN2, as the planner's top bar does (js/ui/names.js); the kit's stored title is untouched
     const tag = document.createElement('p');
     tag.className = 'kit-tagline';
     tag.textContent = k.tagline || '';
@@ -721,9 +721,10 @@ function renderCards(kits, main) {
      case — it leaves for Printables/Thangs and the viewer never sees it, so
      kit-dl:<store> is the only way to know whether the one-download link is
      actually used. That's the whole question behind the feature, hence the one
-     event. Same site code as the viewer (see the tag in ../index.html for why
-     it's separate from the planner's). -->
-<script data-goatcounter="https://jerrari-build.goatcounter.com/count"
+     event. The same counter as the planner's (../index.html): since the cutover
+     this page is part of the planner, and `jerrari-build` keeps only what still
+     runs on gen2build.jerrari3d.com (moved 2026-10-30). -->
+<script data-goatcounter="https://jerrari.goatcounter.com/count"
         async src="https://gc.zgo.at/count.js"></script>
 <script>
 // dark-mode switch — mirrors the viewer's (same origin, same gen2-theme key,

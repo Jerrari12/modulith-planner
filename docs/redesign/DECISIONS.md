@@ -6334,3 +6334,24 @@ comment corrections taken).
 
 Live 2026-10-29 as f793fcd3 (main f793fcd, run 40989052577 all green, shard 4 included; it carried the side covers). Live
 check on the stamp: the phone tab bar and the staggered spool tags (baroff-live), no page errors.
+
+## 2026-10-30 · The kit gallery says MODULITH
+
+The silk session's site review found `planner.modulith.systems/builds/` still titled "GEN2 Starter Kits — 3D Build Studio",
+with "LEGO-style" and "GEN2 QuickLock" on it. The page stayed behind in the rename. Joey: yes to the small fix, not the restyle.
+
+- **Words:** the title, the description, the headline ("MODULITH starter kits · your first build."), the back link
+  ("← Planner"), the footer ("MODULITH by Jerrari"), the 3W-2H blurb ("staggered covers") and two taglines in
+  `builds/index.json`.
+- **Card titles** drop GEN2 for display only, as the top bar does (Joey 2026-10-16: drop GEN2, do not add MODULITH), so
+  "185 Tabletop Kit 2W-2H". The kits' stored titles are untouched.
+- **Logo and links:** the MODULITH wordmark replaces the Jerrari mark and "GEN2", and jerrari3d.com becomes
+  modulith.systems. The Printables and Thangs links stay: those listings are still named GEN2.
+- **Counter:** `jerrari-build` -> `jerrari`, the planner's since the cutover. This page's visits and `kit-dl:` events
+  start there; their earlier history stays on `jerrari-build`.
+- **Not changed:** the page's look, its old background photo, the kit files' own taglines (the 3D instructions' intro
+  still reads "the standard GEN2 starter build"), the planner's "Browse the official GEN2 kits →" links, and the
+  unreferenced `builds/banner.html`.
+
+Tests: `kit-gallery-page.test.mjs` (fails 3 of 3 on the old page), `official-builds.test.mjs`. Measured at 1400x900 and
+360x675: 10 cards, no old name in the page text, no overflow, no page errors or failed loads. Terra 01a18dd2: no findings.
