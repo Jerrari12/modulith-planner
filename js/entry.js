@@ -22,8 +22,8 @@
  *   6. bare root      the current recommended starter
  */
 
-/* The kit the BARE ROOT opens. 185 is deliberate: with 165 it is one of only
- * two collections that generate with ZERO runtime warnings (115/240/270 each
+/* The kit the BARE ROOT opens. 185 is deliberate: with 165 and 59 it is one of only
+ * three collections that generate with ZERO runtime warnings (115/240/270 each
  * report "hardware positions are scaled from the 185 calibration"), which is
  * not a sentence the front door should say.
  * ⚠ Changing this changes what `/` opens for everyone, immediately and by

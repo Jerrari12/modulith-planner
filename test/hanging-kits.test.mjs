@@ -58,9 +58,7 @@ for (const row of hanging) {
     assert.equal(Rs.instructionsBlockReason(), null);
     const gen = generateManifest(migrateOfficialBuild(readKit(`${row.id}.json`).build, 1));
     assert.ok(gen.manifest, (gen.errors || []).join('; '));
-    // 165 and 185 hardware positions are measured; the 59's are scaled, and the planner says so on every 59 build
-    if (row.length === 59) assert.match(gen.warnings.join(' '), /scaled from the 185 calibration/);
-    else assert.deepEqual(gen.warnings, []);
+    assert.deepEqual(gen.warnings, [], 'an official kit carries no warning');
   });
 
   test(`${row.id}: the BOM bills what the kit page tells a buyer`, () => {

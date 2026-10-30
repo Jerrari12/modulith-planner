@@ -6374,8 +6374,9 @@ after we built the modulith website that essentially gave organizing kits a new 
 - **Shapes:** 2W-2H is 1W+1W on top with 2W below. 3W-2H is 1W+1W+1W on top with 2W+1W below. The planner's rules pass
   narrow-top and wide-top alike, so the preference rests on the vault's "Put narrower cases nearest the support".
 - **The set:** 59, 165 and 185, both mounts, 12 kits (Joey added the 59: "the under table and wall mount kits should include 59
-  series"; it hangs only, so it has no tabletop kit). 115, 240 and 270 are not done. Every 59 build carries the generator's
-  warning that its hardware positions are scaled from the 185 calibration, the 59 kits included, and their test expects it.
+  series"; it hangs only, so it has no tabletop kit). 115, 240 and 270 are not done. The generator's warning that hardware positions are scaled from the 185 no longer fires on a 59
+  (Joey: "they should be fine", wall and under-table). It was one rule for every length but 165 and 185, from 2026-07-10, not a
+  finding about the 59. 115, 240 and 270 keep it.
 - **The pages are the site's** (its branch `hanging-kits`): what to buy, the no-load-rating note, the bracket or rail listing.
   No new listings.
 - **A wrong instruction fixed for every wall build:** the bracket step told people to leave the screw heads "just proud",
