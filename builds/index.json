@@ -118,7 +118,7 @@
     "length": 165,
     "drawers": 3,
     "units": 3,
-    "dims": "181 × 122 × 195 mm"
+    "dims": "176 × 122 × 195 mm"
   },
   {
     "id": "185-wall-2w2h",
@@ -129,7 +129,7 @@
     "length": 185,
     "drawers": 3,
     "units": 3,
-    "dims": "181 × 122 × 215 mm"
+    "dims": "176 × 122 × 215 mm"
   },
   {
     "id": "165-wall-3w2h",
@@ -140,7 +140,7 @@
     "length": 165,
     "drawers": 5,
     "units": 5,
-    "dims": "269 × 122 × 195 mm"
+    "dims": "264 × 122 × 195 mm"
   },
   {
     "id": "185-wall-3w2h",
@@ -151,7 +151,7 @@
     "length": 185,
     "drawers": 5,
     "units": 5,
-    "dims": "269 × 122 × 215 mm"
+    "dims": "264 × 122 × 215 mm"
   },
   {
     "id": "165-undertable-2w2h",
@@ -162,7 +162,7 @@
     "length": 165,
     "drawers": 3,
     "units": 3,
-    "dims": "181 × 119 × 208 mm"
+    "dims": "176 × 119 × 208 mm"
   },
   {
     "id": "185-undertable-2w2h",
@@ -173,7 +173,7 @@
     "length": 185,
     "drawers": 3,
     "units": 3,
-    "dims": "181 × 119 × 230 mm"
+    "dims": "176 × 119 × 230 mm"
   },
   {
     "id": "165-undertable-3w2h",
@@ -184,7 +184,7 @@
     "length": 165,
     "drawers": 5,
     "units": 5,
-    "dims": "269 × 119 × 208 mm"
+    "dims": "264 × 119 × 208 mm"
   },
   {
     "id": "185-undertable-3w2h",
@@ -195,6 +195,6 @@
     "length": 185,
     "drawers": 5,
     "units": 5,
-    "dims": "269 × 119 × 230 mm"
+    "dims": "264 × 119 × 230 mm"
   }
 ]

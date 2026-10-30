@@ -5477,7 +5477,7 @@ test('a build link that cannot be shown: its words stay text, and the planner of
   assert.equal(await page.locator('#loading-text img').count(), 0, 'no markup from the link');
   assert.match(await text(page, '#loading-text'), /"<img src=x onerror=/, 'the words shown as text');
   assert.equal(await page.locator('#loading-text a[href="index.html?ws=build&new=1&setup=1"]').count(), 1, 'Start a new build');
-  assert.equal(await page.locator('#loading-text a[href="builds/"]').count(), 1, 'the kits');
+  assert.equal(await page.locator('#loading-text a[href="https://modulith.systems/builds/"]').count(), 1, 'the kits');
   await ctx.close();
 });
 

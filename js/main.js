@@ -3218,7 +3218,7 @@ async function loadStaticKit() {
   } catch (e) {
     track('error:kit-not-found');
     bootFail('<strong>This build isn’t available - it may have moved or been renamed.</strong>' +
-      '<br><br><a href="builds/">Browse the official GEN2 kits →</a>', 'static kit "' + KIT + '": ' + e.message);
+      '<br><br><a href="https://modulith.systems/builds/">Browse the official kits →</a>', 'static kit "' + KIT + '": ' + e.message);
   }
   PARTS_BASE = KIT_URL + 'parts/';
 }
@@ -3309,14 +3309,14 @@ if (IS_PART) {
     // in the planner, a way out. The stress test, 2026-10-15: a stored build that cannot be shown reopened on every reload,
     // the bare address included, so the page had no exit. A fresh build and the kits never read the stored one
     const way = document.documentElement.dataset.ws
-      ? '<br><br><a href="index.html?ws=build&amp;new=1&amp;setup=1">Start a new build →</a> · <a href="builds/">Browse the official GEN2 kits →</a>' : '';
+      ? '<br><br><a href="index.html?ws=build&amp;new=1&amp;setup=1">Start a new build →</a> · <a href="https://modulith.systems/builds/">Browse the official kits →</a>' : '';
     bootFail('<strong>Can’t show this build yet</strong><br><br>' + gen.errors.map(e => '• ' + escHtml(e)).join('<br>') + way,
       'unsupported build: ' + gen.errors.join('; '));
   }
   manifest = gen.manifest;
   PARTS_BASE = ASSET_BASE + 'parts/' + (manifest.collection || '185') + '/';   // one self-contained pool per collection (parts/165, parts/185)
 } else if (WANTS_OFFICIAL) {
-  const GALLERY = '<br><br><a href="builds/">Browse the official GEN2 kits →</a>';
+  const GALLERY = '<br><br><a href="https://modulith.systems/builds/">Browse the official kits →</a>';
   // `ev` names the failure for analytics — never the id itself, which at this
   // point is unvalidated visitor input (and a bad id is the whole story anyway:
   // it means a link we printed somewhere is wrong)
@@ -11717,7 +11717,6 @@ function captureShot() {
       Handle: dark, Accent: dark, Label: { name: 'White', hex: '#eef0f4' },
       CoverL: graphite, CoverU: graphite, FootrailL: graphite, FootrailU: graphite,
       Foot: dark, QuickLock: graphite, Stopper: graphite, Rail: graphite,
-      SideCover: graphite, 'SideCover:FACE': graphite,   // else a new kit's card draws them in the instruction magenta
       Drawer: { name: 'Shell', hex: '#3c3f45' },
     };
     useCustom = true;

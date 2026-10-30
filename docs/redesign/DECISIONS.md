@@ -6360,31 +6360,40 @@ Tests: `kit-gallery-page.test.mjs` (fails 3 of 3 on the old page), `official-bui
   live page at 1400x900 and 360x675: the title and headline, 10 cards ("115 Tabletop Kit 2W-2H"), no old name in the text,
   the `jerrari` counter, modulith.systems links, the logo loaded, no overflow, no page errors or failed loads.
 
-## 2026-10-30 · Wall and under-table starter kits (on a branch, not live)
+## 2026-10-30 · Wall and under-table starter kits, and the kit gallery retires (on branches, not live)
 
 Joey: kits for wall and under-table, "basically the same thing, but excluding the foot rails and instead requiring the wall
 mount bracket or under table rails", "higher density on top". He saw the proposal and said "these look good", read as
-approving its recommended answers.
+approving its recommended answers. Then, seeing the gallery: "the old build page for the gen2 planner is not longer needed,
+after we built the modulith website that essentially gave organizing kits a new home".
 
+- **The gallery retires.** `builds/index.html` only forwards to `modulith.systems/builds/` (GitHub Pages cannot send a 301,
+  so a refresh, a canonical and a plain link). The kit files stay: every `?build=<id>` opens from them, printed links
+  included, and `index.json` is what the site vendors. The planner's three error links now say "Browse the official kits"
+  and go to the site.
 - **Shapes:** 2W-2H is 1W+1W on top with 2W below. 3W-2H is 1W+1W+1W on top with 2W+1W below. The planner's rules pass
   narrow-top and wide-top alike, so the preference rests on the vault's "Put narrower cases nearest the support".
 - **First set:** 165 and 185, both mounts, 8 kits. The other lengths warn that hardware positions are scaled from the 185.
-- **Downloads:** no new listings. A card links the existing bracket or rail listing, named for what it is, plus the
-  planner's parts list. Clicks count as `kit-hang-dl:<store>`, apart from the tabletop bundle's `kit-dl:`.
-- **The page says what to buy per mount:** wood screws (wall 4 or 6, under-table 6 or 8), anchors by wall, the table-thickness
-  check, magnets (6 or 10, the kits keep the magnet closure, and the catch is optional). It says no load rating is published
-  and that narrow-on-top is design guidance, not a load test. No printed-part count: 39 and 63 are not reconciled with the BOM.
+- **The pages are the site's** (its branch `hanging-kits`): what to buy, the no-load-rating note, the bracket or rail listing.
+  No new listings.
 - **A wrong instruction fixed for every wall build:** the bracket step told people to leave the screw heads "just proud",
   which the vault records as wrong (the pegs are sleeves, a proud head stops the case going on). It now says so, and names
   studs and anchors. Only wall builds' step text changes; no golden held the old wording.
-- **Sizes** are the stage's `buildSize`, side covers included. The tabletop rows' 176 and 264 predate side covers (the
-  stage now says 181 and 269) and are left for Joey to decide.
-- **Card art** is `?shot=1`, whose palette now gives side covers graphite. Existing cards were not re-shot.
+- **Two kit taglines brought into line.** The gallery rename edited `index.json` but not the 185 and 240 2W-2H kit files, which
+  still said GEN2, and the site's vendor tool refuses a file and row that disagree. Nothing re-vendored since, so nothing broke;
+  the next re-vendor would have.
+- **Sizes** are the stage's `buildSize` less the optional side covers (2.5 mm a side), the way the tabletop rows state theirs and
+  the site lists them, outside the kit. So 176 and 264 wide, where the stage's chip says 181 and 269.
+- **The printed-part count is settled, not open:** the site's 39 and 63 are right (hand-checked against the STL bodies,
+  `test/builds.test.js`). The 37 and 59 that raised the question were 43 less the 6 feet and 67 less the 8 feet: a sum that kept the
+  side covers and dropped the feet. The same rule gives 34 and 26 for the two 185 2W-2H hanging kits, which plus 4 side covers is
+  the planner's own 38 and 30.
 - **Not proven:** no kit has been printed in this arrangement. Before anything is published Joey checks one 185 of each mount:
   does the lower 2W slide across two seated 1Ws without binding, and how does a top 1W come off when a 2W bridges below it.
+  Merging this publishes the kit files, so the merge waits for that and for his go; deploy the planner first, then the site.
 
-Checks: `test/hanging-kits.test.mjs` (18 mutants, one survivor fixed, then all dead), new goldens for the 8 kits (8 manifests,
-48 shots), unit suite 792 pass, 5 skipped, 1 fail. The fail is `test/parity/site-boms.test.mjs`, which fails the same way on
-pristine main: its site artifact is from an older planner commit. Gallery and the Parts, Assemble and Build routes checked in a
-browser at 1280 and 360 wide. Sol 01a18e08: no findings. Terra 01a18e09 (paired sample): one, discarded, the vault's catalog
-row names #6 or #8.
+Checks: `test/hanging-kits.test.mjs` and `test/kit-gallery-page.test.mjs`, new goldens for the 8 kits (8 manifests, 48 shots), unit suite 784
+pass, 5 skipped, and `M28` in `test/simplify.test.mjs`, a timing gate that failed while GPU captures ran and passes alone. The site's BOM
+parity test passes against the site branch. An earlier note here that it fails on main was wrong: the site checkout beside this repo was
+two commits behind. E2E: the error-page case. In a browser the old address lands on `modulith.systems/builds/`. Sol 01a18eb6, then the
+combined diff: no findings. Terra 01a18e09 on the first version: one, discarded, the vault's catalog names #6 or #8.

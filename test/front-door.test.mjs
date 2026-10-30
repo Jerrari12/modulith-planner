@@ -55,13 +55,9 @@ test('app.js opens the shell by shellWorkspace, and the deploy stamps that impor
   assert.ok(yml.includes(`sed -i "s|'./entry.js'|'./entry.js?v=$V'|" js/app.js`), 'pages.yml stamps app.js\'s import of entry.js');
 });
 
-test('nothing here sends a visitor to the old planner: Customize opens this app\'s Build, the kit gallery its workspaces', () => {
+test('nothing here sends a visitor to the old planner: Customize opens this app\'s Build', () => {
   const main = read('js', 'main.js');
   assert.ok(!/https?:\/\/gen2planner\.jerrari3d\.com/.test(main), 'main.js links no old planner address');
   assert.ok(/const plannerHandoffUrl = \(\) => location\.pathname \+ '\?ws=build&build=' \+ encodeURIComponent\(OFFICIAL\.id\) \+ '#build=' \+ btoa\(/.test(main),
     'Customize hands the current build to this page\'s Build workspace, with its kit');
-  const gallery = read('builds', 'index.html');
-  assert.ok(!/https?:\/\/gen2planner\.jerrari3d\.com/.test(gallery), 'the gallery links no old planner address');
-  assert.ok(/open\.href = '\.\.\/\?ws=assemble&build=' \+ encodeURIComponent\(k\.id\)/.test(gallery), 'a kit card opens the kit in Assemble');
-  assert.equal((gallery.match(/href="\.\.\/\?ws=build"/g) || []).length, 3, 'the brand and both planner links open Build');
 });
