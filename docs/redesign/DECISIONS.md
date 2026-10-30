@@ -6355,3 +6355,7 @@ with "LEGO-style" and "GEN2 QuickLock" on it. The page stayed behind in the rena
 
 Tests: `kit-gallery-page.test.mjs` (fails 3 of 3 on the old page), `official-builds.test.mjs`. Measured at 1400x900 and
 360x675: 10 cards, no old name in the page text, no overflow, no page errors or failed loads. Terra 01a18dd2: no findings.
+
+- **Live 2026-10-30 at `4dc5293`** (pushed 13:20, live 13:57; the run took longer than usual, no case failed). Checked on the
+  live page at 1400x900 and 360x675: the title and headline, 10 cards ("115 Tabletop Kit 2W-2H"), no old name in the text,
+  the `jerrari` counter, modulith.systems links, the logo loaded, no overflow, no page errors or failed loads.
