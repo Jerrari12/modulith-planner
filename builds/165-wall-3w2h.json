@@ -1,0 +1,80 @@
+{
+  "gen2OfficialBuild": 1,
+  "id": "165-wall-3w2h",
+  "title": "165 Wall Kit 3W-2H",
+  "tagline": "Five drawers on the wall for sockets, calipers and hobby bits - three narrow cases on top, a wide and a narrow below.",
+  "buildVersion": 1,
+  "build": {
+    "mount": "wall",
+    "length": 165,
+    "printer": "any",
+    "customBed": {
+      "x": null,
+      "y": null
+    },
+    "spaceW": null,
+    "spaceH": null,
+    "faceStyle": "classic",
+    "doorStyle": "essential",
+    "handleStyle": "deco",
+    "wallStagger": false,
+    "backCover": false,
+    "buildPlate": "powder",
+    "removedStoppers": [],
+    "gridW": 6,
+    "gridH": 4,
+    "placed": [
+      {
+        "id": 1,
+        "x": 1,
+        "y": 0,
+        "w": 1,
+        "hh": 2,
+        "fill": "decor",
+        "shelves": 0,
+        "closure": "magnet"
+      },
+      {
+        "id": 2,
+        "x": 2,
+        "y": 0,
+        "w": 1,
+        "hh": 2,
+        "fill": "decor",
+        "shelves": 0,
+        "closure": "magnet"
+      },
+      {
+        "id": 3,
+        "x": 3,
+        "y": 0,
+        "w": 1,
+        "hh": 2,
+        "fill": "decor",
+        "shelves": 0,
+        "closure": "magnet"
+      },
+      {
+        "id": 4,
+        "x": 1,
+        "y": 2,
+        "w": 2,
+        "hh": 2,
+        "fill": "decor",
+        "shelves": 0,
+        "closure": "magnet"
+      },
+      {
+        "id": 5,
+        "x": 3,
+        "y": 2,
+        "w": 1,
+        "hh": 2,
+        "fill": "decor",
+        "shelves": 0,
+        "closure": "magnet"
+      }
+    ],
+    "nextId": 6
+  }
+}

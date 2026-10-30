@@ -15,8 +15,8 @@ const OLD = /GEN2|LEGO|brick|JERRARI3D|Build Studio/i;
 
 test('what the page says: no old name in its markup, its tier blurbs or its kit taglines', () => {
   assert.doesNotMatch(markup, OLD);
-  const blurbs = [...html.matchAll(/blurb: '([^']*)'/g)].map((m) => m[1]);
-  assert.equal(blurbs.length, 2, 'both tiers read');
+  const blurbs = [...html.matchAll(/^ +(?:tabletop|wall|'under-table'): '([^']*)'/gm)].map((m) => m[1]);
+  assert.equal(blurbs.length, 6, 'both tiers read, per mount');
   for (const b of blurbs) assert.doesNotMatch(b, OLD);
   for (const k of index) assert.doesNotMatch(k.tagline || '', OLD, k.id);
   assert.match(html, /<title>MODULITH Starter Kits<\/title>/);

@@ -11717,6 +11717,7 @@ function captureShot() {
       Handle: dark, Accent: dark, Label: { name: 'White', hex: '#eef0f4' },
       CoverL: graphite, CoverU: graphite, FootrailL: graphite, FootrailU: graphite,
       Foot: dark, QuickLock: graphite, Stopper: graphite, Rail: graphite,
+      SideCover: graphite, 'SideCover:FACE': graphite,   // else a new kit's card draws them in the instruction magenta
       Drawer: { name: 'Shell', hex: '#3c3f45' },
     };
     useCustom = true;

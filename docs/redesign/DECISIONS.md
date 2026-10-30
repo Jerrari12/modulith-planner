@@ -6359,3 +6359,32 @@ Tests: `kit-gallery-page.test.mjs` (fails 3 of 3 on the old page), `official-bui
 - **Live 2026-10-30 at `4dc5293`** (pushed 13:20, live 13:57; the run took longer than usual, no case failed). Checked on the
   live page at 1400x900 and 360x675: the title and headline, 10 cards ("115 Tabletop Kit 2W-2H"), no old name in the text,
   the `jerrari` counter, modulith.systems links, the logo loaded, no overflow, no page errors or failed loads.
+
+## 2026-10-30 · Wall and under-table starter kits (on a branch, not live)
+
+Joey: kits for wall and under-table, "basically the same thing, but excluding the foot rails and instead requiring the wall
+mount bracket or under table rails", "higher density on top". He saw the proposal and said "these look good", read as
+approving its recommended answers.
+
+- **Shapes:** 2W-2H is 1W+1W on top with 2W below. 3W-2H is 1W+1W+1W on top with 2W+1W below. The planner's rules pass
+  narrow-top and wide-top alike, so the preference rests on the vault's "Put narrower cases nearest the support".
+- **First set:** 165 and 185, both mounts, 8 kits. The other lengths warn that hardware positions are scaled from the 185.
+- **Downloads:** no new listings. A card links the existing bracket or rail listing, named for what it is, plus the
+  planner's parts list. Clicks count as `kit-hang-dl:<store>`, apart from the tabletop bundle's `kit-dl:`.
+- **The page says what to buy per mount:** wood screws (wall 4 or 6, under-table 6 or 8), anchors by wall, the table-thickness
+  check, magnets (6 or 10, the kits keep the magnet closure, and the catch is optional). It says no load rating is published
+  and that narrow-on-top is design guidance, not a load test. No printed-part count: 39 and 63 are not reconciled with the BOM.
+- **A wrong instruction fixed for every wall build:** the bracket step told people to leave the screw heads "just proud",
+  which the vault records as wrong (the pegs are sleeves, a proud head stops the case going on). It now says so, and names
+  studs and anchors. Only saved wall builds' step text changes; no golden held the old wording.
+- **Sizes** are the stage's `buildSize`, side covers included. The tabletop rows' 176 and 264 predate side covers (the
+  stage now says 181 and 269) and are left for Joey to decide.
+- **Card art** is `?shot=1`, whose palette now gives side covers graphite. Existing cards were not re-shot.
+- **Not proven:** no kit has been printed in this arrangement. Before anything is published Joey checks one 185 of each mount:
+  does the lower 2W slide across two seated 1Ws without binding, and how does a top 1W come off when a 2W bridges below it.
+
+Checks: `test/hanging-kits.test.mjs` (18 mutants, one survivor fixed, then all dead), 16 new kit goldens (8 manifests, 48
+shots), unit suite 792 pass, 5 skipped, 1 fail. The fail is `test/parity/site-boms.test.mjs`, which fails the same way on
+pristine main: its site artifact is from an older planner commit. Gallery and the Parts, Assemble and Build routes checked in a
+browser at 1280 and 360 wide. Sol 01a18e08: no findings. Terra 01a18e09 (paired sample): one, discarded, the vault's catalog
+row names #6 or #8.

@@ -2474,7 +2474,7 @@ export function generateManifest(build, opts = {}) {
   } else if (isWall) {
     preSteps.push({
       title: bracketIds.length > 1 ? 'Mount the wall brackets' : 'Mount the wall bracket',
-      note: `Screw the bracket${bracketIds.length > 1 ? 's' : ''} flat to the wall · 2 wood screws per 1W column. The cases hang on the protruding screw-head pegs, so drive them until the heads stand just proud of the bracket.`,
+      note: `Screw the bracket${bracketIds.length > 1 ? 's' : ''} flat to the wall · 2 wood screws per 1W column, into a stud wherever you can, with wall anchors in drywall with no stud. The pegs are raised sleeves on the bracket and each screw seats fully inside its sleeve: a screw head left standing out stops the case going on.`,
       camera: cam(0, flatTopY, totalW, gridBottom, FIT),
       phases: [
         { enter: bracketIds.map(id => ({ id, from: [0, 0, 70] })) },       // hold the bracket to the wall

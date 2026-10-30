@@ -154,6 +154,15 @@ a { color: var(--accent); }
 }
 .tier-head h2 { font-size: 1.05rem; margin: 0; }
 .tier-head span { font-size: 0.85rem; color: var(--muted); }
+/* what a hanging kit needs besides its prints, once per mount above its tiers */
+.mount-note {
+  margin: 28px 0 0; padding: 14px 18px; font-size: 0.88rem;
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.mount-note h2 { font-size: 1.05rem; margin: 0 0 8px; }
+.mount-note ul { margin: 0 0 8px; padding-left: 20px; }
+.mount-note li { margin: 3px 0; }
+.mount-note p { margin: 0; color: var(--muted); }
 /* mount filter — only rendered once there's more than one mount to pick from */
 .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 22px 0 2px; }
 .filter-chip {
@@ -246,6 +255,7 @@ a { color: var(--accent); }
   transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 .kit-get:hover { color: #fff; background: rgba(0,0,0,0.58); border-color: rgba(255,255,255,0.45); }
+.kit-list { position: relative; z-index: 1; }   /* above .kit-open's card-wide overlay, like .kit-dl */
 .kit-more { position: relative; display: inline-flex; }
 .kit-more-btn {
   font: inherit; font-size: 0.72rem; line-height: 1; cursor: pointer;
@@ -451,7 +461,18 @@ const LENGTH_COLORS = { 59: '#f2f2f2', 115: '#9ea3a8', 165: '#3aa0e8', 185: '#ff
    file set is ever trimmed per length, the 3W cards are what breaks first.
    MIRROR RULE: these are LINKS_BY_LEN.kit from ../js/generate.js. Kept as a
    local map rather than an import so this page stays a plain script with no
-   generator dependency — update both together, same as the planner mirror. */
+   generator dependency — update both together, same as the planner mirror.
+   HANGING KITS have no bundle listing (Joey, 2026-10-30: no new listings), so
+   HANG_LINKS sends them to the listing for the part only they need, and the
+   card's parts list covers the rest. Mirrors LINKS_BY_LEN.wall and .rail; the
+   kit tests compare these to the rows the generator bills. */
+const HANG_LINKS = {
+  wall: { p: 'https://www.printables.com/model/1777719-gen2-wall-mount-brackets', t: 'https://than.gs/m/1574321' },
+  'under-table': {
+    165: { p: 'https://www.printables.com/model/1053557-gen2-rails-165-mini', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20Under%20Table%20Rails%20-%20165-1165793' },
+    185: { p: 'https://www.printables.com/model/1052357-gen2-rails-185-standard', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20Under%20Table%20Rails%20-%20185-1163830' },
+  },
+};
 const KIT_LINKS = {
   115: { p: 'https://www.printables.com/model/1146353-gen2-115-tabletop-starter-kit', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20115%20Tabletop%20Starter%20Kit-1245167' },
   165: { p: 'https://www.printables.com/model/1124278-gen2-165-tabletop-starter-kit', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20165%20Tabletop%20Starter%20Kit-1233752' },
@@ -538,9 +559,41 @@ const TIERS = [
   // Counts follow the kits' own BOM (2026-07-25: the Classic faceplate prints
   // its grip in, so the handles and their screws left the list — 42 -> 39 and
   // 68 -> 63, and there is no longer anything to buy).
-  { key: 'starter', label: '2W-2H', blurb: 'Start here - 3 drawers, 39 printed parts and nothing to buy.' },
-  { key: 'next',    label: '3W-2H', blurb: 'One column wider - 5 drawers, 63 printed parts, and staggered covers.' },
+  // The hanging blurbs quote no printed-part count: the tabletop numbers above
+  // are not reconciled with the BOM yet, so no new page repeats that sum.
+  { key: 'starter', label: '2W-2H', blurbs: {
+    tabletop: 'Start here - 3 drawers, 39 printed parts and nothing to buy.',
+    wall: 'Start here - 3 drawers: two 1W cases on the bracket, one 2W hanging below them.',
+    'under-table': 'Start here - 3 drawers: two 1W cases on the rail, one 2W hanging below them.',
+  } },
+  { key: 'next',    label: '3W-2H', blurbs: {
+    tabletop: 'One column wider - 5 drawers, 63 printed parts, and staggered covers.',
+    wall: 'One column wider - 5 drawers: three 1W cases on the bracket, a 2W and a 1W hanging below them.',
+    'under-table': 'One column wider - 5 drawers: three 1W cases on the rail, a 2W and a 1W hanging below them.',
+  } },
 ];
+/* What a hanging kit needs besides its prints. Quantities are the kits' own BOM
+   (the kit tests hold them to it). Every word on load is deliberate: no rating
+   exists and nothing has been load tested, so nothing here may read as either. */
+const MOUNT_NOTES = {
+  wall: {
+    head: 'Wall Mount kits: what to buy',
+    items: [
+      'Countersunk wood screws, #6 or #8: 4 for a 2W-2H kit, 6 for a 3W-2H kit.',
+      'Screw length and anchors depend on your wall. Go into a stud wherever you can; in drywall with no stud, use wall anchors. Any other wall material needs a fixing made for it.',
+      'Magnets for the drawer catch, 10×2 mm or 6×2 mm: 6 for a 2W-2H kit, 10 for a 3W-2H kit. The catch is optional.',
+    ],
+  },
+  'under-table': {
+    head: 'Under-Table kits: what to buy',
+    items: [
+      'Countersunk wood screws, #6 × 3/4 inch by default: 6 for a 2W-2H kit, 8 for a 3W-2H kit.',
+      'Check your table first. A 3/4 inch screw reaches about 16 mm into the top, so the top must be thick enough, and choose a length that cannot break through.',
+      'Magnets for the drawer catch, 10×2 mm or 6×2 mm: 6 for a 2W-2H kit, 10 for a 3W-2H kit. The catch is optional.',
+    ],
+  },
+};
+const LOAD_NOTE = 'No load rating is published for hanging builds, so judge what you store in them and check the fixings yourself. Narrow cases go on top because the case walls nearest the support carry hanging weight better; that is design guidance, not a load test.';
 
 let ALL_KITS = [];
 let mountFilter = 'all';
@@ -567,6 +620,7 @@ function render() {
   const shown = ALL_KITS.filter(k => mountFilter === 'all' || mountOf(k) === mountFilter);
   for (const m of present) {
     if (mountFilter !== 'all' && m.key !== mountFilter) continue;
+    if (MOUNT_NOTES[m.key]) main.appendChild(buildMountNote(MOUNT_NOTES[m.key]));
     for (const t of TIERS) {
       const group = shown.filter(k => mountOf(k) === m.key && (k.tier || TIERS[0].key) === t.key)
         .sort((a, b) => (a.length || 0) - (b.length || 0));
@@ -577,7 +631,7 @@ function render() {
       // with a single mount the label would just repeat itself on every heading
       h.textContent = present.length > 1 ? `${m.label} · ${t.label}` : t.label;
       const s = document.createElement('span');
-      s.textContent = t.blurb;
+      s.textContent = t.blurbs[m.key];
       head.append(h, s);
       const grid = document.createElement('div');
       grid.className = 'tier-grid';
@@ -585,6 +639,23 @@ function render() {
       renderCards(group, grid);
     }
   }
+}
+
+function buildMountNote(note) {
+  const box = document.createElement('div');
+  box.className = 'mount-note';
+  const h = document.createElement('h2');
+  h.textContent = note.head;
+  const list = document.createElement('ul');
+  for (const item of note.items) {
+    const li = document.createElement('li');
+    li.textContent = item;
+    list.appendChild(li);
+  }
+  const load = document.createElement('p');
+  load.textContent = LOAD_NOTE;
+  box.append(h, list, load);
+  return box;
 }
 
 function buildFilter(present) {
@@ -650,8 +721,15 @@ function renderCards(kits, main) {
     // renders under-table/wall sections in anticipation of those tiers, so
     // without this an under-table kit would quietly offer a download whose
     // parts don't build it. A future mount needs its own bundle page here.
-    const links = k.mount === 'tabletop' ? KIT_LINKS[k.length] : null;
+    // A hanging kit links its bracket or rail listing instead (HANG_LINKS), named
+    // for what it is, and the planner's parts list for everything else.
+    const hanging = k.mount === 'wall' || k.mount === 'under-table';
+    const links = k.mount === 'tabletop' ? KIT_LINKS[k.length]
+      : k.mount === 'wall' ? HANG_LINKS.wall
+      : k.mount === 'under-table' ? HANG_LINKS['under-table'][k.length] : null;
     const stores = links ? kitStoresFor(links) : [];
+    const dlWhat = k.mount === 'wall' ? 'wall brackets' : 'under-table rails';
+    const dlEvent = hanging ? 'kit-hang-dl:' : 'kit-dl:';
     if (stores.length) {
       const [primary, ...rest] = stores;
       const dl = document.createElement('span');
@@ -661,9 +739,9 @@ function renderCards(kits, main) {
       get.href = links[primary.key];
       get.target = '_blank';
       get.rel = 'noopener';
-      get.textContent = '⤓ Download the models · ' + primary.label;
-      get.title = 'Every part for this kit in one download, from ' + primary.label;
-      get.addEventListener('click', () => { adoptStore(primary.id); track('kit-dl:' + primary.id); });
+      get.textContent = hanging ? '⤓ The ' + dlWhat + ' · ' + primary.label : '⤓ Download the models · ' + primary.label;
+      get.title = hanging ? 'The ' + dlWhat + ' for this kit, from ' + primary.label + '. The parts list has everything else.' : 'Every part for this kit in one download, from ' + primary.label;
+      get.addEventListener('click', () => { adoptStore(primary.id); track(dlEvent + primary.id); });
       dl.appendChild(get);
 
       if (rest.length) {                       // the other stores carrying it
@@ -687,7 +765,7 @@ function renderCards(kits, main) {
           a.textContent = s.label;
           a.title = 'The same download, from ' + s.label;
           a.addEventListener('click', () => {
-            track('kit-dl:' + s.id);
+            track(dlEvent + s.id);
             adoptStore(s.id);
             // re-label every card so the new preference is visible, not just
             // stored. DEFERRED: render() replaces this anchor, and tearing it
@@ -708,6 +786,14 @@ function renderCards(kits, main) {
       }
       actions.appendChild(dl);
     }
+    if (hanging) {
+      const list = document.createElement('a');
+      list.className = 'kit-get kit-list';
+      list.href = '../?ws=parts&build=' + encodeURIComponent(k.id);
+      list.textContent = 'Parts list →';
+      list.title = 'Every part and quantity for this kit, with its download links, in the planner';
+      actions.appendChild(list);
+    }
 
     body.append(title, tag, chips, actions);
     card.appendChild(body);
@@ -721,7 +807,8 @@ function renderCards(kits, main) {
      case — it leaves for Printables/Thangs and the viewer never sees it, so
      kit-dl:<store> is the only way to know whether the one-download link is
      actually used. That's the whole question behind the feature, hence the one
-     event. The same counter as the planner's (../index.html): since the cutover
+     event, with kit-hang-dl:<store> for a hanging kit's bracket or rail link,
+     which is not that bundle. The same counter as the planner's (../index.html): since the cutover
      this page is part of the planner, and `jerrari-build` keeps only what still
      runs on gen2build.jerrari3d.com (moved 2026-10-30). -->
 <script data-goatcounter="https://jerrari.goatcounter.com/count"

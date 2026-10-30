@@ -1,0 +1,2165 @@
+{
+ "title": "The Grand Workbench Commander · GEN2 Custom · 165",
+ "collection": "165",
+ "generated": true,
+ "mount": "wall",
+ "pitch": {
+  "x": 88,
+  "y": 56
+ },
+ "colors": {
+  "Case": "#34373c",
+  "Drawer": "#e8433a",
+  "Faceplate": "#f2911f",
+  "Handle": "#f6cf2b",
+  "CoverL": "#34a85a",
+  "CoverU": "#8bd14e",
+  "FootrailL": "#2f7fd6",
+  "FootrailU": "#45c8e0",
+  "QuickLock": "#12b5a8",
+  "Foot": "#8b5cf0",
+  "Stopper": "#d84fb0",
+  "MagnetClip": "#b06a3c",
+  "Magnet": "#b8bcc4",
+  "BackCover": "#5b6ee1",
+  "Accent": "#25316e",
+  "Label": "#eef0f4",
+  "Bracket": "#8792a2",
+  "Screw": "#d5dae1",
+  "Rail": "#2f7fd6",
+  "SideCover": "#c2185b"
+ },
+ "parts": [
+  {
+   "node": "WallMount_Lite_2W",
+   "label": "Wall Mount Lite 2W",
+   "type": "Bracket",
+   "qty": 1,
+   "links": {
+    "p": "https://www.printables.com/model/1777719-gen2-wall-mount-brackets",
+    "t": "https://than.gs/m/1574321"
+   },
+   "img": "img/parts/WallMount_Lite_2W.png",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "mount.install"
+   },
+   "basis": {
+    "axis": "mount",
+    "choice": "wall",
+    "subjectType": "build"
+   },
+   "required": true
+  },
+  {
+   "node": "WoodScrew",
+   "label": "Wood Screw",
+   "type": "Screw",
+   "qty": 4,
+   "links": {
+    "p": "https://www.printables.com/model/1777719-gen2-wall-mount-brackets",
+    "t": "https://than.gs/m/1574321",
+    "buy": [
+     {
+      "id": "woodscrew-6",
+      "label": "Buy #6 × 3/4\"",
+      "url": "https://amzn.to/4s487gc"
+     },
+     {
+      "id": "woodscrew-8",
+      "label": "Buy #8",
+      "url": "https://amzn.to/4pTWDuq"
+     }
+    ]
+   },
+   "purchased": true,
+   "note": "Hardware store item · length and anchors depend on the wall material; the 1-1/4\" screw shown is an illustration.",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "mount.install"
+   },
+   "basis": {
+    "axis": "mount",
+    "choice": "wall",
+    "subjectType": "build"
+   },
+   "required": true
+  },
+  {
+   "node": "165-2W-1H_Case",
+   "label": "Case 165-2W-1H",
+   "type": "Case",
+   "qty": 1,
+   "links": {
+    "p": "https://www.printables.com/model/1658722-gen2-165-cases-all",
+    "t": "https://than.gs/m/1535457",
+    "m": "https://makerworld.com/en/models/3092414-gen2-165-cases-all"
+   },
+   "img": "img/parts/Case 165-2W-1H.png",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "unit.enclosure"
+   },
+   "required": true
+  },
+  {
+   "node": "QuickLock-L",
+   "label": "QuickLock L",
+   "type": "QuickLock",
+   "qty": 3,
+   "links": {
+    "p": "https://www.printables.com/model/1012796-gen2-hardware",
+    "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Hardware-1141439"
+   },
+   "img": "img/parts/QuickLock.png",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "unit.join"
+   },
+   "required": true
+  },
+  {
+   "node": "QuickLock-R",
+   "label": "QuickLock R",
+   "type": "QuickLock",
+   "qty": 3,
+   "links": {
+    "p": "https://www.printables.com/model/1012796-gen2-hardware",
+    "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Hardware-1141439"
+   },
+   "img": "img/parts/QuickLock-R.png",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "unit.join"
+   },
+   "required": true
+  },
+  {
+   "node": "MagnetClip_10x2mm",
+   "label": "Magnet Clip 10×2",
+   "type": "MagnetClip",
+   "qty": 6,
+   "links": {
+    "p": "https://www.printables.com/model/1012796-gen2-hardware",
+    "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Hardware-1141439"
+   },
+   "img": "img/parts/Magnet Clip.png",
+   "requirement": {
+    "scope": "option",
+    "obligationId": "drawer.closure",
+    "optionId": "drawer.closure.magnet"
+   },
+   "basis": {
+    "axis": "drawer.closure",
+    "choice": "magnet",
+    "subjectType": "unit",
+    "selectedCount": 3
+   },
+   "required": true
+  },
+  {
+   "node": "Magnet_10x2mm",
+   "label": "Magnet 10×2 mm",
+   "type": "Magnet",
+   "qty": 6,
+   "links": {
+    "buy": [
+     {
+      "id": "magnet-10x2",
+      "label": "10×2 mm",
+      "url": "https://amzn.to/4sesPKm"
+     },
+     {
+      "id": "magnet-6x2",
+      "label": "6×2 mm",
+      "url": "https://amzn.to/4aH1ASw"
+     },
+     {
+      "id": "magnet-n52-10x2",
+      "label": "N52 10×2 strong",
+      "url": "https://amzn.to/4q4JX3Z"
+     },
+     {
+      "id": "magnet-n52-6x2",
+      "label": "N52 6×2 strong",
+      "url": "https://amzn.to/49BZyC0"
+     }
+    ]
+   },
+   "img": "img/parts/Magnets.png",
+   "purchased": true,
+   "requirement": {
+    "scope": "option",
+    "obligationId": "drawer.closure",
+    "optionId": "drawer.closure.magnet"
+   },
+   "basis": {
+    "axis": "drawer.closure",
+    "choice": "magnet",
+    "subjectType": "unit",
+    "selectedCount": 3
+   },
+   "required": true
+  },
+  {
+   "node": "SideCover_165-1H",
+   "label": "Side Cover 165-1H",
+   "type": "SideCover",
+   "qty": 4,
+   "links": {
+    "p": "https://www.printables.com/model/1872112-modulith-165-side-covers",
+    "t": "https://than.gs/m/1619978"
+   },
+   "img": "img/parts/SideCover_165-1H.png",
+   "requirement": {
+    "scope": "enhancement",
+    "obligationId": "unit.side_finish"
+   }
+  },
+  {
+   "node": "165-1W-1H_Case",
+   "label": "Case 165-1W-1H",
+   "type": "Case",
+   "qty": 2,
+   "links": {
+    "p": "https://www.printables.com/model/1658722-gen2-165-cases-all",
+    "t": "https://than.gs/m/1535457",
+    "m": "https://makerworld.com/en/models/3092414-gen2-165-cases-all"
+   },
+   "img": "img/parts/Case 165-1W-1H.png",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "unit.enclosure"
+   },
+   "required": true
+  },
+  {
+   "node": "CL-165-1W",
+   "label": "Cover Lower 165-1W",
+   "type": "CoverL",
+   "qty": 2,
+   "links": {
+    "p": "https://www.printables.com/model/1774498-gen2-165-covers",
+    "t": "https://than.gs/m/1574320",
+    "m": "https://makerworld.com/en/models/3094016-gen2-165-covers"
+   },
+   "img": "img/parts/CL-165-1W.png",
+   "requirement": {
+    "scope": "option",
+    "obligationId": "drawer.stopper.seat",
+    "optionId": "drawer.stoppers"
+   },
+   "required": true
+  },
+  {
+   "node": "CU-165-1W",
+   "label": "Cover Upper 165-1W",
+   "type": "CoverU",
+   "qty": 2,
+   "links": {
+    "p": "https://www.printables.com/model/1774498-gen2-165-covers",
+    "t": "https://than.gs/m/1574320",
+    "m": "https://makerworld.com/en/models/3094016-gen2-165-covers"
+   },
+   "img": "img/parts/CU-165-1W.png",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "top.enclosure"
+   },
+   "required": true
+  },
+  {
+   "node": "Drawer_Stoppers_L",
+   "label": "Drawer Stopper L",
+   "type": "Stopper",
+   "qty": 4,
+   "links": {
+    "p": "https://www.printables.com/model/1012796-gen2-hardware",
+    "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Hardware-1141439"
+   },
+   "img": "img/parts/Drawer Stopper.png",
+   "requirement": {
+    "scope": "enhancement",
+    "obligationId": "drawer.retention"
+   }
+  },
+  {
+   "node": "Drawer_Stoppers_R",
+   "label": "Drawer Stopper R",
+   "type": "Stopper",
+   "qty": 4,
+   "links": {
+    "p": "https://www.printables.com/model/1012796-gen2-hardware",
+    "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Hardware-1141439"
+   },
+   "img": "img/parts/Drawer Stopper.png",
+   "requirement": {
+    "scope": "enhancement",
+    "obligationId": "drawer.retention"
+   }
+  },
+  {
+   "node": "DecorDrawer_165-2W-1H",
+   "label": "Decor Drawer 165-2W-1H",
+   "type": "Drawer",
+   "qty": 1,
+   "links": {
+    "p": "https://www.printables.com/model/1100978-gen2-165-decor-drawers-all",
+    "t": "https://than.gs/m/1493950",
+    "m": "https://makerworld.com/en/models/861753-gen2-165-decor-drawers-all"
+   },
+   "img": "img/parts/Decor Drawer 165-2W-1H.png"
+  },
+  {
+   "node": "Faceplate_ClassicDecor_2W-1H",
+   "label": "Classic Faceplate 2W-1H",
+   "type": "Faceplate",
+   "qty": 1,
+   "links": {
+    "p": "https://www.printables.com/model/1280870-gen2-decor-faceplates-classic-series",
+    "t": "https://than.gs/m/1334047"
+   },
+   "img": "img/parts/ClassicDecor_2W-1H.png"
+  },
+  {
+   "node": "DecorDrawer_165-1W-1H",
+   "label": "Decor Drawer 165-1W-1H",
+   "type": "Drawer",
+   "qty": 2,
+   "links": {
+    "p": "https://www.printables.com/model/1100978-gen2-165-decor-drawers-all",
+    "t": "https://than.gs/m/1493950",
+    "m": "https://makerworld.com/en/models/861753-gen2-165-decor-drawers-all"
+   },
+   "img": "img/parts/Decor Drawer 165-1W-1H.png"
+  },
+  {
+   "node": "Faceplate_ClassicDecor_1W-1H",
+   "label": "Classic Faceplate 1W-1H",
+   "type": "Faceplate",
+   "qty": 2,
+   "links": {
+    "p": "https://www.printables.com/model/1280870-gen2-decor-faceplates-classic-series",
+    "t": "https://than.gs/m/1334047"
+   },
+   "img": "img/parts/ClassicDecor_1W-1H.png"
+  }
+ ],
+ "instances": [
+  {
+   "id": "br0",
+   "node": "WallMount_Lite_2W",
+   "pos": [
+    0,
+    168,
+    -79.45
+   ]
+  },
+  {
+   "id": "sc0",
+   "node": "WoodScrew",
+   "pos": [
+    -68,
+    205.9,
+    -91.65
+   ]
+  },
+  {
+   "id": "sc1",
+   "node": "WoodScrew",
+   "pos": [
+    -20,
+    205.9,
+    -91.65
+   ]
+  },
+  {
+   "id": "sc2",
+   "node": "WoodScrew",
+   "pos": [
+    20,
+    205.9,
+    -91.65
+   ]
+  },
+  {
+   "id": "sc3",
+   "node": "WoodScrew",
+   "pos": [
+    68,
+    205.9,
+    -91.65
+   ]
+  },
+  {
+   "id": "case0",
+   "node": "165-2W-1H_Case",
+   "pos": [
+    0,
+    112,
+    0
+   ]
+  },
+  {
+   "id": "ql0L",
+   "node": "QuickLock-L",
+   "pos": [
+    -84.12,
+    147.68,
+    55.019999999999996
+   ]
+  },
+  {
+   "id": "ql0R",
+   "node": "QuickLock-R",
+   "pos": [
+    84.55,
+    147.68,
+    55.019999999999996
+   ]
+  },
+  {
+   "id": "mc0",
+   "node": "MagnetClip_10x2mm",
+   "pos": [
+    -44,
+    147.8,
+    -75.7
+   ],
+   "owner": 3
+  },
+  {
+   "id": "mg0",
+   "node": "Magnet_10x2mm",
+   "pos": [
+    -44,
+    152,
+    -76
+   ],
+   "owner": 3
+  },
+  {
+   "id": "sc0L",
+   "node": "SideCover_165-1H",
+   "pos": [
+    -87.975,
+    112.4,
+    4
+   ],
+   "owner": 3
+  },
+  {
+   "id": "sc0R",
+   "node": "SideCover_165-1H",
+   "pos": [
+    87.975,
+    112.4,
+    4
+   ],
+   "yaw": 180,
+   "owner": 3
+  },
+  {
+   "id": "case1",
+   "node": "165-1W-1H_Case",
+   "pos": [
+    -44,
+    168,
+    0
+   ],
+   "stage": "w1"
+  },
+  {
+   "id": "ql1L",
+   "node": "QuickLock-L",
+   "pos": [
+    -84.12,
+    203.68,
+    55.019999999999996
+   ],
+   "stage": "w1"
+  },
+  {
+   "id": "ql1R",
+   "node": "QuickLock-R",
+   "pos": [
+    -3.45,
+    203.68,
+    55.019999999999996
+   ],
+   "stage": "w1"
+  },
+  {
+   "id": "mc1",
+   "node": "MagnetClip_10x2mm",
+   "pos": [
+    -44,
+    203.8,
+    -75.7
+   ],
+   "owner": 1,
+   "stage": "w1"
+  },
+  {
+   "id": "mg1",
+   "node": "Magnet_10x2mm",
+   "pos": [
+    -44,
+    208,
+    -76
+   ],
+   "owner": 1,
+   "stage": "w1"
+  },
+  {
+   "id": "sc1L",
+   "node": "SideCover_165-1H",
+   "pos": [
+    -87.975,
+    168.4,
+    4
+   ],
+   "owner": 1,
+   "stage": "w1"
+  },
+  {
+   "id": "cl0",
+   "node": "CL-165-1W",
+   "pos": [
+    -44,
+    224,
+    0
+   ],
+   "stage": "w1"
+  },
+  {
+   "id": "cu0",
+   "node": "CU-165-1W",
+   "pos": [
+    -44,
+    228.3,
+    0
+   ],
+   "stage": "w1"
+  },
+  {
+   "id": "tst1c0L",
+   "node": "Drawer_Stoppers_L",
+   "pos": [
+    -56.6,
+    222,
+    66.5
+   ],
+   "stopperKey": "1:0",
+   "stage": "w1"
+  },
+  {
+   "id": "tst1c0R",
+   "node": "Drawer_Stoppers_R",
+   "pos": [
+    -31.6,
+    222,
+    66.5
+   ],
+   "stopperKey": "1:0",
+   "stage": "w1"
+  },
+  {
+   "id": "case2",
+   "node": "165-1W-1H_Case",
+   "pos": [
+    44,
+    168,
+    0
+   ],
+   "stage": "w2"
+  },
+  {
+   "id": "ql2L",
+   "node": "QuickLock-L",
+   "pos": [
+    3.88,
+    203.68,
+    55.019999999999996
+   ],
+   "stage": "w2"
+  },
+  {
+   "id": "ql2R",
+   "node": "QuickLock-R",
+   "pos": [
+    84.55,
+    203.68,
+    55.019999999999996
+   ],
+   "stage": "w2"
+  },
+  {
+   "id": "mc2",
+   "node": "MagnetClip_10x2mm",
+   "pos": [
+    44,
+    203.8,
+    -75.7
+   ],
+   "owner": 2,
+   "stage": "w2"
+  },
+  {
+   "id": "mg2",
+   "node": "Magnet_10x2mm",
+   "pos": [
+    44,
+    208,
+    -76
+   ],
+   "owner": 2,
+   "stage": "w2"
+  },
+  {
+   "id": "sc2R",
+   "node": "SideCover_165-1H",
+   "pos": [
+    87.975,
+    168.4,
+    4
+   ],
+   "yaw": 180,
+   "owner": 2,
+   "stage": "w2"
+  },
+  {
+   "id": "cl1",
+   "node": "CL-165-1W",
+   "pos": [
+    44,
+    224,
+    0
+   ],
+   "stage": "w2"
+  },
+  {
+   "id": "cu1",
+   "node": "CU-165-1W",
+   "pos": [
+    44,
+    228.3,
+    0
+   ],
+   "stage": "w2"
+  },
+  {
+   "id": "tst2c1L",
+   "node": "Drawer_Stoppers_L",
+   "pos": [
+    31.4,
+    222,
+    66.5
+   ],
+   "stopperKey": "2:0",
+   "stage": "w2"
+  },
+  {
+   "id": "tst2c1R",
+   "node": "Drawer_Stoppers_R",
+   "pos": [
+    56.4,
+    222,
+    66.5
+   ],
+   "stopperKey": "2:0",
+   "stage": "w2"
+  },
+  {
+   "id": "st0L",
+   "node": "Drawer_Stoppers_L",
+   "pos": [
+    -56.6,
+    166,
+    66.5
+   ],
+   "stopperKey": "3:0"
+  },
+  {
+   "id": "st0R",
+   "node": "Drawer_Stoppers_R",
+   "pos": [
+    -31.6,
+    166,
+    66.5
+   ],
+   "stopperKey": "3:0"
+  },
+  {
+   "id": "st1L",
+   "node": "Drawer_Stoppers_L",
+   "pos": [
+    31.4,
+    166,
+    66.5
+   ],
+   "stopperKey": "3:1"
+  },
+  {
+   "id": "st1R",
+   "node": "Drawer_Stoppers_R",
+   "pos": [
+    56.4,
+    166,
+    66.5
+   ],
+   "stopperKey": "3:1"
+  },
+  {
+   "id": "drw0",
+   "node": "DecorDrawer_165-2W-1H",
+   "pos": [
+    0.16,
+    117.72,
+    5.24
+   ],
+   "owner": 3
+  },
+  {
+   "id": "dc0",
+   "node": "MagnetClip_10x2mm",
+   "pos": [
+    -43.84,
+    147.72,
+    -73
+   ],
+   "yaw": 180,
+   "rides": "drw0",
+   "owner": 3
+  },
+  {
+   "id": "dm0",
+   "node": "Magnet_10x2mm",
+   "pos": [
+    -43.84,
+    152.72,
+    -74
+   ],
+   "rides": "drw0",
+   "owner": 3
+  },
+  {
+   "id": "fp0",
+   "node": "Faceplate_ClassicDecor_2W-1H",
+   "pos": [
+    0.47,
+    115.72,
+    97.17
+   ],
+   "rides": "drw0"
+  },
+  {
+   "id": "drw1",
+   "node": "DecorDrawer_165-1W-1H",
+   "pos": [
+    -43.84,
+    173.72,
+    5.24
+   ],
+   "owner": 1
+  },
+  {
+   "id": "dc1",
+   "node": "MagnetClip_10x2mm",
+   "pos": [
+    -43.84,
+    203.72,
+    -73
+   ],
+   "yaw": 180,
+   "rides": "drw1",
+   "owner": 1
+  },
+  {
+   "id": "dm1",
+   "node": "Magnet_10x2mm",
+   "pos": [
+    -43.84,
+    208.72,
+    -74
+   ],
+   "rides": "drw1",
+   "owner": 1
+  },
+  {
+   "id": "fp1",
+   "node": "Faceplate_ClassicDecor_1W-1H",
+   "pos": [
+    -43.53,
+    171.72,
+    97.17
+   ],
+   "rides": "drw1"
+  },
+  {
+   "id": "drw2",
+   "node": "DecorDrawer_165-1W-1H",
+   "pos": [
+    44.16,
+    173.72,
+    5.24
+   ],
+   "owner": 2
+  },
+  {
+   "id": "dc2",
+   "node": "MagnetClip_10x2mm",
+   "pos": [
+    44.16,
+    203.72,
+    -73
+   ],
+   "yaw": 180,
+   "rides": "drw2",
+   "owner": 2
+  },
+  {
+   "id": "dm2",
+   "node": "Magnet_10x2mm",
+   "pos": [
+    44.16,
+    208.72,
+    -74
+   ],
+   "rides": "drw2",
+   "owner": 2
+  },
+  {
+   "id": "fp2",
+   "node": "Faceplate_ClassicDecor_1W-1H",
+   "pos": [
+    44.47,
+    171.72,
+    97.17
+   ],
+   "rides": "drw2"
+  }
+ ],
+ "stages": {
+  "base": [
+   0,
+   110,
+   0
+  ],
+  "w1": [
+   0,
+   16,
+   200
+  ],
+  "w2": [
+   0,
+   16,
+   200
+  ]
+ },
+ "steps": [
+  {
+   "title": "The Grand Workbench Commander",
+   "note": "Your custom GEN2 build · 3 units, 3 drawers, 2 columns wide. Drag to orbit, tap any part to identify it. 38 prints · quantities on the right. and 6× 10×2 mm disc magnets for the optional magnet closures (hardware store items).",
+   "camera": {
+    "t": 30,
+    "p": 58,
+    "r": 1062.99,
+    "target": [
+     0,
+     128.70000000000002,
+     50
+    ]
+   },
+   "checklist": true
+  },
+  {
+   "title": "Mount the wall bracket",
+   "note": "Screw the bracket flat to the wall · 2 wood screws per 1W column, into a stud wherever you can, with wall anchors in drywall with no stud. The pegs are raised sleeves on the bracket and each screw seats fully inside its sleeve: a screw head left standing out stops the case going on.",
+   "camera": {
+    "t": 30,
+    "p": 58,
+    "r": 787.4,
+    "target": [
+     0,
+     224,
+     0
+    ],
+    "fit": 1.18
+   },
+   "phases": [
+    {
+     "enter": [
+      {
+       "id": "br0",
+       "from": [
+        0,
+        0,
+        70
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "sc0",
+       "from": [
+        0,
+        0,
+        55
+       ]
+      },
+      {
+       "id": "sc1",
+       "from": [
+        0,
+        0,
+        55
+       ]
+      },
+      {
+       "id": "sc2",
+       "from": [
+        0,
+        0,
+        55
+       ]
+      },
+      {
+       "id": "sc3",
+       "from": [
+        0,
+        0,
+        55
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Cover the top case · 1W-1H",
+   "note": "On the bench, before it goes near the wall: QuickLocks in, the side cover on (optional), slide the Cover Lower on, drop the drawer stoppers into it, then cap it with the Cover Upper · the cover can only slide on now, not once the case is on the wall. A side cover goes on like this: hold it against the outer wall just above its seat, press it in so the clips enter the slots, then slide it down to lock.",
+   "camera": {
+    "t": 30,
+    "p": 58,
+    "r": 430,
+    "target": [
+     44,
+     213.5,
+     200
+    ]
+   },
+   "phases": [
+    {
+     "enter": [
+      {
+       "id": "case2",
+       "from": [
+        0,
+        45,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "ql2L",
+       "from": [
+        0,
+        45,
+        0
+       ]
+      },
+      {
+       "id": "ql2R",
+       "from": [
+        0,
+        45,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "mc2",
+       "from": [
+        0,
+        35,
+        0
+       ]
+      },
+      {
+       "id": "mg2",
+       "from": [
+        0,
+        0,
+        -30
+       ]
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 55,
+      "p": 66,
+      "fitR": 54.508445446554425,
+      "target": [
+       102.975,
+       212.20000000000002,
+       243.25
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc2R",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc2R",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 430,
+      "target": [
+       44,
+       213.5,
+       200
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "cl1",
+       "from": [
+        0,
+        0,
+        -60
+       ]
+      }
+     ],
+     "dip": [
+      {
+       "id": "ql2L",
+       "from": 0.7086666666666666
+      },
+      {
+       "id": "ql2R",
+       "from": 0.7086666666666666
+      }
+     ]
+    },
+    {
+     "pop": [
+      {
+       "id": "ql2L"
+      },
+      {
+       "id": "ql2R"
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "tst2c1L",
+       "from": [
+        0,
+        35,
+        0
+       ]
+      },
+      {
+       "id": "tst2c1R",
+       "from": [
+        0,
+        35,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "cu1",
+       "from": [
+        0,
+        0,
+        -60
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Hang the top case on the pegs",
+   "note": "Now hang the covered case: push it straight back so the bracket pegs enter the case-back slots, then drop it 16 mm to lock. (The cover is ghosted so you can see the pegs.) Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional).",
+   "camera": {
+    "t": 30,
+    "p": 58,
+    "r": 430,
+    "target": [
+     44,
+     213.5,
+     200
+    ]
+   },
+   "phases": [
+    {
+     "camera": {
+      "t": 24,
+      "p": 40,
+      "r": 380,
+      "target": [
+       44,
+       206,
+       -30
+      ]
+     },
+     "ghost": [
+      {
+       "id": "cl1"
+      },
+      {
+       "id": "cu1"
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "case2",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "ql2L",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "ql2R",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "mc2",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "mg2",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "sc2R",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "cl1",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "cu1",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "tst2c1L",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "tst2c1R",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "case2",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "ql2L",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "ql2R",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "mc2",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "mg2",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "sc2R",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "cl1",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "cu1",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "tst2c1L",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "tst2c1R",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 787.4,
+      "target": [
+       44,
+       197.5,
+       0
+      ],
+      "fit": 1.18
+     },
+     "solid": [
+      {
+       "id": "cl1"
+      },
+      {
+       "id": "cu1"
+      }
+     ]
+    },
+    {
+     "land": "w2"
+    },
+    {
+     "enter": [
+      {
+       "id": "st1L",
+       "from": [
+        0,
+        55,
+        0
+       ]
+      },
+      {
+       "id": "st1R",
+       "from": [
+        0,
+        55,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Hang the covered top case · 1W-1H",
+   "note": "On the bench, before it goes near the wall: QuickLocks in, the side cover on (optional), slide the Cover Lower on, drop the drawer stoppers into it, then cap it with the Cover Upper · the cover can only slide on now, not once the case is on the wall. Then hang it: push it straight back onto the pegs and drop 16 mm to lock. Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional).",
+   "camera": {
+    "t": 30,
+    "p": 58,
+    "r": 430,
+    "target": [
+     -44,
+     213.5,
+     200
+    ]
+   },
+   "phases": [
+    {
+     "enter": [
+      {
+       "id": "case1",
+       "from": [
+        0,
+        45,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "ql1L",
+       "from": [
+        0,
+        45,
+        0
+       ]
+      },
+      {
+       "id": "ql1R",
+       "from": [
+        0,
+        45,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "mc1",
+       "from": [
+        0,
+        35,
+        0
+       ]
+      },
+      {
+       "id": "mg1",
+       "from": [
+        0,
+        0,
+        -30
+       ]
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": -55,
+      "p": 66,
+      "fitR": 54.508445446554425,
+      "target": [
+       -102.975,
+       212.20000000000002,
+       243.25
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc1L",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        -30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc1L",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 430,
+      "target": [
+       -44,
+       213.5,
+       200
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "cl0",
+       "from": [
+        0,
+        0,
+        -60
+       ]
+      }
+     ],
+     "dip": [
+      {
+       "id": "ql1L",
+       "from": 0.7086666666666666
+      },
+      {
+       "id": "ql1R",
+       "from": 0.7086666666666666
+      }
+     ]
+    },
+    {
+     "pop": [
+      {
+       "id": "ql1L"
+      },
+      {
+       "id": "ql1R"
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "tst1c0L",
+       "from": [
+        0,
+        35,
+        0
+       ]
+      },
+      {
+       "id": "tst1c0R",
+       "from": [
+        0,
+        35,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "cu0",
+       "from": [
+        0,
+        0,
+        -60
+       ]
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 787.4,
+      "target": [
+       -44,
+       197.5,
+       0
+      ],
+      "fit": 1.18
+     },
+     "move": [
+      {
+       "id": "case1",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "ql1L",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "ql1R",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "mc1",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "mg1",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "sc1L",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "cl0",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "cu0",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "tst1c0L",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "tst1c0R",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "case1",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "ql1L",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "ql1R",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "mc1",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "mg1",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "sc1L",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "cl0",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "cu0",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "tst1c0L",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "tst1c0R",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "land": "w1"
+    },
+    {
+     "enter": [
+      {
+       "id": "st0L",
+       "from": [
+        0,
+        55,
+        0
+       ]
+      },
+      {
+       "id": "st0R",
+       "from": [
+        0,
+        55,
+        0
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Hang case · 2W-1H",
+   "note": "Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home. Magnet closure: snap the clip into the back-wall slot (magnet pressed in back-to-front, clip lowered) · unreachable after assembly, so now is the time. Fit both side covers before it goes up (optional) · under the row above there is no room to lift it on.",
+   "camera": {
+    "t": 30,
+    "p": 116,
+    "r": 430,
+    "target": [
+     0,
+     156.5,
+     0
+    ]
+   },
+   "phases": [
+    {
+     "sync": true,
+     "enter": [
+      {
+       "id": "case0",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "ql0L",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "ql0R",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "mc0",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "mg0",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "sc0L",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "sc0R",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      }
+     ],
+     "dip": [
+      {
+       "id": "ql0L",
+       "from": 0.92
+      },
+      {
+       "id": "ql0R",
+       "from": 0.92
+      }
+     ]
+    },
+    {
+     "pop": [
+      {
+       "id": "ql0L"
+      },
+      {
+       "id": "ql0R"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Drawers",
+   "note": "Before a magnet-closure drawer goes in: snap a clip into its back-wall slot and press in the magnet, front to back. Then slide each drawer in from the front.",
+   "camera": {
+    "t": 12,
+    "p": 68,
+    "r": 787.4,
+    "target": [
+     0,
+     105.3,
+     0
+    ],
+    "fit": 1.18
+   },
+   "phases": [
+    {
+     "enter": [
+      {
+       "id": "drw0",
+       "at": [
+        0,
+        0,
+        170
+       ],
+       "from": [
+        0,
+        0,
+        60
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "dc0",
+       "at": [
+        0,
+        35,
+        170
+       ],
+       "from": [
+        0,
+        30,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "dm0",
+       "at": [
+        0,
+        35,
+        170
+       ],
+       "from": [
+        0,
+        0,
+        30
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "dc0",
+       "by": [
+        0,
+        -35,
+        0
+       ]
+      },
+      {
+       "id": "dm0",
+       "by": [
+        0,
+        -35,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "drw0",
+       "by": [
+        0,
+        0,
+        -170
+       ]
+      },
+      {
+       "id": "dc0",
+       "by": [
+        0,
+        0,
+        -170
+       ]
+      },
+      {
+       "id": "dm0",
+       "by": [
+        0,
+        0,
+        -170
+       ]
+      }
+     ]
+    },
+    {
+     "fade": [
+      {
+       "id": "dc1"
+      },
+      {
+       "id": "dm1"
+      },
+      {
+       "id": "dc2"
+      },
+      {
+       "id": "dm2"
+      }
+     ]
+    },
+    {
+     "enter": [
+      {
+       "id": "drw1",
+       "from": [
+        0,
+        0,
+        180
+       ]
+      },
+      {
+       "id": "drw2",
+       "from": [
+        0,
+        0,
+        180
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Faceplates",
+   "note": "The faceplate prints complete - its grip is part of the faceplate, so there's nothing to bolt on and no hardware to buy. Pop a drawer out about 40 mm, slide the faceplate DOWN onto the drawer front until it snaps, then push the drawer home. Repeat for every drawer · the build is done. Tap any part to see its name and download links.",
+   "camera": {
+    "t": 15,
+    "p": 66,
+    "r": 787.4,
+    "target": [
+     0,
+     117,
+     0
+    ],
+    "fit": 1.18
+   },
+   "phases": [
+    {
+     "move": [
+      {
+       "id": "drw0",
+       "by": [
+        0,
+        0,
+        40
+       ]
+      },
+      {
+       "id": "dc0",
+       "by": [
+        0,
+        0,
+        40
+       ]
+      },
+      {
+       "id": "dm0",
+       "by": [
+        0,
+        0,
+        40
+       ]
+      }
+     ]
+    },
+    {
+     "vanish": true,
+     "room": 0,
+     "camera": {
+      "t": 12,
+      "p": 82,
+      "fitR": 139.4072272158083,
+      "target": [
+       0.47,
+       188.22,
+       137.17000000000002
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "fp0",
+       "at": [
+        0,
+        45,
+        40
+       ],
+       "from": [
+        0,
+        30,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "appear": true,
+     "room": 1,
+     "camera": {
+      "t": 15,
+      "p": 66,
+      "r": 787.4,
+      "target": [
+       0,
+       117,
+       0
+      ],
+      "fit": 1.18
+     }
+    },
+    {
+     "move": [
+      {
+       "id": "fp0",
+       "by": [
+        0,
+        -45,
+        0
+       ]
+      }
+     ],
+     "sync": true
+    },
+    {
+     "move": [
+      {
+       "id": "drw0",
+       "by": [
+        0,
+        0,
+        -40
+       ]
+      },
+      {
+       "id": "dc0",
+       "by": [
+        0,
+        0,
+        -40
+       ]
+      },
+      {
+       "id": "dm0",
+       "by": [
+        0,
+        0,
+        -40
+       ]
+      },
+      {
+       "id": "fp0",
+       "by": [
+        0,
+        0,
+        -40
+       ]
+      }
+     ]
+    },
+    {
+     "fade": [
+      {
+       "id": "fp1"
+      },
+      {
+       "id": "fp2"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
