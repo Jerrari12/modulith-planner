@@ -6376,15 +6376,15 @@ approving its recommended answers.
   and that narrow-on-top is design guidance, not a load test. No printed-part count: 39 and 63 are not reconciled with the BOM.
 - **A wrong instruction fixed for every wall build:** the bracket step told people to leave the screw heads "just proud",
   which the vault records as wrong (the pegs are sleeves, a proud head stops the case going on). It now says so, and names
-  studs and anchors. Only saved wall builds' step text changes; no golden held the old wording.
+  studs and anchors. Only wall builds' step text changes; no golden held the old wording.
 - **Sizes** are the stage's `buildSize`, side covers included. The tabletop rows' 176 and 264 predate side covers (the
   stage now says 181 and 269) and are left for Joey to decide.
 - **Card art** is `?shot=1`, whose palette now gives side covers graphite. Existing cards were not re-shot.
 - **Not proven:** no kit has been printed in this arrangement. Before anything is published Joey checks one 185 of each mount:
   does the lower 2W slide across two seated 1Ws without binding, and how does a top 1W come off when a 2W bridges below it.
 
-Checks: `test/hanging-kits.test.mjs` (18 mutants, one survivor fixed, then all dead), 16 new kit goldens (8 manifests, 48
-shots), unit suite 792 pass, 5 skipped, 1 fail. The fail is `test/parity/site-boms.test.mjs`, which fails the same way on
+Checks: `test/hanging-kits.test.mjs` (18 mutants, one survivor fixed, then all dead), new goldens for the 8 kits (8 manifests,
+48 shots), unit suite 792 pass, 5 skipped, 1 fail. The fail is `test/parity/site-boms.test.mjs`, which fails the same way on
 pristine main: its site artifact is from an older planner commit. Gallery and the Parts, Assemble and Build routes checked in a
 browser at 1280 and 360 wide. Sol 01a18e08: no findings. Terra 01a18e09 (paired sample): one, discarded, the vault's catalog
 row names #6 or #8.
