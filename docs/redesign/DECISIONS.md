@@ -6281,3 +6281,8 @@ read v1 in an old tab), both fixed; round 2 ship.
   New build and a first visit are set 2 (Purple #7a4fb0, White #787e82, rows "suggested"), an older record stays v1
   (#f0a4c0, #efefea), a set-2 link opens whole; no page errors. label-palette-prod, stripe-spool-prod and share-look-prod
   green on the same stamp.
+- **Correction (2026-10-29):** neither CI failure was v2's. The idle gate was runner timing: on run 40915714215 (main
+  5b8d42f, shard 4) its new failure message showed the edit had reached the stage (placed 4, instances 61) and the woken
+  counter missed it, the case's documented limit; done-scene fixed the case (deployed with f793fcd3). The steam case was
+  the shard reshuffle against its 60 s wait (now 180 s). The boot-repaint guard in `setLabelPalette` was not needed for
+  either; it stays as a harmless saving.
