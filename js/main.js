@@ -3755,8 +3755,11 @@ const skinMaps = (() => {
   /* fetch what the stage needs and repack when the set on stage changed; one run at a time, the next waits for it */
   async function sync() {
     if (!wanted()) return st.rev;
-    if (st.syncing) await st.syncing;
+    while (st.syncing) await st.syncing;   // `while`: two waiters must not both go on (Terra 01a1940d)
     st.syncing = (async () => {
+      /* the maps' decode and the repack hold the page 0.3 to 0.5 s between them: after the model is up, not before it (THE FIRST FRAME
+         WAITS FOR ITS PROGRAMS), and a frame on, so that the first frame is on screen before they start */
+      if (firstDrawn()) { await firstDrawn(); await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))); }
       const index = await loadIndex();
       const on = new Set(manifest ? manifest.instances.map((i) => i.node) : []);
       const need = [...st.roots.keys()].filter((n) => on.has(n) && index.nodes[n] && !st.sources.has(n) && !st.loading.has(n) && !st.failed.has(n));
@@ -3764,7 +3767,6 @@ const skinMaps = (() => {
         st.loading.set(n, load(n).catch((e) => { st.failed.set(n, (e && e.message) || String(e)); console.warn(`[skin map] ${n}: ${(e && e.message) || e} - left plain`); }).finally(() => st.loading.delete(n)));
       }
       await Promise.all([...st.loading.values()]);
-      await firstDrawn();   // a repack holds the page 0.3 to 0.5 s (its maps resampled here): after the model is up, not before (THE FIRST FRAME WAITS)
       const want = live();
       const same = want.length === st.slots.size && want.every((n) => st.slots.has(n));
       if (!same) repack();
