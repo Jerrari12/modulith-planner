@@ -6390,9 +6390,10 @@ after we built the modulith website that essentially gave organizing kits a new 
   `test/builds.test.js`). The 37 and 59 that raised the question were 43 less the 6 feet and 67 less the 8 feet: a sum that kept the
   side covers and dropped the feet. The same rule gives 34 and 26 for the two 185 2W-2H hanging kits, which plus 4 side covers is
   the planner's own 38 and 30.
-- **Not proven:** no kit has been printed in this arrangement. Before anything is published Joey checks one 185 of each mount:
-  does the lower 2W slide across two seated 1Ws without binding, and how does a top 1W come off when a 2W bridges below it.
-  Merging this publishes the kit files, so the merge waits for that and for his go; deploy the planner first, then the site.
+- **Assembly needs no separate test:** Joey, asked about a physical check of the 2W sliding across two seated 1Ws: "i build these all
+  the time, it's identical to the table top build other than either a wall mount bracket or under table rail". An earlier note here
+  said no kit had been printed in this arrangement; that was this work's assumption, and it was wrong. It says nothing about load: no
+  rating exists. Merging this publishes the kit files, so the merge waits for his go; deploy the planner first, then the site.
 
 Checks: `test/hanging-kits.test.mjs` and `test/kit-gallery-page.test.mjs`, new goldens for the 12 kits (12 manifests, 72 shots), unit suite 784
 pass, 5 skipped, and `M28` in `test/simplify.test.mjs`, a timing gate that failed while GPU captures ran and passes alone. The site's BOM
