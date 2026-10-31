@@ -6483,3 +6483,13 @@ The planner had no canonical link. The old planner's forward lands on `?ws=build
 - **Not changed, reported to Joey:** the description's last sentence, the only GEN2 words, falls past where Google cuts the snippet; the title has no GEN2; after boot the title is the open build's name, on the bare address too; no Open Graph tags.
 
 Checks: `test/front-door.test.mjs` (two new cases, failing before the change), the e2e case "the front door" with a new assertion under `E2E_SOFT=1`, 13 mutants all killed, the real count.js in headless Chrome under this host name on seven kinds of address (each reports itself, an event keeps its own path), the deploy's stamping step and module-graph guard on a replay, and the 14 test files that read `index.html`. No js changed, so `pages.yml` needs no line. Terra 01a19342: one finding, the test accepted a tag in a script's text, fixed; one discarded, an exact-string pin is this repo's idiom (`test/kit-gallery-page.test.mjs`). Terra 01a1934d, with count.js in the payload: no findings. The facts are in the vault's `repo-map-and-contracts.md` (06c7c7e).
+
+## 2026-10-31 · `?ref=` leaves the address once the visit has counted (on branch `self-canonical`, not live)
+
+Goes with the old planner's branch `forward-keeps-referrer`, on which the forward passes the visitor's true origin as `?ref=`, because the forward itself becomes the new page's referrer. Left in the address, `ref` would stay for good: a reopened tab, a bookmark and every Share link would count later visits as that source. The same has been true of the site's `?ref=modulith-site` since the site began linking.
+
+- **It leaves after the count and never before.** count.js reads `location.search` when it counts. In a visible tab that is before `load`, which waits for it. In a background tab, such as a result opened with a middle click, count.js waits to be shown and its listener was added first, so this one runs after it.
+- **Deploy this before the forward,** or its `ref` sticks in the addresses of whoever arrives between the two.
+- **Left as it is:** a visitor who blocks the counter, then unblocks it and reloads the same tab, counts that once by the plain referrer.
+
+Checks: `test/front-door.test.mjs`, a new case that failed first; 22 mutants of the three search cases, all killed against a passing baseline. In Chrome with the real count.js counting and `sendBeacon` stubbed: an ordinary tab, count.js 4 s late and a hidden tab shown later each send one pageview carrying `ref`, and the address then loses it, keeping its other parameters. Terra 01a19369 raised the problem; Terra 01a19370 on the fix: one finding, the blocked-counter case above, left as it is.
