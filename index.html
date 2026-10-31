@@ -352,5 +352,22 @@
      `jerrari-build` keeps only what still runs on gen2build.jerrari3d.com. -->
 <script data-goatcounter="https://jerrari.goatcounter.com/count"
         async src="https://gc.zgo.at/count.js"></script>
+<!-- ?ref= is for the one pageview count.js sends: it says where this visit came from (the site's buttons, and the old
+     planner's forward, which would otherwise be the referrer). Left in the address it would stay for good, in a reopened
+     tab, a bookmark and every Share link, and count those later visits as that source too. So it leaves once the visit has
+     counted, and not before: count.js reads location.search when it counts. That is before `load` (the page waits for it)
+     in a visible tab. In a background tab count.js waits to be shown, and its listener was added first, so this one runs after it. -->
+<script>
+addEventListener('load', function () {
+  function drop() {
+    var u = new URL(location.href);
+    if (!u.searchParams.has('ref')) return;
+    u.searchParams.delete('ref');
+    try { history.replaceState(history.state, '', u.href); } catch (e) { /* the address keeps it: nothing else depends on this */ }
+  }
+  if (document.visibilityState === 'visible') return drop();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') drop(); });
+});
+</script>
 </body>
 </html>
