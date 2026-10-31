@@ -34,4 +34,4 @@ export function noteText(note) {
    also what a search engine shows for the page (2026-10-19: "modulith" on Google is a Java framework, and the planner's
    title has to say which MODULITH this is); with no build open it says what the planner is for, the same words as
    index.html's static <title>. The plain viewer (main.js, no workspace on <html>) uses the same shape since then. */
-export const tabTitle = (name) => (name ? `${buildName(name)} · MODULITH Planner` : 'MODULITH Planner · plan a 3D-printable modular storage build');
+export const tabTitle = (name) => (name ? `${buildName(name)} · MODULITH Planner` : 'MODULITH Planner (formerly GEN2) · plan a 3D-printable modular storage build');

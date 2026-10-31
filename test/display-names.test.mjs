@@ -2,6 +2,7 @@
 // keeps its GEN2 form.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { partName, buildName, noteText, tabTitle } from '../js/ui/names.js';
 
 test('a sized part reads Name, collection, size', () => {
@@ -33,5 +34,12 @@ test('build names and the tab title', () => {
   assert.equal(buildName('GEN2 185 Tabletop Kit 2W-2H'), '185 Tabletop Kit 2W-2H');
   assert.equal(buildName('My shop wall'), 'My shop wall');
   assert.equal(tabTitle('The Mighty Bit Bunker · GEN2 Custom · 185'), 'The Mighty Bit Bunker · Custom · 185 · MODULITH Planner');
-  assert.equal(tabTitle(null), 'MODULITH Planner · plan a 3D-printable modular storage build');
+  assert.equal(tabTitle(null), 'MODULITH Planner (formerly GEN2) · plan a 3D-printable modular storage build');
+});
+
+test('the old name stays in the title a search engine reads, and the page and the tab say the same words (Joey 2026-10-31)', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.equal(/<title>([^<]*)<\/title>/.exec(html)[1], tabTitle(null));
+  // Google cuts a title at about 60 characters: the old name has to come before that
+  assert.match(tabTitle(null).slice(0, 40), /\(formerly GEN2\)/);
 });
