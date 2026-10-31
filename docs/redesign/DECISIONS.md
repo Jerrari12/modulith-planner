@@ -6415,3 +6415,5 @@ test passes against the site's main. In a browser, the 115, 240 and 270 kits ope
 
 - **Live 2026-10-30 at `2239d7f`** (pushed 20:15, live about 20:40; run 41149209019 succeeded). On the live site in a browser: the 115, 240, 270
   and 185 kits open in Assemble on stamp `2239d7f3` with no warning and no page errors.
+
+- **Live 2026-10-30 (hanging kits and the gallery's retirement):** planner `334ce1f` (pushed 23:07, live about 23:30; run 41163019386), then site `12b8275` (pushed 23:38, Cloudflare). On the live sites in a browser: the old gallery address lands on `modulith.systems/builds/`; 23 cards with no broken image, 12 of them hanging, under their own mounts; all 12 kit pages state their screws, "None published" for load and their bracket or rail listing, and link their guide; five guides opened in Assemble with the right title, no warning and no page errors.
