@@ -22,8 +22,8 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const items = (rec) => { const d = clone(rec); sanitizeBuild(d, GEN2); return computeBom(d, GEN2).flatMap((s) => s.items); };
 const qty = (list, re) => list.filter((i) => re.test(i.name)).reduce((a, i) => a + i.qty, 0);
 
-test('the set: 59, 165 and 185, wall and under-table, both shapes', () => {
-  const want = [59, 165, 185].flatMap((l) => ['wall', 'undertable'].flatMap((m) => ['2w2h', '3w2h'].map((s) => `${l}-${m}-${s}`)));
+test('the set: every depth, wall and under-table, both shapes', () => {
+  const want = [59, 115, 165, 185, 240, 270].flatMap((l) => ['wall', 'undertable'].flatMap((m) => ['2w2h', '3w2h'].map((s) => `${l}-${m}-${s}`)));
   assert.deepEqual(hanging.map((k) => k.id).sort(), want.sort());
 });
 
