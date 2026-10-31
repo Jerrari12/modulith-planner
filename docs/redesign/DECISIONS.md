@@ -6372,3 +6372,6 @@ stay, for builds that use derived sizes (Classic drawers, non-1H drawers).
 Checks: six golden manifests change one line each, the note losing the sentence. Unit suite 748 pass, 5 skipped, and the site BOM parity
 test passes against the site's main. In a browser, the 115, 240 and 270 kits open in Assemble with no warning and no page error. Terra
 01a18f4f: no findings.
+
+- **Live 2026-10-30 at `2239d7f`** (pushed 20:15, live about 20:40; run 41149209019 succeeded). On the live site in a browser: the 115, 240, 270
+  and 185 kits open in Assemble on stamp `2239d7f3` with no warning and no page errors.
