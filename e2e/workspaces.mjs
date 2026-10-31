@@ -263,6 +263,7 @@ test('the front door: the bare address opens Build; a kit link and a part previe
   await page.goto(`${base}/index.html?debug=1`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.ws), 'build', 'the bare address mounts Build');
   assert.equal(await page.evaluate(() => new URLSearchParams(location.search).get('ws')), 'build', 'and names it in the address');
+  assert.equal(await page.evaluate(() => window.goatcounter.path), '/index.html?debug=1', 'the counter keeps the address it arrived on: not the rewrite, not the canonical');
   assert.ok(await page.locator('#ws-top').count(), 'the top bar');
   // a kit by name, without ?ws=: the old viewer (the smoke test's and the goldens' route)
   await page.goto(`${base}/index.html?build=185-tabletop-2w2h&debug=1`, { waitUntil: 'load', timeout: 90_000 });

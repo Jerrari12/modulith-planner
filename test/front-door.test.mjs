@@ -46,6 +46,55 @@ test('an address that names something without ?ws= keeps the old viewer', () => 
   ]) assert.equal(shellWorkspace(q, h), null, why);
 });
 
+test('search sees one address: the page names the bare address as canonical, once, in its head', () => {
+  // only a real tag counts, not one in a comment or a script's text, and a second one would make Google ignore both
+  const html = read('index.html').replace(/<!--[\s\S]*?-->/g, '').replace(/<script\b[\s\S]*?<\/script>/gi, '');
+  const end = html.indexOf('</head>');
+  const tags = (s) => s.match(/<link\b[^>]*\brel=["']?canonical\b[^>]*>/gi) || [];
+  assert.deepEqual(tags(html.slice(0, end)), ['<link rel="canonical" href="https://planner.modulith.systems/">']);
+  assert.deepEqual(tags(html.slice(end)), [], 'none outside <head>, where a search engine would not read it');
+});
+
+test('the counter keeps every address: count.js would report the canonical\'s "/", so the page pins the arrival URL first', () => {
+  const html = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+  const pin = html.indexOf('<script>window.goatcounter = { path: location.pathname + location.search };</script>');
+  assert.ok(pin > -1, 'the path is pinned, as a string');
+  assert.ok(pin < html.indexOf('<script data-goatcounter='), 'before count.js loads');
+});
+
+test('?ref= leaves the address once the visit has counted, and not before: a background tab counts when it is shown', () => {
+  const src = /<script>\s*(addEventListener\('load'[\s\S]*?)<\/script>/.exec(read('index.html').replace(/<!--[\s\S]*?-->/g, ''));
+  assert.ok(src, 'the script is on the page');
+  const boot = (href, visibility) => {
+    const loc = new URL(href), calls = [], on = { load: [], visibilitychange: [] };
+    const doc = { visibilityState: visibility, addEventListener: (k, f) => on[k].push(f), removeEventListener: (k, f) => { on[k] = on[k].filter((x) => x !== f); } };
+    const hist = { state: { keep: 1 }, replaceState: (s, _, u) => { calls.push([s, u]); loc.href = u; } };
+    new Function('addEventListener', 'document', 'location', 'history', src[1])((k, f) => on[k].push(f), doc, loc, hist);
+    return { doc, calls, fire: (k) => [...on[k]].forEach((f) => f()) };
+  };
+  const A = 'https://planner.modulith.systems/?ws=build&ref=Google&from=printables#build=AAA';
+  const clean = 'https://planner.modulith.systems/?ws=build&from=printables#build=AAA';
+  // nothing moves while the page parses: count.js reads location.search when it counts
+  const seen = boot(A, 'visible');
+  assert.deepEqual(seen.calls, [], 'before load');
+  seen.fire('load');
+  assert.deepEqual(seen.calls, [[{ keep: 1 }, clean]], 'at load, in a visible tab, keeping every other parameter, the hash and the history state');
+  // a background tab: count.js waits for it to be shown, and its listener was added first, so this one runs after it
+  const back = boot(A, 'hidden');
+  back.fire('load');
+  back.fire('visibilitychange');
+  assert.deepEqual(back.calls, [], 'still hidden: not counted yet');
+  back.doc.visibilityState = 'visible';
+  back.fire('visibilitychange');
+  assert.deepEqual(back.calls.map((c) => c[1]), [clean], 'when it is shown');
+  back.fire('visibilitychange');
+  assert.equal(back.calls.length, 1, 'once');
+  // an address with no ref is left exactly alone
+  const none = boot('https://planner.modulith.systems/?ws=build&from=printables', 'visible');
+  none.fire('load');
+  assert.deepEqual(none.calls, []);
+});
+
 test('app.js opens the shell by shellWorkspace, and the deploy stamps that import', () => {
   const app = read('js', 'app.js');
   assert.ok(/import \{ shellWorkspace \} from '\.\/entry\.js';/.test(app), 'app.js imports it');

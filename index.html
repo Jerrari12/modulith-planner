@@ -3,13 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>MODULITH Planner · plan a 3D-printable modular storage build</title>
+<title>MODULITH Planner (formerly GEN2) · plan a 3D-printable modular storage build</title>
 <!-- What a search engine shows for this page (2026-10-19). The static title and description say what the thing is:
      a crawler that runs no script reads only these, and one that does reads the build's name first (js/ui/names.js
      tabTitle), set by app.js in the planner and by main.js in the plain viewer, in the same shape. "GEN2 Assembly
-     Instructions" was the viewer's name from before the merge and said nothing about MODULITH. -->
+     Instructions" was the viewer's name from before the merge and said nothing about MODULITH. "(formerly GEN2)" is for
+     the old name's searchers (Joey, 2026-10-31), for now: the old address's canonical sends its listing to this page, and
+     the rename is weeks old. Check Search Console's gen2 queries around 2027-01-31 before dropping it. -->
 <meta name="description" content="MODULITH Planner: lay out a 3D-printable modular storage build, pick filament colors, make labels, and get the parts list and assembly steps. Free, in the browser. GEN2 parts still work.">
 <!-- the bare address is the planner (cutover, 2026-10-17), so a link preview of it shows the title and description above -->
+<!-- One address for search (2026-10-31): the old planner's forward lands on ?ws=build and names this same address. Every
+     ?ws=, ?build=, ?part= and ?ref= address opens this one page with no words of its own; a kit's page to rank is on the site. -->
+<link rel="canonical" href="https://planner.modulith.systems/">
 <!-- Site icon: the Jerrari J on a dark tile. The mark's core is WHITE, so a
      transparent icon dissolves into a light tab bar — the tile keeps it legible
      in both themes. Root-absolute paths so /builds/ resolves them too. Same
@@ -332,23 +337,16 @@
      This is a SEPARATE GoatCounter site from the planner's (jerrari.*), so the
      two apps' "/" pageviews don't collapse into one row and event names need
      no app prefix. Keep the two in sync if either ever moves. -->
-<!-- NO `path` OVERRIDE, deliberately. There used to be one, pinning the pageview
-     to the arrival URL because main.js history.replaceState()d the bare root
-     onto the canonical starter kit, and those raced on a cold CDN. That
-     rewrite was removed on 2026-08-22 (the root is a live promise again, see
-     entry.js), so the override guarded a race that no longer exists - and it
-     carried a standing hazard of its own: a captured path is applied to any
-     goatcounter.count() call that does not pass its own, so one future call
-     that forgot would have reported this URL instead of the current one.
-     count.js's own default - location.pathname + location.search at load - is
-     now correct by construction. VERIFIED before removal: nothing in the viewer
-     mutates location.href/search/pathname and there is no replaceState or
-     pushState anywhere (test/entry-routes.test.mjs pins that). The single hash
-     write, on a mount or length change, is followed immediately by
-     location.reload(), and a hash is not part of count.js's default path.
-     ⚠ If a URL rewrite is ever reintroduced, this override comes back WITH IT -
-     and as a STRING, never a function. -->
-<script>window.goatcounter = {};</script>
+<!-- THE PAGEVIEW PATH IS PINNED to the URL the visitor arrived on (2026-10-31; the
+     first pin ran 2026-08-21 to 08-22). count.js's default path comes from a
+     same-host <link rel="canonical"> when the page has one, so the canonical in
+     <head> would report every address as "/": every ?ws=, ?build=, ?part= and
+     ?from= row gone from the dashboard. And app.js replaceState()s the bare root
+     onto ?ws=build, which races that default on a cold CDN.
+     ⚠ A STRING, never a function: a function runs when count.js counts, after
+     that rewrite. Every goatcounter.count() must pass its own path, as track()
+     does, or it reports this arrival URL instead of the current one. -->
+<script>window.goatcounter = { path: location.pathname + location.search };</script>
 <!-- Absolute https (not protocol-relative): a //-URL opened via file://
      resolves to a Windows network share and hangs the page for minutes.
      The counter is `jerrari`, the old planner's, since the cutover (CUTOVER.md,
@@ -356,5 +354,22 @@
      `jerrari-build` keeps only what still runs on gen2build.jerrari3d.com. -->
 <script data-goatcounter="https://jerrari.goatcounter.com/count"
         async src="https://gc.zgo.at/count.js"></script>
+<!-- ?ref= is for the one pageview count.js sends: it says where this visit came from (the site's buttons, and the old
+     planner's forward, which would otherwise be the referrer). Left in the address it would stay for good, in a reopened
+     tab, a bookmark and every Share link, and count those later visits as that source too. So it leaves once the visit has
+     counted, and not before: count.js reads location.search when it counts. That is before `load` (the page waits for it)
+     in a visible tab. In a background tab count.js waits to be shown, and its listener was added first, so this one runs after it. -->
+<script>
+addEventListener('load', function () {
+  function drop() {
+    var u = new URL(location.href);
+    if (!u.searchParams.has('ref')) return;
+    u.searchParams.delete('ref');
+    try { history.replaceState(history.state, '', u.href); } catch (e) { /* the address keeps it: nothing else depends on this */ }
+  }
+  if (document.visibilityState === 'visible') return drop();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') drop(); });
+});
+</script>
 </body>
 </html>
