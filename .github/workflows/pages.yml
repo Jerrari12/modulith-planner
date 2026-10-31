@@ -165,6 +165,8 @@ jobs:
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'./names.js'|'./names.js?v=$V'|" js/ui/topbar.js
           # the shown names (2026-10-16): imported by app.js, the top bar and the Parts workspace
           sed -i "s|'./ui/names.js'|'./ui/names.js?v=$V'|" js/app.js js/main.js   # main.js imports it too since 2026-10-19 (the viewer's tab title)
+          # the room ahead (2026-10-31): app.js asks room-ahead.js who gets the Colors room ready in the background, and imports done.js for it (the same stamp as Colors' own import: one instance of the module)
+          sed -i "s|'./scenes/room-ahead.js'|'./scenes/room-ahead.js?v=$V'|; s|'./scenes/done.js'|'./scenes/done.js?v=$V'|" js/app.js
           # the front door (cutover, 2026-10-17): app.js asks entry.js which workspace a bare address opens; main.js
           # imports it too (its own line below), one sed target per importer
           sed -i "s|'./entry.js'|'./entry.js?v=$V'|" js/app.js

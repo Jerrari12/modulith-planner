@@ -228,6 +228,291 @@ function unlit(root) {
   return made;
 }
 
+/* the room's own materials dressed: every baked mesh with a tile in the walls' bounce draws its bake less its share, and less
+   its share of the desk's where the room has those tiles (paintRoom sets the shares and the desk tile's rect), and the desk
+   top a sheen for a plain colour (addSheen). An entry and the room's programs ahead (warmRoom) both come through here, so
+   what is compiled ahead is what is drawn. */
+function dressRoom(group, bounce) {
+  if (bounce) group.traverse((o) => {
+    const rec = o.isMesh && bounce.meshes[o.name];
+    if (!rec) return;
+    for (const m of [].concat(o.material)) if (m.isMeshBasicMaterial && m.map) addBounce(m, bounce, rec.rect);
+  });
+  const deskTop = group.getObjectByName('desk_top');
+  if (deskTop) for (const m of [].concat(deskTop.material)) if (m.isMeshBasicMaterial && m.map) addSheen(m);
+}
+/* the room's small materials, one maker each for the same reason */
+const catcherMaterial = (opacity) => new THREE.ShadowMaterial({ opacity, depthWrite: false });
+const maskMaterial = (tex) => new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false,
+  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
+  blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor });
+const discMaterial = (tex) => new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false });
+const paneMaterial = (tex) => new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+/* the coffee's steam, its two materials on one clock (makeSteam) */
+function steamMaterials(r, size) {
+  const time = { value: 7.3 }, colour = { value: new THREE.Color(0.95, 0.95, 0.96) };
+  return {
+    time,
+    sheets: new THREE.ShaderMaterial({
+      uniforms: { uTime: time, uW: { value: size.w }, uH: { value: size.h }, uR: { value: r * SCALE }, uAlpha: { value: STEAM.alpha }, uColor: colour },
+      vertexShader: STEAM_VERT, fragmentShader: STEAM_FRAG, transparent: true, depthWrite: false, toneMapped: false,
+    }),
+    mist: new THREE.ShaderMaterial({
+      uniforms: { uTime: time, uMist: { value: STEAM.mist }, uColor: colour },
+      vertexShader: STEAM_MIST_VERT, fragmentShader: STEAM_MIST_FRAG, transparent: true, depthWrite: false, toneMapped: false,
+    }),
+  };
+}
+/* THE GLAZE'S LIGHT (Astra 2026-10-26: "The white mug texture is a little heavy in close-up. It reads more like rough
+   stoneware than glazed ceramic"). The bake carries a speckle of its sampling noise and a dark line at each of its four
+   UV seams (measured: the seams at -7.5, 82.5, 172.5 and -97.5 deg about the axis), and a turned mug swings them into
+   view. So the outer wall (and the handle) are lit here instead of read from the bake: the bake's mean (its last mip) for
+   the level, the room's sun across the normal for the shape (a wrap of 0.55 + 0.9 Lambert about the horizontal, its mean
+   round the cylinder 1), and a darker foot where the desk shades it. Lit from the right side however the mug is turned;
+   the inside keeps its bake. `uMugFoot` 0 for the handle. */
+const MUG_GLAZE_ROUGH = 0.12;
+const MUG_LIGHT_GLSL = '#if defined( USE_MAP ) && defined( USE_ENVMAP )\n'
+  + '\tif ( dot( vMugP.xz, vMugP.xz ) >= uMugR2 ) {\n'
+  + '\t\tvec3 mugN = normalize( vSheenN );\n'
+  + '\t\tfloat mugNl = length( mugN.xz ), mugLam = mugNl > 1e-4 ? max( dot( mugN.xz / mugNl, uMugSun ), 0.0 ) * mugNl : 0.0;\n'
+  + '\t\tfloat mugL = ( 0.55 + 0.9 * mugLam + 0.25 * max( mugN.y, 0.0 ) ) / ( 0.55 + 0.9 / 3.14159265 );\n'
+  + '\t\tfloat mugFootK = mix( 1.0, mix( 0.8, 1.0, smoothstep( 0.0, 0.3, ( vMugP.y - uMugY0 ) / uMugH ) ), uMugFoot );\n'
+  + '\t\tdiffuseColor.rgb = diffuse * textureLod( map, vMapUv, 12.0 ).rgb * uMugGain * mugL * mugFootK;\n'
+  + '\t}\n#endif\n';
+const MUG_GAIN = 2.0;   // the bake's mean takes in its dark inside and foot: the outer wall's level over it (1.12, 1.4, then 1.6 drew the white mugs grey)
+const MUG_PRINT_GLSL = '\tfloat mugTh = atan( vMugP.x, vMugP.z ) - uMugTurn;\n'
+  + '\tfloat mugR2 = max( dot( vMugP.xz, vMugP.xz ), 1e-12 );\n'
+  + '\tvec3 mugPx = dFdx( vMugP ), mugPy = dFdy( vMugP );\n'
+  + '\tvec2 mugUv = vec2( fract( mugTh / 6.28318530718 + 0.5 ), ( vMugP.y - uMugY0 ) / uMugH );\n'
+  + '\t// the angle\'s own derivatives, continuous across the print\'s seam at the back (atan\'s jump would pick the smallest mip there)\n'
+  + '\tvec2 mugDx = vec2( ( vMugP.z * mugPx.x - vMugP.x * mugPx.z ) / mugR2 / 6.28318530718, mugPx.y / uMugH );\n'
+  + '\tvec2 mugDy = vec2( ( vMugP.z * mugPy.x - vMugP.x * mugPy.z ) / mugR2 / 6.28318530718, mugPy.y / uMugH );\n'
+  + '\tvec4 mugInk = ( mugUv.y < 0.0 || mugUv.y > 1.0 || mugR2 < uMugR2 ) ? vec4( 0.0 ) : textureGrad( uMugPrint, mugUv, mugDx, mugDy );\n'
+  + '\tdiffuseColor.rgb *= mix( uMugBody, mugInk.rgb, mugInk.a );\n';
+/* `env`: the room's environment as captured, `sunDir`: its sun (room.json), about the horizontal (the room is not turned) */
+function glaze(m, { body, tex = null, turn = 0, y0 = 0, h = 1, r = 0, foot = 1, bounce = !!m.userData.bounce, env = null, sunDir = null }) {
+  addSheen(m);
+  m.userData.sheen.on.value = 1; m.userData.sheen.rough.value = MUG_GLAZE_ROUGH;
+  m.envMap = env;
+  const prev = m.onBeforeCompile;
+  const sd = sunDir || [-1, 1, 1], sl = Math.hypot(sd[0], sd[2]) || 1;
+  const u = { uMugBody: { value: body }, uMugPrint: { value: tex }, uMugTurn: { value: turn }, uMugY0: { value: y0 }, uMugH: { value: h }, uMugR2: { value: (r * 0.97) ** 2 },
+    uMugSun: { value: new THREE.Vector2(sd[0] / sl, sd[2] / sl) }, uMugGain: { value: MUG_GAIN }, uMugFoot: { value: foot } };
+  m.userData.mug = u;
+  m.onBeforeCompile = (sh, rr) => {
+    if (prev) prev.call(m, sh, rr);
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = 'varying vec3 vMugP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvMugP = position;');
+    sh.fragmentShader = 'uniform vec3 uMugBody;\nuniform sampler2D uMugPrint;\nuniform float uMugTurn;\nuniform float uMugY0;\nuniform float uMugH;\nuniform float uMugR2;\nuniform vec2 uMugSun;\nuniform float uMugGain;\nuniform float uMugFoot;\nvarying vec3 vMugP;\n'
+      + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + MUG_LIGHT_GLSL + (tex ? MUG_PRINT_GLSL : '\tdiffuseColor.rgb *= uMugBody;\n'));
+  };
+  const key = 'done-mug|' + (bounce ? 'bounce|' : '') + (tex ? 'print' : 'glaze');
+  m.customProgramCacheKey = () => key;
+  m.needsUpdate = true;
+}
+
+/* THE ROOM'S PROGRAMS AHEAD (Joey 2026-10-31, of the first switch to Colors: "it takes a good couple seconds to load ... it
+   just feels like it's sluggish or frozen, even on this powerful laptop ... is there maybe a way to partially preload in the
+   background? or maybe even a loading status bar or similar?"). MEASURED on his laptop (D:/Claude - Output/colors-load-
+   2026-10-31; A5000, Chrome and Brave alike): the files arrive in 0.1 to 0.5 s. The wait is the GPU driver building
+   shader programs: 41 at Very High, and three's first use of each (getProgramInfoLog) holds the page until its link is done.
+   7 to 11 s of a frozen page on a browser with no cached copy of them (every first visit, every driver update, every shader
+   this repo changes), 0.7 s with them cached. Most of it is not the room's own: on the dark stage the build's parts have
+   never been drawn with a shadow map, so the room asks for every part program again (four, three of them 0.7 to 0.9 s each),
+   and on Very High for each of those again drawing into a target.
+   So the programs are started before the room is on the stage. renderer.compile only issues the compile and the link: with
+   KHR_parallel_shader_compile they run on the driver's own threads, the page keeps its frames, and programs are polled until
+   ready (isReady); only then does the entry put the room on. Asked for by the boot, in idle slices, on a device that should
+   (room-ahead.js), and by the entry itself on every device, as fast as a slice allows, behind the loading bar (roomStatus).
+   ⚠ A SET THAT LIVES AS LONG AS THE PAGE. three releases a program with the last material using it, and every entry makes its
+   own materials and disposes them on leave: the second switch re-linked 28 programs (0.2 s, from the driver's cache). So one
+   material of each kind stays referenced here, never drawn, and a real material of the same key shares its program.
+   ⚠ THE KEYS MUST BE THE ENTRY'S OWN. A material here that differs from the entry's in anything a program key reads compiles
+   a program nobody draws and leaves the entry its wait. So they come from the entry's own makers (dressRoom, glaze,
+   steamMaterials, makeSpool, makeTag ...), and the e2e counts the programs a first switch adds: a drift shows there.
+   Without KHR_parallel_shader_compile nothing is pending and the link waits for first use, as it did. WARM_WAIT_MS: a driver
+   that never says ready must not hold the room back for ever; the entry then takes the wait on its first frame, as it did. */
+const WARM_WAIT_MS = 20000;
+const warm = { run: null, urgent: false, wake: null, phase: 'none', files: false, done: 0, total: 0, pending: 0, peak: 0, ms: null, timedOut: false, set: null, tiers: new Set(), parts: new Set(), watch: new Set(), started: 0, slices: 0 };
+const warmProgress = () => (warm.phase === 'ready' ? 1 : (warm.files ? 0.25 : 0) + (warm.total ? 0.15 * warm.done / warm.total : 0) + (warm.peak ? 0.6 * (1 - warm.pending / warm.peak) : 0));
+function warmEmit() { const f = warmProgress(); for (const w of warm.watch) w(f); }
+const warmAwake = () => { if (warm.wake) { const w = warm.wake; warm.wake = null; w(); } };
+/* a wait the entry can cut short: it turns the run urgent and wakes it */
+function warmWait(ms, idle = false) {
+  return new Promise((ok) => {
+    let id = 0;
+    const done = (deadline) => { if (warm.wake === wake) warm.wake = null; if (idle && window.cancelIdleCallback) cancelIdleCallback(id); else clearTimeout(id); ok(deadline); };
+    const wake = () => done(null);
+    warm.wake = wake;
+    id = idle && window.requestIdleCallback ? requestIdleCallback(done, { timeout: ms }) : setTimeout(done, ms);
+  });
+}
+let warmSliceEnd = 0;
+async function warmSlice(stage) {
+  if (performance.now() < warmSliceEnd) return;
+  warm.slices++;
+  if (warm.urgent) { await warmWait(0); warmSliceEnd = performance.now() + 8; return; }   // a task at a time: the page and its frames go first
+  while (!warm.urgent && stage.warmQuiet && !stage.warmQuiet()) await warmWait(250);   // not under a move, a tween or a hidden tab
+  if (warm.urgent) { warmSliceEnd = performance.now() + 8; return; }
+  const deadline = await warmWait(1500, true);
+  warmSliceEnd = performance.now() + (deadline && deadline.timeRemaining ? Math.min(8, deadline.timeRemaining()) : 4);
+}
+/* one of each kind, once a page: nothing here is added to a scene or drawn */
+function warmSetOf(stage, { gltf, json, masks, bounce, light, spoolGeo }) {
+  const env = stage.studioEnv();
+  const cv = document.createElement('canvas'); cv.width = cv.height = 1;
+  const tex = new THREE.CanvasTexture(cv);   // any map: a program reads that there is one, not which
+  const room = gltf.scene.clone(true), plane = new THREE.PlaneGeometry(1, 1), lone = (mat) => new THREE.Mesh(plane, mat);
+  const mats = unlit(room);
+  dressRoom(room, bounce);
+  const sunDir = json && json.sun && json.sun.dir, body = new THREE.Color(1, 1, 1);
+  const mug = room.getObjectByName('mug'), handle = room.getObjectByName('mug_handle');
+  if (mug) glaze([].concat(mug.material)[0], { body, tex, env, sunDir });
+  if (handle) glaze([].concat(handle.material)[0], { body, env, sunDir });
+  const live = [], meshes = [];
+  room.traverse((o) => { if (!o.isMesh) return; if (o.userData.live) { for (const m of [].concat(o.material)) m.envMap = env; live.push(o); } else meshes.push(o); });
+  /* a desk this browser remembers as a plain colour (paintRoom): the sheen on, the room in it, another program of the same
+     material, kept with the first. A desk picked plain later links its own then, in a blink: it is one small program */
+  const deskTop = room.getObjectByName('desk_top');
+  const saved = deskLook(savedRoomColours().desk, light && light.desk_top && light.desk_top.tex ? light.desk_top : null, bounce && bounce.desk ? bounce.desk.share : null);
+  const plainDesk = deskTop && saved && saved.use === 'light' ? [].concat(deskTop.material)[0] : null;
+  const steam = steamMaterials(0.04, steamSize(1));
+  const extras = [catcherMaterial(0.42), maskMaterial(tex), discMaterial(tex), steam.sheets, steam.mist].map(lone);
+  const pane = lone(paneMaterial(tex));   // compiled both ways on every tier, as the scene's compileAhead asks for it
+  const spoolParts = [];
+  if (spoolGeo) {
+    const s = makeSpool(spoolGeo, '#808080', { silkEnv: stage.silkU ? stage.silkU.uSilkEnv : null });
+    const info = tagInfo({ material: 'PLA', hex: '#808080', colourName: 'Grey' });
+    const tag = makeTag(info, MATERIAL_COLOURS.PLA, new THREE.Vector3(0, 0, 1)), sticker = makeSticker(info, MATERIAL_COLOURS.PLA);
+    s.add(tag, sticker);
+    s.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.material.map) { o.material.map.dispose(); o.material.map = tex; }   // their drawn words are not kept for this
+      spoolParts.push(o);
+    });
+    spoolParts.silk = s.userData.setSilk;
+  }
+  const textures = new Set([...(masks || []).map((m) => m.tex), light && light.desk_top && light.desk_top.tex, bounce && bounce.tex, ...mats.map((m) => m.map)].filter(Boolean));
+  return { mats, room, meshes, live, extras, pane, spoolParts, plainDesk, env, textures: [...textures] };
+}
+/* what this tier and this build have not compiled yet: the textures once, the room's set once a tier, the parts' materials
+   once a tier each (a build that changed brings new ones; the rest are a key lookup, and the entry asks again anyway) */
+function warmItems(stage, room) {
+  const tier = stage.quality, q = stage.QUALITY[tier] || {}, into = !!q.accum, items = [];
+  if (!warm.set) warm.set = warmSetOf(stage, room);
+  const s = warm.set;
+  for (let i = 0; i < s.textures.length; i++) items.push(() => stage.renderer.initTexture(s.textures.shift()));   // any tier's: one left behind by a tier change comes round again
+  if (!warm.tiers.has(tier)) {
+    warm.tiers.add(tier);
+    const roomMesh = (o) => { stage.compileForCapture(o); stage.compileForHold(o, { target: into }); };   // the environment's capture (captureEnv), and on the stage
+    for (const o of s.meshes) items.push(() => roomMesh(o));
+    for (const o of s.live) items.push(() => stage.compileForHold(o, { target: into }));
+    if (s.plainDesk) items.push(() => { const m = s.plainDesk; m.envMap = s.env; m.needsUpdate = true; for (const o of s.meshes) if ([].concat(o.material).includes(m)) roomMesh(o); });
+    for (const o of s.extras) items.push(() => stage.compileForHold(o, { target: into }));
+    items.push(() => stage.compileForHold(s.pane, { target: true }));
+    for (const o of s.spoolParts) items.push(() => stage.compileForHold(o, { target: into }));
+  }
+  /* A SILK SPOOL (spool.js): a silk filament's coil is another program; only when the build wears one */
+  if (s.spoolParts.silk && stage.filamentsInBuild && !warm.tiers.has(tier + '|silk') && stage.filamentsInBuild().filaments.some((f) => f.silk)) {
+    warm.tiers.add(tier + '|silk');
+    items.push(() => {
+      s.spoolParts.silk(true, stage.silkEnv ? stage.silkEnv() : null);
+      for (const o of s.spoolParts) if (o.material && o.material.isMeshPhysicalMaterial) stage.compileForHold(o, { target: into });
+      s.spoolParts.silk(false);   // plain again: a later tier compiles the plain coil first
+    });
+  }
+  for (const { mesh, key } of stage.holdPartMeshes()) {
+    const k = key + '|' + tier;
+    if (warm.parts.has(k)) continue;
+    warm.parts.add(k);
+    items.push(() => stage.compileForHold(mesh, { target: into }));
+  }
+  return items;
+}
+async function warmRun(stage) {
+  const t0 = warm.started = performance.now();
+  warm.phase = 'files'; warm.files = false; warm.done = warm.total = warm.pending = warm.peak = 0; warm.timedOut = false; warm.slices = 0;
+  warmEmit();
+  while (!warm.urgent && document.hidden) await warmWait(1000);   // no data for a tab nobody has looked at
+  const room = await loadRoom();
+  warm.files = true; warm.phase = 'compile'; warm.filesMs = +(performance.now() - t0).toFixed(1);
+  warmEmit();
+  /* a tier or a build that changed under the run: its items too. A tier that changed part way drops what its old tier had left
+     and forgets that tier: compiled under the new tier's state, those items would mark it done without its programs (Sol
+     01a19327: High, Fast and back to High blocked on first use) */
+  for (let tier = stage.quality, items; (tier = stage.quality, items = warmItems(stage, room)).length;) {
+    warm.total += items.length;
+    for (const it of items) {
+      await warmSlice(stage);
+      if (stage.quality !== tier) {
+        warm.tiers.delete(tier); warm.tiers.delete(tier + '|silk');
+        for (const k of warm.parts) if (k.endsWith('|' + tier)) warm.parts.delete(k);
+        warm.total -= items.length - items.indexOf(it);
+        break;
+      }
+      try { it(); } catch (e) { console.warn('[done scene] a program ahead', e); }
+      warm.done++;
+      warmEmit();
+    }
+  }
+  warm.phase = 'link';
+  const t1 = performance.now();
+  warm.compileMs = +(t1 - t0).toFixed(1);
+  for (;;) {
+    const n = stage.programsPending();
+    warm.pending = n; warm.peak = Math.max(warm.peak, n);
+    warmEmit();
+    if (!n) break;
+    if (performance.now() - t1 > WARM_WAIT_MS) { warm.timedOut = true; break; }
+    await warmWait(warm.urgent ? 40 : 200);
+  }
+  warm.ms = +(performance.now() - t0).toFixed(1);
+  // a check's reading: a later run with nothing to do leaves it. `newest`: the newest program's id, what the room's entry must add nothing to
+  if (warm.total) warm.last = { ms: warm.ms, filesMs: warm.filesMs, compileMs: warm.compileMs, items: warm.total, slices: warm.slices, programs: warm.peak, urgent: warm.urgent, timedOut: warm.timedOut, newest: Math.max(0, ...stage.renderer.info.programs.map((p) => p.id)) };
+  warm.phase = 'ready';
+  warmEmit();
+}
+/* `urgent`: the entry is waiting (no idle slices from here on); `onProgress(0..1)`: for its loading bar. One run at a time: a
+   call during a run joins it. A run that fails (the files did not load) leaves the entry to say so, as it always has. */
+export function warmRoom(stage, { urgent = false, onProgress = null } = {}) {
+  if (new URLSearchParams(location.search).has('debug')) window.__GEN2_ROOM_WARM__ = warm;
+  if (urgent) { warm.urgent = true; warmAwake(); }
+  const running = warm.run || (warm.run = warmRun(stage).finally(() => { warm.run = null; warm.urgent = false; }));
+  if (onProgress) { warm.watch.add(onProgress); onProgress(warmProgress()); }   // after the start: the last run's 'ready' is not this one's
+  return running.finally(() => { if (onProgress) warm.watch.delete(onProgress); });
+}
+/* THE WAIT, SAID (Joey's "a loading status bar"): a pill over the free part of the stage, only once the wait has lasted
+   long enough to notice (STATUS_MS), gone with the wait. Its bar and its sweep move on the compositor, so it would keep moving
+   through a blocked main thread too. The studio stays live under it: nothing has changed on the stage until the room comes
+   on. A pill drawn over a wait this short would be the flicker it is meant to prevent. */
+const STATUS_MS = 150;
+function roomStatus(stage) {
+  let box = null, bar = null, f = 0, gone = false;
+  const place = () => {
+    if (!box) return;
+    const sa = stage.safeArea || { left: 0, right: 0, top: 0 }, tools = document.getElementById('ws-tools');
+    box.style.left = `${Math.round((sa.left + innerWidth - sa.right) / 2)}px`;
+    box.style.top = `${Math.round(Math.max(sa.top + 10, tools && !tools.hidden ? tools.getBoundingClientRect().bottom + 8 : 0))}px`;   // clear of the toolbar, which runs past the safe area's top
+  };
+  const timer = setTimeout(() => {
+    const root = document.getElementById('ws');
+    if (gone || !root) return;
+    box = document.createElement('div');
+    box.id = 'ws-room-loading'; box.className = 'glass'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+    const label = document.createElement('span'); label.textContent = 'Setting up the room…';
+    const track = document.createElement('i'); bar = document.createElement('b');
+    track.appendChild(bar); box.append(label, track);
+    bar.style.transform = `scaleX(${f})`;
+    root.appendChild(box);
+    place();
+    addEventListener('resize', place);
+  }, STATUS_MS);
+  return {
+    set(v) { f = Math.max(f, Math.min(1, v)); if (bar) bar.style.transform = `scaleX(${f})`; },
+    remove() { gone = true; clearTimeout(timer); removeEventListener('resize', place); if (box) { box.remove(); box = bar = null; } },
+  };
+}
+
 function boxOf(obj) { return new THREE.Box3().setFromObject(obj); }
 const plain = (b) => ({ min: { x: b.min.x, y: b.min.y, z: b.min.z }, max: { x: b.max.x, y: b.max.y, z: b.max.z } });
 
@@ -263,7 +548,7 @@ function contactTexture() {
    the shots are the only views, and the handle's `nextShot()` cuts to the next one. */
 export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true, orbit = true, onSpool = null } = {}) {
   const { scene, camera, controls, renderer } = stage;
-  let cancelled = false, on = false;
+  let cancelled = false, on = false, status = null;   // status: the loading pill, while the room is on its way (roomStatus)
   const parts = { group: null, catcher: null, wall: null, sprite: null, masks: [], slid: {}, env: null, tex: null, mats: [], raf: 0, fade: null };
   const was = { table: stage.table.visible, grid: stage.grid.visible,
     sun: { pos: stage.sun.position.clone(), color: stage.sun.color.clone(), intensity: stage.sun.intensity },
@@ -789,11 +1074,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!coffee || !coffee.geometry) return;
     coffee.geometry.computeBoundingBox();
     const bb = coffee.geometry.boundingBox, r = (bb.max.x - bb.min.x) / 2, size = steamSize(r * SCALE);   // the GLB's metres to mm
-    const time = { value: 7.3 }, colour = { value: new THREE.Color(0.95, 0.95, 0.96) };
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: time, uW: { value: size.w }, uH: { value: size.h }, uR: { value: r * SCALE }, uAlpha: { value: STEAM.alpha }, uColor: colour },
-      vertexShader: STEAM_VERT, fragmentShader: STEAM_FRAG, transparent: true, depthWrite: false, toneMapped: false,
-    });
+    const { sheets: mat, mist: mistMat } = steamMaterials(r, size);
     // the sheets in one geometry: each a quad carrying its depth across the coffee, its foot's half-width and its seed
     const quad = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), slices = steamSlices(), nq = quad.attributes.position.count;
     const pos = new Float32Array(nq * 3 * slices.length), uvs = new Float32Array(nq * 2 * slices.length), sl = new Float32Array(nq * 3 * slices.length), idx = [];
@@ -807,10 +1088,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2)); geo.setAttribute('aSlice', new THREE.BufferAttribute(sl, 3)); geo.setIndex(idx);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set((bb.min.x + bb.max.x) / 2, bb.max.y + 0.001, (bb.min.z + bb.max.z) / 2);   // the coffee's own frame
-    const mist = new THREE.Mesh(new THREE.CircleGeometry(r * 0.97, 48).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-      uniforms: { uTime: time, uMist: { value: STEAM.mist }, uColor: colour },
-      vertexShader: STEAM_MIST_VERT, fragmentShader: STEAM_MIST_FRAG, transparent: true, depthWrite: false, toneMapped: false,
-    }));
+    const mist = new THREE.Mesh(new THREE.CircleGeometry(r * 0.97, 48).rotateX(-Math.PI / 2), mistMat);
     mist.position.set((bb.min.x + bb.max.x) / 2, bb.max.y + 0.0015, (bb.min.z + bb.max.z) / 2);   // 1.5 mm over the coffee
     for (const o of [mesh, mist]) { o.frustumCulled = false; o.castShadow = false; o.receiveShadow = false; o.renderOrder = 2; o.raycast = () => {}; }
     mesh.name = 'done-steam'; mesh.userData.ghost = true; mesh.userData.doneRoom = true;
@@ -872,52 +1150,6 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      the room's mug mesh again (its bake fits any place on the desk as well as the coffee's), its handle turned about the
      axis, the coffee mug's shadow mask again under it. Made after the environment capture (the room it reflects has no mug
      of its own), on every visit, in the visit's own clone of the room; its prints' textures disposed on leave. */
-  const MUG_GLAZE_ROUGH = 0.12;
-  /* THE GLAZE'S LIGHT (Astra 2026-10-26: "The white mug texture is a little heavy in close-up. It reads more like rough
-     stoneware than glazed ceramic"). The bake carries a speckle of its sampling noise and a dark line at each of its four
-     UV seams (measured: the seams at -7.5, 82.5, 172.5 and -97.5 deg about the axis), and a turned mug swings them into
-     view. So the outer wall (and the handle) are lit here instead of read from the bake: the bake's mean (its last mip) for
-     the level, the room's sun across the normal for the shape (a wrap of 0.55 + 0.9 Lambert about the horizontal, its mean
-     round the cylinder 1), and a darker foot where the desk shades it. Lit from the right side however the mug is turned;
-     the inside keeps its bake. `uMugFoot` 0 for the handle. */
-  const MUG_LIGHT_GLSL = '#if defined( USE_MAP ) && defined( USE_ENVMAP )\n'
-    + '\tif ( dot( vMugP.xz, vMugP.xz ) >= uMugR2 ) {\n'
-    + '\t\tvec3 mugN = normalize( vSheenN );\n'
-    + '\t\tfloat mugNl = length( mugN.xz ), mugLam = mugNl > 1e-4 ? max( dot( mugN.xz / mugNl, uMugSun ), 0.0 ) * mugNl : 0.0;\n'
-    + '\t\tfloat mugL = ( 0.55 + 0.9 * mugLam + 0.25 * max( mugN.y, 0.0 ) ) / ( 0.55 + 0.9 / 3.14159265 );\n'
-    + '\t\tfloat mugFootK = mix( 1.0, mix( 0.8, 1.0, smoothstep( 0.0, 0.3, ( vMugP.y - uMugY0 ) / uMugH ) ), uMugFoot );\n'
-    + '\t\tdiffuseColor.rgb = diffuse * textureLod( map, vMapUv, 12.0 ).rgb * uMugGain * mugL * mugFootK;\n'
-    + '\t}\n#endif\n';
-  const MUG_GAIN = 2.0;   // the bake's mean takes in its dark inside and foot: the outer wall's level over it (1.12, 1.4, then 1.6 drew the white mugs grey)
-  const MUG_PRINT_GLSL = '\tfloat mugTh = atan( vMugP.x, vMugP.z ) - uMugTurn;\n'
-    + '\tfloat mugR2 = max( dot( vMugP.xz, vMugP.xz ), 1e-12 );\n'
-    + '\tvec3 mugPx = dFdx( vMugP ), mugPy = dFdy( vMugP );\n'
-    + '\tvec2 mugUv = vec2( fract( mugTh / 6.28318530718 + 0.5 ), ( vMugP.y - uMugY0 ) / uMugH );\n'
-    + '\t// the angle\'s own derivatives, continuous across the print\'s seam at the back (atan\'s jump would pick the smallest mip there)\n'
-    + '\tvec2 mugDx = vec2( ( vMugP.z * mugPx.x - vMugP.x * mugPx.z ) / mugR2 / 6.28318530718, mugPx.y / uMugH );\n'
-    + '\tvec2 mugDy = vec2( ( vMugP.z * mugPy.x - vMugP.x * mugPy.z ) / mugR2 / 6.28318530718, mugPy.y / uMugH );\n'
-    + '\tvec4 mugInk = ( mugUv.y < 0.0 || mugUv.y > 1.0 || mugR2 < uMugR2 ) ? vec4( 0.0 ) : textureGrad( uMugPrint, mugUv, mugDx, mugDy );\n'
-    + '\tdiffuseColor.rgb *= mix( uMugBody, mugInk.rgb, mugInk.a );\n';
-  function glaze(m, { body, tex = null, turn = 0, y0 = 0, h = 1, r = 0, foot = 1, bounce = !!m.userData.bounce }) {
-    addSheen(m);
-    m.userData.sheen.on.value = 1; m.userData.sheen.rough.value = MUG_GLAZE_ROUGH;
-    m.envMap = parts.env || null;
-    const prev = m.onBeforeCompile;
-    const sd = (json && json.sun && json.sun.dir) || [-1, 1, 1], sl = Math.hypot(sd[0], sd[2]) || 1;   // the room's sun, about the horizontal (the room is not turned)
-    const u = { uMugBody: { value: body }, uMugPrint: { value: tex }, uMugTurn: { value: turn }, uMugY0: { value: y0 }, uMugH: { value: h }, uMugR2: { value: (r * 0.97) ** 2 },
-      uMugSun: { value: new THREE.Vector2(sd[0] / sl, sd[2] / sl) }, uMugGain: { value: MUG_GAIN }, uMugFoot: { value: foot } };
-    m.userData.mug = u;
-    m.onBeforeCompile = (sh, rr) => {
-      if (prev) prev.call(m, sh, rr);
-      Object.assign(sh.uniforms, u);
-      sh.vertexShader = 'varying vec3 vMugP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvMugP = position;');
-      sh.fragmentShader = 'uniform vec3 uMugBody;\nuniform sampler2D uMugPrint;\nuniform float uMugTurn;\nuniform float uMugY0;\nuniform float uMugH;\nuniform float uMugR2;\nuniform vec2 uMugSun;\nuniform float uMugGain;\nuniform float uMugFoot;\nvarying vec3 vMugP;\n'
-        + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + MUG_LIGHT_GLSL + (tex ? MUG_PRINT_GLSL : '\tdiffuseColor.rgb *= uMugBody;\n'));
-    };
-    const key = 'done-mug|' + (bounce ? 'bounce|' : '') + (tex ? 'print' : 'glaze');
-    m.customProgramCacheKey = () => key;
-    m.needsUpdate = true;
-  }
   /* a mug's wrap-round print: 2048 px round the circumference, as tall as the mug; the logo centred on the front (u 0.5,
      the angle 0), the saying on the back (u 0 and 1: drawn twice, either side of the seam); the logo when its SVG loads */
   function mugPrint(look, back, rMm, hMm, done) {
@@ -1068,7 +1300,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       for (const c of g.colours) root.add(newSpool(c));
       poseGroup(root);
       scene.add(root);
-      const disc = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: parts.tex || (parts.tex = contactTexture()), transparent: true, depthWrite: false, toneMapped: false }));
+      const disc = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), discMaterial(parts.tex || (parts.tex = contactTexture())));
       const w = g.kind === 'stand' ? [90, 240] : [250, 250];
       disc.scale.set(w[0], 1, w[1]); disc.rotation.y = turn; disc.position.set(p.x, deskY + 0.6, p.z); disc.renderOrder = 1; disc.raycast = () => {};
       disc.visible = !(stage.QUALITY[stage.quality] || {}).shadow;
@@ -1245,7 +1477,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const a0 = jambs[0].max[along], a1 = jambs[1].min[along], y0 = sill.max.y, y1 = head.min.y;   // the opening, between the frame's inner faces
     const d0 = Math.min(jambs[0].min[axis], jambs[1].min[axis]), d1 = Math.max(jambs[0].max[axis], jambs[1].max[axis]);
     const roomFace = inward > 0 ? d1 : d0, depth = roomFace - inward * FROST.inset * (d1 - d0);
-    const pane = new THREE.Mesh(new THREE.PlaneGeometry(a1 - a0 + 2 * FROST.lap, y1 - y0 + 2 * FROST.lap), new THREE.MeshBasicMaterial({ map: frostTexture(), toneMapped: false }));
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(a1 - a0 + 2 * FROST.lap, y1 - y0 + 2 * FROST.lap), paneMaterial(frostTexture()));
     const at = new THREE.Vector3(); at[axis] = depth; at[along] = (a0 + a1) / 2; at.y = (y0 + y1) / 2;
     pane.position.copy(at);
     // a plane faces +z: turned to face into the room
@@ -1351,6 +1583,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.mugs = made;
     subj.mugs = [];
     const gone = () => parts.mugs !== made;
+    const lit = { env: parts.env || null, sunDir: json && json.sun && json.sun.dir };   // a glaze's light: the room's environment and its sun
     const linear = (hex) => (hex ? new THREE.Color(hex) : new THREE.Color(1, 1, 1));   // THREE.Color takes sRGB hex to linear
     const body = (m) => [].concat(m.material)[0];
     const src = { body: body(mug), handle: handle ? body(handle) : null };
@@ -1419,21 +1652,21 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       let b, hd;
       if (i === 0) {   // THE COFFEE: the room's own mug, its coffee and the steam moved with it, its shadow mask too
         b = mug; hd = handle;
-        glaze(src.body, { body: linear(look.body), tex, y0: bb.min.y, h, r });
+        glaze(src.body, { ...lit, body: linear(look.body), tex, y0: bb.min.y, h, r });
         mug.quaternion.copy(turnQ(turn));
-        if (src.handle) glaze(src.handle, { body: linear(look.body), foot: 0 });
+        if (src.handle) glaze(src.handle, { ...lit, body: linear(look.body), foot: 0 });
         for (const o of [mug, coffee]) if (o) o.position.add(d);
         if (handle) place(handle, turn, d);
         if (q0 && (d.x || d.z)) { q0.position.add({ x: p.x - home.x, y: 0, z: p.z - home.z }); q0.userData.doneShadow.moved = { x: p.x - home.x, z: p.z - home.z }; }   // the move, for a reader of the quads
       } else {         // A FURTHER MUG: the room's mesh again with its own glaze, and the coffee mug's shadow again under it
         const mb = copyOf(src.body, fn.body);
-        glaze(mb, { body: linear(look.body), tex, y0: bb.min.y, h, r, bounce: bounce.body });
+        glaze(mb, { ...lit, body: linear(look.body), tex, y0: bb.min.y, h, r, bounce: bounce.body });
         b = new THREE.Mesh(mug.geometry, mb);
         b.position.copy(mug.position).sub(made.placed[0].d).add(d); b.quaternion.copy(turnQ(turn)); b.scale.copy(mug.scale);   // from home: the coffee has moved already
         const meshes = [b];
         if (handle && src.handle) {
           const mh = copyOf(src.handle, fn.handle);
-          glaze(mh, { body: linear(look.body), foot: 0, bounce: bounce.handle });
+          glaze(mh, { ...lit, body: linear(look.body), foot: 0, bounce: bounce.handle });
           hd = new THREE.Mesh(handle.geometry, mh); hd.scale.copy(handle.scale); place(hd, turn, d);
           meshes.push(hd);
         }
@@ -1558,7 +1791,18 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.raf = requestAnimationFrame(step);
   }
 
-  const ready = loadRoom().then(({ gltf, json: j, masks, light, bounce, spoolGeo }) => {
+  /* the files, then the programs (THE ROOM'S PROGRAMS AHEAD: nothing on the stage has changed yet, and the page has its
+     frames), then the room in one task. A software rasteriser stays as it was: its programs are the CPU's, on the machine
+     the page runs on, however they are started (`?roomahead=on` for the CI runner's e2e, `off` for a control arm). */
+  const aheadFlag = debug ? new URLSearchParams(location.search).get('roomahead') : null;
+  const ahead = aheadFlag !== 'off' && (!stage.softwareGL || aheadFlag === 'on');
+  status = roomStatus(stage);
+  const ready = loadRoom().then((room) => {
+    if (cancelled || !ahead) return room;
+    status.set(0.25);
+    return warmRoom(stage, { urgent: true, onProgress: (f) => status.set(f) }).catch((e) => console.warn('[done scene] the programs ahead', e)).then(() => room);
+  }).then(({ gltf, json: j, masks, light, bounce, spoolGeo }) => {
+    status.remove();
     if (cancelled) return null;
     json = j; roomLight = light || {}; roomBounce = bounce || null;
     buildBox = stage.assembledBox.clone();
@@ -1566,15 +1810,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     // the room, scaled to millimetres, its anchor on the build's back-centre at desk height
     const group = gltf.scene.clone(true);
     parts.mats = unlit(group);
-    // every baked mesh with a tile in the walls' bounce draws its bake less its share, and less its share of the desk's
-    // where the room has those tiles (paintRoom sets the shares and the desk tile's rect)
-    if (roomBounce) group.traverse((o) => {
-      const rec = o.isMesh && roomBounce.meshes[o.name];
-      if (!rec) return;
-      for (const m of [].concat(o.material)) if (m.isMeshBasicMaterial && m.map) addBounce(m, roomBounce, rec.rect);
-    });
-    const deskTop = group.getObjectByName('desk_top');   // ... and the desk top a sheen for a plain colour (addSheen)
-    if (deskTop) for (const m of [].concat(deskTop.material)) if (m.isMeshBasicMaterial && m.map) addSheen(m);
+    dressRoom(group, roomBounce);
     group.name = 'done-room';
     group.scale.setScalar(SCALE);
     const anchor = group.getObjectByName('anchor_tabletop');
@@ -1613,7 +1849,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.group = group;
     scene.add(group);
     // the shadow catcher over the desk top (its extent from room.json, relative to the anchor), and the Fast tier's disc
-    const catcher = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0, d.zFront - d.zBack).rotateX(-Math.PI / 2), new THREE.ShadowMaterial({ opacity: 0.42, depthWrite: false }));
+    const catcher = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0, d.zFront - d.zBack).rotateX(-Math.PI / 2), catcherMaterial(0.42));
     catcher.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, deskY + 0.3, anchorWorld.z + (d.zBack + d.zFront) / 2);
     catcher.receiveShadow = true; catcher.castShadow = false; catcher.renderOrder = 1; catcher.raycast = () => {};
     catcher.userData.doneRoom = true;
@@ -1632,7 +1868,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        so 31.4 mm with the margin, over the 29.9 mm the sun reaches on the face itself. */
     const drop = wallZ != null ? gapDrop(json.sun && json.sun.dir, anchorWorld.z + d.zBack - wallZ) : 0;
     if (wallZ != null) {
-      const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600 + drop), new THREE.ShadowMaterial({ opacity: WALL_SHADOW, depthWrite: false }));
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(d.x1 - d.x0 + 1200, 1600 + drop), catcherMaterial(WALL_SHADOW));
       wall.position.set(anchorWorld.x + (d.x0 + d.x1) / 2, deskY + 800 - drop / 2, wallZ + 0.3);   // a plane facing +z: toward the desk
       wall.receiveShadow = true; wall.castShadow = false; wall.renderOrder = 1; wall.raycast = () => {};
       wall.userData.doneRoom = true;
@@ -1657,9 +1893,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (q.u0 > 0 || q.u1 < 1) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, q.u0 + uv.getX(i) * (q.u1 - q.u0)); uv.needsUpdate = true; }   // the texture window follows the cut
       if (q.v0 < 0) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, q.v0 + uv.getY(i) * (1 - q.v0)); uv.needsUpdate = true; }   // a wall mask carried down the strip under the desk top: its bottom row, clamped
       if (q.surface === 'desk') geo.rotateX(-Math.PI / 2);   // lying on the desk, the image's top toward the wall; a wall mask faces +z, toward the desk
-      const quad = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: m.tex, transparent: true, depthWrite: false, toneMapped: false,
-        blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor,
-        blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor }));
+      const quad = new THREE.Mesh(geo, maskMaterial(m.tex));
       quad.position.set(q.x, q.y, q.z); quad.visible = q.visible;
       quad.renderOrder = 1; quad.raycast = () => {}; quad.castShadow = false; quad.receiveShadow = false;
       quad.userData.doneRoom = true; quad.userData.doneShadow = { group: m.group, surface: m.surface, dx: q.visible ? (slid[m.group] || 0) : null, u0: q.u0, u1: q.u1 };
@@ -1667,7 +1901,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     const fp = contactFootprint(plain(buildBox));
     parts.tex = contactTexture();
-    const sprite = new THREE.Mesh(new THREE.PlaneGeometry(fp.w, fp.d).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: parts.tex, transparent: true, depthWrite: false, toneMapped: false }));
+    const sprite = new THREE.Mesh(new THREE.PlaneGeometry(fp.w, fp.d).rotateX(-Math.PI / 2), discMaterial(parts.tex));
     sprite.position.set(fp.x, deskY + 0.2, fp.z); sprite.renderOrder = 1; sprite.raycast = () => {}; sprite.userData.doneRoom = true;
     /* UNDER THE DESK (an under-table build, 2026-10-25): the room is baked and unlit, so its desk casts no shadow, and the
        build hung under it took the sun as if the desk were not there. The desk's own top and legs cast it, drawn as
@@ -1842,6 +2076,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     stage.invalidateFrame();
     return handle;
   }).catch((e) => {
+    status.remove();
     if (cancelled) return null;
     console.warn('[done scene]', e);
     if (say) say('The room could not load; the build stays on the stage.');
@@ -1875,6 +2110,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   function leave() {
     cancelled = true;
+    status.remove();
     if (!on) return;
     on = false;
     seqStop();

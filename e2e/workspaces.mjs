@@ -2431,7 +2431,8 @@ test('Assemble: the Done scene compiles the relief ahead: at the hero\'s landing
      800, 2.87 at 720), and there the macro draws without the relief and nothing is compiled ahead */
   const hctx = await browser.newContext({ viewport: { width: 1280, height: 1080 } });
   await hctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
-  const hi = await open('assemble', { query: '&done=room', context: hctx });
+  // (roomahead=off: done.js's programs ahead would have built these already, and warmRelief would have nothing to show here)
+  const hi = await open('assemble', { query: '&done=room&roomahead=off', context: hctx });
   await enter(hi.page);
   const h = await look(hi.page);
   assert.equal(h.mode, 'full', 'High moves its shots');
@@ -4621,6 +4622,178 @@ test('Colors: on Very High at rest the steam keeps rising over the still picture
   console.log('steam overlay', JSON.stringify(r));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* THE ROOM'S PROGRAMS AHEAD (done.js, room-ahead.js; Joey 2026-10-31, of the first switch to Colors: "it just feels like it's
+   sluggish or frozen, even on this powerful laptop"). The wait was the driver building shader programs, and three's first use
+   of each holding the page until its link was done: 41 on Very High, up to 0.9 s each with no cached copy, 7 to 11 s of a
+   frozen page. Counted, not timed where it can be: the programs a switch adds that stay, by id (a released slot is refilled).
+   What may still come late: the shadow pass's depth program and the stage's own small overlay shaders, 30 ms at most. */
+const ROOM_FILES = /scenes\/(home-office|props)\//;
+const newestProgram = (page) => page.evaluate(() => Math.max(...window.__GEN2_VIEWER__.renderer.info.programs.map((p) => p.id)));
+const programsSince = (page, id) => page.evaluate((id) => window.__GEN2_VIEWER__.renderer.info.programs.filter((p) => p.id > id).map((p) => String(p.cacheKey).split(',').slice(0, 8).join(',')), id);
+const LATE_OK = /^(depth|\d+,\d+),/;
+test('Colors: the room is got ready in the background, Build unchanged, and the first switch then builds nothing that matters, waits on no program and shows no pill; the second builds nothing', { skip: ROOM_SOFT_SKIP }, async () => {
+  for (const tier of ['veryhigh', 'high']) {
+    const vctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await vctx.addInitScript((tier) => {
+      try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {}
+      const P = WebGL2RenderingContext.prototype, f = P.getProgramInfoLog;
+      window.__WAIT__ = { max: 0 };   // the longest the page was held on a program's first use
+      P.getProgramInfoLog = function (p) { const t = performance.now(), r = f.call(this, p); window.__WAIT__.max = Math.max(window.__WAIT__.max, performance.now() - t); return r; };
+    }, tier);
+    const fetched = [];
+    vctx.on('request', (r) => { if (ROOM_FILES.test(r.url())) fetched.push(r.url()); });
+    const { ctx, page, errors } = await open('build', { visitor: true, context: vctx, query: '&spools=plan&mugs=plan' });
+    assert.deepEqual(fetched, [], `${tier}: nothing of the room during Build's own boot`);
+    const booted = await page.evaluate(() => performance.now());
+    await page.waitForFunction(() => window.__GEN2_ROOM_WARM__ && window.__GEN2_ROOM_WARM__.phase === 'ready', null, { timeout: 120_000 }).catch(() => assert.fail(`${tier}: the room's programs were not got ready within 120 s`));
+    const firstFile = await page.evaluate(() => Math.min(...performance.getEntriesByType('resource').filter((r) => /scenes\/(home-office|props)\//.test(r.name)).map((r) => r.startTime)));
+    assert.ok(firstFile - booted > 1000, `${tier}: and the page has had its moment first (ROOM_AHEAD_DELAY_MS): the first file ${(firstFile - booted).toFixed(0)} ms after the boot`);
+    const last = await page.evaluate(() => window.__GEN2_ROOM_WARM__.last);
+    assert.ok(last.items > 50 && last.urgent === false && last.timedOut === false && fetched.length >= 3, `${tier}: in the background, the files and the programs (${JSON.stringify(last)}, ${fetched.length} files)`);
+    /* Build as it was: the state the programs were compiled under is gone, the stage is not held, and the idle gate rests */
+    const put = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { shadow: v.renderer.shadowMap.enabled, cast: v.sun.castShadow, env: v.scene.environment === v.studioEnv(), held: v.sceneHeld, rt: v.renderer.getRenderTarget() === null, ws: document.documentElement.dataset.ws, done: document.documentElement.dataset.done || null, pending: v.programsPending() }; });
+    assert.deepEqual(put, { shadow: false, cast: false, env: true, held: false, rt: true, ws: 'build', done: null, pending: 0 }, `${tier}: Build's stage put back`);
+    await page.waitForFunction(async () => { const V = window.__GEN2_VIEWER__, a = V.idleStats().drawn; await new Promise((r) => setTimeout(r, 1000)); return V.idleStats().drawn - a <= 3; }, null, { timeout: 60_000, polling: 200 }).catch(() => assert.fail(`${tier}: the idle gate does not rest after the work`));
+    const before = await newestProgram(page);
+    await page.evaluate(() => { window.__WAIT__.max = 0; window.__PILLS__ = 0; new MutationObserver(() => { if (document.getElementById('ws-room-loading')) window.__PILLS__++; }).observe(document.body, { childList: true, subtree: true }); });
+    await page.click('#ws-tabs .tab:has-text("Colors")');
+    await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-colors .roomcols'), null, { timeout: 60_000 }).catch(() => assert.fail(`${tier}: the room did not come on`));
+    await settle(page, 2000);
+    const late = (await programsSince(page, before)).filter((k) => !LATE_OK.test(k));
+    assert.deepEqual(late, [], `${tier}: the first switch builds nothing the background did not`);
+    const first = await page.evaluate(() => ({ wait: window.__WAIT__.max, pills: window.__PILLS__ }));
+    assert.ok(first.wait < 400, `${tier}: no long wait on a program (${first.wait} ms; 860 ms before, on this laptop with no driver cache)`);
+    assert.equal(first.pills, 0, `${tier}: nothing to wait for, no pill`);
+    await page.click('#ws-tabs .tab:has-text("Build")');
+    await page.waitForFunction(() => document.documentElement.dataset.ws === 'build' && !document.documentElement.dataset.done, null, { timeout: 60_000 });
+    await settle(page, 1200);
+    const before2 = await newestProgram(page);
+    await page.click('#ws-tabs .tab:has-text("Colors")');
+    await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-colors .roomcols'), null, { timeout: 60_000 }).catch(() => assert.fail(`${tier}: the room did not come back`));
+    await settle(page, 1500);
+    assert.deepEqual(await programsSince(page, before2), [], `${tier}: the second switch builds nothing that stays: the programs outlived the first room`);
+    assert.deepEqual(clean(errors), []);
+    await ctx.close();
+  }
+});
+/* a tier that changes under the background run must not leave its old tier marked done with programs it never compiled (Sol
+   01a19327): High, Fast part way through, High again, and the switch still finds High's programs ready */
+test('Colors: a tier change under the background work leaves no tier marked done without its programs', { skip: ROOM_SOFT_SKIP }, async () => {
+  const vctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await vctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
+  const { ctx, page, errors } = await open('build', { visitor: true, context: vctx, query: '&spools=plan&mugs=plan' });
+  await page.waitForFunction(() => window.__GEN2_ROOM_WARM__ && window.__GEN2_ROOM_WARM__.phase === 'compile' && window.__GEN2_ROOM_WARM__.done > 5, null, { timeout: 120_000, polling: 'raf' }).catch(() => assert.fail('the background work did not reach its compiles'));
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('fast', { user: true }); });
+  await page.waitForFunction(() => window.__GEN2_ROOM_WARM__.phase === 'ready', null, { timeout: 120_000 }).catch(() => assert.fail('the run did not finish on Fast'));
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('high', { user: true }); });
+  await settle(page, 1500);
+  const before = await newestProgram(page);
+  await page.click('#ws-tabs .tab:has-text("Colors")');
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-colors .roomcols'), null, { timeout: 120_000 }).catch(() => assert.fail('the room did not come on'));
+  await settle(page, 2000);
+  const after = await page.evaluate(({ before }) => window.__GEN2_VIEWER__.renderer.info.programs.filter((p) => p.id > before).map((p) => String(p.cacheKey).split(',').slice(0, 8).join(',')), { before });
+  // the switch's own run compiled what the old tier had left: all of it ready before the room came on, and in that run's count
+  const last = await page.evaluate(() => window.__GEN2_ROOM_WARM__.last);
+  assert.equal(last.urgent, true, `the switch finished High's programs itself (${JSON.stringify(last)})`);
+  assert.ok(last.items > 0 && last.timedOut === false, JSON.stringify(last));
+  const held = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { pending: v.programsPending(), quality: v.quality, held: v.sceneHeld }; });
+  assert.deepEqual(held, { pending: 0, quality: 'high', held: true }, 'and the room is on, on High');
+  assert.ok(after.length > 0, 'High\'s programs were compiled by this switch, not skipped as done');
+  assert.deepEqual((await programsSince(page, last.newest)).filter((k) => !LATE_OK.test(k)), [], 'and the room added nothing to that run\'s programs');
+  /* and on to a tier nothing has asked for yet, on a build wearing silk (the root kit's grips): the plain coil is that tier's too
+     (the silk spool's item puts the coil back) */
+  await page.click('#ws-tabs .tab:has-text("Build")');
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'build' && !document.documentElement.dataset.done, null, { timeout: 60_000 });
+  await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }); });
+  await settle(page, 1000);
+  await page.click('#ws-tabs .tab:has-text("Colors")');
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-colors .roomcols'), null, { timeout: 120_000 }).catch(() => assert.fail('the room did not come on at Very High'));
+  await settle(page, 2000);
+  const vh = await page.evaluate(() => window.__GEN2_ROOM_WARM__.last);
+  assert.deepEqual((await programsSince(page, vh.newest)).filter((k) => !LATE_OK.test(k)), [], 'Very High: the room added nothing to its own run\'s programs');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+test('Colors: the room is not fetched ahead on a phone, for a visitor who chose Neutral, or with ?done=off (and each still gets it when asked)', { skip: ROOM_SOFT_SKIP }, async () => {
+  const high = (stage) => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); if (stage) localStorage.setItem('gen2-colors-stage', stage); } catch {} };
+  for (const [name, opts, stage, how] of [
+    ['a phone', { viewport: { width: 360, height: 675 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, null, { visitor: true, phone: true }],
+    ['Neutral chosen', { viewport: { width: 1280, height: 800 } }, 'studio', { visitor: true }],
+    ['?done=off', { viewport: { width: 1280, height: 800 } }, null, {}],
+  ]) {
+    const vctx = await browser.newContext(opts);
+    await vctx.addInitScript(high, stage);
+    const fetched = [];
+    vctx.on('request', (r) => { if (ROOM_FILES.test(r.url())) fetched.push(r.url()); });
+    const { ctx, page, errors } = await open('build', { ...how, context: vctx });
+    await settle(page, 4000);   // past ROOM_AHEAD_DELAY_MS
+    assert.deepEqual(fetched, [], `${name}: nothing of the room`);
+    assert.equal(await page.evaluate(() => !!window.__GEN2_ROOM_WARM__), false, `${name}: and no programs`);
+    assert.deepEqual(clean(errors), [], name);
+    await ctx.close();
+  }
+  // the phone, asked: the wait is said, the room comes on
+  const pctx = await browser.newContext({ viewport: { width: 360, height: 675 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  await pctx.addInitScript(high, null);
+  const { ctx, page, errors } = await open('build', { visitor: true, phone: true, context: pctx });
+  await page.locator('#ws-tabbar .tab:has-text("Colors")').tap();
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 120_000 }).catch(() => assert.fail('the phone\'s room did not come on'));
+  assert.equal(await page.evaluate(() => window.__GEN2_ROOM_WARM__.last.urgent), true, 'its programs were started by the switch itself');
+  assert.equal(await page.locator('#ws-room-loading').count(), 0);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+/* the wait, said, and the studio live under it. On Fast and the runner's software rasteriser too: `roomahead=on` is its way into
+   the same run, and the room's file is held until the case lets it go, so no clock is raced */
+test('Colors: while the room is on its way a pill says so and the studio stays live; it goes with the room, with a leave, and with a failed load', async () => {
+  const pill = (page) => page.locator('#ws-room-loading');
+  const c1 = await freshContext();
+  let release; const gate = new Promise((ok) => { release = ok; });
+  await c1.route('**/scenes/home-office/room.glb*', async (r) => { await gate; r.continue(); });
+  const { page, errors } = await open('build', { visitor: true, context: c1, query: '&roomahead=on' });
+  await page.click('#ws-tabs .tab:has-text("Colors")');
+  await pill(page).waitFor({ state: 'visible', timeout: 30_000 });
+  assert.match(await pill(page).textContent(), /Setting up the room/);
+  assert.equal(await pill(page).getAttribute('role'), 'status');
+  const held = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, p = document.querySelector('#ws-room-loading').getBoundingClientRect(), t = document.querySelector('#ws-tools').getBoundingClientRect(); return { held: v.sceneHeld, done: document.documentElement.dataset.done || null, orbit: v.controls.enabled, clear: p.top >= t.bottom, inView: p.left >= 0 && p.right <= innerWidth, panel: !!document.querySelector('#ws-colors h2') }; });
+  assert.deepEqual(held, { held: false, done: null, orbit: true, clear: true, inView: true, panel: true }, 'the studio is live, the panel is up, the pill clear of the toolbar');
+  release();
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 180_000 }).catch(() => assert.fail('the room did not come on within 180 s'));
+  assert.equal(await pill(page).count(), 0, 'gone with the room');
+  const ran = await page.evaluate(() => { const w = window.__GEN2_ROOM_WARM__, v = window.__GEN2_VIEWER__; return { phase: w.phase, urgent: w.last && w.last.urgent, items: w.last && w.last.items, timedOut: w.last && w.last.timedOut, shadowQ: !!v.QUALITY[v.quality].shadow }; });
+  assert.ok(ran.phase === 'ready' && ran.urgent === true && ran.items > 20 && ran.timedOut === false, `the programs came first, at once: the switch asked (${JSON.stringify(ran)})`);
+  // what the program keys read, on Fast and on the runner's rasteriser too: the room adds nothing to the run's programs
+  const newest = await page.evaluate(() => window.__GEN2_ROOM_WARM__.last.newest);
+  assert.deepEqual((await programsSince(page, newest)).filter((k) => !LATE_OK.test(k)), [], 'the entry\'s materials found their programs');
+  assert.deepEqual(clean(errors), []);
+  await c1.close();
+  // a leave during the wait takes the pill with it, the workspace staying, and no room comes on after it
+  const c2 = await freshContext();
+  let release2; const gate2 = new Promise((ok) => { release2 = ok; });
+  await c2.route('**/scenes/home-office/room.glb*', async (r) => { await gate2; r.continue(); });
+  const left = await open('build', { visitor: true, context: c2 });
+  await left.page.click('#ws-tabs .tab:has-text("Colors")');
+  await pill(left.page).waitFor({ state: 'visible', timeout: 30_000 });
+  await left.page.locator('#ws-tools .backdrop button:has-text("Neutral")').click();
+  assert.equal(await pill(left.page).count(), 0, 'gone with the room');
+  release2();
+  await settle(left.page, 2500);
+  assert.deepEqual(await left.page.evaluate(() => ({ done: document.documentElement.dataset.done || null, held: window.__GEN2_VIEWER__.sceneHeld })), { done: null, held: false }, 'and the room never came on');
+  assert.deepEqual(clean(left.errors), []);
+  await c2.close();
+  // a room whose file fails, with the pill up: it goes, the page says so, Neutral is back
+  const c3 = await freshContext();
+  let release3; const gate3 = new Promise((ok) => { release3 = ok; });
+  await c3.route('**/scenes/home-office/room.glb*', async (r) => { await gate3; r.abort(); });
+  const fail = await open('colors', { visitor: true, context: c3 });
+  await pill(fail.page).waitFor({ state: 'visible', timeout: 30_000 });
+  release3();
+  await fail.page.waitForFunction(() => { const on = document.querySelector('#ws-tools .backdrop button[aria-pressed="true"]'); return on && on.textContent === 'Neutral'; }, null, { timeout: 60_000 }).catch(() => assert.fail('Neutral did not come back after a failed load'));
+  assert.equal(await pill(fail.page).count(), 0, 'no pill left over a failed load');
+  assert.match(await fail.page.locator('#ws-toast').textContent(), /could not load/);
+  await c3.close();
 });
 
 /* a room that cannot load (its module request fails) falls back to Studio AND forgets the choice, so a remount does not

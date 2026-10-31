@@ -14,6 +14,7 @@ import { mountLabels, labelsBadge } from './workspaces/labels.js';
 import { createStore } from './state/store.js';
 import { openBuilds, entryOf, hashOf, fileOf, fileName, parseBuildFile, cleanName, savedHint } from './state/builds.js';
 import { isPhone, PHONE_MAX } from './ui/phone.js';
+import { roomAheadWanted, ROOM_AHEAD_DELAY_MS } from './scenes/room-ahead.js';
 import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
@@ -421,6 +422,14 @@ export async function boot() {
   const labelsLink = !!labelsAdd || /(^#|&)labels-open/.test(location.hash);
   if (/(^#|&)labels-open(&|$)/.test(location.hash)) history.replaceState(history.state, '', location.href.replace(/[#&]labels-open(?=&|$)/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
   ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
+  /* THE ROOM AHEAD (js/scenes/room-ahead.js says who; done.js warmRoom what): once the page has settled, the Colors room's files
+     and shader programs in idle moments, so the first switch to Colors has nothing to wait for */
+  setTimeout(() => {
+    let stored = null;
+    try { stored = localStorage.getItem('gen2-colors-stage'); } catch { /* private mode */ }
+    if (!roomAheadWanted({ search: location.search, phone: isPhone(), softwareGL: stage.softwareGL, tier: stage.quality, stored, connection: navigator.connection || null, memoryGB: navigator.deviceMemory ?? null, cores: navigator.hardwareConcurrency ?? null })) return;
+    import('./scenes/done.js').then(({ warmRoom }) => warmRoom(stage)).catch((e) => console.warn('[room ahead]', e));
+  }, ROOM_AHEAD_DELAY_MS);
   if (labelCopy && current.name !== 'labels') toast(`Opened without its ${labelCopy.n} ${labelCopy.n === 1 ? 'label · Labels can bring it back.' : 'labels · Labels can bring them back.'}`);
   if (SETUP) ctx.openSetup('mount', FRESH);   // New build: the sheet opens over the fresh kit
   /* WHAT THE SETUP SHEET OR THE BOOT SAID BEFORE THIS PAGE (2026-10-20/21), said once: the empty slots a mount change left

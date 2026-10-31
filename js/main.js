@@ -4122,6 +4122,46 @@ function compileAhead(obj) {
   try { for (const rt of [null, warmTarget]) { renderer.setRenderTarget(rt); renderer.compile(obj, camera, scene); } }
   finally { renderer.setRenderTarget(prev); }
 }
+/* THE PROGRAMS OF A HELD SCENE, BEFORE IT HOLDS (done.js THE ROOM'S PROGRAMS AHEAD, 2026-10-31): a held scene's shadow map is on
+   whatever the theme (shadowsWanted), so on the dark stage every lit material needs a program the studio never asked for, the
+   parts' above all (0.7 to 0.9 s each, measured on the A5000 with no driver cache). One object's programs, under the state the
+   hold will draw in: put, compiled and put back in this one call, so no frame ever sees it. Later frames find the studio's
+   program in the material's own map, a lookup (warmRelief above does the same). The environment is the studio's: a held
+   scene's own is another PMREM of the same size, and a program reads only the size. */
+function compileForHold(obj, { target = false } = {}) {
+  const q = QUALITY[quality], shadow = !!q.shadow && !IS_PART;
+  const had = { on: renderer.shadowMap.enabled, type: renderer.shadowMap.type, cast: sun.castShadow, env: scene.environment, rt: renderer.getRenderTarget() };
+  if (target && !warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
+  try {
+    renderer.shadowMap.enabled = shadow; renderer.shadowMap.type = THREE.PCFShadowMap; sun.castShadow = shadow;
+    scene.environment = q.env ? studioEnv() : null;
+    for (const rt of target ? [null, warmTarget] : [null]) { renderer.setRenderTarget(rt); renderer.compile(obj, camera, scene); }
+  } finally {
+    renderer.shadowMap.enabled = had.on; renderer.shadowMap.type = had.type; sun.castShadow = had.cast; scene.environment = had.env;
+    renderer.setRenderTarget(had.rt);
+  }
+}
+/* ... and as a capture of the scene's own environment draws it (done.js captureEnv): into a target, in a scene of no lights */
+const captureCompileScene = new THREE.Scene();
+function compileForCapture(obj) {
+  if (!warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
+  const prev = renderer.getRenderTarget();
+  try { renderer.setRenderTarget(warmTarget); renderer.compile(obj, camera, captureCompileScene); }
+  finally { renderer.setRenderTarget(prev); }
+}
+/* the build's meshes, one for each thing a program reads off a mesh and its material */
+function holdPartMeshes() {
+  const seen = new Set(), out = [];
+  for (const inst of instances.values()) inst.group.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const key = [].concat(o.material).map((m) => m.uuid).join() + '|' + Object.keys(o.geometry.attributes).join() + '|' + (o.isInstancedMesh ? (o.instanceColor ? 'ic' : 'i') : '');
+    if (!seen.has(key)) { seen.add(key); out.push({ mesh: o, key }); }
+  });
+  return out;
+}
+const programsPending = () => (renderer.info.programs || []).filter((p) => !p.isReady()).length;
+/* nothing the visitor would feel a slice of work under: no move or tween, no scene of its own, a tab on screen */
+const warmQuiet = () => tweens.size === 0 && !perf.moving && !cinema.on && !sceneHold.on && !document.hidden;
 
 /**
  * Rebuild the part materials when the relief crosses the tier boundary.
@@ -11947,7 +11987,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
     mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
     // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
-    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn && !!QUALITY[quality].accum && !SOFTWARE_GL; }, get softwareGL() { return SOFTWARE_GL; }, compileAhead, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
+    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn && !!QUALITY[quality].accum && !SOFTWARE_GL; }, get softwareGL() { return SOFTWARE_GL; }, compileAhead, compileForHold, compileForCapture, holdPartMeshes, programsPending, warmQuiet, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
     // reflector, so a rendering question can be answered by reading state instead
