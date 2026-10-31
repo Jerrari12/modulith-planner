@@ -6417,3 +6417,7 @@ test passes against the site's main. In a browser, the 115, 240 and 270 kits ope
   and 185 kits open in Assemble on stamp `2239d7f3` with no warning and no page errors.
 
 - **Live 2026-10-30 (hanging kits and the gallery's retirement):** planner `334ce1f` (pushed 23:07, live about 23:30; run 41163019386), then site `12b8275` (pushed 23:38, Cloudflare). On the live sites in a browser: the old gallery address lands on `modulith.systems/builds/`; 23 cards with no broken image, 12 of them hanging, under their own mounts; all 12 kit pages state their screws, "None published" for load and their bracket or rail listing, and link their guide; five guides opened in Assemble with the right title, no warning and no page errors.
+
+## 2026-10-31 · The last GEN2 words on the planner's screens
+
+Joey asked for the small things left. The instructions opened with "An official GEN2 kit" or "Your custom GEN2 build"; they now say "An official kit" and "Your custom build", under the rule from 2026-10-16 (drop GEN2, do not add MODULITH). The tabletop kits' overview heading goes through `buildName`, and a parts note through a new `noteText`, so "the universal GEN2 Hardware pack" reads as the site words it. Display only: stored titles, the catalog and the BOM rows keep their GEN2 form, so the parity gates do not move. A browser scan of all five workspaces on an official tabletop, an official wall and a custom build finds no GEN2 on screen. Terra 01a192f2: one finding, discarded, kits regenerate their note on every load and none stores it.

@@ -2449,7 +2449,7 @@ export function generateManifest(build, opts = {}) {
   const preSteps = [
     {
       title: funName,
-      note: `Your custom GEN2 build · ${units.length} unit${units.length > 1 ? 's' : ''}, ${drawerCount} drawer${drawerCount === 1 ? '' : 's'}, ${totalW} column${totalW > 1 ? 's' : ''} wide. Drag to orbit, tap any part to identify it. ` +
+      note: `Your custom build · ${units.length} unit${units.length > 1 ? 's' : ''}, ${drawerCount} drawer${drawerCount === 1 ? '' : 's'}, ${totalW} column${totalW > 1 ? 's' : ''} wide. Drag to orbit, tap any part to identify it. ` +
         `${printTotal} prints · quantities on the right.` +
         (handleTotal ? ` You'll also need ${handleTotal * 2}× M3 screws for the handles` : '') +
         (magnetTotal ? ` and ${magnetTotal}× 10×2 mm disc magnets for the optional magnet closures (hardware store items).` : '.') +

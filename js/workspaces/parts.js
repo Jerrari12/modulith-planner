@@ -18,7 +18,7 @@ import { glyphEl, FACEK, DEFAULT_COLORS } from '../ui/glyph.js';
 import { computeBom, bomRows } from '../rules/bom.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
-import { partName } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
+import { partName, noteText } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
 import { assetUrl } from '../config.js';
 import { ZONE_LABEL, isPaid, disclosureFor, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid link's disclosure, and its click event
 
@@ -381,7 +381,7 @@ export function mountParts(stage, ctx) {
     row.append(chipEl(r, regions), thumbEl(r), el('span.qty.mono', { text: `×${r.qty}` }));
     const mid = el('div.mid', {}, [el('div.name', { text: rowName(r) })]);
     if (regions) mid.appendChild(printLine(regions));
-    if (r.note) mid.appendChild(el('div.note', { text: r.note }));
+    if (r.note) mid.appendChild(el('div.note', { text: noteText(r.note) }));
     row.appendChild(mid);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
     if (badge) row.appendChild(el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }));
@@ -419,7 +419,7 @@ export function mountParts(stage, ctx) {
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
     const mid = el('div.mid', {}, [el('div.name', {}, [rowName(r), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
     if (regions) mid.appendChild(printLine(regions));
-    if (r.note) mid.appendChild(el('div.note', { text: r.note }));
+    if (r.note) mid.appendChild(el('div.note', { text: noteText(r.note) }));
     const counter = (field, label) => {
       const v = p[field] || 0;
       return el('div.counter.big', { title: label }, [

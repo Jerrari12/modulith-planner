@@ -2,7 +2,7 @@
 // keeps its GEN2 form.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { partName, buildName, tabTitle } from '../js/ui/names.js';
+import { partName, buildName, noteText, tabTitle } from '../js/ui/names.js';
 
 test('a sized part reads Name, collection, size', () => {
   assert.equal(partName('GEN2 185 Case - 2W-1H'), 'Case 185 · 2W-1H');
@@ -20,6 +20,12 @@ test('a part with no collection number just loses the prefix; a non-GEN2 name is
   assert.equal(partName('GEN2 Under Table Rails - 185'), 'Under Table Rails - 185');
   assert.equal(partName('M3 x 8 socket head screw'), 'M3 x 8 socket head screw');
   assert.equal(partName(undefined), '');
+});
+
+test('a parts note loses the old name, and nothing else moves', () => {
+  assert.equal(noteText('Included with each case model, or print from the universal GEN2 Hardware pack.'), 'Included with each case model, or print from the universal Hardware pack.');
+  assert.equal(noteText('Cases QuickLock together.'), 'Cases QuickLock together.');
+  assert.equal(noteText(undefined), '');
 });
 
 test('build names and the tab title', () => {

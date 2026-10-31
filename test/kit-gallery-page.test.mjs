@@ -32,6 +32,14 @@ test('the planner\'s error pages point at the site, by the current name', () => 
   assert.equal([...main.matchAll(/<a href="https:\/\/modulith\.systems\/builds\/">Browse the official kits →<\/a>/g)].length, 3);
 });
 
+test('the instructions open with the current name: no GEN2 in the overview, official kit or custom build (2026-10-31)', () => {
+  const generate = readFileSync(join(root, 'js', 'generate.js'), 'utf8');
+  assert.doesNotMatch(generate, /Your custom GEN2 build/);
+  assert.match(generate, /note: `Your custom build · /);
+  // the official kit's words replace these exact words: if they drift apart, a kit silently says "Your custom build"
+  assert.match(main, /\.replace\('Your custom build', 'An official kit'\)/);
+});
+
 test('every kit the site vendors is a file here, under a current name, agreeing with its index row', () => {
   for (const k of index) {
     assert.ok(existsSync(join(root, 'builds', `${k.id}.json`)), k.id);

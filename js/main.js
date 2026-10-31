@@ -8,7 +8,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { generateManifest, migrateOfficialBuild, resolvePartPreview, REQUIREMENT as REQ,
   shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, gridfinitySizeOk } from './generate.js';
 import { resolveEntry } from './entry.js';
-import { tabTitle } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
+import { tabTitle, buildName } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
 import { createPlannerRelay } from './relay-auth.js';
 import { FILAMENT_DB } from './filament-db.js';
 import { partMaterialSpec } from './part-material.js';
@@ -3360,7 +3360,7 @@ if (IS_PART) {
     else {
       build = mBuild;
       originalBuild = structuredClone(mBuild);
-      OFFICIAL = { id: OFFICIAL_TARGET, title: String(file.title || 'GEN2 Kit'), tagline: typeof file.tagline === 'string' ? file.tagline : '' };
+      OFFICIAL = { id: OFFICIAL_TARGET, title: String(file.title || 'Official kit'), tagline: typeof file.tagline === 'string' ? file.tagline : '' };
       manifest = mGen.manifest;
       PARTS_BASE = ASSET_BASE + 'parts/' + (manifest.collection || '185') + '/';
     }
@@ -11225,9 +11225,9 @@ async function mountManifest(m) {
     m.title = OFFICIAL.title;
     const intro = m.steps[0];
     if (intro && intro.checklist) {
-      intro.title = OFFICIAL.title;
+      intro.title = buildName(OFFICIAL.title);
       intro.note = (OFFICIAL.tagline ? OFFICIAL.tagline + ' ' : '') +
-        (intro.note || '').replace('Your custom GEN2 build', 'An official GEN2 kit');
+        (intro.note || '').replace('Your custom build', 'An official kit');
     }
   }
   $('kit-title').textContent = m.title;
