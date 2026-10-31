@@ -66,6 +66,9 @@ for (const f of kitFiles) {
     const gen = generateManifest(build);
     assert.ok(gen.manifest,
       'generateManifest FAILED on a committed official kit:\n  • ' + (gen.errors || []).join('\n  • '));
+    // a warning lands in the instructions' opening text: a released kit must not tell its builder to doubt it (Joey, 2026-10-30)
+    assert.deepEqual(gen.warnings, [], 'an official kit generates with no warnings');
+    assert.doesNotMatch(gen.manifest.steps[0].note, /⚠/, 'and its opening text carries none');
 
     // ---- golden snapshot: the generated instructions must not silently drift ----
     const snap = JSON.stringify(gen.manifest, null, 1);

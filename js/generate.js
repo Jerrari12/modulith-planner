@@ -723,8 +723,6 @@ export function generateManifest(build, opts = {}) {
   const L = build.length;
   if (!COLL[L])
     errors.push(`The ${L} collection isn't in the 3D part library yet · 59, 115, 165, 185, 240 and 270 builds for now.`);
-  else if (COLL[L].depth !== 185 && COLL[L].depth !== 165 && COLL[L].depth !== 59)   // 59: Joey, 2026-10-30, "they should be fine", wall and under-table (it has no tabletop)
-    warnings.push(`${L} hardware positions are scaled from the 185 calibration · double-check a printed build and report anything that sits off.`);
   const coll = COLL[L] || COLL[185];
   const depth = coll.depth;
   const dz = (185 - depth) / 2;                       // 0 for 185, 10 for 165 — each case face moves this toward center (negative for 240/270: faces move outward)

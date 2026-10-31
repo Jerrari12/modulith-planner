@@ -6374,9 +6374,8 @@ after we built the modulith website that essentially gave organizing kits a new 
 - **Shapes:** 2W-2H is 1W+1W on top with 2W below. 3W-2H is 1W+1W+1W on top with 2W+1W below. The planner's rules pass
   narrow-top and wide-top alike, so the preference rests on the vault's "Put narrower cases nearest the support".
 - **The set:** 59, 165 and 185, both mounts, 12 kits (Joey added the 59: "the under table and wall mount kits should include 59
-  series"; it hangs only, so it has no tabletop kit). 115, 240 and 270 are not done. The generator's warning that hardware positions are scaled from the 185 no longer fires on a 59
-  (Joey: "they should be fine", wall and under-table). It was one rule for every length but 165 and 185, from 2026-07-10, not a
-  finding about the 59. 115, 240 and 270 keep it.
+  series"; it hangs only, so it has no tabletop kit). 115, 240 and 270 are not done. The generator's warning that hardware positions are scaled from the 185 went from every length
+  while these were on a branch; the entry below has it.
 - **The pages are the site's** (its branch `hanging-kits`): what to buy, the no-load-rating note, the bracket or rail listing.
   No new listings.
 - **A wrong instruction fixed for every wall build:** the bracket step told people to leave the screw heads "just proud",
@@ -6400,3 +6399,15 @@ pass, 5 skipped, and `M28` in `test/simplify.test.mjs`, a timing gate that faile
 parity test passes against the site branch. An earlier note here that it fails on main was wrong: the site checkout beside this repo was
 two commits behind. E2E: the error-page case. In a browser the old address lands on `modulith.systems/builds/`. Sol 01a18eb6, then the
 combined diff: no findings. Terra 01a18e09 on the first version: one, discarded, the vault's catalog names #6 or #8.
+## 2026-10-30 · The instructions stop telling builders to doubt the 59, 115, 240 and 270 hardware
+
+Joey, on the opening text of those lengths' instructions, including the six official tabletop kits: "That's not right to show those
+warning right?" The rule fired on every length but 165 and 185 from the day they joined the library (04513b2, 2026-07-10): "<L> hardware
+positions are scaled from the 185 calibration · double-check a printed build and report anything that sits off." It said how the 3D
+placement was derived, not that anything was wrong, and it was the first thing a builder read. The rule is gone. A new check in
+`test/official-builds.test.mjs` holds every official kit to no warnings and no warning mark in its opening text. The other warnings
+stay, for builds that use derived sizes (Classic drawers, non-1H drawers).
+
+Checks: six golden manifests change one line each, the note losing the sentence. Unit suite 748 pass, 5 skipped, and the site BOM parity
+test passes against the site's main. In a browser, the 115, 240 and 270 kits open in Assemble with no warning and no page error. Terra
+01a18f4f: no findings.
