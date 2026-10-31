@@ -18,8 +18,9 @@
 import { test as nodeTest, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, mkdtemp, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localParts } from '../test/lib/local-parts.mjs';
@@ -143,6 +144,114 @@ test('every workspace boots on the root kit without errors, desktop and phone', 
       await ctx.close();
     }
   }
+});
+
+/* THE FIRST FRAME WAITS FOR ITS PROGRAMS (main.js; Joey 2026-10-31). A first visit had no interface until the part programs had
+   linked: app.js awaits before the workspace mounts, and the stage's first frames, the mirror's forced draw and the previews all
+   waited on those links first. Here the order is the check, on Fast and on the runner's rasteriser too (`firstdraw=on`): the
+   workspace is up, the overlay says what is happening, and no program is pending when the canvas is first drawn. */
+const firstDrawWatch = () => {
+  const P = WebGL2RenderingContext.prototype, T = window.__FIRST__ = { draw: null, pending: null, ui: null, words: null };
+  for (const n of ['drawElements', 'drawElementsInstanced', 'drawArrays']) {
+    const o = P[n];
+    P[n] = function (...a) {
+      if (T.draw == null && !this.getParameter(this.FRAMEBUFFER_BINDING)) { T.draw = performance.now(); const v = window.__GEN2_VIEWER__; T.pending = v ? v.programsPending() : null; T.ui = !!document.querySelector('#ws-dock, #ws-player'); }
+      return o.apply(this, a);
+    };
+  }
+  addEventListener('DOMContentLoaded', () => new MutationObserver(() => { const t = document.getElementById('loading-text'); if (t && document.querySelector('#ws-dock') && !T.words) T.words = t.textContent; }).observe(document.documentElement, { childList: true, subtree: true }));
+};
+test('the first frame waits for its programs: the workspace comes first, the overlay says so, nothing is pending when the canvas is drawn, and the old viewer comes through too', async () => {
+  const c = await freshContext();
+  await c.addInitScript(firstDrawWatch);
+  const { page, errors } = await open('build', { context: c, query: '&firstdraw=on' });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.firstDrawState.held === false, null, { timeout: 180_000 }).catch(() => assert.fail('the first frame never came'));
+  await page.waitForFunction(() => window.__FIRST__.draw != null, null, { timeout: 60_000 }).catch(() => assert.fail('no draw on the canvas'));
+  const seen = await page.evaluate(() => ({ ...window.__FIRST__, state: window.__GEN2_VIEWER__.firstDrawState, overlay: !!document.getElementById('loading-overlay') }));
+  assert.equal(seen.ui, true, `the workspace was up before the canvas was drawn (${JSON.stringify(seen)})`);
+  assert.ok(seen.pending <= 2, `at most the two stragglers a warm cache may leave pending at the first draw (${JSON.stringify(seen)})`);
+  assert.match(String(seen.words), /Preparing the 3D view/, 'the overlay said what the wait is');
+  assert.equal(seen.overlay, false, 'the overlay goes with the first frame');
+  assert.ok(seen.state.released === true && seen.state.timedOut === false && seen.state.compiled > 5, `released by the workspace, not by the clock (${JSON.stringify(seen.state)})`);
+  // a preview waited for the frame, and came (Build's library)
+  await page.waitForFunction(() => document.querySelector('#ws-lib img'), null, { timeout: 120_000 }).catch(() => assert.fail('the library\'s previews never came after the first frame'));
+  assert.deepEqual(clean(errors), []);
+  await c.close();
+  // the old viewer has no workspace to wait for: it releases at once
+  const c2 = await freshContext();
+  const old = await c2.newPage();
+  const oldErrors = [];
+  old.on('pageerror', (e) => oldErrors.push(e.message));
+  await old.goto(`${base}/index.html?build=185-tabletop-2w2h&debug=1&done=off&firstdraw=on`, { waitUntil: 'load', timeout: 90_000 });
+  await old.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && window.__GEN2_VIEWER__.firstDrawState.held === false, null, { timeout: 180_000 }).catch(() => assert.fail('the old viewer\'s first frame never came'));
+  assert.equal((await old.evaluate(() => window.__GEN2_VIEWER__.firstDrawState)).released, true, 'released by its boot');
+  assert.equal(await old.locator('#loading-overlay').count(), 0, 'its overlay gone');
+  assert.deepEqual(clean(oldErrors), []);
+  await c2.close();
+});
+/* the thing itself, needing a real GPU and a browser with no programs in it: its own launch, since a context in the suite's browser
+   shares the GPU process's memory of them. Before: 0.7 to 1.1 s on a program, in each pass, with no interface on the page */
+test('the first load of a browser with no cached programs holds the page on no program once the workspace is up, in Build and in Colors', { skip: ROOM_SOFT_SKIP }, async () => {
+  for (const [ws, tier] of [['build', 'veryhigh'], ['build', 'high'], ['colors', 'high']]) {
+    const b2 = await chromium.launch({ channel: 'chrome', args: launchArgs }).catch(() => null);
+    if (!b2) return;
+    try {
+      const ctx = await b2.newContext({ viewport: { width: 1280, height: 800 } });
+      await ctx.addInitScript((tier) => {
+        try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {}
+        const P = WebGL2RenderingContext.prototype, f = P.getProgramInfoLog, W = window.__WAITS__ = [], B = window.__WAITS_BEFORE__ = [];
+        P.getProgramInfoLog = function (p) { const t = performance.now(), r = f.call(this, p), d = performance.now() - t; (document.querySelector('#ws-dock, #ws-player') ? W : B).push(+d.toFixed(1)); return r; };
+      }, tier);
+      await ctx.addInitScript(firstDrawWatch);
+      const page = await ctx.newPage();
+      const errors = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.goto(`${base}/index.html?ws=${ws}&debug=1&spools=plan&mugs=plan`, { waitUntil: 'load', timeout: 90_000 });
+      await waitBoot(page);
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.firstDrawState.held === false, null, { timeout: 120_000 }).catch(() => assert.fail(`${ws} ${tier}: the first frame never came`));
+      if (ws === 'colors') await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 120_000 }).catch(() => assert.fail('the room did not come on'));
+      await settle(page, 4000);
+      const r = await page.evaluate(() => ({ waits: window.__WAITS__, before: window.__WAITS_BEFORE__, ui: window.__FIRST__.ui, pending: window.__FIRST__.pending, state: window.__GEN2_VIEWER__.firstDrawState }));
+      assert.equal(r.ui, true, `${ws} ${tier}: the workspace before the canvas`);
+      // before the workspace, under the overlay: the studio environment's capture alone, about 0.5 s (the mirror's forced draw held 2.5 s here)
+      const held = r.before.reduce((a, d) => a + d, 0);
+      assert.ok(held < 2000, `${ws} ${tier}: nothing but the environment's capture waits before the workspace is up (${held.toFixed(0)} ms: ${JSON.stringify(r.before)})`);
+      assert.ok(r.state.marks.left > 2, `${ws} ${tier}: a cold browser, as this case needs (${JSON.stringify(r.state)})`);
+      assert.equal(r.pending, 0, `${ws} ${tier}: nothing pending at the first draw`);
+      const worst = Math.max(0, ...r.waits);
+      assert.ok(worst < 300, `${ws} ${tier}: no long wait on a program with the workspace up (${worst} ms, ${r.waits.length} first uses; 700 to 1100 ms before)`);
+      assert.equal(r.state.timedOut, false, `${ws} ${tier}: not by the clock`);
+      assert.deepEqual(clean(errors), [], `${ws} ${tier}`);
+    } finally { await b2.close(); }
+  }
+});
+/* a browser kept a program a compile-ahead finished last only once a first draw had waited on it itself: without A CACHED VISIT DOES
+   NOT WAIT FOR A STRAGGLER (main.js) every later visit waited on that one program again, model at 1.5 s against 0.6 s. Visits on one
+   kept profile until the wait is short: it cures itself, and stays cured */
+test('Build\'s later visits on one browser profile cure the last program the driver did not keep, and then barely wait', { skip: ROOM_SOFT_SKIP }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'gen2-firstdraw-'));
+  const visit = async () => {
+    const ctx = await chromium.launchPersistentContext(dir, { channel: 'chrome', args: launchArgs, viewport: { width: 1280, height: 800 } });
+    try {
+      await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
+      const page = ctx.pages()[0] || await ctx.newPage();
+      await page.goto(`${base}/index.html?ws=build&debug=1&roomahead=off`, { waitUntil: 'load', timeout: 90_000 });
+      await waitBoot(page);
+      await page.waitForFunction(() => window.__GEN2_VIEWER__.firstDrawState.held === false, null, { timeout: 120_000 }).catch(() => assert.fail('the first frame never came'));
+      await settle(page, 1500);
+      const s = await page.evaluate(() => window.__GEN2_VIEWER__.firstDrawState);
+      return { ms: Math.round(s.marks.done - s.marks.start), left: s.marks.left ?? 0 };
+    } finally { await ctx.close(); }
+  };
+  try {
+    const log = [];
+    let v;
+    for (let i = 0; i < 8; i++) { v = await visit(); log.push(v); if (i > 0 && v.left === 0 && v.ms < 800) break; }
+    assert.ok(v.left === 0 && v.ms < 800, `the programs came from the cache within eight visits: ${JSON.stringify(log)}`);
+    const again = await visit();
+    assert.ok(again.left === 0 && again.ms < 800, `and stayed there: ${JSON.stringify([...log, again])}`);
+    console.log('first-draw visits', JSON.stringify([...log, again]));
+  } finally { await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }).catch(() => {}); }
 });
 
 test('the front door: the bare address opens Build; a kit link and a part preview keep the old viewer, whose Customize hands the build to Build', async () => {
@@ -4656,6 +4765,8 @@ test('Colors: the room is got ready in the background, Build unchanged, and the 
     const put = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { shadow: v.renderer.shadowMap.enabled, cast: v.sun.castShadow, env: v.scene.environment === v.studioEnv(), held: v.sceneHeld, rt: v.renderer.getRenderTarget() === null, ws: document.documentElement.dataset.ws, done: document.documentElement.dataset.done || null, pending: v.programsPending() }; });
     assert.deepEqual(put, { shadow: false, cast: false, env: true, held: false, rt: true, ws: 'build', done: null, pending: 0 }, `${tier}: Build's stage put back`);
     await page.waitForFunction(async () => { const V = window.__GEN2_VIEWER__, a = V.idleStats().drawn; await new Promise((r) => setTimeout(r, 1000)); return V.idleStats().drawn - a <= 3; }, null, { timeout: 60_000, polling: 200 }).catch(() => assert.fail(`${tier}: the idle gate does not rest after the work`));
+    // (the accumulator's blit, the stage's own program, drawn when its samples end: Very High only)
+    if (tier === 'veryhigh') await page.waitForFunction(() => { const V = window.__GEN2_VIEWER__; return V.acc.ok && V.acc.n >= V.accTotal(); }, null, { timeout: 90_000 }).catch(() => assert.fail('Very High\'s samples never finished'));
     const before = await newestProgram(page);
     await page.evaluate(() => { window.__WAIT__.max = 0; window.__PILLS__ = 0; new MutationObserver(() => { if (document.getElementById('ws-room-loading')) window.__PILLS__++; }).observe(document.body, { childList: true, subtree: true }); });
     await page.click('#ws-tabs .tab:has-text("Colors")');
@@ -4707,7 +4818,9 @@ test('Colors: a tier change under the background work leaves no tier marked done
   await page.click('#ws-tabs .tab:has-text("Build")');
   await page.waitForFunction(() => document.documentElement.dataset.ws === 'build' && !document.documentElement.dataset.done, null, { timeout: 60_000 });
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('veryhigh', { user: true }); });
-  await settle(page, 1000);
+  // its samples done first: the accumulator's own blit, drawn when they end, is the stage's program and not the room's (two full runs caught it landing after the run's reading)
+  await page.waitForFunction(() => { const V = window.__GEN2_VIEWER__; return V.acc.ok && V.acc.n >= V.accTotal(); }, null, { timeout: 90_000 }).catch(() => assert.fail('Very High\'s samples never finished'));
+  await settle(page, 300);
   await page.click('#ws-tabs .tab:has-text("Colors")');
   await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-colors .roomcols'), null, { timeout: 120_000 }).catch(() => assert.fail('the room did not come on at Very High'));
   await settle(page, 2000);

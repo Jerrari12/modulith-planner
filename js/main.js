@@ -1145,7 +1145,9 @@ function applyReflectionQuality() {
   ensureReflector();
   refl.mesh.visible = true;
   fitReflector();
-  updateReflection(true);
+  /* a draw, in the same task, of every part: not while the first frame waits for its programs (THE FIRST FRAME WAITS, below). That
+     frame draws the mirror itself: its key has not been seen yet */
+  if (!(firstDraw && firstDraw.held)) updateReflection(true);
 }
 function fitReflector() {
   if (!refl.mesh || typeof assembledBox === 'undefined' || assembledBox.isEmpty()) return;
@@ -3762,6 +3764,7 @@ const skinMaps = (() => {
         st.loading.set(n, load(n).catch((e) => { st.failed.set(n, (e && e.message) || String(e)); console.warn(`[skin map] ${n}: ${(e && e.message) || e} - left plain`); }).finally(() => st.loading.delete(n)));
       }
       await Promise.all([...st.loading.values()]);
+      await firstDrawn();   // a repack holds the page 0.3 to 0.5 s (its maps resampled here): after the model is up, not before (THE FIRST FRAME WAITS)
       const want = live();
       const same = want.length === st.slots.size && want.every((n) => st.slots.has(n));
       if (!same) repack();
@@ -4161,7 +4164,7 @@ function holdPartMeshes() {
 }
 const programsPending = () => (renderer.info.programs || []).filter((p) => !p.isReady()).length;
 /* nothing the visitor would feel a slice of work under: no move or tween, no scene of its own, a tab on screen */
-const warmQuiet = () => tweens.size === 0 && !perf.moving && !cinema.on && !sceneHold.on && !document.hidden;
+const warmQuiet = () => tweens.size === 0 && !perf.moving && !cinema.on && !sceneHold.on && !document.hidden && !firstDraw.held;
 
 /**
  * Rebuild the part materials when the relief crosses the tier boundary.
@@ -9667,6 +9670,7 @@ async function drawThumb(s, { plain = false } = {}) {
     catch (e) { missing.push(node); }
   }));
   if (missing.length) throw new Error('part models missing: ' + missing.join(', '));
+  await firstDrawn();
   if (paletteSig() !== sig) throw new Error('palette changed while loading');   // the shared materials now wear another palette: this key must not cache them (Sol 01a132de)
   if (quality !== tier) throw new Error('quality tier changed while loading');   // and the light, the environment and the tone mapping another tier's
   if (!thumbScene) {
@@ -9886,6 +9890,7 @@ function lookCard(look, opts = {}) {
 }
 async function lookCardDraw(look, opts) {
   const { width = 384, height = 288, xr = true, linear = true, samples = 0, compare = false } = opts;
+  await firstDrawn();
   if (!manifest || !instances.size) return null;
   const ts = performance.now();
   lookSnapshot();   // once per manifest: its cost is ms.snap (0 when the snapshot stands)
@@ -11638,6 +11643,83 @@ function startPartIdle() {
     new IntersectionObserver(es => { partView.visible = es.some(x => x.isIntersecting); }, { threshold: 0.01 }).observe(canvas);
 }
 
+/* THE FIRST FRAME WAITS FOR ITS PROGRAMS (Joey 2026-10-31, after the Colors room's: done.js THE ROOM'S PROGRAMS AHEAD; "Yes, fix
+   it here"). On a first visit, or after a driver update or a shader this repo changed, the build's first frames held the page
+   for several seconds: the driver builds each part program, three waits for it at the first draw, and the same again for the
+   floor mirror's or Very High's pass into a target. app.js awaits between this module and the workspace's mount, so those
+   frames ran first and the visitor had no interface at all until they finished (D:/Claude - Output/colors-load-2026-10-31).
+   So the loop draws nothing until the programs are ready: the workspace mounts and is usable, the loading overlay stays over the
+   stage, and the frames that only issue compiles (renderer.compile: KHR_parallel_shader_compile runs them on the driver's
+   threads) leave the page its time. It starts once the workspace has mounted (releaseFirstDraw), since the palette the
+   workspace applies decides programs too; FIRST_DRAW_RELEASE_MS stands in if nothing ever says so. A read of the canvas draws
+   at once, as it always has (idle.force, see READING THE CANVAS). Without the extension nothing is pending and the first draw
+   waits on first use, as it did. A software rasteriser, a part preview, a benchmark and a shot keep the old path (`?firstdraw=on`
+   is the CI runner's way in, `off` a control arm). */
+const FIRST_DRAW_RELEASE_MS = 3000, FIRST_DRAW_WAIT_MS = 20000, FIRST_DRAW_JUDGE_MS = 150, FIRST_DRAW_FEW = 2;
+const firstDrawFlag = new URLSearchParams(location.search).has('debug') ? new URLSearchParams(location.search).get('firstdraw') : null;
+/* `var`, like sceneHold: applyQuality can run before this line, and reads it */
+var firstDraw = { held: firstDrawFlag !== 'off' && !IS_PART && !IS_BENCH && !new URLSearchParams(location.search).get('shot') && (!SOFTWARE_GL || firstDrawFlag === 'on'),
+  released: false, releaseBy: 0, deadline: 0, seen: new Set(), queue: [], compiled: 0, timedOut: false, done: null, finish: null, marks: {} };
+firstDraw.done = new Promise((ok) => { firstDraw.finish = ok; });
+/* a draw outside the loop (a product preview, a look card) waits with the first frame, or the page waits on the same programs in it */
+const firstDrawn = () => (firstDraw && firstDraw.held ? firstDraw.done : null);
+/* what the first frames draw, as this tier and stage draw it: the canvas pass, and a pass into a target where one will come (the
+   floor mirror, Very High's samples). Rescanned while the queue is empty: a palette or a build changing under the wait brings its own */
+function firstDrawScan() {
+  const into = !!QUALITY[quality].accum || !!(refl.mesh && refl.mesh.visible), state = quality + '|' + renderer.shadowMap.enabled + '|' + into;
+  scene.traverse((o) => {
+    if (!o.material || !(o.isMesh || o.isLine || o.isPoints || o.isSprite)) return;
+    const k = [].concat(o.material).map((m) => m.uuid).join() + '|' + (o.geometry ? Object.keys(o.geometry.attributes).join() : '') + '|' + (o.isInstancedMesh ? (o.instanceColor ? 'ic' : 'i') : '') + '|' + state;
+    if (firstDraw.seen.has(k)) return;
+    firstDraw.seen.add(k);
+    firstDraw.queue.push({ o, into });
+  });
+}
+function firstDrawStep() {
+  if (!firstDraw.queue.length) firstDrawScan();
+  const t0 = performance.now(), prev = renderer.getRenderTarget();
+  try {
+    while (firstDraw.queue.length && performance.now() - t0 < 12) {   // a slice, most of a 60 Hz frame with nothing to draw in it: the page and its input go first
+      const { o, into } = firstDraw.queue.shift();
+      if (into && !warmTarget) warmTarget = new THREE.WebGLRenderTarget(1, 1);
+      for (const rt of into ? [null, warmTarget] : [null]) { renderer.setRenderTarget(rt); renderer.compile(o, camera, scene); }
+      firstDraw.compiled++;
+    }
+  } finally { renderer.setRenderTarget(prev); }
+}
+function firstDrawHeld() {
+  if (!firstDraw.held || idle.force) return false;
+  const now = performance.now();
+  if (!firstDraw.released && now < firstDraw.releaseBy) return true;   // the workspace still mounting: its palette decides programs
+  if (!firstDraw.deadline) { firstDraw.deadline = now + FIRST_DRAW_WAIT_MS; firstDraw.marks.start = now; }
+  firstDrawStep();
+  if (firstDraw.queue.length) firstDraw.marks.queued = 0;   // a state change brought more (the Colors room, opened from the address): the moment starts again (Sol 01a1938e)
+  else if (!firstDraw.marks.queued) firstDraw.marks.queued = now;
+  const pending = programsPending();
+  firstDraw.marks.peak = Math.max(firstDraw.marks.peak || 0, pending);
+  /* A CACHED VISIT DOES NOT WAIT FOR A STRAGGLER. With the driver's cache warm, everything is ready within a moment of the last
+     compile but a program or two: measured on the A5000, a browser kept the program a compile-ahead finished last only once a
+     first draw had waited on it itself (Chrome and ANGLE, not this code; seven visits missed the same one at 0.8 s each, model
+     at 1.5 s against 0.6 s before this hold; one synchronous visit cured it for good). So one judgement, once the compiles have
+     had a moment: this few left is a warm cache, and the frame takes the wait on first use, once, with the interface up. That
+     wait is as long as those links take, which a pending count cannot bound (under a second on the A5000): stated, and the old
+     path's cost for those programs, on one visit. More than this is a cold browser, and waits for all of them. */
+  if (firstDraw.marks.queued && !firstDraw.marks.judged && now - firstDraw.marks.queued >= FIRST_DRAW_JUDGE_MS) {
+    firstDraw.marks.judged = now; firstDraw.marks.left = pending;
+    if (pending <= FIRST_DRAW_FEW) firstDraw.stragglersTaken = pending;
+  }
+  if ((firstDraw.queue.length || pending) && firstDraw.stragglersTaken == null) {
+    if (now < firstDraw.deadline) return true;
+    firstDraw.timedOut = true;   // a driver that never says ready must not hold the build back for ever: the wait moves to first use, as it was
+  }
+  firstDraw.marks.done = now;
+  firstDraw.held = false; firstDraw.seen.clear();
+  document.getElementById('loading-overlay')?.remove();
+  perfGrace();   // the frames that follow may still upload every buffer and texture: not a frame rate
+  firstDraw.finish();
+  return false;
+}
+
 // ---------- boot ----------
 const X_URL = 'https://x.com/jerrari3D';
 if (X_URL) { const a = $('outro-x'); a.href = X_URL; a.classList.remove('hidden'); }
@@ -11674,7 +11756,8 @@ try {
     'mount failed: ' + ((e && e.message) || e));
 }
 applyPalette(); // restore any saved filament colors
-$('loading-overlay').remove();
+if (firstDraw.held) $('loading-text').textContent = 'Preparing the 3D view…';   // the overlay goes with the first frame (firstDrawHeld)
+else $('loading-overlay').remove();
 if (IS_PART) {
   // product-preview: no pages, no goTo — snap the part in and frame it. cur
   // stays 0 (the cover page), which keeps tap-identify inert for free (the
@@ -11897,6 +11980,7 @@ function renderLoop(now) {
   updateDrawerDims();
   updateFpEnv();
   updateOverhangPulse(now);
+  if (firstDrawHeld()) return;   // THE FIRST FRAME WAITS FOR ITS PROGRAMS
   // IDLE: nothing on screen can change, so the GPU rests and the canvas keeps showing the last frame (Joey 2026-10-17:
   // the planner held ~40% of a laptop GPU with a still view - measured 120-240 full frames a second, 56 draw calls each
   // on Balanced, with nothing changing). Everything above still runs every frame (damping, tweens, the DOM callouts);
@@ -11946,6 +12030,7 @@ function renderLoop(now) {
     postToEmbedder({ gen2: 'partReady' });
   }
 }
+firstDraw.releaseBy = performance.now() + FIRST_DRAW_RELEASE_MS;
 renderer.setAnimationLoop(loopTick);
 /* READING THE CANVAS DRAWS IT FIRST. preserveDrawingBuffer is off, so a WebGL canvas read on a frame the idle gate
    skipped returns an EMPTY buffer - the screen keeps showing the last frame, but toDataURL / toBlob do not (the goldens
@@ -11987,7 +12072,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
     mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
     // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
-    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn && !!QUALITY[quality].accum && !SOFTWARE_GL; }, get softwareGL() { return SOFTWARE_GL; }, compileAhead, compileForHold, compileForCapture, holdPartMeshes, programsPending, warmQuiet, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
+    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn && !!QUALITY[quality].accum && !SOFTWARE_GL; }, get softwareGL() { return SOFTWARE_GL; }, compileAhead, compileForHold, compileForCapture, holdPartMeshes, programsPending, warmQuiet, releaseFirstDraw() { firstDraw.released = true; }, get firstDrawState() { return { held: firstDraw.held, released: firstDraw.released, compiled: firstDraw.compiled, timedOut: firstDraw.timedOut, marks: { ...firstDraw.marks } }; }, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
     // reflector, so a rendering question can be answered by reading state instead

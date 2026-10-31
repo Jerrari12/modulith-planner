@@ -72,7 +72,7 @@ function initialMode() {
 const WORKSPACES = { build: mountBuild, assemble: mountAssemble, parts: mountParts, colors: mountColors, labels: mountLabels };
 
 export async function boot() {
-  if (!WS) { await createStage(document); return; }
+  if (!WS) { (await createStage(document)).releaseFirstDraw(); return; }
   document.documentElement.dataset.ws = WS;
   document.documentElement.dataset.mode = initialMode();
   document.documentElement.classList.toggle('ws-phone', isPhone());   // the phone chrome (bottom tabs, sheets) below 1024 px
@@ -422,6 +422,7 @@ export async function boot() {
   const labelsLink = !!labelsAdd || /(^#|&)labels-open/.test(location.hash);
   if (/(^#|&)labels-open(&|$)/.test(location.hash)) history.replaceState(history.state, '', location.href.replace(/[#&]labels-open(?=&|$)/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
   ctx.switchTo(labelsLink ? 'labels' : WORKSPACES[WS] ? WS : 'build');
+  stage.releaseFirstDraw();   // the workspace is up with its palette: the stage's first frame can get its programs ready (main.js THE FIRST FRAME WAITS)
   /* THE ROOM AHEAD (js/scenes/room-ahead.js says who; done.js warmRoom what): once the page has settled, the Colors room's files
      and shader programs in idle moments, so the first switch to Colors has nothing to wait for */
   setTimeout(() => {
