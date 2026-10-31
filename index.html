@@ -10,6 +10,9 @@
      Instructions" was the viewer's name from before the merge and said nothing about MODULITH. -->
 <meta name="description" content="MODULITH Planner: lay out a 3D-printable modular storage build, pick filament colors, make labels, and get the parts list and assembly steps. Free, in the browser. GEN2 parts still work.">
 <!-- the bare address is the planner (cutover, 2026-10-17), so a link preview of it shows the title and description above -->
+<!-- One address for search (2026-10-31): the old planner's forward lands on ?ws=build and names this same address. Every
+     ?ws=, ?build=, ?part= and ?ref= address opens this one page with no words of its own; a kit's page to rank is on the site. -->
+<link rel="canonical" href="https://planner.modulith.systems/">
 <!-- Site icon: the Jerrari J on a dark tile. The mark's core is WHITE, so a
      transparent icon dissolves into a light tab bar — the tile keeps it legible
      in both themes. Root-absolute paths so /builds/ resolves them too. Same
@@ -332,23 +335,16 @@
      This is a SEPARATE GoatCounter site from the planner's (jerrari.*), so the
      two apps' "/" pageviews don't collapse into one row and event names need
      no app prefix. Keep the two in sync if either ever moves. -->
-<!-- NO `path` OVERRIDE, deliberately. There used to be one, pinning the pageview
-     to the arrival URL because main.js history.replaceState()d the bare root
-     onto the canonical starter kit, and those raced on a cold CDN. That
-     rewrite was removed on 2026-08-22 (the root is a live promise again, see
-     entry.js), so the override guarded a race that no longer exists - and it
-     carried a standing hazard of its own: a captured path is applied to any
-     goatcounter.count() call that does not pass its own, so one future call
-     that forgot would have reported this URL instead of the current one.
-     count.js's own default - location.pathname + location.search at load - is
-     now correct by construction. VERIFIED before removal: nothing in the viewer
-     mutates location.href/search/pathname and there is no replaceState or
-     pushState anywhere (test/entry-routes.test.mjs pins that). The single hash
-     write, on a mount or length change, is followed immediately by
-     location.reload(), and a hash is not part of count.js's default path.
-     ⚠ If a URL rewrite is ever reintroduced, this override comes back WITH IT -
-     and as a STRING, never a function. -->
-<script>window.goatcounter = {};</script>
+<!-- THE PAGEVIEW PATH IS PINNED to the URL the visitor arrived on (2026-10-31; the
+     first pin ran 2026-08-21 to 08-22). count.js's default path comes from a
+     same-host <link rel="canonical"> when the page has one, so the canonical in
+     <head> would report every address as "/": every ?ws=, ?build=, ?part= and
+     ?from= row gone from the dashboard. And app.js replaceState()s the bare root
+     onto ?ws=build, which races that default on a cold CDN.
+     ⚠ A STRING, never a function: a function runs when count.js counts, after
+     that rewrite. Every goatcounter.count() must pass its own path, as track()
+     does, or it reports this arrival URL instead of the current one. -->
+<script>window.goatcounter = { path: location.pathname + location.search };</script>
 <!-- Absolute https (not protocol-relative): a //-URL opened via file://
      resolves to a Windows network share and hangs the page for minutes.
      The counter is `jerrari`, the old planner's, since the cutover (CUTOVER.md,

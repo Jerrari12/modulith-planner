@@ -46,6 +46,22 @@ test('an address that names something without ?ws= keeps the old viewer', () => 
   ]) assert.equal(shellWorkspace(q, h), null, why);
 });
 
+test('search sees one address: the page names the bare address as canonical, once, in its head', () => {
+  // only a real tag counts, not one in a comment or a script's text, and a second one would make Google ignore both
+  const html = read('index.html').replace(/<!--[\s\S]*?-->/g, '').replace(/<script\b[\s\S]*?<\/script>/gi, '');
+  const end = html.indexOf('</head>');
+  const tags = (s) => s.match(/<link\b[^>]*\brel=["']?canonical\b[^>]*>/gi) || [];
+  assert.deepEqual(tags(html.slice(0, end)), ['<link rel="canonical" href="https://planner.modulith.systems/">']);
+  assert.deepEqual(tags(html.slice(end)), [], 'none outside <head>, where a search engine would not read it');
+});
+
+test('the counter keeps every address: count.js would report the canonical\'s "/", so the page pins the arrival URL first', () => {
+  const html = read('index.html').replace(/<!--[\s\S]*?-->/g, '');
+  const pin = html.indexOf('<script>window.goatcounter = { path: location.pathname + location.search };</script>');
+  assert.ok(pin > -1, 'the path is pinned, as a string');
+  assert.ok(pin < html.indexOf('<script data-goatcounter='), 'before count.js loads');
+});
+
 test('app.js opens the shell by shellWorkspace, and the deploy stamps that import', () => {
   const app = read('js', 'app.js');
   assert.ok(/import \{ shellWorkspace \} from '\.\/entry\.js';/.test(app), 'app.js imports it');
