@@ -1206,6 +1206,14 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws #ws-toast { bottom: 12px; left: calc(var(--rail) + (100vw - var(--rail) - var(--side)) / 2); max-width: calc(100vw - var(--rail) - var(--side) - 24px); }
 }
 
+/* ---- the room on its way (done.js roomStatus; Joey 2026-10-31: "maybe even a loading status bar"): over the stage's free part, its
+   left and top set from the safe area; the bar and its sweep are transforms, so they run on the compositor ---- */
+#ws-room-loading { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; width: 184px; box-sizing: border-box; padding: 8px 12px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; pointer-events: none; z-index: 5; }
+#ws-room-loading i { position: relative; display: block; height: 3px; border-radius: 2px; overflow: hidden; background: var(--track); }
+#ws-room-loading b { position: absolute; inset: 0; background: var(--orange); transform: scaleX(0); transform-origin: left; transition: transform 200ms var(--ease-out); }
+#ws-room-loading i::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); transform: translateX(-100%); animation: room-sweep 1.2s linear infinite; }
+@keyframes room-sweep { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { #ws-room-loading i::after { animation: none; } #ws-room-loading b { transition: none; } }
 /* ---- toast ---- */
 #ws-toast { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); padding: 10px 14px; border-radius: 12px; font-size: 13px; font-weight: 600; opacity: 0; transition: opacity var(--d-pop) var(--ease-out); pointer-events: none; }
 #ws-toast.show { opacity: 1; }
