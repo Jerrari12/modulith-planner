@@ -3,7 +3,7 @@
    GPU and machines up to twice as slow as each other. Each run failed on a different wait, and each was patched where it failed.
 
    THE WAITS. A wait returns as soon as its condition holds, so a longer limit costs a passing case nothing, and a case stops at
-   its first timeout, so a real break costs about 90 s more. On a software rasteriser only, watchWaits lifts every explicit limit
+   its first timeout, so a real break costs the difference, at most 105 s. On a software rasteriser only, watchWaits lifts every explicit limit
    from 15 s up to 120 s, and page loads to 180 s, in one place instead of 800. Below 15 s a limit is left alone: those are the
    short probes, where running out is a normal answer. goBack and goForward are left alone too: the suite probes with them.
 
@@ -47,7 +47,7 @@ export function watchWaits(protos, { stretch, onTimeout }) {
 }
 
 /* did this failure come from a wait running out? Playwright's own error, or the error a case's catch raises from one: the suite
-   turns 211 timeouts into a sentence with `.catch(() => assert.fail(...))`. That is an assert.fail, thrown at once, so it counts
+   turns many timeouts into a sentence with `.catch(() => assert.fail(...))`. That is an assert.fail, thrown at once, so it counts
    only as one within 250 ms of a timeout: an assert.equal just after a probe ran out is a wrong value, and fails (Sol 01a19841) */
 export const CAUGHT_WITHIN_MS = 250;
 export function ranOutOfTime(err, lastTimeoutAt, now = Date.now()) {

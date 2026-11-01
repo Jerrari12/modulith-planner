@@ -115,7 +115,7 @@ async function warmUp() {
     const p = await c.newPage();
     await p.goto(`${base}/index.html?ws=build&debug=1&done=off`, { waitUntil: 'load' });
     await waitBoot(p);
-    await p.waitForFunction(() => window.__GEN2_VIEWER__.idleStats().drawn >= 1, null, { timeout: WAIT_FLOOR_MS });   // a frame drawn: a software rasteriser skips the first-draw hold, so its programs are built here
+    await p.waitForFunction(() => window.__GEN2_VIEWER__.idleStats().drawn >= 1, null, { timeout: WAIT_FLOOR_MS });   // a frame drawn: a software rasteriser keeps the old path, with no first-draw hold, so its programs are built here
   } catch (e) { console.log(`e2e warm-up: ${String(e.message).split('\n')[0]}`); }
   finally { await c.close().catch(() => {}); }
 }
