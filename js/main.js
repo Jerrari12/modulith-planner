@@ -12200,7 +12200,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
     applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
     setMeasure, setDims, get dimsOn() { return dFocus.peek ? dFocus.peek.dimsWas : dims.on; }, get dims() { return dims; }, resetView() { $('btn-cam').click(); }, get camFree() { return camOverride; },
-    setCamFree(on) { setCamOverride(!!on); },   // a held scene that owns the camera (the Done room's sequence) takes it back after a grab without the stage's return button
+    setCamFree(on) { setCamOverride(!!on); if (on) camTweenToken++; },   // a held scene that owns the camera (the Done room's sequence) takes it back after a grab without the stage's return button; a camera taken stops a glide on its way (a stage left for Colors' Neutral had one going, and landed it over the camera put back)
     setSafeArea, get safeArea() { return safeArea; },
     // the step player, for the Assemble workspace (phase 1): the page index, the page count, and the viewer's
     // own controls driven through their buttons so their tracking and state stay in one place

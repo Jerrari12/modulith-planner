@@ -548,7 +548,7 @@ function contactTexture() {
    the orbit free, no drifts and no drawer moment; the toolbar's camera button returns to the hero through `recenter()`. */
 /* `orbit: false` is the FINAL SCENE (Assemble, Joey 2026-10-23: "don't let them rotate the camera"): the controls are off,
    the shots are the only views, and the handle's `nextShot()` cuts to the next one. */
-export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true, orbit = true, onSpool = null } = {}) {
+export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, sequence = true, orbit = true, onSpool = null, returnCam = null } = {}) {   // returnCam: { position, target, fov }, a camera to come back to, no entrance
   const { scene, camera, controls, renderer } = stage;
   let cancelled = false, on = false, status = null;   // status: the loading pill, while the room is on its way (roomStatus)
   const parts = { group: null, catcher: null, wall: null, sprite: null, masks: [], slid: {}, env: null, tex: null, mats: [], raf: 0, fade: null };
@@ -2114,7 +2114,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     stage.invalidateFrame();
     afterFrames(seq.timing.preFrames, () => {
       if (!on || seq.on) return;   // Next view in these frames has begun the grammar already: no entrance to make (Sol 01a16e0e)
-      placeCamera(!reduced);
+      if (returnCam) { putCam(returnCam); stage.invalidateFrame(); } else placeCamera(!reduced);
       if (sequenceWanted(stage.quality)) seq.startTimer = setTimeout(seqStart, reduced ? 0 : seq.timing.enterMs + 50);
     });
     addEventListener('resize', refit);

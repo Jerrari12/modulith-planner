@@ -136,6 +136,31 @@ export function mountAssemble(stage, ctx) {
     if (!pop.hidden || strip.matches(':hover') || strip.querySelector(':focus-visible')) { stripWake(); return; }
     document.documentElement.classList.add('scene-idle');
   }
+  /* A SHOWCASE THAT STARTED ITSELF ENDS ON ANY INPUT (Joey 2026-11-01): back where the visitor was, at once. The press or key that ended
+     it does nothing else, and nor does the rest of it: a tap's click comes where the finger was, on what is there back in Colors, and
+     the Z of a Ctrl+Z that ended on its Ctrl would undo a colour there, however long the Ctrl is held. A mouse counts once it has moved
+     3 px: a browser sends a move of nothing when the page changes under a still pointer (its own movement is 0, so the first event
+     counts by that, and later ones by the distance from it). */
+  function endOnInput(signal) {
+    let from = null, ended = false;
+    const end = () => { if (!ended && inScene) { ended = true; leaveScene(); } };
+    const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+    const quietClick = () => { window.addEventListener('click', swallow, { capture: true }); setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 600); };
+    const quietKeys = () => {
+      const off = () => { window.removeEventListener('keydown', swallow, { capture: true }); window.removeEventListener('keyup', up, { capture: true }); clearTimeout(limit); };
+      const up = (e) => { if (!e.ctrlKey && !e.metaKey && !e.altKey) off(); };
+      const limit = setTimeout(off, 5000);   // a keyup lost to another window
+      window.addEventListener('keydown', swallow, { capture: true }); window.addEventListener('keyup', up, { capture: true });
+    };
+    window.addEventListener('pointermove', (e) => {
+      const far = from ? Math.hypot(e.clientX - from[0], e.clientY - from[1]) : Math.hypot(e.movementX || 0, e.movementY || 0);
+      if (!from) from = [e.clientX, e.clientY];
+      if (far >= 3) end();
+    }, { signal, capture: true, passive: true });
+    window.addEventListener('wheel', end, { signal, capture: true, passive: true });
+    window.addEventListener('keydown', (e) => { swallow(e); end(); quietKeys(); }, { signal, capture: true });
+    window.addEventListener('pointerdown', (e) => { swallow(e); end(); quietClick(); }, { signal, capture: true });
+  }
   function enterScene() {
     if (DONE_SCENE !== 'room' || inScene) return;
     inScene = true;
@@ -144,6 +169,7 @@ export function mountAssemble(stage, ctx) {
     root.append(bars, strip, pop);
     idle.ac = new AbortController();
     for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown']) document.addEventListener(type, stripWake, { signal: idle.ac.signal, passive: true });
+    if (showcase && showcase.auto) endOnInput(idle.ac.signal);
     stripWake();
     enterRoom();
     safe();

@@ -143,7 +143,7 @@ afterEach(async () => { for (const c of contexts) await c.close().catch(() => {}
    page renders at its default quality, and on the CI runner's software rasteriser that kept the main thread so busy that
    a click outlived its 30 s (deploy run 38981210610: "the redesign follow-up: a gap build…" - locator.click: Timeout
    30000ms exceeded; this suite passed locally on a real GPU every time) */
-const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} };   // no sheet nudge (open() says why)
+const FAST = () => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); } catch {} };   // no sheet nudge (open() says why)
 async function freshContext() { const c = await browser.newContext({ viewport: { width: 1280, height: 800 } }); contexts.add(c); await c.addInitScript(FAST); return c; }
 async function open(ws, { query = '', phone = false, context = null, visitor = false, viewport = null } = {}) {   // viewport: a phone's own size (390 x 844 when not given)
   /* the room is on for everyone (Joey 2026-10-26): a case about something else keeps the studio it was written for
@@ -159,7 +159,7 @@ async function open(ws, { query = '', phone = false, context = null, visitor = f
   contexts.add(ctx);
   // the phone sheets' one-time nudge stays out of every case but its own: a sheet lifting a second after load moves what a
   // case taps or measures
-  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
+  if (!context) await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); } catch {} });
   const page = await ctx.newPage();
   // E2E_THROTTLE=n slows this machine's CPU n times (Chrome's own throttling), towards the CI runner's speed: the
   // follow-up cases of 2026-10-16 passed here, soft rendering included, and failed there twice
@@ -254,7 +254,7 @@ test('the first load of a browser with no cached programs holds the page on no p
     try {
       const ctx = await b2.newContext({ viewport: { width: 1280, height: 800 } });
       await ctx.addInitScript(([tier, memory]) => {
-        try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); if (memory) localStorage.setItem('gen2-first-draw-waits', memory); } catch {}
+        try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); if (memory) localStorage.setItem('gen2-first-draw-waits', memory); } catch {}
         const P = WebGL2RenderingContext.prototype, f = P.getProgramInfoLog, W = window.__WAITS__ = [], B = window.__WAITS_BEFORE__ = [];
         P.getProgramInfoLog = function (p) { const t = performance.now(), r = f.call(this, p), d = performance.now() - t; (document.querySelector('#ws-dock, #ws-player') ? W : B).push(+d.toFixed(1)); return r; };
       }, [tier, memory ? JSON.stringify(memory) : null]);
@@ -291,7 +291,7 @@ test('Build\'s later visits on one browser profile cure the last programs the dr
   const visit = async () => {
     const ctx = await chromium.launchPersistentContext(dir, { channel: 'chrome', args: launchArgs, viewport: { width: 1280, height: 800 } });
     try {
-      await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
+      await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); } catch {} });
       const page = ctx.pages()[0] || await ctx.newPage();
       await page.goto(`${base}/index.html?ws=build&debug=1&roomahead=off`, { waitUntil: 'load', timeout: 90_000 });
       await waitBoot(page);
@@ -334,7 +334,7 @@ test('a browser that has sat through a short wait on this tier may take five str
   assert.equal(await few(c, 'balanced', { fast: 1000 }), 2, 'another tier has its own programs');
   await c.close();
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-  await phone.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
+  await phone.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); } catch {} });
   assert.equal(await few(phone, 'fast', { fast: 1000 }), 2, 'a touch device keeps to two: no phone was measured');
   await phone.close();
 });
@@ -4521,9 +4521,9 @@ test('Colors: a spool clicked in the room opens the picker on its filament, and 
    Colors comes back on the room, and Assemble's own place is left as it was */
 test('Colors: Showcase plays the final scene in these colours, and Esc comes back to Colors on the room, Assemble’s own place kept', async () => {
   const { ctx, page, errors } = await open('colors', { visitor: true });
-  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-colors .showcase'), null, { timeout: 60_000 });
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-dock .showcase'), null, { timeout: 60_000 });
   const before = await page.evaluate(() => { const m = window.__GEN2_CTX__().memo; return { page: m.assemblePage ?? null, done: m.assembleDone ?? null, hex: window.__GEN2_VIEWER__.activeHex('Faceplate') }; });
-  await page.locator('#ws-colors .showcase').click();
+  await page.locator('#ws-dock .showcase').click();
   await page.waitForFunction(() => document.documentElement.dataset.ws === 'assemble' && document.documentElement.classList.contains('cinema') && window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence, null, { timeout: 60_000 }).catch(() => assert.fail('Showcase did not open the final scene'));
   const inScene = await page.evaluate(() => ({ back: document.querySelector('#ws-scene button').textContent, hex: window.__GEN2_VIEWER__.activeHex('Faceplate'), mine: window.__GEN2_VIEWER__.useCustom }));
   assert.equal(inScene.back, '← Back to Colors', 'its Back says where it goes');
@@ -4534,6 +4534,254 @@ test('Colors: Showcase plays the final scene in these colours, and Esc comes bac
   assert.deepEqual(after, { page: before.page, done: before.done }, 'Assemble’s own place as it was');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* THE SHOWCASE, EASIER TO FIND (Joey 2026-11-01, of a button, a hint and an auto-start: "Yeah all 3"; of its colours: "Yeah your suggestion
+   orange to black sounds good"). In the dock, on a desktop and a phone: orange and alone on arriving, then small and dark beside an orange
+   Parts list once watched, each visit afresh; a hint once a browser after the second colour; after a quiet while, on a desktop on High or
+   Very High with nothing open, it starts itself, once a visit, and any input comes back exactly where the visitor was, doing nothing else.
+   The clocks are set through the debug hooks, and every wait is a poll. */
+const showcaseKit = () => {
+  const opened = async ({ tier = 'high', idle = null, hinted = true, viewport = { width: 1280, height: 800 }, options = {}, reduced = false }) => {
+    const c = await browser.newContext({ viewport, reducedMotion: reduced ? 'reduce' : 'no-preference', ...options });
+    await c.addInitScript(({ tier, idle, hinted }) => {
+      try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); if (hinted) localStorage.setItem('gen2-showcase-hinted', '1'); } catch { /* */ }
+      if (idle) window.__SHOWCASE_IDLE_MS__ = idle;
+      window.__SHOWCASE_HINT_MS__ = 600_000;   // its nine seconds are shorter than a pick on a runner; the one check of its going sets its own
+    }, { tier, idle, hinted });
+    return { c, ...(await open('colors', { query: '&done=room', context: c, phone: !!options.isMobile })) };
+  };
+  const inColors = (page) => page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.documentElement.dataset.done === 'room' && !document.documentElement.classList.contains('cinema'), null, { timeout: 120_000 });
+  const inScene = (page) => page.waitForFunction(() => document.documentElement.dataset.ws === 'assemble' && document.documentElement.classList.contains('cinema'), null, { timeout: 120_000 });
+  const stays = async (page, ms) => { await settle(page, ms); assert.equal(await page.evaluate(() => document.documentElement.dataset.ws), 'colors', 'it did not start itself'); };
+  // the entrance's move ends before a case takes the camera; the clock is shortened only then, and a move of the mouse starts it over (it is read at each arming)
+  const rests = (page) => page.waitForFunction(() => { const q = window.__GEN2_VIEWER__.camera.position, n = q.x + q.y + q.z, was = window.__camWas; window.__camWas = n; return was !== undefined && Math.abs(was - n) < 0.01; }, null, { polling: 500, timeout: 120_000 });
+  let moved = 0, pointer = null;
+  const startClock = async (page, ms, spot = null) => { pointer = spot || [700 + moved++, 400]; await page.evaluate((m) => { window.__SHOWCASE_IDLE_MS__ = m; }, ms); await page.mouse.move(pointer[0], pointer[1]); };
+  const pointerAt = () => pointer;   // where startClock left it: a move from there is a move, a press there is only a press
+  // what the dock offers, and which of it is orange
+  const dockNow = (page) => page.evaluate(() => { const d = document.querySelector('#ws-dock'), orange = (e) => { const c = e && getComputedStyle(e).backgroundColor.match(/[\d.]+/g).map(Number); return !!c && c[0] > 200 && c[1] > 70 && c[1] < 150 && c[2] < 80; }, sc = d.querySelector('.showcase'), cta = d.querySelector('.cta:not(.showcase)'), b = sc.getBoundingClientRect();
+    return { text: sc.textContent.trim(), small: b.width < 60, showcaseOrange: orange(sc), parts: cta ? cta.textContent.trim() : null, partsOrange: orange(cta), inside: b.bottom <= innerHeight && b.right <= innerWidth }; });
+  const openRow = async (page) => { await page.locator('#ws-colors button.crow').first().click(); await page.waitForFunction(() => !document.querySelector('#ws-picker').hidden, null, { timeout: 30_000 }); };
+  return { opened, inColors, inScene, stays, rests, startClock, pointerAt, dockNow, openRow };
+};
+
+test('Colors: the Showcase is orange in the dock, small and dark beside an orange Parts list once watched, and hints once after two picks', async () => {
+  const { opened, inColors, inScene, stays, dockNow, openRow } = showcaseKit();
+  const a = await opened({ hinted: false });
+  await inColors(a.page);
+  assert.equal(await a.page.locator('#ws-colors .head .showcase').count(), 0, 'gone from the panel\'s header');
+  assert.deepEqual(await dockNow(a.page), { text: 'Showcase', small: false, showcaseOrange: true, parts: null, partsOrange: false, inside: true }, 'on arriving: an orange Showcase, no Parts list');
+  const pickOne = async (nth) => {
+    await openRow(a.page);
+    await a.page.locator('#ws-picker .sw').nth(nth).click();
+    await a.page.locator('#ws-picker button[aria-label="Close the picker"]').click();
+  };
+  await pickOne(2);
+  assert.equal(await a.page.locator('#ws-dock .showcase-hint').count(), 0, 'no hint after one colour');
+  await pickOne(4);
+  assert.match(await a.page.locator('#ws-dock .showcase-hint').textContent(), /See it in the room/, 'the hint after the second');
+  assert.equal(await a.page.evaluate(() => localStorage.getItem('gen2-showcase-hinted')), '1', 'marked at once');
+  await a.page.locator('#ws-dock .showcase-hint').click();
+  await inScene(a.page);
+  await a.page.waitForFunction(() => document.querySelector('#ws-scene button'), null, { timeout: 120_000 });
+  await settle(a.page, 800);
+  await a.page.mouse.move(300, 200); await a.page.mouse.move(420, 340);
+  await settle(a.page, 600);
+  assert.equal(await a.page.evaluate(() => document.documentElement.dataset.ws), 'assemble', 'a showing they asked for is not ended by a move');
+  await a.page.keyboard.press('Escape');
+  await inColors(a.page);
+  assert.deepEqual(await dockNow(a.page), { text: '', small: true, showcaseOrange: false, parts: 'Parts list', partsOrange: true, inside: true }, 'back from it: an orange Parts list, the Showcase small and dark');
+  await a.page.locator('#ws-dock .showcase').click();   // and it plays again from there
+  await inScene(a.page);
+  await a.page.keyboard.press('Escape');
+  await inColors(a.page);
+  await a.page.locator('#ws-dock .cta').click();
+  await a.page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 120_000 });
+  await a.page.click('#ws-tabs .tab:has-text("Colors")');
+  await inColors(a.page);
+  assert.equal((await dockNow(a.page)).parts, 'Parts list', 'stays turned for the visit, through another workspace');
+  await a.page.reload();
+  await inColors(a.page);
+  assert.equal((await dockNow(a.page)).text, 'Showcase', 'each visit afresh');
+  await pickOne(2); await pickOne(4);
+  assert.equal(await a.page.locator('#ws-dock .showcase-hint').count(), 0, 'once a browser');
+  assert.equal((await dockNow(a.page)).text, 'Showcase', 'picks do not turn it');
+  await a.page.evaluate(() => { localStorage.removeItem('gen2-showcase-hinted'); });
+  await a.page.reload();
+  await inColors(a.page);
+  await a.page.evaluate(() => { window.__SHOWCASE_HINT_MS__ = 1500; });
+  await pickOne(2); await pickOne(4);
+  await a.page.waitForFunction(() => localStorage.getItem('gen2-showcase-hinted') === '1' && !document.querySelector('#ws-dock .showcase-hint'), null, { timeout: 60_000 }).catch(() => assert.fail('the hint did not go away'));
+  assert.deepEqual(clean(a.errors), []);
+  await a.c.close();
+
+  // A PHONE: its dock holds what it has, 6 px or more apart, both ways; no auto-start; the hint waits for the picker's sheet, which covers the dock, and is not spent meanwhile
+  const h = await opened({ hinted: false, idle: 1000, viewport: { width: 360, height: 675 }, options: { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } });
+  await inColors(h.page);
+  const phoneDock = (page) => page.evaluate(() => { const d = document.querySelector('#ws-dock'), box = (e) => { const b = e.getBoundingClientRect(); return [Math.round(b.left * 10) / 10, Math.round(b.right * 10) / 10]; }, kids = [...d.querySelectorAll('.status, .showcase, .cta:not(.showcase)')].filter((e) => e.checkVisibility()).map(box); return { kids, dock: box(d), over: d.scrollWidth - d.clientWidth, word: d.querySelector('.status .word').checkVisibility() }; });
+  const holds = (m, what, words) => { assert.ok(m.kids.length === (what === 'arriving' ? 2 : 3) && m.over <= 0 && m.kids.every((k, i) => k[0] >= m.dock[0] && k[1] <= m.dock[1] && (!i || m.kids[i - 1][1] + 6 <= k[0])), `${what}: ${JSON.stringify(m)}`); assert.equal(m.word, words, `${what}: the pill's words (${JSON.stringify(m)})`); };
+  holds(await phoneDock(h.page), 'arriving', true);
+  await stays(h.page, 3000);
+  await h.page.evaluate(() => { const r = document.querySelector('#ws-colors button.crow'); r.scrollIntoView({ block: 'center' }); r.click(); });
+  await h.page.waitForFunction(() => !document.querySelector('#ws-picker').hidden && document.querySelector('#ws-picker button.sw'), null, { timeout: 30_000 });
+  await h.page.locator('#ws-picker button.sw').nth(2).click();
+  await h.page.locator('#ws-picker button.sw').nth(4).click();
+  await settle(h.page, 400);
+  assert.equal(await h.page.locator('#ws-dock .showcase-hint').count(), 0, 'not under the sheet');
+  assert.equal(await h.page.evaluate(() => localStorage.getItem('gen2-showcase-hinted')), null, 'and not spent');
+  await h.page.locator('#ws-picker .sheet-handle .hx').click();
+  await h.page.waitForSelector('#ws-dock .showcase-hint', { timeout: 30_000 });
+  await settle(h.page, 500);
+  const hintAt = await h.page.evaluate(() => { const e = document.querySelector('#ws-dock .showcase-hint'), b = e.getBoundingClientRect(), d = document.querySelector('#ws-dock'), label = getComputedStyle(e).pointerEvents; e.style.pointerEvents = 'auto'; const t = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2), top = !!t && e.contains(t); e.style.pointerEvents = ''; return { top, label, left: b.left, right: b.right, vw: innerWidth, over: d.scrollWidth - d.clientWidth }; });
+  assert.ok(hintAt.top && hintAt.label === 'none' && hintAt.left >= 8 && hintAt.right <= hintAt.vw - 8 && hintAt.over <= 0, `on top once the picker has closed, off the screen's edge, a label a tap goes through (${JSON.stringify(hintAt)})`);
+  assert.equal(await h.page.evaluate(() => localStorage.getItem('gen2-showcase-hinted')), '1');
+  await h.page.locator('#ws-dock .showcase').first().click();
+  await inScene(h.page);
+  await h.page.locator('#ws-scene button').first().click();
+  await inColors(h.page);
+  holds(await phoneDock(h.page), 'watched', false);
+  const sheetUp = () => h.page.evaluate(() => document.querySelector('#ws-colors').classList.contains('open'));
+  assert.equal(await sheetUp(), false, 'the Colors sheet down, as it was');
+  await h.page.locator('#ws-colors .sheet-handle').click();
+  await h.page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
+  await h.page.locator('#ws-dock .showcase').click();
+  await inScene(h.page);
+  await h.page.locator('#ws-scene button').first().click();
+  await inColors(h.page);
+  assert.equal(await sheetUp(), true, 'and up, as it was');
+  await h.c.close();
+});
+
+test('Colors: after a quiet while on a desktop on High the Showcase starts itself, once a visit, and a move comes back where the visitor was; it waits for a picker and a page in view, and never on Balanced or under reduced motion', async () => {
+  const { opened, inColors, inScene, stays, rests, startClock, pointerAt, dockNow, openRow } = showcaseKit();
+  const b = await opened({});
+  await inColors(b.page);
+  await rests(b.page);
+  const place = () => b.page.evaluate(() => { const v = window.__GEN2_VIEWER__, p = document.querySelector('#ws-colors'); return { cam: v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(1)), scroll: p.scrollTop, free: v.camFree, room: document.querySelector('#ws-tools .backdrop [aria-pressed="true"]')?.textContent || null }; });
+  await b.page.evaluate(() => { const v = window.__GEN2_VIEWER__, k = v.controls; v.setCamFree && v.setCamFree(true); const p = v.camera.position; p.set(p.x - 160, p.y - 40, p.z - 120); k.update(); v.invalidateFrame && v.invalidateFrame(); document.querySelector('#ws-colors').scrollTop = 90; });
+  const was = await place();
+  assert.ok(was.scroll > 0, 'the panel scrolled');
+  await startClock(b.page, 1500);
+  await inScene(b.page);
+  assert.equal(await b.page.evaluate(() => window.__GEN2_CTX__().memo.showcaseAutoDone), true);
+  await b.page.waitForFunction(() => document.querySelector('#ws-scene button'), null, { timeout: 120_000 });
+  assert.equal(await b.page.evaluate(() => document.querySelector('#ws-scene button').textContent), '← Back to Colors');
+  await settle(b.page, 1200);
+  const [px, py] = pointerAt();
+  await b.page.mouse.move(px + 1, py); await b.page.mouse.move(px + 2, py);
+  await settle(b.page, 400);
+  assert.equal(await b.page.evaluate(() => document.documentElement.dataset.ws), 'assemble', 'a still pointer and a hair\'s move do not end it');
+  await b.page.mouse.move(420, 320);
+  await inColors(b.page);
+  await b.page.waitForFunction((c) => { const v = window.__GEN2_VIEWER__, q = v.camera.position; return Math.hypot(q.x - c[0], q.y - c[1], q.z - c[2]) < 1; }, was.cam, { timeout: 120_000 }).catch(() => assert.fail('the camera did not come back'));
+  await settle(b.page, 500);
+  const now = await place();
+  for (let i = 0; i < 7; i++) assert.ok(Math.abs(now.cam[i] - was.cam[i]) < 1, `the camera as it was (${now.cam} vs ${was.cam})`);
+  assert.equal(now.scroll, was.scroll, 'the panel\'s scroll as it was');
+  assert.equal(now.room, 'Room', 'Room still pressed');
+  assert.equal(now.free, true, 'the camera still theirs: a resize does not take it back');
+  assert.equal((await dockNow(b.page)).parts, 'Parts list', 'a showing that started itself counts as watched');
+  await startClock(b.page, 1500);
+  await stays(b.page, 5000);   // once a visit
+  assert.deepEqual(clean(b.errors), []);
+  await b.c.close();
+
+  const e = await opened({});
+  await inColors(e.page);
+  await rests(e.page);
+  await openRow(e.page);
+  await startClock(e.page, 1200);
+  await stays(e.page, 3000);   // a picker open
+  await e.page.locator('#ws-picker button[aria-label="Close the picker"]').click();
+  await inScene(e.page);
+  await e.c.close();
+  const v = await opened({});
+  await inColors(v.page);
+  await rests(v.page);
+  await v.page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); });
+  await startClock(v.page, 1000);
+  await stays(v.page, 3000);   // the page out of view
+  if (!SOFTWARE_GL) {   // a real clock against this page's: a pointer that keeps moving keeps it waiting
+    await v.page.evaluate(() => { delete document.hidden; window.__SHOWCASE_IDLE_MS__ = 1500; });
+    await v.page.keyboard.press('Shift');   // a key starts the short clock, so the moves below have something to hold off
+    for (let i = 0; i < 12; i++) { await v.page.mouse.move(500 + i * 5, 300); await settle(v.page, 300); }
+    assert.equal(await v.page.evaluate(() => document.documentElement.dataset.ws), 'colors', 'a pointer on the move holds it off');
+  }
+  await v.page.evaluate(() => { delete document.hidden; });
+  await v.page.mouse.move(700, 500);
+  await inScene(v.page);
+  await v.c.close();
+  const f = await opened({ tier: 'balanced', idle: 1000 });
+  await inColors(f.page);
+  await stays(f.page, 3000);   // not on Balanced
+  await f.c.close();
+  const g = await opened({ idle: 1000, reduced: true });
+  await inColors(g.page);
+  await stays(g.page, 3000);   // not under reduced motion
+  await g.c.close();
+});
+
+/* every other way out, a visit each, and none of them does anything else: a press where a control of Colors' is, a press on the model
+   (a press reaching the stage would select the part and open its picker), a tap, a key Colors acts on, one large move, Ctrl+Z (reaching
+   Colors it would undo the colour), and the same with the Ctrl held past the return, the wheel; and from Neutral, which has no entrance
+   to land the camera. On a GPU: nine visits are many minutes on a runner, and the case above walks the one path they share */
+test('Colors: a press, a move, a key or the wheel ends a Showcase that started itself and does nothing else, and from Neutral it comes back on Neutral', { skip: ROOM_SOFT_SKIP }, async () => {
+  const { opened, inColors, inScene, rests, startClock, pointerAt } = showcaseKit();
+  const d = await opened({});
+  const colours = () => d.page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.keysInBuild().map((k) => window.__GEN2_VIEWER__.activeHex(k.key))));
+  const press = async () => { await d.page.mouse.down(); await d.page.mouse.up(); };
+  for (const [what, act, spot] of [
+    ['a press on Neutral', press, 'neutral'],
+    ['a press on the model', press, [640, 400]],
+    // a tap's click comes where the finger was, on what is there by then (a mouse's goes to what the press and release share, so this is put by hand)
+    ['a tap on Neutral', async () => { await d.page.evaluate(([x, y]) => addEventListener('pointerdown', () => setTimeout(() => document.elementFromPoint(x, y).click(), 50), { capture: true, once: true }), pointerAt()); await press(); }, 'neutral'],
+    ['a key with a meaning in Colors', async () => d.page.keyboard.press('Backslash')],
+    ['one large move', async () => d.page.mouse.move(120, 620)],
+    ['Ctrl+Z', async () => d.page.keyboard.press('Control+z')],
+    ['Ctrl held past its return, then Z', async () => { await d.page.keyboard.down('Control'); await inColors(d.page); await settle(d.page, 900); await d.page.keyboard.press('z'); await d.page.keyboard.up('Control'); }],
+    ['the wheel', async () => d.page.mouse.wheel(0, 120)],
+  ]) {
+    await inColors(d.page);
+    await rests(d.page);
+    await d.page.locator('#ws-colors button.crow').first().click();
+    await d.page.waitForFunction(() => !document.querySelector('#ws-picker').hidden, null, { timeout: 30_000 });
+    await d.page.locator('#ws-picker .sw').nth(3).click();
+    await d.page.locator('#ws-picker button[aria-label="Close the picker"]').click();
+    const before = await colours();
+    const b0 = await d.page.locator('#ws-tools .backdrop button', { hasText: 'Neutral' }).boundingBox();
+    await startClock(d.page, 1500, spot === 'neutral' ? [b0.x + b0.width / 2, b0.y + b0.height / 2] : spot);
+    await inScene(d.page);
+    await settle(d.page, 800);
+    await act();
+    await inColors(d.page);
+    await settle(d.page, 800);
+    const after = await d.page.evaluate(() => ({ done: document.documentElement.dataset.done, picker: document.querySelector('#ws-picker').hidden, chrome: !document.querySelector('#ws').hidden }));
+    assert.deepEqual(after, { done: 'room', picker: true, chrome: true }, `${what} ended it and pressed nothing back in Colors`);
+    assert.equal(await colours(), before, `${what} undid nothing`);
+    await d.page.reload();
+  }
+  assert.deepEqual(clean(d.errors), []);
+  await d.c.close();
+
+  const u = await opened({});
+  await inColors(u.page);
+  await u.page.locator('#ws-tools .backdrop button', { hasText: 'Neutral' }).click();
+  await u.page.waitForFunction(() => document.documentElement.dataset.done !== 'room', null, { timeout: 60_000 });
+  await rests(u.page);
+  const cu = () => u.page.evaluate(() => { const v = window.__GEN2_VIEWER__; return v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(1)); });
+  await u.page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setCamFree && v.setCamFree(true); const q = v.camera.position; q.set(q.x - 90, q.y + 30, q.z - 60); v.controls.update(); v.invalidateFrame && v.invalidateFrame(); });
+  const cu0 = await cu();
+  await startClock(u.page, 1500);
+  await inScene(u.page);
+  await settle(u.page, 800);
+  await u.page.mouse.move(380, 280); await u.page.mouse.move(420, 320);
+  await u.page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && !document.documentElement.classList.contains('cinema'), null, { timeout: 120_000 });
+  await settle(u.page, 800);
+  assert.deepEqual(await cu(), cu0, 'the camera as it was, on Neutral');
+  assert.equal(await u.page.evaluate(() => document.querySelector('#ws-tools .backdrop [aria-pressed="true"]')?.textContent), 'Neutral');
+  assert.deepEqual(clean(u.errors), []);
+  await u.c.close();
 });
 
 /* THE WINDOW: FROSTED GLASS (Joey 2026-10-26, after a photographed garden through it in six versions: "that window scene
@@ -5075,7 +5323,7 @@ test('Colors: the room is got ready in the background, Build unchanged, and the 
   for (const tier of ['veryhigh', 'high']) {
     const vctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     await vctx.addInitScript((tier) => {
-      try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {}
+      try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); } catch {}
       const P = WebGL2RenderingContext.prototype, f = P.getProgramInfoLog;
       window.__WAIT__ = { max: 0 };   // the longest the page was held on a program's first use
       P.getProgramInfoLog = function (p) { const t = performance.now(), r = f.call(this, p); window.__WAIT__.max = Math.max(window.__WAIT__.max, performance.now() - t); return r; };
@@ -5122,7 +5370,7 @@ test('Colors: the room is got ready in the background, Build unchanged, and the 
    01a19327): High, Fast part way through, High again, and the switch still finds High's programs ready */
 test('Colors: a tier change under the background work leaves no tier marked done without its programs', { skip: ROOM_SOFT_SKIP }, async () => {
   const vctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  await vctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
+  await vctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); } catch {} });
   const { ctx, page, errors } = await open('build', { visitor: true, context: vctx, query: '&spools=plan&mugs=plan' });
   await page.waitForFunction(() => window.__GEN2_ROOM_WARM__ && window.__GEN2_ROOM_WARM__.phase === 'compile' && window.__GEN2_ROOM_WARM__.done > 5, null, { timeout: 120_000, polling: 'raf' }).catch(() => assert.fail('the background work did not reach its compiles'));
   await page.evaluate(() => { window.__GEN2_VIEWER__.setQuality('fast', { user: true }); });
@@ -5159,7 +5407,7 @@ test('Colors: a tier change under the background work leaves no tier marked done
   await ctx.close();
 });
 test('Colors: the room is not fetched ahead on a phone, for a visitor who chose Neutral, or with ?done=off (and each still gets it when asked)', { skip: ROOM_SOFT_SKIP }, async () => {
-  const high = (stage) => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); if (stage) localStorage.setItem('gen2-colors-stage', stage); } catch {} };
+  const high = (stage) => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); localStorage.setItem('gen2-showcase-hinted', '1'); if (stage) localStorage.setItem('gen2-colors-stage', stage); } catch {} };
   for (const [name, opts, stage, how] of [
     ['a phone', { viewport: { width: 360, height: 675 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, null, { visitor: true, phone: true }],
     ['Neutral chosen', { viewport: { width: 1280, height: 800 } }, 'studio', { visitor: true }],

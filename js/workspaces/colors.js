@@ -189,6 +189,8 @@ const TPU_LABELS = new Set(FILAMENT_DB.filter((b) => /TPU/.test(b.line)).flatMap
 const isFeet = (key) => String(key || '').split(':')[0] === 'Foot';
 const storage = () => { try { return localStorage; } catch { return null; } };   // a browser that blocks storage throws on the read itself
 
+const SHOWCASE_HINT_KEY = 'gen2-showcase-hinted', SHOWCASE_HINT_AFTER = 2, SHOWCASE_HINT_MS = 9000;
+
 export function mountColors(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
@@ -197,7 +199,7 @@ export function mountColors(stage, ctx) {
   // tray: the compare tray is open; flip: the index of the finalist shown on the model (null = the chosen look)
   // surprise: the Surprise me panel is open; owning: its owned-filaments editor is up (oq its search); sshow: the index of
   // the candidate pinned on the model (null = none)
-  const st = { key: null, sel: null, expanded: null, query: '', mat: 'all', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null, swap: null };   // swap: the spool whose filament the picker changes everywhere (openSwap); simp: the Simplify panel is open, simpTarget its filament count
+  const st = { picks: 0, scHint: false, scHintDue: false, key: null, sel: null, expanded: null, query: '', mat: 'all', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null, swap: null };   // swap: the spool whose filament the picker changes everywhere (openSwap); simp: the Simplify panel is open, simpTarget its filament count
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
@@ -220,6 +222,21 @@ export function mountColors(stage, ctx) {
   let room = null;   // { leaveFn, handle } while the room is on or loading
   let syncBar = null;   // the toolbar's sync, once it is made (its Room | Neutral switch follows st.room)
   const storedStage = (() => { try { return storage()?.getItem(STAGE_KEY); } catch { return null; } })();
+  /* THE WAY BACK FROM THE SHOWCASE (Joey 2026-11-01: an auto-start ends on any input and "returns them exactly where they were"):
+     the camera, whether it is the visitor's to hold, and the panel's scroll. Nothing else can be open: the auto-start waits for
+     that, and the button is under a panel that keeps its own state in the store */
+  const back = ctx.memo && ctx.memo.colorsBack ? ctx.memo.colorsBack : null;
+  if (back) { ctx.memo.colorsBack = null; ctx.memo.showcaseWatched = true; if (back.free && stage.setCamFree) stage.setCamFree(true); }
+  const watched = !!(ctx.memo && ctx.memo.showcaseWatched);
+  function goShowcase(auto = false) {
+    stage.track(auto ? 'showcase:auto' : 'showcase:play');   // whether the dock's button and the auto-start are doing their job: a showing itself counts as done:room either way
+    if (ctx.memo) {
+      const c = stage.camera.position, t = stage.controls.target;
+      ctx.memo.showcase = { from: 'colors', auto };
+      ctx.memo.colorsBack = { cam: { position: { x: c.x, y: c.y, z: c.z }, target: { x: t.x, y: t.y, z: t.z }, fov: stage.camera.fov }, free: !!stage.camFree, scroll: panel.scrollTop, sheetUp: !phone || panel.classList.contains('open') };
+    }
+    ctx.switchTo('assemble');
+  }
   st.room = ROOM_FLAG && (ctx.memo && ctx.memo.colorsRoom != null ? !!ctx.memo.colorsRoom : storedStage !== 'studio');
   function enterRoom() {
     if (!ROOM_FLAG || room) return;
@@ -227,7 +244,7 @@ export function mountColors(stage, ctx) {
     room = h;
     import('../scenes/done.js').then(({ enterDoneScene }) => {
       if (room !== h) return;
-      const r = enterDoneScene(stage, { say, sequence: false, onSpool: (hex) => openSwap(hex) });
+      const r = enterDoneScene(stage, { say, sequence: false, onSpool: (hex) => openSwap(hex), returnCam: back ? back.cam : null });
       h.leaveFn = r.leave;
       r.ready.then((handle) => { if (room === h) { h.handle = handle; if (!handle) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; } renderPanel(); } });   // a room that came on brings its wall and desk control
     }).catch((e) => { console.warn('[colors] the room did not load', e); if (room === h) { room = null; st.room = false; if (ctx.memo) ctx.memo.colorsRoom = false; renderPanel(); } });   // forgotten too, so a remount does not retry (Terra 01a16b56)
@@ -259,6 +276,7 @@ export function mountColors(stage, ctx) {
   const unitWord = () => { const u = store.state.placed.find((p) => p.id === unitOfSel()); return FILL_WORD[u?.fill] || 'unit'; };
   const unitNo = () => { const i = store.state.placed.findIndex((p) => p.id === unitOfSel()); return i < 0 ? '' : ` (unit ${i + 1})`; };
   function pick(key, f) {
+    if (f && ++st.picks === SHOWCASE_HINT_AFTER) showcaseHint();
     const fil = f ? { name: f.label || f.name, hex: f.hex, url: f.url } : null;
     if (st.scope === 'unit' && unitOfSel() != null) commitColors('color-unit', () => stage.setOverride(unitOfSel(), key, fil));
     else commitColors('color', () => stage.setColor(key, fil));
@@ -301,10 +319,6 @@ export function mountColors(stage, ctx) {
        colours, room wall/desk as a small section at the bottom only while the room shows, and the view switch moves to the
        toolbar as Room | Neutral"): the switch is the toolbar's (syncBar), the room's wall and desk the panel's last section */
     const head = el('div.head', {}, [el('h2', { text: 'Colors' }), el('span.hint', { text: 'Click a part on the model, or a row below.' })]);
-    /* THE SHOWCASE (Joey 2026-10-26: "in the color tab, we should somehow also work in the final scene but call it
-       something else, like that way after selecting your colors and stuff you can also view it in this way"): the final
-       scene, in these colours, opened from here and back here on its Back (assemble.js THE SHOWCASE) */
-    if (ROOM_FLAG) head.appendChild(el('button.key.sm.showcase', { title: 'Watch your build in its colours, in the room, the way the final scene shows it · Esc comes back here', onclick: () => { if (ctx.memo) ctx.memo.showcase = { from: 'colors' }; ctx.switchTo('assemble'); } }, [icon('play', { size: 14, fill: true }), 'Showcase']));
     panel.appendChild(head);
     if (syncBar) syncBar();
     // no Instruction colors / My colors switch here: part colours show only in Assemble's player (style brief v3; Joey
@@ -776,7 +790,7 @@ export function mountColors(stage, ctx) {
   root.appendChild(picker);
   const pickerSparkle = sparkleOnScroll(picker);
   function openPicker(key) { st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
-  function closePicker() { st.key = null; st.swap = null; renderAll(); if (phone) phone.collapse(picker); }
+  function closePicker() { st.key = null; st.swap = null; renderAll(); if (phone) phone.collapse(picker); if (st.scHintDue) { st.scHintDue = false; showcaseHint(); } }
   /* THE SPOOL'S FILAMENT, EVERYWHERE (Joey 2026-10-26: "what if i could select a spool and change it's color, and doing so
      would replace everything in the build that used that same color, kind of a handy feature"). A spool in the room is a
      colour (done.js onSpool); what the build prints in it is every filament picked in that colour and every region still
@@ -969,11 +983,51 @@ export function mountColors(stage, ctx) {
     const count = fc ? fc.count : 0;
     const s = stage.buildSize?.(); const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
     dock.replaceChildren(
-      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { if (st.shop) { st.shop = false; renderShop(); renderCard(); } else openShop(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), count ? n(count, 'filament') : 'Instruction colors']),
+      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { if (st.shop) { st.shop = false; renderShop(); renderCard(); } else openShop(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), el('span.word', { text: count ? n(count, 'filament') : 'Instruction colors' })]),
       el('div.group', {}, [el('span.big', { text: String(store.state.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
-      el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })]),
+      /* THE SHOWCASE (Joey 2026-10-26: "in the color tab, we should somehow also work in the final scene but call it
+         something else, like that way after selecting your colors and stuff you can also view it in this way"): the final
+         scene, in these colours, opened from here and back here on its Back (assemble.js THE SHOWCASE). In the dock since
+         2026-11-01 (Joey, of making it easier to find: "Yeah all 3"), with its one-time hint over it. ORANGE TO BLACK (Joey,
+         the same day: "Yeah your suggestion orange to black sounds good"): the one orange thing here is the next thing to do.
+         Orange Showcase and no Parts list on arriving; once they have watched it and come back, orange Parts list with a small
+         dark Showcase beside it. A visit's own state, turned only by the return (the top of this mount), never while they tap */
+      ...(ROOM_FLAG ? [el('div.showcase-at', {}, [
+        ...(st.scHint ? [el('button.showcase-hint', { onclick: () => goShowcase() }, ['See it in the room', icon('play', { fill: true, size: 12 })])] : []),
+        watched
+          ? el('button.key.showcase.again', { title: 'Watch the Showcase again · Esc comes back here', 'aria-label': 'Watch the Showcase again', onclick: () => goShowcase() }, [icon('play', { fill: true, size: 18 })])
+          : el('button.cta.showcase', { title: 'Watch your build in its colours, in the room, the way the final scene shows it · Esc comes back here', onclick: () => goShowcase() }, [icon('play', { fill: true, size: 18 }), 'Showcase']),
+      ])] : []),
+      ...(!ROOM_FLAG || watched ? [el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Parts list', icon('arrow-right', { size: 20 })])] : []),
     );
+  }
+  /* THE HINT, once a browser, after a visitor's second colour (Joey 2026-11-01): a look at the room is the natural next thing. Played
+     or not wanted, it stays played; a storage that throws (a private window) reads as played, so it never repeats on every load */
+  function showcaseHint() {
+    if (!ROOM_FLAG) return;
+    if (phone && (st.key || st.swap)) { st.scHintDue = true; return; }   // a phone's picker is a sheet over the dock: seen only once it closes
+    const s = storage();
+    try { if (!s || s.getItem(SHOWCASE_HINT_KEY) === '1') return; s.setItem(SHOWCASE_HINT_KEY, '1'); } catch { return; }
+    st.scHint = true; renderDock();
+    setTimeout(() => { st.scHint = false; if (!signal.aborted) renderDock(); }, (debug && window.__SHOWCASE_HINT_MS__) || SHOWCASE_HINT_MS);
+  }
+  /* THE SHOWCASE STARTS ITSELF (Joey 2026-11-01): after two minutes with no input, nothing open, the page in view; once a visit. A
+     desktop on High or Very High, for now: a phone has the button. Never under reduced motion. Any input ends it and comes back
+     here (assemble.js). The clock starts over when the page comes back into view: time away is not idle time in front of it. */
+  const autoMs = () => (debug && window.__SHOWCASE_IDLE_MS__) || 120000;   // read at each arming: a check shortens it once the page has settled
+  let autoTimer = 0;
+  const autoAllowed = () => ROOM_FLAG && !phone && !(ctx.memo && ctx.memo.showcaseAutoDone) && matchMedia('(hover: hover) and (pointer: fine)').matches
+    && !matchMedia('(prefers-reduced-motion: reduce)').matches && ['high', 'veryhigh'].includes(stage.quality) && store.state.placed.length > 0;
+  const nothingOpen = () => !(st.key || st.swap || st.sel || st.gallery || st.detail || st.tray || st.surprise || st.simp || st.shop || st.saving) && !/^(input|select|textarea)$/i.test(document.activeElement?.tagName || '');
+  function autoArm() {
+    clearTimeout(autoTimer);
+    if (!signal.aborted) autoTimer = setTimeout(autoFire, autoMs());
+  }
+  function autoFire() {
+    if (document.hidden || !nothingOpen() || !autoAllowed()) { autoArm(); return; }
+    ctx.memo.showcaseAutoDone = true;
+    goShowcase(true);
   }
   const shop = el('div.glass', { id: 'ws-shop', role: 'dialog', 'aria-label': 'Filaments in this build', hidden: true });
   root.appendChild(shop);
@@ -998,7 +1052,7 @@ export function mountColors(stage, ctx) {
   /* ---------------- layout ---------------- */
   const narrow = () => innerWidth < 1280;
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'colors', soon }, { panels: [
-    { el: panel, title: 'Colors', open: true },
+    { el: panel, title: 'Colors', open: !back || back.sheetUp },
     // the handle stands in for the picker's own title row on a phone (app.css hides that row), so it says what the row
     // said - the unit's number, the spool's filament - and carries the close
     { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}${unitNo()}` : typePlural(st.key)}` : st.swap ? `Spool · ${swapName(st.swap)}` : 'Filament', close: () => closePicker() },
@@ -1023,6 +1077,10 @@ export function mountColors(stage, ctx) {
   function safe() { safeArea(); if (room && room.handle) room.handle.refit(); }   // the room's shot follows the free region too (the picker opening narrows it)
   function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
   addEventListener('resize', safe, { signal });
+  for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown', 'touchstart']) document.addEventListener(type, autoArm, { signal, passive: true, capture: true });
+  document.addEventListener('visibilitychange', autoArm, { signal });
+  signal.addEventListener('abort', () => clearTimeout(autoTimer));
+  autoArm();
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
@@ -1047,6 +1105,11 @@ export function mountColors(stage, ctx) {
   if (!pal().on && Object.keys(pal().colors).length) commitColors('colors-on', () => stage.setUseCustom(true));   // the tab's job is the visitor's colours
   renderAll();
   if (st.room) enterRoom();   // a remembered Room choice comes back with the workspace
+  else if (back) {   // Neutral has no entrance to land the camera: put it back here
+    const { position: p, target: t, fov } = back.cam;
+    stage.camera.position.set(p.x, p.y, p.z); stage.controls.target.set(t.x, t.y, t.z); stage.camera.fov = fov; stage.camera.updateProjectionMatrix(); stage.controls.update(); stage.invalidateFrame();
+  }
+  if (back) panel.scrollTop = back.scroll;
 
   return {
     onQuality(tier) { if (room && room.handle) room.handle.onQuality(tier); },   // the room re-aims its lights after the tier's rig reset

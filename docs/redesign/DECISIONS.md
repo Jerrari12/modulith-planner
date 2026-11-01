@@ -6800,3 +6800,36 @@ Not measured: Joey's phone, or any phone. This laptop's GPU reproduced the strip
 Checks: `test/done-fit.test.mjs` 47 of 47; the showing's e2e case on the GPU and under `E2E_SOFT=1`: every shot's depth step under 0.07 mm 800 mm past its aim, the near plane under a prop 40 mm off and under the desk for the ant, restored on leaving. The grammar's case on the GPU. Mutants N1, N3 to N5 and U23 to U25 killed. One line that called `nearFollow` as the scene began survived, and was redundant (the camera always moves after it), so it is gone. Terra 01a1987d: the steam, the stale boxes and a camera past a wall taken; a change of near during an accumulation sample discarded, since the samples move the camera directly and never fire the controls' change.
 
 - **Live 2026-11-01 at `632f45f`** (run 41343534413, stamp `632f45f8`), by the same run as BlockBar B. On the live page on Very High, the near plane two frames into each shot: hero 171.2 mm, pullback 1.4, top 139.8, macro 51.4, ant 1.7, heli 103.5; no page errors. Whether it ends what Joey saw on the phone is still Joey's to say.
+
+## 2026-11-01 · The Showcase is easy to find: orange in the dock, a hint, and it starts itself
+
+Joey, asked whether to build a clear button, a one-time hint and an auto-start: "Yeah all 3". Then, of its colours, reading a suggestion of an orange Showcase that swaps to an orange Parts list once watched: "Yeah your suggestion orange to black sounds good". Both came relayed by the planner-2 session, as quotes.
+
+**Orange to black** (`colors.js` `renderDock`, Colors only; Build's own button stays). The one orange thing in the dock is the next thing to do. On arriving: the filaments pill and an orange Showcase, no Parts list button. Once they have watched it and come back: an orange Parts list, with the Showcase a small dark play button beside it. A visit's own state (`ctx.memo.showcaseWatched`): it turns only on the return, at Colors' mount, never while they tap, and a reload starts it over. The panel header's small Showcase button is gone. With `?done=off` there is no room and the dock keeps its Parts list.
+
+Two calls made here that Joey did not weigh in on, named by planner-2: a showing that started itself counts as watched, and when the second state does not fit a phone the pill drops its words. At 360 x 675 and 780 x 260 it holds the words on arriving and drops them once watched, and every gap is over the 6 px rule (36.7 px or more measured).
+
+**The hint** (`showcaseHint`). "See it in the room", over the button, after a visitor's second colour in one stay on Colors, for nine seconds, once a browser (`gen2-showcase-hinted`). A storage that throws reads as played, so a private window is not nagged on every load. On a phone the picker is a sheet over the dock, so the hint waits for it to close and is not spent meanwhile; there it sits over the Colors sheet's handle, so it is a label a tap passes through, held to the button's right edge.
+
+**It starts itself** (`autoArm`, `autoFire`). After two minutes with no pointer, wheel, key or touch, nothing open, the page in view; once a visit. A desktop on High or Very High only, as Joey's relayed brief said: a phone has the button. Never under reduced motion. The clock starts over when the page comes back into view.
+
+**Any input ends it and comes back exactly where they were** (`assemble.js` `endOnInput`, only for a showing that started itself: one they asked for ends as it always has). The camera, whether it is the visitor's to hold, the panel's scroll, and on a phone whether the Colors sheet was up (`ctx.memo.colorsBack`, which the button takes too). The Room comes back through `enterDoneScene`'s `returnCam` with no entrance; Neutral has no entrance and is put back directly.
+
+A mouse counts once it has moved 3 px: its first event by the browser's own `movementX`, and later ones by the distance from it. A browser sends a move of nothing when the page changes under a still pointer. The rest of the gesture that ended it does nothing either: keys stay quiet until they are up (5 s at most, for a keyup lost to another window), so the Z of a Ctrl+Z that ended on its Ctrl cannot undo a colour; and clicks stay quiet for 600 ms, for a tap's click, which comes where the finger was.
+
+Faults the cases found while they were written, each fixed:
+
+- An option named `at` was shadowed by a local of the same name in the room's loader, so the first return threw.
+- Ctrl+Z ended the showing on its Ctrl, and its Z then reached Colors and undid a colour.
+- On Neutral, a glide `setSafeArea` started as the scene left landed over the camera put back. `setCamFree(true)` now stops a glide on its way.
+- On a phone the hint appeared under the picker's sheet, and was spent.
+
+**Events.** `showcase:play` and `showcase:auto`, so it can be read whether the button and the auto-start do their job. Not asked for; a line each, and `done:room` cannot tell them apart.
+
+**Not measured.** Any real phone. On 780 x 260 the Colors sheet is up on arrival and covers the dock, as it covered the Parts list before, so a landscape phone sees the orange Showcase only once that sheet is down. On a phone or below High it never starts itself, so it is seen only by the button.
+
+**Three cases, the third on a GPU only.** One case, on software GL at half speed, was still unfinished when it failed at 761 s; split, the first two took 344 s and 190 s there, and the third, eight ways out and a return to Neutral, is skipped on a software rasteriser like the other room cases. So CI walks a move ending it, and only a GPU run walks a press, a key and the wheel.
+
+**Review.** Sol `01a198bf`: a large first move not counting, and a Ctrl held past the 600 ms a key's quiet then lasted, both taken. On the fix, two discarded: a Ctrl held 5 s with Colors back, then Z, is an undo the visitor means; a Backslash held through another key's release is an unlikely gesture whose only effect is the chrome's hide.
+
+Checks: all three cases on the GPU; `npm run e2e:changed`, the first two on software GL at half speed; `npm test`, 923 of 929, 5 skipped, the one failure the site's BOM parity test against a checkout of the site 35 commits behind (it passes against the site's current main, and CI skips it); 38 deliberately broken builds, each caught by a case, on this code (`mutants-findable.py`, in the session's output folder). The first run of them missed five: one case could not fail, one line was redundant and is gone, and two ways out had no visit.
