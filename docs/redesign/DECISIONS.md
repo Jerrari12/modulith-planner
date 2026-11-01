@@ -6578,3 +6578,7 @@ A visitor's first load, no `?debug`, a new browser each time (`visitor-first-loa
   close; that the runner's cold start is what tipped it is an inference. Its actions get 120 s, as the wall-and-desk case's do (2c522a8).
   The partition does not move, since no case was added.
 - **Review of that.** Terra `01a194af`: 1 returned, 1 held (the first draft said "about 10 s in", which the annotation does not establish).
+- **The second deploy stopped on another case again.** Run 41260740403 failed the phone's open-sheet case in shard 4, which passed in the
+  run before it with the same partition. Its numbers: 600 ms after the click the sheet's bottom was at 883 where the dock's top less 6 is
+  609, while the tab bar and the dock were already in place, so that fixed wait ran out while the sheet was still 274 px from landing. It
+  now waits for the sheet to land, up to 30 s, and a sheet that never lands still fails the same assertion.

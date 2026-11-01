@@ -6008,6 +6008,8 @@ test('the phone: an open sheet puts the tab bar away, the dock or the player tak
     await page.click(`${sheet} .sheet-handle`);
     await page.waitForFunction((s) => document.querySelector(s).classList.contains('open'), sheet, { timeout: 15_000 });
     await settle(page, 600);
+    // run 41260740403: 600 ms in, the sheet was still 274 px below its place on the runner, so wait for it to land. One that never lands still fails below
+    await page.waitForFunction(([s, f]) => Math.abs(document.querySelector(f).getBoundingClientRect().top - 6 - document.querySelector(s).getBoundingClientRect().bottom) <= 1, [sheet, floor], { timeout: 30_000 }).catch(() => {});
     const up = await measure(page, sheet, floor);
     assert.ok(up.tab.vis === 'hidden', `${ws}, open: the tab bar put away (${JSON.stringify(up)})`);
     assert.ok(up.vh - up.floor.bottom === 6, `${ws}, open: the ${floor} dropped to 6 px off the bottom (${JSON.stringify(up)})`);
