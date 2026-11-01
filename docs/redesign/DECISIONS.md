@@ -6783,6 +6783,8 @@ Joey, having noticed BlockBar B showed no layer lines: "Orient blockbar B front 
 
 Checks: the pose suites, 45 of 45 (`test/bed-finish`, `handle-preview`, `build-axis`, `part-preview`, `plate-poses-vendor`). The vault's orientation is per family, so B's sits in `PART_ORIENTATION` in its catalog generator, and the other five stay blank.
 
+- **Live 2026-11-01 at `632f45f`** (run 41343534413, stamp `632f45f8`). The first push, `dc799f6`, did not deploy: its unit job failed. Run here, `npm test` named `test/plate-glb-orientation.test.mjs`, which snapshots every plate-eligible GLB's dimensions, had no entry for B, and is not among the suites named above. `632f45f` adds the entry, [66, 9, 27], and changes nothing else, and its run passed. On the live page, `?mode=preview&part=blockbar-handle-b&plate=256x256`: the bar flat on the bed, its mounts standing up, 66 x 27 x 9 mm with the 27 upward; no page errors.
+
 ## 2026-11-01 · The near plane follows the camera, so far shots' shadows stop flickering
 
 Joey, watching the Showcase on a phone: "when the camera is far away, shadows seem to flicker, almost like a clipping issue".
@@ -6796,3 +6798,5 @@ Joey, watching the Showcase on a phone: "when the camera is far away, shadows se
 Not measured: Joey's phone, or any phone. This laptop's GPU reproduced the stripes only at a distance a phone reaches by its own fit, so whether they are what Joey saw needs Joey's eye.
 
 Checks: `test/done-fit.test.mjs` 47 of 47; the showing's e2e case on the GPU and under `E2E_SOFT=1`: every shot's depth step under 0.07 mm 800 mm past its aim, the near plane under a prop 40 mm off and under the desk for the ant, restored on leaving. The grammar's case on the GPU. Mutants N1, N3 to N5 and U23 to U25 killed. One line that called `nearFollow` as the scene began survived, and was redundant (the camera always moves after it), so it is gone. Terra 01a1987d: the steam, the stale boxes and a camera past a wall taken; a change of near during an accumulation sample discarded, since the samples move the camera directly and never fire the controls' change.
+
+- **Live 2026-11-01 at `632f45f`** (run 41343534413, stamp `632f45f8`), by the same run as BlockBar B. On the live page on Very High, the near plane two frames into each shot: hero 171.2 mm, pullback 1.4, top 139.8, macro 51.4, ant 1.7, heli 103.5; no page errors. Whether it ends what Joey saw on the phone is still Joey's to say.
