@@ -6539,7 +6539,7 @@ Checks: three new e2e cases, the first also under `E2E_SOFT=1`, the others GPU-o
 
 Balanced and Fast settled sooner: Balanced took one visit with a 0.89 s task, then model 1.35 and 0.77 s; Fast one with a 0.38 s task, then model 0.62 s.
 
-**What it costs.** A first visit's model comes later than it did (Very High 5.44 s against about 4.1 s), with the page usable from 2.5 s instead of frozen until 6.4 s or more. On Very High, the first two visits after that show it 1.0 to 1.2 s later than the old code's first two, one of them holds the page 0.7 s, and visits 3 and 4 show it 0.2 to 0.3 s later. **High is the slow one to settle.** Programs left at the judgement went 6, 5, 4, 3, 3, 3, 3, 3, 2, then none, so visits 1 to 8 showed the model at 2.0 to 2.9 s against 0.56 and 0.88 s before, and visit 8 took the one long task, 1.37 s. An earlier batch at `323f763` went 6, 4, 3, 3, 2, with the model at 1.56 to 1.87 s on visits 1 to 4. This is read as the straggler above with a count that stays over two for longer; the cause is not established. It reaches a visitor who picked High, or one reloading in a tab the auto-downgrade took to High, not the default path. Not measured: a real phone, or any GPU but this one.
+**What it costs.** A first visit's model comes later than it did (Very High 5.44 s against about 4.1 s), with the page usable from 2.5 s instead of frozen until 6.4 s or more. On Very High, the first two visits after that show it 1.0 to 1.2 s later than the old code's first two, one of them holds the page 0.7 s, and visits 3 and 4 show it 0.2 to 0.3 s later. **High is the slow one to settle** (changed the same day: "A browser that has sat through a short wait", below). Programs left at the judgement went 6, 5, 4, 3, 3, 3, 3, 3, 2, then none, so visits 1 to 8 showed the model at 2.0 to 2.9 s against 0.56 and 0.88 s before, and visit 8 took the one long task, 1.37 s. An earlier batch at `323f763` went 6, 4, 3, 3, 2, with the model at 1.56 to 1.87 s on visits 1 to 4. This is read as the straggler above with a count that stays over two for longer; the cause is not established. It reaches a visitor who picked High, or one reloading in a tab the auto-downgrade took to High, not the default path. Not measured: a real phone, or any GPU but this one.
 
 Colors opened from the address, Very High, no cache, one run each, the hold on and off (`?debug=1&firstdraw=off`) on the same live build: on (CPU 31 %, GPU 4 % before it), interface 2.30 s, overlay gone 10.51 s, blocked 3.72 s, longest 0.68 s, last long task ended 12.30 s; off (CPU 17 %, GPU 28 %), interface 9.61 s, blocked 9.54 s, longest 3.69 s, last long task ended 15.99 s.
 
@@ -6583,3 +6583,59 @@ A visitor's first load, no `?debug`, a new browser each time (`visitor-first-loa
   609, while the tab bar and the dock were already in place, so that fixed wait ran out while the sheet was still 274 px from landing. It
   now waits for the sheet to land, up to 30 s, and a sheet that never lands still fails the same assertion.
 - **Live.** Stamp `1b13be00`, run 41262802890, after the two failed runs above. `rails-prod.mjs` (`D:\Claude - Output\under-table-listings-2026-10-31\tools`) on the live planner: all 12 kits, through the `?ws=assemble&build=<id>&from=printables` and `?ws=parts&build=<id>` links, the model and Parts on the right rails, the screws and the guide's sentence. Site `3d9ff82`: all 12 kit pages read after the push. "Off every 256 mm bed" above means laid straight: turned about 37 degrees, the 59's 3W fits one (vault `rules.md`, `decisions.md`, 2018f39).
+
+## 2026-10-31 · A browser that has sat through a short wait takes its stragglers at the first frame, so High settles in a visit or two
+
+Joey, asked whether High should settle sooner at the price of its one freeze coming earlier: "Fix it here".
+
+**The problem** (the Live line of "The first frame waits for its programs"). With two programs as the only rule, High stayed over it on the live page for four to eight visits, its model at 2.0 to 2.9 s against 0.56 to 0.88 s before, and then took a long wait anyway. A count cannot tell those visits from a cold browser: cold, Balanced left 3 and Fast 4; warm, High left 5.
+
+**The rule** (`main.js`, A BROWSER THAT HAS WAITED FOR THIS TIER TAKES MORE OF THEM). The page remembers, per tier in `gen2-first-draw-waits`, the shortest wait it has sat through with more stragglers left than it could take. If that wait is under 4 s, back on that tier, up to five go to first use. A first visit, a slower machine and a touch device keep two; no phone was measured. Two earlier forms failed. Remembering only that a tier had been seen bounded no time: five on a slower GPU could hold the page for many seconds (Terra 01a19477). Remembering the first wait alone let one busy visit lock a browser out: in the local e2e runs on this laptop the first wait on High read 1.9 to 9.3 s, the longest with other work on the machine. With the shortest, one sequence went 5010 ms left 6, 2416 left 3, 585 left 1. A build stamp in the key was rejected: a visitor returning weekly against daily deploys would never count as returning.
+
+**The price.** It is a heuristic, not a bound on a freeze. A wait recorded on a quiet day says nothing about a busy one, or about a cache gone behind the memory (a driver update, a changed shader): there, up to five wait at first use where a cold count fits. Very High and High left 6 cold on this GPU, and hold; Balanced and Fast's cold counts fit. It can come on two visits running (in one e2e sequence, left 4 then 2).
+
+Checks: the four first-load cases on the GPU, and the two that run on software rendering under `E2E_SOFT=1`; 25 mutants, all killed, among them the 4 s bound removed, the latest wait kept instead of the shortest, the first wait kept, and a visit with nothing to wait for rewriting the memory. Not exercised by a case: not remembering on a timeout, a thrown `localStorage`, a stale memory with a cold driver cache. The whole suite ran on CI only. Terra 01a19477: three findings taken (the time bound, "once" in the comment, a non-object in the key could throw in the render loop); the comment's wording taken.
+
+The runner's clicks: `8472e77` gives every action on a software rasteriser 120 s. Runs 41247969961 and 41257763151 ran out of 30 s on a click in two different cases (the annotation does not say which click). Neither case has grown: 385 to 407 s and 94 to 120 s in green runs, before that day's work and after. A control that cannot be clicked still fails, 90 s later; `pages.yml` sets no job timeout for that to reach (Terra 01a194ab).
+
+- **Live 2026-10-31 at `8472e77`** (run 41264498083 green, stamp `8472e778`). Measured on the live page in headless Chrome on Joey's laptop, RTX A5000, one run a value, a new profile and then visits on it. CPU read 4 to 15 % and GPU 0 % before each run of these tables. That is quieter than the batch in the entry above (GPU 9 to 19 %), and close to the before runs (GPU 0 to 6 %), so the difference between the two after batches is not all this rule.
+
+| Very High (the default) | interface | model | blocked | longest |
+|---|---|---|---|---|
+| Before, no cache | 6.44 to 7.46 s | 3.98, 4.21 s | 5.80 to 6.64 s | 2.32 to 2.65 s |
+| After, no cache | 2.67 s | 4.31 s | 1.24 s | 0.60 s |
+| Before, visits 1 and 2 | 0.87, 0.92 s | 0.63, 0.64 s | 0.95, 1.01 s | 0.37, 0.34 s |
+| After, visit 1 | 0.55 s | 1.50 s | 1.32 s | 0.71 s |
+| After, visits 2 to 4 | 0.54, 0.51, 0.51 s | 0.81, 0.78, 0.79 s | 0.57, 0.53, 0.53 s | 0.30, 0.30, 0.29 s |
+
+| High, two profiles | interface | model | blocked | longest |
+|---|---|---|---|---|
+| Before, no cache, three runs | 6.47 to 7.42 s | 4.17 s, one comparable run | 5.33 to 6.13 s | 2.23 to 2.54 s |
+| After, no cache | 2.44, 2.00 s | 3.73, 3.25 s | 0.72, 0.71 s | 0.51, 0.51 s |
+| Before, cached, four visits | 0.73 to 1.18 s | 0.88, 0.56 s, the two with this metric | 0.47 to 0.84 s | 0.14 to 0.24 s |
+| After, visit 1 (left 3, 4) | 0.56, 0.53 s | 1.24, 1.39 s | 0.72, 0.89 s | 0.44, 0.63 s |
+| After, visits 2 to 4, five visits | 0.50 to 0.57 s | 0.66 to 0.75 s | 0.17 to 0.29 s | 0.07 to 0.11 s |
+
+| Balanced and Fast | interface | model | blocked | longest |
+|---|---|---|---|---|
+| Balanced, before, no cache | 4.43 s | | 3.32 s | 2.31 s |
+| Balanced, after, no cache | 1.97 s | 3.04 s | 0.65 s | 0.51 s |
+| Balanced, after, visit 1 | 0.56 s | 1.31 s | 0.83 s | 0.56 s |
+| Balanced, after, visits 2 and 3 | 0.50, 0.50 s | 0.63, 0.62 s | 0.28, 0.26 s | 0.10, 0.09 s |
+| Fast, before, no cache | 2.85 s | | 1.99 s | 1.07 s |
+| Fast, after, no cache | 1.89 s | 2.55 s | 0.52 s | 0.46 s |
+| Fast, after, visit 1 | 0.46 s | 0.86 s | 0.33 s | 0.24 s |
+| Fast, after, visit 2 | 0.44 s | 0.56 s | 0.14 s | 0.08 s |
+
+High on visits 1 to 8 was 2.0 to 2.9 s in the batch above, then a 1.37 s task: here one task of 0.44 and 0.63 s, then 0.66 to 0.75 s, against 0.56 and 0.88 s before. Very High left 1 at the judgement on visits 2 to 4, and its 0.3 s task stayed; it was 0.34 and 0.37 s before.
+
+**Colors opened from the address, Very High, one profile each, hold on and off (`?debug=1&firstdraw=off`) on this build.** The hold does not settle here: left 19, 16, 21 on visits 1 to 3, over five, so those visits wait for all of them, with no task over 0.32 s. Against the hold off, the interface is earlier and the model later, and the page's last long task ends at about the same time.
+
+| Colors from the address | interface | model | blocked | longest | last long task ends |
+|---|---|---|---|---|---|
+| Hold on, no cache | 2.37 s | 5.35 s | 1.22 s | 0.49 s | 6.70 s |
+| Hold off, no cache | 6.49 s | 4.16 s | 6.00 s | 2.24 s | 9.58 s |
+| Hold on, visits 1 to 3 | 0.58, 0.56, 0.53 s | 2.34, 2.08, 1.84 s | 0.75, 0.71, 0.71 s | 0.32, 0.30, 0.29 s | 3.02, 2.79, 2.55 s |
+| Hold off, visits 1 to 3 | 0.89, 0.84, 0.85 s | 0.62, 0.59, 0.60 s | 1.06, 0.97, 0.97 s | 0.32, 0.30, 0.31 s | 3.08, 3.00, 2.71 s |
+
+A visitor's first load, no `?debug`, a new browser each time (`visitor-first-load.mjs`), on this laptop's GPU: the interface was up at 1.89 to 2.27 s with "Preparing the 3D view…" still over the stage, the overlay went at 3.51 s (1600 x 793, Build), 5.10 s (Colors), 3.17 s (360 x 675 with touch, Build) and 4.71 s (Colors), no page errors. `live-check.mjs` on the Colors fix still passes: no room files at boot, 12 after 9 s on a desktop, none on the phone size after 6 s, the room on 323 ms after a click once the work is done, the pill reads "Setting up the room…", no page errors. Not measured: a real phone, or any GPU but this one.
