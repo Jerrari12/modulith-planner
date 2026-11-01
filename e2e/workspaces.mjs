@@ -8111,6 +8111,129 @@ test('Colors: a Galaxy pick makes the region glitter on the model, a plain pick 
   await off.ctx.close();
 });
 
+/* GLITTER SWATCHES (Joey, 2026-11-01: "represent glitter filaments square swatches ... rather than just a solid color"; "I like c from first
+   sheet"; "when scrolling down the list of swatches, if the glitter ones could sparkle"). js/colors/swatch.js, app.css .sw.glitter. */
+const swatchInPicker = (page, label) => page.evaluate((label) => {
+  const e = document.querySelector(`#ws-picker .brands .sw[aria-label="${label}"]`); const b = getComputedStyle(e, '::before');
+  return { cls: e.className, image: b.backgroundImage, content: b.content, pos: b.backgroundPosition, size: b.backgroundSize, sx: e.style.getPropertyValue('--sx') };
+}, label);
+const tileCount = (image) => (image.match(/url\("data:image\/svg\+xml/g) || []).length;
+
+test('Colors: a glitter swatch wears specks and glints wherever it shows, silk keeps its sheen, a plain one neither, and the star and the outline still draw', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  const black = await swatchInPicker(page, 'Prusament Galaxy Black');
+  assert.ok(/\bglitter\b/.test(black.cls), black.cls);
+  assert.equal(tileCount(black.image), 2, `two tiles on ::before: ${black.image.slice(0, 120)}`);
+  const green = await swatchInPicker(page, 'Prusament Galaxy Green');
+  assert.ok(/\bwarm\b/.test(green.cls) && green.image !== black.image, 'Galaxy Green\'s flakes are warm');
+  const silk = await swatchInPicker(page, 'Panchroma Silk Gold');
+  assert.ok(!/\bglitter\b/.test(silk.cls) && /\bsilk\b/.test(silk.cls), silk.cls);
+  assert.ok(/linear-gradient/.test(silk.image) && tileCount(silk.image) === 0, `silk keeps its gradient and no tile: ${silk.image.slice(0, 120)}`);
+  const plain = await swatchInPicker(page, 'Elegoo PLA Black');
+  assert.equal(plain.image, 'none', 'a plain swatch has no finish');
+  assert.equal(plain.content, 'none', 'and no ::before at all');
+  assert.notEqual((await swatchInPicker(page, 'Prusament Galaxy Red')).pos, black.pos, 'neighbours look through different windows');
+  // ::after stays free: the star of a Jerrari's pick draws over the specks
+  const star = await page.evaluate(() => { const e = document.querySelector('#ws-picker .brands .sw[aria-label="Prusament Galaxy Black"]'); e.classList.add('pick'); const r = { after: getComputedStyle(e, '::after').content, before: getComputedStyle(e, '::before').backgroundImage.slice(0, 20) }; e.classList.remove('pick'); return r; });
+  assert.ok(/★/.test(star.after) && /^url/.test(star.before), JSON.stringify(star));
+  // the pick: the outline has room on both sides of the scroller, and the specks follow the filament to its row and the summary
+  await page.locator('#ws-picker .brands .sw[aria-label="Prusament Galaxy Black"]').first().click();
+  await page.waitForFunction(() => document.querySelector('#ws-colors .crow .sw.glitter') && document.querySelector('#ws-colors .summary .sfil .sw.glitter'), null, { timeout: 15_000 });
+  const small = await page.evaluate(() => [...document.querySelectorAll('#ws-colors .crow .sw.glitter, #ws-colors .summary .sfil .sw.glitter')].map((e) => getComputedStyle(e, '::before').backgroundSize));
+  assert.ok(small.length >= 2 && small.every((s) => s === '24px 24px, auto'), `the small swatches draw the lit tile small: ${small}`);
+  const room = await page.evaluate(() => { const list = document.querySelector('#ws-picker .brands').getBoundingClientRect(); const cols = [...document.querySelectorAll('#ws-picker .brands .swatches .sw')].map((e) => e.getBoundingClientRect()); return { left: Math.min(...cols.map((r) => r.left - list.left)), right: Math.min(...cols.map((r) => list.right - r.right)) }; });
+  assert.ok(room.left >= 4 && room.right >= 4, `a selected swatch's outline needs 4 px inside the scroller: ${JSON.stringify(room)}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: the glitter swatches sparkle as the list scrolls: a step moves the glints and not the small specks, rest holds them, back restores them, and the model draws nothing', async () => {
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  const label = 'Polymaker PETG Galaxy Blue';   // mid-list, so a scroll either way keeps it inside the list
+  const frame = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 80)))));
+  // ⚠ a clip, never locator.screenshot: that scrolls the element into view first, so every read lands at one scroll position. And the
+  // swatch's opaque middle: its border and round corners are translucent over the glass, which moves with the scene behind it
+  const at = async (y) => {
+    await page.evaluate((y) => { document.querySelector('#ws-picker .brands').scrollTop = y; }, y);
+    await frame();
+    const box = await page.evaluate((label) => { const r = document.querySelector(`#ws-picker .brands .sw[aria-label="${label}"]`).getBoundingClientRect(), l = document.querySelector('#ws-picker .brands').getBoundingClientRect(); return { x: r.x + 6, y: r.y + 6, width: r.width - 12, height: r.height - 12, inside: r.top >= l.top && r.bottom <= l.bottom }; }, label);
+    assert.ok(box.inside, `the swatch is inside the list at ${y}, or the pixels below read something else`);
+    const { inside, ...clip } = box;
+    return { px: (await page.screenshot({ clip })).toString('base64'), ...(await swatchInPicker(page, label)) };
+  };
+  const y0 = await page.evaluate((label) => { const e = document.querySelector(`#ws-picker .brands .sw[aria-label="${label}"]`), l = document.querySelector('#ws-picker .brands'); return Math.round(l.scrollTop + e.getBoundingClientRect().top - l.getBoundingClientRect().top - l.clientHeight / 2); }, label);
+  // the opening camera move draws for several seconds (about 1100 frames here): the count below means nothing until the gate has rested
+  let woken = await page.evaluate(() => window.__GEN2_VIEWER__.idleStats().woken);
+  for (let i = 0; i < 40; i++) { await page.waitForTimeout(1000); const w = await page.evaluate(() => window.__GEN2_VIEWER__.idleStats().woken); if (w === woken) break; woken = w; }
+  const a = await at(y0);
+  await page.waitForTimeout(700);
+  const rest = await at(y0);
+  assert.equal(rest.px, a.px, 'at rest the swatch holds still');
+  const c = await at(y0 + 56);
+  assert.notEqual(c.px, a.px, 'four steps on, the glints have moved');
+  assert.notEqual(c.pos.split(',')[0], a.pos.split(',')[0], 'the lit layer moved');
+  assert.equal(c.pos.split(',')[1], a.pos.split(',')[1], 'the small specks did not');
+  const back = await at(y0);
+  assert.equal(back.px, a.px, 'scrolling back brings the same glints back');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.idleStats().woken), woken, 'a list scrolling wakes nothing on the model');
+  // a list rebuilt in place (a material chip) stays at the step it is scrolled to
+  await page.evaluate(() => { document.querySelector('#ws-picker .brands').scrollTop = 140; });
+  await frame();
+  const before = await swatchInPicker(page, 'Prusament Galaxy Purple');
+  assert.ok(before.sx, 'a step has been written');
+  await page.locator('#ws-picker .mchip[data-mat="PLA"]').click();
+  await frame();
+  assert.equal(await page.evaluate(() => document.querySelector('#ws-picker .brands').scrollTop), 140, 'the chip left the scroll where it was');
+  assert.equal((await swatchInPicker(page, 'Prusament Galaxy Purple')).sx, before.sx, 'the rebuilt swatch is at the same step');
+  // the hover glistens, and reduced motion stills both
+  const anim = () => page.evaluate(() => getComputedStyle(document.querySelector('#ws-picker .brands .sw[aria-label="Prusament Galaxy Purple"]'), '::before').animationName);
+  assert.equal(await anim(), 'none', 'nothing at rest');
+  await page.locator('#ws-picker .brands .sw[aria-label="Prusament Galaxy Purple"]').hover();
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ws-picker .brands .sw[aria-label="Prusament Galaxy Purple"]'), '::before').animationName === 'glint', null, { timeout: 5_000 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.waitForFunction(() => getComputedStyle(document.querySelector('#ws-picker .brands .sw[aria-label="Prusament Galaxy Purple"]'), '::before').animationName === 'none', null, { timeout: 5_000 });
+  const still = (await swatchInPicker(page, 'Prusament Galaxy Purple')).sx;
+  await page.evaluate(() => { document.querySelector('#ws-picker .brands').scrollTop = 0; });
+  await frame();
+  assert.equal((await swatchInPicker(page, 'Prusament Galaxy Purple')).sx, still, 'reduced motion: a scroll writes nothing');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Colors: on the phone the sheet\'s scroll sparkles the swatches, and on a desktop the owned list\'s does', async () => {
+  const scrollIn = (page, host, y) => page.evaluate(async ({ host, y }) => {
+    let e = document.querySelector(`${host} .sw.glitter`);
+    while (e && !(e.scrollHeight > e.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(e).overflowY))) e = e.parentElement;
+    if (!e) return null;
+    e.scrollTop = y;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 80))));
+    return { scroller: e.id || e.className, top: e.scrollTop, sx: [...document.querySelectorAll(`${host} .sw.glitter`)].map((s) => s.style.getPropertyValue('--sx')) };
+  }, { host, y });
+  const { ctx, page, errors } = await open('colors', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.evaluate(() => document.querySelector('#ws-colors .crow').click());
+  await page.waitForSelector('#ws-picker .brands .sw.glitter', { timeout: 15_000 });
+  await page.waitForTimeout(500);   // the sheet's lift
+  const p1 = await scrollIn(page, '#ws-picker', 300), p2 = await scrollIn(page, '#ws-picker', 356);
+  assert.ok(p1 && p2 && p1.top !== p2.top, `the sheet scrolls: ${JSON.stringify(p1)}`);
+  assert.notDeepEqual(p2.sx, p1.sx, `the swatches step with it: ${JSON.stringify([p1, p2])}`);
+  assert.ok(p2.sx.every(Boolean), 'on all of them');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  const d = await open('colors');
+  await d.page.locator('#ws-colors .surprise').click();
+  await d.page.locator('#ws-surprise .edit').click();
+  await d.page.waitForSelector('#ws-surprise .sw.glitter', { timeout: 15_000 });
+  const a = await scrollIn(d.page, '#ws-surprise', 200), b = await scrollIn(d.page, '#ws-surprise', 256);
+  assert.ok(a && b && a.top !== b.top, `the owned list scrolls: ${JSON.stringify(a)}`);
+  assert.notDeepEqual(b.sx, a.sx, `the owned list sparkles too: ${JSON.stringify([a, b])}`);
+  assert.deepEqual(clean(d.errors), []);
+  await d.ctx.close();
+});
+
 /* AN OPEN DRAWER SAYS ITS INSIDE SIZE (Joey, 2026-10-21: "we no longer get interior dimensions when opening a drawer like we
    did in the old planner"). The stage's drawer focus - the cavity measured by rays, lines on its floor and back wall, the
    W / L / H pills - now follows the planner's own way of opening one (stage.peekUnit: Build's Peek inside, the Colors

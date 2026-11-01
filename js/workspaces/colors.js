@@ -41,6 +41,7 @@ import { readOwned, writeOwned } from '../state/owned.js';
 import { STRIPE_COLOURS } from '../label-look.js';   // a stripe meaning's word (the label palette, 2026-10-28)
 import { simplify, worn as wornLook, byFilament, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
 import { lineMaterials, materialsIn, filterByMaterial, labelMaterials, wordMaterial } from '../colors/materials.js';
+import { finishClass, glitterClass, swatchStyle, sparkleOnScroll } from '../colors/swatch.js';   // a swatch's silk sheen, glitter specks and sparkle
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
 /* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/colors-*.mp4 from
@@ -175,10 +176,6 @@ let trayLooks = [];
    looks as the gallery lists them ({ id, kind, name, colors, over }), plus their roles, accent colour and interpretation. */
 const sp = { style: 'workshop', cap: 3, ownedOnly: false, locks: {}, like: null, seed: 0, cands: [], short: false };
 const LABELS = new Set(FILAMENT_DB.flatMap((b) => b.colors.map((c) => c.label)));
-/* SILK SWATCHES (Joey, 2026-10-21: "give the silk material squares a gloss effect, like a sheen on half of it or something? To
-   help differentiate it from regular material"): a swatch whose filament is a silk one wears `.silk`, drawn in app.css as a
-   highlight over its upper-left half. Every silk filament's label carries the word ("Panchroma Silk Gold"). */
-const silk = (name) => (String(name || '').split(' ').includes('Silk') ? '.silk' : '');
 /* MATERIAL TAGS AND THE FEET (Joey, 2026-10-21: "maybe we need to make PETG and PLA and TPU, like colored tags in the menu to
    help differentiate the material types more"; "when selecting the feet, i feel like we should only list TPU filaments").
    A line's materials come from its name (the Elegoo line sells PLA and PETG; colors/materials.js, which the picker's
@@ -333,7 +330,7 @@ export function mountColors(stage, ctx) {
       const ownUnits = Object.values(p.over || {}).filter((o) => o && Object.keys(o).length).length;   // units wearing a colour of their own (listed in the picker's rows, counted here)
       look.appendChild(el('div.summary', {}, [
         el('p.sline', {}, [el('b', { text: `${n(fc.count, 'filament')} used` }), ownUnits ? el('span.sg.own', { text: ` · ${n(ownUnits, 'unit')} with ${ownUnits === 1 ? 'its' : 'their'} own colours` }) : null]),
-        el('ul.sfil', {}, rows.map((r) => el('li', {}, [el('i.sw', { style: `background:${r.hex}`, 'aria-hidden': 'true' }), el('span.sgf', { text: r.filament, title: r.name }), el('span.sgl', { text: r.label })]))),
+        el('ul.sfil', {}, rows.map((r) => el('li', {}, [el('i.sw' + glitterClass(r.name), { style: swatchStyle(r.name, r.hex), 'aria-hidden': 'true' }), el('span.sgf', { text: r.filament, title: r.name }), el('span.sgl', { text: r.label })]))),
         el('div.sacts', {}, [
           el('button.link.keeplook', { text: 'Keep this look', title: 'Save these colours as a look of your own', onclick: () => { st.saving = true; renderPanel(); } }),
           el('button.link.review', { text: 'Review filaments', title: 'Every filament this build prints in, with where to buy it', onclick: openShop }),
@@ -371,7 +368,7 @@ export function mountColors(stage, ctx) {
       const w = worn(k.key);
       const hex = stage.activeHex(k.key);
       rows.appendChild(el('button.crow.key' + (st.key === k.key ? '.on' : ''), { disabled: k.locked, title: k.locked ? 'Purchased hardware, not printed · no filament to pick' : `Pick a filament for ${keyLabel(k.key).toLowerCase()}`, onclick: () => openPicker(k.key) }, [
-        el('span.sw' + silk(w && w.name), { style: `background:${hex}` }),
+        el('span.sw' + finishClass(w && w.name), { style: swatchStyle(w && w.name, hex) }),
         el('span.lbl', {}, [el('b', { text: keyLabel(k.key) }), el('span.cnt', { text: ` ×${k.count}` })]),
         el('span.fil', {}, [k.locked ? 'Bought' : w ? short(w.name) : p.on && k.zone && !k.ownColor ? 'follows Body' : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
       ]));
@@ -524,7 +521,7 @@ export function mountColors(stage, ctx) {
      paid host; the disclosure is the one line under the rows, `disclosure` below) */
   function filamentRows(fc) {
     return [
-      ...fc.filaments.map((f) => el('div.frow.well', {}, [el('span.sw' + silk(f.name), { style: `background:${f.hex}` }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: isPaid(f.url) ? 'noopener sponsored' : 'noopener', text: 'Buy ↗', onclick: buyFilament(stage, f) }) : null])),
+      ...fc.filaments.map((f) => el('div.frow.well', {}, [el('span.sw' + finishClass(f.name), { style: swatchStyle(f.name, f.hex) }), el('div.col', {}, [el('b', { text: f.name }), el('span.meta', { text: f.keys.map(keyLabel).join(' · ') })]), f.url ? el('a.link', { href: f.url, target: '_blank', rel: isPaid(f.url) ? 'noopener sponsored' : 'noopener', text: 'Buy ↗', onclick: buyFilament(stage, f) }) : null])),
       // printed, but with no filament chosen: a region left on its instruction colour, a label stripe (the label's own colour)
       ...fc.unpicked.map((u) => el('div.frow.well.bare', {}, [el('span.sw', { style: `background:${u.hex}` }), el('div.col', {}, [el('b', { text: u.stripe ? 'Label stripe' : keyLabel(u.key) }), el('span.meta', { text: u.stripe ? `Printed in the label’s own colour, ${u.hex}` : 'No filament picked yet' })])])),
     ];
@@ -612,6 +609,7 @@ export function mountColors(stage, ctx) {
 
   /* ---------------- Surprise me (step 5): three looks under the visitor's constraints ---------------- */
   const sur = el('aside.glass', { id: 'ws-surprise', role: 'dialog', 'aria-label': 'Surprise me', hidden: true });
+  const ownedSparkle = sparkleOnScroll(sur);
   root.appendChild(sur);
   const owned = () => readOwned(storage(), LABELS);
   // the panel takes the gallery's spot and closes it and the tray (contextual panels do not pile up over the model)
@@ -727,9 +725,10 @@ export function mountColors(stage, ctx) {
         any = true;
         const mine = brand.colors.filter((f) => have.has(f.label)).length;
         brands.appendChild(el('div.bhead', {}, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${mine ? `${mine} of ${brand.colors.length}` : brand.colors.length}` }), matTags(brand)])]));
-        brands.appendChild(el('div.swatches', {}, colors.map((f) => { const on = have.has(f.label); return el('button.sw' + (on ? '.own' : '') + silk(f.label), { style: `background:${f.hex}`, title: f.label + (on ? ' · owned' : ''), 'aria-label': f.label, 'aria-pressed': String(on), onclick: () => { const cur = owned(); writeOwned(storage(), on ? cur.filter((x) => x !== f.label) : [...cur, f.label]); sync(); fill(); } }); })));
+        brands.appendChild(el('div.swatches', {}, colors.map((f) => { const on = have.has(f.label); return el('button.sw' + (on ? '.own' : '') + finishClass(f.label), { style: swatchStyle(f.label, f.hex), title: f.label + (on ? ' · owned' : ''), 'aria-label': f.label, 'aria-pressed': String(on), onclick: () => { const cur = owned(); writeOwned(storage(), on ? cur.filter((x) => x !== f.label) : [...cur, f.label]); sync(); fill(); } }); })));
       }
       if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
+      ownedSparkle.sync();
     };
     fill(); sync();
     sur.appendChild(el('div.ofoot', {}, [clear, el('span.note', { text: 'Kept in this browser. With two or more ticked, Surprise me can stay inside your shelf.' })]));
@@ -762,7 +761,7 @@ export function mountColors(stage, ctx) {
     simp.append(
       el('div.ihead', {}, [el('b', { text: 'Simplify' }), el('span.sub', { text: `${n(now, 'filament')} now` }), el('button.x', { 'aria-label': 'Close Simplify', title: 'Close', onclick: closeSimplify }, [icon('x', { size: 16 })])]),
       targets.length ? el('div.srow', {}, [el('span.lbl', { text: 'Down to' }), el('div.track.tgt', { role: 'group', 'aria-label': 'Filaments', style: `grid-template-columns: repeat(${targets.length}, minmax(0, 1fr))` }, targets.map((t) => el('button.seg.sm' + (st.simpTarget === t ? '.on' : ''), { text: n(t, 'filament'), 'aria-pressed': String(st.simpTarget === t), onclick: () => { if (st.simpTarget !== t) { st.simpTarget = t; renderSimplify(); if (phone) phone.refresh(); } } })))]) : el('p.note', { text: 'This look already prints in two filaments; a shelf deck or label text needs a colour that reads against its background, so two is the floor.' }),
-      rows.size ? el('div.changes', { role: 'list' }, [...rows.values()].map((c) => el('div.chg', { role: 'listitem' }, [el('span.sw' + silk(c.from.name), { style: `background:${c.from.hex}` }), el('span.arrow', { text: '→' }), el('span.sw' + silk(c.to.name), { style: `background:${c.to.hex}` }), el('span.what', {}, [el('b', { text: regionWords(c.keys) + (c.own ? (c.keys.length ? ' and ' : '') + n(c.own, 'own pick') : '') }), `: ${shortName(c.from.name)} → ${shortName(c.to.name)}`])]))) : null,
+      rows.size ? el('div.changes', { role: 'list' }, [...rows.values()].map((c) => el('div.chg', { role: 'listitem' }, [el('span.sw' + finishClass(c.from.name), { style: swatchStyle(c.from.name, c.from.hex) }), el('span.arrow', { text: '→' }), el('span.sw' + finishClass(c.to.name), { style: swatchStyle(c.to.name, c.to.hex) }), el('span.what', {}, [el('b', { text: regionWords(c.keys) + (c.own ? (c.keys.length ? ' and ' : '') + n(c.own, 'own pick') : '') }), `: ${shortName(c.from.name)} → ${shortName(c.to.name)}`])]))) : null,
       // what fewer filaments reduces, exactly: spools to own and load, not necessarily colour changes in a print (Astra, 2026-10-19)
       el('p.note.outcome', { text: r.short ? `${r.reason} This look stops at ${n(r.count, 'filament')}.` : r.changes.length ? `${n(after, 'filament')} after this, as the model shows it now. Nothing else changes. Fewer filaments means fewer spools to own and load; colour changes within one print depend on which parts print together.` : 'Nothing to change.' }),
       el('div.tacts', {}, [
@@ -775,6 +774,7 @@ export function mountColors(stage, ctx) {
   /* ---------------- the picker (replaces the inspector) ---------------- */
   const picker = el('aside.glass.glass-edge', { id: 'ws-picker', 'aria-label': 'Filament picker', hidden: true });
   root.appendChild(picker);
+  const pickerSparkle = sparkleOnScroll(picker);
   function openPicker(key) { st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
   function closePicker() { st.key = null; st.swap = null; renderAll(); if (phone) phone.collapse(picker); }
   /* THE SPOOL'S FILAMENT, EVERYWHERE (Joey 2026-10-26: "what if i could select a spool and change it's color, and doing so
@@ -881,7 +881,7 @@ export function mountColors(stage, ctx) {
     const inBuild = [...seen.values()].filter((c) => (!q2 || c.name.toLowerCase().includes(q2)) && TPU_LABELS.has(c.name) === tpu && (mat === 'all' || materialOfName(c.name) === mat));
     if (inBuild.length) {
       brands.appendChild(el('div.bhead', { text: 'In this build' }));
-      brands.appendChild(el('div.swatches', {}, inBuild.map((c) => el('button.sw' + (active === c.name ? '.active' : '') + silk(c.name), { style: `background:${c.hex}`, title: `${c.name} · already in this build`, 'aria-label': c.name, onclick: () => onPick({ label: c.name, hex: c.hex, url: c.url }) }))));
+      brands.appendChild(el('div.swatches', {}, inBuild.map((c) => el('button.sw' + (active === c.name ? '.active' : '') + finishClass(c.name), { style: swatchStyle(c.name, c.hex), title: `${c.name} · already in this build`, 'aria-label': c.name, onclick: () => onPick({ label: c.name, hex: c.hex, url: c.url }) }))));
     }
     let any = inBuild.length > 0;
     for (const brand of filterByMaterial(FILAMENT_DB.filter((b) => /TPU/.test(b.line) === tpu), mat)) {   // TPU for the feet and only for them, narrowed to the chip's material
@@ -891,9 +891,10 @@ export function mountColors(stage, ctx) {
       const id = brand.brand + '|' + brand.line;
       const open = q2 ? true : st.expanded ? st.expanded.has(id) : true;
       brands.appendChild(el('button.bhead.toggle', { 'aria-expanded': String(open), onclick: () => { if (!st.expanded) st.expanded = new Set(FILAMENT_DB.map((b) => b.brand + '|' + b.line)); st.expanded[st.expanded.has(id) ? 'delete' : 'add'](id); fillBrands(brands, { tpu, active, onPick, mat }); } }, [el('span', {}, [brand.brand, el('i', { text: ` ${brand.line} · ${colors.length}` }), matTags(brand)]), el('span.chev', { text: open ? '▾' : '▸' })]));
-      if (open) brands.appendChild(el('div.swatches', {}, colors.map((f) => el('button.sw' + (active === f.label ? '.active' : '') + (f.pick ? '.pick' : '') + silk(f.label), { style: `background:${f.hex}`, title: f.label + (f.pick ? (f.pickNote || ' · ★ Used by Jerrari') : ''), 'aria-label': f.label, onclick: () => onPick(f) }))));
+      if (open) brands.appendChild(el('div.swatches', {}, colors.map((f) => el('button.sw' + (active === f.label ? '.active' : '') + (f.pick ? '.pick' : '') + finishClass(f.label), { style: swatchStyle(f.label, f.hex), title: f.label + (f.pick ? (f.pickNote || ' · ★ Used by Jerrari') : ''), 'aria-label': f.label, onclick: () => onPick(f) }))));
     }
     if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
+    pickerSparkle.sync();
   }
   /* the picker on a spool (swapTarget): what it prints, and one pick changes all of it */
   const swapName = (t) => t.names.length === 1 ? short(t.names[0]) : t.names.length ? t.names.map(short).join(' & ') : 'Instruction colour';
@@ -903,7 +904,7 @@ export function mountColors(stage, ctx) {
     const renderBrands = () => fillBrands(brands, { tpu: t.feet, active: t.names[0] || null, onPick: swapTo });
     picker.append(...[
       el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: 'Spool' }), ` · ${name}`]), el('button.x', { title: 'Close', 'aria-label': 'Close the picker', onclick: closePicker }, [icon('x', { size: 16 })])]),
-      el('p.note.swapnote', {}, [el('i.sw', { style: `background:${t.hex}`, 'aria-hidden': 'true' }), `Prints ${regionWords(t.keys).toLowerCase()}. Pick a filament and all of it takes it, in one undo step.`]),
+      el('p.note.swapnote', {}, [el('i.sw' + glitterClass(t.names.length === 1 ? t.names[0] : null), { style: swatchStyle(t.names.length === 1 ? t.names[0] : null, t.hex), 'aria-hidden': 'true' }), `Prints ${regionWords(t.keys).toLowerCase()}. Pick a filament and all of it takes it, in one undo step.`]),
       el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } })]),   // as the region picker's: in a sheet a bare input shrank to 19 px
       t.feet ? el('p.note.feet', { text: 'The feet print in TPU, the flexible filament, so only TPU is listed.' }) : null,
       brands,
@@ -935,7 +936,7 @@ export function mountColors(stage, ctx) {
     const unitIdx = info.owner != null ? store.state.placed.findIndex((p) => p.id === info.owner) + 1 : 0;
     card.append(
       el('div.chead', {}, [
-        el('span.sw' + silk(ownPick ? (ownPick.name || ownPick.label) : w && w.name), { style: `background:${ownPick ? ownPick.hex : stage.activeHex(primary)}` }),
+        el('span.sw' + finishClass(ownPick ? (ownPick.name || ownPick.label) : w && w.name), { style: swatchStyle(ownPick ? (ownPick.name || ownPick.label) : w && w.name, ownPick ? ownPick.hex : stage.activeHex(primary)) }),
         el('div.col', {}, [el('b', { text: info.label }), el('span.meta', { text: `${info.qty} of this size · ${n(total, TYPE_PLURAL[info.type] ? TYPE_PLURAL[info.type].replace(/s$/, '') : info.type.toLowerCase(), TYPE_PLURAL[info.type] || info.type.toLowerCase() + 's')} in the build${unitIdx ? ` · unit ${unitIdx}` : ''} · ${info.locked ? 'bought, not printed' : ownPick ? `${ownPick.name} (this ${unitWord()}’s own)` : w ? w.name : 'instruction colour'}` })]),
         el('button.x', { title: 'Deselect', 'aria-label': 'Deselect', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })]),
       ]),

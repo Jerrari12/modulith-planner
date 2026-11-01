@@ -3934,11 +3934,7 @@ function attachHolo(m, diffracts) {
   return m;
 }
 const holoUniforms = [];   // live intensity across every holo material
-/* ⚠ THE FINISH NUMBERS MOVED TO `part-material.js` ON 2026-09-05, unchanged.
-   They are vendored into the Filament Material Lab, whose staging page has to
-   render what THIS viewer renders in order to argue that something else would
-   be better - and a hand-copied 0.55 / 0.05 there would be a second author of
-   this surface. Edit them THERE only; both suites gate on byte equality.
+/* ⚠ THE FINISH NUMBERS MOVED TO `part-material.js` ON 2026-09-05, unchanged. Edit them THERE.
 
    What stays here is everything the spec deliberately does not carry: the
    colour (palette state, and the whole point of the picker), the THREE
@@ -3946,12 +3942,12 @@ const holoUniforms = [];   // live intensity across every holo material
 /* ── PRINTED LAYER RELIEF ────────────────────────────────────────────────────────────────────
    Every part in this viewer is a 3D print, and until now none of them looked like one: the
    surface is smooth where a real part carries 0.2 mm bead corrugation, a crown of light along
-   each bead crest, and a crest line on convex edges. `vendor/layer-detail.js` is the Filament
-   Material Lab's renderer for exactly that, vendored (see test/layer-detail-vendor.test.mjs).
+   each bead crest, and a crest line on convex edges. `vendor/layer-detail.js` is the renderer for
+   exactly that, from the Filament Material Lab, ours since the Lab was retired on 2026-11-01.
 
    Two print facts have to travel with it, because THIS REPO KNOWS NEITHER. There is no layer
    height and no facet tilt anywhere in the viewer - a kit is geometry and a colour, and how it
-   was printed has never been part of that. Both are gated from the Lab's side, which is where
+   was printed has never been part of that. Both were gated from the Lab's side, which is where
    they were measured; see the ⚠ on each. */
 
 /* ⚠ AN ASSUMPTION, AND THE ONLY ONE THE SURFACE RESTS ON. The Lab calls it ASSUMED_LAYER_PITCH_MM
@@ -7702,11 +7698,9 @@ function exitFaceplateFocus() {
   setDims(!PAGES[cur]?.cover && !PAGES[cur]?.outro && cur - 1 === manifest.steps.length - 1);
 }
 // ---------- filament colors ----------
-// The catalog moved to `filament-db.js` on 2026-09-05 so the Lab can read it
-// too; values unchanged, and it is imported at the top of this file with the
-// other modules. Edit it THERE - it is vendored into the Lab and both suites
-// gate on byte equality. See that file for the measured shape, and for why it
-// is an ES module rather than JSON.
+// The catalog moved to `filament-db.js` on 2026-09-05; values unchanged, and it is
+// imported at the top of this file with the other modules. Edit it THERE. See that
+// file for the measured shape, and for why it is an ES module rather than JSON.
 
 // ---------- filament presets ----------
 // One click sets a filament per part TYPE. Every colour is pulled from

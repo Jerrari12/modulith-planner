@@ -45,7 +45,7 @@ test('the catalog decides silk: exactly the Silk PLA line, all 24, and nothing e
 });
 
 test('the picker\'s swatch sheen and the model agree on every catalog label', () => {
-  /* colors.js `silk()` reads the word, because a saved palette can name a filament the catalog lacks; on the catalog's own
+  /* swatch.js `finishClass()` reads the word, because a saved palette can name a filament the catalog lacks; on the catalog's own
      labels the two rules must not disagree, or the swatch and the model would tell two stories */
   const word = (name) => String(name || '').split(' ').includes('Silk');
   for (const c of FILAMENT_DB.flatMap((b) => b.colors)) assert.equal(word(c.label), finishOfLabel(c.label) === 'silk', c.label);

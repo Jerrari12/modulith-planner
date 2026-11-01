@@ -1,53 +1,20 @@
 /* =========================================================================
    PART MATERIAL SPEC - what a printed part's surface is made of
    =========================================================================
-   SOURCE OF TRUTH: gen2-visual-animator/viewer/js/part-material.js
-   CONTRACT VERSION: 1
-   ⚠ VENDORED BYTE-FOR-BYTE INTO THE FILAMENT MATERIAL LAB.
-   Edit it HERE ONLY, then re-vendor. Both repos gate on byte equality, so a
-   divergent copy fails their suites rather than quietly drifting.
-
-   WHY THIS EXISTS
-   ---------------------------------------------------------------------------
-   The Lab's staging page shows three panes: a reference photograph, its own
-   candidate render, and WHAT BUILD STUDIO SHOWS TODAY. That third pane has to
-   be the real thing or it is worthless - and the two ways to get it were both
-   wrong. An iframe cannot be told which filament to use (part-preview mode
-   accepts no incoming messages, by design, and there is no colour parameter).
-   A hand-written replica in the Lab would make these numbers double-authored,
-   which is exactly the failure `requirement-scope.js` exists to prevent.
-
-   So the numbers move here, once, and both repos read them.
+   The numbers live here, once. They moved out of main.js so the Filament Material
+   Lab could render this surface without a second copy of them; the Lab was retired
+   on 2026-11-01, so nothing else reads this file now, and it needs no contract.
 
    ⚠ WHAT THIS RETURNS IS A FINISH, NOT A MATERIAL, AND CARRIES NO COLOUR.
-   Colour is palette state - `activeHex(key)` here, a vendored catalog lookup in
-   the Lab - and it changes constantly while the finish does not. Keeping them
-   apart is what lets the Lab render Build Studio's surface in a filament Build
-   Studio has never been told about.
+   Colour is palette state, `activeHex(key)`, and it changes constantly while the
+   finish does not.
 
-   ⚠ AND IT HOLDS NO `THREE` IMPORT. The two repos resolve three differently
-   (vendored import map here, npm there), so a shared module that constructed a
-   material would have to agree about that too. Each side builds its own from
-   the spec; the numbers are what must not differ. It is also why this file is
-   testable in plain node on both sides.
+   ⚠ AND IT HOLDS NO `THREE` IMPORT, which is why this file is testable in plain
+   node. main.js builds the material from the spec.
    ========================================================================= */
 
 import { FILAMENT_PROFILES } from './filament-profiles.js';
 import { finishOfLabel } from './filament-db.js';
-
-/**
- * ⚠ 3 SINCE 2026-10-28, AND THE BUMP IS THE POINT AGAIN. Version 2 answered a part key and a
- * filament label with two scalars. Version 3 can also return `anisotropy` (and `silk`) for a
- * filament of the catalog's silk family — a consumer written against 2 would render a silk label
- * with the silk roughness and metalness but no directional sheen, an isotropic pseudo-metal nobody
- * authored. Both repos pin this constant, so the mismatch is a failing test rather than a picture
- * nobody can explain. A label-free call (the Lab's own pane) returns exactly what it did under 2.
- * Version 4 can also return `glitter` for a filament of the catalog's glitter family: the scalars do
- * not change, so a consumer written against 3 draws a plain part and nothing it cannot explain.
- *
- * (2 since 2026-09-07: version 1 answered a part key with a fixed finish; 2 added the label.)
- */
-export const PART_MATERIAL_CONTRACT_VERSION = 4;
 
 /**
  * ⚠ THE AUTHORED SILK APPROXIMATION (2026-10-28) — VISUALLY TUNED IN THE PLANNER'S OWN ROOM AND
@@ -68,7 +35,7 @@ export const PART_MATERIAL_CONTRACT_VERSION = 4;
  * changed the 185 2W-2H's fronts almost not at all: an upright face mirrors the plain desk, and
  * even metalness 1 at roughness 0.1 rendered as flat gold there. Build Studio adds a silk light by
  * the camera and a silk studio the part reflects in place of the room (main.js SILK_STUDIO,
- * silk-axis.js SILK_LIGHT); a consumer without them - the Lab's pane - would see a duller silk.
+ * silk-axis.js SILK_LIGHT); a part without them would look a duller silk.
  *
  * ⚠ metalness HERE IS AN ARTISTIC COMPROMISE, NOT SILK PHYSICS: silk PLA is a dielectric. A
  * dielectric's tinted F0 is ~4 % and does not read in this rig; the metallic blend is the cheapest
@@ -99,8 +66,7 @@ export function partMaterialSpec(key, ctx = {}) {
 
   /* The holographic build plate transfers its own finish to the faceplate that
      was printed against it - polished where it made contact, ordinary elsewhere.
-     ⚠ ONLY REACHABLE IN THE PLATE VIEW. The Lab never sets this, so its third
-     pane always takes one of the two branches below. */
+     ⚠ ONLY REACHABLE IN THE PLATE VIEW. */
   if (holographicPlate && baseType(key) === 'Faceplate') {
     return {
       kind: 'physical',
@@ -170,9 +136,9 @@ export function partMaterialSpec(key, ctx = {}) {
     clearcoat: 0, clearcoatRoughness: 0, envMapIntensity: 1,
   };
 
-  /* ⚠ THE AUTHORED PROFILE, AND IT REPLACES TWO SCALARS AND NOTHING ELSE. P6 option A: the Lab
-     owns the per-label values and emits them into `filament-profiles.js`; this repo owns the key
-     vocabulary, because a filament exists here first or it has no label to be keyed by.
+  /* ⚠ THE AUTHORED PROFILE, AND IT REPLACES TWO SCALARS AND NOTHING ELSE. The per-label values
+     live in `filament-profiles.js`, keyed by the catalog's label, because a filament exists there
+     first or it has no label to be keyed by.
 
      ⚠ ORDINARY PARTS ONLY, ON PURPOSE. It sits below the plate branch, so the holographic
      transfer still wins where it applies — that finish describes what the BUILD PLATE did to a

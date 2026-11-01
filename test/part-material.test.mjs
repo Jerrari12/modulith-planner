@@ -1,9 +1,7 @@
 /* THE PART FINISH, AND THE FACT THAT ONLY ONE FILE STATES IT.
  *
- * `partMaterialSpec` was lifted out of `newPartMaterial` on 2026-09-05 so the
- * Filament Material Lab can render the surface this viewer renders. Its third
- * staging pane is "what Build Studio shows today", and that pane is only worth
- * looking at if it is not a replica someone typed a second time.
+ * `partMaterialSpec` was lifted out of `newPartMaterial` on 2026-09-05, so that
+ * nothing else had to type these numbers a second time.
  *
  * So the numbers are asserted here, and `main.js` is asserted NOT to contain
  * them - which is the half that actually keeps the contract, because a copy
@@ -14,21 +12,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { partMaterialSpec, baseType, PART_MATERIAL_CONTRACT_VERSION } from '../js/part-material.js';
+import { partMaterialSpec, baseType } from '../js/part-material.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 /* ⚠ NORMALISED, because a Windows working copy holds CRLF and every `\n` anchor
    below would silently miss - the same trap the vendor gates hash around. */
 const main = readFileSync(join(root, 'js', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
-
-test('the contract version is pinned - the Lab refuses a mismatch', () => {
-  /* ⚠ 3 SINCE 2026-10-28. Version 1 answered a part key with a fixed finish; version 2 answers a
-     part key AND a filament label, and can return values the Lab authored; version 3 can also return
-     `anisotropy` and `silk` for the catalog's silk family. A consumer written against 2 would render a
-     silk label as an isotropic pseudo-metal - a wrong picture with no error, which is what a version
-     exists to turn into a failing test. test/silk.test.mjs pins the silk branch itself. */
-  assert.equal(PART_MATERIAL_CONTRACT_VERSION, 4);
-});
 
 test('an ordinary printed part is 0.55 / 0.05 physical', () => {
   /* Every case, drawer, shelf and handle in the viewer. This is the surface

@@ -1,9 +1,6 @@
 /* =========================================================================
    FILAMENT CATALOG - the shared filament list
    =========================================================================
-   SOURCE OF TRUTH: gen2-visual-animator/viewer/js/filament-db.js
-   CONTRACT VERSION: 1
-
    Moved out of main.js on 2026-09-05, unchanged. It had been a `const` at
    line 4052 of a 6,592-line module: not exported, not fetchable, and therefore
    unreadable by anything but this file - which is what made "read Build
@@ -18,11 +15,6 @@
    run at module-evaluation time, so a `fetch()` would make the catalog async
    and cascade through the presets. An ES module keeps the derivation, keeps
    the synchronous read, and is still a file any JS consumer can import.
-
-   HOW THE OTHER REPO CONSUMES IT. Byte-for-byte vendoring, the convention
-   `requirement-scope.js` and `tabletop-completion.js` already use in the other
-   direction: edit HERE ONLY, then re-vendor, and both suites gate on equality
-   so a divergent copy fails rather than drifting.
 
    THE SHAPE, MEASURED RATHER THAN ASSERTED (re-measured 2026-09-06, 6 brands / 102 colours):
      brand   { brand, line, url, colors[] }              - all 6 identical

@@ -3215,7 +3215,7 @@ export function plateRotForType(type, faceStyle, handleStyle) {
  * a matrix because this module has no dependencies and their node tests rely on that.
  *
  * ⚠ THE ROW EXPANSION IS three's 'XYZ' EULER CONVENTION AND NOTHING ELSE. It is retyped here, so
- * the Filament Material Lab gates it against three's own Matrix4/Euler over every pose in this
+ * the Filament Material Lab (retired 2026-11-01) gated it against three's own Matrix4/Euler over every pose in this
  * table plus a deterministic sweep of arbitrary triples — an agreement test, because a
  * hand-expanded rotation matrix is exactly the kind of thing that is wrong in one quadrant and
  * right everywhere anyone looked.
