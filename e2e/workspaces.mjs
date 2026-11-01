@@ -613,6 +613,9 @@ test('Build: a void the armed size fills shows one "+" there, the hover holds on
       [14, 0, 14, 2, 1], [15, 2, 15, 1, 1], [16, 2, 14, 1, 1], [18, 0, 8, 2, 6], [19, 0, 7, 3, 1]].map(([id, x, y, w, hh]) => ({ id, x, y, w, hh, fill: 'decor', shelves: 0 })) };
   const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
   const { ctx, page, errors } = await open('build', { query: `#build=${b64}` });
+  // run 41257763151 ran out of the default 30 s on one of this case's two clicks (the annotation does not say which), first in its shard on a fresh runner.
+  // On a laptop's SwiftShader with the CPU at 94 %, they took about 20 s and 17 s of a 109 s case; with the CPU free the whole case takes 34 s
+  ctx.setDefaultTimeout(120_000);
   await page.waitForFunction(() => window.__GEN2_VIEWER__?.manifest?.instances?.length, null, { timeout: 90_000 });
   await page.locator('#ws-lib button.unit', { hasText: 'Shelf' }).first().click();
   await armSize(page, '1W·3H');

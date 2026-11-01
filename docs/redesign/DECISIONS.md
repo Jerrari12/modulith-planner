@@ -6570,3 +6570,11 @@ A visitor's first load, no `?debug`, a new browser each time (`visitor-first-loa
 - **Review.** Sol `01a19482`, substantial: 1 returned, 1 held. "Butt the rails" also showed for two rails with a gap between them;
   it now keys off a joint, not a second rail. Undo could not be established from the payload; the code settles it: the store's
   history snapshots `serializeBuild`, which carries the field.
+- **The first deploy stopped on another case.** Run 41257763151 failed "a void the armed size fills" with `locator.click: Timeout
+  30000ms`, in a tabletop build with no rails; the annotation does not name the click, and the case ran 39.7 s. The new e2e case moved
+  58 cases between shards (read from each shard's report on both commits), and this one went from third in shard 1 to first, on a fresh
+  runner. Here it takes 34 s with the CPU free, `E2E_THROTTLE=4` too, and 109 to 123 s on SwiftShader with the CPU at 94 % from other
+  sessions, where `DEBUG=pw:api` shows its two clicks taking about 20 s and 17 s. So its clicks are slow under load, and a 30 s limit is
+  close; that the runner's cold start is what tipped it is an inference. Its actions get 120 s, as the wall-and-desk case's do (2c522a8).
+  The partition does not move, since no case was added.
+- **Review of that.** Terra `01a194af`: 1 returned, 1 held (the first draft said "about 10 s in", which the annotation does not establish).
