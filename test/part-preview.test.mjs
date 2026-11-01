@@ -269,20 +269,20 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
   // 2026-08-31: the bracket confirmation COMPLETED the register, and for three
   // weeks the fail-closed sweep had no honest subject. THE HANDLES GAVE IT ONE
   // (2026-09-19): Joey confirmed the DECO handle's pose on 2026-09-14 and no
-  // other handle family's, so eight of the nine handle pages ship turntable-only
-  // - the mechanism working on live slugs, not a spare part. Named one by one
+  // other handle family's, and BlockBar B's on 2026-11-01, so seven of the nine handle
+  // pages ship turntable-only - the mechanism working on live slugs, not a spare part. Named one by one
   // rather than counted, because which slugs are plate-less is the claim.
   const caps = [...resolved.values()].filter(r => !r.fail);
   assert.deepEqual(
     [...resolved].filter(([, r]) => !r.fail && !r.part.platePreview).map(([s]) => s).sort(),
-    ['blockbar-handle-a', 'blockbar-handle-b', 'blockbar-handle-c', 'blockbar-handle-d',
+    ['blockbar-handle-a', 'blockbar-handle-c', 'blockbar-handle-d',
      'blockbar-handle-e', 'blockbar-handle-f', 'crystal-handle-a', 'crystal-handle-b-wide'],
-    'the slugs with no confirmed print pose - only the BlockBar and Crystal handles');
+    'the slugs with no confirmed print pose - only the other BlockBar and Crystal handles');
   // full census: 94 cases + 94 classic + 94 decor + 60 Gridfinity decor + 90
   // faceplates + 4 hardware + 24 covers + 20 foot rails + 24 under-table rails
   // + 22 case extenders + 22 shelf inserts + 4 shelf lips + 18 back covers + 3
-  // wall brackets + 1 Deco handle + 27 side covers (face-down, the plateRot entry's release notes)
-  assert.equal(caps.filter(r => r.part.platePreview).length, 601, 'plate-capable slug count');
+  // wall brackets + 1 Deco handle + 1 BlockBar B + 27 side covers (face-down, the plateRot entry's release notes)
+  assert.equal(caps.filter(r => r.part.platePreview).length, 602, 'plate-capable slug count');
 
   // sweep EVERY plate-capable slug's plate boot (not just samples): the bare
   // print JOB (one body, or every member of a handed set), rotations matching
@@ -298,6 +298,7 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
       : /-shelf-insert-|^shelf-lip-/.test(s) ? [180, 0, 0]
       : /^faceplate-back-cover-|^wall-mount-bracket-/.test(s) ? [-90, 0, 0]
       : s === 'deco-handle' ? [180, 0, 0]
+      : s === 'blockbar-handle-b' ? [90, 0, 0]
       : /-side-cover-/.test(s) ? [0, 0, 90]
       : undefined;
   for (const [s, r] of resolved) {

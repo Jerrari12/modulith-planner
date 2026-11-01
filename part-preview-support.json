@@ -2320,7 +2320,7 @@
     },
     "blockbar-handle-b": {
       "preview": true,
-      "platePreview": false
+      "platePreview": true
     },
     "blockbar-handle-c": {
       "preview": true,

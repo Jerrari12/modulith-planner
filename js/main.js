@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { generateManifest, migrateOfficialBuild, resolvePartPreview, REQUIREMENT as REQ,
-  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, gridfinitySizeOk } from './generate.js';
+  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, handlePoseKey, gridfinitySizeOk } from './generate.js';
 import { resolveEntry } from './entry.js';
 import { tabTitle, buildName } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
 import { createPlannerRelay } from './relay-auth.js';
@@ -3992,21 +3992,17 @@ function setLayerDetailPixelRatio(dpr) {
  */
 const faceStyleNow = () =>
   (build && build.faceStyle) || (currentFaceplateStyle() && currentFaceplateStyle().key) || null;
-/* ⚠ THE HANDLE FAMILY IS PART OF THE QUESTION TOO (Joey 2026-09-14: the Deco handle prints top-down;
-   BlockBar and Crystal have no confirmed pose). Read from the NODE NAME - Handle_Deco, Handle_BlockBar_C
-   - not from HANDLE_STYLES, which is declared thousands of lines below and would be in its TDZ if a
-   material were ever built during module evaluation. */
-const handleFamilyOfNode = (node) => {
-  const m = /^Handle_([A-Za-z]+)/.exec(node || '');
-  return m ? m[1].toLowerCase() : null;
-};
-/* The family the build's handles ARE: the manifest's Handle row, which a handle swap renames in place
+/* ⚠ THE HANDLE'S STYLE IS PART OF THE QUESTION TOO (Joey 2026-09-14: the Deco handle prints top-down;
+   2026-11-01: BlockBar B prints front face down; the others have no confirmed pose). Read from the NODE
+   NAME (generate.js handlePoseKey) - not from HANDLE_STYLES, which is declared thousands of lines below and
+   would be in its TDZ if a material were ever built during module evaluation. */
+/* The style the build's handles ARE: the manifest's Handle row, which a handle swap renames in place
    (applyHandleStyle) and every regenerate re-emits - so a swap, a relayed style, a planner layout and
    Reset all answer from the one place that describes what is on screen. */
-const handleFamilyNow = () => handleFamilyOfNode(manifest?.parts?.find((p) => p.type === 'Handle')?.node);
+const handlePoseNow = () => handlePoseKey(manifest?.parts?.find((p) => p.type === 'Handle')?.node);
 
 function buildAxisForKey(key) {
-  return buildAxisForType(key.split(':')[0], faceStyleNow(), handleFamilyNow());
+  return buildAxisForType(key.split(':')[0], faceStyleNow(), handlePoseNow());
 }
 
 /* One author for "the faceplate materials are no longer valid", because there are two reasons and
@@ -4233,8 +4229,8 @@ function purgePartMaterials({ keepClones = false } = {}) {
  * TYPES they were.
  *
  * ⚠ A MATERIAL KEY IS A TYPE, AND TWO TYPES' AXES DEPEND ON A BUILD OPTION: the faceplate FAMILY
- * (back-down +Z, face-down -Z) and the handle FAMILY (Deco prints top-down; BlockBar and Crystal have no
- * pose). ensureMaterials is idempotent, so a cached material keeps the axis it was built with - layer
+ * (back-down +Z, face-down -Z) and the handle's STYLE (Deco prints top-down, BlockBar B front-down; the others
+ * have no pose). ensureMaterials is idempotent, so a cached material keeps the axis it was built with - layer
  * lines and a plate finish running the wrong way, or a guessed axis on a family that has none. Each
  * material records its axis when it is built (recordAxis) and this compares. mountManifest runs it on
  * every mount, which is every path that re-emits the build; the in-place handle swap mounts nothing
@@ -4710,7 +4706,7 @@ function stampSeams(root) {
 const faceFamilyOfNode = node => (node && FACEPLATE_STYLES.find(s => node.startsWith(s.node('')))?.key) || null;
 function stampBedFaces(root, type, node) {
   const axis = type
-    ? buildAxisForType(type, faceFamilyOfNode(node) || faceStyleNow(), handleFamilyOfNode(node) || handleFamilyNow())
+    ? buildAxisForType(type, faceFamilyOfNode(node) || faceStyleNow(), handlePoseKey(node) || handlePoseNow())
     : null;
   if (!axis) return;
   root.updateMatrixWorld(true);   // the template is not in the scene: its world IS the part frame
@@ -4892,7 +4888,7 @@ function placeLabelPieces(inst, inner, pieces, cast) {
    pieces are shared by every label with the same stripe position and pattern - and again only when the build axis moves. */
 function stampPieceBedFaces(inst, geos) {
   const type = typeByNode[inst.cfg.node], node = inst.cfg.node;
-  const axis = type ? buildAxisForType(type, faceFamilyOfNode(node) || faceStyleNow(), handleFamilyOfNode(node) || handleFamilyNow()) : null;
+  const axis = type ? buildAxisForType(type, faceFamilyOfNode(node) || faceStyleNow(), handlePoseKey(node) || handlePoseNow()) : null;
   if (!axis || geos.every((g) => g.userData.bedAxis && g.userData.bedAxis.every((v, i) => v === axis[i]))) return;
   try {
     const { mm, uv } = bedFaceAttributes(geos.map((g) => g.attributes.position.array), axis);
@@ -8600,9 +8596,9 @@ async function applyHandleStyle(style) {
     partInfoByNode[style.node] = row;
     renderChecklist();
   }
-  /* The family can change the handle's BUILD AXIS (Deco prints top-down; BlockBar and Crystal have no
-     pose), and nothing here re-mounts - so drop the stale materials and put the live meshes of those
-     types back on rebuilt ones. After the row rename above: handleFamilyNow reads that row. */
+  /* The style can change the handle's BUILD AXIS (Deco prints top-down, BlockBar B front-down; the others have
+     no pose), and nothing here re-mounts - so drop the stale materials and put the live meshes of those
+     types back on rebuilt ones. After the row rename above: handlePoseNow reads that row. */
   const staleTypes = dropStaleAxisMaterials(['Handle']);
   if (staleTypes.length) {
     for (const inst of instances.values()) {

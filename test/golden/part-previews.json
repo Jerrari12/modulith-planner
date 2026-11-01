@@ -5193,7 +5193,7 @@
     "collection": "185",
     "type": "Handle",
     "label": "BlockBar Handle B",
-    "platePreview": false,
+    "platePreview": true,
     "instances": [
       {
         "id": "p0",

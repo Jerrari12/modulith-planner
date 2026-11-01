@@ -33,7 +33,7 @@ register('data:text/javascript,' + encodeURIComponent(
 const THREE = await import(THREE_URL);
 const { applyLayerDetail, LAYER_DETAIL_DEFAULTS } = await import(url('js', 'vendor', 'layer-detail.js'));
 const BF = await import(url('js', 'bed-finish.js'));
-const { generateManifest, buildAxisForType } = await import(url('js', 'generate.js'));
+const { generateManifest, buildAxisForType, handlePoseKey } = await import(url('js', 'generate.js'));
 
 /* ── 1. what a saved build means ─────────────────────────────────────────────────────────── */
 
@@ -501,15 +501,23 @@ test('on the starter kit dressed as EdgeLabel, only QuickLock and Magnet stay pl
 test('the Deco handle prints top-down: axis -Y, and along it the handle measures its height', () => {
   /* Joey 2026-09-14: "the side facing up, that side prints face-down on the build plate". */
   assert.deepEqual(buildAxisForType('Handle', null, 'deco'), [0, -1, 0]);
-  /* one material type serves every handle style, and only Deco has a confirmed pose */
-  for (const family of ['blockbar', 'crystal', null, undefined]) {
-    assert.equal(buildAxisForType('Handle', 'essential', family), null, `a ${family} handle has no confirmed pose`);
+  /* one material type serves every handle style, and only Deco and BlockBar B have a confirmed pose */
+  for (const key of ['blockbar', 'blockbar_a', 'blockbar_c', 'blockbar_d', 'blockbar_e', 'blockbar_f', 'crystal', 'crystal_a', 'crystal_b', null, undefined]) {
+    assert.equal(buildAxisForType('Handle', 'essential', key), null, `a ${key} handle has no confirmed pose`);
   }
   const [x, y, z] = worldSpans(join(root, 'parts', '185', 'Handle_Deco.lib.glb'));
   /* generate.js HANDLE_STYLES.deco h 9, the height it is centred on the plate by. Declaring its depth
      axis would put 24 here, its width 75. */
   assert.ok(Math.abs(y - 9) < 0.5 && y < z && y < x,
     `Handle_Deco spans ${[x, y, z].map((v) => v.toFixed(2))} - Y is not its 9 mm height`);
+});
+
+test('BlockBar B prints front face down: axis -Z, and along it the handle measures its depth, its mounting face last', () => {
+  /* Joey 2026-11-01: "Orient blockbar B front face down". */
+  assert.deepEqual(buildAxisForType('Handle', null, 'blockbar_b'), [0, 0, -1]);
+  const [x, y, z] = worldSpans(join(root, 'parts', '185', 'Handle_BlockBar_B.lib.glb'));
+  /* generate.js HANDLE_VARIANTS: h 9, d 27, and the deepest handle there is */
+  assert.ok(Math.abs(z - 27) < 0.5 && z > y && z < x, `Handle_BlockBar_B spans ${[x, y, z].map((v) => v.toFixed(2))} - Z is not its 27 mm depth`);
 });
 
 test('on the starter kit dressed as Essential with Deco handles, the handle is finished and only QuickLock, Magnet and Screw stay plain', () => {
@@ -521,7 +529,7 @@ test('on the starter kit dressed as Essential with Deco handles, the handle is f
   assert.deepEqual(types.filter((t) => !buildAxisForType(t, 'essential', 'deco')), ['Magnet', 'QuickLock', 'Screw']);
 });
 
-test('main.js reads the handle family from the node name for every handle style, and both axis readers pass it', () => {
+test('main.js reads the handle\'s pose key from the node name for every handle style, and both axis readers pass it', () => {
   const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');
   /* from `needle` to the end of its statement, brackets balanced - CALLED below, not text-matched */
   const take = (needle) => {
@@ -536,12 +544,13 @@ test('main.js reads the handle family from the node name for every handle style,
     }
     return assert.fail(`unterminated "${needle}"`);
   };
-  const familyOf = new Function(take('const handleFamilyOfNode =') + '\nreturn handleFamilyOfNode;')();
   const styles = new Function(take('const HANDLE_STYLES =') + '\nreturn HANDLE_STYLES;')();
   assert.ok(styles.length >= 9, `only ${styles.length} handle styles read`);
-  for (const s of styles) assert.equal(familyOf(s.node), s.planner, `${s.node} reads as ${familyOf(s.node)}`);
-  assert.equal(familyOf('Faceplate_Essential_1W-1H'), null);
-  assert.equal(familyOf(undefined), null);
+  for (const s of styles) assert.ok(handlePoseKey(s.node) === s.planner || handlePoseKey(s.node).startsWith(s.planner + '_'), `${s.node} reads as ${handlePoseKey(s.node)}`);
+  assert.equal(new Set(styles.map((s) => handlePoseKey(s.node))).size, styles.length, 'one key a style: a pose given for one is not given for its family');
+  assert.equal(handlePoseKey('Handle_Deco'), 'deco'); assert.equal(handlePoseKey('Handle_BlockBar_B'), 'blockbar_b'); assert.equal(handlePoseKey('Handle_Crystal_A'), 'crystal_a');
+  assert.equal(handlePoseKey('Faceplate_Essential_1W-1H'), null);
+  assert.equal(handlePoseKey(undefined), null);
   /* the material's axis and the geometry's stamp must be asked the same question, or a Deco handle's
      layer lines and its plate face disagree about which way it printed */
   const fnBody = (name) => {
@@ -549,6 +558,6 @@ test('main.js reads the handle family from the node name for every handle style,
     assert.ok(at >= 0, `main.js has no function ${name}`);
     return main.slice(at, main.indexOf('\n}', at));
   };
-  assert.match(fnBody('buildAxisForKey'), /buildAxisForType\([^;]*handleFamilyNow\(\)\)/);
-  assert.match(fnBody('stampBedFaces'), /buildAxisForType\([^;]*handleFamilyOfNode\(node\)/);
+  assert.match(fnBody('buildAxisForKey'), /buildAxisForType\([^;]*handlePoseNow\(\)\)/);
+  assert.match(fnBody('stampBedFaces'), /buildAxisForType\([^;]*handlePoseKey\(node\)/);
 });

@@ -118,17 +118,22 @@ test('the preview is MOUNTED: the plate sits where the generator seats it', () =
   }
 });
 
-test('only the Deco handle has a confirmed print pose', () => {
+test('only the Deco handle and BlockBar B have a confirmed print pose', () => {
   /* Joey, 2026-09-14, of the Deco handle: "the side facing up, that side prints face-down on
-     the build plate" - and of no other handle family. The pose is keyed by FAMILY, so the eight
-     BlockBar and Crystal pages ship turntable-only until their own words arrive. */
+     the build plate"; 2026-11-01: "Orient blockbar B front face down" - and of no other handle. The pose is
+     keyed by STYLE, so the seven other pages ship turntable-only until their own words arrive. */
   const deco = resolvePartPreview('deco-handle', { plate: true });
   assert.ok(!deco.fail, 'deco plate boot');
   assert.equal(deco.manifest.instances.length, 1, 'the plate view is the bare print job - the plate is not mounted');
   assert.deepEqual(deco.manifest.instances[0].rot, [180, 0, 0], 'the installed top goes onto the bed');
   assert.equal(deco.manifest.parts.length, 1, 'and the BOM is the handle alone');
+  const b = resolvePartPreview('blockbar-handle-b', { plate: true });
+  assert.ok(!b.fail, 'BlockBar B plate boot');
+  assert.deepEqual(b.manifest.instances[0].rot, [90, 0, 0], 'its front goes onto the bed');
+  assert.equal(b.manifest.parts[0].node, 'Handle_BlockBar_B', 'its own handle, not the family default');
+  assert.equal(resolvePartPreview('blockbar-handle-b').part.platePreview, true, 'its page offers the plate view');
   for (const s of Object.keys(SLUGS)) {
-    if (s === 'deco-handle') continue;
+    if (s === 'deco-handle' || s === 'blockbar-handle-b') continue;
     assert.equal(resolvePartPreview(s).part.platePreview, false, s + ': no confirmed pose');
     assert.equal(resolvePartPreview(s, { plate: true }).fail.reason, 'unsupported', s + ': plate boot fails closed');
   }
@@ -141,7 +146,7 @@ test('the deployed support manifest carries all nine', () => {
   for (const s of Object.keys(SLUGS)) {
     assert.ok(support.parts[s], s + ': missing from the support manifest');
     assert.equal(support.parts[s].preview, true, s + ': preview');
-    assert.equal(support.parts[s].platePreview, s === 'deco-handle', s + ': platePreview');
+    assert.equal(support.parts[s].platePreview, s === 'deco-handle' || s === 'blockbar-handle-b', s + ': platePreview');
   }
 });
 

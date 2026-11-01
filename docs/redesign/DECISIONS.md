@@ -6768,3 +6768,15 @@ Joey: "There have been a ton of failures, why does this keep happening, it seems
 **Review.** Sol `01a1982b` on the diagnosis and plan: eight taken (a plain retry could deploy an intermittent real bug, so it was narrowed to waits; rebalance on purpose; the pre-push command's limits said; clocks audited now, not when each next breaks), one discarded (a longer wait exhausting a job's deadline: a case stops at its first timeout). Sol `01a19841` on the code: the 250 ms window also retried a wrong value just after a swallowed probe, so only an `assert.fail` counts now. The Colors session pointed at click timeouts since 10-31 and at its first-draw hold; a software rasteriser keeps the old path with no such hold, and its `ci-named.sh` change will show what blocks a click from here on.
 
 - **Live 2026-11-01 at `70934d9`** (run 41335501782, green on its first try, stamp `70934d95`), no case on its retry. One run proves little: shards 9.1 to 27.6 min, median 19.2 (about 15 on green runs before it; the warm-up's share is not measured), 28 min in all. What will say whether this worked is the next week's failure rate, against the 18 to 75 % above, and how often the coverage job names a retry.
+
+## 2026-11-01 · BlockBar B prints front face down
+
+Joey, having noticed BlockBar B showed no layer lines: "Orient blockbar B front face down". Stated, not measured or sliced, and of B alone: the other BlockBars are other shapes.
+
+**The pose** (`generate.js` PLATE_POSE `handle:blockbar_b`, [90, 0, 0]). B's front is +Z as authored (on a built drawer its box runs from its back at z 97.57 to its front at z 124.57), so it grows along -Z. On the bed the bar lies on its front with its two mounting posts up. On a drawer at Very High its sides and top carry layer lines and its front the bed's texture.
+
+**Keyed by style.** A pose was keyed by handle family, so a pose for B would have reached the five other BlockBars. `handlePoseKey` reads the style from the node name (`deco`, `blockbar_b`, `crystal_a`); only `deco` and `blockbar_b` are in the table, and the rest stay plain. `blockbar-handle-b` becomes plate-capable (602 slugs, was 601), and the seven other handle pages still fail closed.
+
+**Not done.** B has no baked top-skin or first-layer maps (`tools/skin-map.mjs` names Deco alone among handles), so its front takes the plate's generic finish and not its real first layer. `data/plate-poses.json` is not re-exported; no entry in it names a handle, Deco included. The site vendors its own `part-preview-support.json`, which this does not refresh, so B's page there still reads `platePreview: false` until it is, after this is live (Terra 01a1981e).
+
+Checks: the pose suites, 45 of 45 (`test/bed-finish`, `handle-preview`, `build-axis`, `part-preview`, `plate-poses-vendor`). The vault's orientation is per family, so B's sits in `PART_ORIENTATION` in its catalog generator, and the other five stay blank.

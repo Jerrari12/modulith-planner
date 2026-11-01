@@ -3158,11 +3158,15 @@ const PLATE_POSE = {
   /* Joey, 2026-09-14, of the Deco handle: "The way they are right now in the viewer, the side
      facing up, that side prints face-down on the build plate." Installed, the handle's top faces
      up, so it takes the Cover Upper's swing - the installed top onto the plate - and that top face
-     carries the plate's finish. KEYED BY HANDLE FAMILY, like the faceplates: the handle material is
-     one TYPE shared by every style, and BlockBar and Crystal have no confirmed pose, so they stay
-     plain - on the renderer AND, since the nine handle product pages landed (2026-09-19), on the
-     plate view: `deco-handle` is plate-capable and the eight BlockBar/Crystal pages fail closed. */
+     carries the plate's finish. KEYED BY HANDLE (handlePoseKey), like the faceplates: the handle material is
+     one TYPE shared by every style, and a style with no confirmed pose stays plain - on the renderer AND,
+     since the nine handle product pages landed (2026-09-19), on the plate view: `deco-handle` and
+     `blockbar-handle-b` are plate-capable and the seven other pages fail closed. */
   'handle:deco': [180, 0, 0],
+  /* Joey, 2026-11-01: "Orient blockbar B front face down". Its front (+Z as authored, the end that stands out
+     from the drawer) on the plate, so it grows from the front back to its mounting face: authored -Z. Of B alone:
+     the other BlockBars are other shapes and keep no pose until Joey's own words arrive. */
+  'handle:blockbar_b': [90, 0, 0],
   /* Side covers (v2609) "print face-down" (the release's print notes: face-down, no supports; the FACE zone is the
      bed-contact face, decisions.md "Side covers"). The GLB is the left-wall installed pose, its face toward -X, so
      +90 about Z lays that face on the plate and the part grows face first, clips last: authored +X. The first pose
@@ -3173,6 +3177,15 @@ const PLATE_POSE = {
    platePoseFor reads, so the two cannot name different entries for one type. */
 const HW_BY_TYPE = {};
 for (const hw of Object.values(HARDWARE_PREVIEW)) if (hw.type) HW_BY_TYPE[hw.type] = hw;
+
+/**
+ * What a handle's pose is filed under, from its node: 'deco', 'blockbar_b', 'crystal_a'. By style and not by family,
+ * because a pose is confirmed one shape at a time. Null for anything that is not a handle.
+ */
+export function handlePoseKey(node) {
+  const m = /^Handle_([A-Za-z]+)(?:_([A-Z]))?$/.exec(node || '');
+  return m ? (m[2] ? `${m[1]}_${m[2]}` : m[1]).toLowerCase() : null;
+}
 
 /**
  * The plate pose for a part TYPE — an [x,y,z] Euler triple in degrees, a per-node map of them for
@@ -3255,8 +3268,8 @@ export function buildAxisFromEuler(rot) {
  *                       than by naming QuickLock, so the next chiral family fails closed too.
  *
  * The FAMILY arguments matter to one type each: `faceStyle` to a Faceplate (Classic, ClassicPro and
- * EdgeLabel print back-down, Essential and Chevron face-down), `handleStyle` to a Handle ('deco',
- * 'blockbar', 'crystal' - only Deco has a confirmed pose).
+ * EdgeLabel print back-down, Essential and Chevron face-down), `handleStyle` to a Handle (handlePoseKey:
+ * only 'deco' and 'blockbar_b' have a confirmed pose).
  */
 export function buildAxisForType(type, faceStyle, handleStyle) {
   const rot = plateRotForType(type, faceStyle, handleStyle);
@@ -3276,11 +3289,11 @@ function platePoseFor(probe) {
   // hardware poses live on the entry ([] = as authored); the probe already found it, and
   // plateRotForType would find the same one by type.
   if (probe.hw) return probe.hw.plateRot;
-  // the handle FAMILY matters as much as the faceplate family does: only Deco has a confirmed
-  // print pose, so the eight BlockBar and Crystal pages ship turntable-only and fail closed on
+  // the handle's style matters as much as the faceplate family does: only Deco and BlockBar B have
+  // a confirmed print pose, so the seven other handle pages ship turntable-only and fail closed on
   // ?plate= - and without this argument even Deco would, which is what it did until handles
   // had product pages to reach it.
-  return plateRotForType(probe.pick.type, probe.build.faceStyle, probe.build.handleStyle);
+  return plateRotForType(probe.pick.type, probe.build.faceStyle, handlePoseKey(probe.build.handleVariant) || probe.build.handleStyle);
 }
 
 export function resolvePartPreview(slug, opts = {}) {
