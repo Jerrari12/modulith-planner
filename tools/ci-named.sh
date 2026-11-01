@@ -12,6 +12,9 @@ if [ "$status" -ne 0 ]; then
   # "✖" (f10b245's run matched nothing); and anything else ends with the log's last lines
   { grep -E '^\s*(not ok|✖)' "/tmp/$s.log" | sort -u | head -5; grep -E "AssertionError|TimeoutError|Timeout [0-9]+ms|Error:|error: |within|expected|actual" "/tmp/$s.log" | head -5; } > "/tmp/$s.why"
   [ -s "/tmp/$s.why" ] || tail -n 8 "/tmp/$s.log" > "/tmp/$s.why"
+  # and what stopped an action: which line of the case, and what lay over the control (three cases have run out of time on a
+  # click that no annotation could name: 2026-10-31 and 2026-11-01)
+  grep -E "intercepts pointer events|waiting for locator|element is not|not stable|workspaces\.mjs:[0-9]+:[0-9]+" "/tmp/$s.log" | awk '!seen[$0]++' | head -10 >> "/tmp/$s.why"
   sed -e 's/%/%25/g' -e 's/\r/%0D/g' "/tmp/$s.why" | while IFS= read -r l; do echo "::error title=$s::$l"; done
 fi
 node tools/tap-durations.mjs "/tmp/$s.log" "$s" || true
