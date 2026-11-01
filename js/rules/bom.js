@@ -35,7 +35,7 @@ export function computeBom(build, GEN2) {
     GEN2.railWidths.forEach((w) => {
       if (fitsBed(w * GEN2.units.widthMM, build.length || 0)) max = Math.max(max, w);
     });
-    return max;
+    return build.railMaxW ? Math.min(max, build.railMaxW) : max;   // the record's own cap, whatever the bed (schema.js BUILD_FIELDS)
   }
   function unitAt(x, y) {
     return build.placed.find((p) =>

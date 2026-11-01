@@ -643,7 +643,8 @@ export function migrateOfficialBuild(b, v) {
    showed 4W+4W+3W - a user's report, 2026-10-19 (docs/redesign/DECISIONS.md). The limits are the bill's own rules,
    restated here against the catalog so the three views agree:
      rail    = the widest of railWidths whose section (w x 88 by the length) fits the bed either way round, never
-               below 1 (bom.js maxRailW); no bed = 4.
+               below 1 (bom.js maxRailW); no bed = 4. A record's own railMaxW caps it further, whatever the bed
+               (schema.js BUILD_FIELDS): the under-table kits carry 2 since 2026-10-31.
      bracket = GEN2.wallMount.maxW(bed): 3 with no bed or the diagonal trick, else 2 or 1.
    The foot rails and the covers are NOT bed-limited: they exist in 1W and 2W only and both sides tile them with the
    brick stagger (brickTiling / tilesLower / tilesUpper), so a bed changes nothing there.
@@ -660,13 +661,15 @@ export function bedOfBuild(build, catalog) {
 }
 export function bedLimits(build, catalog) {
   const bed = bedOfBuild(build, catalog);
-  if (!bed) return { ...UNLIMITED };
+  // a kit file and a #build= link reach the generator unsanitized, so only a whole width counts as a cap: anything else would tile by NaN
+  const capped = (limits) => (Number.isInteger(build?.railMaxW) && build.railMaxW >= 1 ? { ...limits, rail: Math.min(limits.rail, build.railMaxW) } : limits);
+  if (!bed) return capped({ ...UNLIMITED });
   const len = +build.length || 0, unit = catalog.units?.widthMM || 88;
   const fits = (fw, fl) => (fw <= bed.x && fl <= bed.y) || (fw <= bed.y && fl <= bed.x);
   let rail = 1;
   for (const w of catalog.railWidths || [1, 2, 3, 4]) if (fits(w * unit, len)) rail = Math.max(rail, w);
   const bracket = typeof catalog.wallMount?.maxW === 'function' ? catalog.wallMount.maxW(bed) : UNLIMITED.bracket;
-  return { rail, bracket };
+  return capped({ rail, bracket });
 }
 const pageCatalog = () => (typeof GEN2 !== 'undefined' ? GEN2 : null);   // eslint-disable-line no-undef
 
@@ -1171,6 +1174,7 @@ export function generateManifest(build, opts = {}) {
   const frlIds = [], feetIds = { back: [], front: [] };
   const bracketIds = [], screwIds = [];       // wall only
   const utIds = [], utScrewIds = [];          // under-table only
+  let utJoints = 0;                           // rail sections that sit against the section before them
   const flatTopY = row0 + maxTop * PITCH_HALF_Y;
   if (isUT) {
     // one rail course spans the flat top, tiled biggest-first per contiguous
@@ -1186,6 +1190,7 @@ export function generateManifest(build, opts = {}) {
     }
     for (const run of topRuns) for (let c = run.c0; c <= run.c1; ) {
       const w = Math.min(limits.rail, run.c1 - c + 1);
+      if (c > run.c0) utJoints++;
       const t = { col: c, w };
       const id = `utr${utIds.length}`;
       utIds.push(id);
@@ -2462,7 +2467,9 @@ export function generateManifest(build, opts = {}) {
   if (isUT) {
     preSteps.push({
       title: utIds.length > 1 ? 'Screw the rails to the surface' : 'Screw the rail to the surface',
-      note: 'Hold each rail flat against the underside · channels facing down, the long overhang toward the back · and drive the #6 × 3/4" wood screws up through the plate: one at each end and at every seam line, in the front and back rows. A 3/4" screw reaches about 16 mm into the top, so check the surface is thick enough first. The rail is the stationary part; every case slides into it.',
+      note: 'Hold each rail flat against the underside · channels facing down, the long overhang toward the back · and drive the #6 × 3/4" wood screws up through the plate: one at each end and at every seam line, in the front and back rows. ' +
+        (utJoints ? 'Butt the rails edge to edge where they meet, so the cases line up across the joint. ' : '') +
+        'A 3/4" screw reaches about 16 mm into the top, so check the surface is thick enough first. The rail is the stationary part; every case slides into it.',
       camera: { ...camUp(0, flatTopY, totalW, gridBottom), fit: FIT },
       phases: [
         { enter: utIds.map(id => ({ id, from: [0, -70, 0] })) },      // lift the rail up against the surface

@@ -8,6 +8,7 @@
     "mount": "under-table",
     "length": 270,
     "printer": "any",
+    "railMaxW": 2,
     "customBed": {
       "x": null,
       "y": null

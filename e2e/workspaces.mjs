@@ -7214,6 +7214,27 @@ test('Build: on a bed-limited printer the stage tiles the under-table rails as t
   await ctx.close();
 });
 
+/* THE KITS' OWN CAP (2026-10-31). Joey: "it looks like the kits use 3W under table rail, that requires a larger printer than most
+   people have, i think it would be best to use at at most a 2W". The record carries railMaxW; it has to survive the road a kit
+   link takes (kit file, store, stage, Parts) and the road an edit takes (store.commit, stage.update(serialize)). */
+test('an under-table kit opens on a 2W and a 1W rail with Any printer, in the model and the Parts list, and an edit keeps the cap', async () => {
+  const { ctx, page, errors } = await open('parts', { query: '&done=off&build=185-undertable-3w2h' });
+  await page.waitForSelector('#ws-parts .prow', { timeout: 60_000 });
+  assert.equal((await S(page)).printer, 'any');
+  assert.equal((await S(page)).railMaxW, 2, 'the store kept the kit\'s cap');
+  const rails = () => page.evaluate(() => { const out = {}; for (const i of window.__GEN2_VIEWER__.manifest.instances) { const m = /^UnderTableRail_185-(\d)W$/.exec(i.node); if (m) out[m[1]] = (out[m[1]] || 0) + 1; } return out; });
+  const listed = () => page.evaluate(() => { const out = {}; for (const row of document.querySelectorAll('#ws-parts .prow')) { const m = /^Under Table Rails - 185 · (\d)W section$/.exec(row.querySelector('.name')?.textContent.trim() || ''); if (m) out[m[1]] = (out[m[1]] || 0) + 1; } return out; });
+  assert.deepEqual(await rails(), { 2: 1, 1: 1 }, 'the stage: one 2W and one 1W');
+  assert.deepEqual(await listed(), { 2: 1, 1: 1 }, 'the Parts list: the same two sections');
+  // a fourth narrow case on the top row, through the store: the stage takes the record again and the rails stay at 2W
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.evaluate(() => { const st = window.__GEN2_STORE__; st.commit((s) => { const top = Math.min(...s.placed.map((p) => p.y)); const x = Math.max(...s.placed.filter((p) => p.y === top).map((p) => p.x + p.w)); s.placed.push({ id: s.nextId++, x, y: top, w: 1, hh: 2, fill: 'decor', shelves: 0, closure: 'magnet' }); }); });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 6 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+  assert.deepEqual(await rails(), { 2: 2 }, 'a 4W top row: two 2W rails, never a 3W or a 4W');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE PHONE ACCEPTANCE CHECK (2026-10-17, the live planner driven with real touch at 390 and 412 px). The floating cards and
    the toast sat at a fixed 132 px from the bottom, under the collapsed sheets' handles (z-index 6 against 10): a "+" tapped
    on the model showed its ghost while Place / Cancel stayed under the Library's handle, the issue card's text and buttons

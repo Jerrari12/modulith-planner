@@ -31,8 +31,8 @@
  },
  "parts": [
   {
-   "node": "UnderTableRail_240-3W",
-   "label": "Under-Table Rail 240-3W",
+   "node": "UnderTableRail_240-2W",
+   "label": "Under-Table Rail 240-2W",
    "type": "Rail",
    "qty": 1,
    "links": {
@@ -40,7 +40,7 @@
     "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Under%20Table%20Rails%20-%20240-1360077",
     "m": "https://makerworld.com/en/models/1516579-gen2-under-table-rails-240"
    },
-   "img": "img/parts/Rails 240-3W.png",
+   "img": "img/parts/Rails 240-2W.png",
    "requirement": {
     "scope": "core",
     "obligationId": "mount.install"
@@ -56,7 +56,7 @@
    "node": "WoodScrew_No6-19mm",
    "label": "#6 × 3/4\" wood screw",
    "type": "Screw",
-   "qty": 8,
+   "qty": 10,
    "links": {
     "p": "https://www.printables.com/model/1322484-gen2-rails-240",
     "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Under%20Table%20Rails%20-%20240-1360077",
@@ -72,6 +72,28 @@
    "img": "img/parts/WoodScrew_No6-19mm.png",
    "purchased": true,
    "note": "Hardware store item · a 3/4\" screw reaches about 16 mm into the top - check the surface is thick enough first and choose a length that cannot break through.",
+   "requirement": {
+    "scope": "core",
+    "obligationId": "mount.install"
+   },
+   "basis": {
+    "axis": "mount",
+    "choice": "under-table",
+    "subjectType": "build"
+   },
+   "required": true
+  },
+  {
+   "node": "UnderTableRail_240-1W",
+   "label": "Under-Table Rail 240-1W",
+   "type": "Rail",
+   "qty": 1,
+   "links": {
+    "p": "https://www.printables.com/model/1322484-gen2-rails-240",
+    "t": "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Under%20Table%20Rails%20-%20240-1360077",
+    "m": "https://makerworld.com/en/models/1516579-gen2-under-table-rails-240"
+   },
+   "img": "img/parts/Rails 240-1W.png",
    "requirement": {
     "scope": "core",
     "obligationId": "mount.install"
@@ -311,9 +333,9 @@
  "instances": [
   {
    "id": "utr0",
-   "node": "UnderTableRail_240-3W",
+   "node": "UnderTableRail_240-2W",
    "pos": [
-    0,
+    -44,
     222,
     0
    ]
@@ -378,7 +400,7 @@
    "id": "uts4",
    "node": "WoodScrew_No6-19mm",
    "pos": [
-    44,
+    39,
     237.4,
     -103.574
    ],
@@ -392,7 +414,7 @@
    "id": "uts5",
    "node": "WoodScrew_No6-19mm",
    "pos": [
-    44,
+    39,
     237.4,
     104.426
    ],
@@ -403,7 +425,44 @@
    ]
   },
   {
+   "id": "utr1",
+   "node": "UnderTableRail_240-1W",
+   "pos": [
+    88,
+    222,
+    0
+   ]
+  },
+  {
    "id": "uts6",
+   "node": "WoodScrew_No6-19mm",
+   "pos": [
+    49,
+    237.4,
+    -103.574
+   ],
+   "rot": [
+    90,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "uts7",
+   "node": "WoodScrew_No6-19mm",
+   "pos": [
+    49,
+    237.4,
+    104.426
+   ],
+   "rot": [
+    90,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "uts8",
    "node": "WoodScrew_No6-19mm",
    "pos": [
     127,
@@ -417,7 +476,7 @@
    ]
   },
   {
-   "id": "uts7",
+   "id": "uts9",
    "node": "WoodScrew_No6-19mm",
    "pos": [
     127,
@@ -993,7 +1052,7 @@
  "steps": [
   {
    "title": "The Mighty Drawer Vault",
-   "note": "Your custom build · 5 units, 5 drawers, 3 columns wide. Drag to orbit, tap any part to identify it. 46 prints · quantities on the right. and 10× 10×2 mm disc magnets for the optional magnet closures (hardware store items).",
+   "note": "Your custom build · 5 units, 5 drawers, 3 columns wide. Drag to orbit, tap any part to identify it. 47 prints · quantities on the right. and 10× 10×2 mm disc magnets for the optional magnet closures (hardware store items).",
    "camera": {
     "t": 30,
     "p": 58,
@@ -1007,8 +1066,8 @@
    "checklist": true
   },
   {
-   "title": "Screw the rail to the surface",
-   "note": "Hold each rail flat against the underside · channels facing down, the long overhang toward the back · and drive the #6 × 3/4\" wood screws up through the plate: one at each end and at every seam line, in the front and back rows. A 3/4\" screw reaches about 16 mm into the top, so check the surface is thick enough first. The rail is the stationary part; every case slides into it.",
+   "title": "Screw the rails to the surface",
+   "note": "Hold each rail flat against the underside · channels facing down, the long overhang toward the back · and drive the #6 × 3/4\" wood screws up through the plate: one at each end and at every seam line, in the front and back rows. Butt the rails edge to edge where they meet, so the cases line up across the joint. A 3/4\" screw reaches about 16 mm into the top, so check the surface is thick enough first. The rail is the stationary part; every case slides into it.",
    "camera": {
     "t": 30,
     "p": 116,
@@ -1025,6 +1084,14 @@
      "enter": [
       {
        "id": "utr0",
+       "from": [
+        0,
+        -70,
+        0
+       ]
+      },
+      {
+       "id": "utr1",
        "from": [
         0,
         -70,
@@ -1093,6 +1160,22 @@
       },
       {
        "id": "uts7",
+       "from": [
+        0,
+        -45,
+        0
+       ]
+      },
+      {
+       "id": "uts8",
+       "from": [
+        0,
+        -45,
+        0
+       ]
+      },
+      {
+       "id": "uts9",
        "from": [
         0,
         -45,

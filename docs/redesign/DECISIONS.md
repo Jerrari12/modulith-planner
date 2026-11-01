@@ -6544,3 +6544,29 @@ Balanced and Fast settled sooner: Balanced took one visit with a 0.89 s task, th
 Colors opened from the address, Very High, no cache, one run each, the hold on and off (`?debug=1&firstdraw=off`) on the same live build: on (CPU 31 %, GPU 4 % before it), interface 2.30 s, overlay gone 10.51 s, blocked 3.72 s, longest 0.68 s, last long task ended 12.30 s; off (CPU 17 %, GPU 28 %), interface 9.61 s, blocked 9.54 s, longest 3.69 s, last long task ended 15.99 s.
 
 A visitor's first load, no `?debug`, a new browser each time (`visitor-first-load.mjs`): Build and Colors at 1600 x 793 and at 360 x 675 with touch, on this laptop's GPU. The interface was up at 2.39 to 2.61 s with "Preparing the 3D view…" still over the stage, the overlay went at 6.73 s (desktop Build), 11.69 s (desktop Colors), 7.24 s (phone size Build) and 13.36 s (phone size Colors), and no page errors. `live-check.mjs` on the Colors fix still passes: no room files at boot, 12 after 9 s on a desktop, none on the phone size after 6 s, the pill reads "Setting up the room…", no page errors. Terra 01a1945a on this line: eight taken; the rest discarded (the run ids, procedure and scripts it could not see were not in its payload; the batch's opening 6 is that batch's visit 0).
+
+## 2026-10-31 (the under-table kits hang from rails no wider than 2W)
+
+- **The report.** Joey, looking at a 3W-2H kit: "it looks like the kits use 3W under table rail, that requires a larger printer
+  than most people have, i think it would be best to use at at most a 2W".
+- **What was wrong.** Every kit is saved as Any printer, and with no bed the rail limit is 4W (`bedLimits`, `maxRailW`), so a
+  three-column kit took one 3W rail. A 3W rail is 264 mm in every depth (measured from the published STLs), off every 256 mm
+  bed: it fits 17 of the catalog's 34 printer presets. A 2W rail fits 33, 33, 33, 31 and 26 of them at 59, 115, 165, 185 and 240.
+  At 270 it fits 15, the same 15 as a 3W, because the 270 rail is 286 mm deep whatever its width; the kit there has bigger
+  problems than the rail's width, and takes the cap so all six depths read the same.
+- **Changed.** A new record field, `railMaxW` (schema.js BUILD_FIELDS), caps the rail sections on top of the bed: the narrower
+  of the two wins. The 12 under-table kits carry 2. The six 3W-2H kits now take a 2W and a 1W rail and 10 screws (2 + 2W per
+  section, was 8); the six 2W-2H kits' goldens are unchanged, and they carry the field so a kit someone widens stays printable.
+  The guide's rail step gains "Butt the rails edge to edge where they meet", for any build whose sections touch.
+- **Deliberately not changed.** A build without the field behaves as before, including 4W on Any printer. The wall kits keep
+  their 3W bracket (264 mm too, on the catalog's diagonal rule for 250 x 220 beds and up). The site's cards are untouched:
+  from above the table they do not show the rail. Its parts list follows on the next vendor.
+- **Found, not fixed.** The bed rule measures a rail by its collection number, not its depth: a 270 rail is 286 mm deep, so the
+  two 270 x 270 presets (QIDI Q2, Snapmaker U1) are told a rail fits that does not. The others do not change the answer.
+- **Checks.** `test/hanging-kits.test.mjs` (every under-table kit, in the bill and the model, with and without the catalog, and on
+  a 360 mm bed), `test/rail-bed-limit.test.mjs` (the cap against the bed, junk in a raw link, model and bill for every printer),
+  an e2e case (the kit link through the store, the stage and Parts, then an edit: two 2W rails, never a 3W or 4W). Exactly the
+  six 3W-2H goldens changed.
+- **Review.** Sol `01a19482`, substantial: 1 returned, 1 held. "Butt the rails" also showed for two rails with a gap between them;
+  it now keys off a joint, not a second rail. Undo could not be established from the payload; the code settles it: the store's
+  history snapshots `serializeBuild`, which carries the field.
