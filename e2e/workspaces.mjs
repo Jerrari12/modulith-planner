@@ -192,16 +192,17 @@ test('the first frame waits for its programs: the workspace comes first, the ove
 /* the thing itself, needing a real GPU and a browser with no programs in it: its own launch, since a context in the suite's browser
    shares the GPU process's memory of them. Before: 0.7 to 1.1 s on a program, in each pass, with no interface on the page */
 test('the first load of a browser with no cached programs holds the page on no program once the workspace is up, in Build and in Colors', { skip: ROOM_SOFT_SKIP }, async () => {
-  for (const [ws, tier] of [['build', 'veryhigh'], ['build', 'high'], ['colors', 'high']]) {
+  // the memory going in, then what the wait makes of it: nothing yet, a slow wait a shorter one replaces, a short wait (and another tier's) it keeps
+  for (const [ws, tier, memory, kept] of [['build', 'veryhigh', null, null], ['build', 'high', { high: 99999 }, null], ['colors', 'high', { high: 1, fast: 7 }, { high: 1, fast: 7 }]]) {
     const b2 = await chromium.launch({ channel: 'chrome', args: launchArgs }).catch(() => null);
     if (!b2) return;
     try {
       const ctx = await b2.newContext({ viewport: { width: 1280, height: 800 } });
-      await ctx.addInitScript((tier) => {
-        try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {}
+      await ctx.addInitScript(([tier, memory]) => {
+        try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); if (memory) localStorage.setItem('gen2-first-draw-waits', memory); } catch {}
         const P = WebGL2RenderingContext.prototype, f = P.getProgramInfoLog, W = window.__WAITS__ = [], B = window.__WAITS_BEFORE__ = [];
         P.getProgramInfoLog = function (p) { const t = performance.now(), r = f.call(this, p), d = performance.now() - t; (document.querySelector('#ws-dock, #ws-player') ? W : B).push(+d.toFixed(1)); return r; };
-      }, tier);
+      }, [tier, memory ? JSON.stringify(memory) : null]);
       await ctx.addInitScript(firstDrawWatch);
       const page = await ctx.newPage();
       const errors = [];
@@ -211,7 +212,8 @@ test('the first load of a browser with no cached programs holds the page on no p
       await page.waitForFunction(() => window.__GEN2_VIEWER__.firstDrawState.held === false, null, { timeout: 120_000 }).catch(() => assert.fail(`${ws} ${tier}: the first frame never came`));
       if (ws === 'colors') await page.waitForFunction(() => document.documentElement.dataset.done === 'room', null, { timeout: 120_000 }).catch(() => assert.fail('the room did not come on'));
       await settle(page, 4000);
-      const r = await page.evaluate(() => ({ waits: window.__WAITS__, before: window.__WAITS_BEFORE__, ui: window.__FIRST__.ui, pending: window.__FIRST__.pending, state: window.__GEN2_VIEWER__.firstDrawState }));
+      const r = await page.evaluate(() => ({ waits: window.__WAITS__, before: window.__WAITS_BEFORE__, ui: window.__FIRST__.ui, pending: window.__FIRST__.pending, state: window.__GEN2_VIEWER__.firstDrawState, memory: JSON.parse(localStorage.getItem('gen2-first-draw-waits')) }));
+      assert.deepEqual(r.memory, kept || { [tier]: Math.round(r.state.marks.done - r.state.marks.start) }, `${ws} ${tier}: the wait remembered (${JSON.stringify(r.state.marks)})`);
       assert.equal(r.ui, true, `${ws} ${tier}: the workspace before the canvas`);
       // before the workspace, under the overlay: the studio environment's capture alone, about 0.5 s (the mirror's forced draw held 2.5 s here)
       const held = r.before.reduce((a, d) => a + d, 0);
@@ -227,8 +229,9 @@ test('the first load of a browser with no cached programs holds the page on no p
 });
 /* a browser kept a program a compile-ahead finished last only once a first draw had waited on it itself: without A CACHED VISIT DOES
    NOT WAIT FOR A STRAGGLER (main.js) every later visit waited on that one program again, model at 1.5 s against 0.6 s. Visits on one
-   kept profile until the wait is short: it cures itself, and stays cured */
-test('Build\'s later visits on one browser profile cure the last program the driver did not keep, and then barely wait', { skip: ROOM_SOFT_SKIP }, async () => {
+   kept profile until the wait is short: it cures itself, and stays cured. Within four: with two as the only rule High took eight or
+   more on the live page, model at 2 to 3 s all the way (A BROWSER THAT HAS WAITED FOR THIS TIER TAKES MORE OF THEM) */
+test('Build\'s later visits on one browser profile cure the last programs the driver did not keep, and then barely wait', { skip: ROOM_SOFT_SKIP }, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'gen2-firstdraw-'));
   const visit = async () => {
     const ctx = await chromium.launchPersistentContext(dir, { channel: 'chrome', args: launchArgs, viewport: { width: 1280, height: 800 } });
@@ -239,19 +242,46 @@ test('Build\'s later visits on one browser profile cure the last program the dri
       await waitBoot(page);
       await page.waitForFunction(() => window.__GEN2_VIEWER__.firstDrawState.held === false, null, { timeout: 120_000 }).catch(() => assert.fail('the first frame never came'));
       await settle(page, 1500);
-      const s = await page.evaluate(() => window.__GEN2_VIEWER__.firstDrawState);
-      return { ms: Math.round(s.marks.done - s.marks.start), left: s.marks.left ?? 0 };
+      const s = await page.evaluate(() => ({ ...window.__GEN2_VIEWER__.firstDrawState, memory: JSON.parse(localStorage.getItem('gen2-first-draw-waits')) }));
+      return { ms: Math.round(s.marks.done - s.marks.start), left: s.marks.left ?? 0, few: s.marks.few, memory: s.memory?.high };
     } finally { await ctx.close(); }
   };
   try {
     const log = [];
     let v;
-    for (let i = 0; i < 8; i++) { v = await visit(); log.push(v); if (i > 0 && v.left === 0 && v.ms < 800) break; }
-    assert.ok(v.left === 0 && v.ms < 800, `the programs came from the cache within eight visits: ${JSON.stringify(log)}`);
+    for (let i = 0; i < 5; i++) { v = await visit(); log.push(v); if (i > 0 && v.left === 0 && v.ms < 800) break; }
+    assert.ok(v.left === 0 && v.ms < 800, `the programs came from the cache within five visits: ${JSON.stringify(log)}`);
+    // a visit that may take them waits for no straggler: the wait on them comes at the first frame, and only the first compiles here (at two as the only rule, 1.1 to 1.7 s with three to five left)
+    for (const w of log) if (w.few === 5 && w.left <= 5) assert.ok(w.ms < 800, `a returning visit waited for its stragglers: ${JSON.stringify(log)}`);
+    // only a visit that sat through a wait for stragglers is remembered, the shortest: not the visits that had none left
+    assert.equal(v.memory, Math.min(...log.filter((w) => w.left > w.few).map((w) => w.ms)), `the shortest wait remembered: ${JSON.stringify(log)}`);
     const again = await visit();
     assert.ok(again.left === 0 && again.ms < 800, `and stayed there: ${JSON.stringify([...log, again])}`);
     console.log('first-draw visits', JSON.stringify([...log, again]));
   } finally { await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }).catch(() => {}); }
+});
+/* what a browser may take at its first frame, read from the rule and not from a driver's timing, so it runs on the runner too */
+test('a browser that has sat through a short wait on this tier may take five stragglers at its first frame; a first visit, only slow waits, another tier and a touch device keep to two', async () => {
+  /* the few a visit is allowed, from the memory going in (what it writes is timing: the two GPU cases above read that) */
+  const few = async (c, tier, memory) => {
+    await c.addInitScript(([t, m]) => { try { localStorage.setItem('gen2-quality', t); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-first-draw-waits', m); } catch {} }, [tier, JSON.stringify(memory)]);
+    const { page, errors } = await open('build', { context: c, query: '&firstdraw=on' });
+    await page.waitForFunction(() => window.__GEN2_VIEWER__.firstDrawState.held === false, null, { timeout: 180_000 }).catch(() => assert.fail(`${tier}: the first frame never came`));
+    const r = await page.evaluate(() => window.__GEN2_VIEWER__.firstDrawState.marks.few);
+    assert.deepEqual(clean(errors), [], tier);
+    await page.close();
+    return r;
+  };
+  const c = await freshContext();
+  assert.equal(await few(c, 'fast', {}), 2, 'a first visit keeps to two');
+  assert.equal(await few(c, 'fast', { fast: 1000 }), 5, 'back on that tier after a short wait it may take five');
+  assert.equal(await few(c, 'fast', { fast: 9000 }), 2, 'only slow waits keep to two: five would hold the page about that long');
+  assert.equal(await few(c, 'balanced', { fast: 1000 }), 2, 'another tier has its own programs');
+  await c.close();
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await phone.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-sheet-nudged', '1'); } catch {} });
+  assert.equal(await few(phone, 'fast', { fast: 1000 }), 2, 'a touch device keeps to two: no phone was measured');
+  await phone.close();
 });
 
 test('the front door: the bare address opens Build; a kit link and a part preview keep the old viewer, whose Customize hands the build to Build', async () => {
