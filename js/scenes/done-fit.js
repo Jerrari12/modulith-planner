@@ -396,6 +396,166 @@ export function deskLook(choice, light, share = null) {
 export const BEAT = { holdMs: 11000, dipInMs: 1100, dipOutMs: 800, blackMs: 350, maxFrameMs: 50 };
 export const FLOOR_MM = 18;   // no camera lower than this over the desk top (the low shot, on any build)
 
+/* NO TWO SHOWINGS ALIKE (Joey 2026-11-01: "it starts feeling a bit repetitive after a while, like same camera angles, same
+ * points of interest"; "maybe we can randomize that to not rush certain scenes"). The grammar's numbers are each shot's
+ * centre; a showing draws its own hold, angle, lens, side and subject around them, by the visit's seed.
+ *
+ * THE HOLDS, ms, by what a shot has to show: a glance at the top or a label; a long look at a slow truck or a pull out to the
+ * whole build. The detail shot's shortest still fits its drawer moment (drawerBeat). */
+export const SHOT_HOLD = {
+  hero: [10000, 22000], push: [8000, 18000], low: [6000, 14000], detail: [12000, 20000], slide: [10000, 26000], top: [5000, 12000],
+  wide: [7000, 16000], macro: [9000, 14000], side: [8000, 20000], label: [5000, 9000], glide: [5000, 12000], pullback: [16000, 30000],
+  dolly: [9000, 14000], mugs: [7000, 11000], ant: [10000, 18000], heli: [14000, 24000], crane: [12000, 20000],
+};
+/* a hold for this showing, `gap` ms or more from the last one where a few draws find it, so the rhythm is felt */
+export function drawHold(name, rng, prev = null, gap = 3000) {
+  const r = SHOT_HOLD[name] || [BEAT.holdMs, BEAT.holdMs];
+  const draw = () => Math.round(r[0] + rng() * (r[1] - r[0]));
+  let t = draw();
+  for (let i = 0; i < 5 && prev != null && Math.abs(t - prev) < gap; i++) t = draw();
+  return t;
+}
+/* How far a showing's move goes for its length (`pace`): a short hold takes the part of the path that keeps the shot's speed;
+ * a long one goes further and slower, by the root of the ratio, so it is not rushed. A shot whose ends matter has no `pace`, and
+ * a shortest hold that keeps its speed near the beat's. */
+export function paceOf(holdMs, b = BEAT) {
+  const r = (holdMs + b.dipInMs + b.dipOutMs) / (b.holdMs + b.dipInMs + b.dipOutMs);
+  return r < 1 ? r : Math.sqrt(r);
+}
+/* THE ANGLES, per shot: `az`, `el` degrees either way; `lens` the fov's factor (the fill is kept, so the framing holds and the
+ * perspective changes); `fill` its factor; `mirror` it may run from the other side; `pace` its path follows paceOf, up to
+ * `paceMax` (the glide's row ends where it ends); `spread` other keys of the shot, either way. The macro and the pullback keep their lens and distance: their relief is compiled ahead
+ * for those (warmAhead), and nearer or longer would bring a compile to the cut. */
+export const SHOT_VARY = {
+  hero: { az: 8, el: 3, lens: [0.8, 1.3], fill: [0.92, 1.1], pace: true },
+  push: { az: 10, el: 3, lens: [0.8, 1.5], mirror: true, pace: true },
+  low: { az: 10, el: 2, lens: [0.8, 1.2], fill: [0.9, 1.08], mirror: true, pace: true },
+  detail: { az: 8, el: 3, lens: [0.8, 1.4], mirror: true, pace: true },
+  slide: { az: 6, el: 3, lens: [0.8, 1.5], fill: [0.9, 1.15], pace: true },
+  top: { az: 12, el: 8, lens: [0.8, 1.4], fill: [0.9, 1.1], mirror: true, pace: true },
+  wide: { az: 10, el: 2, lens: [0.85, 1.2], fill: [0.9, 1.1], pace: true },
+  macro: { az: 5, el: 2, mirror: true },
+  side: { az: 8, el: 3, lens: [0.8, 1.5], fill: [0.9, 1.12], mirror: true, pace: true },
+  label: { az: 5, el: 2, lens: [0.9, 1.3], pace: true },
+  glide: { az: 6, el: 2, lens: [1, 1.3], mirror: true, pace: true, paceMax: 1 },
+  pullback: { az: 6, el: 2, mirror: true },
+  dolly: { az: 10, el: 3, mirror: true },
+  mugs: { az: 6, el: 2 },
+  ant: { lens: [0.92, 1.12], mirror: true, spread: { standoff: 0.25, walkX: 0.14, lookY: 0.07 } },
+  heli: { az: 8, el: 4, lens: [0.9, 1.15], fill: [0.92, 1.08] },
+  crane: { az: 10, lens: [0.9, 1.2], mirror: true },
+};
+/* This showing's two ends: new objects, the shot's base left as it is. `scale`: paceOf for the showing's hold. `mirror` is
+ * reported: a mirrored macro or pullback takes the near corner of the far side (fitShot, `corner`). */
+export function varyShot(shot, rng, { scale = 1 } = {}) {
+  const base = shot.base || shot, from = { ...base.from }, to = base.to ? { ...base.to } : undefined, v = SHOT_VARY[shot.name];
+  if (!v || !to) return { from, to, mirror: false };
+  const span = (d) => (d ? (rng() * 2 - 1) * d : 0), between = (r) => (r ? r[0] + rng() * (r[1] - r[0]) : 1);
+  const paced = Math.min(scale, v.paceMax || Infinity);
+  if (v.pace && paced !== 1) for (const key of ['az', 'el', 'fill', 'targetLift', 'shiftX']) {
+    if (from[key] == null || to[key] == null) continue;
+    const mid = (from[key] + to[key]) / 2;
+    from[key] = mid + (from[key] - mid) * paced; to[key] = mid + (to[key] - mid) * paced;
+  }
+  const az = span(v.az), el = span(v.el), lens = between(v.lens), fill = between(v.fill), mirror = !!v.mirror && rng() < 0.5;
+  const more = Object.entries(v.spread || {}).map(([key, d]) => [key, span(d)]);
+  for (const e of [from, to]) {
+    if (e.az != null) e.az = (e.az + az) * (mirror ? -1 : 1);
+    if (e.el != null) e.el += el;
+    if (e.fovV != null) e.fovV *= lens;
+    if (e.fill != null) e.fill *= fill;
+    for (const [key, d] of more) if (e[key] != null) e[key] += d;
+    if (mirror) {
+      if (e.aim === 'drawer-front') e.corner = 'right';
+      for (const key of ['walkX', 'lookX']) if (e[key] != null) e[key] = -e[key];
+    }
+  }
+  return { from, to, mirror };
+}
+/* The next from a bag: everything in `list` once before anything comes again, and never the same twice running where there is
+ * a choice. `state`: { bag, last }, kept by the caller. */
+export function bagNext(state, list, rng) {
+  if (!list.length) return null;
+  if (!state.bag.length) {
+    state.bag = [...list];
+    for (let i = state.bag.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [state.bag[i], state.bag[j]] = [state.bag[j], state.bag[i]]; }
+    if (state.bag.length > 1 && state.bag[state.bag.length - 1] === state.last) [state.bag[0], state.bag[state.bag.length - 1]] = [state.bag[state.bag.length - 1], state.bag[0]];
+  }
+  return (state.last = state.bag.pop());
+}
+/* WHETHER A PROP STANDS IN THE WAY (a drawn angle has no one to check it): the segments from the camera to the aim and to four
+ * points round it, `spread` of the frame's half-size out and held inside `within` (the build's box: a prop beside the build is
+ * only in the picture, one in front of it is in the way), against `boxes` grown by `grow` mm; or the camera inside one. Boxes
+ * are { min, max } in mm, the props', not the room's shell. */
+export function viewBlocked(cam, boxes, aspect = 16 / 9, { within = null, spread = 0.4, pull = 0.7, grow = 8 } = {}) {
+  const p = cam.position, t = cam.target, f = { x: t.x - p.x, y: t.y - p.y, z: t.z - p.z }, d = Math.hypot(f.x, f.y, f.z);
+  if (!(d > 0)) return false;
+  const rl = Math.hypot(f.z, f.x) || 1, right = { x: -f.z / rl, y: 0, z: f.x / rl };
+  const up = { x: (right.y * f.z - right.z * f.y) / d, y: (right.z * f.x - right.x * f.z) / d, z: (right.x * f.y - right.y * f.x) / d };
+  const h = d * Math.tan(((cam.fov || 36) * Math.PI) / 360), w = h * aspect;
+  // on the build's front, then `pull` of the way from the aim: a prop lapping the build's edge is framing, not in the way
+  const inside = (v, a) => t[a] + pull * ((within ? Math.min(within.max[a], Math.max(within.min[a], v)) : v) - t[a]);
+  const points = [[0, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => ({ x: inside(t.x + spread * (a * w * right.x + b * h * up.x), 'x'), y: inside(t.y + spread * (a * w * right.y + b * h * up.y), 'y'), z: within ? within.max.z : t.z + spread * (a * w * right.z + b * h * up.z) }));
+  const crosses = (q, b) => {   // the slab test: does p -> q enter the grown box before it ends?
+    let t0 = 0, t1 = 1;
+    for (const a of ['x', 'y', 'z']) {
+      const lo = b.min[a] - grow, hi = b.max[a] + grow, dd = q[a] - p[a];
+      if (Math.abs(dd) < 1e-9) { if (p[a] < lo || p[a] > hi) return false; continue; }
+      let e0 = (lo - p[a]) / dd, e1 = (hi - p[a]) / dd;
+      if (e0 > e1) [e0, e1] = [e1, e0];
+      t0 = Math.max(t0, e0); t1 = Math.min(t1, e1);
+      if (t0 > t1) return false;
+    }
+    return true;
+  };
+  return boxes.some((b) => points.some((q) => crosses(q, b)));
+}
+/* whether the camera itself stands in a prop's box (a move's whole path, where viewBlocked looks at its middle only) */
+export function cameraInProp(cam, boxes, grow = 8) {
+  const p = cam.position;
+  return boxes.some((b) => ['x', 'y', 'z'].every((a) => p[a] >= b.min[a] - grow && p[a] <= b.max[a] + grow));
+}
+/* THE RARE SHOTS (Joey 2026-11-01: "imagine miniature cameras as if you were ant sized standing near the front edge of the table
+ * looking around at the build like it's a giant building ... the perspective of a tiny helicopter focused on the build (not an
+ * actual helicopter but the feel)"). A showing's own, not the cycle's: about one a cycle in RARE_SHARE of them, the rare ones
+ * in turn. Each may be left out where its view is blocked.
+ * - ant: on the desk (`eyeMm` over it, under FLOOR_MM on purpose), `standoff` build heights out from the front, or at the desk's
+ *   front edge if that comes first, a wide lens looking up and turning its head (`lookX`, `lookY`: the aim as shares of the
+ *   build's width from its middle and of its height), walking a little (`walkX`);
+ * - heli: a wide orbit, banking into its turn and hovering unsteadily (hoverAt);
+ * - crane: from level with the build, up and over to look down on its top.
+ * A wall build has neither yet: looking up from the desk the ant sees its underside and, past the walls' tops, the room's missing
+ * ceiling; the crane would look down over the wall. */
+export const RARE_SHARE = 0.5;
+const ANT = { fovV: 68, eyeMm: 7 };
+const HELI = { hover: true, reversible: true };
+export const RARE_SHOTS = {
+  tabletop: [
+    { name: 'ant', from: { ...ANT, standoff: 1.0, walkX: -0.1, lookX: -0.3, lookY: 0.42 }, to: { ...ANT, standoff: 0.86, walkX: 0.04, lookX: 0.28, lookY: 0.72 }, rare: true, reversible: true },
+    { name: 'heli', from: { az: -58, el: 22, fovV: 34, fill: 0.6, targetLift: -0.06 }, to: { az: 56, el: 30, fovV: 34, fill: 0.68, targetLift: -0.06 }, rare: true, ...HELI },
+    { name: 'crane', from: { az: 8, el: 3, fovV: 32, fill: 0.6, targetLift: 0.02 }, to: { az: 16, el: 74, fovV: 32, fill: 0.56 }, rare: true },
+  ],
+  wall: [
+    { name: 'heli', from: { az: -52, el: 2, fovV: 34, fill: 0.6 }, to: { az: 50, el: 10, fovV: 34, fill: 0.66 }, rare: true, ...HELI },
+  ],
+  'under-table': [
+    { name: 'heli', from: { az: -46, el: 0, fovV: 34, fill: 0.6 }, to: { az: 44, el: 5, fovV: 34, fill: 0.66 }, rare: true, ...HELI },
+  ],
+};
+/* The helicopter's unsteadiness at `t` ms: an offset in mm and a roll in degrees, from sines that never line up, `seed` (0..1)
+ * setting where they start. It banks into the turn (`bank`: signed by the way the shot's moving), fullest at the middle of the
+ * move (`k`), level at its ends. */
+export function hoverAt(t, k, { bank = 0, seed = 0, mm = 5, rollDeg = 1.4 } = {}) {
+  const s = t / 1000, ph = seed * Math.PI * 2;
+  const wave = (f, p) => Math.sin(s * f * Math.PI * 2 + ph * p + p);
+  return {
+    x: mm * (0.6 * wave(0.23, 1) + 0.4 * wave(0.61, 2)),
+    y: mm * (0.55 * wave(0.31, 3) + 0.45 * wave(0.83, 4)),
+    z: mm * (0.6 * wave(0.19, 5) + 0.4 * wave(0.53, 6)),
+    roll: bank * Math.sin(Math.PI * Math.min(1, Math.max(0, k))) + rollDeg * (0.6 * wave(0.27, 7) + 0.4 * wave(0.71, 8)),
+  };
+}
+
 /* A drift's verdict from the frames it drew: too slow when it drew fewer frames than a drift at `maxFrameMs` a frame
  * (20 fps) would have over its `moveMs` (a potato or a phone: it locks off from then on, see grammarMode). Counting
  * frames against the drift's length, rather than averaging intervals, catches the slowest device too: a machine that
@@ -435,12 +595,27 @@ export function grammarMode({ tier, reduced = false, sequence = true, slow = fal
 export const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
 /* THE DRAWER MOMENT (the style doc: "every ~15-20 s one labeled drawer slides out ~40 %, holds, and closes, timed with
- * the detail shot"). In the detail shot's hold: out at `outMs`, open for `openMs`, back before the drift. The stage's
- * slide tweens take 380 ms out and 320 ms back (slideDrawer, js/main.js); a hold too short for the whole beat has none. */
-export const DRAWER = { outMs: 700, openMs: 3200, fraction: 0.4, slideOutMs: 380, slideBackMs: 320 };
-export function drawerBeat(holdMs, d = DRAWER) {
-  const openAt = d.outMs, closeAt = openAt + d.slideOutMs + d.openMs;
-  return closeAt + d.slideBackMs + 400 <= holdMs ? { openAt, closeAt } : null;
+ * the detail shot"). In the detail shot's hold: out at `outMs`, open for `openMs`, back before the drift. A hold too short for
+ * the whole beat has none. The slide is the scene's own (Joey 2026-11-01: "drawers open way too fast, they feel unnatural"; the
+ * stage's 380 ms out and 320 ms back are a tap's answer): a hand's pull, and a push the magnets finish. `rng`: a longer hold
+ * spends what it has over by starting later and staying open longer, a share each. */
+export const DRAWER = { outMs: 700, openMs: 3200, fraction: 0.4, slideOutMs: 1800, slideBackMs: 1400, snap: 0.06, snapTime: 0.05 };
+export function drawerBeat(holdMs, d = DRAWER, rng = null) {
+  const spare = holdMs - (d.outMs + d.slideOutMs + d.openMs + d.slideBackMs + 400);
+  if (spare < 0) return null;
+  const openAt = d.outMs + (rng ? rng() * 0.45 * spare : 0), closeAt = openAt + d.slideOutMs + d.openMs + (rng ? rng() * 0.45 * spare : 0);
+  return { openAt, closeAt };
+}
+const smooth = (x) => x * x * (3 - 2 * x);
+/* the pull, 0..1 of the slide at 0..1 of its time: gets going early and comes to rest slowly, as a hand does */
+export const drawerOutAt = (k) => smooth(Math.pow(Math.min(1, Math.max(0, k)), 0.75));
+/* the push: slowing as it nears the case until, `snap` of the way from shut, the magnets take it the rest of the way in the
+ * last `snapTime` of its time, arriving at speed. (A tween's raw clock: an eased one cannot arrive abruptly.) */
+export function drawerBackAt(k, d = DRAWER) {
+  const c = Math.min(1, Math.max(0, k)), body = 1 - d.snapTime;
+  if (c < body) return (1 - d.snap) * smooth(c / body);
+  const x = (c - body) / d.snapTime;
+  return 1 - d.snap + d.snap * x * x;
 }
 
 /* The aim for a close-up on one unit: its box centre as targetShift fractions of the build's box (what shotCamera takes). */
@@ -471,14 +646,21 @@ export function pickDrawerUnit(units, build) {
 /* The glide's row (2026-10-25): the top row of the fronts' grips and handles, `boxes` their boxes in mm: those whose
  * centre lies within `tol` of the highest one, their span across, their height and the front plane. Without any, a line
  * across the build's front a fifth of its height down from the top, inset by 15 % each side. */
-export function rowOf(boxes, build, tol = 6) {
-  const ok = (boxes || []).filter((b) => b && b.max.x > b.min.x);
-  if (!ok.length) {
+export function rowOf(boxes, build, tol = 6) { return rowsOf(boxes, build, tol)[0]; }
+/* ... and every row, top first (2026-11-01: the glide takes a different one each time round) */
+export function rowsOf(boxes, build, tol = 6) {
+  let left = (boxes || []).filter((b) => b && b.max.x > b.min.x);
+  if (!left.length) {
     const w = build.max.x - build.min.x;
-    return { x0: build.min.x + 0.15 * w, x1: build.max.x - 0.15 * w, y: build.max.y - 0.2 * (build.max.y - build.min.y), z: build.max.z };
+    return [{ x0: build.min.x + 0.15 * w, x1: build.max.x - 0.15 * w, y: build.max.y - 0.2 * (build.max.y - build.min.y), z: build.max.z }];
   }
-  const cy = (b) => (b.min.y + b.max.y) / 2, top = Math.max(...ok.map(cy)), row = ok.filter((b) => top - cy(b) <= tol);
-  return { x0: Math.min(...row.map((b) => b.min.x)), x1: Math.max(...row.map((b) => b.max.x)), y: row.reduce((a, b) => a + cy(b), 0) / row.length, z: Math.max(...row.map((b) => b.max.z)) };
+  const cy = (b) => (b.min.y + b.max.y) / 2, rows = [];
+  while (left.length) {
+    const top = Math.max(...left.map(cy)), row = left.filter((b) => top - cy(b) <= tol);
+    left = left.filter((b) => top - cy(b) > tol);
+    rows.push({ x0: Math.min(...row.map((b) => b.min.x)), x1: Math.max(...row.map((b) => b.max.x)), y: row.reduce((a, b) => a + cy(b), 0) / row.length, z: Math.max(...row.map((b) => b.max.z)) });
+  }
+  return rows;
 }
 
 /* A slow move's easing: a half cosine, gentle at both ends (a cubic's middle is too quick for a move this long). */
@@ -543,7 +725,7 @@ export function mixShot(shot, k) {
   const a = shot.from, b = shot.to;
   if (!b) return { ...a };
   const m = { ...a };
-  for (const key of ['az', 'el', 'fovV', 'fill', 'distMm', 'targetLift', 'shiftX']) if (a[key] != null && b[key] != null) m[key] = a[key] + (b[key] - a[key]) * k;
+  for (const key of ['az', 'el', 'fovV', 'fill', 'distMm', 'targetLift', 'shiftX', 'standoff', 'walkX', 'lookX', 'lookY']) if (a[key] != null && b[key] != null) m[key] = a[key] + (b[key] - a[key]) * k;
   return m;
 }
 
@@ -552,11 +734,20 @@ export function mixShot(shot, k) {
  * inside the room (clampToInterior) and above the desk top (FLOOR_MM over `floorY`, the desk top's height: 0 for a build on
  * it, the room's own for a wall build; an under-table build's shots go below the desk top, so it passes -Infinity and the
  * room's floor is the interior's). */
-export function fitShot(spec, box, view, interior, aims = {}, { floorY = 0 } = {}) {
+export function fitShot(spec, box, view, interior, aims = {}, { floorY = 0, deskFrontZ = Infinity } = {}) {
   const s = { ...spec };
-  if (s.aim === 'drawer' && aims.drawer) s.targetShift = aims.drawer;
+  /* an ant on the desk (RARE_SHOTS): out from the build's front, or at the desk's front edge, looking up at it. Not fitted to a
+     frame and under FLOOR_MM on purpose */
+  if (s.eyeMm != null) {
+    const w = box.max.x - box.min.x, h = box.max.y - box.min.y, cx = (box.min.x + box.max.x) / 2;
+    const position = { x: cx + w * s.walkX, y: floorY + s.eyeMm, z: Math.max(box.max.z + 30, Math.min(box.max.z + s.standoff * Math.max(h, 100), deskFrontZ - 14)) };   // never into the build, whatever the desk leaves
+    const target = { x: cx + w * s.lookX, y: box.min.y + h * s.lookY, z: box.max.z };
+    return { position, target, fov: s.fovV, distance: Math.hypot(position.x - target.x, position.y - target.y, position.z - target.z), radius: Math.hypot(w, h, box.max.z - box.min.z) / 2, fill: 1 };
+  }
+  if (s.aim === 'drawer' && aims.drawerAt) s.targetAt = aims.drawerAt;   // a showing's own drawer, at any height (done.js, 2026-11-01)
+  else if (s.aim === 'drawer' && aims.drawer) s.targetShift = aims.drawer;
   if (s.aim === 'drawer-front') {
-    if (aims.front) s.targetAt = aims.front;
+    if (aims.front) s.targetAt = s.corner === 'right' && aims.frontRight ? aims.frontRight : aims.front;
     else { delete s.distMm; s.fill = 1.2; }
   }
   // a label: aimed at its centre and fitted to its own box (`aims.label`: { box }; done.js drops the shot without one)

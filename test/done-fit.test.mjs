@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, SPOOL_HIGH, SPOOL_STEP, SPOOL_HEADROOM, stackCap, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook, roomFloor, ROOM_FLOOR_HEX } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, rowsOf, around, SHOT_HOLD, SHOT_VARY, drawHold, paceOf, varyShot, bagNext, viewBlocked, cameraInProp, RARE_SHOTS, RARE_SHARE, hoverAt, drawerOutAt, drawerBackAt, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, SPOOL_HIGH, SPOOL_STEP, SPOOL_HEADROOM, stackCap, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook, roomFloor, ROOM_FLOOR_HEX } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -250,6 +250,196 @@ test('driftTooSlow: a drift drawn under 20 fps on average turns the sequence to 
   assert.equal(driftTooSlow(new Array(69).fill(50), 50, 3500), false, '70 frames over 3.5 s is exactly 20 fps: kept');
   assert.equal(driftTooSlow(new Array(17).fill(190), 50, 3500), true, '18 frames over 3.5 s (SwiftShader on a desktop): too slow');
   assert.equal(driftTooSlow([600, 650], 50, 2000), true, 'three frames over 2 s (SwiftShader on a laptop): too slow, where the mean rule had no evidence');
+});
+
+test('the scene\'s drawer (Joey 2026-11-01: "way too fast"): a hand\'s pull that comes to rest slowly, a push the magnets finish at speed, and a longer hold spends its time on the moment', () => {
+  assert.ok(DRAWER.slideOutMs >= 1500 && DRAWER.slideBackMs >= 1100, 'seconds, not a tap\'s 380 and 320 ms');
+  const walk = (f, n = 2000) => Array.from({ length: n + 1 }, (_, i) => f(i / n));
+  for (const [name, f] of [['out', drawerOutAt], ['back', drawerBackAt]]) {
+    const v = walk(f);
+    assert.equal(v[0], 0, `${name} starts at rest`); close(v[v.length - 1], 1, 1e-12, `${name} ends at the end of its slide`);
+    assert.ok(v.every((x, i) => i === 0 || x >= v[i - 1] - 1e-12), `${name} never goes back on itself`);
+    close(f(-1), 0, 1e-12, `${name} before its start`); close(f(2), 1, 1e-12, `${name} past its end`);
+  }
+  assert.ok(drawerOutAt(0.45) > 0.5, `the pull is past half way before half its time (${drawerOutAt(0.45).toFixed(3)})`);
+  assert.ok(drawerOutAt(1) - drawerOutAt(0.98) < 0.005, 'and comes to rest, not to a stop');
+  const body = 1 - DRAWER.snapTime;
+  close(drawerBackAt(body), 1 - DRAWER.snap, 1e-9, 'the magnets take over this close to shut');
+  assert.ok(drawerBackAt(body) - drawerBackAt(body - 0.01) < 0.001, 'the push has all but stopped there');
+  assert.ok(drawerBackAt(1) - drawerBackAt(0.99) > 0.02, `and the last of it arrives at speed (${(drawerBackAt(1) - drawerBackAt(0.99)).toFixed(3)} in the last 1 %)`);
+  assert.ok(DRAWER.snap * 171.5 * DRAWER.fraction < 6, 'a few mm of the 69 mm slide on a 185 drawer');
+  // the beat: a long hold's spare time, a share to the wait and a share to the time open, never past the hold
+  const need = DRAWER.outMs + DRAWER.slideOutMs + DRAWER.openMs + DRAWER.slideBackMs + 400;
+  assert.equal(drawerBeat(need - 1), null, 'a hold short of the whole beat has none');
+  assert.deepEqual(drawerBeat(need), { openAt: DRAWER.outMs, closeAt: DRAWER.outMs + DRAWER.slideOutMs + DRAWER.openMs }, 'one just long enough has no choice');
+  const late = drawerBeat(20000, DRAWER, () => 1), early = drawerBeat(20000, DRAWER, () => 0);
+  assert.ok(late.openAt > early.openAt && late.closeAt - late.openAt > early.closeAt - early.openAt, 'a drawn beat starts later and stays open longer');
+  assert.ok(late.closeAt + DRAWER.slideBackMs + 400 <= 20000, 'and is back before the hold ends, whatever it draws');
+});
+
+const allShots = () => Object.entries({ ...GRAMMAR }).flatMap(([m, l]) => [...l, ...(RARE_SHOTS[m] || [])].map((s) => ({ ...s, mount: m })));
+
+test('no two showings alike: each shot\'s hold, drawn from its own range and away from the last one; a short hold takes the part of the path that keeps its speed, a long one goes further and slower', () => {
+  for (const s of allShots()) {
+    const r = SHOT_HOLD[s.name];
+    assert.ok(r && r[0] >= 5000 && r[1] > r[0], `${s.name} has a range of 5 s or more at its shortest`);
+    if (s.drawer) assert.ok(drawerBeat(r[0]), `${s.name}: its shortest still has the drawer moment`);
+  }
+  const short = SHOT_HOLD.label[1], long = SHOT_HOLD.pullback[0];
+  assert.ok(short < long, 'a glance and a long look do not overlap');
+  const rng = rngFrom(7);
+  let prev = null, near = 0;
+  const holds = Array.from({ length: 400 }, () => { const t = drawHold('slide', rng, prev); if (prev != null && Math.abs(t - prev) < 3000) near++; prev = t; return t; });
+  assert.ok(holds.every((t) => t >= SHOT_HOLD.slide[0] && t <= SHOT_HOLD.slide[1]), 'in its range');
+  assert.ok(new Set(holds).size > 300, 'all over it');
+  assert.ok(near < 8, `a hold keeps away from the last one (${near} of 400 within 3 s)`);
+  assert.equal(drawHold('no such shot', rng), BEAT.holdMs, 'a shot with no range keeps the beat');
+  close(paceOf(BEAT.holdMs), 1, 1e-12, 'the beat\'s own hold is the path as written');
+  close(paceOf(5000), (5000 + BEAT.dipInMs + BEAT.dipOutMs) / (BEAT.holdMs + BEAT.dipInMs + BEAT.dipOutMs), 1e-12, 'a short one: the same speed');
+  const lv = (22000 + BEAT.dipInMs + BEAT.dipOutMs) / (BEAT.holdMs + BEAT.dipInMs + BEAT.dipOutMs);
+  close(paceOf(22000), Math.sqrt(lv), 1e-12, 'a long one: further, and slower');
+});
+
+test('no two showings alike: a shot\'s angle, lens and side are drawn round its own numbers, the base left alone; a mirrored macro takes the far corner; what the relief is compiled for stays', () => {
+  const shot = (n, m = 'tabletop') => { const s = [...GRAMMAR[m], ...(RARE_SHOTS[m] || [])].find((x) => x.name === n); return { ...s, base: { from: { ...s.from }, to: s.to ? { ...s.to } : undefined } }; };
+  for (const s of allShots()) assert.ok(SHOT_VARY[s.name], `${s.name} has its ranges`);
+  const rng = rngFrom(11);
+  const push = shot('push'), was = JSON.stringify(push.base), v = SHOT_VARY.push;
+  const draws = Array.from({ length: 200 }, () => varyShot(push, rng));
+  assert.equal(JSON.stringify(push.base), was, 'the base is not touched');
+  assert.ok(new Set(draws.map((d) => JSON.stringify(d))).size === 200, 'no two alike');
+  assert.ok(draws.some((d) => d.mirror) && draws.some((d) => !d.mirror), 'both sides');
+  for (const d of draws) {
+    const sign = d.mirror ? -1 : 1;
+    assert.ok(Math.abs(sign * d.from.az - push.base.from.az) <= v.az + 1e-9, 'its az within the range');
+    close(sign * (d.to.az - d.from.az), push.base.to.az - push.base.from.az, 1e-9, 'one offset for both ends: the move is still the move');
+    close(d.to.el - d.from.el, push.base.to.el - push.base.from.el, 1e-9, 'and its el');
+    assert.ok(Math.abs(d.from.el - push.base.from.el) <= v.el + 1e-9, 'its el within the range');
+    assert.ok(d.from.fovV >= push.base.from.fovV * v.lens[0] - 1e-9 && d.from.fovV <= push.base.from.fovV * v.lens[1] + 1e-9, 'its lens within the range');
+    close(d.from.fovV, d.to.fovV, 1e-9, 'one lens');
+  }
+  const macro = shot('macro');
+  for (let i = 0; i < 60; i++) {
+    const d = varyShot(macro, rng);
+    assert.equal(d.from.distMm, macro.base.from.distMm); assert.equal(d.to.distMm, macro.base.to.distMm, 'the macro keeps its distance');
+    assert.equal(d.from.fovV, macro.base.from.fovV, 'and its lens: nearer or longer would compile the relief at the cut');
+    assert.equal(d.from.corner, d.mirror ? 'right' : undefined, 'mirrored, it aims at the far corner');
+    assert.equal(Math.sign(d.from.az), d.mirror ? 1 : -1, 'from the corner\'s own side');
+  }
+  const pull = shot('pullback');
+  for (let i = 0; i < 40; i++) { const d = varyShot(pull, rng, { scale: 1.5 }); assert.equal(d.from.distMm, 150); assert.equal(d.from.fovV, pull.base.from.fovV); close(d.to.az - d.from.az, (d.mirror ? -1 : 1) * (pull.base.to.az - pull.base.from.az), 1e-9, 'a blended shot keeps its ends'); }
+  const hero = shot('hero');
+  for (const d of Array.from({ length: 40 }, () => varyShot(hero, rng))) assert.equal(d.mirror, false, 'the hero stays on the side the room was lit for');
+  // the pace: about the middle of the move, the move's length scaled
+  const side = shot('side');
+  const noRng = () => 0.5, half = varyShot(side, noRng, { scale: 0.5 });
+  const fullLen = side.base.to.az - side.base.from.az;
+  close(half.to.az - half.from.az, 0.5 * fullLen, 1e-9, 'half the path');
+  close((half.to.az + half.from.az) / 2, (side.base.to.az + side.base.from.az) / 2, 1e-9, 'about its middle');
+  // the glide's short showing takes part of the row at its speed; a long one stops at the row's ends
+  const glide = shot('glide');
+  const gs = varyShot(glide, noRng, { scale: 0.5 }), gl = varyShot(glide, noRng, { scale: 1.5 });
+  close(gs.to.shiftX - gs.from.shiftX, 0.5 * (glide.base.to.shiftX - glide.base.from.shiftX), 1e-9, 'a short glide: part of the row');
+  close(gl.to.shiftX - gl.from.shiftX, glide.base.to.shiftX - glide.base.from.shiftX, 1e-9, 'a long one: the whole row, no further');
+  // a shot with no pace keeps its speed near the beat's at its shortest
+  for (const n of ['macro', 'dolly', 'pullback', 'mugs']) assert.ok(!SHOT_VARY[n].pace && SHOT_HOLD[n][0] >= 7000, `${n}: its ends matter, and its shortest hold is not a rush`);
+  const unknown = { name: 'no such shot', from: { az: 1 }, to: { az: 2 } };
+  assert.deepEqual(varyShot(unknown, rng), { from: { az: 1 }, to: { az: 2 }, mirror: false }, 'a shot with no ranges is as written');
+  // a showing's drawer: the aim's height is its own, and a mirrored corner its own side
+  const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } }, view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
+  const aims = { drawerAt: { x: 44, y: 100, z: 10 }, front: { x: -80, y: 120, z: 107 }, frontRight: { x: 80, y: 120, z: 107 } };
+  assert.deepEqual(fitShot(mixShot(shot('detail'), 0.5), box, view, null, aims).target, aims.drawerAt, 'the detail looks at this showing\'s drawer, at its height');
+  assert.deepEqual(fitShot({ ...mixShot(macro, 0.5), corner: 'right' }, box, view, null, aims).target, aims.frontRight, 'a mirrored macro its far corner');
+  assert.deepEqual(fitShot(mixShot(macro, 0.5), box, view, null, aims).target, aims.front, 'and otherwise the near one');
+  assert.deepEqual(fitShot({ ...mixShot(macro, 0.5), corner: 'right' }, box, view, null, { front: aims.front }).target, aims.front, 'with no far corner known, the near one');
+});
+
+test('no two showings alike: the next drawer comes from a bag, each once before any comes again, never the same twice running', () => {
+  const rng = rngFrom(3), list = ['a', 'b', 'c', 'd'], st = { bag: [], last: null };
+  const seen = Array.from({ length: 400 }, () => bagNext(st, list, rng));
+  for (let i = 0; i + 4 <= seen.length; i += 4) assert.equal(new Set(seen.slice(i, i + 4)).size, 4, 'each once a round');
+  assert.ok(seen.every((x, i) => i === 0 || x !== seen[i - 1]), 'never twice running');
+  assert.notDeepEqual(seen.slice(0, 4), seen.slice(4, 8), 'a different order each round');
+  assert.equal(bagNext({ bag: [], last: null }, [], rng), null, 'nothing to draw');
+  const one = { bag: [], last: null };
+  assert.deepEqual([bagNext(one, ['x'], rng), bagNext(one, ['x'], rng)], ['x', 'x'], 'one drawer is that drawer every time');
+  assert.equal(bagNext({ bag: ['first'], last: null }, list, rng), 'first', 'a seeded bag gives its own first');
+});
+
+test('whether a prop stands in the way: one in front of the build does, one beside it is only in the picture, nor does one behind the camera or the build; a camera inside one does', () => {
+  const build = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
+  const cam = { position: { x: 0, y: 100, z: 900 }, target: { x: 0, y: 67, z: 10 }, fov: 30 };
+  const at = (x, y, z, r = 30) => ({ min: { x: x - r, y: y - r, z: z - r }, max: { x: x + r, y: y + r, z: z + r } });
+  const blocked = (b, c = cam) => viewBlocked(c, [b], 16 / 9, { within: build });
+  assert.equal(blocked(at(0, 80, 500)), true, 'on the line to the build');
+  assert.equal(blocked(at(40, 80, 300)), true, 'in front of a part of its face');
+  assert.equal(blocked(at(400, 60, 100)), false, 'beside the build');
+  assert.equal(blocked(at(0, 60, 1100)), false, 'behind the camera');
+  assert.equal(blocked(at(0, 60, -300)), false, 'behind the build');
+  assert.equal(blocked(at(0, 100, 900)), true, 'the camera inside it');
+  assert.equal(blocked(at(135, 60, 300, 18)), false, 'lapping the build\'s edge is framing');
+  assert.equal(viewBlocked(cam, [], 16 / 9, { within: build }), false, 'no props, nothing in the way');
+  assert.equal(cameraInProp(cam, [at(0, 100, 900)]), true, 'a camera inside a prop'); assert.equal(cameraInProp(cam, [at(0, 100, 930, 25)]), true, 'or within its margin');
+  assert.equal(cameraInProp(cam, [at(0, 60, 500)]), false, 'not one on the way to the build'); assert.equal(cameraInProp(cam, []), false);
+  assert.equal(viewBlocked({ ...cam, position: cam.target }, [at(0, 60, 10)], 16 / 9), false, 'a camera on its aim has no view to block');
+  const big = at(360, 100, 100, 200);
+  assert.equal(blocked(big), false, 'a big prop well to the side of the build');
+  assert.equal(viewBlocked(cam, [big], 16 / 9, { spread: 1, pull: 1 }), true, 'with nothing to hold them, the points reach across the frame');
+});
+
+test('the rare shots (Joey 2026-11-01): an ant on the desk looking up at a giant building, a tiny helicopter that banks and hovers, a crane up and over; each mount its own; all named rare, none in the everyday grammar', () => {
+  const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } }, view = { width: 1280, height: 800, free: { w: 1264, h: 672 } };
+  assert.deepEqual(RARE_SHOTS.tabletop.map((s) => s.name), ['ant', 'heli', 'crane']);
+  assert.deepEqual(RARE_SHOTS.wall.map((s) => s.name), ['heli'], 'a wall build has no over-the-top crane, and no ant until the room has a ceiling for it to look up at');
+  assert.deepEqual(RARE_SHOTS['under-table'].map((s) => s.name), ['heli'], 'and an under-table build no desk to stand on in front of it');
+  for (const [m, list] of Object.entries(RARE_SHOTS)) for (const s of list) {
+    assert.ok(s.rare && s.to, `${m} ${s.name}: rare, moving`);
+    assert.ok(!GRAMMAR[m].some((x) => x.name === s.name), `${m} ${s.name} is not an everyday shot`);
+  }
+  assert.ok(RARE_SHARE > 0 && RARE_SHARE <= 0.5, 'about one a cycle at most every other cycle');
+  const ant = RARE_SHOTS.tabletop[0], at = (k, o) => fitShot(mixShot(ant, k), box, view, null, {}, o);
+  const a = at(0.5, { floorY: 0 });
+  close(a.position.y, 7, 1e-9, 'its eye a few mm over the desk, under the other shots\' floor');
+  assert.ok(a.position.y < FLOOR_MM && !a.floored, 'not lifted');
+  assert.ok(a.target.y > a.position.y + 40 && a.position.z > box.max.z && a.target.z === box.max.z, 'out from the front, looking up at it');
+  assert.ok(a.fov >= 60, `a wide lens (${a.fov})`);
+  const lifted = fitShot(mixShot(ant, 0.5), box, view, null, {}, { floorY: 200 });
+  close(lifted.position.y, 207, 1e-9, 'its eye is over the desk wherever the desk is');
+  const edge = at(0.5, { floorY: 0, deskFrontZ: box.max.z + 60 });
+  close(edge.position.z, box.max.z + 46, 1e-9, 'at the desk\'s front edge if that comes first, not over it');
+  assert.notDeepEqual(at(0, { floorY: 0 }).target, at(1, { floorY: 0 }).target, 'it looks around');
+  assert.ok(at(1, { floorY: 0 }).target.y > at(0, { floorY: 0 }).target.y, 'and up');
+  const wide = { min: { x: -530, y: 0, z: -86 }, max: { x: 530, y: 700, z: 107 } };
+  assert.ok(fitShot(mixShot(ant, 0.5), wide, view, null, {}, { floorY: 0, deskFrontZ: 700 }).position.z <= 700 - 14, 'a big build: still on the desk');
+  close(fitShot(mixShot(ant, 0.5), box, view, null, {}, { floorY: 0, deskFrontZ: box.max.z + 5 }).position.z, box.max.z + 30, 1e-9, 'a desk with no room left in front of the build: out from its front all the same, never into it');
+  // the mirror turns the walk and the look with the side
+  const am = varyShot({ ...ant, base: { from: ant.from, to: ant.to } }, () => 0.2);
+  assert.equal(am.mirror, true);
+  assert.equal(am.from.lookX, -ant.from.lookX, 'looks the other way round'); assert.equal(am.to.lookX, -ant.to.lookX);
+  // the helicopter
+  const h = RARE_SHOTS.tabletop[1];
+  assert.ok(h.hover && h.reversible && Math.abs(h.to.az - h.from.az) >= 90, 'a wide orbit, either way');
+  const samples = Array.from({ length: 600 }, (_, i) => hoverAt(i * 100, 0.5, { mm: 5, seed: 0.3 }));
+  assert.ok(samples.every((s) => Math.abs(s.x) <= 5 && Math.abs(s.y) <= 5 && Math.abs(s.z) <= 5), 'its unsteadiness is bounded by its size');
+  assert.ok(new Set(samples.map((s) => s.y.toFixed(3))).size > 300, 'and does not settle into a pattern');
+  close(Math.max(...samples.map((s) => Math.abs(s.roll))), 1.4, 0.4, 'a small roll of its own');
+  assert.notDeepEqual(hoverAt(1000, 0.5, { seed: 0.1 }), hoverAt(1000, 0.5, { seed: 0.6 }), 'its seed sets where it starts');
+  close(hoverAt(0, 0.5, { bank: 7, rollDeg: 0 }).roll, 7, 1e-9, 'leaning fullest in the middle of the turn');
+  close(hoverAt(0, 0, { bank: 7, rollDeg: 0 }).roll, 0, 1e-9, 'level at its start'); close(hoverAt(0, 1, { bank: 7, rollDeg: 0 }).roll, 0, 1e-9, 'and its end');
+  close(hoverAt(0, 0.5, { bank: -7, rollDeg: 0 }).roll, -7, 1e-9, 'the other way round, the other way');
+  // the crane ends looking down on the build's top
+  const cr = RARE_SHOTS.tabletop[2];
+  assert.ok(cr.from.el < 10 && cr.to.el > 60, 'from level with the build, up and over');
+});
+
+test('the rows of fronts: every row, top first, each its own span and height', () => {
+  const box = { min: { x: -88, y: 0, z: -86 }, max: { x: 88, y: 134, z: 107 } };
+  const b = (x0, x1, y, z = 100) => ({ min: { x: x0, y: y - 2, z }, max: { x: x1, y: y + 2, z: z + 5 } });
+  const rows = rowsOf([b(-80, -10, 30), b(10, 80, 31), b(-80, 80, 90), b(-40, 40, 60)], box);
+  assert.deepEqual(rows.map((r) => r.y), [90, 60, 30.5], 'top first');
+  assert.deepEqual([rows[2].x0, rows[2].x1], [-80, 80], 'a row\'s span across its boxes');
+  assert.deepEqual(rowOf([b(-80, -10, 30), b(-80, 80, 90)], box), rows[0] && { x0: -80, x1: 80, y: 90, z: 105 }, 'rowOf is the top one');
+  assert.equal(rowsOf([], box).length, 1, 'with no fronts, one line across the build');
 });
 
 test('the drawer moment: out, open, back inside the detail hold; none in a hold too short; the unit is a labelled drawer nearest the front-left; the shot aims at it', () => {

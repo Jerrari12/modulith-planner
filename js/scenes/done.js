@@ -22,12 +22,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool, makeTag, makeSticker, STICKER, disposeMark, tagInfo, MATERIAL_COLOURS } from './spool.js';
-import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, around, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook, roomFloor } from './done-fit.js';
+import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowsOf, around, drawHold, paceOf, varyShot, bagNext, viewBlocked, cameraInProp, RARE_SHOTS, RARE_SHARE, hoverAt, DRIFT, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, drawerOutAt, drawerBackAt, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook, roomFloor } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
 const SCALE = 1000;        // metres in the GLB -> the stage's millimetres
 const ENTER_MS = 900;      // the camera's move into the shot
+const PROP_MESH = /^(monitor_|keyboard$|mouse$|mug|pot$|soil$|leaf_|notebook$|pen$|cal_|desk_leg_|done-mug)/;   // what can stand in a shot's way (viewBlocked): not the room's shell, not the coffee's steam
+const WORLD_UP = new THREE.Vector3(0, 1, 0), _camF = new THREE.Vector3(), _camR = new THREE.Vector3();
 const SUN_MM = 1200;       // the room's sun, this far from the build: inside the shadow camera's 3000 mm far plane (see applyLights)
 /* the build's shadow on the wall, lighter than on the desk (Astra 2026-10-25: "Soften the build's wall shadow a little ... the
    desk and props are becoming more believable, so that shadow now stands out more"); its edge stays the room's 1 deg sun's,
@@ -562,7 +564,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   const colours = { wall: 'white', desk: 'oak', envs: 0 };   // the room colours drawn now (paintRoom), and how often the environment was captured
   /* the build's mount (stage.mountFrame) and the desk top's height in the stage once the room is placed (roomAnchor): 0 for
      a build standing on it, lower for one hanging on the wall over it, just over the rails of one hanging under it */
-  let mount = 'tabletop', deskY = 0;
+  let mount = 'tabletop', deskY = 0, deskFront = Infinity;   // deskFront: the desk's front edge, stage z
   const debug = new URLSearchParams(location.search).has('debug');
 
   /* THE CAMERA GRAMMAR (done-fit.js GRAMMAR, BEAT, beatAt, planCycle, grammarMode; Joey 2026-10-24, DESIGN.md §8l):
@@ -583,7 +585,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
        every shot of the moving grammar held at the middle of its move, as the still shots were before 2026-10-25: the
        lens's and the steam's checks need a shot that stays put on a tier that moves) */
     timing: { ...BEAT, enterMs: ENTER_MS, preFrames: 2, waitFrames: 2, ...(debug && window.__DONE_TIMING__ ? window.__DONE_TIMING__ : {}) },
-    manual: null, slow: false, judged: false, frames: [], lastFrame: 0, checked: false, warm: null };
+    manual: null, slow: false, judged: false, frames: [], lastFrame: 0, checked: false, warm: null,
+    /* each showing's own hold, angle, side and subject (done-fit.js SHOT_HOLD, SHOT_VARY; showingOf). `?variety=off`, with
+       ?debug, keeps the grammar's own numbers: the e2e's default, as ?mugs=home is. `beat`: the showing's clock; `pose`: a
+       third random source, so the plan's order and the turns stay the seed's */
+    variety: !(debug && new URLSearchParams(location.search).get('variety') === 'off'), beat: null, pose: null, lastHold: null, rare: { bag: [], last: null }, draws: 0, bank: 0, hoverSeed: 0 };
   const mode = (tier) => grammarMode({ tier: tier || stage.quality, reduced, sequence, slow: seq.slow });
   const sequenceWanted = (tier) => mode(tier) !== 'off';
   const moves = (tier) => mode(tier) === 'full';
@@ -591,28 +597,33 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      by a fraction of its travel and back before the drift. The unit is chosen once per entry (a labelled unit with a
      drawer, else any with one, nearest the front-left); the detail shot aims at it. Closed early by a grab, a hidden
      tab, a tier change, a drift or leave(). */
-  const drawer = { unit: null, openTimer: 0, closeTimer: 0, open: false };
+  const drawer = { unit: null, openTimer: 0, closeTimer: 0, open: false, units: [], turn: { bag: [], last: null }, push: null };   // push: a slow push still running, { id, until }
+  const PULL = { out: { ms: DRAWER.slideOutMs, at: drawerOutAt }, back: { ms: DRAWER.slideBackMs, at: drawerBackAt } };
   function pickDrawer() {
     const units = (stage.build && stage.build.placed || []).map((u) => { const b = stage.unitBox(u.id); return { id: u.id, label: u.label, drawer: !!stage.unitHasDrawer && stage.unitHasDrawer(u.id), box: b.isEmpty() ? null : plain(b) }; });
     drawer.unit = pickDrawerUnit(units, plain(buildBox));
+    drawer.units = units.filter((u) => u.drawer && u.box);
+    drawer.turn = { bag: drawer.unit ? [drawer.unit] : [], last: null };   // the chosen one first, then all of them in turn (showingOf)
   }
   function shotsFor() {
-    const list = (GRAMMAR[mount] || GRAMMAR.tabletop).map((s) => ({ ...s, from: { ...s.from }, to: s.to ? { ...s.to } : undefined }))
+    const list = [...(GRAMMAR[mount] || GRAMMAR.tabletop), ...(seq.variety ? RARE_SHOTS[mount] || [] : [])].map((s) => ({ ...s, from: { ...s.from }, to: s.to ? { ...s.to } : undefined }))
       .filter((s) => (s.name !== 'label' || subj.labels.length) && (s.name !== 'mugs' || (subj.mugs && subj.mugs.length)));   // the label shot only where a drawer carries words, the mugs' only where a mug stands
     const hero = list.find((s) => s.name === 'hero');
     // the bake's own hero shot wins - for a build on the desk, the one it was framed for, the centre of the hero's drift
     if (mount === 'tabletop' && hero && json.shots && json.shots.hero) Object.assign(hero, around({ ...hero.from, ...json.shots.hero }, hero.swing || {}));
+    for (const s of list) s.base = { from: { ...s.from }, to: s.to ? { ...s.to } : undefined };
     return list;
   }
   /* THE SHOTS' SUBJECTS (2026-10-25; done-fit.js GRAMMAR): the labels with the visitor's own words on them (the label shot
      picks one each time it comes round) and the fronts' top row of grips and handles (the glide), found once per entry */
-  const subj = { labels: [], label: null, row: null, mugs: null, mug: null };
+  const subj = { labels: [], label: null, row: null, rows: [], rowTurn: { bag: [], last: null }, mugs: null, mug: null };
   function pickSubjects() {
     const units = (stage.build && stage.build.placed) || [];
     const box = (id, types) => { const b = stage.unitPartBox ? stage.unitPartBox(id, types) : new THREE.Box3(); return b.isEmpty() ? null : plain(b); };
     subj.labels = units.filter((u) => u.label && String(u.label).trim()).map((u) => ({ id: u.id, box: box(u.id, ['Label']) })).filter((l) => l.box);
     subj.label = subj.labels[0] || null;
-    subj.row = rowOf(units.map((u) => box(u.id, ['Label', 'Handle'])).filter(Boolean), plain(buildBox));
+    subj.rows = rowsOf(units.map((u) => box(u.id, ['Label', 'Handle'])).filter(Boolean), plain(buildBox));
+    subj.row = subj.rows[0];
   }
   /* the shots that look at the drawer unit: the detail shot at its box centre (targetShift, as before), the macro at the
      top-left corner of its face (the faceplate's edge, the seam to the case and to the unit above: structure at the scale
@@ -620,27 +631,45 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function aims() {
     if (!drawer.unit || !drawer.unit.box) return { label: subj.label, row: subj.row, mugs: subj.mug };
     const b = drawer.unit.box;
-    return { drawer: aimAt(plain(buildBox), b), front: { x: b.min.x + 0.08 * (b.max.x - b.min.x), y: b.max.y - 0.12 * (b.max.y - b.min.y), z: b.max.z }, label: subj.label, row: subj.row, mugs: subj.mug };
+    const own = seq.variety ? { drawerAt: { x: (b.min.x + b.max.x) / 2, y: (b.min.y + b.max.y) / 2, z: (b.min.z + b.max.z) / 2 }, frontRight: { x: b.min.x + 0.92 * (b.max.x - b.min.x), y: b.max.y - 0.12 * (b.max.y - b.min.y), z: b.max.z } } : {};   // any drawer, at any height; a mirrored shot's near corner
+    return { drawer: aimAt(plain(buildBox), b), ...own, front: { x: b.min.x + 0.08 * (b.max.x - b.min.x), y: b.max.y - 0.12 * (b.max.y - b.min.y), z: b.max.z }, label: subj.label, row: subj.row, mugs: subj.mug };
   }
   const shotNamed = (name) => (seq.shots || shotsFor()).find((s) => s.name === name);
   // inside the room and above the desk, at k along its move (an under-table build's shots go below the desk top)
   const GRAMMAR_HERO = () => shotsFor().find((s) => s.name === 'hero');
-  const fitOne = (spec) => fitShot(spec, plain(buildBox), view(), interior, aims(), { floorY: mount === 'under-table' ? -Infinity : deskY });
+  const fitOne = (spec) => fitShot(spec, plain(buildBox), view(), interior, aims(), { floorY: mount === 'under-table' ? -Infinity : deskY, deskFrontZ: deskFront });
   const fitAt = (shot, k) => (shot.blend && shot.to ? blendShot(shot, k, fitOne) : fitOne(mixShot(shot, k)));
-  function drawerSet(open) {
+  function drawerSet(open, quick = false) {
     if (!drawer.unit || drawer.open === open || !stage.slideUnitDrawer) return;
     drawer.open = open;
-    stage.slideUnitDrawer(drawer.unit.id, open, DRAWER.fraction);
+    stage.slideUnitDrawer(drawer.unit.id, open, DRAWER.fraction, quick ? null : open ? PULL.out : PULL.back);
+    drawer.push = !open && !quick ? { id: drawer.unit.id, until: performance.now() + PULL.back.ms } : null;
   }
-  function drawerCancel() { clearTimeout(drawer.openTimer); clearTimeout(drawer.closeTimer); drawer.openTimer = drawer.closeTimer = 0; drawerSet(false); }
+  /* cut short: the stage's quick slide, gone before the next shot, a push under way too (its long tween would otherwise write the
+     drawer's place on after the scene has left, over whatever put it elsewhere: Sol 01a197b8) */
+  function drawerCancel() {
+    clearTimeout(drawer.openTimer); clearTimeout(drawer.closeTimer); drawer.openTimer = drawer.closeTimer = 0;
+    if (drawer.push && performance.now() < drawer.push.until && stage.slideUnitDrawer) stage.slideUnitDrawer(drawer.push.id, false, DRAWER.fraction);
+    drawer.push = null;
+    drawerSet(false, true);
+  }
   function drawerSchedule(holdMs) {
     drawerCancel();
-    const beat = drawer.unit && drawerBeat(holdMs);
+    const beat = drawer.unit && drawerBeat(holdMs, DRAWER, seq.variety ? seq.pose : null);
     if (!beat) return;
     drawer.openTimer = setTimeout(() => drawerSet(true), beat.openAt);
     drawer.closeTimer = setTimeout(() => drawerSet(false), beat.closeAt);
   }
-  function putCam(c) { camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix(); controls.update(); }
+  /* `roll`, degrees (the helicopter's bank): the camera's up tipped about its view, which the controls' lookAt then takes */
+  function putCam(c) {
+    camera.position.set(c.position.x, c.position.y, c.position.z); controls.target.set(c.target.x, c.target.y, c.target.z); camera.fov = c.fov; camera.updateProjectionMatrix();
+    if (c.roll) {
+      _camF.subVectors(controls.target, camera.position).normalize(); _camR.crossVectors(_camF, WORLD_UP).normalize();
+      const r = (c.roll * Math.PI) / 180;
+      camera.up.copy(WORLD_UP).multiplyScalar(Math.cos(r)).addScaledVector(_camR, Math.sin(r));
+    } else camera.up.copy(WORLD_UP);
+    controls.update();
+  }
   /* THE RELIEF BY DISTANCE (Joey 2026-10-24; done-fit.js reliefResolves, PERF.md §5): the nearest the build comes to the
      camera says whether any layer can span the shader's cutoff; if none can, the stage takes the relief off
      (stage.setReliefOverride(false): a material rebuild, so once a shot, at its cut, in the black). A moving shot is
@@ -697,8 +726,9 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (!driftWanted(stage.quality, reduced) || seq.moving || !el.animate || !box || !buildBox || buildBox.isEmpty()) return;
     const ctr = buildBox.getCenter(new THREE.Vector3()).project(camera);
     const origin = { x: Math.min(0.8, Math.max(0.2, (ctr.x + 1) / 2)), y: Math.min(0.8, Math.max(0.2, (1 - ctr.y) / 2)) };
-    const plan = driftFor(driftKind(seq.shot, drift.n++), origin);
-    const ms = (seq.skipIn ? 0 : seq.timing.dipInMs) + seq.timing.holdMs + seq.timing.dipOutMs;
+    const beat = seq.beat || seq.timing, ms = (seq.skipIn ? 0 : beat.dipInMs) + beat.holdMs + beat.dipOutMs;
+    // a short showing's drift goes as far as its time at the usual speed, as a move does (paceOf)
+    const plan = driftFor(driftKind(seq.shot, drift.n++), origin, seq.variety ? { scale: 1 + (DRIFT.scale - 1) * Math.min(1, ms / (BEAT.dipInMs + BEAT.holdMs + BEAT.dipOutMs)) } : {});
     if (drift.clip == null) { drift.clip = box.style.overflow; drift.origin = el.style.transformOrigin; box.style.overflow = 'hidden'; }
     el.style.transformOrigin = `${(plan.origin.x * 100).toFixed(2)}% ${(plan.origin.y * 100).toFixed(2)}%`;
     drift.plan = plan;
@@ -709,6 +739,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      over the dip-in and FOCUS_MS more, the compositor's work like the drift. The whole frame, not a depth: the stage has
      no depth of field while the camera moves. Only where the shots move; cleared with the drift. */
   const FOCUS = { px: 7, ms: 1800 };
+  const HELI_BANK = 7;   // the helicopter's lean into its turn, degrees (done-fit.js hoverAt)
   const focus = { anim: null };
   function focusStart() {
     const el = renderer.domElement, shot = currentShot();
@@ -740,7 +771,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      later cycle never opening on the shot the last one closed on, a still between two moves where it can */
   function planNext() {
     const prev = seq.order.length ? seq.order[seq.order.length - 1] : null;
-    seq.order = planCycle(seq.shots.map((s) => s.name), seq.rng, { first: seq.cycle === 0 ? 'hero' : null, prev, moving: (n) => !!shotNamed(n).to });
+    seq.order = planCycle(seq.shots.filter((s) => !s.rare).map((s) => s.name), seq.rng, { first: seq.cycle === 0 ? 'hero' : null, prev, moving: (n) => !!shotNamed(n).to });
     // the visitor's own label comes straight after the hero on the first cycle (Astra 2026-10-25: "seeing the camera notice
     // something the user chose ... will do more than adding ten generic camera angles")
     const li = seq.cycle === 0 ? seq.order.indexOf('label') : -1;
@@ -757,7 +788,46 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (j < 0) j = seq.order.findLastIndex((n, k) => k > 0 && BUILD_VIEWS.includes(n));
       if (j > 0) seq.order.splice(j, 0, 'mugs');
     }
+    // a rare shot in about half the cycles, the rare ones in turn, never in the first two places (done-fit.js RARE_SHOTS)
+    const rare = seq.shots.filter((s) => s.rare).map((s) => s.name);
+    if (rare.length && seq.pose && seq.pose() < RARE_SHARE) seq.order.splice(2 + Math.floor(seq.pose() * Math.max(1, seq.order.length - 1)), 0, bagNext(seq.rare, rare, seq.pose));
     seq.cycle++; seq.idx = 0;
+  }
+  /* THE PROPS THAT CAN STAND IN A SHOT'S WAY, as they stand now: the room's own, slid or hidden, the mugs and the spools */
+  function propBoxes() {
+    const boxes = [], b = new THREE.Box3();
+    const take = (o) => { b.setFromObject(o); if (!b.isEmpty()) boxes.push(plain(b)); };
+    if (parts.group) parts.group.traverseVisible((o) => { if (PROP_MESH.test(o.name) && (o.isMesh || o.children.length)) take(o); });
+    for (const g of parts.spools ? parts.spools.groups : []) if (g.visible) take(g);
+    return boxes;
+  }
+  /* THIS SHOWING (done-fit.js, NO TWO SHOWINGS ALIKE): its hold, its drawer or row, and an angle no prop stands in the way of,
+     all in the black. The first hero is the entrance's landing, as composed. A clock the debug hook set stands, and with it the
+     move's length. Six draws, then the shot as composed; a rare shot with no clear view is not shown (false). */
+  function showingOf(shot, flip) {
+    const drawn = seq.timing.holdMs === BEAT.holdMs, hold = drawn ? drawHold(shot.name, seq.pose, seq.lastHold) : seq.timing.holdMs;
+    seq.lastHold = hold; seq.beat = { ...seq.timing, holdMs: hold };
+    const aim = shot.base.from.aim;
+    if (shot.drawer || aim === 'drawer-front' || aim === 'drawer') drawer.unit = bagNext(drawer.turn, drawer.units, seq.pose) || drawer.unit;
+    if (aim === 'row') subj.row = bagNext(subj.rowTurn, subj.rows, seq.pose) || subj.row;
+    const first = !shot.shown;
+    shot.shown = true; shot.mirrored = false; seq.draws = 0;
+    const put = (from, to) => { [shot.from, shot.to] = flip && to ? [to, from] : [from, to]; };
+    const composed = () => put({ ...shot.base.from }, shot.base.to ? { ...shot.base.to } : undefined);
+    if (first && shot.name === 'hero') { composed(); return true; }
+    const v = view(), aspect = v.width / v.height, boxes = shot.name === 'mugs' ? [] : propBoxes();   // a mug is its own shot's aim
+    /* along its whole path; the helicopter's wide orbit in its middle only, and it may start or end behind a spool, a reveal, though
+       never with the camera inside a prop */
+    const ks = [0, 0.25, 0.5, 0.75, 1];
+    const clear = () => (shot.hover ? ks.every((k) => !cameraInProp(fitAt(shot, k), boxes)) && !viewBlocked(fitAt(shot, 0.5), boxes, aspect, { within: plain(buildBox) }) : ks.every((k) => !viewBlocked(fitAt(shot, k), boxes, aspect, { within: plain(buildBox) })));
+    for (let i = 0; i < 6; i++) {
+      const p = varyShot(shot, seq.pose, { scale: drawn ? paceOf(hold) : 1 });
+      put(p.from, p.to); shot.mirrored = p.mirror; seq.draws++;
+      if (clear()) return true;
+    }
+    if (shot.rare) return false;
+    composed(); shot.mirrored = false;
+    return true;
   }
   /* a shot begins, in the black: the camera on its opening (a moving shot at its start, any shot locked off at the middle
      of its move), the relief decided for the whole shot, the stage told whether this one moves, the clock at the start of
@@ -767,8 +837,16 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const shot = currentShot();
     /* this showing's way round (a reversible move runs either way, by the visit's second random source, so the plan's
        order is the same whatever the turns) and its label (a different drawer's each time round, where there are several) */
-    if (shot.reversible && shot.to && seq.turn && seq.turn() < 0.5) [shot.from, shot.to] = [shot.to, shot.from];
+    const flip = !!(shot.reversible && shot.to && seq.turn && seq.turn() < 0.5);
+    if (flip && !seq.variety) [shot.from, shot.to] = [shot.to, shot.from];
     if (shot.name === 'label' && subj.labels.length) subj.label = subj.labels[Math.floor((seq.turn ? seq.turn() : 0) * subj.labels.length) % subj.labels.length];
+    if (!seq.variety) seq.beat = seq.timing;
+    else if (!showingOf(shot, flip)) {   // a rare shot with no clear view: on to the next one
+      seq.order.splice(seq.idx, 1);
+      if (seq.idx >= seq.order.length) planNext();
+      beginShot({ skipIn });
+      return;
+    }
     if (shot.name === 'mugs' && subj.mugs && subj.mugs.length) {
       /* one mug each time round: one with no other mug in its frame (Astra: "The cropped mug behind the foreground mug is
          distracting ... fix this through the close-up framing or target selection"), its saying toward the room where one
@@ -808,6 +886,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     seq.shot = shot.name; seq.skipIn = skipIn; seq.cutAt = null; seq.cutK = null; seq.phase = null;
     seq.moving = moves() && !!shot.to && !seq.timing.hold;
     seq.k = seq.moving ? 0 : 0.5;
+    seq.bank = shot.hover && shot.to ? Math.sign(shot.to.az - shot.from.az) * HELI_BANK : 0;
+    seq.hoverSeed = shot.hover && seq.pose ? seq.pose() : 0;
     const c = fitAt(shot, seq.k);
     setCam(c, seq.moving ? [c, fitAt(shot, 1)] : [c]);
     if (skipIn) warmAhead();   // a hold that begins on screen: the relief a later shot needs is compiled under it
@@ -831,7 +911,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   /* where the shot on screen is: its own beat, or, once Next view asked for the next shot, a dip-out from that moment */
   function phaseNow(now) {
-    if (seq.cutAt == null) return beatAt(now - seq.t0, seq.timing, { skipIn: seq.skipIn });
+    if (seq.cutAt == null) return beatAt(now - seq.t0, seq.beat || seq.timing, { skipIn: seq.skipIn });
     const t = now - seq.cutAt, o = seq.timing.dipOutMs, bl = seq.timing.blackMs;
     if (t < o) return { phase: 'out', fade: 1, fadeMs: o - t, k: seq.cutK, left: o - t };
     if (t < o + bl) return { phase: 'black', fade: 1, fadeMs: 0, k: seq.cutK, left: o + bl - t };
@@ -851,7 +931,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     if (seq.moving && seq.cutAt == null) {
       const sh = currentShot();
       seq.k = sh && sh.settle ? easeSine(Math.min(1, Math.acos(Math.max(-1, Math.min(1, 1 - 2 * b.k))) / Math.PI / sh.settle)) : b.k;   // `settle`: the eased move done by that share of the visible time
-      putCam(fitAt(currentShot(), seq.k));
+      putCam(sh && sh.hover ? hovering(sh, seq.k, now - seq.t0) : fitAt(currentShot(), seq.k));
       /* every moving shot is a verdict too, on its frames from 0.4 s to 2.4 s in (the first frames after a cut carry the
          new view's compiles): under 20 fps it locks off where it is, and the visit stays still from then on */
       const ms = now - seq.t0;
@@ -864,6 +944,11 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       if (seq.moving) { seq.raf = requestAnimationFrame(tick); return; }
     }
     seq.timer = setTimeout(tick, Math.max(16, b.left));
+  }
+  /* the helicopter's camera: the move's, unsteady (hoverAt), its size the build's */
+  function hovering(sh, k, ms) {
+    const c = fitAt(sh, k), h = hoverAt(ms, k, { bank: seq.bank, seed: seq.hoverSeed, mm: (c.radius || 150) * 0.045 });
+    return { ...c, position: { x: c.position.x + h.x, y: c.position.y + h.y, z: c.position.z + h.z }, roll: h.roll };
   }
   /* a moving shot locks off where it is (a slow verdict; a drop below High): the rest of it is a still, its drawer back.
      `resched`: called from outside the clock, which then needs its timer again */
@@ -891,7 +976,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     }
     if (!drawer.unit) pickDrawer();
     pickSubjects();
-    seq.shots = shotsFor(); seq.rng = rngFrom(seq.seed); seq.turn = rngFrom(seq.seed ^ 0x5bd1e995); seq.order = []; seq.cycle = 0;
+    seq.shots = shotsFor(); seq.rng = rngFrom(seq.seed); seq.turn = rngFrom(seq.seed ^ 0x5bd1e995); seq.pose = rngFrom(seq.seed ^ 0x2f6e2b1); seq.lastHold = null; seq.rare = { bag: [], last: null }; seq.order = []; seq.cycle = 0;
     planNext();
     seq.on = true;
     if (document.hidden) { seq.pausedAt = performance.now(); seq.pendingBegin = true; return; }   // a tab hidden before it began: it begins when the tab comes back (Sol 01a16b2a)
@@ -901,6 +986,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     seq.on = false; seq.pausedAt = null; seq.pendingBegin = false; seq.moving = false; seq.cutAt = null; seq.waiting = false;
     cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); clearTimeout(seq.timer); clearTimeout(seq.startTimer);
     drawerCancel(); fadeTo(0, 0);
+    camera.up.copy(WORLD_UP); controls.update();   // no grammar, no bank
     if (stage.setMotionFull) stage.setMotionFull(false);
     if (stage.setLens) stage.setLens(null);   // no grammar, no lens (leave() comes through here too)
     driftLeave();   // no grammar, no drift: the canvas back as it was
@@ -924,7 +1010,8 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   function jumpTo(which) {
     if (!seq.on) return;
     const name = typeof which === 'number' ? (seq.shots[which] || {}).name : which;
-    const i = seq.order.indexOf(name);
+    let i = seq.order.indexOf(name);
+    if (i < 0 && shotNamed(name) && shotNamed(name).rare) { seq.order.splice(seq.idx + 1, 0, name); i = seq.idx + 1; }   // a rare shot is only in the plan when drawn
     if (i < 0) return;
     cancelAnimationFrame(seq.raf); cancelAnimationFrame(seq.waitRaf); seq.waiting = false; clearTimeout(seq.timer); drawerCancel();
     [seq.order[i], seq.order[seq.idx]] = [seq.order[seq.idx], seq.order[i]];
@@ -948,7 +1035,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       drawerCancel();
       clearTimeout(seq.timer); seq.phase = null; tick();
     } else {
-      seq.manual = ((seq.manual == null ? 0 : seq.manual) + 1) % seq.shots.length;
+      seq.manual = ((seq.manual == null ? 0 : seq.manual) + 1) % seq.shots.filter((s) => !s.rare).length;   // the rare ones come last in the list
       setCam(fitAt(seq.shots[seq.manual], 0.5)); stage.invalidateFrame();
     }
     return true;
@@ -1828,7 +1915,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const legInnerL = legL ? new THREE.Box3().setFromObject(legL).max.x - a.x * SCALE : null;
     const at = roomAnchor(mount, plain(buildBox), frame, json.anchors, { ...d, legInnerL });
     const anchorWorld = new THREE.Vector3(at.x, at.y, at.z);
-    deskY = at.y;
+    deskY = at.y; deskFront = anchorWorld.z + d.zFront;
     group.position.set(anchorWorld.x - a.x * SCALE, anchorWorld.y - a.y * SCALE, anchorWorld.z - a.z * SCALE);
     group.updateMatrixWorld(true);
     interior = roomInterior(group);   // the walls do not slide: the shots' clamp is fixed from here
@@ -2067,10 +2154,12 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
           waiting: !!seq.waiting, entering: !!(parts.enter && !parts.enter.done),
           fits: shots.map((s) => { const c = fitAt(s, 0.5); return { name: s.name, fov: c.fov, clamped: !!c.clamped, k: c.k, share: c.share, floored: !!c.floored, pos: [c.position.x, c.position.y, c.position.z] }; }),
           interior: interior && { ...interior }, paused: seq.pausedAt != null, manual: seq.manual, orbit: controls.enabled, slow: seq.slow, judged: seq.judged,
-          timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open }, warm: seq.warm };
+          timing: { ...seq.timing }, drawer: { unit: drawer.unit ? drawer.unit.id : null, open: drawer.open, units: drawer.units.length }, warm: seq.warm,
+          variety: seq.variety, holdMs: (seq.beat || seq.timing).holdMs, mirrored: !!(sh && sh.mirrored), draws: seq.draws, rowY: subj.row ? subj.row.y : null, rows: subj.rows.length, rare: shots.filter((s) => s.rare).map((s) => s.name),
+          view: sh ? (() => { const c = fitAt(sh, 0.5); return { pos: [c.position.x, c.position.y, c.position.z], target: [c.target.x, c.target.y, c.target.z], fov: c.fov }; })() : null, up: camera.up.toArray() };
       },
       setTiming(t) { const { seed, ...rest } = t; Object.assign(seq.timing, rest); if (seed != null) seq.seed = seed >>> 0; seq.judged = false; seq.slow = false; if (seq.on) seqStop(); seqStart(); },   // a new clock is a new verdict (and a new seed a new plan)
-      jump(which) { jumpTo(which); }, nextShot,   // to a shot by name (or its place in GRAMMAR), its hold beginning at once
+      propBoxes, jump(which) { jumpTo(which); }, nextShot,   // to a shot by name (or its place in GRAMMAR), its hold beginning at once
       seek(ms) { if (!seq.on || seq.waiting || seq.pausedAt != null || seq.cutAt != null) return; cancelAnimationFrame(seq.raf); clearTimeout(seq.timer); seq.t0 = performance.now() - ms; seq.phase = null; tick(); } };   // the shot on screen's clock put at `ms`
     if (!tracked) { tracked = true; stage.track('done:room'); }
     stage.invalidateFrame();

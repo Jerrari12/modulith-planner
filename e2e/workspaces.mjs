@@ -25,6 +25,7 @@ import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localParts } from '../test/lib/local-parts.mjs';
 import { parseShard, registerShare } from './shard.mjs';
+import { SHOT_HOLD, DRIFT, BEAT } from '../js/scenes/done-fit.js';
 /* THE SHARDS (2026-10-25, e2e/shard.mjs): every test(...) below is COLLECTED, and the file's last line registers this
    process's share - all of them unless E2E_SHARD=k/n asks for one shard. Read before the browser launches, so a malformed
    value fails at once rather than after the boot. */
@@ -102,6 +103,7 @@ async function open(ws, { query = '', phone = false, context = null, visitor = f
   // ?mugs=plan for the link's own) gets the room as it was composed: one mug at home, the notebook on the desk
   if (roomy && !/mugs=/.test(query)) query += '&mugs=home';
   if (roomy && !/spools=/.test(query)) query += '&spools=off';   // and no spools, unless it asks (?spools=plan)
+  if (roomy && !/variety=/.test(query)) query += '&variety=off';   // and each shot as written, unless it asks: a showing draws its own angle and hold (done.js showingOf)
   const ctx = context || await browser.newContext(phone ? { viewport: viewport || { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   contexts.add(ctx);
   // the phone sheets' one-time nudge stays out of every case but its own: a sheet lifting a second after load moves what a
@@ -2537,6 +2539,178 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
   await rm.ctx.close();
 });
 
+/* NO TWO SHOWINGS ALIKE (Joey 2026-11-01: "same camera angles, same points of interest", "drawers open way too fast", "randomize
+   that to not rush certain scenes", "ant sized ... a tiny helicopter"): done.js showingOf, done-fit.js SHOT_HOLD, SHOT_VARY,
+   RARE_SHOTS. Every other case keeps the shots as written (?variety=off, open()). Read off the debug hook and the stage; every
+   wait is a poll and the drawer's tween runs on the wall clock, so it runs on the CI runner too. */
+test('Assemble: the Done scene draws each showing: its own hold, angle, lens, side and drawer; the drawer pulled slowly and the magnets finishing it; a rare shot now and then: the ant, the helicopter, the crane', async () => {
+  const { ctx, page, errors } = await open('assemble', { query: '&done=room&variety=on' });
+  await btn(page, 'Skip to the finished build', '#ws-steps').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 60_000 });
+  await btn(page, 'Next', '#ws-player').click();
+  await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 30_000 });
+  await btn(page, 'Watch the final scene', '#ws-player').click();
+  await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence.on, null, { timeout: 90_000 }).catch(() => assert.fail('the grammar never began'));
+  const seqOf = () => page.evaluate(() => window.__GEN2_DONE__.sequence);
+  const camNow = () => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { pos: v.camera.position.toArray(), fov: v.camera.fov, up: v.camera.up.toArray() }; });
+  const showing = async (name) => {   // a new showing of the shot, its clock begun
+    await page.evaluate((n) => { window.__jumpAt = performance.now(); window.__GEN2_DONE__.jump(n); }, name);
+    await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return !s.waiting && s.shot != null; }, null, { timeout: 30_000 });
+    return seqOf();
+  };
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setQuality('high', { user: true }); window.__GEN2_DONE__.setTiming({ maxFrameMs: 1e9, seed: 5 }); });
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.on && window.__GEN2_DONE__.sequence.mode === 'full', null, { timeout: 30_000 }).catch(() => assert.fail('High did not bring the moving grammar'));
+  const s0 = await seqOf();
+  assert.equal(s0.variety, true); assert.deepEqual(s0.rare, ['ant', 'heli', 'crane'], 'the rare shots are this visit\'s');
+  const nProps = await page.evaluate(() => window.__GEN2_DONE__.propBoxes().length);
+  assert.ok(nProps >= 10, `the props that can stand in a shot's way are known (${nProps})`);
+  assert.equal(s0.shot, 'hero'); assert.equal(s0.draws, 0, 'the first hero is the entrance\'s landing, as composed');
+  const heroFit = s0.view;
+  const close = (x, y, tol, msg) => assert.ok(Math.abs(x - y) <= tol, `${msg}: ${x} vs ${y}`);
+
+  // THE HOLDS: each showing's own, from its own range, and the clock keeps to it
+  const holds = [];
+  for (let i = 0; i < 6; i++) { const s = await showing('slide'); assert.equal(s.shot, 'slide'); holds.push(s.holdMs); }
+  assert.ok(holds.every((h) => h >= SHOT_HOLD.slide[0] && h <= SHOT_HOLD.slide[1]), `in the slide's range (${holds})`);
+  assert.ok(new Set(holds).size >= 5, `and not the same twice (${holds})`);
+  let short = await showing('top');
+  for (let i = 0; i < 30 && short.holdMs > 7500; i++) short = await showing('top');
+  assert.ok(short.holdMs <= 7500, `a short top shot was drawn (${short.holdMs})`);
+  // on the page's own clock from the jump, the black layer's own opacity read (a read through the hook takes a second on the runner, and could miss the 800 ms dip)
+  const held = await page.evaluate(() => new Promise((done) => { const f = document.getElementById('done-fade'); const step = () => { if (f.style.opacity === '1') done(performance.now() - window.__jumpAt); else setTimeout(step, 50); }; step(); }));
+  assert.ok(held >= short.holdMs - 200 && held < short.holdMs + 2600, `it ended on its own hold, ${short.holdMs} ms, not the beat's ${BEAT.holdMs} (${held} ms)`);
+
+  // THE ANGLES: the same shot from different places, lenses and sides; a later hero is not the composed one
+  const pushes = [];
+  for (let i = 0; i < 8; i++) pushes.push(await showing('push'));
+  assert.ok(new Set(pushes.map((s) => s.view.pos.map((n) => n.toFixed(0)).join())).size >= 7, 'different places');
+  assert.ok(new Set(pushes.map((s) => s.view.fov.toFixed(1))).size >= 6, 'different lenses');
+  assert.deepEqual([...new Set(pushes.map((s) => s.mirrored))].sort(), [false, true], 'both sides');
+  // (the push's azimuth is small, about 9 degrees either side, and a draw can take it just past square on)
+  assert.ok(pushes.every((s) => { const dx = s.view.pos[0] - s.view.target[0]; return s.mirrored ? dx < 80 : dx > -80; }), `each on the side it says (${pushes.map((s) => `${s.mirrored}:${(s.view.pos[0] - s.view.target[0]).toFixed(0)}`)})`);
+  const hero2 = await showing('hero');
+  assert.ok(hero2.draws >= 1 && hero2.view.pos.some((n, i) => Math.abs(n - heroFit.pos[i]) > 1), 'a later hero is drawn too');
+
+  // THE SUBJECTS: the close-ups go round the drawers, at each one's own height
+  const units = new Set(), aims = [];
+  for (let i = 0; i < 4; i++) { const s = await showing('macro'); units.add(s.drawer.unit); aims.push(s.view.target.map((n) => n.toFixed(0)).join()); }
+  assert.ok(s0.drawer.units >= 2, `a build with drawers to go round (${s0.drawer.units})`);
+  assert.equal(units.size, Math.min(4, s0.drawer.units), `every drawer in turn (${[...units]})`);
+  assert.ok(new Set(aims).size >= 2, `a different spot (${aims})`);
+
+  // THE DRAWER'S PULL: seconds, not a tap's 380 ms; the interior stays until the drawer is back; a slide cut short stays cut
+  const pull = () => page.evaluate(() => new Promise((done) => {
+    const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__;
+    let z0 = null, out = null, back = null, peak = 0, shownAtPush = null, startedAt = null, pushAt = null;
+    const t00 = performance.now();
+    d.jump('detail');   // here, so the first read is the drawer shut (a read through the hook takes a second on the runner, and it opens at 0.7 s)
+    (function step(now) {
+      const s = d.sequence, u = s.drawer.unit;
+      if (u != null) {
+        const z = v.unitBox(u).max.z;
+        if (z0 == null) z0 = z;
+        peak = Math.max(peak, z);
+        if (s.drawer.open && startedAt == null) startedAt = now;
+        if (startedAt != null && out == null && z >= z0 + 60 && step.z != null && Math.abs(step.z - z) < 0.01) out = now - startedAt;   // come to rest
+        if (startedAt != null && !s.drawer.open && pushAt == null) pushAt = now;
+        if (pushAt != null && shownAtPush == null && now - pushAt > 700) shownAtPush = v.interiorState().units.includes(u);
+        if (pushAt != null && back == null && Math.abs(z - z0) < 0.01) { back = now - pushAt; done({ out, back, slid: peak - z0, shownAtPush, after: v.interiorState().units.includes(u) }); return; }
+        step.z = z;
+      }
+      if (now - t00 > 30_000) { done({ timedOut: true, out, back, slid: peak - z0, startedAt, pushAt }); return; }
+      requestAnimationFrame(step);
+    })(t00);
+  }));
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 8000, dipInMs: 100, dipOutMs: 100, blackMs: 50, maxFrameMs: 1e9, seed: 5 }));
+  const p = await pull();
+  assert.ok(!p.timedOut, `the moment ran (${JSON.stringify(p)})`);
+  assert.ok(p.slid > 60 && p.slid < 75, `40 % of the 185 drawer's slide (${p.slid})`);
+  assert.ok(p.out >= 1200 && p.out < 4000, `the pull takes its time (${p.out} ms)`);
+  assert.ok(p.back >= 1200 && p.back < 3500, `the push takes its time (${p.back} ms)`);
+  assert.equal(p.shownAtPush, true, 'the interior is still shown 700 ms into the push');
+  // a cut mid-pull: closed by the stage's quick slide, and the pull's own tween does not put it back out
+  const cut0 = await showing('detail');
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.drawer.open, null, { timeout: 15_000 }).catch(() => assert.fail('the drawer did not open for the cut'));
+  const zc0 = await page.evaluate((u) => window.__GEN2_VIEWER__.unitBox(u).max.z, cut0.drawer.unit);
+  await page.evaluate(() => window.__GEN2_DONE__.nextShot());
+  await page.waitForFunction(() => !window.__GEN2_DONE__.sequence.drawer.open, null, { timeout: 10_000 });
+  await settle(page, 2600);   // past where the pull's own tween would have ended
+  const zc1 = await page.evaluate((u) => window.__GEN2_VIEWER__.unitBox(u).max.z, cut0.drawer.unit);
+  assert.ok(zc1 <= zc0 + 1, `the drawer stays shut after a cut mid-pull (${zc0} then ${zc1})`);
+  // a cut mid-push: the stage's quick slide takes over, so nothing writes the drawer's place long after the cut (Sol 01a197b8)
+  const push = await page.evaluate(() => new Promise((done) => {
+    const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__;
+    d.jump('detail');
+    const u = d.sequence.drawer.unit, z0 = v.unitBox(u).max.z;
+    let opened = false, cutAt = null;
+    const began = performance.now();
+    (function step(now) {
+      const open = d.sequence.drawer.open, z = v.unitBox(u).max.z;
+      if (open) opened = true;
+      if (opened && !open && cutAt == null) { d.nextShot(); cutAt = performance.now(); }
+      if (cutAt != null && z - z0 < 1) { done({ ms: performance.now() - cutAt }); return; }
+      if (now - began > 60_000) { done({ timedOut: true }); return; }
+      requestAnimationFrame(step);
+    })(performance.now());
+  }));
+  assert.ok(!push.timedOut, 'the push ended');
+  if (!SOFTWARE_GL) assert.ok(push.ms < 1000, `a cut mid-push ends it at the quick slide's pace, not the push's 1.4 s (${push.ms} ms)`);
+  await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 11000, dipInMs: 1100, dipOutMs: 800, blackMs: 350, maxFrameMs: 1e9, seed: 5 }));
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.on, null, { timeout: 10_000 });
+
+  // A SHORT SHOWING'S DRIFT goes as far as its time allows (the still grammar)
+  await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('fast', { user: true }));
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.mode === 'still', null, { timeout: 20_000 });
+  let st = await showing('top');
+  for (let i = 0; i < 30 && st.holdMs > 7000; i++) st = await showing('top');
+  const drift = await page.evaluate(() => {
+    const a = window.__GEN2_VIEWER__.renderer.domElement.getAnimations().find((x) => /scale/.test(JSON.stringify(x.effect.getKeyframes())));
+    if (!a) return null;
+    return { ms: a.effect.getTiming().duration, scales: a.effect.getKeyframes().map((k) => +/scale\(([\d.]+)\)/.exec(k.transform)[1]) };
+  });
+  assert.ok(drift, 'the still shot drifts');
+  close(Math.max(...drift.scales), 1 + (DRIFT.scale - 1) * Math.min(1, drift.ms / (BEAT.dipInMs + BEAT.holdMs + BEAT.dipOutMs)), 0.002, `its reach follows its time (${drift.ms} ms, ${drift.scales})`);
+  assert.ok(Math.max(...drift.scales) < DRIFT.scale - 0.01, 'short of a full-length drift');
+  await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('high', { user: true }));
+  await page.waitForFunction(() => window.__GEN2_DONE__.sequence.mode === 'full', null, { timeout: 20_000 });
+
+  // THE RARE SHOTS: in the plan in about half the cycles, never in its first two places
+  const plans = [];
+  for (const seed of Array.from({ length: 12 }, (_, i) => Math.imul(i + 1, 2654435761) >>> 0)) {   // well apart: a visit's seed is the clock's
+    await page.evaluate((sd) => window.__GEN2_DONE__.setTiming({ seed: sd, maxFrameMs: 1e9 }), seed);
+    plans.push((await seqOf()).order);
+  }
+  const withRare = plans.filter((o) => o.some((n) => s0.rare.includes(n)));
+  assert.ok(withRare.length >= 2 && withRare.length <= 10, `about half of twelve plans (${withRare.length})`);
+  assert.ok(plans.every((o) => o.filter((n) => s0.rare.includes(n)).length <= 1), 'one a cycle at most');
+  assert.ok(plans.every((o) => o.findIndex((n) => s0.rare.includes(n)) !== 0 && o.findIndex((n) => s0.rare.includes(n)) !== 1), 'never in the first two places');
+  // the ant: on the desk, a wide lens, looking up; held at the hook's own camera as the shot moves
+  const ant = await showing('ant');
+  assert.equal(ant.shot, 'ant', 'the ant was shown');
+  const a1 = await camNow(), target = ant.view.target;
+  assert.ok(a1.pos[1] < 18, `its eye under the other shots' floor (${a1.pos[1]})`);
+  assert.ok(a1.fov > 55 && target[1] > a1.pos[1] + 30, `a wide lens, looking up (${a1.fov}, ${target[1]})`);
+  // the helicopter: its camera leans as it moves, and the next shot is level again
+  const heli = await showing('heli');
+  assert.equal(heli.shot, 'heli', 'the helicopter was shown');
+  await page.waitForFunction(() => { const u = window.__GEN2_VIEWER__.camera.up; return Math.hypot(u.x, u.z) > 0.01 && Math.abs(Math.hypot(u.x, u.y, u.z) - 1) < 1e-6; }, null, { timeout: 15_000 }).catch(() => assert.fail('the helicopter never leaned'));
+  const pos1 = (await camNow()).pos;
+  await page.waitForFunction((p0) => { const p = window.__GEN2_VIEWER__.camera.position; return Math.hypot(p.x - p0[0], p.y - p0[1], p.z - p0[2]) > 5; }, pos1, { timeout: 15_000 }).catch(() => assert.fail('the helicopter never flew'));
+  await showing('hero');
+  assert.deepEqual((await camNow()).up, [0, 1, 0], 'the next shot is level');
+  const crane = await showing('crane');
+  assert.equal(crane.shot, 'crane', 'the crane was shown');
+  assert.ok(crane.ends[1][1] > crane.ends[0][1] + 300 || crane.ends[0][1] > crane.ends[1][1] + 300, `up and over (${crane.ends.map((e) => e[1].toFixed(0))})`);
+  // a heli left in mid-lean by leaving the scene: the studio's camera is level
+  await showing('heli');
+  await page.waitForFunction(() => { const u = window.__GEN2_VIEWER__.camera.up; return Math.hypot(u.x, u.z) > 0.01; }, null, { timeout: 15_000 }).catch(() => assert.fail('the helicopter never leaned before the leave'));
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 30_000 }).catch(() => assert.fail('Esc did not leave the scene'));
+  assert.deepEqual((await camNow()).up, [0, 1, 0], 'left mid-lean, the studio\'s camera is level');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE RELIEF COMPILED AHEAD (stage.warmRelief, 2026-10-24). Without it the cut into the macro compiled its two relief
    programs on its first frame, one frame of 1.2 to 1.4 s that the black waited through (1.6 to 1.8 s of full black at
    High, against about 0.4 s with it). Two ways in, each in its own page, since a program once compiled stays compiled: booted at
@@ -2841,7 +3015,7 @@ test('Assemble: the Done scene hangs a wall build on its wall and an under-table
     await page.evaluate((six) => window.__GEN2_STORE__.commit((s) => { s.placed = six.map(([id, x, y, w]) => ({ id, x, y, w, hh: 2, fill: 'decor', shelves: 0 })); s.nextId = 5; s.gridW = 6; s.gridH = 2; }, 'e2e layout'), SIX);
     await page.waitForFunction(() => window.__GEN2_VIEWER__.build.placed.length === 4 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 120_000 }).catch(() => assert.fail(`the ${mount} build did not reach the stage`));
     await settle(page, 800);
-    await page.goto(`${base}/index.html?ws=assemble&debug=1&done=room`, { waitUntil: 'load', timeout: 90_000 });
+    await page.goto(`${base}/index.html?ws=assemble&debug=1&done=room&variety=off`, { waitUntil: 'load', timeout: 90_000 });
     await waitBoot(page);
     await btn(page, 'Skip to the finished build', '#ws-steps').click();
     await page.waitForFunction(() => window.__GEN2_VIEWER__.cur === window.__GEN2_VIEWER__.pageCount - 2, null, { timeout: 30_000 });
@@ -3890,6 +4064,16 @@ test('Assemble: the Done scene\'s spools wear the build\'s colours, stand clear 
   await page.waitForFunction(() => /End of instructions/.test(document.querySelector('#ws-player .title')?.textContent || ''), null, { timeout: 20_000 });
   await btn(page, 'Watch the final scene', '#ws-player').click();
   await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.spools && window.__GEN2_DONE__.sequence.on, null, { timeout: 60_000 }).catch(() => assert.fail('the room never came on'));
+  // a drawn camera angle minds them as it does the room's own props (done.js propBoxes), a hidden one not
+  const propCount = await page.evaluate(() => {
+    const d = window.__GEN2_DONE__, roots = []; window.__GEN2_VIEWER__.scene.traverse((o) => { if (o.name === 'done-spools') roots.push(o); });
+    const on = d.propBoxes().length;
+    for (const r of roots) r.visible = false;
+    const off = d.propBoxes().length;
+    for (const r of roots) r.visible = true;
+    return { on, off, roots: roots.length };
+  });
+  assert.ok(propCount.roots >= 1 && propCount.on - propCount.off === propCount.roots, `each spool group is a prop in a shot's way (${JSON.stringify(propCount)})`);
   const sp = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, f = v.filamentsInBuild(), bb = v.assembledBox, T = v.THREE;
     const props = []; v.scene.getObjectByName('done-room').traverse((o) => { if (o.isMesh && o.visible && o.userData.slot) props.push({ name: o.name, box: new T.Box3().setFromObject(o) }); });

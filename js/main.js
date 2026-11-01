@@ -6838,13 +6838,17 @@ function drawerCarrier(inst) {
   }
   return null;
 }
-function slideDrawer(carrier, open, dist = 40) {
+/* `pull` { ms, at(k) }: a slide with its own length and curve, for the final scene (done-fit.js drawerOutAt, drawerBackAt; Joey
+   2026-11-01: "drawers open way too fast, they feel unnatural"). Without it, a tap's quick answer. A new slide takes over from
+   one still running: at these lengths the old tween would outlive it and put the drawer back on its own path. */
+function slideDrawer(carrier, open, dist = 40, pull = null) {
   const group = [carrier, ...[...instances.values()].filter(x => x.cfg.rides === carrier.cfg.id)];
   for (const i of group) {
     const to = basePos(i, i.staged);
     if (open) to.z += dist;
     const fromV = i.group.position.clone();
-    tween({ duration: open ? 380 : 320, onUpdate: k => i.group.position.lerpVectors(fromV, to, k) });
+    const mine = (i.slideN = (i.slideN || 0) + 1);
+    tween({ duration: pull ? pull.ms : (open ? 380 : 320), raw: !!pull, onUpdate: k => { if (i.slideN === mine) i.group.position.lerpVectors(fromV, to, pull ? pull.at(k) : k); } });
   }
 }
 // Selection "removal rituals": some parts glide through world-space waypoints
@@ -10184,11 +10188,11 @@ function unpeek() { if (openCarrier) { slideDrawer(openCarrier, false); openCarr
 /* The Done room's drawer moment (js/scenes/done.js, 2026-10-23): a unit's drawer slides out a FRACTION of its travel and
    back again - no focus, no dims, no selection (the room shows no callouts). unitHasDrawer says whether a unit has one. */
 function unitHasDrawer(unitId) { return unitInstances(unitId).some(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible); }
-function slideUnitDrawer(unitId, open, fraction = 0.4) {
+function slideUnitDrawer(unitId, open, fraction = 0.4, pull = null) {
   const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
   if (!d) return false;
-  slideDrawer(d, open, drawerStop() * fraction);
-  interiorShow(unitId, open);
+  slideDrawer(d, open, drawerStop() * fraction, pull);
+  interiorShow(unitId, open, pull ? pull.ms : 320);
   invalidateFrame();
   return true;
 }
@@ -10201,7 +10205,7 @@ function slideUnitDrawer(unitId, open, fraction = 0.4) {
    unitBox (which read group.visible) still answer and slideUnitDrawer still moves the group; each mesh remembers that
    this rule hid it, so a mesh hidden by anything else stays as it was. A unit whose drawer is OUT shows its whole
    interior (the bay's stoppers and magnet clips show through the opening; the drawer body alone left 2 087 px wrong,
-   §4.8) until the drawer is back: the slide's 320 ms and a margin. The QuickLocks belong to no unit (unitOf is undefined
+   §4.8) until the drawer is back: the slide's length and a margin. The QuickLocks belong to no unit (unitOf is undefined
    for them: they sit at the case joints, not in a bay), so they stay hidden with a drawer out, which is the state the
    probe measured at 0 px (Terra 01a16dbb). Each change is one shadow-map render (markShadowDirty),
    not a per-frame cost. The scene turns it on at entry and off at leave; the Colors stage, with its free orbit, does
@@ -10230,12 +10234,12 @@ function setInteriorHidden(on) {
   interiorShown.clear();
   applyInterior();
 }
-function interiorShow(unitId, open) {
+function interiorShow(unitId, open, backMs = 320) {
   if (!interiorHidden) return;
   clearTimeout(interiorShown.get(unitId));
   if (open) { interiorShown.set(unitId, 0); applyInterior(); return; }
   if (!interiorShown.has(unitId)) return;
-  interiorShown.set(unitId, setTimeout(() => { if (interiorShown.delete(unitId)) applyInterior(); }, 360));
+  interiorShown.set(unitId, setTimeout(() => { if (interiorShown.delete(unitId)) applyInterior(); }, backMs + 40));
 }
 function interiorState() {
   let hidden = 0, shown = 0;
