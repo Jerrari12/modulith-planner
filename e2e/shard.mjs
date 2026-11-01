@@ -15,6 +15,9 @@
      0.5.
      A case missing from the weights - a new one - counts as the median, so a stale file only unbalances, it never drops
      or doubles a case;
+   - a case keeps its shard (e2e/shard-map.json, 2026-11-01). Without the map, one added case moved 58 others on 2026-10-31
+     and failures landed on cases the push never touched. A new case goes to the least-loaded shard, moving nothing that is
+     mapped; `npm run e2e:rebalance` rewrites the map, on purpose;
    - each shard writes what it ran to E2E_SHARD_REPORT, and the deploy workflow's coverage gate checks the reports of all
      n shards together: the same case list in each, and every position run by exactly one. */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -36,11 +39,17 @@ export function weightOf(names, weights = {}) {
   return names.map((x) => (typeof weights[x] === 'number' && weights[x] > 0 ? weights[x] : median));
 }
 
-/* one shard number (1..n) per position: longest-processing-time first onto the least-loaded shard */
-export function assign(names, n, weights = {}) {
+/* one shard number (1..n) per position: a mapped case in its own shard (a shard outside 1..n counts as unmapped), then the rest,
+   longest-processing-time first, each onto the least-loaded shard */
+export function assign(names, n, weights = {}, pins = {}) {
   const w = weightOf(names, weights);
-  const order = names.map((_, i) => i).sort((a, b) => w[b] - w[a] || a - b);
   const load = new Array(n).fill(0), out = new Array(names.length);
+  const free = [];
+  names.forEach((x, i) => {
+    const p = Object.hasOwn(pins, x) ? pins[x] : null;
+    if (Number.isInteger(p) && p >= 1 && p <= n) { out[i] = p; load[p - 1] += w[i]; } else free.push(i);
+  });
+  const order = free.sort((a, b) => w[b] - w[a] || a - b);
   for (const i of order) {
     let best = 0;
     for (let s = 1; s < n; s++) if (load[s] < load[best]) best = s;
@@ -52,19 +61,36 @@ export function assign(names, n, weights = {}) {
 export const listHash = (names) => createHash('sha256').update(names.join('\n')).digest('hex').slice(0, 16);
 
 /* register this process's share of the collected cases with node:test, in file order, and report it */
-export function registerShare(nodeTest, cases, shard, { weightsFile, reportFile } = {}) {
+export function registerShare(nodeTest, cases, shard, { weightsFile, pinsFile, reportFile, rebalance = false } = {}) {
   const names = cases.map((args) => String(args[0]));
   if (!shard) { for (const args of cases) nodeTest(...args); return; }
   const weights = weightsFile && existsSync(weightsFile) ? JSON.parse(readFileSync(weightsFile, 'utf8')) : {};
-  const where = assign(names, shard.n, weights);
+  if (rebalance) {   // tools/e2e-rebalance.mjs: the map as the weights alone would split the cases, one line a case so a diff reads
+    const fresh = assign(names, shard.n, weights);
+    writeFileSync(pinsFile, `{\n${names.map((x, i) => `  ${JSON.stringify(x)}: ${fresh[i]}`).join(',\n')}\n}\n`);
+    console.log(`e2e shard map rewritten: ${names.length} cases in ${shard.n} shards`);
+    return;
+  }
+  const pins = pinsFile && existsSync(pinsFile) ? JSON.parse(readFileSync(pinsFile, 'utf8')) : {};
+  const where = assign(names, shard.n, weights, pins);
   const mine = [];
   cases.forEach((args, i) => { if (where[i] === shard.k) { mine.push(i); nodeTest(...args); } });
   const est = weightOf(names, weights).reduce((s, w, i) => s + (where[i] === shard.k ? w : 0), 0);
   console.log(`e2e shard ${shard.k}/${shard.n}: ${mine.length} of ${names.length} cases, about ${Math.round(est)} s by the weights`);
   /* the weights decide the split, so the report carries their hash too: shards that read different weights (a weights
      file edited between two local shard runs) disagree on the partition, and the gate says so by name */
-  const wHash = createHash('sha256').update(JSON.stringify(Object.entries(weights).sort())).digest('hex').slice(0, 16);
+  const wHash = createHash('sha256').update(JSON.stringify([Object.entries(weights).sort(), Object.entries(pins).sort()])).digest('hex').slice(0, 16);
   if (reportFile) writeFileSync(reportFile, JSON.stringify({ k: shard.k, n: shard.n, total: names.length, hash: listHash(names), weights: wHash, positions: mine, names: mine.map((i) => names[i]) }, null, 1));
+}
+
+/* a case that passed only on its second try (e2e/patience.mjs), added to this shard's report for the coverage job to name */
+export function noteRetried(reportFile, name, firstMessage) {
+  const first = String(firstMessage).split('\n')[0].slice(0, 300);
+  console.log(`e2e retried: ${name}: ${first}`);
+  if (!reportFile || !existsSync(reportFile)) return;
+  const report = JSON.parse(readFileSync(reportFile, 'utf8'));
+  (report.retried ||= []).push({ name, first });
+  writeFileSync(reportFile, JSON.stringify(report, null, 1));
 }
 
 /* the coverage gate: the reports of all n shards, together. Returns a list of problems (empty = every case ran once) */

@@ -8,6 +8,8 @@
     "test": "node --test",
     "smoke": "node --test test/smoke.mjs",
     "e2e": "node --test e2e/workspaces.mjs",
+    "e2e:changed": "node tools/e2e-changed.mjs",
+    "e2e:rebalance": "node tools/e2e-rebalance.mjs",
     "drift": "node tools/port-rules.mjs --check",
     "profile-lands": "node --test test/profile-lands.mjs",
     "relief-tier": "node --test test/relief-tier.mjs",

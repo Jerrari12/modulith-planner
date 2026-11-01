@@ -15,3 +15,6 @@ if (want && reports[0] && reports[0].n !== +want) bad.push(`the shards split ${r
 if (bad.length) { for (const b of bad) console.log(`::error title=e2e shard coverage::${b}`); process.exit(1); }
 const per = reports.sort((a, b) => a.k - b.k).map((r) => `shard ${r.k}: ${r.positions.length}`).join(', ');
 console.log(`::notice title=e2e shard coverage::${reports[0].total} cases, each run exactly once (${per})`);
+/* a pass on the second try does not block, and it is not nothing: each is named where the run's annotations are read (e2e/patience.mjs) */
+const esc = (s) => String(s).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+for (const r of reports) for (const c of r.retried || []) console.log(`::warning title=e2e case passed on its retry (shard ${r.k})::${esc(`${c.name}: ${c.first}`)}`);
