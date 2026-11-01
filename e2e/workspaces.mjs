@@ -74,6 +74,8 @@ const SOFTWARE_GL = await (async () => {
   finally { await p.close(); }
 })();
 const ROOM_SOFT_SKIP = SOFTWARE_GL && 'the Done room on a software rasteriser races the scene\'s clock; runs on a GPU (follow-up: make it runner-safe)';
+/* a software rasteriser's actions get 120 s: the runner ran out of the default 30 s on a click in two different cases on 2026-10-31 (runs 41247969961 and 41257763151; the annotation does not say which click). Neither case has grown: 385 to 407 s and 94 to 120 s in green runs, before that day's work and after. A fresh Colors page's Room click alone took 10 s on a laptop's SwiftShader. A control that cannot be clicked still fails the case */
+if (SOFTWARE_GL) { const make = browser.newContext.bind(browser); browser.newContext = async (o) => { const c = await make(o); c.setDefaultTimeout(120_000); return c; }; }
 localParts(browser, root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from this checkout (test/lib/local-parts.mjs)
 test.after(async () => { await browser.close(); server.close(); if (studioServer) studioServer.close(); });
 /* a case that fails before its own ctx.close() must not leave a page rendering: on the CI runner's software rasteriser
@@ -2951,8 +2953,6 @@ test('Assemble: the Done scene hangs a wall build on its wall and an under-table
 test('Assemble: the Done scene\'s wall and desk colours repaint the room, a dark wall darkens the rest of it, and the choice is remembered', async () => {
   const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-  // run 41247969961 ran out of the default 30 s on one of this case's clicks (the annotation does not say which); a fresh Colors page's Room click alone took 10 s on a laptop's SwiftShader
-  ctx.setDefaultTimeout(120_000);
   await ctx.addInitScript(() => { try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', 'high'); localStorage.setItem('gen2-quality:set', '1'); } catch {} window.__DONE_TIMING__ = { maxFrameMs: 1e9, enterMs: 3000 }; });
   const { page, errors } = await open('assemble', { query: '&done=room', context: ctx });
   await btn(page, 'Skip to the finished build', '#ws-steps').click();
