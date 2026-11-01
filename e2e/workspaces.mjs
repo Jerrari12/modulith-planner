@@ -8010,7 +8010,7 @@ test('Colors: silk filaments wear a sheen in the picker and in the rows, plain o
     const silk = sws.filter(isSilk), plain = sws.filter((e) => !isSilk(e));
     return { silk: silk.length, plain: plain.length,
       silkOk: silk.filter((e) => !(e.classList.contains('silk') && /linear-gradient/.test(sheen(e)))).map((e) => e.getAttribute('aria-label')),
-      plainOk: plain.filter((e) => e.classList.contains('silk') || sheen(e) !== 'none').map((e) => e.getAttribute('aria-label')) };
+      plainOk: plain.filter((e) => e.classList.contains('silk') || /linear-gradient/.test(sheen(e))).map((e) => e.getAttribute('aria-label')) };   // the sheen, not any ::before: a glitter swatch has its specks there
   });
   assert.ok(r.silk >= 24, `the Silk PLA line is in the picker: ${r.silk}`);
   assert.deepEqual(r.silkOk, [], 'every silk swatch wears the sheen');
