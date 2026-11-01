@@ -15,7 +15,7 @@ import { generateManifest, migrateOfficialBuild } from '../js/generate.js';
 const { GEN2, GEN2_TABLETOP } = loadCatalog();
 const index = JSON.parse(readFileSync(join(root, 'builds', 'index.json'), 'utf8'));
 const hanging = index.filter((k) => k.mount !== 'tabletop');
-const SCREWS = { wall: { '2w2h': 4, '3w2h': 6 }, 'under-table': { '2w2h': 6, '3w2h': 8 } };
+const SCREWS = { wall: { '2w2h': 4, '3w2h': 6 }, 'under-table': { '2w2h': 6, '3w2h': 10 } };
 const MAGNETS = { '2w2h': 6, '3w2h': 10 };
 const shapeOf = (id) => id.slice(-4);
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -66,9 +66,40 @@ for (const row of hanging) {
     assert.equal(qty(list, /wood screw/i), SCREWS[row.mount][s]);
     assert.equal(qty(list, /^Magnets/), MAGNETS[s]);
     assert.equal(qty(list, /foot|feet/i), 0, 'a hanging kit has no foot rails or feet');
-    assert.equal(qty(list, row.mount === 'wall' ? /Wall Mount Kit/ : /Under Table Rails/), 1);
+    assert.equal(qty(list, row.mount === 'wall' ? /Wall Mount Kit/ : /Under Table Rails/), row.mount === 'under-table' && s === '3w2h' ? 2 : 1);
   });
 }
+
+/* Joey, 2026-10-31: "it looks like the kits use 3W under table rail, that requires a larger printer than most people have, i
+   think it would be best to use at at most a 2W". A 3W rail is 264 mm in every depth, which is off every 256 mm bed. */
+for (const row of hanging.filter((k) => k.mount === 'under-table')) {
+  test(`${row.id}: no rail wider than 2W, in the bill and in the model`, () => {
+    const kit = readKit(`${row.id}.json`).build;
+    assert.equal(kit.railMaxW, 2);
+    const want = shapeOf(row.id) === '3w2h' ? ['1W section', '2W section'] : ['2W section'];
+    const rails = (rec) => items(rec).filter((i) => /Under Table Rails/.test(i.name)).map((i) => i.variant).sort();
+    assert.deepEqual(rails(kit), want, 'the bill');
+    assert.deepEqual(rails({ ...kit, printer: 'xl' }), want, 'a 360 mm bed does not lift it: the kit stays the kit its page describes');
+    const re = new RegExp(`^UnderTableRail_${row.length}-(\\d)W$`);
+    const drawn = (rec, opts) => generateManifest(rec, opts).manifest.instances.filter((i) => re.test(i.node)).map((i) => `${re.exec(i.node)[1]}W section`).sort();
+    assert.deepEqual(drawn(kit, { catalog: GEN2 }), want, 'the model');
+    assert.deepEqual(drawn(kit, { catalog: null }), want, 'and in the goldens, which run with no catalog');
+  });
+}
+
+test('a 3W-2H kit\'s first step tells the builder to butt its two rails; a kit on one rail has nothing to butt', () => {
+  const note = (id) => generateManifest(migrateOfficialBuild(readKit(`${id}.json`).build, 1)).manifest.steps.find((s) => /Screw the rails? to the surface/.test(s.title || '')).note;
+  assert.match(note('185-undertable-3w2h'), /Butt the rails edge to edge/);
+  assert.doesNotMatch(note('185-undertable-2w2h'), /Butt/);
+  // two rails with a gap between them do not meet (Sol 01a19482): the sentence is for a joint, not for a second rail
+  const kit = readKit('185-undertable-2w2h.json').build;
+  const gapped = { ...kit, placed: [{ ...kit.placed[0], x: 1, w: 1 }, { ...kit.placed[1], x: 3, w: 1 }] };
+  const gen = generateManifest(gapped);
+  assert.deepEqual(gen.errors, []);
+  const first = gen.manifest.steps.find((s) => /Screw the rails? to the surface/.test(s.title || ''));
+  assert.equal(first.title, 'Screw the rails to the surface', 'two rails');
+  assert.doesNotMatch(first.note, /Butt/, 'and no joint between them');
+});
 
 test('the wall kit\'s first step tells the truth about the pegs (vault rules.md: sleeves, not screw heads)', () => {
   const gen = generateManifest(migrateOfficialBuild(readKit('185-wall-2w2h.json').build, 1));

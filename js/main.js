@@ -11675,7 +11675,7 @@ function startPartIdle() {
    at once, as it always has (idle.force, see READING THE CANVAS). Without the extension nothing is pending and the first draw
    waits on first use, as it did. A software rasteriser, a part preview, a benchmark and a shot keep the old path (`?firstdraw=on`
    is the CI runner's way in, `off` a control arm). */
-const FIRST_DRAW_RELEASE_MS = 3000, FIRST_DRAW_WAIT_MS = 20000, FIRST_DRAW_JUDGE_MS = 150, FIRST_DRAW_FEW = 2;
+const FIRST_DRAW_RELEASE_MS = 3000, FIRST_DRAW_WAIT_MS = 20000, FIRST_DRAW_JUDGE_MS = 150, FIRST_DRAW_FEW = 2, FIRST_DRAW_FEW_RETURNING = 5, FIRST_DRAW_QUICK_MS = 4000, FIRST_DRAW_WAITS = 'gen2-first-draw-waits';
 const firstDrawFlag = new URLSearchParams(location.search).has('debug') ? new URLSearchParams(location.search).get('firstdraw') : null;
 /* `var`, like sceneHold: applyQuality can run before this line, and reads it */
 var firstDraw = { held: firstDrawFlag !== 'off' && !IS_PART && !IS_BENCH && !new URLSearchParams(location.search).get('shot') && (!SOFTWARE_GL || firstDrawFlag === 'on'),
@@ -11707,11 +11707,14 @@ function firstDrawStep() {
     }
   } finally { renderer.setRenderTarget(prev); }
 }
+/* the shortest wait this browser has sat through on each tier with more stragglers than it could take (about what they take here), and how many that buys: see the judgement */
+function firstDrawWaits() { try { const m = JSON.parse(localStorage.getItem(FIRST_DRAW_WAITS)); return m && typeof m === 'object' ? m : {}; } catch { return {}; } }
+const firstDrawFew = () => (firstDrawWaits()[quality] < FIRST_DRAW_QUICK_MS && !matchMedia('(pointer: coarse)').matches ? FIRST_DRAW_FEW_RETURNING : FIRST_DRAW_FEW);
 function firstDrawHeld() {
   if (!firstDraw.held || idle.force) return false;
   const now = performance.now();
   if (!firstDraw.released && now < firstDraw.releaseBy) return true;   // the workspace still mounting: its palette decides programs
-  if (!firstDraw.deadline) { firstDraw.deadline = now + FIRST_DRAW_WAIT_MS; firstDraw.marks.start = now; }
+  if (!firstDraw.deadline) { firstDraw.deadline = now + FIRST_DRAW_WAIT_MS; firstDraw.marks.start = now; firstDraw.marks.few = firstDrawFew(); }
   firstDrawStep();
   if (firstDraw.queue.length) firstDraw.marks.queued = 0;   // a state change brought more (the Colors room, opened from the address): the moment starts again (Sol 01a1938e)
   else if (!firstDraw.marks.queued) firstDraw.marks.queued = now;
@@ -11723,16 +11726,27 @@ function firstDrawHeld() {
      at 1.5 s against 0.6 s before this hold; one synchronous visit cured it for good). So one judgement, once the compiles have
      had a moment: this few left is a warm cache, and the frame takes the wait on first use, once, with the interface up. That
      wait is as long as those links take, which a pending count cannot bound (under a second on the A5000): stated, and the old
-     path's cost for those programs, on one visit. More than this is a cold browser, and waits for all of them. */
+     path's cost for those programs, on one visit. More than this is a cold browser, and waits for all of them.
+     A BROWSER THAT HAS WAITED FOR THIS TIER TAKES MORE OF THEM. Two alone left High over the rule for four to eight visits on the
+     live page (left 5, 4, 3, 3, 3, 3, 3, 2; model at 2.0 to 2.9 s against 0.56 to 0.88 s before), and it took its long wait in the
+     end anyway. A count cannot tell those from a cold browser (cold, Balanced left 3 and Fast 4; warm, High left 5), but the page
+     can remember having waited here, and how long. A count bounds no time, and five on a slower GPU could hold the page for many
+     seconds (Terra 01a19477), so the shortest such wait has to be under FIRST_DRAW_QUICK_MS: the wait on stragglers comes near the
+     whole of it (five at High on the A5000: one task of 1.88 s, after a wait of 2.2 s). It can come on two visits running (left 4,
+     then 2). A slower machine keeps two until its waits have shrunk; the shortest, since this laptop's own first wait read 3.8 to
+     5.3 s when busy, and that one visit must not settle it for good. A cache gone behind that memory (a driver update, a changed
+     shader) waits at first use the same way where a cold count fits; VH and High left 6 cold, and hold. A touch device keeps two: no phone was measured. */
   if (firstDraw.marks.queued && !firstDraw.marks.judged && now - firstDraw.marks.queued >= FIRST_DRAW_JUDGE_MS) {
     firstDraw.marks.judged = now; firstDraw.marks.left = pending;
-    if (pending <= FIRST_DRAW_FEW) firstDraw.stragglersTaken = pending;
+    if (pending <= firstDraw.marks.few) firstDraw.stragglersTaken = pending;
   }
   if ((firstDraw.queue.length || pending) && firstDraw.stragglersTaken == null) {
     if (now < firstDraw.deadline) return true;
     firstDraw.timedOut = true;   // a driver that never says ready must not hold the build back for ever: the wait moves to first use, as it was
   }
   firstDraw.marks.done = now;
+  const waits = firstDrawWaits();
+  if (!firstDraw.timedOut && firstDraw.marks.left > firstDraw.marks.few) { waits[quality] = Math.min(waits[quality] ?? Infinity, Math.round(now - firstDraw.marks.start)); try { localStorage.setItem(FIRST_DRAW_WAITS, JSON.stringify(waits)); } catch { /* private mode: every visit is a first one */ } }
   firstDraw.held = false; firstDraw.seen.clear();
   document.getElementById('loading-overlay')?.remove();
   perfGrace();   // the frames that follow may still upload every buffer and texture: not a frame rate

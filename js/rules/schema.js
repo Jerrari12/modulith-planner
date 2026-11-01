@@ -49,7 +49,11 @@ export const BUILD_FIELDS = ["mount", "length", "printer", "customBed", "spaceW"
   // the planner's own field (2026-10-28): the build's LOOK, its Colors palette as chosen, { v: 1, on, colors, over }
   // (docs/redesign/SHARE-LOOK.md), so a link, a file or a Recent entry carries its colours. Absent in every older record
   // and share link, which read as null - this browser's palette for the build, else the first preset, as before
-  "look"];
+  "look",
+  // the planner's own field (2026-10-31): the widest under-table rail section this build tiles with, on top of what the
+  // chosen bed allows. The under-table kits carry 2 (Joey: a 3W rail is 264 mm, wider than most people's beds, and a kit
+  // is printed by whoever opens it). Absent in every older record and share link, which read as null - the bed alone decides
+  "railMaxW"];
 /* the per-part plate finishes, cleaned (2026-10-26, the planner's own field): an object of type name -> one of
    BUILD_PLATES; anything else is dropped, never guessed. Type names are the manifest's part types ("Faceplate",
    "Case", "Stopper", "MagnetClip"...): a letter, then letters, digits, spaces, "-" or "_", 1-40 characters in all. */
@@ -222,6 +226,8 @@ export function sanitizeBuild(d, GEN2) {
   d.labelPalette = cleanLabelPalette(d.labelPalette);
   // the look (2026-10-28): ALWAYS written (null when none), for the same reason
   d.look = cleanLook(d.look);
+  // the rail cap (2026-10-31): ALWAYS written (null when none), for the same reason
+  d.railMaxW = GEN2.railWidths?.includes(d.railMaxW) ? d.railMaxW : null;
   // a build without an identity (older than the field, or a mangled one) gets
   // a new one; a valid one is KEPT, so a saved or shared build stays itself
   d.buildId = typeof d.buildId === "string" && BUILD_ID_RE.test(d.buildId) ? d.buildId : newBuildId();

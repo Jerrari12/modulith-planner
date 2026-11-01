@@ -16,7 +16,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import { computeBom, bomRows } from '../js/rules/bom.js';
-import { sanitizeBuild } from '../js/rules/schema.js';
+import { sanitizeBuild, serializeBuild } from '../js/rules/schema.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { generateManifest, bedLimits } = await import(pathToFileURL(join(root, 'js', 'generate.js')).href);
@@ -108,5 +108,37 @@ test('the foot rails keep their brick stagger whatever the printer, and match th
     assert.deepEqual(drawn(m, FRU), [1, 2, 2, 2, 2, 2], `${printer}: the upper layer, seams offset from the lower`);
     assert.deepEqual(mix(drawn(m, FRL)), billed(b, 'GEN2 270 Foot Rail Lower'), `${printer}: the lower bill`);
     assert.deepEqual(mix(drawn(m, FRU)), billed(b, 'GEN2 270 Foot Rail Upper'), `${printer}: the upper bill`);
+  }
+});
+
+/* THE RECORD'S OWN CAP (2026-10-31): railMaxW, which the under-table kits carry as 2 (test/hanging-kits.test.mjs has Joey's
+   words). It caps the rails on top of the bed: the narrower of the two wins, and the wall brackets do not follow it. */
+test('railMaxW: the narrower of the cap and the bed wins, and only the rails follow it', () => {
+  assert.deepEqual(bedLimits(rec({ printer: 'any', railMaxW: 2 }), GEN2), { rail: 2, bracket: 3 });
+  assert.deepEqual(bedLimits(rec({ printer: 'xl', railMaxW: 2 }), GEN2), { rail: 2, bracket: 3 });
+  assert.deepEqual(bedLimits(rec({ printer: 'mk4', railMaxW: 2 }), GEN2), { rail: 1, bracket: 2 }, 'a 270 rail fits an MK4 no way round: the bed wins');
+  assert.deepEqual(bedLimits(rec({ printer: 'any', railMaxW: 2 }), null), { rail: 2, bracket: 3 }, 'no catalog: the cap still holds, as it does in the goldens');
+  assert.deepEqual(bedLimits(rec({ printer: 'any' }), GEN2), { rail: 4, bracket: 3 }, 'no cap: nothing changes for any other build');
+});
+
+test('railMaxW: sanitize keeps a real width and drops the rest, serialize carries it, and the generator ignores junk from an unsanitized link', () => {
+  assert.equal(rec({ railMaxW: 2 }).railMaxW, 2);
+  assert.equal(rec({}).railMaxW, null);
+  for (const junk of [0, 5, 2.5, '2', 'x', null, {}]) {
+    assert.equal(rec({ railMaxW: junk }).railMaxW, null, `sanitize: ${JSON.stringify(junk)}`);
+    const raw = { ...rec({ placed: row([3]) }), railMaxW: junk };
+    assert.deepEqual(drawn(generateManifest(raw, { catalog: GEN2 }).manifest, UT_RAIL), [3], `the generator: ${JSON.stringify(junk)} is no cap`);
+  }
+  assert.equal(serializeBuild(rec({ railMaxW: 2 })).railMaxW, 2);
+});
+
+test('railMaxW: the model and the bill agree on the sections and the screws for every printer and row width', () => {
+  for (const widths of [[1], [2], [3], [2, 3], [1, 2, 2], [2, 3, 3, 3]]) for (const printer of [...GEN2.printers.map((p) => p.id), 'custom']) {
+    const b = rec({ printer, railMaxW: 2, customBed: printer === 'custom' ? { x: 400, y: 400 } : { x: null, y: null }, placed: row(widths) });
+    const m = gen(b);
+    assert.ok(drawn(m, UT_RAIL).every((w) => w <= 2), `${printer} ${widths.join('+')}: nothing over 2W`);
+    assert.deepEqual(mix(drawn(m, UT_RAIL)), billed(b, 'GEN2 Under Table Rails - 270'), `${printer} ${widths.join('+')}`);
+    const screws = bomRows(computeBom(b, GEN2) || [], null).find((r) => r.hardware && /wood screws/i.test(r.name)).qty;
+    assert.equal(m.parts.find((p) => p.type === 'Screw').qty, screws, `${printer} ${widths.join('+')}: the screws`);
   }
 });
