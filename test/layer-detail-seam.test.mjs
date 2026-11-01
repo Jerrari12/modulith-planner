@@ -25,9 +25,9 @@
  * finish numbers.
  *
  * The COMPOSITION MECHANISM — that a chain really does survive an assignment that ran first — is
- * gated where three can actually be loaded: the Lab's `test/unit/layerDetailSeam.test.ts` compiles
- * both orders against a stand-in assigner and reads the resulting shader. Between them the claim
- * is covered from both ends; neither half covers it alone.
+ * gated where three could actually be loaded: the Lab's `test/unit/layerDetailSeam.test.ts` compiled
+ * both orders against a stand-in assigner and read the resulting shader. The Lab was retired on
+ * 2026-11-01, so that half no longer runs: this file holds the order, and the module is pinned.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -128,9 +128,9 @@ test('⚔ the constraint still holds: attachHolo ASSIGNS and the vendored module
 });
 
 test('⚔ the print facts it passes are named constants, not literals in the call', () => {
-  /* This repo knows no layer height and no facet tilt; both travel from the Lab, where they were
-     measured, and are gated from that side. A literal in the call would be a sixth site with no
-     gate on it — the failure the Lab's own layerTiltAgreement test exists for. */
+  /* This repo knows no layer height and no facet tilt; both came from the Lab, where they were
+     measured. A literal in the call would be a sixth site with no gate on it — the failure the
+     Lab's own layerTiltAgreement test existed for. */
   const fn = body('withLayerDetail');
   assert.match(fn, /layerPitchMm:\s*LAYER_PITCH_MM/, 'the layer pitch is not the named constant');
   assert.match(fn, /tiltDeg:\s*LAYER_TILT_DEG/, 'the facet tilt is not the named constant');

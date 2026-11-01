@@ -6705,8 +6705,18 @@ Joey: "plan out how to represent glitter filaments square swatches next rather t
 
 **Also here.** The selected swatch's outline was cut off by the scroller on a desktop; `.brands` now has 4 px each side, its margins keeping the list's width.
 
-**Size.** `css/app.css` grows by about 3.6 KB: 2.8 KB of tiles (`tools/glitter-tiles.mjs` draws them, and a test holds the CSS to the tool) and the rules. One new module, `js/colors/swatch.js`, with its `pages.yml` lines; a copy of `js/` run through all 78 sed lines passes the guard's regex.
+**Size.** `css/app.css` grows by about 5 KB: 2.8 KB of tiles (`tools/glitter-tiles.mjs` draws them, and a test holds the CSS to the tool) and the rules. One new module, `js/colors/swatch.js`, with its `pages.yml` lines; a copy of `js/` run through all 78 sed lines passes the guard's regex.
 
-**Not measured.** A real phone, a real touch fling (every scroll here is scripted), another browser. Prototype cost on this laptop: about 0.45 ms of style work a step, no layout, one run each.
+**Not measured.** A real phone, a real touch fling (every scroll here is scripted), another browser. Cost on this laptop, the build itself with reduced motion as its control, one run each, the same 120-frame scroll: style 0.0 -> 51.6 ms for 68 steps on a desktop, 0.0 -> 79.3 ms for 95 steps at the S23's size, about 0.8 ms a step, layout 0.
 
 Checks: `test/swatch-finish.test.mjs` (5), `test/silk.test.mjs`, and three e2e cases, on the GPU and `E2E_SOFT=1`, with the idle gate and the Galaxy model case alongside on soft. 21 mutants, 21 killed, 15 by the e2e cases. Review: Sol `01a1978f`, no objection; its one conditional note, two glitter scrollers under one host in the same frame, does not arise here (each host has one).
+
+## 2026-11-01 · The planner owns what came from the Filament Material Lab
+
+Joey retired the Lab on 2026-11-01 (the vault's `docs/knowledge/decisions.md` has the reasons). It is a read-only archive at the tag `retired-2026-11`. Nothing is re-vendored now, in either direction, which also closes the re-vendor owed since silk.
+
+**What changed here: words, not behaviour.** `js/vendor/layer-detail.js` and `js/filament-profiles.js` stay where they are, keep their hash pins, and say they are the source now. The pin is how an intended change gets seen, so a change bumps it in the same commit. `PART_MATERIAL_CONTRACT_VERSION` is gone: only the Lab read it. `test/plate-poses-vendor.test.mjs` no longer compares with the Lab's copy; it keeps the checks on the registry's shape, because the knowledge pack now reads this repo's `data/plate-poses.json`. Comments that cite the Lab's findings stay, as citations of its archive.
+
+**Checks that no longer run, and had not been protecting this code.** Three lived only on the Lab's side: `layerDetailSeam` (a chain survives the holographic patch's assignment), `layerTiltAgreement` (the print facts), and the agreement test on `generate.js`'s Euler expansion. Their upstream was the old viewer, merged into this repo at the 2026-10-23 cutover, so none has checked this repo since. Nothing replaces them here: `test/layer-detail-seam.test.mjs` holds the order, and the module is pinned. A change to `generate.js`'s `PLATE_POSE` expansion has no agreement test.
+
+Checks: the full unit suite on this branch. No deploy of its own: this goes out with the glitter swatches.

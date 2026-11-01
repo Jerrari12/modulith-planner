@@ -38,7 +38,7 @@ const LABEL_PREFIX = {
 const BRAND_LINE_PREFIX = { 'Polar Filament|PLA': 'Polar ' };
 const prefixOf = (b) => Object.hasOwn(BRAND_LINE_PREFIX, `${b.brand}|${b.line}`) ? BRAND_LINE_PREFIX[`${b.brand}|${b.line}`] : LABEL_PREFIX[b.line];
 
-test('the catalog is the shape main.js and the Lab both read', () => {
+test('the catalog is the shape main.js reads', () => {
   assert.ok(Array.isArray(FILAMENT_DB), 'FILAMENT_DB is an array');
   assert.equal(FILAMENT_DB.length, 11, 'eleven brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26, Prusament Galaxy PLA 2026-11-01)');
 

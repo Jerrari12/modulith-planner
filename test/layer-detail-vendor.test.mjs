@@ -1,31 +1,13 @@
-/* THE VENDORED LAYER-DETAIL MODULE — drift gate + load contract.
+/* THE LAYER-DETAIL MODULE — a pin + the load contract.
  *
- * `js/vendor/layer-detail.js` is the Filament Material Lab's printed-layer renderer,
- * compiled from `src/appearance/layerDetail.ts` over there and copied here. It draws the bead
- * corrugation, the bead crown and the crest on printed parts.
+ * `js/vendor/layer-detail.js` draws the bead corrugation, the bead crown and the crest on printed
+ * parts. It began as a compile of the Filament Material Lab's `src/appearance/layerDetail.ts`. The
+ * Lab was retired on 2026-11-01, so this copy is the source now: no one re-emits it.
  *
- * ⚠ OWNERSHIP IS INVERTED FROM EVERY OTHER VENDORED FILE IN THIS REPO, so the two halves of the
- * gate swap sides. `part-material.js`, `filament-db.js` and `data/plate-poses.json` are OURS and
- * the Lab copies them; `requirement-scope.js` is the planner's and we copy it. This one is the
- * Lab's and we carry the copy — the same shape as requirement-scope, and the OPPOSITE of
- * plate-poses.
- *
- * The rule `plate-poses-vendor.test.mjs` states decides what belongs here: **each repo gates the
- * drift it can actually cause.**
- *
- *   HERE      someone hand-edits the copy       <- the pinned hash below
- *   THE LAB   someone edits the source and      <- their portVendor test, which re-derives the
- *             does not re-emit                     source hash and compares it to the banner
- *
- * ⚠ SO THE PIN IS NOT THE WHOLE GATE AND IS NOT MEANT TO BE. It cannot tell a current copy from a
- * stale one — both are "unchanged since I last looked". What it catches is the one failure this
- * repo can produce on its own, which is an edit made here to a file whose author is elsewhere.
- * The staleness half is unrunnable here: this repo has no TypeScript, no tsconfig and no `three`
- * in node_modules, so it cannot compile the source even if the source were present.
- *
- * ⚠ DERIVED FILE. Do not "fix" a failure here by editing the vendored copy or this constant.
- * Edit `src/appearance/layerDetail.ts` in the Lab and run `node tools/build-port-harness.mjs`,
- * which rewrites the copy and re-stamps its banner. Then bump the pin, in the same commit.
+ * ⚠ THE PIN STAYS, AND IT IS HOW AN INTENDED CHANGE IS SEEN. This file's 115 KB of shader decide how
+ * every printed part in the planner looks, and an unintended edit that still parses would pass every
+ * other test. Change the module on purpose, then bump the pin in the same commit, so a reviewer sees
+ * both. A failure here means the module changed: read the diff before you bump anything.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,32 +19,21 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDORED = join(root, 'js', 'vendor', 'layer-detail.js');
 
-/* ⚠ Bump ONLY after the Lab's module legitimately changed AND it has been re-emitted here. */
-const PINNED_SHA256 = '904abd9df9ecf793a0d4331df0b6ff1879a615a353c330f2823b861b7b912c15';
+/* ⚠ Bump ONLY in the commit that changes the module on purpose. */
+const PINNED_SHA256 = 'b4838053e33d722d77e88baef62453018280e78b646312e99d23ec314456fe65';
 
-/* ⚠⚠ HASH THE CANONICAL CONTENT, NEVER THE WORKING-COPY BYTES. Both repos STORE LF and a Windows
+/* ⚠⚠ HASH THE CANONICAL CONTENT, NEVER THE WORKING-COPY BYTES. The repo STORES LF and a Windows
    working copy holds CRLF, so hashing raw bytes asks which OS checked the file out rather than
    what the file says — and it answers NO in every fresh clone and in CI while passing locally.
    That already blocked one deploy on a copy that was correct. */
 const canonical = (p) => Buffer.from(readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8');
 
-test('the vendored layer-detail module is the copy that was reviewed', () => {
+test('the layer-detail module is the copy that was reviewed', () => {
   assert.ok(existsSync(VENDORED), 'js/vendor/layer-detail.js is missing');
   const got = createHash('sha256').update(canonical(VENDORED)).digest('hex');
   assert.equal(got, PINNED_SHA256,
-    'the vendored layer-detail copy has been edited here. It is a compiler emit owned by the '
-    + 'Filament Material Lab — re-run their tools/build-port-harness.mjs rather than editing it.');
-});
-
-test('it declares where it came from, in a form the Lab can check', () => {
-  const src = canonical(VENDORED).toString('utf8');
-  assert.match(src, /SOURCE OF TRUTH:\s+filament-material-lab\/src\/appearance\/layerDetail\.ts/,
-    'the provenance banner is gone — a derived file with no stated author is unmaintainable');
-  /* The Lab's half of the gate reads this line and compares it to the live source. A copy with no
-     source hash is one the other repo cannot prove current, so the banner is load-bearing rather
-     than decorative. */
-  assert.match(src, /SOURCE SHA256:\s+[0-9a-f]{64}/,
-    'the banner carries no source hash, so the Lab cannot prove this copy is not stale');
+    'js/vendor/layer-detail.js has changed. It decides how every printed part looks: if the change '
+    + 'is intended, bump this pin in the same commit.');
 });
 
 test('it loads in a browser here: three and nothing else', () => {
