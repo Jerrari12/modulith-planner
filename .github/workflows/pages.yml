@@ -145,6 +145,9 @@ jobs:
           sed -i "s|'./colour.js'|'./colour.js?v=$V'|; s|'./surprise.js'|'./surprise.js?v=$V'|" js/colors/simplify.js
           # the material chips (2026-10-23): the picker's material filter, imported by the Colors workspace (it imports nothing itself)
           sed -i "s|'../colors/materials.js'|'../colors/materials.js?v=$V'|" js/workspaces/colors.js
+          # the swatches' silk and glitter (2026-11-01): imported by the Colors workspace, and it reads the catalog and the flake tints
+          sed -i "s|'../colors/swatch.js'|'../colors/swatch.js?v=$V'|" js/workspaces/colors.js
+          sed -i "s|'../filament-db.js'|'../filament-db.js?v=$V'|; s|'../glitter.js'|'../glitter.js?v=$V'|" js/colors/swatch.js
           sed -i "s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/store.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../ui/glyph.js'|'../ui/glyph.js?v=$V'|; s|'../rules/bom.js'|'../rules/bom.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|" js/workspaces/parts.js
           # the Parts list names the filament a part prints in (2026-10-18): it reads the Colors tab's words from its module

@@ -6692,3 +6692,21 @@ Joey asked whether the BOM could say "how many 1kg spools they will need". The s
 **Review.** Sol `01a19776` (substantial, a new rule and a cross-repo table). Taken: the kit page's "one more for each extra colour" overstated it, two colours at 600 g need two spools, so it now says each one starts a spool of its own. Discarded: a missing import of `PRINT_GRAMS`, which is in the file and was left out of the payload.
 
 Checks: `test/filament-use.test.mjs` (10 cases), the Parts e2e case asserts the block, and a Chrome run on desktop and at the S23's 360x675 and 780x260 read the lines back with no overflow and no page errors. `npm test` here fails one case against a stale site checkout (`site-boms`, the laptop's `MODULITH` folder is behind): it passes with `SITE_REPO` on current site code.
+
+## 2026-11-01 · Glitter swatches: specks and glints that sparkle as the list scrolls
+
+Joey: "plan out how to represent glitter filaments square swatches next rather than just a solid color". Of the candidates, "I like c from first sheet", fine specks with four-point glints. And "it might be cool if when scrolling down the list of swatches, if the glitter ones could sparkle and flint as you scroll".
+
+**What it does.** The catalog's glitter family wears `.sw.glitter`: two tiles on the swatch's `::before`, so `::after` stays free for the pick star and the owned tick. The steady tile holds the small specks and never moves on a swatch. The lit tile holds two glints and five bright specks, and it is the one that moves. Each swatch looks through its own window on the tiles (`--gx`, `--gy`, a hash of its label), so neighbours differ and a filament looks the same everywhere. It draws at every size, including the 12 px summary list and swap note, where silk has no sheen; at 16 and 12 px the lit tile draws at 24 px, so a glint still lands on most swatches. Galaxy Green's lit tile is warm, for `GLITTER_TINTS`.
+
+**The sparkle** (`sparkleOnScroll`). The lit layer's place is a function of the scroll position alone, a step every 14 px, so stopping stops it and scrolling back brings the same glints back; step 0 is the swatch at rest. One capture listener on the picker and one on the Surprise panel hear any scroller inside them, which is the sheet itself on a phone. At most one write a frame, on the glitter swatches alone. A list rebuilt in place (a material chip) is put back at its step. A pointer's hover steps the lit layer through four places in CSS, so a short list that cannot scroll still glistens. Reduced motion stills both. Nothing touches the model: on the settled page, 90 frames of scrolling drew 0 frames and woke nothing (`idleStats`).
+
+**Silk's word rule stays.** The plan was to read silk from the catalog too; `test/silk.test.mjs` says the word is on purpose, because a saved palette can name a filament the catalog lacks. Glitter is the catalog's alone, as on the model.
+
+**Also here.** The selected swatch's outline was cut off by the scroller on a desktop; `.brands` now has 4 px each side, its margins keeping the list's width.
+
+**Size.** `css/app.css` grows by about 3.6 KB: 2.8 KB of tiles (`tools/glitter-tiles.mjs` draws them, and a test holds the CSS to the tool) and the rules. One new module, `js/colors/swatch.js`, with its `pages.yml` lines; a copy of `js/` run through all 78 sed lines passes the guard's regex.
+
+**Not measured.** A real phone, a real touch fling (every scroll here is scripted), another browser. Prototype cost on this laptop: about 0.45 ms of style work a step, no layout, one run each.
+
+Checks: `test/swatch-finish.test.mjs` (5), `test/silk.test.mjs`, and three e2e cases, on the GPU and `E2E_SOFT=1`, with the idle gate and the Galaxy model case alongside on soft. 21 mutants, 21 killed, 15 by the e2e cases. Review: Sol `01a1978f`, no objection; its one conditional note, two glitter scrollers under one host in the same frame, does not arise here (each host has one).
