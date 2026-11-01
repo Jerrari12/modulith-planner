@@ -32,6 +32,7 @@ const LABEL_PREFIX = {
   'PLA / PETG': null,                 // Elegoo, explicit per row
   PLA: 'Printed Solid ',
   'Burnt Titanium PLA': null,         // ERYONE, explicit per row
+  'Galaxy PLA': 'Prusament ',         // 2026-11-01
 };
 /* a line name two brands share ("PLA": Printed Solid and Polar Filament, 2026-10-26) is told apart by its brand */
 const BRAND_LINE_PREFIX = { 'Polar Filament|PLA': 'Polar ' };
@@ -39,7 +40,7 @@ const prefixOf = (b) => Object.hasOwn(BRAND_LINE_PREFIX, `${b.brand}|${b.line}`)
 
 test('the catalog is the shape main.js and the Lab both read', () => {
   assert.ok(Array.isArray(FILAMENT_DB), 'FILAMENT_DB is an array');
-  assert.equal(FILAMENT_DB.length, 10, 'ten brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26)');
+  assert.equal(FILAMENT_DB.length, 11, 'eleven brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26, Prusament Galaxy PLA 2026-11-01)');
 
   for (const b of FILAMENT_DB) {
     const where = `${b.brand} / ${b.line}`;
@@ -70,7 +71,7 @@ test('every colour carries the four fields a consumer may rely on', () => {
       if ('pickNote' in c) assert.ok(c.pick === true, `${where}: pickNote without pick`);
     }
   }
-  assert.equal(n, 166, 'one hundred and sixty-six colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21, 44 Polar PLA 2026-10-26)');
+  assert.equal(n, 171, 'one hundred and seventy-one colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21, 44 Polar PLA 2026-10-26, 5 Prusament Galaxy PLA 2026-11-01)');
 });
 
 test('⚔ every label is unique across every brand', () => {
@@ -83,7 +84,7 @@ test('⚔ every label is unique across every brand', () => {
     }
   }
   assert.deepEqual(clashes, [], 'labels collide, and customColors keys on them');
-  assert.equal(seen.size, 166, 'every colour contributed a distinct label');
+  assert.equal(seen.size, 171, 'every colour contributed a distinct label');
 });
 
 test('⚔ each brand builds its labels the way its block says it does', () => {

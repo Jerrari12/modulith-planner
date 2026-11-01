@@ -37,7 +37,7 @@ test('the catalog decides silk: exactly the Silk PLA line, all 24, and nothing e
   assert.equal(silk.length, 24);
   assert.ok(silk.every(([line]) => line === 'Panchroma™ Silk PLA'), 'a filament outside the Silk PLA line is marked silk');
   assert.ok(FILAMENT_DB.filter((b) => b.line === 'Panchroma™ Silk PLA').every((b) => b.colors.every((c) => c.finish === 'silk')));
-  for (const c of FILAMENT_DB.flatMap((b) => b.colors)) assert.ok(c.finish === undefined || c.finish === 'silk', `${c.label}: finish ${c.finish}`);
+  for (const c of FILAMENT_DB.flatMap((b) => b.colors)) assert.ok(c.finish === undefined || c.finish === 'silk' || c.finish === 'glitter', `${c.label}: finish ${c.finish}`);
   assert.equal(finishOfLabel('Panchroma Silk Gold'), 'silk');
   assert.equal(finishOfLabel('Panchroma Yellow'), null);
   assert.equal(finishOfLabel('A filament the catalog no longer holds'), null);

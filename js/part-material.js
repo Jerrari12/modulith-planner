@@ -42,10 +42,12 @@ import { finishOfLabel } from './filament-db.js';
  * with the silk roughness and metalness but no directional sheen, an isotropic pseudo-metal nobody
  * authored. Both repos pin this constant, so the mismatch is a failing test rather than a picture
  * nobody can explain. A label-free call (the Lab's own pane) returns exactly what it did under 2.
+ * Version 4 can also return `glitter` for a filament of the catalog's glitter family: the scalars do
+ * not change, so a consumer written against 3 draws a plain part and nothing it cannot explain.
  *
  * (2 since 2026-09-07: version 1 answered a part key with a fixed finish; 2 added the label.)
  */
-export const PART_MATERIAL_CONTRACT_VERSION = 3;
+export const PART_MATERIAL_CONTRACT_VERSION = 4;
 
 /**
  * ⚠ THE AUTHORED SILK APPROXIMATION (2026-10-28) — VISUALLY TUNED IN THE PLANNER'S OWN ROOM AND
@@ -191,5 +193,8 @@ export function partMaterialSpec(key, ctx = {}) {
      the label's words. `anisotropy` is the spec's ASK: the viewer zeroes it where it does not know
      which way the part grew, because a direction on a guessed axis is a print that does not exist. */
   if (label && finishOfLabel(label) === 'silk') return { ...base, ...SILK_APPROX, silk: 'approx' };
+  /* THE GLITTER FAMILY, ALSO BELOW THE PROFILE AND THE PLATE: an ask, like `anisotropy`. The viewer draws it (main.js, glitter.js);
+     the plastic around the flakes keeps the base finish, so no scalar moves. */
+  if (label && finishOfLabel(label) === 'glitter') return { ...base, glitter: 'approx' };
   return base;
 }

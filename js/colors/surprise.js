@@ -160,7 +160,7 @@ function writeOut(r, hardware, feet) {
 /* the share of the visible area carrying a colour, by the role weights */
 export const areaOf = (roles, name) => +Object.entries(roles).reduce((s, [role, c]) => s + ((c.name || c) === name ? AREA[role] || 0 : 0), 0).toFixed(3);
 /* a filament's short name (the brand and line dropped, the finish kept): the tooltip and the toast; titles use colour words */
-export const shortName = (name) => String(name).replace(/^(Panchroma|Polymaker PETG|Polymaker|Printed Solid|Elegoo PLA|Elegoo PETG|ERYONE|Polar) /, '');
+export const shortName = (name) => String(name).replace(/^(Panchroma|Polymaker PETG|Polymaker|Printed Solid|Elegoo PLA|Elegoo PETG|ERYONE|Polar|Prusament) /, '');
 /* "<the two colours with the most visible area>", as colour words (Astra: "Sand & charcoal"; "derive titles from the prominent
    visible colours - including locked colours"); a quiet look names its touch of accent; a bold one puts the accent first */
 function nameOf(r, A, slot) {

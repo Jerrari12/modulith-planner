@@ -1,9 +1,10 @@
 /* =========================================================================
-   GLITTER - specks in the surface that catch the light as the view moves (PROTOTYPE, 2026-10-31)
+   GLITTER - specks in the surface that catch the light as the view moves (2026-10-31, live 2026-11-01)
    =========================================================================
    Joey 2026-10-31: "a low performance taxing way to represent glitter filament from a distance ... if you move the camera
-   specks in the surface seem to glisten a little ... pretend this is prusament galaxy black grips." Behind ?glitter= only:
-   with no flag no material is patched, so every program stays what it is on main.
+   specks in the surface seem to glisten a little ... pretend this is prusament galaxy black grips." The catalog's glitter family
+   wears it (filament-db.js `finish: 'glitter'`, read by part-material.js). Every printed part's program carries the block behind
+   a define, so a part in another filament compiles it out and pays nothing a frame. ?glitter=off patches nothing, to compare.
 
    THE REFERENCE, MEASURED FROM JOEY'S CLIP OF THE REAL PRINT (20261031_202801.mp4, 720p, about 9 px/mm, video_specks.py):
    1 to 2 lit specks per mm2 on a face turned to the light, far fewer on one turned away; a speck's peak about 37 sRGB codes
@@ -70,12 +71,8 @@ export const GLITTER = Object.freeze({
   keyDir: [-0.5, 0.75, 0.45],           // the envelope's world-fixed half vector, from above and to the left, the room's window side
 });
 
-/** A flag value, or null. `on`: the labels below. `grips`: the grip zone whatever it wears. `all`: every part (the cost bench). */
-export const glitterArm = (v) => (['on', 'grips', 'all'].includes(v) ? v : null);
-
-/* the catalog's own galaxy rows and the one Joey asked to pretend with; a real line would carry `finish: 'glitter'` in the
-   catalog, the way silk does (a filament's name never decides a finish). Not needed until there is a go. */
-export const GLITTER_LABELS = Object.freeze(['Prusament Galaxy Black', 'Prusament Galaxy Purple', 'Prusament Galaxy Green', 'Prusament Galaxy Silver', 'Prusament Galaxy Red', 'Polymaker Hedgehog Makes Galaxy Red', 'Polymaker PETG Galaxy Black', 'Polymaker PETG Galaxy Dark Grey', 'Polymaker PETG Galaxy Blue', 'Polymaker PETG Galaxy Red']);
+/** The flag's arm. `on`, the default: the catalog's glitter family. `off`: none, and nothing patched. `grips`: the family and the grip zone whatever it wears. `all`: every part (the cost bench). */
+export const glitterArm = (v) => (v === 'off' ? null : ['grips', 'all'].includes(v) ? v : 'on');
 
 /* A filament's flakes can be another colour than the near-white of the rest: a retailer describes Galaxy Green's as "fine gold glitters"
    (3dstisk.com; Prusa's own pages tag glitter and do not describe its colour). Compiled in as a define, so it costs nothing a frame and one
@@ -88,12 +85,12 @@ export function glitterTintOf(label) {
   return t ? `vec3( ${t.map((n) => n.toFixed(3)).join(', ')} )` : null;
 }
 
-/** Does this key wear glitter under this arm? */
-export function glitterWanted(arm, key, label) {
+/** Does this key wear glitter under this arm? `spec` is part-material.js's answer, so the catalog decides, never a filament's name. */
+export function glitterWanted(arm, key, spec) {
   if (!arm) return false;
   if (arm === 'all') return true;
   if (arm === 'grips' && String(key) === 'Faceplate:GRIP') return true;
-  return !!label && GLITTER_LABELS.includes(label);
+  return !!spec.glitter;
 }
 
 export const glitterTier = (tone) => (tone ? 1 : GLITTER.flat);

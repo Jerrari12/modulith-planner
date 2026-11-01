@@ -177,10 +177,10 @@ const FILAMENT_DB = [
     { name: 'PETG Dark Purple',      hex: '#462a6b', id: 45079221698617 },
     { name: 'PETG Army Brown',       hex: '#6f5b3e', id: 45588258095161 },
     { name: 'PETG Clear',            hex: '#e8ecef', id: 46279866023993 },
-    { name: 'PETG Galaxy Black',     hex: '#23252e', id: 45588258553913 },
-    { name: 'PETG Galaxy Dark Grey', hex: '#4a4e59', id: 45588259078201 },
-    { name: 'PETG Galaxy Blue',      hex: '#2b4a8c', id: 45588259176505 },
-    { name: 'PETG Galaxy Red',       hex: '#8c2430', id: 45588259504185 },
+    { name: 'PETG Galaxy Black',     hex: '#23252e', id: 45588258553913, finish: 'glitter' },
+    { name: 'PETG Galaxy Dark Grey', hex: '#4a4e59', id: 45588259078201, finish: 'glitter' },
+    { name: 'PETG Galaxy Blue',      hex: '#2b4a8c', id: 45588259176505, finish: 'glitter' },
+    { name: 'PETG Galaxy Red',       hex: '#8c2430', id: 45588259504185, finish: 'glitter' },
   ].map(f => ({ ...f, label: `Polymaker ${f.name}`, url: POLY_LINK('petg') })) },
   /* Polymaker Panchroma™ Translucent PLA — the EXTRA-TRANSPARENT family only (Joey 2026-09-17).
      ⚠ HEXES HERE ARE THE SHOP'S OWN PUBLISHED SWATCH VALUES, not approximations like every section
@@ -353,10 +353,26 @@ const FILAMENT_DB = [
     { name: 'Power Gray 100',    hex: '#ADA49F', url: `${POLAR}/coming-soon-power-gray-100` },   // P780
     { name: 'Michigan Dew',      hex: '#EAFF80', url: `${POLAR}/new-michigan-dew-pla-1kg-1-75mm` },   // P786
   ].map(f => ({ ...f, label: `Polar ${f.name}` })) },
+  // Prusament Galaxy PLA (Joey, 2026-11-01: "the Prusament can" go live; plain store links with no tracking on them). The 1 kg
+  // spools' own product pages, read in stock 2026-11-01. ⚠ `finish: 'glitter'` IS THE FAMILY THE SHOP TAGS (Glitter on each page), not a
+  // measurement; part-material.js reads it, glitter.js draws it. ⚠ WHERE EACH HEX COMES FROM, BECAUSE THEY DIFFER:
+  // - Black, Silver, Green: Prusa's chart (help.prusa3d.com, HueForge TD and hex codes) and FilamentColors.xyz, digit for digit.
+  // - Purple: FilamentColors' 453A72. Prusa's chart says 0F0939, nearly black in the planner's room. Prusa's own swatch photos settle
+  //   it as a purple: the median of their centre third reads #4B2E7E (1 kg) and #44257A (2 kg). A print would settle the digits.
+  // - Red: NO chart row and no FilamentColors swatch, so the median of the centre third of Prusa's own swatch photo, as Jessie Neon
+  //   Yellow's above. Those photos run dark on the three colours with a chart value (Black 2D2D2D, Silver 85898B, Green 162F18), so
+  //   this may be too; a measured hex replaces it. Polymaker's Hedgehog Makes Galaxy Red (#760007, PA02106) waits for Joey's minted link.
+  { brand: 'Prusament', line: 'Galaxy PLA', url: 'https://www.prusa3d.com/category/prusament-pla/', colors: [
+    { name: 'Galaxy Black',  hex: '#3D3E3C', url: 'https://www.prusa3d.com/product/prusament-pla-prusa-galaxy-black-1kg-nfc/' },
+    { name: 'Galaxy Silver', hex: '#999A9F', url: 'https://www.prusa3d.com/product/prusament-pla-galaxy-silver-1kg-nfc/' },
+    { name: 'Galaxy Purple', hex: '#453A72', url: 'https://www.prusa3d.com/product/prusament-pla-galaxy-purple-1kg-nfc/' },
+    { name: 'Galaxy Green',  hex: '#426639', url: 'https://www.prusa3d.com/product/prusament-pla-galaxy-green-1kg-nfc/' },
+    { name: 'Galaxy Red',    hex: '#9D1817', url: 'https://www.prusa3d.com/product/prusament-pla-galaxy-red-1kg-nfc/' },
+  ].map(f => ({ ...f, finish: 'glitter', label: `Prusament ${f.name}` })) },
 ];
 
-/* The surface family a label's filament belongs to ('silk'), or null for an ordinary one and for a label the catalog does
-   not hold (a saved palette can name a filament that has since left it). */
+/* The surface family a label's filament belongs to ('silk', 'glitter'), or null for an ordinary one and for a label the catalog
+   does not hold (a saved palette can name a filament that has since left it). */
 const FINISH_OF = new Map(FILAMENT_DB.flatMap(b => b.colors.filter(c => c.finish).map(c => [c.label, c.finish])));
 const finishOfLabel = (label) => FINISH_OF.get(label) || null;
 

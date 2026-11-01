@@ -7723,7 +7723,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-colors .crow').first().click();
   await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   const caseHeads = await heads();
-  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26)');
+  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
   // THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a case's lines sell PLA and
   // PETG, so a row of All · PLA · PETG stands above the list, All pressed, 8 px between the chips (the planner's floor)
@@ -7756,7 +7756,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).focus();
   await page.keyboard.press('Space');
   assert.deepEqual(await page.evaluate(() => [document.activeElement.textContent.trim(), document.activeElement.getAttribute('aria-pressed')]), ['PLA', 'true'], 'Space presses the focused chip and keeps the focus on it');
-  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26)');
+  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
   // a shared or uploaded palette can name a filament the catalogue does not know: its own words place it under a chip (Terra 01a16a51)
   await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const p = v.palette(); v.setPalette({ on: true, colors: { ...p.colors, Accent: { name: 'PETG Blue (custom)', hex: '#2f66b8' } }, over: p.over || {} }); });
   await page.locator('#ws-colors .crow').first().click();   // the case picker opened again: it reads the palette afresh and starts at All
@@ -7870,6 +7870,50 @@ test('Colors: a silk pick makes the region silk on the model, and a plain pick p
   }
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* GLITTER ON THE MODEL (Joey, 2026-10-31: specks that "glisten a little"; "the Prusament can" go live, 2026-11-01). A Galaxy pick
+   gives the region's live material the glitter program, with no scalar moved, and its buy link is a plain one, not marked sponsored;
+   a plain pick takes it away on the same material, and ?glitter=off draws none. The look is judged on the clips; this guards the wiring. */
+test('Colors: a Galaxy pick makes the region glitter on the model, a plain pick puts it back, and ?glitter=off draws none', async () => {
+  const wearing = (page, hex) => page.evaluate((hex) => {
+    const v = window.__GEN2_VIEWER__, want = new v.THREE.Color(hex), seen = new Map();
+    v.scene.traverse((o) => { const m = o.isMesh && o.material; if (m && m.isMeshPhysicalMaterial && m.color.equals(want)) seen.set(m.uuid, m); });
+    return [...seen.values()].map((m) => ({ uuid: m.uuid, roughness: +m.roughness.toFixed(3), metalness: +m.metalness.toFixed(3), glitter: 'GLITTER' in (m.defines || {}), tint: 'GLITTER_TINT' in (m.defines || {}), patched: !!(m.userData && m.userData.glitter) }));
+  }, hex);
+  const pick = async (page, label, hex) => {
+    await page.locator(`#ws-picker .brands .sw[aria-label="${label}"]`).click();
+    await page.waitForFunction((hex) => { const v = window.__GEN2_VIEWER__, want = new v.THREE.Color(hex); let n = 0; v.scene.traverse((o) => { if (o.isMesh && o.material && o.material.color && o.material.color.equals(want)) n++; }); return n > 0; }, hex, { timeout: 15_000 });
+  };
+  const { ctx, page, errors } = await open('colors');
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  await pick(page, 'Prusament Galaxy Black', '#3d3e3c');
+  const black = await wearing(page, '#3d3e3c');
+  assert.ok(black.length > 0 && black.every((m) => m.glitter && m.patched && !m.tint), `the common flake, on every material wearing it: ${JSON.stringify(black)}`);
+  const buy = page.locator('#ws-picker .foot a.buy');
+  await page.waitForFunction(() => /prusa3d/.test((document.querySelector('#ws-picker .foot a.buy') || {}).href || ''), null, { timeout: 15_000 });
+  assert.equal(await buy.getAttribute('href'), 'https://www.prusa3d.com/product/prusament-pla-prusa-galaxy-black-1kg-nfc/');
+  assert.equal(await buy.getAttribute('rel'), 'noopener', 'a plain store link is not marked sponsored');
+  await pick(page, 'Prusament Galaxy Green', '#426639');
+  assert.ok((await wearing(page, '#426639')).every((m) => m.glitter && m.tint), 'Galaxy Green\'s flakes are tinted');
+  await pick(page, 'Panchroma Yellow', '#f5c542');
+  const plain = await wearing(page, '#f5c542');
+  for (const m of black) {
+    const p = plain.find((x) => x.uuid === m.uuid);
+    assert.ok(p, 'the region was rebuilt rather than repainted (or did not take the plain pick)');
+    assert.deepEqual({ roughness: p.roughness, metalness: p.metalness, glitter: p.glitter, tint: p.tint }, { roughness: m.roughness, metalness: m.metalness, glitter: false, tint: false }, 'the glitter moves no scalar, and leaves with the pick');
+  }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  const off = await open('colors', { query: '&glitter=off' });
+  await off.page.locator('#ws-colors .crow').first().click();
+  await off.page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
+  await pick(off.page, 'Prusament Galaxy Black', '#3d3e3c');
+  const none = await wearing(off.page, '#3d3e3c');
+  assert.ok(none.length > 0 && none.every((m) => !m.glitter && !m.patched), `?glitter=off: ${JSON.stringify(none)}`);
+  assert.deepEqual(clean(off.errors), []);
+  await off.ctx.close();
 });
 
 /* AN OPEN DRAWER SAYS ITS INSIDE SIZE (Joey, 2026-10-21: "we no longer get interior dimensions when opening a drawer like we

@@ -1,11 +1,11 @@
-/* THE GLITTER PROTOTYPE (Joey, 2026-10-31: "specks in the surface seem to glisten a little"). What it LOOKS like, how stable it
+/* THE GLITTER FILAMENTS (Joey, 2026-10-31: "specks in the surface seem to glisten a little"). What it LOOKS like, how stable it
  * is and what it costs are measured on the real renderer (D:\Claude - Output\glitter-2026-10-31). What node can prove:
  *   1. the patch composes on three r185's real sources after the relief, the bed finish and the silk frame, once each, behind its
  *      define, so a part that does not wear it compiles none of it; a lost anchor throws
  *   2. nothing in it can move with time: no clock reaches the block, which is what lets the idle gate rest
  *   3. a blob stays inside its own cell at any octave weight, which is why one hash finds it
  *   4. the grid is turned: no row of it runs along a part's axis or a 45-degree face
- *   5. who wears it: nothing without the flag; main.js patches only behind the flag, and the deploy stamps the new import
+ *   5. who wears it: the catalog's glitter family, nothing under ?glitter=off; main.js patches only behind the arm, and the deploy stamps the import
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,6 +24,8 @@ const { applyLayerDetail } = await import(url('js', 'vendor', 'layer-detail.js')
 const BF = await import(url('js', 'bed-finish.js'));
 const SA = await import(url('js', 'silk-axis.js'));
 const G = await import(url('js', 'glitter.js'));
+const { FILAMENT_DB, finishOfLabel } = await import(url('js', 'filament-db.js'));
+const { partMaterialSpec } = await import(url('js', 'part-material.js'));
 
 const main = readFileSync(join(root, 'js', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 const pages = readFileSync(join(root, '.github', 'workflows', 'pages.yml'), 'utf8').replace(/\r\n/g, '\n');
@@ -137,17 +139,39 @@ test('the grid is turned: orthonormal, and no row of it runs along a part axis o
   }
 });
 
-test('who wears it: nothing without a flag; the galaxy labels under =on; the grip whatever it wears under =grips; all under =all', () => {
-  assert.equal(G.glitterArm(null), null);
-  assert.equal(G.glitterArm('nonsense'), null);
+test('who wears it: the family by default, none under =off; the grip whatever it wears under =grips; all under =all', () => {
+  assert.equal(G.glitterArm(null), 'on', 'no flag is the default, for every visitor');
+  assert.equal(G.glitterArm('nonsense'), 'on');
+  assert.equal(G.glitterArm('off'), null);
   for (const v of ['on', 'grips', 'all']) assert.equal(G.glitterArm(v), v);
-  assert.equal(G.glitterWanted(null, 'Faceplate:GRIP', 'Prusament Galaxy Black'), false);
-  assert.equal(G.glitterWanted('on', 'Faceplate:GRIP', 'Prusament Galaxy Black'), true);
-  assert.equal(G.glitterWanted('on', 'Case', 'Polymaker PETG Galaxy Red'), true);
-  assert.equal(G.glitterWanted('on', 'Faceplate:GRIP', 'Panchroma Yellow'), false);
-  assert.equal(G.glitterWanted('grips', 'Faceplate:GRIP', 'Panchroma Yellow'), true);
-  assert.equal(G.glitterWanted('grips', 'Case', 'Panchroma Yellow'), false);
-  assert.equal(G.glitterWanted('all', 'Case', null), true);
+  const spec = (label) => partMaterialSpec('Faceplate:GRIP', { label });
+  assert.equal(G.glitterWanted(null, 'Faceplate:GRIP', spec('Prusament Galaxy Black')), false);
+  assert.equal(G.glitterWanted('on', 'Faceplate:GRIP', spec('Prusament Galaxy Black')), true);
+  assert.equal(G.glitterWanted('on', 'Case', partMaterialSpec('Case', { label: 'Polymaker PETG Galaxy Red' })), true);
+  assert.equal(G.glitterWanted('on', 'Faceplate:GRIP', spec('Panchroma Yellow')), false);
+  assert.equal(G.glitterWanted('grips', 'Faceplate:GRIP', spec('Panchroma Yellow')), true);
+  assert.equal(G.glitterWanted('grips', 'Case', partMaterialSpec('Case', { label: 'Panchroma Yellow' })), false);
+  assert.equal(G.glitterWanted('all', 'Case', partMaterialSpec('Case')), true);
+});
+
+test('the catalog decides: Prusament\'s five Galaxy colours and Polymaker\'s four PETG Galaxy rows, by their field and never their name', () => {
+  const family = FILAMENT_DB.flatMap((b) => b.colors.filter((c) => c.finish === 'glitter').map((c) => c.label)).sort();
+  assert.deepEqual(family, ['Polymaker PETG Galaxy Black', 'Polymaker PETG Galaxy Blue', 'Polymaker PETG Galaxy Dark Grey', 'Polymaker PETG Galaxy Red',
+    'Prusament Galaxy Black', 'Prusament Galaxy Green', 'Prusament Galaxy Purple', 'Prusament Galaxy Red', 'Prusament Galaxy Silver']);
+  assert.equal(finishOfLabel('Prusament Galaxy Black'), 'glitter');
+  /* the plastic round the flakes is the ordinary part's, a label-free call and an unknown one answer no glitter */
+  const { glitter, ...rest } = partMaterialSpec('Faceplate:GRIP', { label: 'Prusament Galaxy Black' });
+  assert.equal(glitter, 'approx');
+  assert.deepEqual(rest, partMaterialSpec('Faceplate:GRIP', { label: 'Panchroma Yellow' }));
+  assert.equal(partMaterialSpec('Faceplate:GRIP').glitter, undefined);
+  assert.equal(partMaterialSpec('Faceplate:GRIP', { label: 'A filament the catalog no longer holds' }).glitter, undefined);
+  /* the plate's transfer wins on the face it made, as it does for silk */
+  assert.equal(partMaterialSpec('Faceplate:GRIP', { label: 'Prusament Galaxy Black', holographicPlate: true, plateContact: 'Faceplate:GRIP' }).glitter, undefined);
+  /* each Prusament row has its own product page, a plain link on the store's own host */
+  const prusa = FILAMENT_DB.find((b) => b.brand === 'Prusament');
+  for (const c of prusa.colors) assert.match(c.url, /^https:\/\/www\.prusa3d\.com\/product\/prusament-pla-[a-z-]*galaxy-[a-z]+-1kg-nfc\/$/, c.label);
+  assert.equal(new Set(prusa.colors.map((c) => c.url)).size, prusa.colors.length, 'two colours share a page');
+  assert.equal(new Set(prusa.colors.map((c) => c.hex.toLowerCase())).size, prusa.colors.length);
 });
 
 test('a filament can tint its flakes: compiled in, the common near-white without it, and it follows a repaint and a clone', () => {

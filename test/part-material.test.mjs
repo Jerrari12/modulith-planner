@@ -27,7 +27,7 @@ test('the contract version is pinned - the Lab refuses a mismatch', () => {
      `anisotropy` and `silk` for the catalog's silk family. A consumer written against 2 would render a
      silk label as an isotropic pseudo-metal - a wrong picture with no error, which is what a version
      exists to turn into a failing test. test/silk.test.mjs pins the silk branch itself. */
-  assert.equal(PART_MATERIAL_CONTRACT_VERSION, 3);
+  assert.equal(PART_MATERIAL_CONTRACT_VERSION, 4);
 });
 
 test('an ordinary printed part is 0.55 / 0.05 physical', () => {

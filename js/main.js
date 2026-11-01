@@ -4366,15 +4366,15 @@ function withSilkAxis(m, key) {
   // an unknown axis still gets the patch, for the silk light; silkFinish keeps its anisotropy at 0, so the axis is unread
   return applySilkAxis(m, { up: buildAxisForKey(key) || [0, 1, 0], uniforms: silkU });
 }
-/* GLITTER (2026-10-31, js/glitter.js, a prototype): ?glitter=on for the galaxy labels, =grips for the grip zone whatever it
-   wears, =all for every part (the cost bench); ?glitterAmount= scales it. No flag, no patch: nothing changes on main. */
+/* GLITTER (2026-10-31, js/glitter.js): the catalog's glitter family wears it. ?glitter=off patches nothing, to compare; =grips adds
+   the grip zone whatever it wears, =all every part (the cost bench); ?glitterAmount= scales it. */
 var GLITTER_ARM = glitterArm(new URLSearchParams(location.search).get('glitter'));
 var glitterU = createGlitterUniforms({ amount: Number(new URLSearchParams(location.search).get('glitterAmount') ?? 1), tone: !!QUALITY[quality].tone, dpr: renderer.getPixelRatio() });
 /* The spec as this viewer can draw it: no anisotropy where the build axis is unknown (a direction on a guessed axis is
    a print that does not exist - the relief's rule), and the comparison arms. Every path that paints a finish goes
    through here and then applyFinish, so a repaint can never leave a stale anisotropy behind. */
 function silkFinish(key, spec, label = null) {
-  if (glitterWanted(GLITTER_ARM, key, label)) spec = { ...spec, glitter: 'approx', glitterTint: glitterTintOf(label) };
+  if (glitterWanted(GLITTER_ARM, key, spec)) spec = { ...spec, glitter: 'approx', glitterTint: glitterTintOf(label) };
   if (!spec.silk) return spec;
   if (SILK_ARM === 'off') return spec.glitter ? { ...partMaterialSpec(key), glitter: spec.glitter, glitterTint: spec.glitterTint } : partMaterialSpec(key);
   if (SILK_ARM === 'iso' || !buildAxisForKey(key)) return { ...spec, anisotropy: 0 };
@@ -12239,7 +12239,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     setLabelPalette, get labelPalette() { return labelPalette; },
     // the look cards (step 2's probe, now the gallery's renderer; step 3, 2026-10-18) and the scene revision they key on
     lookCard, get sceneRev() { return sceneRev; },
-    // the glitter prototype's live numbers (glitter.js), for tuning from the console or a harness; invalidateFrame draws them
+    // the glitter's live numbers (glitter.js), for tuning from the console or a harness; invalidateFrame draws them
     glitter: { arm: GLITTER_ARM, uniforms: glitterU },
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
