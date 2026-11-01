@@ -1884,6 +1884,17 @@ test('Parts: the list, tracking counters, and the dock caption', async () => {
   const { ctx, page, errors } = await open('parts');
   await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
   assert.ok(await page.locator('#ws-parts .prow').count() >= 5, 'rows listed');
+  // the filament the build takes (2026-11-01, parts.js filamentBlock), above the rows: a weight and its 1 kg spools on every line
+  const frows = await page.evaluate(() => [...document.querySelectorAll('#ws-parts .frow')].map((r) => [...r.children].slice(1).map((c) => c.textContent)));
+  assert.ok(frows.length >= 1, 'a line per filament');
+  for (const [name, weight, spools] of frows) {
+    assert.ok(name, 'a line names its filament');
+    assert.match(weight, /^([\d,]+ g|small amount)$/);
+    assert.match(spools, /^\d+ spools?(recommend \d+)?$/);
+  }
+  assert.match(await text(page, '#ws-parts .fhead'), /^Filament[\d,]+ g · \d+ spools?( \(recommend \d+\))?$/);
+  assert.match(await text(page, '#ws-parts .fnote'), /From 925 g on a spool, one more is recommended/);
+  assert.equal(await page.evaluate(() => document.querySelector('#ws-parts .fnote').nextElementSibling.tagName), 'H3', 'the rows follow it');
   await btn(page, 'Track my build', '#ws-parts').click();
   await settle(page, 400);
   const plus = page.locator('#ws-parts .counter button:has-text("+")').first();

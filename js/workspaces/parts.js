@@ -16,6 +16,7 @@ import { toolbar } from '../ui/toolbar.js';
 import { attachHint, hideHint } from '../ui/hint.js';
 import { glyphEl, FACEK, DEFAULT_COLORS } from '../ui/glyph.js';
 import { computeBom, bomRows } from '../rules/bom.js';
+import { filamentUse, RECOMMEND_ANOTHER_AT } from '../rules/filament-use.js';
 import { layoutRules } from '../rules/layout.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName, noteText } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
@@ -322,6 +323,42 @@ export function mountParts(stage, ctx) {
     });
     return el('div.note.printin', {}, kids);
   }
+  /* THE FILAMENT THIS BUILD TAKES (Joey, 2026-11-01: "how many 1kg spools they will need in the BOM"), js/rules/filament-use.js:
+     one line a filament, its weight and its spools, above the rows so it is read before anything is bought. With the colours
+     off the filaments are not known yet, so the lines are one per material: what must print in PETG or TPU, and the rest */
+  function filamentNow(rs) {
+    let filaments = null;
+    if (pal) { try { filaments = stage.filamentsInBuild().filaments; } catch { filaments = null; } }
+    return filamentUse(rs, filaments ? { regionsOf: printLook, filaments } : {});
+  }
+  const gramsText = (g) => `${Math.round(g).toLocaleString('en-US')} g`;
+  const spoolsWord = (n) => `${n} spool${n === 1 ? '' : 's'}`;
+  const spoolsText = (u) => spoolsWord(u.spools) + (u.recommended > u.spools ? ` (recommend ${u.recommended})` : '');   // a line or the whole build
+  const MATERIAL_LINE = { PLA: 'Main filament', PETG: 'PETG, for the QuickLocks', TPU: 'TPU, for the feet' };
+  const lineName = (l) => (l.noPick ? 'No filament picked yet' : l.hex ? short(l.name) : MATERIAL_LINE[l.material] || l.name);
+  const lineWeight = (l) => (l.small ? 'small amount' : gramsText(l.grams));
+  function filamentBlock(use) {
+    const line = (l) => {
+      const chip = el('span.chip');
+      if (l.hex) chip.style.background = l.hex;
+      const name = l.url ? el('a', { href: l.url, target: '_blank', rel: isPaid(l.url) ? 'noopener sponsored' : 'noopener', title: `Buy ${short(l.name)} ↗`, text: short(l.name), onclick: buyFilament(stage, { name: l.name }) }) : lineName(l);
+      // the recommended count on a line of its own, under the count: a phone's row has no width for both side by side
+      const spools = el('span.mono.fspools', {}, [spoolsWord(l.spools), l.recommended > l.spools ? el('small', { text: `recommend ${l.recommended}` }) : null]);
+      return el('div.frow', {}, [chip, el('span.fname', {}, [name]), el('span.mono', { text: lineWeight(l) }), spools]);
+    };
+    const said = [
+      `Slicer estimates for the required parts, on 1 kg spools. From ${RECOMMEND_ANOTHER_AT} g on a spool, one more is recommended to leave room for purge and failed prints.`,
+      use.lines.some((l) => l.small) ? 'A small amount is an accent or a label, weighed with its part.' : null,
+      use.optionalGrams >= 1 ? `Optional parts add about ${gramsText(use.optionalGrams)}.` : null,
+      use.unpriced ? `${use.unpriced} part${use.unpriced === 1 ? ' has' : 's have'} no estimate yet.` : null,
+      pal ? null : 'Pick colours to split this by filament: each one is a spool of its own.',
+    ];
+    return [
+      el('h3.fhead', {}, ['Filament', el('span.mono', { text: `${gramsText(use.grams)} · ${spoolsText(use)}` })]),
+      el('div.frows', {}, use.lines.map(line)),
+      el('p.note.fnote', { text: said.filter(Boolean).join(' ') }),
+    ];
+  }
   function renderPanel() {
     const { rs, printCount, files, toGo, missing, optMissing } = counts();
     pal = paletteSnapshot(stage);
@@ -352,6 +389,8 @@ export function mountParts(stage, ctx) {
     );
     panel.appendChild(head);
     const body = el('div.body');
+    const use = filamentNow(rs);
+    body.append(...filamentBlock(use));
     let last = null, group = null;
     const table = st.wide && st.tracking;
     for (const r of rs) {
@@ -369,7 +408,7 @@ export function mountParts(stage, ctx) {
        well, and the last one landed directly on the foot (Joey: "didn't we find a way to shorten this"). No "paid link"
        anywhere (Joey: it read as if a brand had paid to be listed) */
     const hwLink = (r) => (r.hardware ? (BUY[r.name] || [])[0] : null);
-    const urls = rs.flatMap((r) => { const l = hwLink(r); if (l) return [l.url]; const regions = printLook(r); return regions ? printRegions(regions).flatMap((p) => p.items.map((it) => it.url)).filter(Boolean) : []; });
+    const urls = rs.flatMap((r) => { const l = hwLink(r); if (l) return [l.url]; const regions = printLook(r); return regions ? printRegions(regions).flatMap((p) => p.items.map((it) => it.url)).filter(Boolean) : []; }).concat(use.lines.map((l) => l.url).filter(Boolean));
     body.appendChild(el('p.foot', { text: [disclosureFor(urls), 'Any equivalent hardware works.'].filter(Boolean).join(' ') }));
     panel.appendChild(body);
   }
@@ -452,6 +491,9 @@ export function mountParts(stage, ctx) {
     let txt = `MODULITH ${length} · ${m.mount} setup · ${m.date}\nPlanned with the MODULITH Planner (formerly GEN2)\n`;
     if (m.dims) txt += `Overall: ${m.dims} · Faceplate: ${m.faceplate}\n`;
     txt += `Reopen this build: ${m.link}\n\n`;
+    const use = filamentNow(rows());
+    txt += `[Filament: about ${gramsText(use.grams)}, ${spoolsText(use)} of 1 kg]\n`;
+    for (const l of use.lines) txt += `${spoolsText(l)}: ${lineName(l)}, ${l.small ? 'a small amount' : `about ${gramsText(l.grams)}`}\n`;
     let last = '';
     for (const r of rows()) {
       if (r.section !== last) { txt += `\n[${r.section}]\n`; last = r.section; }
@@ -467,6 +509,8 @@ export function mountParts(stage, ctx) {
     const m = meta();
     const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Print in', 'Printables', 'Thangs'].map(esc).join(',')];
     for (const r of rows()) { const regions = printLook(r); lines.push([r.section, r.qty, rowName(r) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), regions ? printText(regions) : '', r.links?.printables || '', r.links?.thangs || ''].map(esc).join(',')); }
+    lines.push('', ['Filament', 'Estimated weight', '1 kg spools', 'Recommended'].map(esc).join(','));
+    for (const l of filamentNow(rows()).lines) lines.push([lineName(l), lineWeight(l), l.spools, l.recommended].map(esc).join(','));
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `modulith-${length}-parts.csv` });
     document.body.appendChild(a); a.click(); a.remove();

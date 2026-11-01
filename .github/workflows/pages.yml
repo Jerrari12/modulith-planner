@@ -152,6 +152,9 @@ jobs:
           # the rows' part renders (2026-10-27) come from the parts host by config.js's assetUrl - the same stamped URL as
           # main.js's import, so one instance
           sed -i "s|'../config.js'|'../config.js?v=$V'|" js/workspaces/parts.js
+          # the Parts list's filament and 1 kg spools (2026-11-01), and the slicer's grams they add up
+          sed -i "s|'../rules/filament-use.js'|'../rules/filament-use.js?v=$V'|" js/workspaces/parts.js
+          sed -i "s|'../catalog/print-grams.js'|'../catalog/print-grams.js?v=$V'|" js/rules/filament-use.js
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|" js/workspaces/assemble.js
           # the Done scene (2026-10-23): assemble.js imports it on demand, so its import() is stamped like a static one; the
           # module's own helper and the room assets it fetches (scenes/) are stamped inside it
