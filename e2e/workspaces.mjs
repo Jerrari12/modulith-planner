@@ -2541,8 +2541,9 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
 
 /* NO TWO SHOWINGS ALIKE (Joey 2026-11-01: "same camera angles, same points of interest", "drawers open way too fast", "randomize
    that to not rush certain scenes", "ant sized ... a tiny helicopter"): done.js showingOf, done-fit.js SHOT_HOLD, SHOT_VARY,
-   RARE_SHOTS. Every other case keeps the shots as written (?variety=off, open()). Read off the debug hook and the stage; every
-   wait is a poll and the drawer's tween runs on the wall clock, so it runs on the CI runner too. */
+   RARE_SHOTS. Every other case keeps the shots as written (?variety=off, open()). A showing is jumped to and read in one task, so
+   it races no clock: a read through the hook takes seconds on the runner, longer than a shot's drawer stays out (runs 41325554777,
+   41328367369). The drawer's own timing has to watch a clock, so it runs on a GPU; its curves are unit tests. */
 test('Assemble: the Done scene draws each showing: its own hold, angle, lens, side and drawer; the drawer pulled slowly and the magnets finishing it; a rare shot now and then: the ant, the helicopter, the crane', async () => {
   const { ctx, page, errors } = await open('assemble', { query: '&done=room&variety=on' });
   await btn(page, 'Skip to the finished build', '#ws-steps').click();
@@ -2553,11 +2554,7 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
   await page.waitForFunction(() => window.__GEN2_DONE__ && window.__GEN2_DONE__.sequence.on, null, { timeout: 90_000 }).catch(() => assert.fail('the grammar never began'));
   const seqOf = () => page.evaluate(() => window.__GEN2_DONE__.sequence);
   const camNow = () => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { pos: v.camera.position.toArray(), fov: v.camera.fov, up: v.camera.up.toArray() }; });
-  const showing = async (name) => {   // a new showing of the shot, its clock begun
-    await page.evaluate((n) => window.__GEN2_DONE__.jump(n), name);
-    await page.waitForFunction(() => { const s = window.__GEN2_DONE__.sequence; return !s.waiting && s.shot != null; }, null, { timeout: 30_000 });
-    return seqOf();
-  };
+  const showing = (name) => page.evaluate((n) => { const d = window.__GEN2_DONE__; d.jump(n); return d.sequence; }, name);   // a new showing of the shot, its clock begun, read in the same task
   await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setQuality('high', { user: true }); window.__GEN2_DONE__.setTiming({ maxFrameMs: 1e9, seed: 5 }); });
   await page.waitForFunction(() => window.__GEN2_DONE__.sequence.on && window.__GEN2_DONE__.sequence.mode === 'full', null, { timeout: 30_000 }).catch(() => assert.fail('High did not bring the moving grammar'));
   const s0 = await seqOf();
@@ -2573,13 +2570,21 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
   for (let i = 0; i < 6; i++) { const s = await showing('slide'); assert.equal(s.shot, 'slide'); holds.push(s.holdMs); }
   assert.ok(holds.every((h) => h >= SHOT_HOLD.slide[0] && h <= SHOT_HOLD.slide[1]), `in the slide's range (${holds})`);
   assert.ok(new Set(holds).size >= 5, `and not the same twice (${holds})`);
-  let short = await showing('top');
-  for (let i = 0; i < 30 && short.holdMs > 7500; i++) short = await showing('top');
-  assert.ok(short.holdMs <= 7500, `a short top shot was drawn (${short.holdMs})`);
-  // the clock put either side of the hold's end, read in the same task: a slow frame on the runner saw it end 4 s late (run 41325554777)
-  const phaseAt = (ms) => page.evaluate((m) => { const d = window.__GEN2_DONE__; d.seek(m); return d.sequence.phase; }, ms);
-  assert.equal(await phaseAt(short.holdMs - 300), 'hold', `still holding just before its own hold ends (${short.holdMs} ms)`);
-  assert.equal(await phaseAt(short.holdMs + 100), 'out', `it ends on its own hold, ${short.holdMs} ms, not the beat's ${BEAT.holdMs}`);
+  // a short one, its clock put either side of its hold's end, all in one task: a slow frame on the runner saw it end 4 s late (run 41325554777)
+  const short = await page.evaluate(() => {
+    const d = window.__GEN2_DONE__;
+    for (let i = 0; i < 60; i++) {
+      d.jump('top');
+      const h = d.sequence.holdMs;
+      if (h > 7500) continue;
+      d.seek(h - 300); const before = d.sequence.phase;
+      d.seek(h + 100); return { h, before, after: d.sequence.phase };
+    }
+    return null;
+  });
+  assert.ok(short, 'a short top shot was drawn');
+  assert.equal(short.before, 'hold', `still holding just before its own hold ends (${short.h} ms)`);
+  assert.equal(short.after, 'out', `it ends on its own hold, ${short.h} ms, not the beat's ${BEAT.holdMs}`);
 
   // THE ANGLES: the same shot from different places, lenses and sides; a later hero is not the composed one
   const pushes = [];
@@ -2600,6 +2605,7 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
   assert.ok(new Set(aims).size >= 2, `a different spot (${aims})`);
 
   // THE DRAWER'S PULL: seconds, not a tap's 380 ms; the interior stays until the drawer is back; a slide cut short stays cut
+  if (!SOFTWARE_GL) {
   const pull = () => page.evaluate(() => new Promise((done) => {
     const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__;
     let z0 = null, out = null, back = null, peak = 0, shownAtPush = null, startedAt = null, pushAt = null;
@@ -2626,9 +2632,9 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
   const p = await pull();
   assert.ok(!p.timedOut, `the moment ran (${JSON.stringify(p)})`);
   assert.ok(p.slid > 60 && p.slid < 75, `40 % of the 185 drawer's slide (${p.slid})`);
-  assert.ok(p.out >= 1200 && (SOFTWARE_GL || p.out < 4000), `the pull takes its time (${p.out} ms)`);
-  assert.ok(p.back >= 1200 && (SOFTWARE_GL || p.back < 3500), `the push takes its time (${p.back} ms)`);
-  if (!SOFTWARE_GL) assert.equal(p.shownAtPush, true, 'the interior is still shown 700 ms into the push');   // (a frame or two late on the runner it is past the re-hide)
+  assert.ok(p.out >= 1200 && p.out < 4000, `the pull takes its time (${p.out} ms)`);
+  assert.ok(p.back >= 1200 && p.back < 3500, `the push takes its time (${p.back} ms)`);
+  assert.equal(p.shownAtPush, true, 'the interior is still shown 700 ms into the push');
   // a cut mid-pull: closed by the stage's quick slide, and the pull's own tween does not put it back out
   const cut0 = await showing('detail');
   await page.waitForFunction(() => window.__GEN2_DONE__.sequence.drawer.open, null, { timeout: 15_000 }).catch(() => assert.fail('the drawer did not open for the cut'));
@@ -2655,16 +2661,17 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
     })(performance.now());
   }));
   assert.ok(!push.timedOut, 'the push ended');
-  if (!SOFTWARE_GL) assert.ok(push.ms < 1000, `a cut mid-push ends it at the quick slide's pace, not the push's 1.4 s (${push.ms} ms)`);
+  assert.ok(push.ms < 1000, `a cut mid-push ends it at the quick slide's pace, not the push's 1.4 s (${push.ms} ms)`);
   await page.evaluate(() => window.__GEN2_DONE__.setTiming({ holdMs: 11000, dipInMs: 1100, dipOutMs: 800, blackMs: 350, maxFrameMs: 1e9, seed: 5 }));
   await page.waitForFunction(() => window.__GEN2_DONE__.sequence.on, null, { timeout: 10_000 });
+  }
 
   // A SHORT SHOWING'S DRIFT goes as far as its time allows (the still grammar)
   await page.evaluate(() => window.__GEN2_VIEWER__.setQuality('fast', { user: true }));
   await page.waitForFunction(() => window.__GEN2_DONE__.sequence.mode === 'still', null, { timeout: 20_000 });
-  let st = await showing('top');
-  for (let i = 0; i < 30 && st.holdMs > 7000; i++) st = await showing('top');
-  const drift = await page.evaluate(() => {
+  const drift = await page.evaluate(() => {   // jumped to and read in one task
+    const d = window.__GEN2_DONE__;
+    for (let i = 0; i < 60; i++) { d.jump('top'); if (d.sequence.holdMs <= 7000) break; }
     const a = window.__GEN2_VIEWER__.renderer.domElement.getAnimations().find((x) => /scale/.test(JSON.stringify(x.effect.getKeyframes())));
     if (!a) return null;
     return { ms: a.effect.getTiming().duration, scales: a.effect.getKeyframes().map((k) => +/scale\(([\d.]+)\)/.exec(k.transform)[1]) };
