@@ -352,7 +352,7 @@ const FILAMENT_DB = [
   // - Purple: FilamentColors' 453A72. Prusa's chart says 0F0939, nearly black in the planner's room. Prusa's own swatch photos settle
   //   it as a purple: the median of their centre third reads #4B2E7E (1 kg) and #44257A (2 kg). A print would settle the digits.
   // - Red: NO chart row and no FilamentColors swatch, so the median of the centre third of Prusa's own swatch photo, as Jessie Neon
-  //   Yellow's above. Those photos run dark on the three colours with a chart value (Black 2D2D2D, Silver 85898B, Green 162F18), so
+  //   Yellow's above. Those photos run dark on the three colours where the chart and FilamentColors agree (Black 2D2D2D, Silver 85898B, Green 162F18), so
   //   this may be too; a measured hex replaces it. Polymaker's Hedgehog Makes Galaxy Red (#760007, PA02106) waits for Joey's minted link.
   { brand: 'Prusament', line: 'Galaxy PLA', url: 'https://www.prusa3d.com/category/prusament-pla/', colors: [
     { name: 'Galaxy Black',  hex: '#3D3E3C', url: 'https://www.prusa3d.com/product/prusament-pla-prusa-galaxy-black-1kg-nfc/' },
