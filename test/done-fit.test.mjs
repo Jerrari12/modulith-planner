@@ -2,7 +2,7 @@
  * contact footprint. Pure functions, so the numbers are checked by hand here. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitDistance, shotCamera, clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, rowsOf, around, SHOT_HOLD, SHOT_VARY, drawHold, paceOf, varyShot, bagNext, viewBlocked, cameraInProp, RARE_SHOTS, RARE_SHARE, hoverAt, drawerOutAt, drawerBackAt, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, SPOOL_HIGH, SPOOL_STEP, SPOOL_HEADROOM, stackCap, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook, roomFloor, ROOM_FLOOR_HEX } from '../js/scenes/done-fit.js';
+import { fitDistance, shotCamera, clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, DRIFT, driftReach, driftFor, driftKind, driftCss, driftWanted, steamShown, GRAMMAR, BEAT, FLOOR_MM, beatAt, easeSine, rngFrom, planCycle, mixShot, fitShot, blendShot, rowOf, rowsOf, around, SHOT_HOLD, SHOT_VARY, drawHold, paceOf, varyShot, bagNext, viewBlocked, cameraInProp, nearPlane, NEAR, RARE_SHOTS, RARE_SHARE, hoverAt, drawerOutAt, drawerBackAt, spoolPlan, SPOOL_MAX, SPOOL_TALL, stackPoses, SPOOL_SLIP, SPOOL_LEAN, SPOOL_HIGH, SPOOL_STEP, SPOOL_HEADROOM, stackCap, MUGS, MUG_PAIRS, MUG_COUNTS, MUG_LOOKS, NOTEBOOK_OFF_SHARE, MUG_MILESTONES, buildFacts, unlockedSayings, sayingsOf, hashSeed, mugPlan, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, grammarMode, easeInOut, driftTooSlow, DRAWER, drawerBeat, aimAt, pickDrawerUnit, reliefResolves, LENS, lensFor, roomAnchor, UNDER_LEFT_GAP, WALL_PAINTS, DESK_FINISHES, hexToLinear, linearToHex, wallFactor, wallWeight, bounceK, deskLook, roomFloor, ROOM_FLOOR_HEX } from '../js/scenes/done-fit.js';
 import { cocPx } from '../js/lens.js';
 
 const close = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} vs ${b}`);
@@ -385,6 +385,31 @@ test('whether a prop stands in the way: one in front of the build does, one besi
   const big = at(360, 100, 100, 200);
   assert.equal(blocked(big), false, 'a big prop well to the side of the build');
   assert.equal(viewBlocked(cam, [big], 16 / 9, { spread: 1, pull: 1 }), true, 'with nothing to hold them, the points reach across the frame');
+});
+
+test('the near plane follows the camera\'s clearance (Joey 2026-11-01: far shots\' shadows flickered): far cameras gain many times the depth precision, a camera close to anything keeps its near plane under it', () => {
+  const room = { x0: -1380, x1: 3220, y0: -740, y1: 2260, z0: -137, z1: 7012 };
+  const build = { min: { x: -130, y: 0, z: -90 }, max: { x: 130, y: 190, z: 230 } }, mug = { min: { x: 300, y: 0, z: 100 }, max: { x: 390, y: 110, z: 190 } };
+  const step = (z, n, f = 8000) => (z * z * (f - n)) / (f * n * (2 ** 24 - 1));   // the depth buffer's step at z, mm
+  const far = { x: 1800, y: 1400, z: 3600 };   // a 3W-3H hero on a phone in portrait, about 4.2 m off
+  const nFar = nearPlane(far, [build, mug], room);
+  assert.ok(nFar >= 100 && nFar <= NEAR.max, `a far camera's near plane is well out (${nFar})`);
+  assert.ok(step(4200, 1) > 0.9, `with 1 mm the step there is about 1 mm (${step(4200, 1).toFixed(2)})`);
+  assert.ok(step(4200, nFar) < 0.03, `now well under the 0.2 mm the thinnest layer stands off (${step(4200, nFar).toFixed(3)})`);
+  // the worst a far camera can have is a wall at the 150 mm clampToInterior keeps it from: still ten times finer than the layers
+  const byWall = nearPlane({ x: room.x0 + 150, y: 700, z: 2800 }, [build], room);
+  close(byWall, 37.5, 1e-9, 'a quarter of the 150 mm to the wall');
+  assert.ok(step(4200, byWall) < 0.03, `and the step at 4.2 m still small (${step(4200, byWall).toFixed(3)})`);
+  // close to anything, under it: the ant's 7 mm off the desk, a close-up off a face, a mug in the foreground
+  const desk = { min: { x: -680, y: -30, z: -25 }, max: { x: 1120, y: 0, z: 381 } };
+  close(nearPlane({ x: 0, y: 7, z: 300 }, [desk, build], room), 1.75, 1e-9, 'the ant: a quarter of its height over the desk');
+  close(nearPlane({ x: 0, y: 100, z: 250 }, [build], room), 5, 1e-9, 'a close-up 20 mm off the build');
+  close(nearPlane({ x: 345, y: 60, z: 350 }, [build, mug], room), 40, 1e-9, '160 mm from a mug');
+  // the bounds
+  assert.equal(nearPlane({ x: 0, y: 50, z: 100 }, [build], room), NEAR.min, 'inside a box: the stage\'s own 1 mm');
+  assert.equal(nearPlane({ x: 0, y: 500, z: 5000 }, [], null), NEAR.max, 'nothing near: capped');
+  assert.ok(NEAR.max <= 200, `and well short of the stage's far plane (${NEAR.max})`);
+  close(nearPlane({ x: 9000, y: 500, z: 3000 }, [{ min: { x: 8900, y: 450, z: 2900 }, max: { x: 8950, y: 550, z: 3100 } }], room), 12.5, 1e-9, 'past a wall, that wall is no clearance, and a prop still is');
 });
 
 test('the rare shots (Joey 2026-11-01): an ant on the desk looking up at a giant building, a tiny helicopter that banks and hovers, a crane up and over; each mount its own; all named rare, none in the everyday grammar', () => {

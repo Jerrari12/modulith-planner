@@ -22,7 +22,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadSpool, makeSpool, disposeSpool, makeTag, makeSticker, STICKER, disposeMark, tagInfo, MATERIAL_COLOURS } from './spool.js';
-import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, rowsOf, around, drawHold, paceOf, varyShot, bagNext, viewBlocked, cameraInProp, RARE_SHOTS, RARE_SHARE, hoverAt, DRIFT, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, drawerOutAt, drawerBackAt, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook, roomFloor } from './done-fit.js';
+import { clampToInterior, insideRoom, slideProps, fitSlides, contactFootprint, maskQuad, gapDrop, STEAM, steamRate, steamSize, steamSlices, steamBeat, steamShown, driftFor, driftKind, driftCss, driftWanted, GRAMMAR, BEAT, beatAt, rngFrom, planCycle, mixShot, fitShot, blendShot, nearPlane, rowsOf, around, drawHold, paceOf, varyShot, bagNext, viewBlocked, cameraInProp, RARE_SHOTS, RARE_SHARE, hoverAt, DRIFT, MUGS, mugPlan, buildFacts, unlockedSayings, spoolPlan, SPOOL_MAX, SPOOL_HIGH, stackCap, stackPoses, hashSeed, pickSpots, apartFrom, mugFace, deskSpots, sayingLayout, MUG_SHOT_SHARE, BUILD_VIEWS, easeSine, grammarMode, driftTooSlow, entranceTooSlow, DRAWER, drawerBeat, drawerOutAt, drawerBackAt, aimAt, pickDrawerUnit, reliefResolves, lensFor, roomAnchor, WALL_PAINTS, DESK_FINISHES, wallFactor, wallWeight, bounceK, hexToLinear, linearToHex, deskLook, roomFloor } from './done-fit.js';
 
 const ROOM_GLB = 'scenes/home-office/room.glb';
 const ROOM_JSON = 'scenes/home-office/room.json';
@@ -792,6 +792,23 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     const rare = seq.shots.filter((s) => s.rare).map((s) => s.name);
     if (rare.length && seq.pose && seq.pose() < RARE_SHARE) seq.order.splice(2 + Math.floor(seq.pose() * Math.max(1, seq.order.length - 1)), 0, bagNext(seq.rare, rare, seq.pose));
     seq.cycle++; seq.idx = 0;
+  }
+  /* THE NEAR PLANE (done-fit.js nearPlane) follows the camera, however it moved: a shot, the entrance, a hand on the Room stage's
+     orbit. What it must clear is read at most once a second, and again when the spools or the fit change: the props, the coffee's
+     steam, the desk, and the build with a drawer's reach in front of it. */
+  const near = { boxes: null, at: 0, was: camera.near };
+  function nearFollow() {
+    if (!on || !buildBox || buildBox.isEmpty()) return;
+    const now = performance.now();
+    if (!near.boxes || now - near.at > 1000) {
+      const b = plain(buildBox), desk = parts.group && parts.group.getObjectByName('desk_top');
+      near.boxes = [...propBoxes(), { min: b.min, max: { ...b.max, z: b.max.z + DRAWER.nearReach } }];
+      if (desk) near.boxes.push(plain(new THREE.Box3().setFromObject(desk)));
+      if (parts.steam) { const f = parts.steam.mesh.getWorldPosition(new THREE.Vector3()), r = parts.steam.size.w / 2; near.boxes.push({ min: { x: f.x - r, y: f.y, z: f.z - r }, max: { x: f.x + r, y: f.y + parts.steam.size.h, z: f.z + r } }); }
+      near.at = now;
+    }
+    const n = nearPlane(camera.position, near.boxes, interior);
+    if (n !== camera.near) { camera.near = n; camera.updateProjectionMatrix(); }
   }
   /* THE PROPS THAT CAN STAND IN A SHOT'S WAY, as they stand now: the room's own, slid or hidden, the mugs and the spools */
   function propBoxes() {
@@ -1607,6 +1624,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
      stack with room (up to the room's cap, stackCap), or lays a standing spool down to start one; a spare left over leaves the desk, and a
      group left with none leaves with its disc */
   function refreshSpools() {
+    near.boxes = null;   // what the near plane must clear has changed
     const sp = parts.spools;
     if (!sp || !sp.groups.length || !sp.geo) return;
     clearSpoolMarks();   // out of the boxes below; made again at the end
@@ -2047,6 +2065,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
       };
       controls.addEventListener('change', parts.keepIn);
     }
+    controls.addEventListener('change', nearFollow);   // after keepIn, which may have put the camera back
     /* ... and a spool there is a filament to change everywhere (Joey 2026-10-26: "what if i could select a spool and change
        it's color, and doing so would replace everything in the build that used that same color"): a tap on one hands its
        colour to the stage's owner (Colors opens its picker on that filament), the pointer and a tooltip say so on hover */
@@ -2181,6 +2200,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
   }
   function refit() {
     if (!on) return;
+    near.boxes = null; nearFollow();   // the build, or what stands round it, may have changed under a still camera
     if (!seq.on) {
       if (stage.camFree) return;   // a camera the visitor holds (the Colors stage: no sequence to take it back) is left where it is
       if (seq.manual != null && seq.shots) { setCam(fitAt(seq.shots[seq.manual], 0.5)); stage.invalidateFrame(); }   // the view chosen by hand (reduced motion) is refitted, not the hero (Sol 01a16c20)
@@ -2237,6 +2257,7 @@ export function enterDoneScene(stage, { say, reduced = matchMedia('(prefers-redu
     parts.envScene = null;   // its clones share the room's geometry and materials, disposed with the room
     controls.enabled = was.controls; controls.enablePan = was.pan; controls.maxPolarAngle = was.polar;
     if (parts.keepIn) { controls.removeEventListener('change', parts.keepIn); parts.keepIn = null; }
+    controls.removeEventListener('change', nearFollow); camera.near = near.was; camera.updateProjectionMatrix();
     if (parts.hover) { parts.hovered = null; parts.selectedHex = null; stage.setTapTargets(null); renderer.domElement.removeEventListener('pointermove', parts.hover); if (parts.hoverOn) { renderer.domElement.style.cursor = ''; renderer.domElement.title = ''; } parts.hover = null; parts.hoverOn = false; }
     stage.resetView();   // the guided camera of the page the stage is on (the finished step, or the one a click chose)
     stage.invalidateFrame();

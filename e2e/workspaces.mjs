@@ -2583,6 +2583,7 @@ test('Assemble: the Done scene\'s camera grammar: distinct shots in a random ord
   await rm.page.setViewportSize({ width: vp.width - 200, height: vp.height - 100 });
   await settle(rm.page, 600);
   const rs = await seqOf(rm.page), r2 = await cam(rm.page);
+  assert.ok(await rm.page.evaluate(() => window.__GEN2_VIEWER__.camera.near) > 1, 'a camera that never moves has its near plane too');
   assert.equal(rs.manual, 1, 'the hand-chosen view is kept'); assert.ok(near(r2.slice(0, 3), fitOf(rs, rs.names[1]).pos), `the camera sits on the refitted second shot (${r2.slice(0, 3)} vs ${fitOf(rs, rs.names[1]).pos.map((n) => n.toFixed(2))})`);
   assert.ok(!near(r2.slice(0, 3), fitOf(rs, 'hero').pos, 1), 'and not on the hero');
   await rm.page.setViewportSize(vp);
@@ -2636,6 +2637,32 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
   assert.ok(short, 'a short top shot was drawn');
   assert.equal(short.before, 'hold', `still holding just before its own hold ends (${short.h} ms)`);
   assert.equal(short.after, 'out', `it ends on its own hold, ${short.h} ms, not the beat's ${BEAT.holdMs}`);
+
+  // THE NEAR PLANE: far shots' shadow layers fought their surfaces (Joey 2026-11-01); it follows the camera, every shot's depth step is far under their 0.2 mm gap
+  const steps = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, out = {};
+    const toBox = (c, b) => Math.hypot(Math.max(b.min.x - c.x, 0, c.x - b.max.x), Math.max(b.min.y - c.y, 0, c.y - b.max.y), Math.max(b.min.z - c.z, 0, c.z - b.max.z));
+    for (const n of ['hero', 'top', 'side', 'slide', 'low', 'push', 'mugs']) {
+      d.jump(n);
+      if (d.sequence.shot !== n) continue;   // the mugs' only where a mug stands
+      const c = v.camera.position, t = v.controls.target, far = Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z) + 800, near = v.camera.near;
+      out[n] = { near, step: (far * far * (v.camera.far - near)) / (v.camera.far * near * (2 ** 24 - 1)), prop: Math.min(...d.propBoxes().map((b) => toBox(c, b))) };
+    }
+    return out;
+  });
+  for (const [n, s] of Object.entries(steps)) {
+    assert.ok(s.near >= 1 && s.step < 0.07, `${n}: near ${s.near}, depth step ${s.step.toFixed(3)} mm past the build`);
+    assert.ok(s.near <= Math.max(1, s.prop / 4 + 1e-6) + 8, `${n}: near ${s.near} stays under the nearest prop, ${s.prop.toFixed(0)} mm off`);   // (8: the camera has moved on a little since the frame set it)
+  }
+  assert.ok(steps.mugs && steps.mugs.near < 200, `a mug close to the camera holds the near plane in (${steps.mugs && steps.mugs.near})`);
+  // a prop close to the camera, far from all else: the top of the tallest one, read in one task
+  const byProp = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, d = window.__GEN2_DONE__, k = v.controls, tall = d.propBoxes().reduce((m, b) => (b.max.y > m.max.y ? b : m));
+    v.camera.position.set((tall.min.x + tall.max.x) / 2, tall.max.y - 5, tall.max.z + 40); k.update();
+    return { near: v.camera.near, y: tall.max.y };
+  });
+  assert.ok(byProp.near <= 10.5, `40 mm off a prop ${byProp.y.toFixed(0)} mm up: near ${byProp.near}`);
+  assert.ok(steps.hero.near > 20, `a far hero's near plane is well out (${steps.hero.near})`);
 
   // THE ANGLES: the same shot from different places, lenses and sides; a later hero is not the composed one
   const pushes = [];
@@ -2747,6 +2774,7 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
   const ant = await showing('ant');
   assert.equal(ant.shot, 'ant', 'the ant was shown');
   const a1 = await camNow(), target = ant.view.target;
+  assert.ok(await page.evaluate(() => window.__GEN2_VIEWER__.camera.near) <= 2.5, 'the ant, 7 mm off the desk, keeps its near plane under the desk');
   assert.ok(a1.pos[1] < 18, `its eye under the other shots' floor (${a1.pos[1]})`);
   assert.ok(a1.fov > 55 && target[1] > a1.pos[1] + 30, `a wide lens, looking up (${a1.fov}, ${target[1]})`);
   // the helicopter: its camera leans as it moves, and the next shot is level again
@@ -2766,6 +2794,7 @@ test('Assemble: the Done scene draws each showing: its own hold, angle, lens, si
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !window.__GEN2_DONE__, null, { timeout: 30_000 }).catch(() => assert.fail('Esc did not leave the scene'));
   assert.deepEqual((await camNow()).up, [0, 1, 0], 'left mid-lean, the studio\'s camera is level');
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.camera.near), 1, 'and its near plane is the stage\'s own again');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

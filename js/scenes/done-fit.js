@@ -133,6 +133,21 @@ export function reliefResolves(cam, box, view, { pitchMm = 0.2, cutoffPx = 4 } =
   return { px, on: px >= cutoffPx, distance, cutoffPx };
 }
 
+/* THE NEAR PLANE, from what the camera has clear around it (Joey 2026-11-01: "when the camera is far away, shadows seem to flicker,
+ * almost like a clipping issue"). The room's shadow layers lie 0.2 to 0.6 mm off the desk and the wall. With the stage's near
+ * plane at 1 mm the depth buffer's step at distance z is about z squared over 2^24 mm: 1.1 mm at 4.2 m, where a 3W-3H build's hero
+ * stands on a phone in portrait, so the layers lost to their own surfaces in stripes that crawled as the camera moved. The step goes
+ * as 1 / near, and nothing is drawn nearer than the camera's clearance: `share` of it, so the near plane's corners stay clear at
+ * a wide lens. From the walls (`interior`) too: a camera is kept at least 150 mm off one, so a far camera always gains; past a
+ * wall, that wall is no clearance. */
+export const NEAR = { share: 0.25, min: 1, max: 200 };
+export function nearPlane(position, boxes, interior = null, { share = NEAR.share, min = NEAR.min, max = NEAR.max } = {}) {
+  let clear = Infinity;
+  for (const b of boxes) clear = Math.min(clear, boxDistance(position, b));
+  if (interior) for (const a of ['x', 'y', 'z']) for (const wall of [position[a] - interior[a + '0'], interior[a + '1'] - position[a]]) if (wall > 0) clear = Math.min(clear, wall);
+  return Math.max(min, Math.min(max, share * clear));
+}
+
 /* THE LENS (Very High's bokeh, 2026-10-24; js/lens.js, main.js THE LENS). A still shot's thin lens: the whole build held
  * sharp to within `maxPx` at its nearest and farthest corners, and what lies beyond it blurred, more the farther it is:
  * focused at the harmonic mean of the box's depths along the view axis, with the widest aperture that holds both ends.
@@ -599,7 +614,7 @@ export const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k +
  * the whole beat has none. The slide is the scene's own (Joey 2026-11-01: "drawers open way too fast, they feel unnatural"; the
  * stage's 380 ms out and 320 ms back are a tap's answer): a hand's pull, and a push the magnets finish. `rng`: a longer hold
  * spends what it has over by starting later and staying open longer, a share each. */
-export const DRAWER = { outMs: 700, openMs: 3200, fraction: 0.4, slideOutMs: 1800, slideBackMs: 1400, snap: 0.06, snapTime: 0.05 };
+export const DRAWER = { outMs: 700, openMs: 3200, fraction: 0.4, slideOutMs: 1800, slideBackMs: 1400, snap: 0.06, snapTime: 0.05, nearReach: 110 };   // nearReach, mm: past the longest drawer's slide (270: 102.6), what nearPlane keeps clear in front of the build
 export function drawerBeat(holdMs, d = DRAWER, rng = null) {
   const spare = holdMs - (d.outMs + d.slideOutMs + d.openMs + d.slideBackMs + 400);
   if (spare < 0) return null;
