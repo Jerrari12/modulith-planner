@@ -6769,6 +6769,8 @@ Joey: "There have been a ton of failures, why does this keep happening, it seems
 
 - **Live 2026-11-01 at `70934d9`** (run 41335501782, green on its first try, stamp `70934d95`), no case on its retry. One run proves little: shards 9.1 to 27.6 min, median 19.2 (about 15 on green runs before it; the warm-up's share is not measured), 28 min in all. What will say whether this worked is the next week's failure rate, against the 18 to 75 % above, and how often the coverage job names a retry.
 
+- **Live 2026-11-01 at `8c417d3`** (run 41332929163 green, stamp `8c417d3e`; the deploy also carries the glitter swatches). On the live page at High, `showcase-live.mjs`: the drawer 68.6 mm in 1785 ms out and 1351 ms back; push holds of 16.5, 8.6 and 15.1 s; the macro on drawers 1, 3 and 2, twice mirrored; the ant, the helicopter and the crane each shown; 25 props known. A visitor with no `?debug`, 40 s in the room: no page errors. Not measured: a real phone, or any GPU but this one. The new case failed the runner twice, racing the scene's clock (41325554777, 41328367369): it now jumps to a showing and reads it in one task, and the drawer's timing runs on a GPU, so on the runner only its unit tests cover the pull. A third run (41330720932) failed on another case's click at 120 s, with this case green; a fresh run at the same code passed, and what blocked the click is not known.
+
 ## 2026-11-01 · BlockBar B prints front face down
 
 Joey, having noticed BlockBar B showed no layer lines: "Orient blockbar B front face down". Stated, not measured or sliced, and of B alone: the other BlockBars are other shapes.
