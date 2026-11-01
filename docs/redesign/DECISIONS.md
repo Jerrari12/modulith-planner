@@ -6713,6 +6713,9 @@ Joey: "plan out how to represent glitter filaments square swatches next rather t
 
 Checks: `test/swatch-finish.test.mjs` (5), `test/silk.test.mjs`, and three e2e cases, on the GPU and `E2E_SOFT=1`, with the idle gate and the Galaxy model case alongside on soft. 21 mutants, 21 killed, 15 by the e2e cases. Review: Sol `01a1978f`, no objection; its one conditional note, two glitter scrollers under one host in the same frame, does not arise here (each host has one).
 
+- **Live 2026-11-01 at `8c417d3`** (run 41332929163, stamp `8c417d3e`), with the Showcase work under it. `swatch-prod.mjs` (`D:\Claude - Output\planner-prod-checks-2026-10-18`) passes all 21 checks on the stamp: the nine Galaxy rows, Green's warm flakes, silk's sheen, a plain row, the scroll's step, rest and return, the model drawing nothing, the hover, reduced motion, a pick's row and summary, the outline's room, and the sheet at the S23's size. `glitter-prod.mjs` passes 21 of 21 and `silk-prod.mjs` 10 of 10 on the same stamp. Still not measured on a real phone.
+- **It took five runs, and the first failure was this change's.** 41320903638 failed on the older silk case, which asserted a plain swatch has no image on `::before`, and that case had not been run locally (fixed in `e5b1fd4`). Then 41323387710 on the Labels case's page load at 90 s (fixed in `77af08c` by the Colors session), 41325554777 and 41328367369 on the Showcase's new case (fixed in `8aef806` and `168b0c5`), and 41330720932 on the board case's click at 120 s, which passed the five runs before it and the run after. That click's cause is not known.
+
 ## 2026-11-01 · The planner owns what came from the Filament Material Lab
 
 Joey retired the Lab on 2026-11-01 (the vault's `docs/knowledge/decisions.md` has the reasons). It is a read-only archive at the tag `retired-2026-11`. Nothing is re-vendored now, in either direction, which also closes the re-vendor owed since silk.
@@ -6721,7 +6724,7 @@ Joey retired the Lab on 2026-11-01 (the vault's `docs/knowledge/decisions.md` ha
 
 **Checks that no longer run, and had not been protecting this code.** Three lived only on the Lab's side: `layerDetailSeam` (a chain survives the holographic patch's assignment), `layerTiltAgreement` (the print facts), and the agreement test on `generate.js`'s Euler expansion. Their upstream was the old viewer, merged into this repo at the 2026-10-23 cutover, so none has checked this repo since. Nothing replaces them here: `test/layer-detail-seam.test.mjs` holds the order, and the module is pinned. A change to `generate.js`'s `PLATE_POSE` expansion has no agreement test.
 
-Checks: the full unit suite on this branch. No deploy of its own: this goes out with the glitter swatches.
+Checks: the full unit suite on this branch; compiled with comments removed, the changed modules match their previous versions but for that one export. Live with the glitter swatches at `8c417d3e`.
 
 ## 2026-11-01 · No two showings alike: the Showcase draws each shot's length, angle and subject, pulls its drawers slowly, and now and then sends an ant
 
