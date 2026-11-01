@@ -209,6 +209,8 @@ jobs:
           sed -i "s|'./filament-db.js'|'./filament-db.js?v=$V'|" js/part-material.js
           # the silk parts' sheen frame and silk light (2026-10-28) - a main.js import
           sed -i "s|'./silk-axis.js'|'./silk-axis.js?v=$V'|" js/main.js
+          # the glitter prototype (2026-10-31), behind ?glitter= - a main.js import
+          sed -i "s|'./glitter.js'|'./glitter.js?v=$V'|" js/main.js
           # the build plate's bed-surface finish (2026-09-14) - a main.js import like the rest
           sed -i "s|'./bed-finish.js'|'./bed-finish.js?v=$V'|" js/main.js
           # the cover tiles' shading-only edge (2026-10-21) - a main.js import too

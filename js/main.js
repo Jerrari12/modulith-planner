@@ -18,6 +18,7 @@ import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFin
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
 import { createSilkUniforms, applySilkAxis, silkTier } from './silk-axis.js';
+import { createGlitterUniforms, applyGlitter, glitterArm, glitterWanted, glitterTier, glitterTintOf } from './glitter.js';
 import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows, firstRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
@@ -785,6 +786,7 @@ function applyQuality(name) {
   renderer.toneMapping = q.tone ? THREE.NeutralToneMapping : THREE.NoToneMapping;
   // the silk light and studio at the strengths this tone mapping can hold (silk-axis.js silkTier); unset on the first call
   if (silkU) { const st = silkTier(!!q.tone); silkU.uSilkLight.value = st.light; silkU.uSilkEnv.value = st.env; }
+  if (glitterU) glitterU.uGlitTier.value = glitterTier(!!q.tone);
   // ⚠ NOT ACES. Measured median hue error: none 0.9 deg, Khronos Neutral 2.5 deg,
   // ACES 5.3 deg. Neutral exists for product rendering where colour is a promise.
 
@@ -3975,6 +3977,7 @@ const LAYER_TILT_DEG = 22;
 const layerHandles = new Map();
 function setLayerDetailPixelRatio(dpr) {
   for (const h of layerHandles.values()) h.setPixelRatio(dpr);
+  if (glitterU) glitterU.uGlitPx.value = dpr;   // a speck's smallest size is stated in CSS px too (glitter.js), so it hears both dpr paths
 }
 
 /**
@@ -4363,12 +4366,17 @@ function withSilkAxis(m, key) {
   // an unknown axis still gets the patch, for the silk light; silkFinish keeps its anisotropy at 0, so the axis is unread
   return applySilkAxis(m, { up: buildAxisForKey(key) || [0, 1, 0], uniforms: silkU });
 }
+/* GLITTER (2026-10-31, js/glitter.js, a prototype): ?glitter=on for the galaxy labels, =grips for the grip zone whatever it
+   wears, =all for every part (the cost bench); ?glitterAmount= scales it. No flag, no patch: nothing changes on main. */
+var GLITTER_ARM = glitterArm(new URLSearchParams(location.search).get('glitter'));
+var glitterU = createGlitterUniforms({ amount: Number(new URLSearchParams(location.search).get('glitterAmount') ?? 1), tone: !!QUALITY[quality].tone, dpr: renderer.getPixelRatio() });
 /* The spec as this viewer can draw it: no anisotropy where the build axis is unknown (a direction on a guessed axis is
    a print that does not exist - the relief's rule), and the comparison arms. Every path that paints a finish goes
    through here and then applyFinish, so a repaint can never leave a stale anisotropy behind. */
-function silkFinish(key, spec) {
+function silkFinish(key, spec, label = null) {
+  if (glitterWanted(GLITTER_ARM, key, label)) spec = { ...spec, glitter: 'approx', glitterTint: glitterTintOf(label) };
   if (!spec.silk) return spec;
-  if (SILK_ARM === 'off') return partMaterialSpec(key);
+  if (SILK_ARM === 'off') return spec.glitter ? { ...partMaterialSpec(key), glitter: spec.glitter, glitterTint: spec.glitterTint } : partMaterialSpec(key);
   if (SILK_ARM === 'iso' || !buildAxisForKey(key)) return { ...spec, anisotropy: 0 };
   return spec;
 }
@@ -4382,6 +4390,7 @@ function applyFinish(m, spec) {
   const studio = !!spec.silk && SILK_ARM !== 'nostudio';
   setDefine(m, 'SILK_SHEEN', !!spec.silk && SILK_ARM !== 'nolight');
   setDefine(m, 'SILK_ENV', studio);
+  if (GLITTER_ARM) { setDefine(m, 'GLITTER', !!spec.glitter); setGlitterTint(m, spec.glitterTint || null); }
   // the silk studio (SILK_STUDIO): a silk part reflects it in place of the scene's environment, on every tier
   const env = studio ? silkEnv() : null;
   if (m.envMap !== env && (env || m.envMap === silkEnvTex)) { if (!m.envMap !== !env) m.needsUpdate = true; m.envMap = env; }
@@ -4392,12 +4401,20 @@ function setDefine(m, name, on) {
   if (on) d[name] = ''; else delete d[name];
   m.defines = d; m.needsUpdate = true;
 }
+/* a filament's flake colour (glitter.js GLITTER_TINTS), a define with a value: a program of its own */
+function setGlitterTint(m, tint) {
+  if ((m.defines && m.defines.GLITTER_TINT) === (tint || undefined)) return;
+  const d = { ...(m.defines || {}) };
+  if (tint) d.GLITTER_TINT = tint; else delete d.GLITTER_TINT;
+  m.defines = d; m.needsUpdate = true;
+}
 /* a clone that follows its source's finish (the planned ghosts): the scalars, and the silk light and studio with them */
 function copyFinish(dst, src) {
   dst.roughness = src.roughness; dst.metalness = src.metalness;
   if (!dst.isMeshPhysicalMaterial) return;
   dst.anisotropy = src.anisotropy;
-  for (const name of ['SILK_SHEEN', 'SILK_ENV']) setDefine(dst, name, !!(src.defines && name in src.defines));
+  for (const name of ['SILK_SHEEN', 'SILK_ENV', 'GLITTER']) setDefine(dst, name, !!(src.defines && name in src.defines));
+  if (GLITTER_ARM) setGlitterTint(dst, (src.defines && src.defines.GLITTER_TINT) || null);
   if (!dst.envMap !== !src.envMap) dst.needsUpdate = true;
   dst.envMap = src.envMap;
 }
@@ -4406,7 +4423,7 @@ function newPartMaterial(key) {
   const plateContact = plateContactKey(key);
   const spec = silkFinish(key, partMaterialSpec(key, {
     holographicPlate: plateActive(), plateContact, label: activeLabel(key),
-  }));
+  }), activeLabel(key));
   const color = new THREE.Color(activeHex(key));
 
   if (spec.kind === 'physical') {
@@ -4430,6 +4447,7 @@ function newPartMaterial(key) {
     withLayerDetail(m, key);
     recordAxis(m, key);   // withBedFinish merges userData, so the record survives it
     withSilkAxis(m, key);   // chains, and draws after lights_physical_fragment whatever order the patches ran in
+    if (GLITTER_ARM) applyGlitter(m, { uniforms: glitterU });
     return withBedFinish(m, key, spec);
   }
   const m = new THREE.MeshStandardMaterial(
@@ -6770,7 +6788,7 @@ function overrideMatFor(key, ov, zone, alt) {
   const k = key + '|' + ov.hex + '|' + (ov.name || '') + (alt && !zone ? '|alt' : '');
   if (!overrideMats[k]) {
     const m = cloneMaterial(base); m.color.set(ov.hex);
-    applyFinish(m, silkFinish(key, partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label: ov.name || null })));
+    applyFinish(m, silkFinish(key, partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label: ov.name || null }), ov.name || null));
     overrideMats[k] = m;
   }
   return overrideMats[k];
@@ -8141,7 +8159,7 @@ const activeLabel = key => {
  */
 const finishFor = key => silkFinish(key, partMaterialSpec(key, {
   holographicPlate: plateActive(), plateContact: plateContactKey(key), label: activeLabel(key),
-}));
+}), activeLabel(key));
 
 function applyPalette() {
   /* ⚠ COLOUR AND FINISH, SINCE 2026-09-07. See finishFor. Roughness, metalness and (since 2026-10-28,
@@ -9856,7 +9874,7 @@ function lookMaterialFor(look, it) {
     m = cloneMaterial((it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone));
     m.color.set(hex);
     if (alt) m.color.lerp(new THREE.Color('#ffffff'), ALT_LIGHTEN);
-    applyFinish(m, silkFinish(key, partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label })));
+    applyFinish(m, silkFinish(key, partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label }), label));
     lookMats.set(k, m);
   }
   return m;
@@ -12207,6 +12225,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     setLabelPalette, get labelPalette() { return labelPalette; },
     // the look cards (step 2's probe, now the gallery's renderer; step 3, 2026-10-18) and the scene revision they key on
     lookCard, get sceneRev() { return sceneRev; },
+    // the glitter prototype's live numbers (glitter.js), for tuning from the console or a harness; invalidateFrame draws them
+    glitter: { arm: GLITTER_ARM, uniforms: glitterU },
     get manifest() { return manifest; } };
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_VIEWER__ = stage;
   return stage;
