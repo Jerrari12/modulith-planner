@@ -1461,7 +1461,7 @@ test('Labels: the Studio’s Add to planner build opens a fresh page and its lab
   // without labels, is now behind: the stale-tab guard (2026-10-22) stops it saving over tab B's build. A tab without the
   // guard (an old planner page left open across the deploy) still can; the stored copy outlives that, so the next page
   // offers the two again
-  const pageIn = async (url) => { const p = await a.ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push('pageerror: ' + e.message)); await p.goto(`${base}/index.html?${url}`, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(p); return { p, errs }; };
+  const pageIn = async (url) => { const p = await a.ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push('pageerror: ' + e.message)); await p.goto(`${base}/index.html?${url}`, { waitUntil: 'load', timeout: SOFTWARE_GL ? 180_000 : 90_000 }); await waitBoot(p); return { p, errs }; };   // the case takes 3 to 4.5 min on the runner, and one load ran out of 90 s (run 41323387710)
   const keptCount = (p) => p.evaluate(() => { try { const o = JSON.parse(localStorage.getItem('gen2-label-copies') || 'null'); return o ? Object.keys(o.copies || {}).length : 0; } catch { return -1; } });
   // an edit has been saved when the slot (written after the Recent entry) holds it: on the CI runner a fixed 1.5 s was not
   // enough, and the next page then opened the build as it was before the edit
