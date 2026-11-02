@@ -1013,7 +1013,7 @@ export function mountColors(stage, ctx) {
   const autoMs = () => (debug && window.__SHOWCASE_IDLE_MS__) || 120000;   // read at each arming: a check shortens it once the page has settled
   let autoTimer = 0;
   const autoAllowed = () => ROOM_FLAG && !phone && !(ctx.memo && ctx.memo.showcaseAutoDone) && matchMedia('(hover: hover) and (pointer: fine)').matches
-    && !matchMedia('(prefers-reduced-motion: reduce)').matches && ['high', 'veryhigh'].includes(stage.quality) && store.state.placed.length > 0;
+    && !matchMedia('(prefers-reduced-motion: reduce)').matches && ((debug && window.__SHOWCASE_ANY_TIER__) || ['high', 'veryhigh'].includes(stage.quality)) && store.state.placed.length > 0;   // the hook: a software rasteriser's check draws at Fast, its High being too slow for the runner (e2e showcaseKit)
   const nothingOpen = () => !(st.key || st.swap || st.sel || st.gallery || st.detail || st.tray || st.surprise || st.simp || st.shop || st.saving) && !/^(input|select|textarea)$/i.test(document.activeElement?.tagName || '');
   function autoArm() {
     clearTimeout(autoTimer);

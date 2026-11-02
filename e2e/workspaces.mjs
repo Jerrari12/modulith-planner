@@ -4542,13 +4542,16 @@ test('Colors: Showcase plays the final scene in these colours, and Esc comes bac
    Very High with nothing open, it starts itself, once a visit, and any input comes back exactly where the visitor was, doing nothing else.
    The clocks are set through the debug hooks, and every wait is a poll. */
 const showcaseKit = () => {
-  const opened = async ({ tier = 'high', idle = null, hinted = true, viewport = { width: 1280, height: 800 }, options = {}, reduced = false }) => {
+  /* a software rasteriser's High took the first case below 16 minutes on the runner, the second 15 over its two attempts and the deploy to 40 (run
+     41373438677), so there every visit draws at Fast, and one that means to start itself (starts) says so through a hook; the tier's own rule is walked on a GPU */
+  const opened = async ({ tier = 'high', idle = null, hinted = true, viewport = { width: 1280, height: 800 }, options = {}, reduced = false, starts = false }) => {
     const c = await browser.newContext({ viewport, reducedMotion: reduced ? 'reduce' : 'no-preference', ...options });
-    await c.addInitScript(({ tier, idle, hinted }) => {
+    await c.addInitScript(({ tier, idle, hinted, anyTier }) => {
       try { localStorage.setItem('gen2-theme', 'dark'); localStorage.setItem('gen2-quality', tier); localStorage.setItem('gen2-quality:set', '1'); localStorage.setItem('gen2-sheet-nudged', '1'); if (hinted) localStorage.setItem('gen2-showcase-hinted', '1'); } catch { /* */ }
       if (idle) window.__SHOWCASE_IDLE_MS__ = idle;
+      if (anyTier) window.__SHOWCASE_ANY_TIER__ = true;
       window.__SHOWCASE_HINT_MS__ = 600_000;   // its nine seconds are shorter than a pick on a runner; the one check of its going sets its own
-    }, { tier, idle, hinted });
+    }, { tier: SOFTWARE_GL ? 'fast' : tier, idle, hinted, anyTier: SOFTWARE_GL && starts });
     return { c, ...(await open('colors', { query: '&done=room', context: c, phone: !!options.isMobile })) };
   };
   const inColors = (page) => page.waitForFunction(() => document.documentElement.dataset.ws === 'colors' && document.documentElement.dataset.done === 'room' && !document.documentElement.classList.contains('cinema'), null, { timeout: 120_000 });
@@ -4655,10 +4658,10 @@ test('Colors: the Showcase is orange in the dock with no Parts list button, watc
 
 test('Colors: after a quiet while on a desktop on High the Showcase starts itself, once a visit, and a move comes back where the visitor was; it waits for a picker and a page in view, and never on Balanced or under reduced motion', async () => {
   const { opened, inColors, inScene, stays, rests, startClock, pointerAt, dockNow, openRow } = showcaseKit();
-  const b = await opened({});
+  const b = await opened({ starts: true });
   await inColors(b.page);
   await rests(b.page);
-  const place = () => b.page.evaluate(() => { const v = window.__GEN2_VIEWER__, p = document.querySelector('#ws-colors'); return { cam: v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(1)), scroll: p.scrollTop, free: v.camFree, room: document.querySelector('#ws-tools .backdrop [aria-pressed="true"]')?.textContent || null }; });
+  const place =() => b.page.evaluate(() => { const v = window.__GEN2_VIEWER__, p = document.querySelector('#ws-colors'); return { cam: v.camera.position.toArray().concat(v.controls.target.toArray(), [v.camera.fov]).map((n) => +n.toFixed(1)), scroll: p.scrollTop, free: v.camFree, room: document.querySelector('#ws-tools .backdrop [aria-pressed="true"]')?.textContent || null }; });
   await b.page.evaluate(() => { const v = window.__GEN2_VIEWER__, k = v.controls; v.setCamFree && v.setCamFree(true); const p = v.camera.position; p.set(p.x - 160, p.y - 40, p.z - 120); k.update(); v.invalidateFrame && v.invalidateFrame(); document.querySelector('#ws-colors').scrollTop = 90; });
   const was = await place();
   assert.ok(was.scroll > 0, 'the panel scrolled');
@@ -4687,7 +4690,7 @@ test('Colors: after a quiet while on a desktop on High the Showcase starts itsel
   assert.deepEqual(clean(b.errors), []);
   await b.c.close();
 
-  const e = await opened({});
+  const e = await opened({ starts: true });
   await inColors(e.page);
   await rests(e.page);
   await openRow(e.page);
@@ -4696,27 +4699,26 @@ test('Colors: after a quiet while on a desktop on High the Showcase starts itsel
   await e.page.locator('#ws-picker button[aria-label="Close the picker"]').click();
   await inScene(e.page);
   await e.c.close();
-  const v = await opened({});
+  const v = await opened({ starts: true });
   await inColors(v.page);
   await rests(v.page);
   await v.page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); });
   await startClock(v.page, 1000);
   await stays(v.page, 3000);   // the page out of view
   if (!SOFTWARE_GL) {   // a real clock against this page's: a pointer that keeps moving keeps it waiting
-    await v.page.evaluate(() => { delete document.hidden; window.__SHOWCASE_IDLE_MS__ = 1500; });
+    await v.page.evaluate(() => { delete document.hidden; window.__SHOWCASE_IDLE_MS__ = 4000; });   // long enough that a stall between two moves does not start it, and the next move end it for the visit (Terra 01a19a15)
     await v.page.keyboard.press('Shift');   // a key starts the short clock, so the moves below have something to hold off
-    for (let i = 0; i < 12; i++) { await v.page.mouse.move(500 + i * 5, 300); await settle(v.page, 300); }
+    for (let i = 0; i < 20; i++) { await v.page.mouse.move(500 + i * 5, 300); await settle(v.page, 300); }
     assert.equal(await v.page.evaluate(() => document.documentElement.dataset.ws), 'colors', 'a pointer on the move holds it off');
   }
-  await v.page.evaluate(() => { delete document.hidden; });
-  await v.page.mouse.move(700, 500);
+  await v.page.evaluate(() => { delete document.hidden; });   // no input after this: its clock is already ticking, and a move landing once the showing has begun ends it, for the visit (run 41373438677)
   await inScene(v.page);
   await v.c.close();
   const f = await opened({ tier: 'balanced', idle: 1000 });
   await inColors(f.page);
-  await stays(f.page, 3000);   // not on Balanced
+  await stays(f.page, 3000);   // not on Balanced (on a software rasteriser, on Fast)
   await f.c.close();
-  const g = await opened({ idle: 1000, reduced: true });
+  const g = await opened({ idle: 1000, reduced: true, starts: true });
   await inColors(g.page);
   await stays(g.page, 3000);   // not under reduced motion
   await g.c.close();
