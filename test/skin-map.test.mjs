@@ -370,8 +370,8 @@ test('the top field\'s rows: rect, frame, first row and crown, all zero for a no
   /* the distance survives the atlas's shrink: a plane stays a plane, to a level or two, where a box of hi and lo bytes would be garbage */
   const w = 40, h = 30, src = new Uint8Array(w * h * 4), level = (x, y) => Math.round(((x + 0.5) + (y + 0.5)) * 0.01 / SM.SKIN_MAP.topStepMm);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = (y * w + x) * 4, e = level(x, y); src[o] = e >> 8; src[o + 1] = e & 255; src[o + 2] = 9; src[o + 3] = 3; }
-  assert.equal(SM.resampleField(src, w, h, w, h), src, 'the same size must return the source itself');
-  const out = SM.resampleField(src, w, h, 20, 15);
+  assert.equal(SM.resampleField(src, w, h, w, h, 1), src, 'scale 1 must return the source itself');
+  const out = SM.resampleField(src, w, h, 20, 15, 0.5);
   for (const [i, j] of [[3, 3], [10, 7], [15, 12]]) {
     const o = (j * 20 + i) * 4, got = out[o] * 256 + out[o + 1], x = (i + 0.5) * 2 - 0.5, y = (j + 0.5) * 2 - 0.5;
     assert.ok(Math.abs(got - ((x + 0.5) + (y + 0.5)) * 0.01 / SM.SKIN_MAP.topStepMm) < 3, `a plane's level at ${i},${j} is ${got}`);
@@ -379,14 +379,83 @@ test('the top field\'s rows: rect, frame, first row and crown, all zero for a no
   }
   /* a neighbour on another row does not pull the distance, whichever row the new texel lands on */
   const two = Uint8Array.from(src); for (let y = 0; y < h; y++) for (let x = 21; x < w; x++) { const o = (y * w + x) * 4; two[o] = 255; two[o + 1] = 255; two[o + 3] = 7; }
-  const low = SM.resampleField(two, w, h, 30, 30), oL = (5 * 30 + 15) * 4;   // between columns 20 and 21, nearer 20
+  const low = SM.resampleField(two, w, h, 30, 23, 0.75), oL = (5 * 30 + 15) * 4;   // between columns 20 and 21, nearer 20, and rows 6 and 7
   assert.equal(low[oL + 3], 3, 'the new texel takes its nearest row');
-  assert.ok(Math.abs(low[oL] * 256 + low[oL + 1] - level(20, 5)) < 3, `the row 3 texel beside row 7 took its distance: ${low[oL] * 256 + low[oL + 1]}`);
-  const high = SM.resampleField(two, w, h, 20, 15), oH = (5 * 20 + 10) * 4;   // midway between them, so the higher column is the nearest
+  assert.ok(Math.abs(low[oL] * 256 + low[oL + 1] - level(20, 6 + 5 / 6)) < 3, `the row 3 texel beside row 7 took its distance: ${low[oL] * 256 + low[oL + 1]}`);
+  const high = SM.resampleField(two, w, h, 20, 15, 0.5), oH = (5 * 20 + 10) * 4;   // midway between them, so the higher column is the nearest
   assert.equal(high[oH + 3], 7, 'the new texel takes its nearest row');
   assert.equal(high[oH] * 256 + high[oH + 1], 65535, 'the row 7 texel beside row 3 took its distance');
   assert.ok(SM.SKIN_MAP.surfaceCols * SM.SKIN_MAP.surfacesPerRow <= 2048, 'the table\'s width must fit the smallest texture WebGL 2 allows');
   assert.equal(SM.SKIN_MAP.topCrownMm, SM.SKIN_MAP.firstCrownMm, 'one bead: at 0.06 the exact drawing read as corduroy (2026-11-02)');
+});
+
+/* a shrunk field read as the shader reads it (FIRST_BLOCK): pxF = q * pxPerMm * scale, nothing past the rectangle, kept a texel in from its edge, a texture's bilinear between texel centres. Plane
+   fields at several angles through the near corner, the middle and the far corner of a real part's size, whose dw / w is not the scale. Only where a layer's perimeters are: 0 to 1.2 mm in from an
+   outline, which lies 3 texels or more inside the field (skin_vector.py's margin of 1 mm around the extrusion's centres) (Joey 2026-11-02: waves on a Chevron) */
+const bilinearAt = (read, x, y) => {
+  const fx = x - 0.5, fy = y - 0.5, x0 = Math.floor(fx), y0 = Math.floor(fy), ax = fx - x0, ay = fy - y0;
+  return read(x0, y0) * (1 - ax) * (1 - ay) + read(x0 + 1, y0) * ax * (1 - ay) + read(x0, y0 + 1) * (1 - ax) * ay + read(x0 + 1, y0 + 1) * ax * ay;
+};
+function shrunkPlaneErrors(shrink, encode, decode) {
+  const W = 705, H = 225, px = 4, worst = { dist: 0, dir: 0, dir45: 0, n: 0, clamped: 0 };
+  for (const deg of [45, 30, 17, 0]) for (const [ax, ay] of [[8, 8], [W / 2, H / 2], [W - 8, H - 8]]) for (const s of [0.9, 0.81, 0.729, 0.5314, 0.387, 0.35]) {
+    const c = Math.cos(deg * Math.PI / 180), n = Math.sin(deg * Math.PI / 180);
+    const plane = (x, y) => 0.4 + ((x - ax) * c + (y - ay) * n) / px;     // x, y in source texel units, an edge's distance: 1 mm a mm
+    const src = new Uint8Array(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) encode(src, (y * W + x) * 4, plane(x + 0.5, y + 0.5));
+    const dw = Math.max(1, Math.round(W * s)), dh = Math.max(1, Math.round(H * s)), out = shrink(src, W, H, dw, dh, s);
+    const read = (i, j) => decode(out, (Math.max(0, Math.min(dh - 1, j)) * dw + Math.max(0, Math.min(dw - 1, i))) * 4);
+    const at = (u, v) => bilinearAt(read, u, v);
+    for (let oy = -8; oy <= 8; oy += 0.37) for (let ox = -8; ox <= 8; ox += 0.37) {
+      const x = ax + ox, y = ay + oy, want = plane(x, y), pX = x * s, pY = y * s;
+      if (want <= 0 || want >= 1.2 || x < 3 || y < 3 || x > W - 3 || y > H - 3) continue;
+      assert.ok(pX < dw && pY < dh, `a perimeter past the rectangle at scale ${s}: ${x}, ${y}`);
+      const cx = Math.max(1, Math.min(dw - 1, pX)), cy = Math.max(1, Math.min(dh - 1, pY));
+      if (cx !== pX || cy !== pY) worst.clamped++;
+      const gx = at(cx + 0.5, cy) - at(cx - 0.5, cy), gy = at(cx, cy + 0.5) - at(cx, cy - 0.5);
+      const dir = Math.abs(Math.atan2(gy * c - gx * n, gx * c + gy * n)) * 180 / Math.PI;
+      worst.dist = Math.max(worst.dist, Math.abs(at(cx, cy) - want));
+      worst.dir = Math.max(worst.dir, dir);
+      if (deg === 45) worst.dir45 = Math.max(worst.dir45, dir);
+      worst.n++;
+    }
+  }
+  return worst;
+}
+
+test('⚔ a shrunk first-layer field reads true where the shader looks: the distance, the bead\'s direction, to the far corner', () => {
+  const step = 0.0125;    // the shipped first-layer field's mm a level (tools/skin-map.mjs SDF_STEP)
+  const r = shrunkPlaneErrors((src, w, h, dw, dh, s) => SM.resampleFirstField(src, w, h, dw, dh, s),
+    (d, o, v) => { d[o] = Math.max(0, Math.min(255, Math.round((v + 1) / step))); d[o + 1] = 128; },
+    (d, o) => d[o] * step - 1);
+  assert.ok(r.n > 20000, `too few samples: ${r.n}`);
+  assert.ok(r.dist < 0.015, `a band is ${r.dist} mm out of place; a ring is 0.5 wide`);
+  assert.ok(r.dir45 < 2.5, `a perimeter bead's direction swings ${r.dir45} degrees along a Chevron's diagonal; the averaged read swung 11`);
+  assert.ok(r.dir < 4, `a perimeter bead's direction swings ${r.dir} degrees; 8 bits rounded twice allow about 3.5 off 45 degrees`);
+});
+
+test('a shrunk first-layer field: scale 1 is the source, G stays flat, an island\'s phase and spacing come whole from the texel nearest where the shader looks', () => {
+  const w = 40, h = 30, src = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = (y * w + x) * 4; src[o] = 100 + x; src[o + 1] = 77; src[o + 2] = x < 21 ? 10 : 200; src[o + 3] = y < 7 ? 40 : 90; }
+  assert.equal(SM.resampleFirstField(src, w, h, w, h, 1), src, 'scale 1 must return the source itself');
+  const out = SM.resampleFirstField(src, w, h, 30, 23, 0.75);
+  /* new column i looks at source column ( i + .5 ) / .75 - .5: 15 is 20.17, nearest 20; 16 is 21.5, nearest 22; new row 4 looks at row 5.5, nearest 6; row 5 at 6.83, nearest 7 */
+  for (const [i, x] of [[15, 20.17], [16, 21.5], [29, 39]]) for (const [j, y] of [[4, 6], [5, 7]]) {
+    const o = (j * 30 + i) * 4;
+    assert.ok(Math.abs(out[o] - (100 + x)) <= 1, `R at column ${i} reads ${out[o]}, the source there is ${100 + x}`);
+    assert.equal(out[o + 1], 128, 'G is flat, as the empty atlas');
+    assert.deepEqual([out[o + 2], out[o + 3]], [x < 20.5 ? 10 : 200, y < 7 ? 40 : 90], `an island's bytes at ${i}, ${j} are averaged or taken from the wrong side`);
+  }
+});
+
+test('⚔ a shrunk top field reads true where the shader looks, to the far corner', () => {
+  const T = SM.SKIN_MAP.topStepMm;
+  const r = shrunkPlaneErrors((src, w, h, dw, dh, s) => SM.resampleField(src, w, h, dw, dh, s),
+    (d, o, v) => { const e = Math.max(0, Math.min(65535, Math.round((v + 1) / T))); d[o] = e >> 8; d[o + 1] = e & 255; d[o + 3] = 1; },
+    (d, o) => (d[o] * 256 + d[o + 1]) * T - 1);
+  assert.ok(r.n > 20000, `too few samples: ${r.n}`);
+  assert.ok(r.dist < 0.001, `a band is ${r.dist} mm out of place`);
+  assert.ok(r.dir < 0.3, `a perimeter bead's direction swings ${r.dir} degrees`);
 });
 
 test('⚔ the label window is empty, the plate around it is skin, and the REMOVE tab lies along the window\'s lower edge', async () => {
@@ -512,13 +581,16 @@ for (const [name, edges] of [['Faceplate_EdgeLabel_2W-1H', [['q1', -1], ['q1', 1
 
 test('main.js patches every finished material, stamps every template, syncs on the mount and the tier switch; the trial is gone', () => {
   const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');
-  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, resampleField, decodePng, tableRows, firstRows, topRows, surfaceRows \} from '\.\/skin-map\.js';/);
+  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, resampleFirstField, resampleField, decodePng, tableRows, firstRows, topRows, surfaceRows \} from '\.\/skin-map\.js';/);
   /* a part with a top field fetches no raster map, keeps its front's size, and its rows land in the surface table */
   assert.match(main, /if \(!top\) \{\n\s*const r = await fetch\(base\(\) \+ entry\.file\);/, 'a part with a field still fetches its raster map');
   assert.ok(main.includes("...(s.top ? [{ id: n + '#top', w: s.top.w, h: s.top.h, front: s.front }] : [])"), 'a field does not keep a front\'s size');
   assert.ok(main.includes('topRows(rt, s.top && s.top.meta, scale, rt ? surfaces.length - s.top.meta.rows.length : 0)'), 'the slot does not name its first row');
   assert.ok(main.includes('skinU.uSMSurf.value = st.surf;'), 'the surface table does not reach the shader');
-  assert.ok(main.includes('const td = scale === 1 ? s.top.data : resampleField(s.top.data, s.top.w, s.top.h, rt.w, rt.h);'), 'a field\'s shrink must not average its high and low bytes');
+  assert.ok(main.includes('const td = resampleField(s.top.data, s.top.w, s.top.h, rt.w, rt.h, scale);'), 'a field\'s shrink must not average its high and low bytes');
+  /* a field's shrink is read at the scale its row draws at, not its own rectangle's */
+  assert.ok(main.includes('const fd = resampleFirstField(s.first.data, s.first.w, s.first.h, rf.w, rf.h, pack.scale);'), 'a first-layer field is shrunk as a picture again: waves on a Chevron');
+  assert.ok(main.includes('firstRows(rf, s.first && s.first.meta, pack.scale)'), 'the first layer\'s row draws at another scale than its field was shrunk to');
   assert.match(main, /var skinU = createSkinMapUniforms\(\{ on: new URLSearchParams\(location\.search\)\.get\('skinmap'\) !== 'off', tier: !!QUALITY\[quality\]\.accum \}\);/);
   /* the block draws on the tier that accumulates, and every tier change says so: the mount and the stepping both come through applyQuality */
   assert.match(main, /function applyQuality\(name\) \{[\s\S]*?if \(skinU\) skinU\.uSMTier\.value = q\.accum \? 1 : 0;[\s\S]*?\n\}\nfunction setQuality/, 'a tier change does not reach the maps');

@@ -461,8 +461,8 @@ async function vector() {
       const inside = !(col < 0 || col >= W || rowi < 0 || rowi >= H);
       const d = inside ? dAt(col, rowi) : -1;
       const o = (j * OW + i) * 4;
-      /* R the field; G unused (flat 128 - resampleMap box-averages R and G); B, A the island's phase and spacing bytes,
-         which resampleMap takes from the nearest texel, never averaged */
+      /* R the field; G unused (flat 128); B, A the island's phase and spacing bytes, which resampleFirstField takes from
+         the nearest texel, never averaged */
       out[o] = Math.max(0, Math.min(255, Math.round((d + 1) / SDF_STEP))); out[o + 1] = 128;
       const s = inside ? (rowi * W + col) * 4 : -1;
       out[o + 2] = s >= 0 && src[s + 3] ? SM.islandPhaseByte(src[s + 2], src[s + 3], nc) : 0;

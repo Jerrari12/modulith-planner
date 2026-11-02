@@ -443,16 +443,38 @@ export function topRows(rect, top, scale, firstRow) {
 }
 
 /**
- * A top field resampled to dw x dh: the 16-bit distance read between the source's texels at each new texel's centre, among those on the
- * nearest one's row (a distance interpolates, a picture would blur; two rows' distances do not mix), B and A from the nearest texel.
+ * A first-layer field shrunk to dw x dh: the distance read between the source's texels where the shader will look for it, a new texel's
+ * centre over `scale` (firstRows draws at pxPerMm * scale, and dw / w is that only to the nearest texel), B and A from the nearest texel.
+ * Averaging whole texels (resampleMap, for a picture) put the distance 0.18 to 0.44 mm off and swung a perimeter bead's direction by 6 to
+ * 11 degrees along a diagonal (95th percentiles), which a Chevron faceplate showed as waves on any build big enough to shrink the atlas (2026-11-02).
  */
-export function resampleField(src, w, h, dw, dh) {
-  if (dw === w && dh === h) return src;
+export function resampleFirstField(src, w, h, dw, dh, scale) {
+  if (scale === 1) return src;
   const out = new Uint8Array(dw * dh * 4);
   for (let j = 0; j < dh; j++) {
-    const sy = (j + 0.5) * h / dh - 0.5, y0 = Math.max(0, Math.min(h - 1, Math.floor(sy))), y1 = Math.min(h - 1, y0 + 1), fy = Math.max(0, Math.min(1, sy - y0));
+    const sy = (j + 0.5) / scale - 0.5, y0 = Math.max(0, Math.min(h - 1, Math.floor(sy))), y1 = Math.min(h - 1, y0 + 1), fy = Math.max(0, Math.min(1, sy - y0));
     for (let i = 0; i < dw; i++) {
-      const sx = (i + 0.5) * w / dw - 0.5, x0 = Math.max(0, Math.min(w - 1, Math.floor(sx))), x1 = Math.min(w - 1, x0 + 1), fx = Math.max(0, Math.min(1, sx - x0));
+      const sx = (i + 0.5) / scale - 0.5, x0 = Math.max(0, Math.min(w - 1, Math.floor(sx))), x1 = Math.min(w - 1, x0 + 1), fx = Math.max(0, Math.min(1, sx - x0));
+      const near = ((fy < 0.5 ? y0 : y1) * w + (fx < 0.5 ? x0 : x1)) * 4, d = (j * dw + i) * 4;
+      out[d] = Math.round(src[(y0 * w + x0) * 4] * (1 - fx) * (1 - fy) + src[(y0 * w + x1) * 4] * fx * (1 - fy) + src[(y1 * w + x0) * 4] * (1 - fx) * fy + src[(y1 * w + x1) * 4] * fx * fy);
+      out[d + 1] = 128; out[d + 2] = src[near + 2]; out[d + 3] = src[near + 3];
+    }
+  }
+  return out;
+}
+
+/**
+ * A top field shrunk to dw x dh: the 16-bit distance read between the source's texels where the shader will look for it, a new texel's
+ * centre over `scale` (topRows draws at pxPerMm * scale), among those on the nearest one's row (a distance interpolates, a picture would
+ * blur; two rows' distances do not mix), B and A from the nearest texel.
+ */
+export function resampleField(src, w, h, dw, dh, scale) {
+  if (scale === 1) return src;
+  const out = new Uint8Array(dw * dh * 4);
+  for (let j = 0; j < dh; j++) {
+    const sy = (j + 0.5) / scale - 0.5, y0 = Math.max(0, Math.min(h - 1, Math.floor(sy))), y1 = Math.min(h - 1, y0 + 1), fy = Math.max(0, Math.min(1, sy - y0));
+    for (let i = 0; i < dw; i++) {
+      const sx = (i + 0.5) / scale - 0.5, x0 = Math.max(0, Math.min(w - 1, Math.floor(sx))), x1 = Math.min(w - 1, x0 + 1), fx = Math.max(0, Math.min(1, sx - x0));
       const near = ((fy < 0.5 ? y0 : y1) * w + (fx < 0.5 ? x0 : x1)) * 4, row = src[near + 3];
       let sum = 0, wt = 0;
       for (const [x, y, k] of [[x0, y0, (1 - fx) * (1 - fy)], [x1, y0, fx * (1 - fy)], [x0, y1, (1 - fx) * fy], [x1, y1, fx * fy]]) {

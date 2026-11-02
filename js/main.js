@@ -19,7 +19,7 @@ import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFin
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
 import { createSilkUniforms, applySilkAxis, silkTier } from './silk-axis.js';
 import { createGlitterUniforms, applyGlitter, glitterArm, glitterWanted, glitterTier, glitterTintOf } from './glitter.js';
-import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, resampleField, decodePng, tableRows, firstRows, topRows, surfaceRows } from './skin-map.js';
+import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, resampleFirstField, resampleField, decodePng, tableRows, firstRows, topRows, surfaceRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
@@ -3779,13 +3779,13 @@ const skinMaps = (() => {
       }
       const rf = s.first ? pack.rects.get(n + '#first') : null;
       if (rf) {
-        const fd = pack.scale === 1 ? s.first.data : resampleMap(s.first.data, s.first.w, s.first.h, rf.w, rf.h);
+        const fd = resampleFirstField(s.first.data, s.first.w, s.first.h, rf.w, rf.h, pack.scale);
         for (let y = 0; y < rf.h; y++) st.atlasData.set(fd.subarray(y * rf.w * 4, (y + 1) * rf.w * 4), ((rf.y + y) * pack.size + rf.x) * 4);
       }
       firstRows(rf, s.first && s.first.meta, pack.scale).forEach((row, k) => st.tableData.set(row, (slot * COLS + 2 + k) * 4));
       const rt = s.top ? pack.rects.get(n + '#top') : null;
       if (rt) {
-        const td = scale === 1 ? s.top.data : resampleField(s.top.data, s.top.w, s.top.h, rt.w, rt.h);
+        const td = resampleField(s.top.data, s.top.w, s.top.h, rt.w, rt.h, scale);
         for (let y = 0; y < rt.h; y++) st.atlasData.set(td.subarray(y * rt.w * 4, (y + 1) * rt.w * 4), ((rt.y + y) * pack.size + rt.x) * 4);
         for (const row of s.top.meta.rows) surfaces.push(row);
       }
