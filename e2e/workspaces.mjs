@@ -4536,6 +4536,31 @@ test('Colors: Showcase plays the final scene in these colours, and Esc comes bac
   await ctx.close();
 });
 
+/* THE SCENE'S STRIP ON A PHONE (Joey 2026-11-01, with screenshots of both: "text seems to go off screen and outside the buttons, both landscape and portrait"). */
+test('the final scene\'s strip fits a phone: one line in each button, on the screen, upright and on its side, with its colours panel over it', async () => {
+  const { ctx, page, errors } = await open('colors', { query: '&done=room', phone: true, viewport: { width: 360, height: 675 } });
+  await page.waitForFunction(() => document.documentElement.dataset.done === 'room' && document.querySelector('#ws-dock .showcase'), null, { timeout: 120_000 });
+  await page.locator('#ws-dock .showcase').click();
+  await page.waitForFunction(() => document.documentElement.classList.contains('cinema') && !document.querySelector('#ws-scene button:nth-child(2)').disabled, null, { timeout: 120_000 });
+  for (const [width, height] of [[360, 675], [320, 568], [780, 260]]) {
+    await page.setViewportSize({ width, height });
+    await page.waitForFunction(([w, h]) => innerWidth === w && innerHeight === h, [width, height], { timeout: 30_000 });
+    await page.locator('#ws-scene button:nth-child(2)').click();   // the colours panel, measured with the strip
+    await page.waitForFunction(() => !document.querySelector('#ws-scene-colours').hidden, null, { timeout: 30_000 });
+    const m = await page.evaluate(() => { const box = (e) => { const b = e.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom }; }, s = document.querySelector('#ws-scene'), c = document.querySelector('#ws-scene-colours'); return { strip: box(s), panel: box(c), panelCut: c.scrollHeight - c.clientHeight, kids: [...s.children].map((k) => { const g = document.createRange(); g.selectNodeContents(k); const t = g.getBoundingClientRect(); return { ...box(k), line: t.height, textLeft: t.left, textRight: t.right }; }) }; });
+    const at = `${width} x ${height}: ${JSON.stringify(m)}`;
+    assert.ok(m.strip.left >= 8 - 0.5 && m.strip.right <= width - 8 + 0.5 && m.strip.bottom <= height - 6 + 0.5, `the strip on the screen, ${at}`);
+    m.kids.forEach((k, i) => {
+      assert.ok(k.line <= 20 && k.textLeft >= k.left && k.textRight <= k.right, `button ${i}'s words on one line inside it, ${at}`);   // a line is 15 to 17 px: two would still fit a 36 px button (Terra 01a19a60)
+      assert.ok(k.left >= m.strip.left && k.right <= m.strip.right && (!i || m.kids[i - 1].right + 6 <= k.left + 0.5), `button ${i} inside the strip, 6 px from the last, ${at}`);
+    });
+    assert.ok(m.panel.top >= 0 && m.panel.left >= 0 && m.panel.right <= width && m.panel.bottom <= m.strip.top && m.panelCut <= 0, `the panel whole, over the strip, ${at}`);
+    await page.locator('#ws-scene button:nth-child(2)').click();
+  }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE SHOWCASE, EASIER TO FIND (Joey 2026-11-01, of a button, a hint and an auto-start: "Yeah all 3"; of the dock: "I just want to not have
    the get parts list button while in color"). In the dock, on a desktop and a phone: orange, with no Parts list button, watched or not, and
    the Parts tab where it was; a hint once a browser after the second colour; after a quiet while, on a desktop on High or
