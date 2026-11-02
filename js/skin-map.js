@@ -11,9 +11,11 @@
    by tools/skin-map.mjs and shipped beside the part GLBs as parts/skin/<node>.png. Nothing is invented in a shader: the
    ?skinlines=on trial that guessed a bead direction (SKIN_LINES, 2026-09-22) is gone; it ran 90 degrees off the slicer's.
 
-   ⚠ VERY HIGH'S SETTLE SAMPLES ONLY, like the visible layer lines and the powder grain's detail form: the block is gated
-   on uLLOn, which only a jittered Very High sample turns on (bed-finish.js setSettleDetail). Fast, Balanced and High
-   draw nothing new, and never fetch a map (main.js loads them only while the tier is Very High).
+   ⚠ VERY HIGH ONLY, BUT IN EVERY FRAME (Joey 2026-11-02: "is it possible to make textures visible during rotation on
+   very high?"). The block was gated on uLLOn, which only a jittered settle sample turns on (bed-finish.js setSettleDetail),
+   so the beads went away the moment the camera moved, and were never drawn at all in the final scene's moving shots.
+   Nothing here needs the jitter: a map is mipmapped and the first layer fades before two pixels a line. uSMTier is the
+   tier's own flag (main.js applyQuality). Fast, Balanced and High draw nothing new, and never fetch a map.
 
    ⚠ ONE ATLAS, ONE TABLE, ONE ATTRIBUTE. Part materials are shared per TYPE (one material serves every size of a
    faceplate), while a map is per NODE (one size of one family). A per-node material would multiply the registries that
@@ -73,10 +75,11 @@ export function islandPhaseByte(phaseByte, spacingByte, shift) {
 /** The cache-key suffix a patched material adds, exported so a test can read it. */
 export const SKIN_MAP_KEY = '|sm1';
 
-/** One set of uniforms for every part material and every clone; `on` is a debug switch (?skinmap=off), not a user setting. */
-export function createSkinMapUniforms({ on = true } = {}) {
+/** One set of uniforms for every part material and every clone; `on` is a debug switch (?skinmap=off), not a user setting; `tier` says this tier draws the maps. */
+export function createSkinMapUniforms({ on = true, tier = false } = {}) {
   return {
     uSMOn: { value: on ? 1 : 0 },
+    uSMTier: { value: tier ? 1 : 0 },
     uSMStrength: { value: SKIN_MAP.strength },
     uSMZLo: { value: SKIN_MAP.zToleranceMm[0] }, uSMZHi: { value: SKIN_MAP.zToleranceMm[1] },
     uSMAtlas: { value: null },      // the RGBA8 atlas, bound by main.js once a map is loaded
@@ -102,7 +105,7 @@ const VERT_COMMON = [
 ].join('\n');
 const VERT_MAIN = 'vSkinId = aSkinId;';
 const FRAG_COMMON = [
-  'uniform float uSMOn, uSMStrength, uSMZLo, uSMZHi, uSMAtlasPx;',
+  'uniform float uSMOn, uSMTier, uSMStrength, uSMZLo, uSMZHi, uSMAtlasPx;',
   'uniform sampler2D uSMAtlas;',
   'uniform sampler2D uSMTable;',
   'varying float vSkinId;',
@@ -169,7 +172,7 @@ const FIRST_BLOCK = [
 ].join('\n');
 
 const FRAG_MAIN = [
-  'if ( uSMOn > 0.5 && uLLOn > 0.5 ) {',
+  'if ( uSMOn > 0.5 && uSMTier > 0.5 ) {',
   /* the frame and its screen-space derivatives in the UNIFORM branch, so textureGrad below is defined on every pixel of
      a quad (an implicit LOD inside the per-fragment branch would not be) */
   '  vec3 axSM = normalize( uAxis );',
@@ -211,7 +214,7 @@ function insert(src, directive, text, what, where) {
 
 /**
  * Chain the skin map onto a material that already carries the bed finish (it reads the finish's vObjPos, uAxis, gBFTop,
- * vPCT1/2 and uLLOn; chains, never assigns - bed-finish.js's rule). The block sits just before lights_physical_fragment,
+ * gBFContact and vPCT1/2; chains, never assigns - bed-finish.js's rule). The block sits just before lights_physical_fragment,
  * after every other patch has written `normal` and before the lights read it, like the cover edge.
  */
 export function applySkinMap(material, { uniforms }) {
@@ -237,14 +240,23 @@ export function applySkinMap(material, { uniforms }) {
 /* ---- the atlas ------------------------------------------------------------------------------ */
 
 /**
- * Shelf-pack maps into a square atlas. items: [{ id, w, h }] in map px. Returns { size, scale, rects: Map(id -> {x, y, w, h}) }:
- * the smallest of SKIN_MAP.atlasPx that holds every map at scale 1, else the largest at the largest scale (down to
- * minScale, in steps of 0.9) that holds them all; null when even that fails. Every rectangle is padded by gutterPx on
- * each side, so mipmaps bleed into padding rather than into a neighbour.
+ * A map the build's front shows: a faceplate printed back face down, so that its last layer is the face you look at. (A
+ * face-down faceplate's front is its first layer, drawn from numbers at any scale; its top map faces the drawer.)
+ */
+export const showsFront = (node, axis) => /^Faceplate_/.test(node) && !!axis && axis[2] > 0.5;
+
+/**
+ * Shelf-pack maps into a square atlas. items: [{ id, w, h, front }] in map px. Returns { size, scale, frontScale, rects:
+ * Map(id -> {x, y, w, h}) }: the smallest of SKIN_MAP.atlasPx that holds every map at scale 1, else the largest, with the
+ * shrink falling first on what the build's front does not show: the rest at the largest scale (down to minScale, in steps
+ * of 0.9) that holds them all with the fronts whole, then the fronts too; null when even that fails. Every rectangle is
+ * padded by gutterPx on each side, so mipmaps bleed into padding rather than into a neighbour.
+ * ⚠ ONE SCALE FOR ALL WAS WHAT TURNED A BEAD INTO A BLOTCH (Joey 2026-11-02, a 7W build of 18 faceplates: "i think i can
+ * faintly see it"): that build asks for 43 Mpx of a 16.8 Mpx atlas, and 0.53 of 7 px/mm leaves under 2 texels a bead.
  */
 export function packAtlas(items, { sizes = SKIN_MAP.atlasPx, gutter = SKIN_MAP.gutterPx, minScale = SKIN_MAP.minScale } = {}) {
-  const tryPack = (size, scale) => {
-    const rows = [...items].map((it) => ({ id: it.id, w: Math.max(1, Math.round(it.w * scale)), h: Math.max(1, Math.round(it.h * scale)) }))
+  const tryPack = (size, scale, frontScale = scale) => {
+    const rows = [...items].map((it) => { const s = it.front ? frontScale : scale; return { id: it.id, w: Math.max(1, Math.round(it.w * s)), h: Math.max(1, Math.round(it.h * s)) }; })
       .sort((a, b) => b.h - a.h || b.w - a.w);
     const rects = new Map();
     let x = gutter, y = gutter, shelf = 0;
@@ -258,12 +270,16 @@ export function packAtlas(items, { sizes = SKIN_MAP.atlasPx, gutter = SKIN_MAP.g
     }
     return rects;
   };
-  if (!items.length) return { size: sizes[0], scale: 1, rects: new Map() };
-  for (const size of sizes) { const r = tryPack(size, 1); if (r) return { size, scale: 1, rects: r }; }
+  if (!items.length) return { size: sizes[0], scale: 1, frontScale: 1, rects: new Map() };
+  for (const size of sizes) { const r = tryPack(size, 1); if (r) return { size, scale: 1, frontScale: 1, rects: r }; }
   const size = sizes[sizes.length - 1];
-  for (let scale = 0.9; scale > minScale; scale *= 0.9) { const r = tryPack(size, scale); if (r) return { size, scale, rects: r }; }
-  const last = tryPack(size, minScale);   // the floor itself is tried (Sol 01a174ad: the 0.9 steps stopped at 0.387)
-  return last ? { size, scale: minScale, rects: last } : null;
+  for (let scale = 0.9; scale > minScale; scale *= 0.9) { const r = tryPack(size, scale, 1); if (r) return { size, scale, frontScale: 1, rects: r }; }
+  // the floor itself is tried (Sol 01a174ad: the 0.9 steps stopped at 0.387), first with the fronts whole
+  const floor = tryPack(size, minScale, 1);
+  if (floor) return { size, scale: minScale, frontScale: 1, rects: floor };
+  for (let frontScale = 0.9; frontScale > minScale; frontScale *= 0.9) { const r = tryPack(size, minScale, frontScale); if (r) return { size, scale: minScale, frontScale, rects: r }; }
+  const last = tryPack(size, minScale);
+  return last ? { size, scale: minScale, frontScale: minScale, rects: last } : null;
 }
 
 /**

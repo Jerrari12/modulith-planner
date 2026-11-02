@@ -19,7 +19,7 @@ import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFin
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
 import { createSilkUniforms, applySilkAxis, silkTier } from './silk-axis.js';
 import { createGlitterUniforms, applyGlitter, glitterArm, glitterWanted, glitterTier, glitterTintOf } from './glitter.js';
-import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows, firstRows } from './skin-map.js';
+import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, decodePng, tableRows, firstRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
@@ -787,6 +787,7 @@ function applyQuality(name) {
   // the silk light and studio at the strengths this tone mapping can hold (silk-axis.js silkTier); unset on the first call
   if (silkU) { const st = silkTier(!!q.tone); silkU.uSilkLight.value = st.light; silkU.uSilkEnv.value = st.env; }
   if (glitterU) glitterU.uGlitTier.value = glitterTier(!!q.tone);
+  if (skinU) skinU.uSMTier.value = q.accum ? 1 : 0;   // the printed layers are Very High's, moving or at rest (skin-map.js)
   // ⚠ NOT ACES. Measured median hue error: none 0.9 deg, Khronos Neutral 2.5 deg,
   // ACES 5.3 deg. Neutral exists for product rendering where colour is a promise.
 
@@ -3664,11 +3665,11 @@ function seamPatched(key, m) {
 
 /* SKIN MAPS (2026-10-25, js/skin-map.js): every part's real printed top layer - the slicer's own lines and perimeter
    loops, baked on node0 from the part's G-code and shipped as parts/skin/<node>.png beside the GLBs - drawn on every
-   top-facing skin in Very High's settle samples. One atlas and one float table serve every node on the stage; a mesh
+   top-facing skin in every Very High frame. One atlas and one float table serve every node on the stage; a mesh
    names its map by the per-vertex aSkinId its template is stamped with here. The maps are fetched only while the tier is
    Very High (the other tiers never draw them), only for nodes the mounted manifest places, and a map that fails to load
    leaves its part plain. ?skinmap=off draws nothing and fetches nothing, for comparison. */
-const skinU = createSkinMapUniforms({ on: new URLSearchParams(location.search).get('skinmap') !== 'off' });
+var skinU = createSkinMapUniforms({ on: new URLSearchParams(location.search).get('skinmap') !== 'off', tier: !!QUALITY[quality].accum });   // `var`: applyQuality reads it, and its first call comes before this line
 function skinPatched(key, m) {
   return m.userData && m.userData.bedFinish ? applySkinMap(m, { uniforms: skinU }) : m;
 }
@@ -3676,7 +3677,7 @@ const skinMaps = (() => {
   const SLOTS = SKIN_MAP.slots;
   const COLS = SKIN_MAP.tableCols;   // 2 for the top map, 5 for the first layer's vectors (skin-map.js firstRows)
   const st = { index: null, indexP: null, atlas: null, atlasPx: 0, atlasData: null, table: null, tableData: new Float32Array(COLS * SLOTS * 4),
-    sources: new Map(), roots: new Map(), slots: new Map(), loading: new Map(), failed: new Map(), scale: 1, rev: 0, syncing: null };
+    sources: new Map(), roots: new Map(), slots: new Map(), loading: new Map(), failed: new Map(), scale: 1, frontScale: 1, rev: 0, syncing: null };
   const wanted = () => skinU.uSMOn.value > 0.5 && !!QUALITY[quality].accum;
   const base = () => assetUrl('parts/skin/');
   const inflate = (bytes) => new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer().then((b) => new Uint8Array(b));
@@ -3704,7 +3705,7 @@ const skinMaps = (() => {
         first = { w: pf.width, h: pf.height, data: pf.data, meta: entry.first };
       } catch (e) { console.warn(`[skin map] ${node} first layer: ${(e && e.message) || e} - drawn without it`); }
     }
-    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm, first });
+    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm, front: showsFront(node, entry.axis), first });
   }
   function ensureTable() {
     if (st.table) return;
@@ -3742,7 +3743,7 @@ const skinMaps = (() => {
   }
   function repack() {
     const nodes = live();
-    const pack = packAtlas(nodes.flatMap((n) => { const s = st.sources.get(n); return [{ id: n, w: s.w, h: s.h }, ...(s.first ? [{ id: n + '#first', w: s.first.w, h: s.first.h }] : [])]; }));
+    const pack = packAtlas(nodes.flatMap((n) => { const s = st.sources.get(n); return [{ id: n, w: s.w, h: s.h, front: s.front }, ...(s.first ? [{ id: n + '#first', w: s.first.w, h: s.first.h }] : [])]; }));
     for (const n of st.slots.keys()) stamp(n, 0);
     st.slots.clear();
     if (!nodes.length) { st.rev++; invalidateFrame(); return; }   // nothing on the stage has a map: no atlas is allocated for it
@@ -3754,10 +3755,10 @@ const skinMaps = (() => {
     let slot = 0;
     for (const n of nodes) {
       if (slot >= SLOTS) { console.warn('[skin map] more than ' + SLOTS + ' mapped nodes on the stage - the rest stay plain'); break; }
-      const s = st.sources.get(n), r = pack.rects.get(n);
-      const data = pack.scale === 1 ? s.data : resampleMap(s.data, s.w, s.h, r.w, r.h);
+      const s = st.sources.get(n), r = pack.rects.get(n), scale = s.front ? pack.frontScale : pack.scale;
+      const data = scale === 1 ? s.data : resampleMap(s.data, s.w, s.h, r.w, r.h);
       for (let y = 0; y < r.h; y++) st.atlasData.set(data.subarray(y * r.w * 4, (y + 1) * r.w * 4), ((r.y + y) * pack.size + r.x) * 4);
-      const rows = tableRows(r, s, pack.scale);
+      const rows = tableRows(r, s, scale);
       st.tableData.set(rows[0], slot * COLS * 4); st.tableData.set(rows[1], (slot * COLS + 1) * 4);
       const rf = s.first ? pack.rects.get(n + '#first') : null;
       if (rf) {
@@ -3767,7 +3768,7 @@ const skinMaps = (() => {
       firstRows(rf, s.first && s.first.meta, pack.scale).forEach((row, k) => st.tableData.set(row, (slot * COLS + 2 + k) * 4));
       st.slots.set(n, slot); stamp(n, slot + 1); slot++;
     }
-    st.scale = pack.scale; st.atlas.needsUpdate = true; st.table.needsUpdate = true; st.rev++;
+    st.scale = pack.scale; st.frontScale = pack.frontScale; st.atlas.needsUpdate = true; st.table.needsUpdate = true; st.rev++;
     invalidateFrame();
   }
   /* fetch what the stage needs and repack when the set on stage changed; one run at a time, the next waits for it */
@@ -3801,7 +3802,7 @@ const skinMaps = (() => {
     set(on) { skinU.uSMOn.value = on ? 1 : 0; invalidateFrame(); if (on) sync(); return !!on; },
     get atlas() { return st.atlas; },
     status() {
-      return { wanted: wanted(), on: skinU.uSMOn.value === 1, atlasPx: st.atlasPx, scale: st.scale, rev: st.rev,
+      return { wanted: wanted(), on: skinU.uSMOn.value === 1, atlasPx: st.atlasPx, scale: st.scale, frontScale: st.frontScale, fronts: [...st.slots.keys()].filter((n) => st.sources.get(n) && st.sources.get(n).front), rev: st.rev,
         slots: Object.fromEntries(st.slots), sources: [...st.sources.keys()], failed: Object.fromEntries(st.failed),
         loading: [...st.loading.keys()], index: st.index ? Object.keys(st.index.nodes).length : null,
         // the slotted nodes whose first layer is drawn (2026-10-28): a live check reads it

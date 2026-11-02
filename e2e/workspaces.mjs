@@ -9233,10 +9233,10 @@ test('Build: Under-Table settles up after every edit - the report\'s layout, a d
   await ctx.close();
 });
 
-/* THE BAKED TOP LAYERS (2026-10-25, js/skin-map.js): a map is fetched only while the tier is Very High, and drawn only in its
-   settle samples. The suite runs on Fast, so what it can hold is the other side of that rule: a build with faceplates on Fast
-   asks the parts host for no map and holds none, while the switch and the status sit on the stage hook. The Very High side
-   (the atlas, the settled frame) is proven by tools/skin-shots.mjs and the Very High goldens on a GPU. */
+/* THE BAKED TOP LAYERS (2026-10-25, js/skin-map.js): a map is fetched and drawn only while the tier is Very High. The suite runs
+   on Fast, so what it can hold is the other side of that rule: a build with faceplates on Fast asks the parts host for no map
+   and holds none, while the switch and the status sit on the stage hook. The Very High side (the atlas, moving and settled
+   frames) is proven by tools/skin-shots.mjs, the Very High goldens on a GPU and a live check. */
 test('the baked top layers: Fast fetches no map and holds none; the switch and the status are on the stage hook', async () => {
   const c = await freshContext();
   const skinRequests = [];
@@ -9253,6 +9253,9 @@ test('the baked top layers: Fast fetches no map and holds none; the switch and t
   assert.deepEqual(skinRequests, [], 'Fast asked the parts host for a map');
   const flipped = await page.evaluate(() => { const s = window.__GEN2_VIEWER__.skinMap; s.set(false); const off = s.uniforms.uSMOn.value; s.set(true); return [off, s.uniforms.uSMOn.value]; });
   assert.deepEqual(flipped, [0, 1], 'the switch does not reach the shared uniform');
+  /* each tier says whether it draws them, in one task, so no frame compiles the other tier's programs on a software rasteriser */
+  const tiers = await page.evaluate(() => { const v = window.__GEN2_VIEWER__, u = v.skinMap.uniforms.uSMTier, out = { fast: u.value }; for (const t of ['veryhigh', 'high', 'balanced', 'fast']) { v.applyQuality(t); out[t] = u.value; } return out; });
+  assert.deepEqual(tiers, { fast: 0, veryhigh: 1, high: 0, balanced: 0 }, 'only Very High draws the maps');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

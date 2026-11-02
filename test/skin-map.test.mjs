@@ -66,13 +66,13 @@ for (const [lib, Ctor] of [['physical', THREE.MeshPhysicalMaterial], ['standard'
     for (const [src, needle] of [[vs, 'attribute float aSkinId;'], [vs, 'vSkinId = aSkinId;'],
       [fs, 'if ( vSkinId > 0.5 && gBFTop > 0.0 ) {'], [fs, 'int idSM = int( vSkinId + 0.5 ) - 1;'],
       [fs, 'uniform sampler2D uSMAtlas;'], [fs, 'uniform sampler2D uSMTable;'],
-      [fs, 'if ( uSMOn > 0.5 && uLLOn > 0.5 ) {'], [fs, 'textureGrad( uSMAtlas, uvSM'], [fs, 'texelFetch( uSMAtlas, ivec2( rSM.xy + floor( pxSM ) ), 0 )'],
+      [fs, 'if ( uSMOn > 0.5 && uSMTier > 0.5 ) {'], [fs, 'textureGrad( uSMAtlas, uvSM'], [fs, 'texelFetch( uSMAtlas, ivec2( rSM.xy + floor( pxSM ) ), 0 )'],
       [fs, 'gBFContact = smoothstep( 0.82, 0.94'], [fs, 'float bandPx = max('], [vs, 'vObjPos = aBfMm;']]) {
       assert.equal(count(src, needle), 1, `${needle} appears ${count(src, needle)} times`);
     }
     assert.ok(fs.includes('ldApplic'), 'the relief block is missing - the chain dropped it');
     const at = (src, needle) => { const i = src.indexOf(needle); assert.ok(i >= 0, `${needle} not found`); return i; };
-    const skinAt = at(fs, 'if ( uSMOn > 0.5 && uLLOn > 0.5 ) {');
+    const skinAt = at(fs, 'if ( uSMOn > 0.5 && uSMTier > 0.5 ) {');
     assert.ok(at(fs, 'gBFContact = smoothstep( 0.82, 0.94') < skinAt, 'the bed finish would undo the skin');
     assert.ok(at(fs, 'if ( uLLOn > 0.5 ) {') < skinAt, 'the layer lines run after the skin');
     assert.ok(at(fs, 'float bandPx = max(') < skinAt, 'the cover edge runs after the skin (both tilt the normal; the chain order puts the edge first)');
@@ -103,6 +103,8 @@ test('the switch is a uniform: one program either way, clones share it, and the 
   const sm = SM.createSkinMapUniforms();
   assert.equal(sm.uSMOn.value, 1);
   assert.equal(SM.createSkinMapUniforms({ on: false }).uSMOn.value, 0);
+  assert.equal(sm.uSMTier.value, 0, 'a tier draws no map unless it says so');
+  assert.equal(SM.createSkinMapUniforms({ tier: true }).uSMTier.value, 1);
   assert.equal(sm.uSMStrength.value, SM.SKIN_MAP.strength);
   assert.deepEqual([sm.uSMZLo.value, sm.uSMZHi.value], [...SM.SKIN_MAP.zToleranceMm]);
   assert.equal(sm.uSMAtlas.value, null, 'no atlas until a map loads');
@@ -171,7 +173,54 @@ test('the packer: the small atlas first at full scale, no overlaps, gutters, a s
   assert.equal(c.size, 4096); assert.ok(c.scale < 1 && c.scale >= SM.SKIN_MAP.minScale, `scale ${c.scale}`);
   const r = c.rects.get('x'); assert.ok(r.w <= 4096 - 2 * g && r.h + c.rects.get('y').h + 4 * g <= 4096 || r.w + c.rects.get('y').w + 4 * g <= 4096);
   assert.equal(SM.packAtlas(Array.from({ length: 40 }, (_, i) => ({ id: i, w: 4000, h: 4000 }))), null, 'an impossible set must say so');
-  assert.deepEqual(SM.packAtlas([]), { size: 2048, scale: 1, rects: new Map() });
+  assert.deepEqual(SM.packAtlas([]), { size: 2048, scale: 1, frontScale: 1, rects: new Map() });
+});
+
+test('⚔ the shrink falls first on what the front does not show: fronts whole while the rest can give, then the fronts too', () => {
+  const g = SM.SKIN_MAP.gutterPx, min = SM.SKIN_MAP.minScale;
+  const noOverlap = (p) => { const rects = [...p.rects.values()]; for (let i = 0; i < rects.length; i++) { const a = rects[i]; assert.ok(a.x >= g && a.y >= g && a.x + a.w + g <= p.size && a.y + a.h + g <= p.size, `rect ${JSON.stringify(a)} leaves the atlas`); for (let j = i + 1; j < rects.length; j++) { const b = rects[j]; assert.ok(a.x + a.w + g <= b.x || b.x + b.w + g <= a.x || a.y + a.h + g <= b.y || b.y + b.h + g <= a.y, `rects ${i} and ${j} overlap`); } } };
+  const rest = (n, w = 2000, h = 700) => Array.from({ length: n }, (_, i) => ({ id: `r${i}`, w, h }));
+  /* the control: the same maps with no front all take one scale, as they always did */
+  const plain = SM.packAtlas([{ id: 'f', w: 2500, h: 600 }, ...rest(30)]);
+  assert.ok(plain.scale < 1, `scale ${plain.scale}`);
+  assert.equal(plain.rects.get('f').w, Math.round(2500 * plain.scale), 'with no front, every map takes the one scale');
+  /* with a front: it stays whole, the rest shrink, and at least as far as they did */
+  const p = SM.packAtlas([{ id: 'f', w: 2500, h: 600, front: true }, ...rest(30)]);
+  assert.equal(p.frontScale, 1);
+  assert.deepEqual([p.rects.get('f').w, p.rects.get('f').h], [2500, 600], 'the front was shrunk');
+  assert.ok(p.scale <= plain.scale && p.scale >= min, `the rest ${p.scale}`);
+  assert.equal(p.rects.get('r0').w, Math.round(2000 * p.scale));
+  noOverlap(p);
+  /* everything fits at 1: nothing shrinks, front or not */
+  const fits = SM.packAtlas([{ id: 'f', w: 2500, h: 600, front: true }, ...rest(2)]);
+  assert.deepEqual([fits.scale, fits.frontScale], [1, 1]);
+  /* the rest all the way down to the floor, the fronts still whole: the floor is tried before a front gives anything */
+  let atFloor = null;
+  for (let n = 1; n < 400 && !atFloor; n++) { const t = SM.packAtlas([{ id: 'f', w: 2500, h: 600, front: true }, ...rest(n)]); if (t && t.scale === min) atFloor = t; }
+  assert.ok(atFloor, 'no set reached the floor');
+  assert.equal(atFloor.frontScale, 1, 'a front gave way while the rest could still reach the floor');
+  noOverlap(atFloor);
+  /* so many fronts they cannot stay whole with the rest at the floor: the rest at the floor, the fronts as large as fits, not straight to the floor */
+  let q = null;
+  for (let n = 1; n < 200 && !q; n++) { const t = SM.packAtlas([...Array.from({ length: n }, (_, i) => ({ id: `f${i}`, w: 2500, h: 600, front: true })), ...rest(10)]); if (t && t.frontScale < 1) q = t; }
+  assert.ok(q, 'no set was crowded enough');
+  assert.equal(q.scale, min);
+  assert.ok(q.frontScale > min, `the fronts fell to ${q.frontScale}, past what fits`);
+  assert.equal(q.rects.get('f0').w, Math.round(2500 * q.frontScale));
+  noOverlap(q);
+  /* and an impossible set still says so */
+  assert.equal(SM.packAtlas(Array.from({ length: 40 }, (_, i) => ({ id: i, w: 4000, h: 4000, front: true }))), null);
+});
+
+test('a front is a faceplate whose last layer faces the room: not a face-down faceplate, not another part facing +Z', () => {
+  assert.equal(SM.showsFront('Faceplate_EdgeLabel_4W-15H', [0, 0, 1]), true);
+  assert.equal(SM.showsFront('Faceplate_ClassicPro_2W-1H', [0, 0, 1]), true);
+  assert.equal(SM.showsFront('Faceplate_Chevron_4W-15H', [0, 0, -1]), false, 'its front is the first layer, its top map faces the drawer');
+  assert.equal(SM.showsFront('Faceplate_Essential_1W-1H', [0, 0, -1]), false);
+  assert.equal(SM.showsFront('BackCover_EdgeLabel_4W-15H', [0, 0, 1]), false, 'a back cover faces the drawer');
+  assert.equal(SM.showsFront('Accent_EdgeLabel_4W-15H', [0, 0, -1]), false);
+  assert.equal(SM.showsFront('DecorDrawer_185-4W-15H', [0, 1, 0]), false);
+  assert.equal(SM.showsFront('Faceplate_EdgeLabel_4W-15H', undefined), false);
 });
 
 test('resampleMap averages the normal and keeps the nearest layer height', () => {
@@ -357,8 +406,10 @@ for (const [name, edges] of [['Faceplate_EdgeLabel_2W-1H', [['q1', -1], ['q1', 1
 
 test('main.js patches every finished material, stamps every template, syncs on the mount and the tier switch; the trial is gone', () => {
   const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');
-  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, resampleMap, decodePng, tableRows, firstRows \} from '\.\/skin-map\.js';/);
-  assert.match(main, /const skinU = createSkinMapUniforms\(\{ on: new URLSearchParams\(location\.search\)\.get\('skinmap'\) !== 'off' \}\);/);
+  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, decodePng, tableRows, firstRows \} from '\.\/skin-map\.js';/);
+  assert.match(main, /var skinU = createSkinMapUniforms\(\{ on: new URLSearchParams\(location\.search\)\.get\('skinmap'\) !== 'off', tier: !!QUALITY\[quality\]\.accum \}\);/);
+  /* the block draws on the tier that accumulates, and every tier change says so: the mount and the stepping both come through applyQuality */
+  assert.match(main, /function applyQuality\(name\) \{[\s\S]*?if \(skinU\) skinU\.uSMTier\.value = q\.accum \? 1 : 0;[\s\S]*?\n\}\nfunction setQuality/, 'a tier change does not reach the maps');
   assert.match(main, /return m\.userData && m\.userData\.bedFinish \? applySkinMap\(m, \{ uniforms: skinU \}\) : m;/);
   assert.equal(count(main, 'applySkinMap('), 1, 'the map is applied somewhere the finish check does not cover');
   assert.equal(count(main, 'skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key))))'), 2, 'a material site builds parts without the map');
@@ -366,6 +417,11 @@ test('main.js patches every finished material, stamps every template, syncs on t
   assert.match(main, /applyQuality\(quality\);\n\s*skinMaps\.sync\(\);/, 'the mount does not sync the maps');
   assert.match(main, /function setQuality\(name, \{ user = false \} = \{\}\) \{\n\s*applyQuality\(name\);\n\s*skinMaps\.sync\(\);/, 'a tier switch does not sync the maps');
   assert.match(main, /skinMap: skinMaps,/, 'the debug hook lost the maps');
+  /* a front keeps its size, and its own scale reaches the table: a row at another map's scale would lay its beads out of register */
+  assert.ok(main.includes('front: showsFront(node, entry.axis), first });'), 'a loaded map does not say whether it shows the front');
+  assert.ok(main.includes('return [{ id: n, w: s.w, h: s.h, front: s.front },'), 'the packer is not told which maps are fronts');
+  assert.ok(main.includes('r = pack.rects.get(n), scale = s.front ? pack.frontScale : pack.scale;'), 'a front does not take its own scale');
+  assert.ok(main.includes('const rows = tableRows(r, s, scale);'), 'the table does not carry the map\'s own scale');
   /* the attribute carries the slot PLUS ONE, so a mesh that never got it (it reads 0) draws no map: both sides pinned */
   assert.ok(main.includes('st.slots.set(n, slot); stamp(n, slot + 1); slot++;'), 'the template is not stamped with slot + 1');
   assert.ok(main.includes('for (const n of st.slots.keys()) stamp(n, 0);'), 'a repack does not clear the old slots to 0');
@@ -430,7 +486,7 @@ test('the first-layer block: once, on a bed face, smooth plate only, no implicit
   const fs = resolveIncludes(sh.fragmentShader);
   const blk = fs.slice(fs.indexOf('if ( vSkinId > 0.5 && gBFContact > 0.0 ) {'));
   assert.equal(count(fs, 'if ( vSkinId > 0.5 && gBFContact > 0.0 ) {'), 1);
-  assert.ok(fs.indexOf('if ( uSMOn > 0.5 && uLLOn > 0.5 ) {') < fs.indexOf('if ( vSkinId > 0.5 && gBFContact > 0.0 ) {'), 'the block sits inside the Very High settle gate');
+  assert.ok(fs.indexOf('if ( uSMOn > 0.5 && uSMTier > 0.5 ) {') < fs.indexOf('if ( vSkinId > 0.5 && gBFContact > 0.0 ) {'), 'the block sits inside the Very High gate');
   assert.match(blk, /float wF = gBFContact \* \( 1\.0 - clamp\( uPC, 0\.0, 1\.0 \) \);/, 'a powder-coated face would draw beads its grain hides');
   const branch = blk.slice(0, blk.indexOf('normal = normalize( normal + ( normalize( vPCT1 ) * slF.x'));
   assert.ok(!/\btexture\(|dFdx|dFdy|fwidth/.test(branch), 'an implicit LOD or a derivative inside the per-fragment branch is undefined');
