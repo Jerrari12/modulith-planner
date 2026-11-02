@@ -98,8 +98,11 @@ const SOFTWARE_GL = await (async () => {
 })();
 const ROOM_SOFT_SKIP = SOFTWARE_GL && 'the Done room on a software rasteriser races the scene\'s clock; runs on a GPU (follow-up: make it runner-safe)';
 /* a software rasteriser's actions get 120 s: the runner ran out of the default 30 s on a click in two different cases on 2026-10-31 (runs 41247969961 and 41257763151; the annotation does not say which click). Neither case has grown: 385 to 407 s and 94 to 120 s in green runs, before that day's work and after. A fresh Colors page's Room click alone took 10 s on a laptop's SwiftShader. A control that cannot be clicked still fails the case */
+/* and the Showcase's own clock stays out of every case but its own (showcaseKit shortens it): two quiet minutes on High or Very High in Colors start the final scene,
+   and on a slow run they ran out inside the steam case, whose frames were then of another scene (run 41386208239: 898,000 pixels changed; firing it there locally, 849,000) */
 const prepareBrowser = (b) => {
-  if (SOFTWARE_GL) { const make = b.newContext.bind(b); b.newContext = async (o) => { const c = await make(o); c.setDefaultTimeout(WAIT_FLOOR_MS); c.setDefaultNavigationTimeout(LOAD_FLOOR_MS); return c; }; }
+  const make = b.newContext.bind(b);
+  b.newContext = async (o) => { const c = await make(o); if (SOFTWARE_GL) { c.setDefaultTimeout(WAIT_FLOOR_MS); c.setDefaultNavigationTimeout(LOAD_FLOOR_MS); } await c.addInitScript(() => { window.__SHOWCASE_IDLE_MS__ = 3_600_000; }); return c; };
   localParts(b, root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from this checkout (test/lib/local-parts.mjs)
 };
 prepareBrowser(browser);
@@ -5286,6 +5289,7 @@ test('Colors: on Very High at rest the steam keeps rising over the still picture
     return { ok: v.acc.ok, n: v.acc.n, total: v.accTotal(), quality: v.quality, lens: v.lens() };
   });
   assert.equal(conv.quality, 'veryhigh');
+  assert.equal(await page.evaluate(() => window.__SHOWCASE_IDLE_MS__), 3_600_000, 'minutes at rest on Very High: the Showcase must not start itself in here');
   assert.equal(conv.lens, null, 'no lens on the Colors stage');
   if (!conv.ok) { assert.equal((await page.evaluate(() => window.__GEN2_DONE__.steam)).overlay, false, 'no accumulator on this runner: no overlay either'); await ctx.close(); return; }
   assert.ok(conv.n >= conv.total, `the still picture converged (${JSON.stringify(conv)})`);
