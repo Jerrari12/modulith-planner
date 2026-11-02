@@ -5048,11 +5048,12 @@ test('the phone on its side: the tabs a rail, the bar and the tools one row, the
     const { ctx, page, errors } = await open(ws, { phone: true, viewport: { width: 780, height: 260 } });
     await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-tabbar'), null, { timeout: 60_000 });
     await settle(page, 1200);
+    await page.evaluate(() => document.fonts.ready.then(() => new Promise(requestAnimationFrame)));   // the bar's width: a cold load's differs until the font lands
     const m = await sideLayout(page), j = JSON.stringify(m);
     assert.ok(m.rail && m.rail.l === 0 && m.rail.w <= 80 && m.rail.h === m.vh, `${ws}: the tabs a rail down the left (${j})`);
     assert.ok(m.top && m.tools && m.top.t === m.tools.t && m.top.r <= m.tools.l && m.top.l >= m.rail.r, `${ws}: the bar and the tools one row, after the rail (${j})`);
     assert.ok(m.toolW.every((w) => w >= 44), `${ws}: every tool at its full size, none squeezed (${j})`);
-    assert.ok(m.tools.l - m.top.r <= 12, `${ws}: the tools start where the bar ends (phone.js --top-r) (${j})`);
+    assert.equal(m.tools.l - m.top.r, 8, `${ws}: the tools start 8 px after the bar ends, the font landed (phone.js --top-r) (${j})`);
     // at 780 the build name gives Build's seven tools their room: none scrolled out of view
     assert.ok(await page.evaluate(() => { const t = document.querySelector('#ws-tools'); return t.scrollWidth <= t.clientWidth + 1; }), `${ws}: every tool in view at 780 px (${j})`);
     const col = m.vw - 340;
@@ -8976,6 +8977,7 @@ test('the Quality pill on a phone: in view on the row, every name inside it, no 
       const { ctx, page, errors } = await open(ws, { phone: true, viewport, visitor: ws === 'colors' });
       await page.waitForFunction((colors) => document.querySelector('#ws-tools .quality') && (!colors || document.querySelector('#ws-tools .backdrop')), ws === 'colors', { timeout: 60_000 });
       await settle(page, 800);
+      await page.evaluate(() => document.fonts.ready.then(() => new Promise(requestAnimationFrame)));
       const m = await row(page), j = `${ws} ${viewport.width}: ${JSON.stringify(m)}`;
       assert.ok(m.shown && m.h >= 44, `the pill is on the row at full height (${j})`);
       assert.deepEqual({ word: m.word, text: m.text, aria: m.aria }, FAST, `the tier's name, without the word a phone has no room for (${j})`);

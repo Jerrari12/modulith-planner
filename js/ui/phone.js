@@ -119,6 +119,9 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     if (entry.open) current = panel;
   }
   stack();
+  // the bar's chips grow when their font lands: --top-r taken before that had the tools 2.6 px into their gap on a cold load,
+  // and a row of Build's tools that fitted on the laptop was 2 px short on the runner (2026-11-02)
+  if (document.fonts) document.fonts.ready.then(() => { if (bar.isConnected) stack(); });
   /* THE ONE-TIME NUDGE (Joey 2026-10-28: a collapsed bar "looks kind of like just a static bar until i click it", asking
      for an up icon, "a slight movement up animation right after page load", or a hover change): once per browser, a second
      after the chrome comes up, the top collapsed sheet lifts and settles (app.css .sheet.nudge). Not under reduced motion,

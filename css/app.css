@@ -1236,7 +1236,7 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws-tabbar .tab .badge { top: 2px; right: 2px; }
   #ws-top { top: 8px; left: calc(var(--rail) + 8px); right: auto; }
   #ws-top #ws-logo { display: none; }
-  #ws-top #ws-switch { flex: none; width: clamp(120px, 18vw, 240px); }   /* 140 px at 780: Build's seven tools keep their 44 px, and Quality its 50 */
+  #ws-top #ws-switch { flex: none; width: clamp(120px, 17vw, 240px); }   /* 133 px at 780: Build's seven tools keep their 44 px, and Quality its 50, with 6 px to spare */
   #ws-tools, html[data-ws] #ws-tools, html.ws-parts-wide[data-ws="parts"] #ws-tools { top: 8px; left: calc(var(--top-r, 420px) + 8px); right: 8px; }
   #ws .sheet { left: auto; right: 0; width: var(--side); border-radius: 18px 0 0 0; }
   #ws-dock, #ws-player { left: auto; right: 8px; width: calc(var(--side) - 16px); box-sizing: border-box; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
