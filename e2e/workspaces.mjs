@@ -8958,6 +8958,55 @@ test('the Quality pill keeps a visitor\'s pick across a reload, and marks it as 
   await ctx.close();
 });
 
+/* THE QUALITY PILL ON A PHONE (Joey 2026-11-02: "Would it be possible to add the graphics button in for mobile as well?"):
+   the tier's name under the icon, in view beside Room | Neutral on an S23 upright and on its side, none of the other
+   tools squeezed for it. Build has more tools than an upright phone's row: they keep their size and the row scrolls. */
+test('the Quality pill on a phone: in view on the row, every name inside it, no tool squeezed; a tap picks the next tier and judges the ratio afresh, and a step the stage takes itself moves it', async () => {
+  const row = (page) => page.evaluate(() => {
+    const t = document.querySelector('#ws-tools'), q = t.querySelector('.quality'), tr = t.getBoundingClientRect(), qr = q.getBoundingClientRect(), name = q.querySelector('span > span:last-child');
+    const kids = [...t.children].filter((c) => c.checkVisibility()), now = name.textContent;
+    const fits = ['Very High', 'High', 'Balanced', 'Fast'].map((n) => { name.textContent = n; const r = name.getBoundingClientRect(), b = q.getBoundingClientRect(); return { n, inside: r.left >= b.left && r.right <= b.right, width: Math.round(b.width), left: Math.round(b.left) }; });
+    name.textContent = now;
+    return { shown: q.checkVisibility(), inView: qr.left >= tr.left && qr.right <= tr.right + 0.5, word: getComputedStyle(q.querySelector('.word')).display, text: name.textContent, aria: q.getAttribute('aria-label'), h: Math.round(qr.height), fits,
+      widths: kids.map((c) => Math.round(c.getBoundingClientRect().width)), gaps: kids.slice(1).map((c, i) => Math.round(c.getBoundingClientRect().left - kids[i].getBoundingClientRect().right)), client: t.clientWidth, scroll: t.scrollWidth };
+  });
+  const FAST = { word: 'none', text: 'Fast', aria: 'Quality: Fast' };
+  for (const viewport of [{ width: 360, height: 675 }, { width: 780, height: 260 }]) {
+    for (const ws of ['colors', 'build']) {
+      const { ctx, page, errors } = await open(ws, { phone: true, viewport, visitor: ws === 'colors' });
+      await page.waitForFunction((colors) => document.querySelector('#ws-tools .quality') && (!colors || document.querySelector('#ws-tools .backdrop')), ws === 'colors', { timeout: 60_000 });
+      await settle(page, 800);
+      const m = await row(page), j = `${ws} ${viewport.width}: ${JSON.stringify(m)}`;
+      assert.ok(m.shown && m.h >= 44, `the pill is on the row at full height (${j})`);
+      assert.deepEqual({ word: m.word, text: m.text, aria: m.aria }, FAST, `the tier's name, without the word a phone has no room for (${j})`);
+      assert.ok(m.fits.every((f) => f.inside && f.width === m.fits[0].width && f.left === m.fits[0].left), `every name fits, and the button stays where it is whichever comes next (${j})`);
+      assert.ok(m.widths.every((w) => w >= 44), `no tool squeezed (${j})`);
+      assert.ok(m.gaps.every((g) => g >= 6), `the gaps kept (${j})`);
+      if (ws === 'build' && viewport.width === 360) {
+        assert.ok(m.scroll > m.client, `the control: an upright phone's row cannot hold Build's tools (${j})`);
+        await page.locator('#ws-tools .quality').scrollIntoViewIfNeeded();
+        assert.ok((await row(page)).inView, `the row scrolls to it (${j})`);
+      } else assert.ok(m.inView && m.scroll <= m.client, `in view with nothing to scroll (${j})`);
+      assert.deepEqual(clean(errors), [], j);
+      await ctx.close();
+    }
+  }
+  const { ctx, page, errors } = await open('build', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.waitForFunction(() => document.querySelector('#ws-tools .quality'), null, { timeout: 60_000 });
+  await settle(page, 800);
+  const read = () => page.evaluate(() => { const v = window.__GEN2_VIEWER__; return { tier: v.quality, text: document.querySelector('#ws-tools .quality span > span:last-child').textContent, saved: localStorage.getItem('gen2-quality:set') === '1' ? localStorage.getItem('gen2-quality') : null, thrifty: v.perf.thrifty, shed: v.perf.shed }; });
+  // a step the stage takes by itself: the pill follows at once, nothing else on the page having asked it to
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.perf.thrifty = true; v.perf.shed = true; localStorage.removeItem('gen2-quality'); localStorage.removeItem('gen2-quality:set'); v.setQuality('balanced'); });
+  assert.deepEqual(await read(), { tier: 'balanced', text: 'Balanced', saved: null, thrifty: true, shed: true }, 'an automatic step moves the pill and clears nothing');
+  await settle(page, 800);
+  await page.locator('#ws-tools .quality').scrollIntoViewIfNeeded();
+  await page.locator('#ws-tools .quality').tap();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.quality === 'fast', null, { timeout: 30_000 }).catch(() => assert.fail('a tap did not pick the next tier'));
+  assert.deepEqual(await read(), { tier: 'fast', text: 'Fast', saved: 'fast', thrifty: false, shed: false }, 'a tap is the visitor\'s pick, saved, and the ratio judged afresh');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('the Parts badge and the size line follow an undo made from Labels: the badge at once, the dock once the stage has rebuilt', async () => {
   const { ctx, page, errors } = await open('build');
   await startBuild(page, [{ id: 1, x: 0, w: 2 }, { id: 2, x: 2, w: 1 }]);

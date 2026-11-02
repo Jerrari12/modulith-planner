@@ -121,7 +121,7 @@ export async function boot() {
     onCamFree: (on) => current?.onCamFree?.(on),
     onContext: (info) => current?.onContext?.(info),
     onHover: (unitId) => current?.onHover?.(unitId),
-    onQuality: (tier) => current?.onQuality?.(tier),
+    onQuality: (tier) => { document.getElementById('ws-tools')?.dispatchEvent(new Event('quality')); current?.onQuality?.(tier); },   // an automatic step moves the pill too
     quietSelect: true, fillBoost: 1.6,
     // the palette is per BUILD: the kit this page opened with keeps its own (the Studio's own key for official kits)
     colorStoreKey: colorKeyAtBoot(),

@@ -17,7 +17,11 @@ export function toolbar(stage, { measure = false, explode = null, view = null, h
   /* Measure = the W/H/L callouts (the inventory's "Measure | W/H/L in mm + in"). The stage turns them on by itself
      on the finished page; the button reflects the stage's state and toggles it. */
   const measureBtn = measure ? el('button.chip.icon-btn.measure', { title: 'Measure · W/H/L', 'aria-label': 'Measure', 'aria-pressed': 'false', onclick: () => { stage.setDims(!stage.dimsOn); sync(); } }, [icon('ruler')]) : null;
-  const qualityBtn = el('button.chip.quality', { title: 'Render quality · click to cycle' }, [icon('gauge', { size: 16 }), el('span')]);
+  /* the tier's name in a span of its own, the word before it a phone's bar has no room for (app.css) */
+  const qualityName = el('span');
+  const qualityBtn = el('button.chip.quality', { title: 'Render quality · click to cycle' }, [icon('gauge', { size: 16 }), el('span', {}, [el('span.word', { text: 'Quality · ' }), qualityName])]);
+  const qualityLabel = () => { const name = Q_NAME[stage.quality] || stage.quality; qualityName.textContent = name; qualityBtn.setAttribute('aria-label', `Quality: ${name}`); };
+  tools.addEventListener('quality', qualityLabel);   // the stage stepped the tier itself (app.js onQuality)
   /* a visitor's pick is kept across reloads and stops the auto-downgrade (setQuality with user: true, as the viewer's own pill
      does); applyQuality alone drew the tier for this page only, and a reload re-probed it (the GPU pass, 2026-10-23) */
   qualityBtn.addEventListener('click', () => { const keys = Object.keys(stage.QUALITY); const next = keys[(keys.indexOf(stage.quality) + 1) % keys.length]; if (stage.setQuality) stage.setQuality(next, { user: true }); else stage.applyQuality(next); sync(); });
@@ -48,7 +52,7 @@ export function toolbar(stage, { measure = false, explode = null, view = null, h
     const on = !!stage.dimsOn;
     if (measureBtn) { measureBtn.classList.toggle('on', on); measureBtn.setAttribute('aria-pressed', String(on)); }
     document.documentElement.classList.toggle('ws-measure', on);
-    qualityBtn.querySelector('span').textContent = `Quality · ${Q_NAME[stage.quality] || stage.quality}`;
+    qualityLabel();
     if (view) { const v = view.get(); b3.classList.toggle('on', v !== '2d'); b2.classList.toggle('on', v === '2d'); b3.setAttribute('aria-pressed', String(v !== '2d')); b2.setAttribute('aria-pressed', String(v === '2d')); }
     if (history) { undoBtn.disabled = !history.canUndo; redoBtn.disabled = !history.canRedo; }
     if (eraser) { const on2 = !!eraser.get(); eraseBtn.classList.toggle('on', on2); eraseBtn.setAttribute('aria-pressed', String(on2)); }

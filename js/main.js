@@ -675,7 +675,7 @@ let qualityLocked = false;   // an explicit user pick stops the auto-downgrade f
 // ⚠ An EXPLICIT pick persists; an AUTO-downgrade does not outlive the tab.
 // It shipped persisting both, which meant one bad three-second window — a
 // throttled tab, a background app, a thermal blip — permanently cost you the good
-// renderer, with no way back on mobile because the pill is hidden under 560px.
+// renderer, with no way back on mobile because the pill was hidden under 560px.
 // Auto lives in sessionStorage so it doesn't re-jank within a visit but is
 // re-judged on the next one. A stored value with no `:set` marker is a stale
 // auto-downgrade from the old scheme — drop it.
@@ -814,7 +814,9 @@ function applyQuality(name) {
 function setQuality(name, { user = false } = {}) {
   applyQuality(name);
   skinMaps.sync();   // a visitor stepping up to Very High fetches the maps then, not before
-  if (user) qualityLocked = true;
+  /* a pick is judged afresh: with the flags left on, a phone that had fallen to a ratio of 1 stayed there whatever it
+     picked, in a scene whose camera never rests (Joey's phone, 2026-11-02). Only the ratio: a pick still does not hold it */
+  if (user) { qualityLocked = true; perf.thrifty = false; perf.shed = false; }
   try {
     if (user) { localStorage.setItem('gen2-quality', quality); localStorage.setItem('gen2-quality:set', '1'); }
     else sessionStorage.setItem('gen2-quality', quality);   // this visit only — see the boot note
@@ -2864,7 +2866,8 @@ const perf = { key: '', moving: false, lastChange: 0, dpr: null, checked: 0,
                // the auto-downgrade's window of accepted frame intervals (perfFeed)
                win: { ms: 0, n: 0 }, lastNow: 0, wasHidden: false, returnGraceUntil: 0,
                log: [],   // why each automatic quality change happened, newest last (debug hook: perf.log)
-               thrifty: false };   // one-way: set once the device proves it needs the resolution drop
+               thrifty: false,     // one-way: set once the device proves it needs the resolution drop
+               shed: false };      // one-way, and the step before it: no more supersampling (superCap)
 const SETTLE_MS = 160;
 
 /**
@@ -2910,6 +2913,7 @@ function setMotionFull(on) { motionFull = !!on; }
      the first (in both measured runs of the 80-unit build under a 4x throttle the second step came
      about 5 s after the first, by the moderate rule);
    - MODERATE: the old rule on 3 s windows - under 30 fps the resolution drop, under 24 a tier step;
+   - while the frame is supersampled, the first window under either rule only gives that up (perf.shed, SUPERSAMPLING below);
    - the first window after boot is discarded, and nothing ever steps back UP (hysteresis by design:
      one-way, so a recovered frame rate cannot start an oscillation).
    ⚠ RESIDUAL RISK, stated: a page the browser keeps VISIBLE but throttles to between 2 and 15 fps would
@@ -2932,13 +2936,15 @@ function perfGrace(ms = 1500) {
  * The verdict on one window of accepted frame intervals, or null while it is too short to judge.
  * Pure: test/quality-guard.test.mjs calls it.
  */
-function perfVerdict(win, { thrifty, locked, canStep }) {
+function perfVerdict(win, { thrifty, locked, canStep, canShed }) {
   const fps = win.ms > 0 ? win.n / (win.ms / 1000) : 0;
   if (win.ms >= PERF_SEVERE.windowMs && win.n >= PERF_SEVERE.minFrames && fps < PERF_SEVERE.fps) {
+    if (canShed) return { fps, severe: true, shed: true, thrifty: false, step: false };
     return { fps, severe: true, thrifty: !thrifty, step: !locked && canStep };
   }
   if (win.ms < PERF_MODERATE.windowMs) return null;
   if (win.n < PERF_MODERATE.minFrames) return { fps, severe: false, thrifty: false, step: false };
+  if (fps < PERF_MODERATE.thriftyFps && canShed) return { fps, severe: false, shed: true, thrifty: false, step: false };
   if (fps < PERF_MODERATE.thriftyFps && !thrifty) return { fps, severe: false, thrifty: true, step: false };
   return { fps, severe: false, thrifty: false, step: fps < PERF_MODERATE.stepFps && !locked && canStep };
 }
@@ -2946,7 +2952,7 @@ function perfVerdict(win, { thrifty, locked, canStep }) {
  * Feed one frame to the window. Returns a verdict when a window closes (with its length in `windowMs`),
  * else null. Touches nothing but `p`, so the test drives it with synthetic timestamps.
  */
-function perfFeed(p, now, { hidden, graceUntil, thrifty, locked, canStep }) {
+function perfFeed(p, now, { hidden, graceUntil, thrifty, locked, canStep, canShed }) {
   if (hidden) { p.lastNow = 0; p.win.ms = 0; p.win.n = 0; p.wasHidden = true; return null; }
   if (p.wasHidden) { p.wasHidden = false; p.returnGraceUntil = now + PERF_RETURN_GRACE_MS; }
   const dt = p.lastNow ? now - p.lastNow : 0;
@@ -2954,7 +2960,7 @@ function perfFeed(p, now, { hidden, graceUntil, thrifty, locked, canStep }) {
   if (now < Math.max(graceUntil || 0, p.returnGraceUntil || 0)) { p.win.ms = 0; p.win.n = 0; return null; }
   if (!(dt > 0) || dt > PERF_PAUSE_MS) return null;
   p.win.ms += dt; p.win.n++;
-  const v = perfVerdict(p.win, { thrifty, locked, canStep });
+  const v = perfVerdict(p.win, { thrifty, locked, canStep, canShed });
   if (!v) return null;
   v.windowMs = p.win.ms;
   p.win.ms = 0; p.win.n = 0;
@@ -2979,18 +2985,24 @@ function logQuality(line) {
    greatly raising performance". Measured on the A5000 at 2000x991 vs 4000x1982, a held shot at High: 3.8-4.2 ms a
    frame against 7.6-10.2 (noisy, vsync off). The worst crawl had causes of its own, fixed where they are (spool.js THE
    FLANGES' SHADOW, done-fit.js SPOOL_LEAN, spool.js COIL_FADE); after them a frame at the screen's ratio drew the
-   spools' rims as cleanly as one at twice it. What is left for this is finer detail, on the tier that spends for it. */
+   spools' rims as cleanly as one at twice it. What is left for this is finer detail, on the tier that spends for it.
+   ⚠ THE EXTRA PIXELS GO FIRST (Joey 2026-11-02, of the Showcase on a phone: "at first it looked outstanding, then it
+   became it's usually pixelly appearance"). On a phone at 360 x 675 and a ratio of 2.56 this draws at 5.12, and the
+   first slow window took it straight to 1 while the camera moved, which in this scene is always. Now that window only
+   gives up the supersampling (perf.shed, perfVerdict), back to the ratio the entrance's verdict was taken at, about 85 %
+   fewer pixels there; the drop to 1 and the tier steps wait for a slow window after it. */
 const SUPER_PIXELS = 3840 * 2160;
 let superOn = false;
 function setSupersample(on) { if (superOn === !!on) return; superOn = !!on; invalidateFrame(); }
 function superCap(q, cap) {
-  if (!superOn || !q.accum || SOFTWARE_GL) return cap;   // never on a software rasteriser (A SOFTWARE RASTERISER, above)
+  if (!superOn || perf.shed || !q.accum || SOFTWARE_GL) return cap;   // never on a software rasteriser (A SOFTWARE RASTERISER, above)
   const css = Math.max(1, canvas.clientWidth * canvas.clientHeight);
   return Math.max(cap, Math.min(2 * devicePixelRatio, Math.sqrt(SUPER_PIXELS / css)));
 }
 function qualityTick(now) {
   const q = QUALITY[quality];
-  const cap = superCap(q, Math.min(q.dpr, devicePixelRatio));
+  const plain = Math.min(q.dpr, devicePixelRatio);
+  const cap = superCap(q, plain);
   if (cinema.on) {                       // the outro drives its own camera constantly
     if (perf.dpr !== cap) { perf.dpr = cap; renderer.setPixelRatio(cap); setLayerDetailPixelRatio(cap); renderer.setSize(canvas.clientWidth, canvas.clientHeight, false); }
     perf.cameraMoving = false;           // and keeps its reflection (motionLite excludes it anyway)
@@ -3038,11 +3050,15 @@ function qualityTick(now) {
   if (quality === 'fast' && perf.thrifty) return;
   if (benchHold) return;   // the orbit benchmark holds the tier and the resolution for the whole run (orbit-bench.js)
   const v = perfFeed(perf, now, { hidden: document.hidden, graceUntil: perfGraceUntil, thrifty: perf.thrifty,
-    locked: qualityLocked, canStep: QUALITY_ORDER.indexOf(quality) < QUALITY_ORDER.length - 1 });
-  if (!v || !(v.thrifty || v.step)) return;
+    locked: qualityLocked, canStep: QUALITY_ORDER.indexOf(quality) < QUALITY_ORDER.length - 1, canShed: cap > plain });
+  if (!v || !(v.shed || v.thrifty || v.step)) return;
   const units = build && Array.isArray(build.placed) ? ` (${build.placed.length} units)` : '';
   const why = `${v.severe ? 'sustained' : 'averaged'} ${v.fps.toFixed(1)} fps over ${(v.windowMs / 1000).toFixed(1)} s, `
     + `visible tab, ${instances.size} parts${units}`;
+  if (v.shed) {
+    perf.shed = true; perfGrace(); track('quality:shed');   // the new ratio's first frames are not its frame rate
+    logQuality(`auto quality: no more supersampling - ${why}`);
+  }
   if (v.thrifty) {
     perf.thrifty = true; track('quality:thrifty');
     logQuality(`auto quality: resolution drop while moving - ${why}`);
@@ -11815,7 +11831,7 @@ const benchApi = !IS_BENCH ? null : ({
   THREE, camera, controls, renderer,
   goTo, stepCount: () => manifest.steps.length, tweenCount: () => tweens.size,
   applyQuality, applyStageTheme, quality: () => quality, stage: () => stageTheme,
-  setHold: (on) => { benchHold = !!on; if (on) { perf.thrifty = false; qualityLocked = true; } },
+  setHold: (on) => { benchHold = !!on; if (on) { perf.thrifty = false; perf.shed = false; qualityLocked = true; } },
   // stops and restarts the viewer's own loop, so the browser's bare frame cadence can be read (see renderLoop's note)
   pauseLoop: (on) => renderer.setAnimationLoop(on ? null : loopTick),
   closePanel: () => setChecklist(false),
@@ -12100,7 +12116,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     // where the build meets its mount (THE MOUNTING FRAME): the room scene hangs its wall and desk there
     mountFrame: () => ({ mount: (manifest && manifest.mount) || 'tabletop', ...mountGeom }),
     // the Done scene's handles (2026-10-23, js/scenes/done.js): the lights it re-aims, the hold, the build's envelope
-    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn && !!QUALITY[quality].accum && !SOFTWARE_GL; }, get softwareGL() { return SOFTWARE_GL; }, compileAhead, compileForHold, compileForCapture, holdPartMeshes, programsPending, warmQuiet, releaseFirstDraw() { firstDraw.released = true; }, get firstDrawState() { return { held: firstDraw.held, released: firstDraw.released, compiled: firstDraw.compiled, timedOut: firstDraw.timedOut, marks: { ...firstDraw.marks } }; }, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
+    sun, hemi, fill, holdScene, setSunHome, setSupersample, get supersampled() { return superOn && !perf.shed && !!QUALITY[quality].accum && !SOFTWARE_GL; }, get softwareGL() { return SOFTWARE_GL; }, compileAhead, compileForHold, compileForCapture, holdPartMeshes, programsPending, warmQuiet, releaseFirstDraw() { firstDraw.released = true; }, get firstDrawState() { return { held: firstDraw.held, released: firstDraw.released, compiled: firstDraw.compiled, timedOut: firstDraw.timedOut, marks: { ...firstDraw.marks } }; }, setShadowExtent, get sceneHeld() { return sceneHold.on; }, get assembledBox() { return assembledBox; },
     renderer, table, grid, camPos, captureShot, get buildCenter() { return buildCenter; },
     // render-quality internals (2026-08-10) — the tier, the AO buffers and the
     // reflector, so a rendering question can be answered by reading state instead

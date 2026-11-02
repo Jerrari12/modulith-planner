@@ -59,8 +59,9 @@ function run(p, state, segments) {
     const dt = 1000 / seg.fps;
     for (let t = 0; t < seg.seconds * 1000; t += dt) {
       now += dt;
-      const v = perfFeed(p, now, { hidden: !!seg.hidden, graceUntil: state.graceUntil, thrifty: state.thrifty, locked: !!state.locked, canStep: state.tier < 3 });
-      if (!v || !(v.thrifty || v.step)) continue;
+      const v = perfFeed(p, now, { hidden: !!seg.hidden, graceUntil: state.graceUntil, thrifty: state.thrifty, locked: !!state.locked, canStep: state.tier < 3, canShed: !!state.canShed });
+      if (!v || !(v.shed || v.thrifty || v.step)) continue;
+      if (v.shed) { state.canShed = false; state.graceUntil = now + 1500; actions.push({ at: now, what: 'shed', fps: v.fps, severe: v.severe }); }
       if (v.thrifty) { state.thrifty = true; actions.push({ at: now, what: 'thrifty', fps: v.fps, severe: v.severe }); }
       if (v.step) { state.tier++; state.graceUntil = now + 1500; actions.push({ at: now, what: 'step', fps: v.fps, severe: v.severe }); }
     }
@@ -151,6 +152,105 @@ test('the moderate rule still works: 20 fps gets the resolution drop first, then
   assert.ok(acts.some((x) => x.what === 'step' && !x.severe), JSON.stringify(acts));
   /* and nothing below 24 but above 15 is ever severe */
   assert.equal(perfVerdict({ ms: 2500, n: 50 }, { thrifty: false, locked: false, canStep: true }), null);
+});
+
+test('while the frame is supersampled the first slow window only gives that up, however slow, and the rules go on after it', () => {
+  assert.deepEqual(perfVerdict({ ms: 2000, n: 16 }, { thrifty: false, locked: false, canStep: true, canShed: true }), { fps: 8, severe: true, shed: true, thrifty: false, step: false }, 'the severe rule too');
+  for (const fps of [20, 8]) {
+    const p = fresh(), s = { thrifty: false, tier: 0, canShed: true };
+    run(p, s, [{ fps: 60, seconds: 4 }]);
+    const acts = run(p, s, [{ fps, seconds: 14 }]);
+    assert.deepEqual(acts.slice(0, 2).map((a) => a.what), ['shed', 'thrifty'], `${fps} fps: ${JSON.stringify(acts)}`);
+    assert.ok(acts[1].at - acts[0].at >= 1500 + PERF_SEVERE.windowMs - 1000 / fps, `${fps} fps: the next verdict came ${acts[1].at - acts[0].at} ms after, inside the new ratio's grace and a window (the first interval past the grace counts)`);
+    assert.ok(acts.some((a) => a.what === 'step'), `${fps} fps: the tier steps in the end: ${JSON.stringify(acts)}`);
+  }
+  // 30 fps and up keeps it; so does a device that only just holds
+  const p = fresh(), s = { thrifty: false, tier: 0, canShed: true };
+  assert.deepEqual(run(p, s, [{ fps: 31, seconds: 60 }]), []);
+  assert.equal(s.canShed, true);
+  // and after giving it up a device that now copes stays where it is: no resolution drop, no step, no way back up by itself
+  const q = fresh(), t = { thrifty: false, tier: 0, canShed: true };
+  run(q, t, [{ fps: 60, seconds: 4 }]);
+  const acts = run(q, t, [{ fps: 20, seconds: 6 }]);
+  assert.deepEqual(acts.map((a) => a.what), ['shed'], JSON.stringify(acts));
+  assert.deepEqual(run(q, t, [{ fps: 45, seconds: 30 }]), []);
+  assert.equal(t.canShed, false);
+  // nothing to give up: the rules as they were
+  assert.deepEqual(perfVerdict({ ms: 3000, n: 60 }, { thrifty: false, locked: false, canStep: true, canShed: false }), { fps: 20, severe: false, thrifty: true, step: false });
+  assert.equal(perfVerdict({ ms: 3000, n: 60 }, { thrifty: false, locked: true, canStep: true, canShed: true }).shed, true, 'a locked tier gives it up too');
+});
+
+/* the ratio itself, through the real qualityTick, superCap and setQuality: a phone at 360 x 675 and a ratio of 2.56 in the
+   final scene, whose camera never stops. Everything else about the page is a stand-in. */
+function phoneStage({ supersampled = true, locked = false } = {}) {
+  const code = [takeAt('const SUPER_PIXELS ='), takeAt('function superCap(', { fn: true }), takeAt('function qualityTick(now)', { fn: true }), takeAt('function setQuality(', { fn: true })].join('\n');
+  return new Function('THREE', 'perfFeed', 'locked', 'superOn', `
+    const QUALITY = { veryhigh: { dpr: 2, accum: true }, high: { dpr: 2 }, balanced: { dpr: 1.5 }, fast: { dpr: 1 } };
+    const QUALITY_ORDER = Object.keys(QUALITY), QUALITY_LABEL = {};
+    let quality = 'veryhigh', qualityLocked = locked, clock = 1000, perfGraceUntil = 0;
+    const devicePixelRatio = 2.56, SOFTWARE_GL = false, benchHold = false, SETTLE_MS = 160, cinema = { on: false }, MOVE_OPT = { shadow: true };
+    const canvas = { clientWidth: 360, clientHeight: 675 }, tweens = { size: 0 }, instances = { size: 1 }, build = null, shadowWatch = {}, document = { hidden: false };
+    const camera = new THREE.PerspectiveCamera(), controls = { target: new THREE.Vector3() };
+    const ratios = [], layer = [];
+    const renderer = { shadowMap: { enabled: false }, setPixelRatio: (r) => ratios.push(+r.toFixed(2)), setSize() {} };
+    const setLayerDetailPixelRatio = (r) => layer.push(+r.toFixed(2));
+    const perf = { key: '', moving: false, lastChange: 0, dpr: null, camKey: '', cameraMoving: false, camChange: 0, win: { ms: 0, n: 0 }, lastNow: 0, wasHidden: false, returnGraceUntil: 0, checked: 1, thrifty: false, shed: false };
+    const perfGrace = (ms = 1500) => { perfGraceUntil = Math.max(perfGraceUntil, clock + ms); };
+    const applyQuality = (name) => { perfGrace(); quality = name; }, skinMaps = { sync() {} }, track = () => {}, logQuality = () => {};
+    const localStorage = { setItem() {} }, sessionStorage = { setItem() {} };
+    ${code}
+    return {
+      ratios, layer, perf, setQuality,
+      get quality() { return quality; }, get locked() { return qualityLocked; },
+      frames(fps, seconds) { for (let t = 0; t < seconds * 1000; t += 1000 / fps) { clock += 1000 / fps; camera.position.x = clock; qualityTick(clock); } },
+      /* frames until done() says, and the seconds they took: a window still holding quick frames does not judge, so the first slow one's time varies */
+      until(fps, done, limit = 15) { const from = clock; while (!done() && clock - from < limit * 1000) this.frames(fps, 1 / fps); return (clock - from) / 1000; },
+    };`)(THREE, perfFeed, locked, supersampled);
+}
+
+test('the Showcase on a phone: slow frames take the ratio from 5.12 to 2, and only then to 1, the relief told each time', () => {
+  const s = phoneStage();
+  s.frames(60, 4);
+  assert.deepEqual(s.ratios, [5.12], 'a phone that copes keeps the extra pixels');
+  assert.ok(s.until(20, () => s.ratios.length > 1) <= 6.1, 'a whole slow window closes within 6 s');
+  assert.deepEqual(s.ratios, [5.12, 2], 'the first slow window stops at the screen\'s own ratio');
+  assert.equal(s.perf.shed, true); assert.equal(s.perf.thrifty, false); assert.equal(s.quality, 'veryhigh');
+  s.frames(60, 20);
+  assert.deepEqual(s.ratios, [5.12, 2], 'a phone that copes at 2 stays at 2: not down, and not back up by itself');
+  s.until(20, () => s.ratios.length > 2);
+  assert.deepEqual(s.ratios, [5.12, 2, 1], 'still slow: 1 while the camera moves');
+  assert.equal(s.quality, 'veryhigh', 'the tier has not moved yet');
+  s.until(20, () => s.quality !== 'veryhigh');
+  assert.equal(s.quality, 'high', 'then the tier steps');
+  assert.deepEqual(s.layer, s.ratios, 'the relief\'s band limit follows every ratio');
+});
+
+test('with nothing supersampled the old order stands: straight to the drop', () => {
+  const s = phoneStage({ supersampled: false });
+  s.frames(60, 4); s.until(20, () => s.ratios.length > 1);
+  assert.deepEqual(s.ratios, [2, 1]);
+  assert.equal(s.perf.shed, false);
+});
+
+test('a pick is judged afresh: a phone at 1 is back at full sharpness, and falls the same way only if still slow, its tier held', () => {
+  const s = phoneStage();
+  s.frames(60, 4); s.until(20, () => s.ratios.length > 2);
+  assert.deepEqual(s.ratios, [5.12, 2, 1]);
+  s.setQuality('veryhigh', { user: true });
+  s.frames(60, 3);
+  assert.deepEqual(s.ratios, [5.12, 2, 1, 5.12], 'the pick did not bring the sharpness back');
+  assert.ok(s.locked);
+  s.until(20, () => s.ratios.length > 4);
+  const between = s.until(20, () => s.ratios.length > 5);
+  assert.deepEqual(s.ratios, [5.12, 2, 1, 5.12, 2, 1], 'the second fall takes the same steps');
+  assert.ok(between >= 4.4, `the drop to 1 waits out the new ratio's grace and a whole window: ${between} s`);
+  s.frames(20, 10);
+  assert.equal(s.quality, 'veryhigh', 'a pick holds its tier');
+  // and an automatic change clears nothing
+  const a = phoneStage();
+  a.frames(60, 4); a.until(20, () => a.ratios.length > 2);
+  a.setQuality('high');
+  assert.equal(a.perf.thrifty, true); assert.equal(a.perf.shed, true); assert.equal(a.locked, false);
 });
 
 test('the visibilitychange handler resets the new window and does not throw', () => {
