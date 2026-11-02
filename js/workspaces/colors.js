@@ -226,8 +226,7 @@ export function mountColors(stage, ctx) {
      the camera, whether it is the visitor's to hold, and the panel's scroll. Nothing else can be open: the auto-start waits for
      that, and the button is under a panel that keeps its own state in the store */
   const back = ctx.memo && ctx.memo.colorsBack ? ctx.memo.colorsBack : null;
-  if (back) { ctx.memo.colorsBack = null; ctx.memo.showcaseWatched = true; if (back.free && stage.setCamFree) stage.setCamFree(true); }
-  const watched = !!(ctx.memo && ctx.memo.showcaseWatched);
+  if (back) { ctx.memo.colorsBack = null; if (back.free && stage.setCamFree) stage.setCamFree(true); }
   function goShowcase(auto = false) {
     stage.track(auto ? 'showcase:auto' : 'showcase:play');   // whether the dock's button and the auto-start are doing their job: a showing itself counts as done:room either way
     if (ctx.memo) {
@@ -983,23 +982,19 @@ export function mountColors(stage, ctx) {
     const count = fc ? fc.count : 0;
     const s = stage.buildSize?.(); const dims = s ? `${Math.round(s.x)} × ${Math.round(s.y)} × ${Math.round(s.z)}` : '';
     dock.replaceChildren(
-      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { if (st.shop) { st.shop = false; renderShop(); renderCard(); } else openShop(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), el('span.word', { text: count ? n(count, 'filament') : 'Instruction colors' })]),
+      el('button.status.stack', { title: count ? 'Filaments in this build · the shopping list' : 'No filament picked yet', disabled: !count, onclick: () => { if (st.shop) { st.shop = false; renderShop(); renderCard(); } else openShop(); } }, [el('span.stacks', {}, (fc ? [...fc.filaments, ...fc.unpicked] : []).slice(0, 6).map((f) => el('i', { style: `background:${f.hex}` }))), count ? n(count, 'filament') : 'Instruction colors']),
       el('div.group', {}, [el('span.big', { text: String(store.state.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
       /* THE SHOWCASE (Joey 2026-10-26: "in the color tab, we should somehow also work in the final scene but call it
          something else, like that way after selecting your colors and stuff you can also view it in this way"): the final
          scene, in these colours, opened from here and back here on its Back (assemble.js THE SHOWCASE). In the dock since
-         2026-11-01 (Joey, of making it easier to find: "Yeah all 3"), with its one-time hint over it. ORANGE TO BLACK (Joey,
-         the same day: "Yeah your suggestion orange to black sounds good"): the one orange thing here is the next thing to do.
-         Orange Showcase and no Parts list on arriving; once they have watched it and come back, orange Parts list with a small
-         dark Showcase beside it. A visit's own state, turned only by the return (the top of this mount), never while they tap */
+         2026-11-01 (Joey, of making it easier to find: "Yeah all 3"), with its one-time hint over it. NO PARTS LIST BUTTON (Joey,
+         the same day: "I just want to not have the get parts list button while in color"): the Showcase is the dock's one orange
+         thing, watched or not, and Parts is the tab. With no room to show (?done=off) the dock keeps its button */
       ...(ROOM_FLAG ? [el('div.showcase-at', {}, [
         ...(st.scHint ? [el('button.showcase-hint', { onclick: () => goShowcase() }, ['See it in the room', icon('play', { fill: true, size: 12 })])] : []),
-        watched
-          ? el('button.key.showcase.again', { title: 'Watch the Showcase again · Esc comes back here', 'aria-label': 'Watch the Showcase again', onclick: () => goShowcase() }, [icon('play', { fill: true, size: 18 })])
-          : el('button.cta.showcase', { title: 'Watch your build in its colours, in the room, the way the final scene shows it · Esc comes back here', onclick: () => goShowcase() }, [icon('play', { fill: true, size: 18 }), 'Showcase']),
-      ])] : []),
-      ...(!ROOM_FLAG || watched ? [el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Parts list', icon('arrow-right', { size: 20 })])] : []),
+        el('button.cta.showcase', { title: 'Watch your build in its colours, in the room, the way the final scene shows it · Esc comes back here', onclick: () => goShowcase() }, [icon('play', { fill: true, size: 18 }), 'Showcase']),
+      ])] : [el('button.cta', { onclick: () => ctx.switchTo('parts') }, ['Get parts list', icon('arrow-right', { size: 20 })])]),
     );
   }
   /* THE HINT, once a browser, after a visitor's second colour (Joey 2026-11-01): a look at the room is the natural next thing. Played

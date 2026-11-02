@@ -465,7 +465,6 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-colors .head .hint { margin: 0; font-size: 12px; color: var(--ink-2); }
 /* the Showcase (the final scene from Colors), in the dock, and its one-time hint over it */
 #ws-dock .showcase-at { position: relative; display: inline-flex; flex: none; }
-#ws-dock .showcase.again { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; padding: 0; border-radius: 14px; }
 #ws-dock .showcase-hint { position: absolute; left: 50%; bottom: calc(100% + 16px); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 10px; border: none; background: var(--orange); color: var(--on-orange); font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
 #ws-dock .showcase-hint::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; margin-left: -5px; background: var(--orange); transform: rotate(45deg); }
 @media (prefers-reduced-motion: no-preference) { #ws-dock .showcase-hint { animation: showcase-hint-in .32s ease-out; } }
@@ -1068,12 +1067,9 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws-dock .status { height: 36px; padding: 0 10px; font-size: 12px; flex: none; }
   #ws-dock .status.stack .stacks i:nth-child(n+5) { display: none; }
   #ws-dock .cta { height: 40px; padding: 0 12px; font-size: 13px; gap: 6px; flex: none; }
-  #ws-dock .showcase.again { width: 40px; height: 40px; }
   /* over the Colors sheet's handle here: a label, so a tap meant for the handle does not start the Showcase; and held to the button's right, off the screen's edge */
   #ws-dock .showcase-hint { left: auto; right: 0; transform: none; pointer-events: none; }
   #ws-dock .showcase-hint::after { left: auto; right: 57px; margin-left: 0; }
-  #ws-dock .showcase-at:has(.again) .showcase-hint::after { right: 15px; }
-  #ws-dock:has(.showcase.again) .status.stack:has(.stacks:not(:empty)) .word { display: none; }
   #ws-dock .pbar { flex: 1; width: auto; min-width: 56px; }
   #ws-dock .pbar .mono { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #ws-dock .pbar .long { display: none; }

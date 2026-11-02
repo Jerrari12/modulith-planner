@@ -4536,9 +4536,9 @@ test('Colors: Showcase plays the final scene in these colours, and Esc comes bac
   await ctx.close();
 });
 
-/* THE SHOWCASE, EASIER TO FIND (Joey 2026-11-01, of a button, a hint and an auto-start: "Yeah all 3"; of its colours: "Yeah your suggestion
-   orange to black sounds good"). In the dock, on a desktop and a phone: orange and alone on arriving, then small and dark beside an orange
-   Parts list once watched, each visit afresh; a hint once a browser after the second colour; after a quiet while, on a desktop on High or
+/* THE SHOWCASE, EASIER TO FIND (Joey 2026-11-01, of a button, a hint and an auto-start: "Yeah all 3"; of the dock: "I just want to not have
+   the get parts list button while in color"). In the dock, on a desktop and a phone: orange, with no Parts list button, watched or not, and
+   the Parts tab where it was; a hint once a browser after the second colour; after a quiet while, on a desktop on High or
    Very High with nothing open, it starts itself, once a visit, and any input comes back exactly where the visitor was, doing nothing else.
    The clocks are set through the debug hooks, and every wait is a poll. */
 const showcaseKit = () => {
@@ -4566,12 +4566,13 @@ const showcaseKit = () => {
   return { opened, inColors, inScene, stays, rests, startClock, pointerAt, dockNow, openRow };
 };
 
-test('Colors: the Showcase is orange in the dock, small and dark beside an orange Parts list once watched, and hints once after two picks', async () => {
+test('Colors: the Showcase is orange in the dock with no Parts list button, watched or not, the Parts tab stays, and it hints once after two picks', async () => {
   const { opened, inColors, inScene, stays, dockNow, openRow } = showcaseKit();
   const a = await opened({ hinted: false });
   await inColors(a.page);
   assert.equal(await a.page.locator('#ws-colors .head .showcase').count(), 0, 'gone from the panel\'s header');
-  assert.deepEqual(await dockNow(a.page), { text: 'Showcase', small: false, showcaseOrange: true, parts: null, partsOrange: false, inside: true }, 'on arriving: an orange Showcase, no Parts list');
+  const orangeAlone = { text: 'Showcase', small: false, showcaseOrange: true, parts: null, partsOrange: false, inside: true };
+  assert.deepEqual(await dockNow(a.page), orangeAlone, 'on arriving: an orange Showcase, no Parts list button');
   const pickOne = async (nth) => {
     await openRow(a.page);
     await a.page.locator('#ws-picker .sw').nth(nth).click();
@@ -4591,22 +4592,20 @@ test('Colors: the Showcase is orange in the dock, small and dark beside an orang
   assert.equal(await a.page.evaluate(() => document.documentElement.dataset.ws), 'assemble', 'a showing they asked for is not ended by a move');
   await a.page.keyboard.press('Escape');
   await inColors(a.page);
-  assert.deepEqual(await dockNow(a.page), { text: '', small: true, showcaseOrange: false, parts: 'Parts list', partsOrange: true, inside: true }, 'back from it: an orange Parts list, the Showcase small and dark');
+  assert.deepEqual(await dockNow(a.page), orangeAlone, 'back from it: the same, no Parts list button');
   await a.page.locator('#ws-dock .showcase').click();   // and it plays again from there
   await inScene(a.page);
   await a.page.keyboard.press('Escape');
   await inColors(a.page);
-  await a.page.locator('#ws-dock .cta').click();
+  await a.page.click('#ws-tabs .tab:has-text("Parts")');   // the way to Parts from here
   await a.page.waitForFunction(() => document.documentElement.dataset.ws === 'parts', null, { timeout: 120_000 });
   await a.page.click('#ws-tabs .tab:has-text("Colors")');
   await inColors(a.page);
-  assert.equal((await dockNow(a.page)).parts, 'Parts list', 'stays turned for the visit, through another workspace');
+  assert.deepEqual(await dockNow(a.page), orangeAlone, 'and through another workspace');
   await a.page.reload();
   await inColors(a.page);
-  assert.equal((await dockNow(a.page)).text, 'Showcase', 'each visit afresh');
   await pickOne(2); await pickOne(4);
   assert.equal(await a.page.locator('#ws-dock .showcase-hint').count(), 0, 'once a browser');
-  assert.equal((await dockNow(a.page)).text, 'Showcase', 'picks do not turn it');
   await a.page.evaluate(() => { localStorage.removeItem('gen2-showcase-hinted'); });
   await a.page.reload();
   await inColors(a.page);
@@ -4616,12 +4615,12 @@ test('Colors: the Showcase is orange in the dock, small and dark beside an orang
   assert.deepEqual(clean(a.errors), []);
   await a.c.close();
 
-  // A PHONE: its dock holds what it has, 6 px or more apart, both ways; no auto-start; the hint waits for the picker's sheet, which covers the dock, and is not spent meanwhile
+  // A PHONE: its dock holds the pill and the Showcase, 6 px or more apart, both ways; no auto-start; the hint waits for the picker's sheet, which covers the dock, and is not spent meanwhile
   const h = await opened({ hinted: false, idle: 1000, viewport: { width: 360, height: 675 }, options: { isMobile: true, hasTouch: true, deviceScaleFactor: 2 } });
   await inColors(h.page);
-  const phoneDock = (page) => page.evaluate(() => { const d = document.querySelector('#ws-dock'), box = (e) => { const b = e.getBoundingClientRect(); return [Math.round(b.left * 10) / 10, Math.round(b.right * 10) / 10]; }, kids = [...d.querySelectorAll('.status, .showcase, .cta:not(.showcase)')].filter((e) => e.checkVisibility()).map(box); return { kids, dock: box(d), over: d.scrollWidth - d.clientWidth, word: d.querySelector('.status .word').checkVisibility() }; });
-  const holds = (m, what, words) => { assert.ok(m.kids.length === (what === 'arriving' ? 2 : 3) && m.over <= 0 && m.kids.every((k, i) => k[0] >= m.dock[0] && k[1] <= m.dock[1] && (!i || m.kids[i - 1][1] + 6 <= k[0])), `${what}: ${JSON.stringify(m)}`); assert.equal(m.word, words, `${what}: the pill's words (${JSON.stringify(m)})`); };
-  holds(await phoneDock(h.page), 'arriving', true);
+  const phoneDock = (page) => page.evaluate(() => { const d = document.querySelector('#ws-dock'), box = (e) => { const b = e.getBoundingClientRect(); return [Math.round(b.left * 10) / 10, Math.round(b.right * 10) / 10]; }, kids = [...d.querySelectorAll('.status, .showcase, .cta:not(.showcase)')].filter((e) => e.checkVisibility()).map(box); return { kids, dock: box(d), over: d.scrollWidth - d.clientWidth }; });
+  const holds = (m, what) => assert.ok(m.kids.length === 2 && m.over <= 0 && m.kids.every((k, i) => k[0] >= m.dock[0] && k[1] <= m.dock[1] && (!i || m.kids[i - 1][1] + 6 <= k[0])), `${what}: ${JSON.stringify(m)}`);
+  holds(await phoneDock(h.page), 'arriving');
   await stays(h.page, 3000);
   await h.page.evaluate(() => { const r = document.querySelector('#ws-colors button.crow'); r.scrollIntoView({ block: 'center' }); r.click(); });
   await h.page.waitForFunction(() => !document.querySelector('#ws-picker').hidden && document.querySelector('#ws-picker button.sw'), null, { timeout: 30_000 });
@@ -4640,9 +4639,10 @@ test('Colors: the Showcase is orange in the dock, small and dark beside an orang
   await inScene(h.page);
   await h.page.locator('#ws-scene button').first().click();
   await inColors(h.page);
-  holds(await phoneDock(h.page), 'watched', false);
+  holds(await phoneDock(h.page), 'watched');
   const sheetUp = () => h.page.evaluate(() => document.querySelector('#ws-colors').classList.contains('open'));
   assert.equal(await sheetUp(), false, 'the Colors sheet down, as it was');
+  assert.equal(await h.page.locator('#ws-tabbar .tab:has-text("Parts")').isVisible(), true, 'the Parts tab with the sheet down: the button is gone, the tab is not (Joey, the same day)');
   await h.page.locator('#ws-colors .sheet-handle').click();
   await h.page.waitForFunction(() => document.querySelector('#ws-colors').classList.contains('open'), null, { timeout: 30_000 });
   await h.page.locator('#ws-dock .showcase').click();
@@ -4681,7 +4681,7 @@ test('Colors: after a quiet while on a desktop on High the Showcase starts itsel
   assert.equal(now.scroll, was.scroll, 'the panel\'s scroll as it was');
   assert.equal(now.room, 'Room', 'Room still pressed');
   assert.equal(now.free, true, 'the camera still theirs: a resize does not take it back');
-  assert.equal((await dockNow(b.page)).parts, 'Parts list', 'a showing that started itself counts as watched');
+  assert.equal((await dockNow(b.page)).parts, null, 'no Parts list button after a showing that started itself either');
   await startClock(b.page, 1500);
   await stays(b.page, 5000);   // once a visit
   assert.deepEqual(clean(b.errors), []);
