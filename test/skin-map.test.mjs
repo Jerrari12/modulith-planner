@@ -64,7 +64,7 @@ for (const [lib, Ctor] of [['physical', THREE.MeshPhysicalMaterial], ['standard'
     m.onBeforeCompile(sh, null);
     const vs = resolveIncludes(sh.vertexShader), fs = resolveIncludes(sh.fragmentShader);
     for (const [src, needle] of [[vs, 'attribute float aSkinId;'], [vs, 'vSkinId = aSkinId;'],
-      [fs, 'if ( vSkinId > 0.5 && gBFTop > 0.0 ) {'], [fs, 'int idSM = int( vSkinId + 0.5 ) - 1;'],
+      [fs, 'if ( vSkinId > 0.5 && gBFTop > 0.0 && drewT < 0.5 ) {'], [fs, 'int idSM = int( vSkinId + 0.5 ) - 1;'],
       [fs, 'uniform sampler2D uSMAtlas;'], [fs, 'uniform sampler2D uSMTable;'],
       [fs, 'if ( uSMOn > 0.5 && uSMTier > 0.5 ) {'], [fs, 'textureGrad( uSMAtlas, uvSM'], [fs, 'texelFetch( uSMAtlas, ivec2( rSM.xy + floor( pxSM ) ), 0 )'],
       [fs, 'gBFContact = smoothstep( 0.82, 0.94'], [fs, 'float bandPx = max('], [vs, 'vObjPos = aBfMm;']]) {
@@ -79,7 +79,7 @@ for (const [lib, Ctor] of [['physical', THREE.MeshPhysicalMaterial], ['standard'
     assert.ok(skinAt < at(fs, 'material.diffuseColor = diffuseColor.rgb'), 'the lights read the normal before the skin');
     assert.ok(skinAt < at(fs, 'RE_Direct( directLight'), 'the direct light is gathered before the skin');
     /* the derivatives the LOD needs are taken in the uniform branch, before the per-fragment one */
-    assert.ok(at(fs, 'vec2 dqxSM = dFdx( qSM ), dqySM = dFdy( qSM );') < at(fs, 'if ( vSkinId > 0.5 && gBFTop > 0.0 ) {'));
+    assert.ok(at(fs, 'vec2 dqxSM = dFdx( qSM ), dqySM = dFdy( qSM );') < at(fs, 'if ( vSkinId > 0.5 && gBFTop > 0.0 && drewT < 0.5 ) {'));
     assert.equal(sh.uniforms.uSMOn, sm.uSMOn, 'the skin uniforms were copied, not shared');
     assert.equal(sh.uniforms.uSMAtlas, sm.uSMAtlas);
     assert.match(m.customProgramCacheKey(), /\|ld\|bf1\|cs1\|sm1$/, 'the cache key does not carry all four patches');
@@ -215,6 +215,7 @@ test('⚔ the shrink falls first on what the front does not show: fronts whole w
 test('a front is a faceplate whose last layer faces the room: not a face-down faceplate, not another part facing +Z', () => {
   assert.equal(SM.showsFront('Faceplate_EdgeLabel_4W-15H', [0, 0, 1]), true);
   assert.equal(SM.showsFront('Faceplate_ClassicPro_2W-1H', [0, 0, 1]), true);
+  assert.equal(SM.showsFront('Label_EdgeLabel', [0, 0, 1]), true, 'a label prints back face down too');
   assert.equal(SM.showsFront('Faceplate_Chevron_4W-15H', [0, 0, -1]), false, 'its front is the first layer, its top map faces the drawer');
   assert.equal(SM.showsFront('Faceplate_Essential_1W-1H', [0, 0, -1]), false);
   assert.equal(SM.showsFront('BackCover_EdgeLabel_4W-15H', [0, 0, 1]), false, 'a back cover faces the drawer');
@@ -281,6 +282,111 @@ test('⚔ the EdgeLabel 2W-1H map: every visible skin agrees with the GLB, and a
     const ctl = CHK.skinCoverage(glb, fixture.axis, map, fixture, { flip });
     assert.ok(ctl.rate <= real.rate - 0.2, `the map mirrored ${flip} still agrees on ${(ctl.rate * 100).toFixed(1)} % - the check cannot see a frame error`);
   }
+});
+
+test('⚔ the EdgeLabel 2W-1H top field: every visible skin agrees with the GLB, a mirrored one does not, and every pixel names a real row', async () => {
+  const top = JSON.parse(readFileSync(join(FIX, 'Faceplate_EdgeLabel_2W-1H.top.json'), 'utf8'));
+  const field = await SM.decodePng(readFileSync(join(FIX, top.file)), (b) => inflateSync(b));
+  assert.deepEqual([field.width, field.height], top.size);
+  for (let i = 0; i < field.data.length; i += 4) assert.ok(field.data[i + 3] <= top.rows.length, 'a pixel names a row the table does not have');
+  assert.ok(top.rows.length <= SM.SKIN_MAP.topMaxRows, 'a row must fit a byte');
+  for (const r of top.rows) {
+    assert.equal(r.length, 10, 'n.x, n.y, spacing, phase, z, ring width, four bands');
+    if (r[2] > 0) { assert.ok(Math.abs(Math.hypot(r[0], r[1]) - 1) < 1e-4, `a family's normal is not unit: ${r}`); assert.ok(r[2] > 0.3 && r[2] < 0.6, `spacing ${r[2]}`); assert.ok(r[3] >= 0 && r[3] < r[2] + 1e-6, `phase ${r[3]} of ${r[2]}`); }
+    assert.ok(fixture.skinLayersZ.includes(r[4]), `a row at ${r[4]} mm, a height the bake never laid`);
+  }
+  const map = CHK.topAsZMap(field, top.rows);
+  const glb = await G.readGlbTriangles(join(root, 'parts', '185', 'Faceplate_EdgeLabel_2W-1H.lib.glb'));
+  const real = CHK.skinCoverage(glb, fixture.axis, map, top);
+  assert.ok(real.rate >= 0.85, `the field agrees with the GLB's visible top skins on ${(real.rate * 100).toFixed(1)} % of their area`);
+  for (const h of ['4.5', '6.5']) { const g = real.byHeight[h]; assert.ok(g && g.area > 1500 && g.agree / g.area >= 0.9, `the skin at ${h} mm: ${g && (g.agree / g.area * 100).toFixed(1)} %`); }
+  for (const flip of [[true, false], [false, true], [true, true]]) {
+    const ctl = CHK.skinCoverage(glb, fixture.axis, map, top, { flip });
+    assert.ok(ctl.rate <= real.rate - 0.2, `mirrored ${flip} it still agrees on ${(ctl.rate * 100).toFixed(1)} %`);
+  }
+  assert.throws(() => CHK.topAsZMap({ width: 1, height: 1, data: Uint8Array.from([0, 0, 0, 5]) }, []), /names row 5 of 0/, 'a row off the table must be refused');
+  /* one slice, so one set of heights: a field short of its bake's is refused, as the two drawers whose G-code lost its start would have been */
+  assert.deepEqual(CHK.missingHeights(top.rows.map((r) => r[4]), fixture.skinLayersZ), [], 'the fixture\'s field lacks a height of its bake');
+  assert.deepEqual(CHK.missingHeights([102.8, 106], [1.2, 2, 102.8, 106.0000001]), [1.2, 2], 'a floor lost from the field must show');
+  assert.ok(readFileSync(join(root, 'tools', 'skin-map.mjs'), 'utf8').includes('const lost = missingHeights(v.heights, raw.skin_layers_z || []);\n    if (lost.length) {'), 'vector-top does not refuse a field short of its bake\'s heights');
+});
+
+test('the top-skin block: once, before the raster, which it stands in for; a pixel names a row, off its height stays plain, and it goes quiet before aliasing', () => {
+  const bf = BF.createBedFinishUniforms(), cs = CS.createCoverSeamUniforms(), sm = SM.createSkinMapUniforms();
+  const m = fullMaterial(THREE.MeshPhysicalMaterial, bf, cs, sm);
+  const sh = shaderFor('physical'); m.onBeforeCompile(sh, null);
+  const fs = resolveIncludes(sh.fragmentShader);
+  assert.equal(count(fs, 'float drewT = 0.0;'), 1);
+  assert.equal(sh.uniforms.uSMSurf, sm.uSMSurf, 'the surface table was copied, not shared');
+  const at = (n) => { const i = fs.indexOf(n); assert.ok(i >= 0, `${n} not found`); return i; };
+  assert.ok(at('if ( uSMOn > 0.5 && uSMTier > 0.5 ) {') < at('float drewT = 0.0;'), 'the block sits outside the Very High gate');
+  assert.ok(at('vec2 dqxSM = dFdx( qSM ), dqySM = dFdy( qSM );') < at('float drewT = 0.0;'), 'the derivatives must be taken in the uniform branch');
+  assert.ok(at('float drewT = 0.0;') < at('if ( vSkinId > 0.5 && gBFTop > 0.0 && drewT < 0.5 ) {'), 'the raster runs first and the vectors draw over it');
+  const blk = fs.slice(at('float drewT = 0.0;'), at('if ( vSkinId > 0.5 && gBFTop > 0.0 && drewT < 0.5 ) {'));
+  assert.ok(!/\btexture\(|dFdx|dFdy|fwidth/.test(blk), 'an implicit LOD or a derivative inside the per-fragment branch is undefined');
+  assert.equal(count(blk, 'textureLod('), 0, 'a filtered read mixes the distances of two heights along every step in the part');
+  assert.equal(count(blk, 'texelFetch( uSMAtlas'), 4, 'the four texels around the fragment');
+  assert.match(blk, /if \( vSkinId > 0\.5 && gBFTop > 0\.0 && fqT < 0\.3 \) \{/, 'a far view should pay for the branch and no more');
+  /* the row comes from the four nearest texels by height, or a diagonal outline reads as a staircase */
+  assert.match(blk, /ivec4 rowsT = ivec4\( smRow\( t00 \), smRow\( t10 \), smRow\( t01 \), smRow\( t11 \) \);/);
+  for (const c of ['x', 'y', 'z', 'w']) assert.ok(blk.includes(`if ( rowsT.${c} > 0 && abs( zsT.${c} - hT ) < uSMZHi && wAllT.${c} > bestT ) { rowT = rowsT.${c}; bestT = wAllT.${c}; }`), `texel ${c} is not a candidate`);
+  assert.match(blk, /if \( rowT > 0 \) \{/);
+  assert.match(blk, /float wZT = 1\.0 - smoothstep\( uSMZLo, uSMZHi, abs\( hT - zT\.x \) \);/, 'a fragment off its row\'s height must stay plain');
+  /* the distance only from texels on that height */
+  assert.match(blk, /vec4 eqT = vec4\( step\( abs\( zsT\.x - zT\.x \), 0\.01 \)/, 'a texel on another height must not read as this height');
+  assert.match(blk, /vec4 loT = \( 1\.0 - eqT \) \* vec4\( step\( zsT\.x, zT\.x \)/, 'a texel just off the skin reads the outline above it');
+  assert.ok(blk.includes('vec4 vT = eqT * ( vec4( t00.r, t10.r, t01.r, t11.r ) * 65280.0 + vec4( t00.g, t10.g, t01.g, t11.g ) * 255.0 ) * fT.w + loT * vec4( t00.b, t10.b, t01.b, t11.b ) * 3.1875 - mT;'), 'the distance is 16 bits on this height, the outline above is B, both in mm');
+  assert.match(blk, /vec4 wT = mT \* wAllT;/);
+  assert.match(blk, /ivec2 cellT = ivec2\( 3 \* \( iT % 256 \), iT \/ 256 \);/, 'the surface table is laid out in rows, so it cannot outgrow a texture');
+  assert.match(blk, /int iT = firstT \+ rowT - 1;/, 'the row counts from the node\'s first, and row 0 means none');
+  assert.ok(fs.includes('int smRow( vec4 t ) { return int( t.a * 255.0 + 0.5 ); }'), 'a row is read from A, unfiltered');
+  assert.ok(fs.includes('if ( row <= 0 ) return -1000.0;'), 'no row must never match a height');
+  assert.match(blk, /if \( fqT < 0\.5 \* max\( sT\.z, zT\.y \) \) \{/);
+  assert.match(blk, /1\.0 - smoothstep\( 0\.25, 0\.5, fqT \/ sT\.z \)/, 'the infill does not fade before two pixels a line');
+  assert.match(blk, /1\.0 - smoothstep\( 0\.25, 0\.5, fqT \/ zT\.y \)/, 'the perimeters do not fade before two pixels a bead');
+  /* the bead's direction, from the shader's own lines: a straight field reads straight with any corner out, where a higher skin took it (Sol 01a19d3a) */
+  const gLines = blk.slice(blk.indexOf('float pA_T'), blk.indexOf('float upT')).replace(/'|,\n|\n/g, ' ').replace(/float /g, 'const ').replace('vec2 gT = vec2( ', 'let gT = [ ').replace(' 0.0 );', ' 0.0 ];')
+    .replace('vec2( vT.w - vT.x )', '[ vT.w - vT.x, vT.w - vT.x ]').replace('( vT.z - vT.y ) * vec2( -1.0, 1.0 )', '[ vT.y - vT.z, vT.z - vT.y ]');
+  const dir = new Function('mT', 'vT', 'aT', `${gLines} return gT;`);
+  const m4 = (x, y, z, w) => ({ x, y, z, w }), plane = (fx, fy) => 0.2 + 0.25 * fx + 0.1 * fy, v4 = m4(plane(0, 0), plane(1, 0), plane(0, 1), plane(1, 1));
+  const near = (got, want, why) => assert.ok(Math.hypot(got[0] - want[0], got[1] - want[1]) < 1e-9, `${why}: ${got}`);
+  for (const [m, want, why] of [[m4(1, 1, 1, 1), [0.25, 0.1], 'all four'], [m4(1, 1, 1, 0), [0.25, 0.1], 'the upper right out'], [m4(1, 1, 0, 1), [0.25, 0.1], 'the upper left out'], [m4(1, 0, 1, 1), [0.25, 0.1], 'the lower right out'], [m4(0, 1, 1, 1), [0.25, 0.1], 'the lower left out'],
+    [m4(1, 1, 0, 0), [0.25, 0], 'the lower pair'], [m4(0, 0, 1, 1), [0.25, 0], 'the upper pair'], [m4(1, 0, 1, 0), [0, 0.1], 'the left pair'], [m4(0, 1, 0, 1), [0, 0.1], 'the right pair'],
+    [m4(1, 0, 0, 1), [0.35, 0.35], 'one diagonal'], [m4(0, 1, 1, 0), [0.15, -0.15], 'the other diagonal'], [m4(1, 0, 0, 0), [0, 0], 'one texel alone']]) near(dir(m, v4, { x: 0.8, y: 0.2 }), want, why);
+  /* right at a cell's edge, a pair there still counts (Sol 01a19d3a, second turn) */
+  near(dir(m4(1, 1, 1, 0), v4, { x: 0.5, y: 0.99995 }), [0.25, 0.1], 'the lower pair, at the upper edge');
+  near(dir(m4(0, 0, 1, 1), v4, { x: 0.5, y: 0 }), [0.25, 0], 'the upper pair, at the lower edge');
+  near(dir(m4(0, 1, 0, 1), v4, { x: 0, y: 0.5 }), [0, 0.1], 'the right pair, at the left edge');
+  assert.match(blk, /\} else if \( sT\.z > 0\.0 \) \{/, 'a row with no family draws its bands and no infill');
+  assert.ok(blk.includes(`( ${SM.SKIN_MAP.topCrownMm.toFixed(4)} * PI * sin( 6.2831853 * uT )`), 'the crown is the table\'s constant');
+});
+
+test('the top field\'s rows: rect, frame, first row and crown, all zero for a node without one; a surface\'s three texels', () => {
+  assert.deepEqual(SM.topRows(null, null, 1, 0), [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]);
+  const top = { q0: [-88, -28], pxPerMm: 4, sdfStepMm: 0.0125 };
+  assert.deepEqual(SM.topRows({ x: 10, y: 20, w: 707, h: 227 }, top, 0.5, 42), [[10, 20, 707, 227], [-88, -28, 2, SM.SKIN_MAP.topStepMm], [42, 0, 0, 0]], 'the atlas px per mm follows the scale, the slot names its first row');
+  assert.deepEqual(SM.surfaceRows([0.7071, -0.7071, 0.378, 0.12, 6.6, 0.45, 0.27, 0.69, 0, 0]), [[0.7071, -0.7071, 0.378, 0.12], [6.6, 0.45, 0, 0], [0.27, 0.69, 0, 0]]);
+  assert.equal(SM.SKIN_MAP.surfaceCols, 3);
+  /* the distance survives the atlas's shrink: a plane stays a plane, to a level or two, where a box of hi and lo bytes would be garbage */
+  const w = 40, h = 30, src = new Uint8Array(w * h * 4), level = (x, y) => Math.round(((x + 0.5) + (y + 0.5)) * 0.01 / SM.SKIN_MAP.topStepMm);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = (y * w + x) * 4, e = level(x, y); src[o] = e >> 8; src[o + 1] = e & 255; src[o + 2] = 9; src[o + 3] = 3; }
+  assert.equal(SM.resampleField(src, w, h, w, h), src, 'the same size must return the source itself');
+  const out = SM.resampleField(src, w, h, 20, 15);
+  for (const [i, j] of [[3, 3], [10, 7], [15, 12]]) {
+    const o = (j * 20 + i) * 4, got = out[o] * 256 + out[o + 1], x = (i + 0.5) * 2 - 0.5, y = (j + 0.5) * 2 - 0.5;
+    assert.ok(Math.abs(got - ((x + 0.5) + (y + 0.5)) * 0.01 / SM.SKIN_MAP.topStepMm) < 3, `a plane's level at ${i},${j} is ${got}`);
+    assert.deepEqual([out[o + 2], out[o + 3]], [9, 3], 'B and A come from the nearest texel');
+  }
+  /* a neighbour on another row does not pull the distance, whichever row the new texel lands on */
+  const two = Uint8Array.from(src); for (let y = 0; y < h; y++) for (let x = 21; x < w; x++) { const o = (y * w + x) * 4; two[o] = 255; two[o + 1] = 255; two[o + 3] = 7; }
+  const low = SM.resampleField(two, w, h, 30, 30), oL = (5 * 30 + 15) * 4;   // between columns 20 and 21, nearer 20
+  assert.equal(low[oL + 3], 3, 'the new texel takes its nearest row');
+  assert.ok(Math.abs(low[oL] * 256 + low[oL + 1] - level(20, 5)) < 3, `the row 3 texel beside row 7 took its distance: ${low[oL] * 256 + low[oL + 1]}`);
+  const high = SM.resampleField(two, w, h, 20, 15), oH = (5 * 20 + 10) * 4;   // midway between them, so the higher column is the nearest
+  assert.equal(high[oH + 3], 7, 'the new texel takes its nearest row');
+  assert.equal(high[oH] * 256 + high[oH + 1], 65535, 'the row 7 texel beside row 3 took its distance');
+  assert.ok(SM.SKIN_MAP.surfaceCols * SM.SKIN_MAP.surfacesPerRow <= 2048, 'the table\'s width must fit the smallest texture WebGL 2 allows');
+  assert.equal(SM.SKIN_MAP.topCrownMm, SM.SKIN_MAP.firstCrownMm, 'one bead: at 0.06 the exact drawing read as corduroy (2026-11-02)');
 });
 
 test('⚔ the label window is empty, the plate around it is skin, and the REMOVE tab lies along the window\'s lower edge', async () => {
@@ -406,7 +512,13 @@ for (const [name, edges] of [['Faceplate_EdgeLabel_2W-1H', [['q1', -1], ['q1', 1
 
 test('main.js patches every finished material, stamps every template, syncs on the mount and the tier switch; the trial is gone', () => {
   const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');
-  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, decodePng, tableRows, firstRows \} from '\.\/skin-map\.js';/);
+  assert.match(main, /import \{ SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, resampleField, decodePng, tableRows, firstRows, topRows, surfaceRows \} from '\.\/skin-map\.js';/);
+  /* a part with a top field fetches no raster map, keeps its front's size, and its rows land in the surface table */
+  assert.match(main, /if \(!top\) \{\n\s*const r = await fetch\(base\(\) \+ entry\.file\);/, 'a part with a field still fetches its raster map');
+  assert.ok(main.includes("...(s.top ? [{ id: n + '#top', w: s.top.w, h: s.top.h, front: s.front }] : [])"), 'a field does not keep a front\'s size');
+  assert.ok(main.includes('topRows(rt, s.top && s.top.meta, scale, rt ? surfaces.length - s.top.meta.rows.length : 0)'), 'the slot does not name its first row');
+  assert.ok(main.includes('skinU.uSMSurf.value = st.surf;'), 'the surface table does not reach the shader');
+  assert.ok(main.includes('const td = scale === 1 ? s.top.data : resampleField(s.top.data, s.top.w, s.top.h, rt.w, rt.h);'), 'a field\'s shrink must not average its high and low bytes');
   assert.match(main, /var skinU = createSkinMapUniforms\(\{ on: new URLSearchParams\(location\.search\)\.get\('skinmap'\) !== 'off', tier: !!QUALITY\[quality\]\.accum \}\);/);
   /* the block draws on the tier that accumulates, and every tier change says so: the mount and the stepping both come through applyQuality */
   assert.match(main, /function applyQuality\(name\) \{[\s\S]*?if \(skinU\) skinU\.uSMTier\.value = q\.accum \? 1 : 0;[\s\S]*?\n\}\nfunction setQuality/, 'a tier change does not reach the maps');
@@ -418,8 +530,8 @@ test('main.js patches every finished material, stamps every template, syncs on t
   assert.match(main, /function setQuality\(name, \{ user = false \} = \{\}\) \{\n\s*applyQuality\(name\);\n\s*skinMaps\.sync\(\);/, 'a tier switch does not sync the maps');
   assert.match(main, /skinMap: skinMaps,/, 'the debug hook lost the maps');
   /* a front keeps its size, and its own scale reaches the table: a row at another map's scale would lay its beads out of register */
-  assert.ok(main.includes('front: showsFront(node, entry.axis), first });'), 'a loaded map does not say whether it shows the front');
-  assert.ok(main.includes('return [{ id: n, w: s.w, h: s.h, front: s.front },'), 'the packer is not told which maps are fronts');
+  assert.ok(main.includes('front: showsFront(node, entry.axis), first, top });'), 'a loaded map does not say whether it shows the front');
+  assert.ok(main.includes('[{ id: n, w: s.w, h: s.h, front: s.front }]'), 'the packer is not told which maps are fronts');
   assert.ok(main.includes('r = pack.rects.get(n), scale = s.front ? pack.frontScale : pack.scale;'), 'a front does not take its own scale');
   assert.ok(main.includes('const rows = tableRows(r, s, scale);'), 'the table does not carry the map\'s own scale');
   /* the attribute carries the slot PLUS ONE, so a mesh that never got it (it reads 0) draws no map: both sides pinned */
@@ -466,7 +578,7 @@ test('the first layer: a slicer line in G-code lands on a bead centre in the par
 });
 
 test('the first layer\'s table rows: rect, frame, family, bands, ring - and all zero for a node without one', () => {
-  assert.equal(SM.SKIN_MAP.tableCols, 7);
+  assert.equal(SM.SKIN_MAP.tableCols, 10, '2 for the top map, 5 for the first layer, 3 for the top skins');
   assert.deepEqual(SM.firstRows(null, null, 1), [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]);
   const first = { q0: [-44.2, -28.45], pxPerMm: 4, sdfStepMm: 0.0125, n: [0.7071, -0.7071], spacing: 0.4596, phase: 0.408, bands: [0.279, 0.736], ringWidth: 0.5 };
   const rows = SM.firstRows({ x: 10, y: 20, w: 353, h: 116 }, first, 0.5);

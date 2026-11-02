@@ -19,7 +19,7 @@ import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFin
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
 import { createSilkUniforms, applySilkAxis, silkTier } from './silk-axis.js';
 import { createGlitterUniforms, applyGlitter, glitterArm, glitterWanted, glitterTier, glitterTintOf } from './glitter.js';
-import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, decodePng, tableRows, firstRows } from './skin-map.js';
+import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, resampleField, decodePng, tableRows, firstRows, topRows, surfaceRows } from './skin-map.js';
 import { createDimCoverTest } from './dim-cover.js';
 import { ASSET_BASE, assetUrl } from './config.js';
 import { benchBuild, createOrbitBench } from './orbit-bench.js';
@@ -3675,8 +3675,8 @@ function skinPatched(key, m) {
 }
 const skinMaps = (() => {
   const SLOTS = SKIN_MAP.slots;
-  const COLS = SKIN_MAP.tableCols;   // 2 for the top map, 5 for the first layer's vectors (skin-map.js firstRows)
-  const st = { index: null, indexP: null, atlas: null, atlasPx: 0, atlasData: null, table: null, tableData: new Float32Array(COLS * SLOTS * 4),
+  const COLS = SKIN_MAP.tableCols;   // 2 for the top map, 5 for the first layer's vectors (skin-map.js firstRows), 3 for the top skins' (topRows)
+  const st = { index: null, indexP: null, atlas: null, atlasPx: 0, atlasData: null, table: null, tableData: new Float32Array(COLS * SLOTS * 4), surf: null,
     sources: new Map(), roots: new Map(), slots: new Map(), loading: new Map(), failed: new Map(), scale: 1, frontScale: 1, rev: 0, syncing: null };
   const wanted = () => skinU.uSMOn.value > 0.5 && !!QUALITY[quality].accum;
   const base = () => assetUrl('parts/skin/');
@@ -3690,10 +3690,24 @@ const skinMaps = (() => {
   }
   async function load(node) {
     const entry = st.index.nodes[node];
-    const r = await fetch(base() + entry.file);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const png = await decodePng(new Uint8Array(await r.arrayBuffer()), inflate);
-    if (png.width !== entry.size[0] || png.height !== entry.size[1]) throw new Error(`the map is ${png.width}x${png.height}, the index says ${entry.size}`);
+    /* the top skins' field (2026-11-02): a part that has one needs no raster map; a failure falls back to the map */
+    let top = null;
+    if (entry.top) {
+      try {
+        const rt = await fetch(base() + entry.top.file);
+        if (!rt.ok) throw new Error('HTTP ' + rt.status);
+        const pt = await decodePng(new Uint8Array(await rt.arrayBuffer()), inflate);
+        if (pt.width !== entry.top.size[0] || pt.height !== entry.top.size[1]) throw new Error(`the field is ${pt.width}x${pt.height}, the index says ${entry.top.size}`);
+        top = { w: pt.width, h: pt.height, data: pt.data, meta: entry.top };
+      } catch (e) { console.warn(`[skin map] ${node} top skins: ${(e && e.message) || e} - drawn from the map`); }
+    }
+    let png = { width: 0, height: 0, data: null };
+    if (!top) {
+      const r = await fetch(base() + entry.file);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      png = await decodePng(new Uint8Array(await r.arrayBuffer()), inflate);
+      if (png.width !== entry.size[0] || png.height !== entry.size[1]) throw new Error(`the map is ${png.width}x${png.height}, the index says ${entry.size}`);
+    }
     /* the first layer's distance field (2026-10-28), when the node has one: a failure leaves the top map and no first layer */
     let first = null;
     if (entry.first) {
@@ -3705,7 +3719,7 @@ const skinMaps = (() => {
         first = { w: pf.width, h: pf.height, data: pf.data, meta: entry.first };
       } catch (e) { console.warn(`[skin map] ${node} first layer: ${(e && e.message) || e} - drawn without it`); }
     }
-    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm, front: showsFront(node, entry.axis), first });
+    st.sources.set(node, { w: png.width, h: png.height, data: png.data, q0: entry.q0, pxPerMm: entry.pxPerMm, front: showsFront(node, entry.axis), first, top });
   }
   function ensureTable() {
     if (st.table) return;
@@ -3743,7 +3757,7 @@ const skinMaps = (() => {
   }
   function repack() {
     const nodes = live();
-    const pack = packAtlas(nodes.flatMap((n) => { const s = st.sources.get(n); return [{ id: n, w: s.w, h: s.h, front: s.front }, ...(s.first ? [{ id: n + '#first', w: s.first.w, h: s.first.h }] : [])]; }));
+    const pack = packAtlas(nodes.flatMap((n) => { const s = st.sources.get(n); return [...(s.data ? [{ id: n, w: s.w, h: s.h, front: s.front }] : []), ...(s.first ? [{ id: n + '#first', w: s.first.w, h: s.first.h }] : []), ...(s.top ? [{ id: n + '#top', w: s.top.w, h: s.top.h, front: s.front }] : [])]; }));
     for (const n of st.slots.keys()) stamp(n, 0);
     st.slots.clear();
     if (!nodes.length) { st.rev++; invalidateFrame(); return; }   // nothing on the stage has a map: no atlas is allocated for it
@@ -3753,21 +3767,41 @@ const skinMaps = (() => {
        mipmaps blend into every map's edge when it is minified (Sol 01a174ad) */
     new Uint32Array(st.atlasData.buffer).fill(0x00008080); st.tableData.fill(0);
     let slot = 0;
+    const surfaces = [];
     for (const n of nodes) {
       if (slot >= SLOTS) { console.warn('[skin map] more than ' + SLOTS + ' mapped nodes on the stage - the rest stay plain'); break; }
       const s = st.sources.get(n), r = pack.rects.get(n), scale = s.front ? pack.frontScale : pack.scale;
-      const data = scale === 1 ? s.data : resampleMap(s.data, s.w, s.h, r.w, r.h);
-      for (let y = 0; y < r.h; y++) st.atlasData.set(data.subarray(y * r.w * 4, (y + 1) * r.w * 4), ((r.y + y) * pack.size + r.x) * 4);
-      const rows = tableRows(r, s, scale);
-      st.tableData.set(rows[0], slot * COLS * 4); st.tableData.set(rows[1], (slot * COLS + 1) * 4);
+      if (r) {   // a part with a top field has no raster map, and these two columns stay zero
+        const data = scale === 1 ? s.data : resampleMap(s.data, s.w, s.h, r.w, r.h);
+        for (let y = 0; y < r.h; y++) st.atlasData.set(data.subarray(y * r.w * 4, (y + 1) * r.w * 4), ((r.y + y) * pack.size + r.x) * 4);
+        const rows = tableRows(r, s, scale);
+        st.tableData.set(rows[0], slot * COLS * 4); st.tableData.set(rows[1], (slot * COLS + 1) * 4);
+      }
       const rf = s.first ? pack.rects.get(n + '#first') : null;
       if (rf) {
         const fd = pack.scale === 1 ? s.first.data : resampleMap(s.first.data, s.first.w, s.first.h, rf.w, rf.h);
         for (let y = 0; y < rf.h; y++) st.atlasData.set(fd.subarray(y * rf.w * 4, (y + 1) * rf.w * 4), ((rf.y + y) * pack.size + rf.x) * 4);
       }
       firstRows(rf, s.first && s.first.meta, pack.scale).forEach((row, k) => st.tableData.set(row, (slot * COLS + 2 + k) * 4));
+      const rt = s.top ? pack.rects.get(n + '#top') : null;
+      if (rt) {
+        const td = scale === 1 ? s.top.data : resampleField(s.top.data, s.top.w, s.top.h, rt.w, rt.h);
+        for (let y = 0; y < rt.h; y++) st.atlasData.set(td.subarray(y * rt.w * 4, (y + 1) * rt.w * 4), ((rt.y + y) * pack.size + rt.x) * 4);
+        for (const row of s.top.meta.rows) surfaces.push(row);
+      }
+      topRows(rt, s.top && s.top.meta, scale, rt ? surfaces.length - s.top.meta.rows.length : 0).forEach((row, k) => st.tableData.set(row, (slot * COLS + 7 + k) * 4));
       st.slots.set(n, slot); stamp(n, slot + 1); slot++;
     }
+    /* the surface table: one row a surface, for every field on the stage */
+    if (st.surf) { st.surf.dispose(); st.surf = null; }
+    if (surfaces.length) {
+      const cols = SKIN_MAP.surfaceCols, per = SKIN_MAP.surfacesPerRow, tw = cols * per, th = Math.ceil(surfaces.length / per), d = new Float32Array(tw * th * 4);
+      surfaces.forEach((row, i) => surfaceRows(row).forEach((c, k) => d.set(c, ((Math.floor(i / per) * tw) + (i % per) * cols + k) * 4)));
+      st.surf = new THREE.DataTexture(d, tw, th, THREE.RGBAFormat, THREE.FloatType);
+      st.surf.minFilter = THREE.NearestFilter; st.surf.magFilter = THREE.NearestFilter; st.surf.generateMipmaps = false; st.surf.needsUpdate = true;
+    }
+    skinU.uSMSurf.value = st.surf;
+    st.surfaces = surfaces.length;
     st.scale = pack.scale; st.frontScale = pack.frontScale; st.atlas.needsUpdate = true; st.table.needsUpdate = true; st.rev++;
     invalidateFrame();
   }
@@ -3802,7 +3836,7 @@ const skinMaps = (() => {
     set(on) { skinU.uSMOn.value = on ? 1 : 0; invalidateFrame(); if (on) sync(); return !!on; },
     get atlas() { return st.atlas; },
     status() {
-      return { wanted: wanted(), on: skinU.uSMOn.value === 1, atlasPx: st.atlasPx, scale: st.scale, frontScale: st.frontScale, fronts: [...st.slots.keys()].filter((n) => st.sources.get(n) && st.sources.get(n).front), rev: st.rev,
+      return { wanted: wanted(), on: skinU.uSMOn.value === 1, atlasPx: st.atlasPx, scale: st.scale, frontScale: st.frontScale, fronts: [...st.slots.keys()].filter((n) => st.sources.get(n) && st.sources.get(n).front), tops: [...st.slots.keys()].filter((n) => st.sources.get(n) && st.sources.get(n).top), surfaces: st.surfaces || 0, rev: st.rev,
         slots: Object.fromEntries(st.slots), sources: [...st.sources.keys()], failed: Object.fromEntries(st.failed),
         loading: [...st.loading.keys()], index: st.index ? Object.keys(st.index.nodes).length : null,
         // the slotted nodes whose first layer is drawn (2026-10-28): a live check reads it

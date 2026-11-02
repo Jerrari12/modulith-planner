@@ -38,7 +38,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deflateSync, inflateSync } from 'node:zlib';
 import { readGlbTriangles, readStlTriangles, matchRotation, rotate, matMul, bounds } from './lib/skin-geometry.mjs';
-import { skinCoverage } from './lib/skin-check.mjs';
+import { skinCoverage, topAsZMap, missingHeights } from './lib/skin-check.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { buildAxisForType } = await import(pathToFileURL(join(root, 'js', 'generate.js')).href);
@@ -245,7 +245,7 @@ async function push() {
    the plan. Returns { A, c, slack } or { skip, slack? }. */
 async function sliceFrame(job, raw) {
   const glb = await readGlbTriangles(glbPathOf(job.node));
-  const stl = readStlTriangles(join(CORPUS, job.stl));
+  const stl = readStlTriangles(job.stlAbs || join(CORPUS, job.stl));   // stlAbs: a part with no STL in the corpus, written from its GLB (the EdgeLabel label)
   const m = matchRotation(glb, stl, job.axis);
   if (m.error || m.ambiguous) return { skip: 'the frame no longer matches: ' + (m.error || 'ambiguous') };
   /* the slicer saw the STL as it is (helper disks included), turned by rotate_x and centred on the bed by ITS
@@ -255,7 +255,12 @@ async function sliceFrame(job, raw) {
   for (let i = 0; i < stlR.length; i += 3) { const v = rotate(Rx, [stl.positions[i], stl.positions[i + 1], stl.positions[i + 2]]); stlR[i] = v[0]; stlR[i + 1] = v[1]; stlR[i + 2] = v[2]; }
   const bStl = bounds(stlR);
   const centre = [(bStl.lo[0] + bStl.hi[0]) / 2, (bStl.lo[1] + bStl.hi[1]) / 2];
-  const off = [raw.bed_centre_mm[0] - centre[0], raw.bed_centre_mm[1] - centre[1]];
+  /* the slicer put the EdgeLabel label 2.1 mm off the bed's centre (a small part, one profile; every other part sits on it). So a job
+     that says so takes the part's place from the G-code's low corner, half a bead outside the extents' low X and Y: two straight
+     sides. Not from the extents' centre, which a sharp tip pulls in: the label's 45-degree end stops short of its model by 0.77 mm,
+     and centring on that put the field 0.16 mm off the model */
+  const placed = job.placeByLowCorner ? [raw.gcode_extents_mm[0] - job.placeByLowCorner / 2 + (bStl.hi[0] - bStl.lo[0]) / 2, raw.gcode_extents_mm[1] - job.placeByLowCorner / 2 + (bStl.hi[1] - bStl.lo[1]) / 2] : raw.bed_centre_mm;
+  const off = [placed[0] - centre[0], placed[1] - centre[1]];
   /* the GLB's own outline on the bed, predicted, against the G-code's extrusion above the first millimetre (the
      helper disks lie below it, outside the GLB) */
   const sp = new Float64Array(glb.positions.length);
@@ -353,11 +358,11 @@ async function ship() {
     };
     row.size = [shipW, shipH]; row.bakedSize = [OW, OH]; row.pxPerMm = +shipPx.toFixed(3); row.bytes = png.length; row.q0 = index.nodes[job.node].q0;
     shipped++;
-    console.log(`  ${job.node.padEnd(36)} ${shipW}x${shipH}${shipW !== OW ? ' (baked ' + OW + 'x' + OH + ', ' + shipPx.toFixed(2) + ' px/mm)' : ''}  ${(png.length / 1024).toFixed(0)} KB  q0 ${row.q0}  slack ${slack.toFixed(3)}`);
+    console.log(`  ${job.node.padEnd(36)} ${shipW}x${shipH}${shipW !== OW ? ' (baked ' + OW + 'x' + OH + ', ' + shipPx.toFixed(2) + ' px/mm)' : ''}  ${(png.length / 1024).toFixed(0)} KB  q0 ${row.q0}  slack ${(fr.slack || 0).toFixed(3)}`);
     } catch (e) { row.skip = 'error: ' + ((e && e.message) || e); console.log(`  ${job.node.padEnd(36)} ERROR ${row.skip.slice(0, 100)}`); }
   }
   index.generated = new Date().toISOString();
-  writeFileSync(join(dest, 'index.json'), JSON.stringify(index, null, 1));
+  writeFileSync(join(dest, 'index.json'), JSON.stringify(index));
   writeFileSync(join(OUT, 'ship.json'), JSON.stringify({ generated: index.generated, shipped, report }, null, 1));
   console.log(`\n${shipped} maps shipped to ${dest}; ${report.filter((r) => r.skip).length} skipped -> ${join(OUT, 'ship.json')}`);
   for (const r of report.filter((r) => r.skip)) console.log(`  skip ${r.node}: ${r.skip}`);
@@ -475,15 +480,134 @@ async function vector() {
     row.size = [OW, OH]; row.bytes = png.length; row.bands = v.bands;
     console.log(`  ${job.node.padEnd(36)} first ${OW}x${OH}  ${(png.length / 1024).toFixed(0)} KB  ${v.family.angleDeg.toFixed(1)} deg  ${sp.toFixed(3)} mm  bands ${v.bands}`);
   }
-  writeFileSync(join(dest, 'index.json'), JSON.stringify(index, null, 1));
+  writeFileSync(join(dest, 'index.json'), JSON.stringify(index));
   writeFileSync(join(OUT, 'vector-report.json'), JSON.stringify(report, null, 1));
   const n = report.filter((r) => !r.skip).length;
   console.log(`vector: ${n} shipped, ${report.length - n} skipped -> ${dest}`);
 }
 
+/* ---- vector-top: every top skin, as numbers and a distance field (2026-11-02) ---- */
+/* Joey 2026-11-02, of an EdgeLabel's front: "i thought we added it as a vector". The first layer has one height and a line
+   family an island; a part's top skins have several heights, so a pixel of the field names a ROW, and a row holds its surface's
+   family, height and perimeter bands (D:/MODULITH/ops/slicing/skin_vector.py --top, which measured 99.9 to 100 % of bead length on
+   the grid on 8 parts before this was written):
+     file      <node>.top.png  R,G = signed distance to that height's outline, (mm + 1) / SKIN_MAP.topStepMm, 16 bits; B = the same to the nearest outline above, 8 bits; A = row + 1
+     rows      [[n.x, n.y, spacing, phase, z, ringWidth, b0, b1, b2, b3], ...] spacing 0 = bands only */
+const TOP_FIT_MIN = 0.85;     // the share of a part's top-skin bead length on its surface's grid within 0.05 mm, to ship
+async function vectorTop() {
+  const RAW = opt('--raw', join(OUT, 'raw'));
+  const VRAW = opt('--vraw', null);
+  if (!VRAW) throw new Error('vector-top needs --vraw <dir> holding <key>.top.json and <key>.top-sdf.png');
+  const plan = JSON.parse(readFileSync(join(OUT, 'jobs.json'), 'utf8'));
+  const dest = DEST || join(root, 'parts', 'skin');
+  mkdirSync(dest, { recursive: true });
+  const index = JSON.parse(readFileSync(join(dest, 'index.json'), 'utf8'));
+  const report = [];
+  for (const job of plan.jobs) {
+    if (ONLY && !ONLY.has(job.node)) continue;
+    if (MATCH && !job.node.includes(MATCH)) continue;
+    if (FAMILIES && !FAMILIES.some((f) => job.node.startsWith(f))) continue;
+    const key = `${job.sha256.slice(0, 16)}-rx${job.rotate_x}-px${SM.SKIN_MAP.pxPerMm}`;
+    const row = { node: job.node, key };
+    report.push(row);
+    const rawPath = join(RAW, key + '.json'), vPath = join(VRAW, key + '.top.json');
+    if (!existsSync(rawPath) || !existsSync(vPath)) { row.skip = 'no raw bake or no top-skin extraction'; continue; }
+    if (!index.nodes[job.node]) { row.skip = 'the node has no entry to ride with'; continue; }
+    const raw = JSON.parse(readFileSync(rawPath, 'utf8')), v = JSON.parse(readFileSync(vPath, 'utf8'));
+    if (raw.failed || v.failed) { row.skip = 'the bake or the extraction failed'; continue; }
+    if (v.key !== key) { row.skip = 'the extraction is for another bake'; continue; }
+    const lost = missingHeights(v.heights, raw.skin_layers_z || []);
+    if (lost.length) { row.skip = `the extraction lacks the bake's heights ${lost.join(', ')}`; continue; }
+    if (!(v.onGrid >= TOP_FIT_MIN)) { row.skip = `its top skins are not line families (on grid ${v.onGrid})`; continue; }
+    const reach = Math.max(0, ...v.rows.flatMap((r) => r.bands.map((b) => b + r.ringWidth / 2 + 0.1)));
+    if (reach >= -1 + 255 * SDF_STEP) { row.skip = `the perimeters reach ${reach.toFixed(2)} mm, past the field's range`; continue; }
+    const fr = await sliceFrame(job, raw);
+    if (fr.skip) { row.skip = fr.skip; continue; }
+    const { A, c } = fr;
+    const src = (await SM.decodePng(readFileSync(join(VRAW, key + '.top-sdf.png')), (b) => inflateSync(b))).data;
+    const srcAbove = (await SM.decodePng(readFileSync(join(VRAW, key + '.top-above.png')), (b) => inflateSync(b))).data;
+    const [W, H] = v.size, px = v.px, [x0, y0] = v.bounds;
+    const toQ = (gx, gy) => { const dx = gx - c[0], dy = gy - c[1]; return [A[0][0] * dx + A[0][1] * dy, A[1][0] * dx + A[1][1] * dy]; };
+    const corners = [[x0, y0], [x0 + W / px, y0], [x0, y0 + H / px], [x0 + W / px, y0 + H / px]].map(([gx, gy]) => toQ(gx, gy));
+    const q0 = [Math.min(...corners.map((p) => p[0])), Math.min(...corners.map((p) => p[1]))];
+    const q1 = [Math.max(...corners.map((p) => p[0])), Math.max(...corners.map((p) => p[1]))];
+    const OW = Math.round((q1[0] - q0[0]) * px), OH = Math.round((q1[1] - q0[1]) * px);
+    /* a pixel's row fits a byte: every height's plain row, then the surfaces with the most lines; a surface past that is drawn plain */
+    const plainOf = new Map(v.rows.map((r, i) => [r.z, i]).filter(([, i]) => !(v.rows[i].spacingMm > 0)));
+    const order = v.rows.map((r, i) => i).sort((a, b) => (v.rows[a].spacingMm > 0) - (v.rows[b].spacingMm > 0) || v.rows[b].lines - v.rows[a].lines);
+    const kept = order.slice(0, SM.SKIN_MAP.topMaxRows).sort((a, b) => a - b), newId = new Map(kept.map((old, k) => [old, k + 1]));
+    const rowMap = v.rows.map((r, i) => newId.get(i) || newId.get(plainOf.get(r.z)));
+    row.droppedRows = v.rows.length - kept.length;
+    const out = new Uint8Array(OW * OH * 4);
+    for (let j = 0; j < OH; j++) for (let i = 0; i < OW; i++) {
+      const qx = q0[0] + (i + 0.5) / px, qy = q0[1] + (j + 0.5) / px;
+      const gx = A[0][0] * qx + A[1][0] * qy + c[0], gy = A[0][1] * qx + A[1][1] * qy + c[1];
+      const col = Math.round((gx - x0) * px - 0.5), rowi = Math.round((gy - y0) * px - 0.5);   // A is a signed permutation: grid onto grid
+      const o = (j * OW + i) * 4;
+      if (col < 0 || col >= W || rowi < 0 || rowi >= H) continue;
+      const s = (rowi * W + col) * 4;
+      const d = (src[s] * 256 + src[s + 1]) / 1000 - 2, a = (srcAbove[s] * 256 + srcAbove[s + 1]) / 1000 - 2;
+      const enc = Math.max(0, Math.min(65535, Math.round((d + 1) / SM.SKIN_MAP.topStepMm)));
+      out[o] = enc >> 8; out[o + 1] = enc & 255;                                   // the distance to this height's outline
+      out[o + 2] = Math.max(0, Math.min(255, Math.round((a + 1) / SM.SKIN_MAP.topAboveStepMm)));   // to the nearest outline above it
+      const id = src[s + 2] * 256 + src[s + 3];
+      out[o + 3] = id ? rowMap[id - 1] : 0;                                        // its row, which fits a byte (below)
+    }
+    /* each surface's family in the part frame (js/skin-map.js lineFamilyInPart, pinned by test/skin-map.test.mjs) */
+    /* ... and the shipped numbers checked against the G-code's own lines: a few beads of each surface must lie on its grid in the part
+       frame, or the surface is drawn plain and reported. The GLB check below cannot see a wrong phase or angle (Sol 01a19ce6) */
+    let offGrid = 0;
+    const rows = kept.map((k) => v.rows[k]).map((r) => {
+      const b = [...r.bands, 0, 0, 0, 0].slice(0, 4);
+      const plain = [0, 0, 0, 0, +r.z.toFixed(3), r.ringWidth, ...b];
+      if (!(r.spacingMm > 0)) return plain;
+      const f = SM.lineFamilyInPart(r, A, c);
+      const on = (r.probe || []).every(([gx, gy]) => { const [qx, qy] = toQ(gx, gy); const u = (f.n[0] * qx + f.n[1] * qy - f.phase) / f.spacing; return Math.abs(u - Math.round(u)) * f.spacing < 0.06; });
+      if (!on) { offGrid++; return plain; }
+      return [+f.n[0].toFixed(6), +f.n[1].toFixed(6), +f.spacing.toFixed(5), +f.phase.toFixed(5), +r.z.toFixed(3), r.ringWidth, ...b];
+    });
+    row.offGrid = offGrid;
+    const png = SM.encodePng(out, OW, OH, (b) => deflateSync(b, { level: 9 }));
+    writeFileSync(join(dest, job.node + '.top.png'), png);
+    index.nodes[job.node].top = { file: job.node + '.top.png', size: [OW, OH], q0: [+q0[0].toFixed(4), +q0[1].toFixed(4)], pxPerMm: px, rows, onGrid: v.onGrid, extractVersion: v.version, pngSha256: sha256(png), bytes: png.length };
+    row.size = [OW, OH]; row.bytes = png.length; row.rows = rows.length; row.onGrid = v.onGrid;
+    console.log(`  ${job.node.padEnd(36)} top ${OW}x${OH}  ${(png.length / 1024).toFixed(0)} KB  ${rows.length} rows  on grid ${v.onGrid}${offGrid ? `  ${offGrid} rows OFF the shipped grid, drawn plain` : ''}`);
+  }
+  writeFileSync(join(dest, 'index.json'), JSON.stringify(index));
+  writeFileSync(join(OUT, 'vector-top-report.json'), JSON.stringify(report, null, 1));
+  const n = report.filter((r) => !r.skip).length;
+  console.log(`vector-top: ${n} shipped, ${report.length - n} skipped -> ${dest}`);
+  for (const r of report.filter((x) => x.skip)) console.log(`  skip ${r.node}: ${r.skip}`);
+}
+
+/* ---- check-top: every shipped field against its GLB, as check does for a map, with its mirrored controls ---- */
+async function checkTop() {
+  const dest = DEST || join(root, 'parts', 'skin');
+  const index = JSON.parse(readFileSync(join(dest, 'index.json'), 'utf8'));
+  const rows = [];
+  for (const [node, e] of Object.entries(index.nodes)) {
+    if (!e.top) continue;
+    if (ONLY && !ONLY.has(node)) continue;
+    if (MATCH && !node.includes(MATCH)) continue;
+    const field = await SM.decodePng(readFileSync(join(dest, e.top.file)), (b) => inflateSync(b));
+    const map = topAsZMap(field, e.top.rows);
+    const glb = await readGlbTriangles(glbPathOf(node));
+    const real = skinCoverage(glb, e.axis, map, e.top);
+    const control = Math.max(...[[true, false], [false, true], [true, true]].map((flip) => skinCoverage(glb, e.axis, map, e.top, { flip }).rate));
+    rows.push({ node, rate: +real.rate.toFixed(4), control: +control.toFixed(4), visibleMm2: Math.round(real.areaMm2), rows: e.top.rows.length });
+    console.log(`  ${node.padEnd(36)} agree ${(real.rate * 100).toFixed(1).padStart(5)} %  control ${(control * 100).toFixed(1).padStart(5)} %  visible ${Math.round(real.areaMm2)} mm2`);
+  }
+  const weak = rows.filter((r) => r.rate < 0.8);
+  writeFileSync(join(OUT, 'check-top.json'), JSON.stringify({ generated: new Date().toISOString(), fields: rows.length, weak: weak.map((r) => r.node), rows }, null, 1));
+  console.log(`\n${rows.length} fields checked; ${weak.length} weak (agree under 80 %)`);
+  for (const r of weak) console.log(`  weak ${r.node}: agree ${(r.rate * 100).toFixed(1)} %, control ${(r.control * 100).toFixed(1)} %`);
+}
+
 if (cmd === 'plan') await plan();
+else if (cmd === 'check-top') await checkTop();
 else if (cmd === 'push') await push();
 else if (cmd === 'ship') await ship();
 else if (cmd === 'vector') await vector();
+else if (cmd === 'vector-top') await vectorTop();
 else if (cmd === 'check') await check();
 else { console.error('usage: node tools/skin-map.mjs plan|push|ship|check [options]'); process.exit(2); }

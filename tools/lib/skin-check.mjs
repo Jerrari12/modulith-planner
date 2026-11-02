@@ -36,6 +36,26 @@ export function mapZAt(map, frame, q, flip = [false, false]) {
   return (map.data[o + 2] * 256 + map.data[o + 3]) / 100;
 }
 
+/** A top skins' field (js/skin-map.js TOP_BLOCK) as a map this check reads: its A names a row; B,A here carry that row's height in the raster's 0.01 mm. */
+export function topAsZMap(field, rows) {
+  const data = new Uint8Array(field.data.length);
+  for (let o = 0; o < data.length; o += 4) {
+    const id = field.data[o + 3];
+    if (!id) continue;
+    if (id > rows.length) throw new Error(`the field names row ${id} of ${rows.length}`);
+    const z = Math.round(rows[id - 1][4] * 100);
+    data[o + 2] = z >> 8; data[o + 3] = z & 255;
+  }
+  return { width: field.width, height: field.height, data };
+}
+
+/** The raster bake's heights a field lacks, from one slice: none, or the field's G-code was damaged or cut short. Two drawers' fields read a file with a hole where its start was
+ *  (the 2026-10-25 parallel bake), lost their floors, and the coverage check saw only a low score among the hidden backs' (2026-11-02). */
+export function missingHeights(fieldZ, bakeZ) {
+  const has = new Set(fieldZ.map((z) => z.toFixed(2)));
+  return bakeZ.filter((z) => !has.has(z.toFixed(2)));
+}
+
 /**
  * @returns {{ samples, areaMm2, hiddenMm2, agree, rate, byHeight }} rate = the agreeing share of the visible skins' area; byHeight groups the
  * area by its own height (mm, 0.1 steps) with the agreeing area per group, so a missed ledge shows as a group at 0.

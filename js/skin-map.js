@@ -52,7 +52,17 @@ export const SKIN_MAP = Object.freeze({
   /* THE FIRST LAYER AS VECTORS (2026-10-28): the table's columns grow from 2 to 7 (see firstRows); firstCrownMm is the
      squashed first-layer bead's relief, a cosine across one line pitch - judged by eye on the EdgeLabel accent's close-up
      (D:\Claude - Output\vector-skin-2026-10-28), lower than a top skin's 0.06 because the bed flattens it */
-  tableCols: 7, firstCrownMm: 0.03,
+  tableCols: 10, firstCrownMm: 0.03,
+  /* THE TOP SKINS AS VECTORS (2026-11-02): columns 7-9 are the field's rectangle, its frame and the node's first row in the
+     surface table (topRows); topCrownMm is the top bead's relief, the first layer's 0.03 (Joey's "Subtle"; the raster bake's 0.06
+     read as corduroy once it was drawn exactly); surfaceCols the surface table's texels a surface, surfacesPerRow its surfaces a row;
+     the stored forms are below */
+  topCrownMm: 0.03, surfaceCols: 3, surfacesPerRow: 256,
+  /* a top field's pixel: R,G the distance to its height's outline, 16 bits; B the distance to the nearest outline above it, 8 bits;
+     A its row. 8 bits for the first of those was 0.0125 mm a level, and along a diagonal that rounding swung the perimeter beads'
+     direction by a couple of degrees, which a bright filament showed as swells down a straight edge (Joey 2026-11-02, the EdgeLabel
+     label: "why is the labels right side line all wavey?", then "is there no way to correct or cheat the wobbly look?") */
+  topStepMm: 3.2 / 65535, topAboveStepMm: 0.0125, topMaxRows: 255,
   /* an island's own line family, per pixel of the first layer's field (D:/MODULITH/ops/slicing/skin_vector.py version 2):
      B = its phase as a fraction of its spacing in 1/256, A = its spacing as islandSpacingLo + A * islandSpacingStep mm,
      A = 0 where no island family was fitted (the table's layer-wide family is drawn there) */
@@ -83,7 +93,8 @@ export function createSkinMapUniforms({ on = true, tier = false } = {}) {
     uSMStrength: { value: SKIN_MAP.strength },
     uSMZLo: { value: SKIN_MAP.zToleranceMm[0] }, uSMZHi: { value: SKIN_MAP.zToleranceMm[1] },
     uSMAtlas: { value: null },      // the RGBA8 atlas, bound by main.js once a map is loaded
-    uSMTable: { value: null },      // the 2 x slots RGBA float table
+    uSMTable: { value: null },      // the columns x slots RGBA float table
+    uSMSurf: { value: null },       // the surface table: one row a surface of a top skin, for every node on the stage (surfaceRows)
     uSMAtlasPx: { value: SKIN_MAP.atlasPx[0] },
   };
 }
@@ -108,7 +119,11 @@ const FRAG_COMMON = [
   'uniform float uSMOn, uSMTier, uSMStrength, uSMZLo, uSMZHi, uSMAtlasPx;',
   'uniform sampler2D uSMAtlas;',
   'uniform sampler2D uSMTable;',
+  'uniform sampler2D uSMSurf;',
   'varying float vSkinId;',
+  /* a top field's pixel's row, and that row's height in the surface table; -1000 for no row */
+  'int smRow( vec4 t ) { return int( t.a * 255.0 + 0.5 ); }',
+  `float smHeight( int first, int row ) { if ( row <= 0 ) return -1000.0; int i = first + row - 1; return texelFetch( uSMSurf, ivec2( ${SKIN_MAP.surfaceCols} * ( i % ${SKIN_MAP.surfacesPerRow} ) + 1, i / ${SKIN_MAP.surfacesPerRow} ), 0 ).x; }`,
 ].join('\n');
 /* THE FIRST LAYER, AS VECTORS (2026-10-28; Joey: the face-down accents on the smooth sheet looked "way too perfect", then,
    of the 8 px/mm maps, "is there a way to produce the texture as vectors?"). On a bed-contact face, where the plate is
@@ -171,6 +186,89 @@ const FIRST_BLOCK = [
   '  }',
 ].join('\n');
 
+/* THE TOP SKINS, AS VECTORS (2026-11-02; Joey: "i thought we added it as a vector"). A part has several top skins at several
+   heights, and each height several surfaces, each laying its own lines; so a pixel of the field names a ROW of the surface table,
+   read unfiltered, and the row holds that surface's family, height and bands. R is the distance to that height's outline, read
+   at mip 0, as the first layer's. The block goes quiet before either bead's pitch reaches two screen pixels, so a whole-build
+   frame pays for the branch and no more; a part with a field does not fetch its raster map (main.js). A fragment off the row's
+   height, under a bridge or in a pocket, stays plain, as under the raster's Z channel. */
+const TOP_BLOCK = [
+  '  float drewT = 0.0;',
+  '  float fqT = max( length( dqxSM ), length( dqySM ) );',          // mm a screen pixel spans
+  '  if ( vSkinId > 0.5 && gBFTop > 0.0 && fqT < 0.3 ) {',            // past a 0.6 mm pitch's two pixels every bead has faded: a far frame pays for this branch and no more
+  '    int idT = int( vSkinId + 0.5 ) - 1;',
+  '    vec4 rT = texelFetch( uSMTable, ivec2( 7, idT ), 0 );',        // the field's atlas rectangle
+  '    vec4 fT = texelFetch( uSMTable, ivec2( 8, idT ), 0 );',        // q0.x, q0.y, atlas px per mm, mm per level of the distance
+  '    vec2 pxT = ( qSM - fT.xy ) * fT.z;',
+  '    if ( fT.z > 0.0 && pxT.x >= 0.0 && pxT.y >= 0.0 && pxT.x < rT.z && pxT.y < rT.w ) {',
+  /* the four nearest texels, and the row among them on this fragment's own height, the heaviest if several. Taking the one texel under
+     the fragment read a diagonal outline as a staircase: where its texel fell just off the skin the fragment went plain, a strip with a
+     scalloped edge along a 45-degree side (Joey 2026-11-02, the EdgeLabel label: "why is the labels right side line all wavey?") */
+  '      vec2 gpT = clamp( pxT - 0.5, vec2( 0.0 ), rT.zw - 1.0 );',
+  '      ivec2 oT0 = ivec2( rT.xy ), i0T = ivec2( floor( gpT ) ), i1T = min( i0T + 1, ivec2( rT.zw ) - 1 );',
+  '      vec2 aT = gpT - vec2( i0T );',
+  '      vec4 t00 = texelFetch( uSMAtlas, oT0 + i0T, 0 ), t10 = texelFetch( uSMAtlas, oT0 + ivec2( i1T.x, i0T.y ), 0 );',
+  '      vec4 t01 = texelFetch( uSMAtlas, oT0 + ivec2( i0T.x, i1T.y ), 0 ), t11 = texelFetch( uSMAtlas, oT0 + i1T, 0 );',
+  '      int firstT = int( texelFetch( uSMTable, ivec2( 9, idT ), 0 ).x + 0.5 );',
+  '      vec4 wAllT = vec4( ( 1.0 - aT.x ) * ( 1.0 - aT.y ), aT.x * ( 1.0 - aT.y ), ( 1.0 - aT.x ) * aT.y, aT.x * aT.y );',
+  '      ivec4 rowsT = ivec4( smRow( t00 ), smRow( t10 ), smRow( t01 ), smRow( t11 ) );',
+  '      vec4 zsT = vec4( smHeight( firstT, rowsT.x ), smHeight( firstT, rowsT.y ), smHeight( firstT, rowsT.z ), smHeight( firstT, rowsT.w ) );',
+  '      float hT = dot( vObjPos, axSM );',
+  '      int rowT = 0; float bestT = -1.0;',
+  '      if ( rowsT.x > 0 && abs( zsT.x - hT ) < uSMZHi && wAllT.x > bestT ) { rowT = rowsT.x; bestT = wAllT.x; }',
+  '      if ( rowsT.y > 0 && abs( zsT.y - hT ) < uSMZHi && wAllT.y > bestT ) { rowT = rowsT.y; bestT = wAllT.y; }',
+  '      if ( rowsT.z > 0 && abs( zsT.z - hT ) < uSMZHi && wAllT.z > bestT ) { rowT = rowsT.z; bestT = wAllT.z; }',
+  '      if ( rowsT.w > 0 && abs( zsT.w - hT ) < uSMZHi && wAllT.w > bestT ) { rowT = rowsT.w; bestT = wAllT.w; }',
+  '      if ( rowT > 0 ) {',
+  '        int iT = firstT + rowT - 1;',
+  `        ivec2 cellT = ivec2( ${SKIN_MAP.surfaceCols} * ( iT % ${SKIN_MAP.surfacesPerRow} ), iT / ${SKIN_MAP.surfacesPerRow} );`,   // the table is rows of surfaces, so it can never outgrow a texture
+  '        vec4 sT = texelFetch( uSMSurf, cellT, 0 );',                     // n.x, n.y, spacing, phase
+  '        vec4 zT = texelFetch( uSMSurf, cellT + ivec2( 1, 0 ), 0 );',     // the height, the ring width
+  '        vec4 bT = texelFetch( uSMSurf, cellT + ivec2( 2, 0 ), 0 );',     // perimeter band distances (0 = none)
+  '        float wZT = 1.0 - smoothstep( uSMZLo, uSMZHi, abs( hT - zT.x ) );',
+  '        if ( wZT > 0.0 ) {',
+  '          drewT = 1.0;',
+  '          vec2 slT = vec2( 0.0 );',
+  '          if ( fqT < 0.5 * max( sT.z, zT.y ) ) {',
+  /* the distance read between those four texels by hand: R,G from a texel on this height, B (its distance to the outline above it) from
+     one on a lower height or none, and a texel on a higher height not at all. R,G on another height is the distance to ANOTHER outline, and
+     a filtered read would draw a band along every step in the part (Sol 01a19ce6); leaving a lower texel out made a sawtooth of a
+     diagonal outline, where a texel in four fell just off the skin */
+  '            vec4 eqT = vec4( step( abs( zsT.x - zT.x ), 0.01 ), step( abs( zsT.y - zT.x ), 0.01 ), step( abs( zsT.z - zT.x ), 0.01 ), step( abs( zsT.w - zT.x ), 0.01 ) );',
+  '            vec4 loT = ( 1.0 - eqT ) * vec4( step( zsT.x, zT.x ), step( zsT.y, zT.x ), step( zsT.z, zT.x ), step( zsT.w, zT.x ) );',
+  '            vec4 mT = eqT + loT;',
+  '            vec4 wT = mT * wAllT;',
+  `            vec4 vT = eqT * ( vec4( t00.r, t10.r, t01.r, t11.r ) * 65280.0 + vec4( t00.g, t10.g, t01.g, t11.g ) * 255.0 ) * fT.w + loT * vec4( t00.b, t10.b, t01.b, t11.b ) * ${(255 * SKIN_MAP.topAboveStepMm).toFixed(4)} - mT;`,   // mm
+  '            float dT = dot( wT, vT ) / max( wT.x + wT.y + wT.z + wT.w, 1e-5 );',
+  '            float lastT = max( max( bT.x, bT.y ), max( bT.z, bT.w ) );',
+  '            if ( dT > 0.0 && lastT > 0.0 && dT < lastT + 0.5 * zT.y ) {',
+  /* a perimeter: the nearest band's bead, across the outline */
+  '              float bnT = bT.x;',
+  '              if ( bT.y > 0.0 && abs( dT - bT.y ) < abs( dT - bnT ) ) bnT = bT.y;',
+  '              if ( bT.z > 0.0 && abs( dT - bT.z ) < abs( dT - bnT ) ) bnT = bT.z;',
+  '              if ( bT.w > 0.0 && abs( dT - bT.w ) < abs( dT - bnT ) ) bnT = bT.w;',
+  /* the outline's direction: each axis's difference across the cell, from the pairs along that axis with both texels counted, weighted as a bilinear read
+     would; two texels alone on a diagonal give that diagonal. A side averaged from the texels it has reads them at different places, and where a higher skin
+     took one corner of a cell that bent the direction by a median of 21 to 28 degrees on real fields, 3 to 6 this way (Sol 01a19d3a) */
+  '              float pA_T = mT.x * mT.y * ( 1.001 - aT.y ), pB_T = mT.z * mT.w * ( aT.y + 0.001 ), pC_T = mT.x * mT.z * ( 1.001 - aT.x ), pD_T = mT.y * mT.w * ( aT.x + 0.001 );',   // never 0 for a pair there, right at a cell's edge
+  '              vec2 gT = vec2( pA_T + pB_T > 1e-4 ? ( pA_T * ( vT.y - vT.x ) + pB_T * ( vT.w - vT.z ) ) / ( pA_T + pB_T ) : 0.0, pC_T + pD_T > 1e-4 ? ( pC_T * ( vT.z - vT.x ) + pD_T * ( vT.w - vT.y ) ) / ( pC_T + pD_T ) : 0.0 );',
+  '              if ( pA_T + pB_T + pC_T + pD_T <= 1e-4 ) gT = mT.x * mT.w > 0.5 ? vec2( vT.w - vT.x ) : mT.y * mT.z > 0.5 ? ( vT.z - vT.y ) * vec2( -1.0, 1.0 ) : gT;',
+  '              float upT = clamp( ( dT - bnT ) / zT.y, -0.5, 0.5 );',
+  '              float lgT = length( gT );',
+  '              if ( lgT > 1e-6 ) slT = ( SM_TOP_CROWN * PI * sin( 6.2831853 * upT ) / zT.y ) * ( gT / lgT ) * ( 1.0 - smoothstep( 0.25, 0.5, fqT / zT.y ) );',
+  '            } else if ( sT.z > 0.0 ) {',
+  /* the infill: h = crown / 2 cos( 2 pi u ), u = ( n . q - phase ) / spacing; the slope is -grad h */
+  '              float uT = ( dot( qSM, sT.xy ) - sT.w ) / sT.z;',
+  '              slT = ( SM_TOP_CROWN * PI * sin( 6.2831853 * uT ) / sT.z ) * sT.xy * ( 1.0 - smoothstep( 0.25, 0.5, fqT / sT.z ) );',
+  '            }',
+  '          }',
+  '          normal = normalize( normal + ( normalize( vPCT1 ) * slT.x + normalize( vPCT2 ) * slT.y ) * gBFTop * wZT );',
+  '        }',
+  '      }',
+  '    }',
+  '  }',
+].join('\n').replace(/SM_TOP_CROWN/g, SKIN_MAP.topCrownMm.toFixed(4));
+
 const FRAG_MAIN = [
   'if ( uSMOn > 0.5 && uSMTier > 0.5 ) {',
   /* the frame and its screen-space derivatives in the UNIFORM branch, so textureGrad below is defined on every pixel of
@@ -181,7 +279,8 @@ const FRAG_MAIN = [
   '  vec3 t2SM = cross( axSM, t1SM );',
   '  vec2 qSM = vec2( dot( pSM, t1SM ), dot( pSM, t2SM ) );',
   '  vec2 dqxSM = dFdx( qSM ), dqySM = dFdy( qSM );',
-  '  if ( vSkinId > 0.5 && gBFTop > 0.0 ) {',
+  TOP_BLOCK,
+  '  if ( vSkinId > 0.5 && gBFTop > 0.0 && drewT < 0.5 ) {',
   '    int idSM = int( vSkinId + 0.5 ) - 1;',
   '    vec4 rSM = texelFetch( uSMTable, ivec2( 0, idSM ), 0 );',    // the atlas rectangle: x, y, w, h in px
   '    vec4 fSM = texelFetch( uSMTable, ivec2( 1, idSM ), 0 );',    // the frame: q0.x, q0.y, atlas px per mm
@@ -240,10 +339,10 @@ export function applySkinMap(material, { uniforms }) {
 /* ---- the atlas ------------------------------------------------------------------------------ */
 
 /**
- * A map the build's front shows: a faceplate printed back face down, so that its last layer is the face you look at. (A
+ * A map the build's front shows: a faceplate or a label printed back face down, so that its last layer is the face you look at. (A
  * face-down faceplate's front is its first layer, drawn from numbers at any scale; its top map faces the drawer.)
  */
-export const showsFront = (node, axis) => /^Faceplate_/.test(node) && !!axis && axis[2] > 0.5;
+export const showsFront = (node, axis) => /^(Faceplate|Label)_/.test(node) && !!axis && axis[2] > 0.5;
 
 /**
  * Shelf-pack maps into a square atlas. items: [{ id, w, h, front }] in map px. Returns { size, scale, frontScale, rects:
@@ -332,6 +431,44 @@ export function firstRows(rect, first, scale) {
   const b = [...(first.bands || []), 0, 0, 0, 0].slice(0, 4);
   return [[rect.x, rect.y, rect.w, rect.h], [first.q0[0], first.q0[1], first.pxPerMm * scale, first.sdfStepMm],
     [first.n[0], first.n[1], first.spacing, first.phase], b, [first.ringWidth, SKIN_MAP.firstCrownMm, first.islands > 0 ? 1 : 0, 0]];
+}
+
+/**
+ * The top field's three texels (columns 7-9) for a slot, from its index entry `top` (tools/skin-map.mjs vector-top): [rect],
+ * [q0.x, q0.y, atlas px per mm, mm per level of the 16-bit distance], [the node's first row in the surface table]. All zero when the node has no field.
+ */
+export function topRows(rect, top, scale, firstRow) {
+  if (!rect || !top) return [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+  return [[rect.x, rect.y, rect.w, rect.h], [top.q0[0], top.q0[1], top.pxPerMm * scale, SKIN_MAP.topStepMm], [firstRow, 0, 0, 0]];
+}
+
+/**
+ * A top field resampled to dw x dh: the 16-bit distance read between the source's texels at each new texel's centre, among those on the
+ * nearest one's row (a distance interpolates, a picture would blur; two rows' distances do not mix), B and A from the nearest texel.
+ */
+export function resampleField(src, w, h, dw, dh) {
+  if (dw === w && dh === h) return src;
+  const out = new Uint8Array(dw * dh * 4);
+  for (let j = 0; j < dh; j++) {
+    const sy = (j + 0.5) * h / dh - 0.5, y0 = Math.max(0, Math.min(h - 1, Math.floor(sy))), y1 = Math.min(h - 1, y0 + 1), fy = Math.max(0, Math.min(1, sy - y0));
+    for (let i = 0; i < dw; i++) {
+      const sx = (i + 0.5) * w / dw - 0.5, x0 = Math.max(0, Math.min(w - 1, Math.floor(sx))), x1 = Math.min(w - 1, x0 + 1), fx = Math.max(0, Math.min(1, sx - x0));
+      const near = ((fy < 0.5 ? y0 : y1) * w + (fx < 0.5 ? x0 : x1)) * 4, row = src[near + 3];
+      let sum = 0, wt = 0;
+      for (const [x, y, k] of [[x0, y0, (1 - fx) * (1 - fy)], [x1, y0, fx * (1 - fy)], [x0, y1, (1 - fx) * fy], [x1, y1, fx * fy]]) {
+        const t = (y * w + x) * 4;
+        if (src[t + 3] === row) { sum += k * (src[t] * 256 + src[t + 1]); wt += k; }
+      }
+      const enc = wt > 0 ? Math.round(sum / wt) : src[near] * 256 + src[near + 1], d = (j * dw + i) * 4;
+      out[d] = enc >> 8; out[d + 1] = enc & 255; out[d + 2] = src[near + 2]; out[d + 3] = row;
+    }
+  }
+  return out;
+}
+
+/** One surface's three texels in the surface table, from a row of `top.rows`: [n.x, n.y, spacing, phase], [height, ring width], [bands]. */
+export function surfaceRows(row) {
+  return [[row[0], row[1], row[2], row[3]], [row[4], row[5], 0, 0], [row[6], row[7], row[8], row[9]]];
 }
 
 /* ---- PNG, 8-bit, non-interlaced: the one shape the bake writes ------------------------------
