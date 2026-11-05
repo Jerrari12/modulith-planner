@@ -6934,3 +6934,39 @@ Joey: "is there a way to make purchasing the affiliate filament more noticeable,
 **Counted** (GoatCounter counts each event path once per visitor per 8-hour session): `seen:filament:<line>` once a page when a line's Buy is at least 60 % in view (the callback checks the ratio itself: an observer also reports a node merely coming into view, Sol `01a1a995`, and its first look at a node, whatever the ratio), `offer:polymaker:shown` for the card or the pill, `offer:polymaker:jump` for the pill's tap, `offer:polymaker:close` and `offer:polymaker:click`, beside the `buy:filament:<line>` click it always sent. `seen:` rather than `buy:...:shown`, so a `buy:` filter stays clicks only.
 
 **Tests.** Every e2e context starts with the offer closed (`prepareBrowser`, unless `polyOffer: true`). Three new cases: the desktop card, nothing moved, close, memory across a reload; a keyboard-followed Buy retiring it with the focus kept, a second tab, storage that throws; the phone pill, its tap, a collapsed sheet, 780 x 260. Twelve of 13 mutants killed; the one that removes the 60 % ratio check survives, its step taken out because Chromium could not stage that case on demand (no callback for a node scrolled to a sliver; a pick re-scrolls the sheet). Review: Sol `01a1a995`, two findings fixed (the 60 % ratio; focus after a keyboard Enter), then no objection.
+
+## 2026-11-04 · The offer leads with supporting MODULITH, and on a desktop it ends the swatch list
+
+Joey, asked whether the offer would feel scummy: "I want the user to know about the deal but first feel like they would be helping the project first and foremost". He took this wording ("I like this approach, yeah let's send it with the support first wording"): the title "Buying this filament supports MODULITH", the body "Polymaker pays me a small commission when you buy through this link, and it helps me keep making free MODULITH files. As a thank-you, your first Polymaker order is 15% off.", the button "Buy Polymaker <filament> →". "Free MODULITH files" is the site's own claim: its About page says "The core system is free: cases, drawers, covers, rails, hardware and several faceplate styles", and the Club's faceplates fund the work.
+
+**Copy** (`js/workspaces/colors.js` OFFER_COPY, polyBuyText). The no-pressure line under the card's Buy reads "You don't need Polymaker to print MODULITH. Buying through this link just helps." It does not say "any brand works", which Sol `01a1aa04` called a compatibility claim nobody measured, and it does not say "any PLA": the feet print in TPU and a heavy-duty case in PETG. Every Polymaker Buy names the shop's product, in the card or not ("Buy Polymaker PLA Black →", "Buy Polymaker PETG Black →", "Buy Polymaker Galaxy Dark Blue →"), so closing the card never relabels a button. With nothing picked, the Buy reads "Shop Polymaker filament →". The pill reads "Supports MODULITH"; "Supports MODULITH · 15% off" was 177 px wide and squeezed the S23 sheet's title to 25 px, and to 5 px on its side.
+
+**Where the card goes.** At the picker's 287 px width the support-first card is 200 px tall; the first card was about 100 px, with 140 px held for it. Measured on the branch, a 200 px card in the fixed foot left the swatch list 47 px at 1280 x 800 and 15 px at 1366 x 768, with no swatch visible. Holding that space from the opening, as the first card's room was held, would have left 15 px for everyone, whatever they picked. Consulted (Sol `01a1aa04`), the desktop layout is now:
+- The card is the swatch list's last child, with a Buy of its own.
+- The fixed foot keeps the plain Buy and its commission line, because a Buy the card can scroll away from needs its own line.
+- A "Supports MODULITH" pill in the panel's head scrolls the card's title to the top of the list.
+
+The list keeps its height: at 1366 x 768 it goes from 158 px to 142 px, because the Polymaker line is one line longer than Amazon's sentence. The reserved room (`.room`) is gone. On a phone nothing moved: the card wraps the foot's Buy at the end of the sheet, its body stands in for the line under the Buy, and the line comes back when the card goes.
+
+**Disclosure.** The card's body is the commission sentence, next to the card's Buy. On a desktop the foot's Buy keeps its own line too, so with the card in view the picker says "commission" twice, once for each Buy. That breaks the literal "once per surface" rule (2026-10-27); it is put to Joey as an exception (Sol `01a1aa10`: proximity justifies it, the rule's owner decides). On a phone it says it once. No Buy is ever without its line.
+
+**Nothing slides** (Sol `01a1aa10`). A card that goes leaves its room behind until the picker is next built, so a list or a sheet scrolled to its end does not move under the next tap:
+- On a desktop, an empty `.ogone` block keeps the list's end, with the card's margins. At first it was an empty flex item, which shrank to 0 and let the scroll slide 209 px.
+- On a phone, the foot keeps its min-height and its layout (`.held`). Without the layout, the Reset rose to the Buy's row, roughly where the card's × had been, and the sheet slid 127 px.
+
+The first `.held` rule nested `:has()` inside `:is()`, Chrome ignored the whole rule, and the e2e failed. It is now a plain selector list.
+
+**Focus.** The pill puts the focus on the card's Buy only when that Buy is in view with the title at the top of the list. A list too short for it takes the focus to the card itself: at 1366 x 768 the list is 142 px and the Buy ends 152 px below the card's top.
+
+**Tests.** The three offer cases were rewritten for this layout:
+- **Desktop:** the card is the list's last child, including after a search refills the list. The foot keeps its Buy and line, and "commission" appears twice while the card shows and once after ×. The pill is in the head, and nothing under the head moves. The pill brings the card's title to the top of the list and focuses its Buy. A × at the list's very end keeps the scroll, on a window tall enough for the × to be in view. The close is remembered across a reload.
+- **Click:** following the card's Buy with the keyboard moves the focus to the foot's Buy. A second tab's picker shows no card. On a 680 px window, with the list at 54 px, the pill focuses the card. With storage that throws, following the foot's Buy retires the offer for the page.
+- **Phone:** the pill reads "Supports MODULITH". The card wraps the foot's Buy and the commission is said once. The title keeps at least 60 px upright and on its side. A × at the sheet's end keeps the scroll and keeps the Reset on its own row.
+
+The analytics case takes the new label. All four cases pass at soft rendering and half speed. 20 of 20 mutants were killed.
+
+Twice, a × that was hidden at the scroll's end made Playwright scroll before clicking, and that showed up as an 18 px slide and a 127 px slide. A probe showed the page itself held still. Those steps now run where the × is in view, and the phone step asserts that the × can be hit.
+
+**Review.** Sol `01a1aa04` chose the layout and the pill and dropped the "any brand" line. Sol `01a1aa10` found three defects, all confirmed and fixed: the phone foot's layout, the placeholder's margins, and focus on a clipped Buy. Its follow-up raised no objection.
+
+**Not verified.** Whether the 15% applies by itself at Polymaker's checkout: the link is known to carry `ref=superfiliate-JERRARI`, but no cart was tried. The look on a real phone has not been checked either.
