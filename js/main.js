@@ -12226,9 +12226,16 @@ for (const m of ['toDataURL', 'toBlob']) {
     applyHandleStyle, HANDLE_STYLES,
     COLOR_STORE_KEY,
     trackLog, track,
+    // once per page session (2026-11-04, the new planner's usage events): "did this visit use X" reads as a share of visits
+    // on the dashboard and keeps a busy session from flooding GoatCounter. Shares the viewer's own set, so a name the viewer
+    // already sent once is not sent again
+    trackOnce,
     // the affiliate-click names (buy:hardware:<listing id>, buy:filament:<brand-line>), so the workspaces' buy links report
     // the same rows as the viewer's own
     buyEvent, buyFilamentEvent,
+    // a model-store link's name (out:printables, out:thangs, ...): the viewer's own outTarget, so the Parts list's download
+    // clicks land on the dashboard's MODEL DOWNLOADS rows beside the viewer's
+    outEvent: (href) => 'out:' + outTarget(href),
     // the Very High accumulation state and the live tier, so a screenshot harness (tools/golden-shots.mjs) can
     // wait for a CONVERGED frame (acc.n reaches ACC_SAMPLES) and prove the tier it asked for is the one drawing
     acc, ACC_SAMPLES, get quality() { return quality; },

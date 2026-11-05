@@ -486,6 +486,92 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   await ctx.close();
 });
 
+/* THE NEW PLANNER'S USAGE EVENTS (2026-11-04, Joey: "we want to track a lot of the new things in the new planner"). After the
+   cutover the dashboard's funnel read the old planner's names: BUILDS STARTED counted page loads, INSTRUCTIONS OPENED read 0,
+   and MODEL DOWNLOADS saw only the old viewer's links, because the Parts list's model links sent nothing. Each workspace now
+   reports what a visit did ONCE per visit (stage.trackOnce), and a model link reports out:<store> on EVERY click. The names
+   are literals here: a rename would split the dashboard's rows and their history. */
+test('analytics: the new planner reports workspaces, building, downloads, colours and instructions, once per visit', async () => {
+  const { ctx, page, errors } = await open('build');
+  const log = () => page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice());
+  const count = async (name) => (await log()).filter((n) => n === name).length;
+  const once = async (name, what) => assert.equal(await count(name), 1, `${what}: "${name}" once; the log has ${(await log()).join(', ')}`);
+  await once('ws:build', 'the workspace a visit opens on');
+  // a unit committed by the store (as a restored build arrives) is not a visitor's placement
+  await startBuild(page, [{ id: 1, x: 0, w: 1 }, { id: 2, x: 2, w: 1 }]);
+  assert.equal(await count('build-start'), 0, 'opening a build is not a build started');
+  // two placements through the board, as a visitor places them: one build-start, one fill:<type>
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  await armSize(page, '1W·1H');
+  await view(page, '2D');
+  for (const x of [1, 3]) {   // the gap between the two, then past the right edge
+    await page.waitForSelector(`#ws-board .b-spot[data-x="${x}"][data-y="${y}"]`, { timeout: 30_000 }).catch(() => assert.fail(`no "+" spot at ${x},${y}`));
+    const k = await units(page);
+    await clickSpot(page, x, y);
+    await page.waitForFunction((k) => window.__GEN2_STORE__.state.placed.length === k + 1, k, { timeout: 30_000 }).catch(() => assert.fail(`the "+" at ${x},${y} placed nothing within 30 s`));
+  }
+  await once('build-start', 'two placements');
+  const fills = (await log()).filter((n) => /^fill:/.test(n));
+  assert.equal(fills.length, 1, `one fill:<type> for two units of one type: ${fills.join(', ')}`);
+  await page.keyboard.press('Escape');
+  // Undo, Undo, Redo, Undo (the two placements gone, the gap at x 1 open again): one event each
+  await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 });
+  await page.evaluate(() => window.__GEN2_STORE__.redo());
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 3, null, { timeout: 30_000 });
+  await page.evaluate(() => window.__GEN2_STORE__.undo());
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.placed.length === 2, null, { timeout: 30_000 });
+  await once('undo', 'three Undos'); await once('redo', 'a Redo');
+  // the inspector's Move: unit 2 one column left, into the gap beside unit 1, is a move; Remove is a remove
+  await page.evaluate(() => window.__GEN2_VIEWER__.selectUnit(2));
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.selectedUnit === 2, null, { timeout: 15_000 });
+  const before = await brief(page);
+  await page.locator('#ws-insp button:has-text("◀ Left")').click();
+  await page.waitForFunction((b) => { const s = window.__GEN2_STORE__.state; return s.placed.map((p) => `${p.id}:${p.w}W@${p.x},${p.y}`).sort().join(' ') !== b; }, before.units, { timeout: 30_000 })
+    .catch(() => assert.fail(`◀ Left moved nothing: ${before.units}`));
+  await once('unit:move', 'the Move button');
+  assert.equal(await count('unit:drag'), 0, 'a button is not a drag');
+  await page.locator('#ws-insp button.danger:has-text("Remove")').click();
+  await page.waitForFunction(() => !window.__GEN2_STORE__.state.placed.some((p) => p.id === 2), null, { timeout: 30_000 });
+  await once('unit:remove', 'Remove');
+  // the Parts list: every model-link click is a download; the exports once per visit
+  await page.evaluate(() => { window.__opened = []; document.addEventListener('click', (e) => { const a = e.target.closest('a[target="_blank"]'); if (a) { window.__opened.push(a.href); e.preventDefault(); } }); });
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  await once('ws:parts', 'switching to Parts');
+  const model = page.locator('#ws-parts .prow').filter({ hasNot: page.locator('.badge', { hasText: /^BUY$/ }) }).locator('a.link').first();
+  await model.waitFor({ timeout: 30_000 }).catch(() => assert.fail('no model link in the Parts list'));
+  await model.click(); await model.click();
+  const outs = (await log()).filter((n) => /^out:/.test(n));
+  assert.deepEqual(outs, ['out:printables', 'out:printables'], `two clicks, two downloads, named by the chosen site (Printables by default): ${outs.join(', ')}`);
+  await btn(page, 'Download CSV', '#ws-parts').click(); await btn(page, 'Download CSV', '#ws-parts').click();
+  await once('bom:csv', 'two CSV downloads');
+  await btn(page, 'Track my build', '#ws-parts').click();
+  await once('bom-track:on', 'Track my build');
+  // Colors: a hand pick, and the gallery
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('colors'));
+  await page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Case$/ }) }).first().click();
+  await page.locator('#ws-picker .sw[aria-label="Elegoo PLA Black"]').first().click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.trackLog.includes('color:pick'), null, { timeout: 15_000 }).catch(() => assert.fail('a swatch pick sent no color:pick'));
+  await page.locator('#ws-picker button[aria-label="Close the picker"]').click();
+  await page.locator('#ws-colors button.browse').first().click();
+  await once('ws:colors', 'switching to Colors'); await once('color:pick', 'a swatch'); await once('looks:open', 'Browse looks');
+  // back to Build and Parts again: still once each
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await once('ws:build', 'a second visit to Build'); await once('ws:parts', 'a second visit to Parts');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+  // INSTRUCTIONS OPENED: a build with instructions reaching the player, by mount and length (the root kit: Tabletop, 185)
+  const a = await open('assemble');
+  await a.page.waitForFunction(() => window.__GEN2_VIEWER__.trackLog.some((n) => /^3d-instructions:/.test(n)), null, { timeout: 30_000 })
+    .catch(async () => assert.fail(`no 3d-instructions event; the log has ${(await a.page.evaluate(() => window.__GEN2_VIEWER__.trackLog.slice())).join(', ')}`));
+  const opened = await a.page.evaluate(() => window.__GEN2_VIEWER__.trackLog.filter((n) => /^(3d-instructions:|ws:)/.test(n)));
+  assert.deepEqual(opened, ['ws:assemble', '3d-instructions:tabletop-185'], `the Assemble boot: ${opened.join(', ')}`);
+  assert.deepEqual(clean(a.errors), []);
+  await a.ctx.close();
+});
+
 /* THE BOARD REDESIGN (Joey + Astra, 2026-10-16): the 2D board hugs the build and shows the 3D view's "+" spots (one
    calculation for both); past either edge widens the build within the mount's cap; a drag may go past the build; the
    inspector's Move buttons are the alternative to dragging; an empty build has one starting spot. */

@@ -277,8 +277,9 @@ export function mountColors(stage, ctx) {
   function pick(key, f) {
     if (f && ++st.picks === SHOWCASE_HINT_AFTER) showcaseHint();
     const fil = f ? { name: f.label || f.name, hex: f.hex, url: f.url } : null;
-    if (st.scope === 'unit' && unitOfSel() != null) commitColors('color-unit', () => stage.setOverride(unitOfSel(), key, fil));
-    else commitColors('color', () => stage.setColor(key, fil));
+    // a hand pick, the tab's main job: once per visit, a single unit's own colour apart (2026-11-04)
+    if (st.scope === 'unit' && unitOfSel() != null) { stage.trackOnce('color:pick:unit'); commitColors('color-unit', () => stage.setOverride(unitOfSel(), key, fil)); }
+    else { stage.trackOnce('color:pick'); commitColors('color', () => stage.setColor(key, fil)); }
   }
 
   /* ---------------- the looks: the presets, ★ My palette, the saved schemes ---------------- */
@@ -291,7 +292,7 @@ export function mountColors(stage, ctx) {
     for (const preset of stage.PRESETS) out.push({ id: 'preset:' + preset.name, kind: 'preset', name: preset.name, colors: preset.colors, over: {}, swatches: preset.swatches, apply: () => commitColors('preset', () => stage.applyPreset(preset)) });
     if (Object.keys(p.user || {}).length) out.push({ id: 'mine', kind: 'mine', name: '★ My palette', colors: p.user, over: {}, apply: () => commitColors('scheme', () => stage.restoreUserPalette()) });
     // deleted by NAME, read fresh: another tab may have saved a look since this list was built (Sol 01a14f91; names are unique, Save dedupes)
-    for (const s of readSchemes()) out.push({ id: 'scheme:' + s.name, kind: 'scheme', name: s.name, colors: s.colors, over: s.over || {}, apply: () => commitColors('scheme', () => stage.setPalette({ colors: s.colors, over: s.over || {}, on: true })), del: () => writeSchemes(readSchemes().filter((x) => x.name !== s.name)) });
+    for (const s of readSchemes()) out.push({ id: 'scheme:' + s.name, kind: 'scheme', name: s.name, colors: s.colors, over: s.over || {}, apply: () => { stage.trackOnce('look:apply'); commitColors('scheme', () => stage.setPalette({ colors: s.colors, over: s.over || {}, on: true })); }, del: () => writeSchemes(readSchemes().filter((x) => x.name !== s.name)) });
     return out;
   }
   const asLook = (l) => ({ colors: l.colors, over: l.over || {} });
@@ -360,7 +361,7 @@ export function mountColors(stage, ctx) {
     if (st.saving) {
       const input = el('input', { type: 'text', placeholder: 'Name this look', maxlength: '40', 'aria-label': 'Look name' });
       // a saved look keeps the per-unit colours too (decision D5); Download and Share stay colours only, for the Studio
-      const save = () => { const name2 = input.value.trim(); if (!name2) return; const l = readSchemes().filter((s) => s.name !== name2); const q = pal(); l.unshift({ name: name2, colors: structuredClone(q.colors), over: structuredClone(q.over || {}), t: Date.now() }); writeSchemes(l.slice(0, 20)); st.saving = false; lastLook = name2; say(`Saved “${name2}”.`); renderAll(); };
+      const save = () => { const name2 = input.value.trim(); if (!name2) return; const l = readSchemes().filter((s) => s.name !== name2); const q = pal(); l.unshift({ name: name2, colors: structuredClone(q.colors), over: structuredClone(q.over || {}), t: Date.now() }); writeSchemes(l.slice(0, 20)); st.saving = false; lastLook = name2; stage.trackOnce('look:save'); say(`Saved “${name2}”.`); renderAll(); };
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { st.saving = false; renderPanel(); } });
       look.appendChild(el('div.saverow', {}, [input, el('button.key.sm.strong', { text: 'Save', onclick: save }), el('button.key.sm', { text: 'Cancel', onclick: () => { st.saving = false; renderPanel(); } })]));
       setTimeout(() => input.focus(), 0);
@@ -432,6 +433,7 @@ export function mountColors(stage, ctx) {
     ].filter(Boolean));
   }
   function downloadScheme() {
+    stage.trackOnce('colors:download');
     const p = pal(); const data = { gen2Colors: 1, colors: p.colors, user: p.user };
     const a = el('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'modulith-colors.json' }); document.body.appendChild(a); a.click(); a.remove();
   }
@@ -447,12 +449,14 @@ export function mountColors(stage, ctx) {
         if (!Object.keys(clean).length) { say('That file holds no colours this app understands.'); return; }
         lastLook = f.name.replace(/\.json$/i, '');
         commitColors('scheme', () => stage.setPalette({ colors: clean, on: true }));
+        stage.trackOnce('colors:upload');
         say(`Applied ${n(Object.keys(clean).length, 'colour')} from ${f.name}.`);
       } catch { say('That file is not a colour scheme.'); }
     });
     input.click();
   }
   async function shareScheme() {
+    stage.trackOnce('colors:share');
     const p = pal();
     const q = new URLSearchParams(location.search); q.set('ws', 'colors');
     const url = `${location.origin}${location.pathname}?${q}${location.hash}${location.hash ? '&' : '#'}scheme=${btoa(unescape(encodeURIComponent(JSON.stringify(p.colors))))}`;
@@ -463,7 +467,7 @@ export function mountColors(stage, ctx) {
   const gallery = el('aside.glass', { id: 'ws-gallery', role: 'dialog', 'aria-label': 'Looks', hidden: true });
   root.appendChild(gallery);
   // the gallery and the tray never show together (Astra: contextual panels do not pile up over the model); the tray's looks keep
-  function openGallery(tab) { st.gallery = tab || 'featured'; st.detail = null; st.tray = false; st.flip = null; st.surprise = false; st.sshow = null; st.simp = false; stage.endPreview?.(); renderAll(); if (phone) phone.open(gallery); else gallery.querySelector('.gq')?.focus(); }
+  function openGallery(tab) { stage.trackOnce('looks:open'); st.gallery = tab || 'featured'; st.detail = null; st.tray = false; st.flip = null; st.surprise = false; st.sshow = null; st.simp = false; stage.endPreview?.(); renderAll(); if (phone) phone.open(gallery); else gallery.querySelector('.gq')?.focus(); }
   function closeGallery() { st.gallery = false; st.detail = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(gallery); phone.open(panel); } }   // the phone comes back to the Colors sheet
 
   /* ---------------- the compare tray (step 4): two or three finalists, flipped on a still model ---------------- */
@@ -482,7 +486,7 @@ export function mountColors(stage, ctx) {
     trayLooks.splice(i, 1);
     if (st.flip === i) { st.flip = null; stage.endPreview?.(); } else if (st.flip != null && st.flip > i) st.flip--;
   }
-  function openTray() { st.gallery = false; st.detail = null; st.surprise = false; st.sshow = null; st.simp = false; st.tray = true; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(tray); }
+  function openTray() { stage.trackOnce('compare:open'); st.gallery = false; st.detail = null; st.surprise = false; st.sshow = null; st.simp = false; st.tray = true; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) phone.open(tray); }
   function closeTray() { st.tray = false; st.flip = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(tray); phone.open(panel); } }   // the phone comes back to the Colors sheet
   /* a flip SHOWS a finalist (previewPalette: never saved, never in the history) and touches nothing else: no renderAll, so
      the safe area is never set and the camera stays where the visitor left it (the plan: "the camera held still") */
@@ -626,7 +630,7 @@ export function mountColors(stage, ctx) {
   root.appendChild(sur);
   const owned = () => readOwned(storage(), LABELS);
   // the panel takes the gallery's spot and closes it and the tray (contextual panels do not pile up over the model)
-  function openSurprise() { st.gallery = false; st.detail = null; st.tray = false; st.flip = null; st.simp = false; st.surprise = true; st.owning = false; st.sshow = null; stage.endPreview?.(); if (!sp.cands.length || !ownedHolds()) roll(); renderAll(); if (phone) phone.open(sur); }
+  function openSurprise() { stage.trackOnce('surprise-me:open'); st.gallery = false; st.detail = null; st.tray = false; st.flip = null; st.simp = false; st.surprise = true; st.owning = false; st.sshow = null; stage.endPreview?.(); if (!sp.cands.length || !ownedHolds()) roll(); renderAll(); if (phone) phone.open(sur); }
   function closeSurprise() { if (st.owning) leaveOwned(); st.surprise = false; st.owning = false; st.sshow = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(sur); phone.open(panel); } }   // the phone comes back to the Colors sheet
   /* "only filaments I own" against the candidates and the list as they stand: false when the list has shrunk under them (a
      filament unticked, the list cleared), so the candidates are rolled again rather than kept to be Kept (Sol 01a150df) */
@@ -639,7 +643,7 @@ export function mountColors(stage, ctx) {
   /* every way out of the owned editor (its Back, Escape, the close button) goes through here: the switch drops when the list
      is under two, and the candidates are rolled again when the list changed under the switch */
   function leaveOwned() { st.owning = false; if (sp.ownedOnly && owned().length < 2) sp.ownedOnly = false; if (sp.ownedOnly && owned().join('|') !== st.ownedWas) roll(); }
-  function enterOwned() { st.owning = true; st.ownedWas = owned().join('|'); renderSurprise(); if (phone) phone.refresh(); }
+  function enterOwned() { stage.trackOnce('filaments:owned'); st.owning = true; st.ownedWas = owned().join('|'); renderSurprise(); if (phone) phone.refresh(); }
   /* a roll: the three interpretations of the style for the settings, a new seed each time; "More like this" keeps a
      candidate's accent colour and interpretation on other shells. A roll never touches the safe area (no renderAll), so the
      camera stays (the plan: a look is judged on a still model) */
@@ -659,7 +663,7 @@ export function mountColors(stage, ctx) {
   }
   /* Use this look: the look on the build as a scheme of its own (one undo step; commitColors flushes around it); the panel
      stays and the card reads ACTIVE, so the next one can be compared against it */
-  const keepLook = (c) => commitColors('scheme', () => stage.setPalette({ colors: c.colors, over: {}, on: true }));
+  const keepLook = (c) => { stage.trackOnce('surprise-me:keep'); commitColors('scheme', () => stage.setPalette({ colors: c.colors, over: {}, on: true })); };
   function keep(c) { st.sshow = null; applyLook({ name: c.name, apply: () => keepLook(c) }); renderAll(); }
   /* Details: the gallery's look details for a candidate (the filament list with buy links, the notes); its Back comes back here */
   function candDetail(c) { st.detail = { id: c.id, kind: 'surprise', name: c.name, colors: c.colors, over: {}, apply: () => keepLook(c) }; st.gallery = 'featured'; st.surprise = false; st.sshow = null; stage.previewPalette(asLook(c)); renderAll(); if (phone) { phone.collapse(sur); phone.open(gallery); } gallery.querySelector('.back')?.focus(); }
@@ -677,7 +681,7 @@ export function mountColors(stage, ctx) {
       el('div.srow', {}, [el('span.lbl', { text: 'Use up to' }), el('div.track.seg3.cap', { role: 'group', 'aria-label': 'Filaments at most' }, CAPS.map((c) => el('button.seg.sm' + (sp.cap === c ? '.on' : ''), { text: `${c} filaments`, title: `At most ${c} filaments, printed · you know your printer's colours`, 'aria-pressed': String(sp.cap === c), onclick: () => { if (sp.cap !== c) { sp.cap = c; reroll(); } } })))]),
       el('div.srow.ownedrow', {}, [
         el('label.chk', { title: list.length < 2 ? 'Tick two or more filaments you own first' : 'Only the filaments on your list' }, [
-          el('input.ownedonly', { type: 'checkbox', checked: sp.ownedOnly && list.length >= 2 ? true : null, disabled: list.length < 2, onchange: (e) => { sp.ownedOnly = e.target.checked; reroll(); } }),
+          el('input.ownedonly', { type: 'checkbox', checked: sp.ownedOnly && list.length >= 2 ? true : null, disabled: list.length < 2, onchange: (e) => { sp.ownedOnly = e.target.checked; if (sp.ownedOnly) stage.trackOnce('filaments:owned-only'); reroll(); } }),
           el('span', { text: 'Only filaments I own' }), el('span.cnt', { text: ` (${list.length})` }),
         ]),
         el('button.key.sm.edit', { title: 'Tick the filaments you have', onclick: enterOwned }, [icon('pencil-simple', { size: 14 }), 'Edit']),
@@ -751,7 +755,7 @@ export function mountColors(stage, ctx) {
   const simp = el('div.glass', { id: 'ws-simplify', role: 'dialog', 'aria-label': 'Simplify', hidden: true });
   root.appendChild(simp);
   // the panel takes the tray's spot and closes the gallery, the tray and Find your next look (panels do not pile up)
-  function openSimplify() { st.gallery = false; st.detail = null; st.tray = false; st.flip = null; st.surprise = false; st.sshow = null; st.simp = true; st.simpTarget = Math.max(2, stage.filamentsInBuild().count - 1); stage.endPreview?.(); renderAll(); if (phone) phone.open(simp); }
+  function openSimplify() { stage.trackOnce('simplify:open'); st.gallery = false; st.detail = null; st.tray = false; st.flip = null; st.surprise = false; st.sshow = null; st.simp = true; st.simpTarget = Math.max(2, stage.filamentsInBuild().count - 1); stage.endPreview?.(); renderAll(); if (phone) phone.open(simp); }
   function closeSimplify() { st.simp = false; st.simpTarget = null; stage.endPreview?.(); renderAll(); if (phone) { phone.collapse(simp); phone.open(panel); } }   // the phone comes back to the Colors sheet
   const proposal = () => { const p = pal(); return simplify({ colors: p.colors, over: p.over || {}, keys: stage.keysInBuild(), target: st.simpTarget }); };
   /* the regions a change touches, in the summary's words ("Handles, small parts") */
@@ -778,7 +782,7 @@ export function mountColors(stage, ctx) {
       // what fewer filaments reduces, exactly: spools to own and load, not necessarily colour changes in a print (Astra, 2026-10-19)
       el('p.note.outcome', { text: r.short ? `${r.reason} This look stops at ${n(r.count, 'filament')}.` : r.changes.length ? `${n(after, 'filament')} after this, as the model shows it now. Nothing else changes. Fewer filaments means fewer spools to own and load; colour changes within one print depend on which parts print together.` : 'Nothing to change.' }),
       el('div.tacts', {}, [
-        el('button.key.sm.strong.apply', { text: r.changes.length ? `Apply · ${n(after, 'filament')}` : 'Apply', disabled: !r.changes.length, title: 'Make these changes · one undo step', onclick: () => { const q = proposal(); if (!q.changes.length) return; const was = lookName(pal()).replace(/ · edited$/, ''); if (!/^(Custom look|Instruction colors)$/.test(was)) lastLook = was; st.simp = false; st.simpTarget = null; commitColors('scheme', () => stage.setPalette({ colors: q.colors, over: q.over, on: true })); say(`Simplified to ${n(stage.filamentsInBuild().count, 'filament')}.`); renderAll(); if (phone) { phone.collapse(simp); phone.open(panel); } } }),   // the panel then reads "<the look> · edited" (decision D4)
+        el('button.key.sm.strong.apply', { text: r.changes.length ? `Apply · ${n(after, 'filament')}` : 'Apply', disabled: !r.changes.length, title: 'Make these changes · one undo step', onclick: () => { const q = proposal(); if (!q.changes.length) return; stage.trackOnce('simplify:apply'); const was = lookName(pal()).replace(/ · edited$/, ''); if (!/^(Custom look|Instruction colors)$/.test(was)) lastLook = was; st.simp = false; st.simpTarget = null; commitColors('scheme', () => stage.setPalette({ colors: q.colors, over: q.over, on: true })); say(`Simplified to ${n(stage.filamentsInBuild().count, 'filament')}.`); renderAll(); if (phone) { phone.collapse(simp); phone.open(panel); } } }),   // the panel then reads "<the look> · edited" (decision D4)
         el('button.key.sm.cancel', { text: 'Cancel', title: 'Keep the look as it is', onclick: closeSimplify }),
       ]),
     );

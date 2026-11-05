@@ -159,6 +159,20 @@ export async function boot() {
   /* the label palette (2026-10-28, docs/redesign/LABEL-PALETTE.md): the stage keeps its own copy, handed over on EVERY store
      change - an edit, an undo or a redo, a load - and only repainted (setLabelPalette compares first) */
   store.subscribe((state) => stage.setLabelPalette?.(state.labelPalette));
+  /* USAGE EVENTS FROM THE STORE (2026-11-04, Joey: "we want to track a lot of the new things in the new planner"): what the
+     store already names, once per visit. Undo and Redo come from the keyboard, the top bar and the panels alike, so they are
+     read here rather than at each button. The size milestones answer "how big do builds get": counted on the edits that ADD
+     units only, so opening a saved 30-unit build says nothing until the visitor builds on it */
+  const SIZE_MARKS = [5, 10, 20, 40];
+  let unitsWere = store.state.placed.length;
+  store.subscribe((state, why) => {
+    const k = state.placed.length, grew = k > unitsWere;
+    unitsWere = k;   // every change moves the baseline, a load and an Undo included
+    if (why === 'undo' || why === 'redo') { stage.trackOnce(why); return; }
+    if (!grew || (why !== 'add' && why !== 'duplicate' && why !== 'fix')) return;   // Fix structure may only move units
+    for (const m of SIZE_MARKS) if (k >= m) stage.trackOnce('units:' + m);
+  });
+  if (FRESH) stage.trackOnce('build:new');   // New build (the switcher's, or the empty state's link) lands here as ?new=1
   /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
      silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
   let capPending = null;   // { drop: entry } while a new build is held back by the cap
@@ -414,6 +428,9 @@ export async function boot() {
       document.documentElement.dataset.ws = ws;
       const q = new URLSearchParams(location.search); q.set('ws', ws);
       history.replaceState(history.state, '', `${location.pathname}?${q}${location.hash}`);
+      // a switch rewrites the address in place, so GoatCounter never sees it as a page view: the workspace's own event is the
+      // only record that a visit reached it (2026-11-04). Once per visit, the boot's own workspace included
+      stage.trackOnce('ws:' + ws);
       current = { name: ws, ...WORKSPACES[ws](stage, ctx) };
     },
   };

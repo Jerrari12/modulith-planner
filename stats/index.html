@@ -258,10 +258,10 @@ body.no-data #dash > .panel:not(.err-banner) { display: none; }
       <div class="panel tile" title="Pageviews, events excluded — the top of the journey.">
         <div class="v c-accent" id="k-visits">—</div><div class="s">VISITS</div>
         <div class="conv" id="kc-visits"></div></div>
-      <div class="panel tile" title="Planner: a visitor placed their first unit this page (build-start — ships 2026-07-30, counts accrue from deploy; restored sessions deliberately don't count). Studio: a kit opened (open:*).">
+      <div class="panel tile" title="A visitor placed their first unit this visit (build-start; the new planner sends it again from 2026-11-04), plus kits opened from a link (open:&lt;kit&gt;). Not counted: a page that reopened a saved build (open:planner-link, open:embed), a part preview (open:part*), or the kit the bare front door loads by itself (one per entry:root).">
         <div class="v c-cyan" id="k-started">—</div><div class="s">BUILDS STARTED</div>
         <div class="conv" id="kc-started"></div></div>
-      <div class="panel tile" title="Planner: the 3D-guide button (3d-instructions:*). Studio: Get started pressed (start).">
+      <div class="panel tile" title="A build with instructions reached the step player (3d-instructions:&lt;mount&gt;-&lt;length&gt;: the new planner's Assemble from 2026-11-04, the old planner's 3D-guide button before), plus the old viewer's Get started (start).">
         <div class="v c-text" id="k-opened">—</div><div class="s">INSTRUCTIONS OPENED</div>
         <div class="conv" id="kc-opened"></div></div>
       <div class="panel tile" title="Clicks out to model pages: out:&lt;store&gt; plus the kit gallery's kit-dl:&lt;store&gt;. Hardware/filament buy links are separate events and deliberately excluded.">
@@ -516,9 +516,13 @@ async function load() {
   // Prefix sums use "name:" with the colon, so 'out:' can never catch 'outro'.
   const kget = k => evts.get(k)?.count || 0;
   const ksum = pre => { let n = 0; for (const [k, v] of evts) if (k.startsWith(pre)) n += v.count; return n; };
+  // BUILDS STARTED (2026-11-04): the merged planner fires one open:* on EVERY page load - open:planner-link when the page
+  // reopened a saved build, the root kit when the bare front door loaded it - so the blind open: sum counted page loads, not
+  // builds. Kits opened from a link still count; the boot's own opens do not
+  const kitOpens = Math.max(0, ksum('open:') - kget('open:planner-link') - kget('open:embed') - kget('open:part') - kget('open:part-plate') - kget('open:bench') - kget('entry:root'));
   const kpi = {
     visits: views,
-    started: kget('build-start') + ksum('open:'),
+    started: kget('build-start') + kitOpens,
     opened: ksum('3d-instructions:') + kget('start'),
     downloads: ksum('out:') + ksum('kit-dl:'),
   };
@@ -586,10 +590,21 @@ const GROUPS = [
   // download like any out:* — it was falling through to OTHER on its own.
   { id: 'out',    label: 'OUTBOUND',         pre: ['out','kit-dl','linksite','store-pref','labelgen'] },
   // help:* sits with video:* — both are "someone went looking for guidance".
-  // filament:<brand> moved here from OUTBOUND: it fires when a colour is PICKED
-  // in the designer, so it belongs with the other design actions, not with the
-  // affiliate clicks it used to sit beside and be mistaken for.
-  { id: 'tools',  label: 'TOOLS & UI',       pre: ['dock','tool','identify','style','preset','colors','filament','bom','export','video','help','save-build','load-build','share-link','save-image','start-fresh','bom-track'] },
+  // filament:<brand> fires when a colour is PICKED in the designer, not bought:
+  // it moved out of OUTBOUND, then (2026-11-04) on to COLORS below with preset:*
+  // and colors:*, beside the new planner's own colour events.
+  { id: 'tools',  label: 'TOOLS & UI',       pre: ['dock','tool','identify','style','video','help','save-build','load-build','share-link','save-image','start-fresh','quality','theme'] },
+  /* THE NEW PLANNER'S WORKSPACES (2026-11-04). Its own events fire ONCE PER VISIT (stage.trackOnce), so each row reads as
+     "visits that did this", and a row against ws:<name> is that workspace's take-up. Download and buy clicks stay per click */
+  { id: 'ws',     label: 'WORKSPACES',       pre: ['ws'],
+    note: 'Visits that reached each workspace, the one a visit opens on included. A tab switch is not a page view, so this is the only record of it.' },
+  { id: 'building', label: 'BUILDING',       pre: ['unit','units','undo','redo','setup','build'],
+    note: 'Once per visit. unit:drag is the board or stage drag, unit:move the Move buttons and arrow keys. units:N is a visit that built up to N units or more.' },
+  { id: 'colors', label: 'COLORS',           pre: ['color','preset','colors','filament','look','looks','surprise-me','compare','simplify','filaments','showcase'],   // surprise-me, not surprise: that head is the old planner's entry mode (ENTRY & INTENT)
+    note: 'color:pick is a hand-picked filament (color:pick:unit, one unit’s own); preset:* a featured look; look:* the visitor’s own saved looks.' },
+  { id: 'parts',  label: 'PARTS LIST',       pre: ['bom','bom-track','export'] },
+  { id: 'labels', label: 'LABELS',           pre: ['label'] },
+  { id: 'assemble', label: 'ASSEMBLE & DONE', pre: ['assemble','done'] },
   // blocked ≠ broken: these are the planner's own rules stopping an illegal
   // layout, listed apart from real failures so 14 mid-build `unsupported`s
   // can't read as 14 crashes. (Since 2026-07-30 the planner also only counts a
@@ -684,7 +699,9 @@ function buildFunnel(evts) {
 
   const stages = [
     { label: 'OPENED',      count: sum('open:') },
-    { label: 'GET STARTED', count: get('start') },
+    // the old viewer's Get started, or (2026-11-04) the new planner reaching its step player: start alone read 0 after the
+    // cutover and showed as a 100% drop between OPENED and INTRO
+    { label: 'INSTRUCTIONS', count: get('start') + sum('3d-instructions:') },
     { label: 'INTRO',       count: get('step:intro') },
     ...steps,
     { label: 'REACHED FINAL', count: get('complete') },
