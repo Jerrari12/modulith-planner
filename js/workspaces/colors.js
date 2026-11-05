@@ -814,7 +814,7 @@ export function mountColors(stage, ctx) {
   const seenOnce = new Set();
   const seenObs = typeof IntersectionObserver === 'function'
     ? new IntersectionObserver((es) => { for (const e of es) {
-      // the observer also reports a mere touch and the first look at a node, whatever its ratio (Sol 01a1a995): a sliver is not seen
+      // the observer also reports a node merely coming into view (Sol 01a1a995) and its first look at a node, whatever the ratio: a sliver is not seen
       if (!e.isIntersecting || e.intersectionRatio < 0.6) { if (!e.target.isConnected) seenObs.unobserve(e.target); continue; }   // a dropped node goes
       const n = e.target.dataset.seen; seenObs.unobserve(e.target);
       if (n && !seenOnce.has(n)) { seenOnce.add(n); stage.track(n); }
