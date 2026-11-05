@@ -48,7 +48,9 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     const { el: panel, handle, peek } = entry;
     // a sheet that can be closed (spec.close) carries its × here, on the handle, so its own title row can go (app.css)
     const x = entry.close ? el('button.hx', { title: 'Close', 'aria-label': `Close ${typeof entry.title === 'function' ? entry.title() : entry.title}`, onclick: (e) => { e.stopPropagation(); entry.close(); } }, [icon('x', { size: 16 })]) : null;
-    handle.replaceChildren(...[el('span.grab'), el('span.ttl', { text: typeof entry.title === 'function' ? entry.title() : entry.title }), x, el('span.chev', {}, [icon(entry.open ? 'caret-down' : 'caret-up', { size: 16 })])].filter(Boolean));
+    // spec.badge: a workspace's own small control on the handle, after the title and before the × (the Polymaker offer's pill, colors.js)
+    const badge = entry.badge ? entry.badge() : null;
+    handle.replaceChildren(...[el('span.grab'), el('span.ttl', { text: typeof entry.title === 'function' ? entry.title() : entry.title }), badge, x, el('span.chev', {}, [icon(entry.open ? 'caret-down' : 'caret-up', { size: 16 })])].filter(Boolean));
     const p = peek ? peek() : null;
     const peekEl = panel.querySelector(':scope > .sheet-peek');
     if (p && !entry.open) { if (peekEl) peekEl.replaceChildren(typeof p === 'string' ? el('span', { text: p }) : p); else panel.insertBefore(el('div.sheet-peek', {}, [typeof p === 'string' ? el('span', { text: p }) : p]), handle.nextSibling); }
@@ -113,7 +115,7 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     // a workspace re-renders its panel with replaceChildren(): the handle comes back on top every time
     const mo = new MutationObserver(() => { if (panel.firstChild !== handle) { panel.prepend(handle); render(sheets.get(panel)); } });
     mo.observe(panel, { childList: true });
-    const entry = { el: panel, handle, title: spec.title, peek: spec.peek || null, close: spec.close || null, open: !!spec.open, mo };
+    const entry = { el: panel, handle, title: spec.title, peek: spec.peek || null, badge: spec.badge || null, close: spec.close || null, open: !!spec.open, mo };
     sheets.set(panel, entry);
     render(entry);
     if (entry.open) current = panel;
