@@ -12,7 +12,10 @@
      layout's shape changes (the worker is M3), with floor colours and the white label strips drawn on it.
    The look is the planner's (MODULITH-planner-style.md): orange is selection, white strips are labels, --measure for
    dimensions, the option keys, no edges - except the proposed edit-mode edges, shown both ways (an open decision).
-   Not here (M2 "Not in M2"): the parts list, outlines, cells, lid, covers. */
+   M3 (2026-11-05): generation runs in a worker (engine.js), the parts list (a part per compartment, a layout from a
+   list, part outlines on the floors, labels.csv in the download, the label text on the holders) and the link from a
+   compartment to its row in the build's label list (comp.labelId; js/parts-drawer/labels.js). Not here (SPEC open
+   decision 7): cells, lid, covers. */
 import { el } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { toolbar } from '../ui/toolbar.js';
@@ -20,10 +23,11 @@ import { FILAMENT_DB } from '../filament-db.js';
 import * as G from './gen.js';
 import * as Mk from './marks.js';
 import { frameOf } from './frame.js';
-import { partsEngine, engineReady, shellGeometry, drawerGeometry } from './engine.js';
-import { PARTS, sizeOfUnit, heightOfUnit, partsSizeOk, isPartsDrawer, partsSizeWhy, layoutOf, layoutForSize, fullLayout, FLOOR_KEYS, FLOOR_DEFAULT_HEX, keepOf, defaultLayout } from './unit.js';
+import * as I from './inventory.js';
+import { partsEngine, engineReady, shellGeometry, drawerGeometry, zipFor } from './engine.js';
+import { PARTS, sizeOfUnit, heightOfUnit, partsSizeOk, isPartsDrawer, partsSizeWhy, layoutOf, layoutForSize, fullLayout, FLOOR_KEYS, FLOOR_DEFAULT_HEX, keepOf, defaultLayout, cleanItem, outlinesOf, compLabelText } from './unit.js';
 import { plan, planThumb } from './plan.js';
-import { buildZip, saveBlob } from './download.js';
+import { saveBytes } from './download.js';
 
 const EPS = 1e-6, WALL = G.C.WALL;
 const fmt = (v) => v.toFixed(1);
@@ -42,7 +46,8 @@ export function partsDrawerTools(stage, ctx) {
   const S = () => store.state;
   const L = () => +ctx.length();
   const unitById = (id) => S().placed.find((p) => p.id === id) || null;
-  const st = { editing: null, view: '2d', sel: null, hover: null, edges: true, picker: null, engineErr: null, booting: false, status: '', downloading: false };
+  const st = { editing: null, view: '2d', sel: null, hover: null, edges: true, picker: null, engineErr: null, booting: false, status: '', downloading: false, inv: null, dockEl: null };
+  let alive = true;
   const canvas = document.getElementById('stage');
 
   /* ---------------- the engine ---------------- */
@@ -62,10 +67,22 @@ export function partsDrawerTools(stage, ctx) {
   /* one undo step on the record: fn(layout, unit) mutates a cleaned copy of the unit's layout, which then replaces it */
   function commitLayout(fn, why = 'parts') {
     const id = st.editing; if (id == null) return;
-    ctx.edit((s) => { const p = s.placed.find((q) => q.id === id); if (!p) return; const lay = layoutOf(L(), p); fn(lay, p); p.partsLayout = lay; }, why, { gravity: false });
+    ctx.edit((s) => { const p = s.placed.find((q) => q.id === id); if (!p) return; const lay = layoutOf(L(), p); fn(lay, p); p.partsLayout = lay; syncLinkedLabels(s, lay); }, why, { gravity: false });
     st.sel = st.sel && regrow(st.sel);
   }
 
+  /* a compartment linked to a row of the build's label list (comp.labelId, M3): its words follow its part in the same
+     commit; a compartment whose part is gone lets its row go (the row stays in the list, waiting) */
+  function syncLinkedLabels(s, lay) {
+    const labels = s.labelList && Array.isArray(s.labelList.labels) ? s.labelList.labels : [];
+    for (const c of lay.comps) {
+      if (!c.labelId) continue;
+      const text = compLabelText(c);
+      if (!text) { delete c.labelId; continue; }
+      const l = labels.find((x) => x.id === c.labelId);
+      if (l && l.text !== text) l.text = text;
+    }
+  }
   /* ---------------- selection (the prototype's: a box closed under touching) ---------------- */
   const comps = () => { const u = editedUnit(); return u ? layoutOfUnit(u).comps : []; };
   const overlaps = (a, b) => a.x0 < b.x1 - EPS && b.x0 < a.x1 - EPS && a.y0 < b.y1 - EPS && b.y0 < a.y1 - EPS;
@@ -154,6 +171,104 @@ export function partsDrawerTools(stage, ctx) {
       }
     });
   }
+  /* the part in one compartment, typed as the prototype's Part field takes it ("M3x10 SHCS 100"); empty clears it */
+  function setPart(text) {
+    const s = selected(); if (s.length !== 1) return;
+    const v = text.trim(), box = st.sel;
+    if (!v) { commitLayout((x) => { for (const c of x.comps) if (G.inBox(c, box)) { delete c.item; delete c.labelId; } }); return; }
+    const r = I.parseLine(v);
+    if (!r || r.error) { say(r && r.error ? r.error[0].toUpperCase() + r.error.slice(1) + '.' : 'That part was not understood.'); return; }
+    const item = cleanItem(r); if (!item) { say('That part is not one the generator knows.'); return; }
+    commitLayout((x) => { for (const c of x.comps) if (G.inBox(c, box)) c.item = item; });
+  }
+  /* the parts list (M3; the prototype's inventory dialog): a kit, typed lines or a file become items; Lay out drawer gives
+     every item a compartment sized for its quantity (inventory.js layoutFor), front-left to back-right */
+  const invKeep = () => { const u = editedUnit(); return u ? layoutOfUnit(u).comps.filter((c) => c.item).map((c) => ({ ...c.item })) : []; };
+  function openInventory() {
+    st.inv = { items: invKeep(), colorBy: 'none', labels: true, err: '' };
+    renderInventory();
+  }
+  function invPlan(work = st.inv, height = null) {
+    const u = editedUnit(); if (!u) return { error: 'No drawer.' };
+    const lay = layoutOfUnit(u);
+    return I.layoutFor(work.items, { size: sizeOfUnit(L(), u), height: height || heightOfUnit(u), label: lay.label, labels: work.labels, scoop: mode(lay.comps.map((c) => c.scoop)) });
+  }
+  function invAdd(list) {
+    const work = st.inv;
+    const items = list.items.filter((it) => I.TYPE_ORDER.includes(it.type)), other = list.items.length - items.length;
+    for (const it of items) { const same = work.items.find((x) => x.type === it.type && x.size === it.size && (x.length || 0) === (it.length || 0)); if (same) same.qty += it.qty; else work.items.push({ ...it }); }
+    work.err = [list.errors.length ? `Skipped ${list.errors.length}: ${list.errors[0]}${list.errors.length > 1 ? ' …' : ''}` : '',
+      other ? `Left out ${other} other part${other === 1 ? '' : 's'} (bearings, pulleys and the like): the parts list takes screws, nuts, washers and inserts for now.` : ''].filter(Boolean).join(' ');
+  }
+  function invApply() {
+    const work = st.inv, u = editedUnit(); if (!work || !u) return;
+    const r = invPlan(); if (r.error) { say(r.error); return; }
+    const keys = new Set(r.comps.map((c) => (work.colorBy === 'size' ? c.item.size : I.TYPES[c.item.type].short)));
+    const slots = keys.size > 3 ? 4 : 3;
+    const colors = I.colorBy(r.comps, work.colorBy, slots);
+    commitLayout((x) => {
+      x.comps = r.comps.map((c, i) => { const item = cleanItem(c.item); return { ...G.comp(c.x0, c.x1, c.y0, c.y1, { holder: c.holder !== false, scoop: c.scoop || 'std', tray: 0, color: colors[i] }), ...(item ? { item } : {}) }; });
+      x.nr = r.rows; x.nc = Math.max(...[...new Set(r.comps.map((c) => c.y0))].map((y) => r.comps.filter((c) => c.y0 === y).length));
+      if (work.colorBy !== 'none') { x.floor.mode = 'paint'; x.floor.slots = slots; }
+    });
+    st.sel = null; closeInventory(); ctx.renderAll();
+  }
+  let invEl = null;
+  function closeInventory() { st.inv = null; if (invEl) { invEl.remove(); invEl = null; } }
+  function renderInventory() {
+    const work = st.inv; if (!work) return;
+    if (!invEl) { invEl = el('div', { id: 'ws-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Lay out from a parts list' }); root.appendChild(invEl); }
+    const u = editedUnit(); const HS = u ? Object.keys(G.SIZES[sizeOfUnit(L(), u)].heights) : [], hi = u ? HS.indexOf(heightOfUnit(u)) : 0;
+    const r = work.items.length ? invPlan() : { error: 'Add some parts to see how they fit.' };
+    const fits = (h, cap) => { const x = invPlan(work, h); return !x.error && x.fullest <= cap; };
+    let sum = '', warn = !!r.error || r.fullest > 1;
+    if (r.error) { const below = HS.slice(0, hi), lower = work.items.length ? below.find((h) => fits(h, 0.9)) || below.reverse().find((h) => fits(h, 1)) : null; sum = r.error + (lower && /to reach into/.test(r.error) ? ` A ${lower} drawer takes them.` : ''); }
+    else {
+      let tip = '';
+      if (r.fullest > 1) { const up = HS.slice(hi + 1).find((h) => fits(h, 1)); tip = up ? ` Too full for ${heightOfUnit(u)}: try ${up}, or lower the quantities.` : ' Too full: lower the quantities or split the list across two drawers.'; }
+      else { const lower = HS.slice(0, hi).find((h) => fits(h, 0.9)); if (lower) tip = ` Plenty of room: a ${lower} drawer would probably do.`; }
+      sum = `${work.items.length} parts in ${r.rows} rows. Fullest compartment about ${Math.round(r.fullest * 100)}% full.${tip}`;
+    }
+    const sel = (opts, val, on) => { const e = el('select'); for (const [v, t] of opts) e.appendChild(el('option', { value: v, text: t })); e.value = val; e.onchange = () => on(e.value); return e; };
+    const num = (val, on, dis) => el('input.mono', { type: 'number', min: '0', step: '1', value: dis ? '' : String(val), disabled: !!dis, onchange: (e) => on(+e.target.value) });
+    const table = el('div.pd-inv-table');
+    if (!work.items.length) table.appendChild(el('p.hint', { text: 'No parts yet. Pick a kit, or type a few lines above.' }));
+    work.items.forEach((it, i) => {
+      const T = I.TYPES[it.type];
+      const sizes = I.THREADS.filter((sz) => I.known({ ...it, size: sz, length: it.length || 10 }));
+      table.appendChild(el('div.pd-inv-row', {}, [
+        sel(I.TYPE_ORDER.map((k) => [k, I.TYPES[k].name]), it.type, (v) => { it.type = v; if (I.TYPES[v].screw && !it.length) it.length = 10; if (!I.known(it)) it.size = I.THREADS.find((sz) => I.known({ ...it, size: sz })) || 'M3'; renderInventory(); }),
+        sel(sizes.map((v) => [v, v]), it.size, (v) => { it.size = v; renderInventory(); }),
+        num(it.length, (v) => { it.length = Math.max(1, v); renderInventory(); }, !T.screw),
+        num(it.qty, (v) => { it.qty = Math.max(0, Math.round(v)); renderInventory(); }),
+        el('button.key.sm', { text: '✕', 'aria-label': 'Remove ' + I.labelText(it), onclick: () => { work.items.splice(i, 1); renderInventory(); } }),
+      ]));
+    });
+    const textarea = el('textarea', { rows: '3', spellcheck: 'false', placeholder: 'M3x10 SHCS 100\nM3 nut 200\nM5 washer 50', 'aria-label': 'Parts, one per line: size, type and quantity' });
+    const fileIn = el('input', { type: 'file', accept: '.json,.csv,.txt', hidden: true, onchange: async (e) => {
+      const f = e.target.files[0]; if (!f) return; const t = await f.text(); e.target.value = '';
+      let list = null;
+      try { const j = JSON.parse(t); const arr = Array.isArray(j) ? j : j.items || j.labels || j.rows || []; list = I.fromPicker(arr.map((x) => (x && typeof x === 'object' && x.schema ? x : typeof x === 'object' && x ? (x.text || x.label || [x.line1, x.line2].filter(Boolean).join(' ')) : x))); }
+      catch { list = I.parseList(t.split(/\r?\n/).map((l) => l.split(',').filter((c) => c.trim()).join(' ')).join('\n')); }
+      invAdd(list); renderInventory();
+    } });
+    const box = el('div.glass.box.pd-inv', {}, [
+      el('div.ihead', {}, [el('h3', { text: 'Lay out from a parts list' }), el('button.x', { 'aria-label': 'Close', onclick: closeInventory }, [icon('x', { size: 16 })])]),
+      el('div.row', {}, [el('label', {}, ['Start from a kit ', sel([['', 'Choose a kit…'], ...Object.entries(I.KITS).map(([k, kit]) => [k, kit.name])], '', (v) => { const kit = I.KITS[v]; if (kit) { work.items = kit.items.map((x) => ({ ...x })); renderInventory(); } })]),
+        el('button.key.sm', { text: 'Import a list…', title: 'A text or CSV list, a Part Picker items file', onclick: () => fileIn.click() }), fileIn]),
+      el('label.pd-inv-text', {}, ['Add parts, one per line: size, type and quantity', textarea]),
+      el('div.pd-btns', {}, [el('button.key.sm', { text: 'Add these', onclick: () => { invAdd(I.parseList(textarea.value)); renderInventory(); } }), work.err ? el('span.hint', { text: work.err }) : null].filter(Boolean)),
+      el('div.pd-inv-head', {}, ['Part', 'Size', 'Length', 'Qty', ''].map((t) => el('span', { text: t }))),
+      table,
+      el('div.row', {}, [el('label', {}, ['Floor colours ', sel([['none', 'Leave as they are'], ['size', 'By thread size'], ['type', 'By part type']], work.colorBy, (v) => { work.colorBy = v; })]),
+        el('label.pd-check', {}, [el('input', { type: 'checkbox', checked: work.labels ? true : null, onchange: (e) => { work.labels = e.target.checked; renderInventory(); } }), ' Label holders']),
+        el('button.key.sm', { text: 'Clear list', onclick: () => { work.items = []; renderInventory(); } })]),
+      el('p.pd-inv-sum' + (warn ? '.warn' : ''), { text: sum }),
+      el('p.hint', { text: 'Parts go front-left to back-right in order of type, size and length. Each compartment is sized for its quantity, using typical ISO part sizes, so treat the fill as an estimate.' }),
+      el('div.btns', {}, [el('button.key', { text: 'Cancel', onclick: closeInventory }), el('button.key.strong', { text: 'Lay out drawer', disabled: !!r.error, onclick: invApply })]),
+    ]);
+    invEl.replaceChildren(box);
+  }
   function setFloorMode(m) { commitLayout((x) => { x.floor.mode = m; if (m === 'paint' && !x.comps.some((c) => c.color)) for (const c of x.comps) c.color = 1; }); }
   function nextTray(list) { const cur = Math.max(...list.map((c) => G.trayMM(c))), same = list.every((c) => G.trayMM(c) === cur); return same ? (G.TRAYS.find((v) => v > cur + EPS) ?? 0) : cur; }
 
@@ -167,6 +282,9 @@ export function partsDrawerTools(stage, ctx) {
   }
   /* what every parts drawer wears right now: the shell closed, the whole drawer while edited; called after every stage
      rebuild and every layout change (cheap when nothing changed: the geometries are cached and setDrawerBody compares) */
+  /* a geometry the worker has just finished: the bodies again (now cached), the overlays, and the Dock's grams - not the
+     panels, whose inputs may be in use (an async re-render is a typing hazard) */
+  const onGeo = () => { if (!alive) return; sync(); if (st.dockEl && st.editing != null) renderDock(st.dockEl); stage.invalidateFrame(); };
   function applyBodies() {
     const units = partsUnits();
     if (units.length) ensureEngine();
@@ -176,10 +294,10 @@ export function partsDrawerTools(stage, ctx) {
       const size = sizeOfUnit(L(), u), height = heightOfUnit(u);
       let geo = null;
       if (ready) {
-        try { geo = st.editing === u.id ? drawerGeometry(fullOf(u)).geometry : shellGeometry(size, height); }
+        try { const d = st.editing === u.id ? drawerGeometry(fullOf(u), onGeo) : null; geo = st.editing === u.id ? (d ? d.geometry : null) : shellGeometry(size, height, onGeo); }
         catch (e) { console.warn('[parts drawer] geometry', e); st.engineErr = String(e && e.message || e); }
       }
-      stage.setDrawerBody(u.id, geo);
+      if (geo) stage.setDrawerBody(u.id, geo);   // still building, or no engine: the drawer keeps what it wears (the GLB, or its last body)
       if (st.editing !== u.id) clearExtras(u.id);
     }
   }
@@ -212,14 +330,26 @@ export function partsDrawerTools(stage, ctx) {
       m.userData.ownMat = true; m.rotation.x = -Math.PI / 2; m.position.set(X((r.x0 + r.x1) / 2), G.C.FLOOR + 0.03, Z((r.y0 + r.y1) / 2)); m.receiveShadow = true;
       extras.add(m);
     }
-    // the white label strips, in the build's label material, on every holder
+    // the white label strips, in the build's label material, on every holder; a compartment with a part shows its words
     const [lw, lh, lt] = H.label;
     let labelMat = null; try { labelMat = stage.partMaterial('Label'); } catch { labelMat = null; }
     for (const c of full.comps) {
       if (!G.hasHolder(full, c)) continue;
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), labelMat || mat3('#f3f1ea'));
-      if (!labelMat) m.userData.ownMat = true;
+      const words = c.item && I.known(c.item) ? I.labelLines(c.item) : null;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), words ? new THREE.MeshStandardMaterial({ map: labelTexture(words, lh), roughness: 0.85 }) : (labelMat || mat3('#f3f1ea')));
+      if (words || !labelMat) m.userData.ownMat = true;
       m.rotation.x = -Math.PI / 2; m.position.set(X(c.x0 + 0.362 + lw / 2), top - 2.5 + lt + 0.03, Z(c.y1 - lh / 2));
+      extras.add(m);
+    }
+    // the part outlines on coloured floors are inlays in the body colour (on a plain floor the worker cuts them into the geometry)
+    let inlayMat = null;
+    for (const o of outlinesOf(full)) {
+      if (!G.floorColorOf(full, full.comps[o.comp])) continue;
+      if (!inlayMat) { try { inlayMat = stage.partMaterial('Drawer'); } catch { inlayMat = mat3(stage.activeHex('Drawer')); } }
+      const shape = new THREE.Shape(o.polys[0].map(([x, y]) => new THREE.Vector2(X(x), -Z(y))));
+      for (const h of o.polys.slice(1)) shape.holes.push(new THREE.Path(h.map(([x, y]) => new THREE.Vector2(X(x), -Z(y)))));
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), inlayMat);
+      m.rotation.x = -Math.PI / 2; m.position.y = G.C.FLOOR + 0.05; m.renderOrder = 1;
       extras.add(m);
     }
     // the proposed edit-mode edges (SPEC open decision: judged at M2, shown both ways): ink on a light body, white on a dark one
@@ -253,6 +383,22 @@ export function partsDrawerTools(stage, ctx) {
   }
   /* a tap on the canvas in edit mode is a compartment pick (stage.setTapTargets: the stage then selects nothing);
      Shift, Ctrl or Cmd grows the selection; a tap off the drawer clears it */
+  /* a compartment's label as a texture: its part's two lines in the planner's display face (the prototype drew the same
+     with its own font); cached per words and label height */
+  const labelTex = new Map();
+  function labelTexture(lines, lhmm) {
+    const key = lines.join('|') + lhmm;
+    if (labelTex.has(key)) return labelTex.get(key);
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = Math.round(512 * lhmm / 29.876);
+    const g2 = cv.getContext('2d'); g2.fillStyle = '#f3f1ea'; g2.fillRect(0, 0, cv.width, cv.height); g2.fillStyle = '#1d1e20'; g2.textAlign = 'center'; g2.textBaseline = 'middle';
+    const fam = 'Archivo, "IBM Plex Sans", system-ui, sans-serif';
+    if (lhmm > 10) {
+      g2.font = `800 ${Math.round(cv.height * 0.5)}px ${fam}`; g2.fillText(lines[0], cv.width / 2, cv.height * 0.4, cv.width * 0.92);
+      g2.font = `600 ${Math.round(cv.height * 0.26)}px ${fam}`; g2.fillText(lines[1] || '', cv.width / 2, cv.height * 0.79, cv.width * 0.9);
+    } else { g2.font = `800 ${Math.round(cv.height * 0.56)}px ${fam}`; g2.fillText(lines.filter(Boolean).join(' '), cv.width / 2, cv.height * 0.53, cv.width * 0.92); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    labelTex.set(key, t); return t;
+  }
   const compAt = (pt, size) => { const Sz = G.SIZES[size]; if (pt.x < -0.2 || pt.x > Sz.W + 0.2 || pt.y < -0.2 || pt.y > Sz.D + 0.2) return null; let best = null, bd = Infinity; for (const c of comps()) { const dx = Math.max(c.x0 - pt.x, 0, pt.x - c.x1), dy = Math.max(c.y0 - pt.y, 0, pt.y - c.y1), dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = c; } } return best; };
   function compUnderRay(ray) {
     const u = editedUnit(); if (!u) return null;
@@ -300,7 +446,7 @@ export function partsDrawerTools(stage, ctx) {
   }
   function stop({ quiet = false } = {}) {
     const id = st.editing; if (id == null) return;
-    st.editing = null; st.sel = null; st.hover = null; st.picker = null;
+    st.editing = null; st.sel = null; st.hover = null; st.picker = null; closeInventory();
     stage.setTapTargets(null);
     canvas.removeEventListener('pointermove', onCanvasMove); canvas.removeEventListener('pointerleave', onCanvasLeave);
     canvas.style.cursor = '';
@@ -392,8 +538,19 @@ export function partsDrawerTools(stage, ctx) {
       el('button.seg.sm' + (scoops.size === 1 && scoops.has(id) ? '.on' : ''), { text: name, onclick: () => setAll('scoop', id) })))]));
     fl.appendChild(el('div.row', {}, [RAMP_NAME, el('div.track.mini.seg5', { role: 'group', 'aria-label': `${RAMP_NAME} for every compartment, mm` }, G.TRAYS.map((v) =>
       el('button.seg.sm' + (trays.size === 1 && trays.has(v) ? '.on' : ''), { text: v ? String(v) : 'Off', 'aria-label': v ? `${v} mm` : 'Off', onclick: () => setAll('tray', v) })))]));
-    fl.appendChild(el('p.hint', { text: `Standard is the shipped 6 mm front scoop, Deep up to 12 mm. ${RAMP_NAME} adds 45° ramps on the sides and back, in mm, so small parts slide to the middle. ${scoops.size > 1 || trays.size > 1 ? 'Mixed right now; these set every compartment.' : ''}` }));
+    fl.appendChild(el('div.row', {}, ['Part outlines', el('div.track.mini.seg2', { role: 'group', 'aria-label': 'Part outlines on the floors' }, [
+      el('button.seg.sm' + (!lay.outlines ? '.on' : ''), { text: 'Off', onclick: () => { if (lay.outlines) commitLayout((x) => { x.outlines = false; }); } }),
+      el('button.seg.sm' + (lay.outlines ? '.on' : ''), { text: 'On', title: 'Each compartment\'s part on its floor at 1:1, so you can lay a screw on it to check the length', onclick: () => { if (!lay.outlines) commitLayout((x) => { x.outlines = true; }); } }),
+    ])]));
+    fl.appendChild(el('p.hint', { text: `Standard is the shipped 6 mm front scoop, Deep up to 12 mm. ${RAMP_NAME} adds 45° ramps on the sides and back, in mm, so small parts slide to the middle. Part outlines put each compartment's part on its floor at 1:1. ${scoops.size > 1 || trays.size > 1 ? 'Mixed right now; these set every compartment.' : ''}` }));
     lib.appendChild(fl);
+
+    const parts = el('section');
+    parts.appendChild(el('h2.h2', { text: 'Parts' }));
+    const withParts = lay.comps.filter((c) => c.item).length;
+    parts.appendChild(el('div.pd-btns', {}, [el('button.key.sm', { text: 'From a parts list…', title: 'A kit, typed lines or a file: every part gets a compartment sized for its quantity', onclick: openInventory })]));
+    parts.appendChild(el('p.hint', { text: withParts ? `${n(withParts, 'compartment')} with a part · the words go on the label holders, into labels.csv in the download, and into the Labels workspace.` : 'Give a compartment a part in This compartment, or lay the whole drawer out from a list.' }));
+    lib.appendChild(parts);
 
     renderFloorColor(lib, lay, full);
 
@@ -471,8 +628,8 @@ export function partsDrawerTools(stage, ctx) {
     const u = unitById(id); if (!u || !engineReady() || st.downloading) return;
     st.downloading = true; st.status = u.partsLayout && layoutOfUnit(u).floor.mode !== 'off' ? 'Building the colour parts…' : 'Packing STL and 3MF…'; ctx.renderAll();
     try {
-      const { blob, filename } = await buildZip(engineReady(), fullOf(u), { bodyHex: stage.activeHex('Drawer') });
-      saveBlob(blob, filename);
+      const { bytes, filename } = await zipFor(fullOf(u), { bodyHex: stage.activeHex('Drawer') });
+      saveBytes(bytes, filename);
       st.status = `Saved ${filename}`;
     } catch (e) { console.error(e); st.status = `The files could not be built (${e && e.message || e}).`; }
     st.downloading = false; ctx.renderAll();
@@ -504,6 +661,15 @@ export function partsDrawerTools(stage, ctx) {
       };
       insp.appendChild(num('Width', 'w', w));
       insp.appendChild(num('Depth', 'd', d));
+      // the part in it (M3): typed as "M3x10 SHCS 100"; its fill is an estimate from ISO sizes (inventory.js)
+      const partIn = el('input', { type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'M3x10 SHCS 100', value: c.item && I.known(c.item) ? `${I.labelText(c.item).replace(' × ', 'x')} ${c.item.qty || ''}`.trim() : '', 'aria-label': 'The part in this compartment' });
+      partIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') partIn.blur(); else if (e.key === 'Escape') { partIn.dataset.skip = '1'; partIn.blur(); } e.stopPropagation(); });
+      partIn.addEventListener('blur', () => { if (partIn.dataset.skip) { delete partIn.dataset.skip; renderInspector(); return; } setPart(partIn.value); });
+      insp.appendChild(el('div.row', {}, ['Part', el('div.pd-part', {}, [partIn])]));
+      if (c.item && I.known(c.item)) {
+        const f = I.fillOf(c, full.height, full.size, lay.label);
+        insp.appendChild(el('div.src', { text: `${I.labelText(c.item)}${c.item.qty ? ' × ' + c.item.qty : ''}${f != null ? `, about ${Math.round(f * 100)}% full${f > 1 ? ' (too full)' : ''}` : ''}.` }));
+      }
     } else {
       const mergedFit = G.holderStatus(full, box).ok ? 'merged, they fit a label' : 'merged, still too small for a label';
       insp.appendChild(el('div.src', { text: `${s.length} compartments · ${mergedFit}.` }));
@@ -533,9 +699,10 @@ export function partsDrawerTools(stage, ctx) {
   /* ---------------- the Dock in edit mode ---------------- */
   function renderDock(dock) {
     const u = editedUnit(); if (!u) return;
+    st.dockEl = dock;
     const full = fullOf(u), [fa, fb] = G.footprint(full.size);
     const bed = BEDS.find(([x, y]) => (fa <= x && fb <= y) || (fa <= y && fb <= x));
-    let grams = null; if (engineReady()) { try { grams = drawerGeometry(full).grams; } catch { grams = null; } }
+    let grams = null; if (engineReady()) { try { const d = drawerGeometry(full, onGeo); grams = d ? d.grams : null; } catch { grams = null; } }
     const fg = G.floorRects(full).reduce((a, r) => a + (r.x1 - r.x0) * (r.y1 - r.y0) * G.SKIN, 0) / 1000 * G.C.PLA;
     dock.replaceChildren(
       el('div.status.stack', { disabled: true, title: 'Every compartment tiles the drawer' }, [el('span.dot'), `${n(full.comps.length, 'compartment')} · ${n(full.comps.filter((c) => G.hasHolder(full, c)).length, 'label')}`]),
@@ -554,7 +721,7 @@ export function partsDrawerTools(stage, ctx) {
     const codeEl = el('span.mono', { text: codes.get(key) || 'MD-···-···' });
     if (!codes.has(key)) Mk.codeOf(full).then((c) => { codes.set(key, Mk.pretty(c)); if (codeEl.isConnected) codeEl.textContent = Mk.pretty(c); }).catch(() => {});
     sec.append(
-      el('div.pd-plan', {}, [el('div.wellbox.well', {}, [planThumb(full)]), el('div.col', {}, [el('div', { text: `${n(full.comps.length, 'compartment')} · ${G.holderOf(full).name} labels` }), el('div.src', {}, ['Layout code ', codeEl]), el('div.src', { text: full.floor.mode === 'off' ? 'One colour' : full.floor.mode === 'one' ? 'Coloured floors' : 'Painted floors' })])]),
+      el('div.pd-plan', {}, [el('div.wellbox.well', {}, [planThumb(full)]), el('div.col', {}, [el('div', { text: `${n(full.comps.length, 'compartment')} · ${G.holderOf(full).name} labels${full.comps.some((c) => c.item) ? ` · ${n(full.comps.filter((c) => c.item).length, 'part')}` : ''}` }), el('div.src', {}, ['Layout code ', codeEl]), el('div.src', { text: full.floor.mode === 'off' ? 'One colour' : full.floor.mode === 'one' ? 'Coloured floors' : 'Painted floors' })])]),
       el('div.actions', {}, [
         el('button.key.strong', { text: 'Edit compartments', title: 'Open the drawer and lay out its compartments', onclick: () => { start(u.id); ctx.renderAll(); } }),
         el('button.key', { text: st.downloading ? 'Building…' : 'Download', title: engineReady() ? 'STL and 3MF, as the generator makes them (.zip)' : 'The geometry engine is still loading', disabled: !engineReady() || st.downloading, onclick: () => download(u.id) }),
@@ -569,7 +736,8 @@ export function partsDrawerTools(stage, ctx) {
     if (st.editing == null) return false;
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
-    if (k === 'escape') { if (st.picker) { st.picker = null; ctx.renderAll(); return true; } if (st.sel) { setSel(null); return true; } stop(); return true; }
+    if (k === 'escape') { if (st.inv) { closeInventory(); return true; } if (st.picker) { st.picker = null; ctx.renderAll(); return true; } if (st.sel) { setSel(null); return true; } stop(); return true; }
+    if (st.inv) return true;   // the parts list dialog has the keys
     if (k === 'delete' || k === 'backspace') return true;   // not the unit under edit (build.js would remove it); compartments are merged, not deleted
     if (k === 'm') { doMerge(); return true; }
     if (k === 's') { doSplit(); return true; }
@@ -596,6 +764,6 @@ export function partsDrawerTools(stage, ctx) {
     plan: pl, toolbar: editBar,
     render2d() { pl.render(); },
     setPanels() { editBar.sync(); },
-    destroy() { if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); },
+    destroy() { alive = false; if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); for (const t of labelTex.values()) t.dispose(); },
   };
 }

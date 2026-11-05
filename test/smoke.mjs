@@ -43,7 +43,7 @@ const TYPES = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon', '.stl': 'application/octet-stream',
+  '.ico': 'image/x-icon', '.stl': 'application/octet-stream', '.wasm': 'application/wasm',
 };
 
 /** A static server, in the standard library, because a deploy gate should not need a stack. */

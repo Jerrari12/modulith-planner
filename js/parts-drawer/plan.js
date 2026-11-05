@@ -10,6 +10,8 @@
    shows a wall drag as it goes (its own preview of the compartments) and commits it at the end. */
 import { el } from '../ui/dom.js';
 import * as G from './gen.js';
+import * as I from './inventory.js';
+import { outlinesOf } from './unit.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const EPS = 1e-6, WALL = G.C.WALL;
@@ -29,6 +31,7 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   svgEl('rect', { class: 'cavity', x: 0, y: 0, width: S.W, height: S.D }, svg);
   const H = G.holderOf(L), HD = H.D;
   const inSel = (c) => !!sel && G.inBox(c, sel);
+  const outl = new Map(outlinesOf(L).map((o) => [o.comp, o.polys]));   // the parts on the floors (M3)
   comps.forEach((c, i) => {
     const w = c.x1 - c.x0, d = c.y1 - c.y0;
     rect('cell' + (inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
@@ -43,11 +46,23 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
     if (s) rect('ramp', c.x0, c.x1, c.y0, c.y0 + s);
     if (t) { rect('ramp', c.x0, c.x0 + t, c.y0 + s, c.y1); rect('ramp', c.x1 - t, c.x1, c.y0 + s, c.y1); rect('ramp', c.x0 + t, c.x1 - t, c.y1 - t, c.y1); }
     if (flags[i]) rect('deep', c.x0 + 0.4, c.x1 - 0.4, c.y0 + 0.4, c.y1 - 0.4);
+    // the part's outline at 1:1 (M3): cut into a plain floor, in the body colour on a coloured one
+    if (outl.has(i)) {
+      const d2 = outl.get(i).map((p) => 'M' + p.map(([x, y]) => `${x.toFixed(2)} ${Y(y).toFixed(2)}`).join('L') + 'Z').join('');
+      svgEl('path', { class: 'outline' + (fk ? ' inlay' : ''), d: d2 }, svg);
+    }
     if (c.holder) {
       const hs = G.holderStatus(L, c);
       if (hs.ok) {
         rect('holder', c.x0, c.x0 + G.C.HOLDER_W, c.y1 - HD, c.y1);
         rect('labelstrip', c.x0 + 0.36, c.x0 + 0.36 + H.label[0], c.y1 - H.label[1], c.y1, { rx: 0.4 });
+        if (c.item && I.known(c.item)) {   // the part's words on the strip (M3)
+          const [big, small] = I.labelLines(c.item), lhh = H.label[1], cxx = c.x0 + 0.36 + H.label[0] / 2;
+          if (lhh > 10) {
+            svgEl('text', { class: 'labeltxt', x: cxx, y: Y(c.y1 - lhh * 0.42), 'text-anchor': 'middle', 'font-size': Math.min(lhh * 0.42, 4.6) }, svg).textContent = big;
+            svgEl('text', { class: 'labeltxt small', x: cxx, y: Y(c.y1 - lhh * 0.8), 'text-anchor': 'middle', 'font-size': Math.min(lhh * 0.24, 2.6) }, svg).textContent = small || '';
+          } else svgEl('text', { class: 'labeltxt', x: cxx, y: Y(c.y1 - lhh * 0.5), 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': Math.min(lhh * 0.42, 3.3) }, svg).textContent = `${big} ${small || ''}`.trim();
+        }
         if (w > G.C.HOLDER_W + EPS) {
           const xc = c.x0 + G.C.HOLDER_W;
           if (w < G.C.HOLDER_W + G.C.END_FILL) rect('wallfill', xc, c.x1, c.y1 - HD, c.y1);

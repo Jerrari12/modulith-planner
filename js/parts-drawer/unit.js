@@ -7,6 +7,7 @@
    size exists, gives a unit its layout (the record's, cleaned against the unit's size, else the default grid), moves a
    layout to another size the way the prototype's size buttons did, and builds the full layout the generator reads. */
 import * as G from './gen.js';
+import * as I from './inventory.js';
 
 export const PARTS = 'parts';
 /* the planner's half-height units to the generator's heights; no 3H (SPEC: a 2W holds one column of reachable compartments) */
@@ -30,6 +31,13 @@ export function partsSizeWhy(L, w, h) {
   return null;
 }
 
+/* a compartment's part, as the prototype kept it (type, size, length for screws and sized parts, quantity); null when
+   the generator does not know it (inventory.js known) */
+export function cleanItem(it) {
+  if (!it || !I.known(it)) return null;
+  const T = I.TYPES[it.type];
+  return { type: it.type, size: it.size, length: T.screw || T.len ? +it.length || 0 : 0, qty: Math.max(0, Math.round(+it.qty || 0)) };
+}
 /* floor colours: the mode and how many paint slots; the colours themselves are the build's palette regions
    (Drawer:FLOOR1..4, SPEC "Floor colours through the planner's filament picker, stored as palette regions") */
 export const FLOOR_KEYS = Object.freeze(['Drawer:FLOOR1', 'Drawer:FLOOR2', 'Drawer:FLOOR3', 'Drawer:FLOOR4']);
@@ -43,12 +51,13 @@ export function defaultLayout(size, keep = {}) {
   const S = G.SIZES[size]; if (!S) throw new Error(`no parts drawer size ${size}`);
   const g = G.defaultGrid(size);
   const comps = S.shipped ? G.gridComps(S.shipped.cols, S.shipped.rows, keep) : G.evenGrid(size, g.nc, g.nr, keep);
-  return { v: 2, label: 'large', nc: g.nc, nr: g.nr, floor: { mode: 'off', slots: 3 }, comps };
+  return { v: 2, label: 'large', nc: g.nc, nr: g.nr, floor: { mode: 'off', slots: 3 }, outlines: false, comps };
 }
 /* a record's layout, cleaned against the unit's size: null when it is not a layout, or its compartments don't tile this
    size (a layout kept across a resize to a size with no parts drawer, a damaged link). Only what M2 edits is kept: the
-   label size, the floor mode and slots, each compartment's box, holder, scoop, ramp (`tray`) and colour. Parts, cells,
-   covers and the lid wait for M3 (SPEC "Not in M2"). */
+   label size, the floor mode and slots, the outlines switch, each compartment's box, holder, scoop, ramp (`tray`),
+   colour, its part (M3) and the id of its row in the label list (M3). Cells, covers and the lid stay out (SPEC open
+   decision 7: unprinted features wait for their prints). */
 export function cleanLayout(raw, size) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.comps) || !G.SIZES[size]) return null;
   if (raw.label !== undefined && !G.HOLDERS[raw.label]) return null;
@@ -62,7 +71,9 @@ export function cleanLayout(raw, size) {
       v: 2, label: G.HOLDERS[raw.label] ? raw.label : 'small',   // a layout saved before the Large holder used the original (gen.js holderOf)
       nc: int(raw.nc, 1, g.nc, G.defaultGrid(size).nc), nr: int(raw.nr, 1, g.nr, G.defaultGrid(size).nr),
       floor: { mode: FLOOR_MODES.includes(f.mode) ? f.mode : 'off', slots: f.slots === 4 ? 4 : 3 },
-      comps: v2.comps.map((c) => ({ x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, holder: c.holder !== false, scoop: G.SCOOPS[c.scoop] ? c.scoop : 'std', tray: G.trayMM(c), color: int(c.color, 0, G.MAX_FLOOR_COLORS, 0) })),
+      outlines: raw.outlines === true,
+      comps: v2.comps.map((c) => { const item = cleanItem(c.item); return { x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, holder: c.holder !== false, scoop: G.SCOOPS[c.scoop] ? c.scoop : 'std', tray: G.trayMM(c), color: int(c.color, 0, G.MAX_FLOOR_COLORS, 0),
+        ...(item ? { item } : {}), ...(typeof c.labelId === 'string' && c.labelId ? { labelId: c.labelId } : {}) }; }),
     };
   } catch { return null; }
 }
@@ -90,14 +101,22 @@ export function layoutForSize(layout, size0, size1) {
     return { layout: { ...clone(layout), nc: Math.min(layout.nc, g.nc), nr: Math.min(layout.nr, g.nr), comps: moved }, note: '' };
   }
   const next = defaultLayout(size1, keepOf(layout.comps));
-  next.label = layout.label; next.floor = clone(layout.floor);
+  next.label = layout.label; next.floor = clone(layout.floor); next.outlines = !!layout.outlines;
   return { layout: next, note: 'The compartments would get too small for their labels, so the grid started over.' };
 }
 /* the full layout the generator reads: the unit's size and height on the record's layout, and the floor colours as hexes */
 export function fullLayout(L, u, layout = layoutOf(L, u), hexes = FLOOR_DEFAULT_HEX) {
   const f = layout.floor || { mode: 'off', slots: 3 };
   const colors = f.mode === 'off' ? [] : f.mode === 'one' ? [hexes[0]] : hexes.slice(0, f.slots);
-  return { v: 2, size: sizeOfUnit(L, u), height: heightOfUnit(u), label: layout.label, style: 'pyramid', floor: { mode: f.mode, colors }, comps: clone(layout.comps) };
+  return { v: 2, size: sizeOfUnit(L, u), height: heightOfUnit(u), label: layout.label, style: 'pyramid', floor: { mode: f.mode, colors }, outlines: !!layout.outlines, comps: clone(layout.comps) };
 }
-/* what the geometry depends on: the size, height, label and each compartment's shape and features (not its colour) */
-export const geomKey = (full) => JSON.stringify([full.size, full.height, full.label, full.comps.map((c) => [c.x0, c.x1, c.y0, c.y1, !!c.holder, c.scoop, G.trayMM(c)])]);
+/* the part outlines on the floors (M3; the prototype's outlinesNow): each compartment's part at 1:1, where it fits the
+   visible floor; nothing when the switch is off */
+export const outlinesOf = (full) => (full.outlines ? I.placedOutlines(full, G.openFloorRect, 2.5, G.floorRect) : []);
+/* what the geometry depends on: the size, height, label, each compartment's shape and features (not its colour), and,
+   with the outlines on, the parts and which floors are coloured (an outline is cut into a plain floor, inlaid on a
+   coloured one) */
+export const geomKey = (full) => JSON.stringify([full.size, full.height, full.label, full.comps.map((c) => [c.x0, c.x1, c.y0, c.y1, !!c.holder, c.scoop, G.trayMM(c)]),
+  full.outlines ? full.comps.map((c) => [c.item || 0, !!G.floorColorOf(full, c)]) : 0]);
+/* the label text a compartment's part gives it (inventory.js labelText), '' without a part */
+export const compLabelText = (c) => (c.item && I.known(c.item) ? I.labelText(c.item) : '');

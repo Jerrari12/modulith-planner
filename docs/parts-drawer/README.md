@@ -34,7 +34,17 @@ moves on.
   its wall and selection dragging), `editor.js` (the Build workspace's parts drawer: the closed drawers' shells, the
   edit mode's panels, 3D overlays, picking, keys), `download.js` (the zip as the prototype made it, through `zip.js`).
   The stage's part is in `js/main.js` under "the parts drawer (M2": `setDrawerBody`, `isolateUnit`, `frameUnit`,
-  `setOutlineObjects`; the record fields in `js/rules/schema.js` under `setPartsDrawerFields`.
+  `setOutlineObjects`.
+- M3 (2026-11-05): `worker.js` (the generator in a module worker: the shell, the drawer, the download's zip; the same
+  functions run on the main thread where no worker can be made, and under node in the tests), `engine.js` is now its
+  client (cached geometry, an answer that lands later calls back), `labels.js` (compartment labels: the rows a parts
+  drawer's parts give, and their link into the build's one label list, keyed from the layout side as `comp.labelId`),
+  `row.js` (the Parts list row of its own with the download). The record fields are the record's own:
+  `js/rules/schema.js` `cleanPartsLayout` (shape and bounds; the generator's tiling check runs in `unit.js` where the
+  layout is read). The editor gained the parts (a Part field per compartment, the parts list dialog with the kits, part
+  outlines, the label words on the holders, labels.csv in the download); the Labels workspace a "Compartment labels"
+  block; the Parts workspace the row. The `?partsdrawer=1` flag still gates the UI; the record carries the fields on any
+  page.
 
 ## Tests
 
@@ -48,6 +58,8 @@ shells the stretch is checked against and the LDO kit list.
 
 `frame.test.mjs` is M1's: the generated empty shell against the planner's Decor drawer GLBs, read from `parts/` like
 every other GLB test here.
-`unit.test.mjs` and `schema.test.mjs` are M2's: the unit-to-layout mapping and the size change rule, and the record
-fields behind the flag. The editor itself is checked in a browser (the M2 screenshots were taken headless with
-`GEN2_PARTS_LOCAL=1`, as the e2e suite runs); its e2e cases are M3's.
+`unit.test.mjs` and `schema.test.mjs`: the unit-to-layout mapping and the size change rule, and the record fields.
+M3's: `worker.test.mjs` (the worker protocol on node's engine: the shell, a drawer with parts and outlines, the zip),
+`rows-labels.test.mjs` (the Parts list row, the compartment labels). The editor itself runs in a browser:
+`e2e/workspaces.mjs` "Parts drawer: the variant swaps the body, the editor merges and undoes, a part gives a label, the
+Parts list downloads, a link keeps it all" (run with `GEN2_PARTS_LOCAL=1`, as the suite does).

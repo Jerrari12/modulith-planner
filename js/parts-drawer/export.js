@@ -83,7 +83,9 @@ export function bambu3MF(parts, title, colorChange) {
   sub.push('</resources><build/></model>');
   const top = parts.length + 1;
   const model = ['<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06" requiredextensions="p">',
-    '<metadata name="Application">BambuStudio-01.09.00.70</metadata><metadata name="BambuStudio:3mfVersion">1</metadata>', meta(title),
+    // M3 (2026-11-05, SPEC "Export" known issue): the file no longer claims to have been saved by Bambu Studio (it has no
+    // project_settings.config, so Bambu Studio dropped the config); it is a generic 3MF with a model_settings.config
+    '<metadata name="BambuStudio:3mfVersion">1</metadata>', meta(title),
     `<resources><object id="${top}" p:UUID="${uuid(top)}" type="model"><components>`,
     parts.map((p, i) => `<component p:path="/3D/Objects/object_1.model" objectid="${i + 1}" p:UUID="${uuid(top + 1 + i)}" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>`).join(''),
     `</components></object></resources><build p:UUID="${uuid(90)}"><item objectid="${top}" p:UUID="${uuid(91)}" transform="1 0 0 0 1 0 0 0 1 0 0 0" printable="1"/></build></model>`].join('');

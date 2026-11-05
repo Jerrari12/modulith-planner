@@ -1463,3 +1463,29 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
 #ws-insp .pd-unit .pd-plan .wellbox { display: flex; align-items: center; justify-content: center; width: 124px; height: 93px; flex: none; border-radius: 12px; overflow: hidden; }
 #ws-insp .pd-unit .pd-plan .col { min-width: 0; }
 #ws-insp .pd-unit .actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* M3 (2026-11-05): the parts on the plan, the Part field, the parts list dialog */
+#ws .pd-thumb .outline, #ws-plan .outline { fill: rgba(0,0,0,.32); fill-rule: evenodd; pointer-events: none; }
+#ws .pd-thumb .outline.inlay, #ws-plan .outline.inlay { fill: var(--ink-2); opacity: .55; }
+#ws .pd-thumb .labeltxt, #ws-plan .labeltxt { font-family: var(--font-display); font-weight: 800; fill: #1D1E20; pointer-events: none; }
+#ws .pd-thumb .labeltxt { display: none; }
+#ws-insp .pd-part input { width: 150px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font-size: 12px; font-family: var(--font-mono); }
+#ws-modal .box.pd-inv { width: 640px; gap: 10px; }
+#ws-modal .pd-inv .ihead { display: flex; justify-content: space-between; align-items: center; }
+#ws-modal .pd-inv .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-modal .pd-inv .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+#ws-modal .pd-inv label { font-size: 12px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+#ws-modal .pd-inv label.pd-inv-text { flex-direction: column; align-items: stretch; }
+#ws-modal .pd-inv select, #ws-modal .pd-inv textarea, #ws-modal .pd-inv input[type="number"] { font: inherit; font-size: 12px; color: var(--ink); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px; padding: 5px 8px; }
+#ws-modal .pd-inv textarea { font-family: var(--font-mono); resize: vertical; }
+#ws-modal .pd-inv input[type="number"] { width: 70px; }
+#ws-modal .pd-inv .pd-inv-head, #ws-modal .pd-inv .pd-inv-row { display: grid; grid-template-columns: 1.4fr 1fr 80px 80px 44px; gap: 6px; align-items: center; }
+#ws-modal .pd-inv .pd-inv-head span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+#ws-modal .pd-inv .pd-inv-table { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+#ws-modal .pd-inv .pd-inv-sum { margin: 0; font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border-radius: 10px; background: var(--well); border-left: 3px solid var(--measure); }
+#ws-modal .pd-inv .pd-inv-sum.warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: var(--warning); }
+#ws-modal .pd-inv .btns { display: flex; justify-content: flex-end; gap: 8px; }
+#ws-modal .pd-inv .btns .key { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-labels .pd-comp-labels .crow { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; }
+#ws-labels .pd-comp-labels .crow .where { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); min-width: 110px; }
+#ws-labels .pd-comp-labels .crow .words { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ws-labels .pd-comp-labels .crow .state { font-size: 11px; color: var(--ink-3); }

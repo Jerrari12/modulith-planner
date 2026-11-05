@@ -19,7 +19,7 @@ import { tabTitle } from './ui/names.js';
 import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
 import { readLabelDefaults, paletteOfDefaults, urlFor, NEW_SET } from './label-palette.js';   // the label palette's defaults and suggestion set for new builds (2026-10-28)
-import { cleanLook, buildTooNew, setPartsDrawerFields } from './rules/schema.js';   // a shared build's look, cleaned once at the boot (SHARE-LOOK.md)
+import { cleanLook, buildTooNew } from './rules/schema.js';   // a shared build's look, cleaned once at the boot (SHARE-LOOK.md)
 import { partsDrawerOn, PARTS_DRAWER_PARAM } from './parts-drawer/flag.js';   // the parts drawer prototype (M2, 2026-11-05): ?partsdrawer=1
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
@@ -74,7 +74,6 @@ const WORKSPACES = { build: mountBuild, assemble: mountAssemble, parts: mountPar
 
 export async function boot() {
   if (!WS) { (await createStage(document)).releaseFirstDraw(); return; }
-  if (partsDrawerOn()) setPartsDrawerFields(true);   // the record keeps a unit's parts drawer fields only on a flagged page (schema.js)
   document.documentElement.dataset.ws = WS;
   document.documentElement.dataset.mode = initialMode();
   document.documentElement.classList.toggle('ws-phone', isPhone());   // the phone chrome (bottom tabs, sheets) below 1024 px

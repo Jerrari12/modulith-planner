@@ -23,6 +23,8 @@ import { labelPreviewUrl, previewNeeds, previewReady } from '../label-preview.js
 import { LABEL_MEANINGS, SUGGESTED_BODY_TEXT, CATALOG, spoolsOf, spoolFor, paletteOf, samePalette, paletteWarnings, warningText, rankSpools, urlFor,
   readLabelDefaults, writeLabelDefaults, paletteOfDefaults, setOf, suggestedPalette } from '../label-palette.js';
 import { readOwned } from '../state/owned.js';
+import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer (M3, 2026-11-05): compartment labels into this list
+import { compartmentLabels, addToList } from '../parts-drawer/labels.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 
 // eslint-disable-next-line no-undef
@@ -176,6 +178,15 @@ export function mountLabels(stage, ctx) {
     st.last = { desc: r.desc, key: JSON.stringify(store.serialize()) };   // after normalize and the push: the entry as the store holds it
     renderAll();
     return true;
+  }
+  /* the compartment labels (M3) added to the list, one undo step, through the same path as a label change */
+  function compCommit(rows) {
+    store.flush();
+    let added = 0;
+    store.commit((s) => { added = addToList(L, s, +s.length, rows); status(added ? `Added ${added} compartment label${added === 1 ? '' : 's'} to the list.` : 'Nothing to add.'); }, 'label');
+    store.flush();
+    st.last = { desc: `Added ${added} compartment label${added === 1 ? '' : 's'}`, key: JSON.stringify(store.serialize()) };
+    renderAll();
   }
   const lastChange = () => (st.last && st.last.key === JSON.stringify(store.serialize()) ? st.last : null);
   function undoLabel() {
@@ -782,6 +793,19 @@ export function mountLabels(stage, ctx) {
       return el('button.prow' + (isSel ? '.sel' : '') + (st.selLabel === l.id ? '.lsel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on drawer ${R.drawerNumber(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
         [preview(l, false, u, 56), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: 'Drawer ' + R.drawerNumber(s, u.id) })]);
     }))]));
+    /* COMPARTMENT LABELS (M3, js/parts-drawer/labels.js): a parts drawer's compartments that carry a part, as the Studio's
+       print set; a row in this list per compartment, never on a faceplate */
+    if (partsDrawerOn()) {
+      const crows = compartmentLabels(+s.length, s);
+      if (crows.length) {
+        const open = crows.filter((r) => !r.linked);
+        scroll.appendChild(el('div.placed.pd-comp-labels', {}, [
+          el('h4', { text: `Compartment labels (${crows.length})` }),
+          el('div.rows', {}, crows.map((r) => el('div.crow', {}, [el('span.where', { text: `Drawer ${r.drawerNo} · ${r.position}` }), el('span.words', { text: r.text }), el('span.state', { text: r.linked ? (r.stale ? 'words changed' : 'In list') : 'not in the list' })]))),
+          open.length ? el('div.fillrow', {}, [el('button.key.tile.wide', { onclick: () => compCommit(open) }, [icon('plus', { size: 16 }), `Add ${open.length === crows.length ? 'all' : open.length} to the list`])]) : el('p.hint', { text: 'Every compartment label is in the list; the Studio prints them with the rest.' }),
+        ]));
+      }
+    }
     panel.appendChild(scroll);
     // the foot: ways in, fill, exports, settings, status
     const pairs = R.fillPairs(L, s);

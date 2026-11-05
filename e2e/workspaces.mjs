@@ -49,7 +49,7 @@ const test = Object.assign((...args) => {
 }, { after: nodeTest.after });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');   // e2e/ sits beside test/
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.wasm': 'application/wasm', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
 function serve(dir = root) {
   const server = createServer(async (req, res) => {
     try {
@@ -946,6 +946,69 @@ test('Build: a unit placed through the store reaches the stage; move, remove and
   await settle(page, 600);
   const status = await text(page, '#ws-dock .status');
   assert.ok(/issue|Fix/i.test(status) || /valid/i.test(status), 'the dock reports a status: ' + status);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE PARTS DRAWER (M2/M3, 2026-11-05, behind ?partsdrawer=1; docs/parts-drawer/SPEC.md, DECISIONS 2026-11-05): the third Decor
+   drawer variant and its compartment editor. The generator runs in a worker (js/parts-drawer/worker.js) with the local
+   parts pool answering the GLBs; headless Chrome draws it on SwiftShader, so the waits are long. */
+test('Parts drawer: the variant swaps the body, the editor merges and undoes, a part gives a label, the Parts list downloads, a link keeps it all', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
+  const lay = () => page.evaluate(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout ? { comps: u.partsLayout.comps.length, parts: u.partsLayout.comps.filter((c) => c.item).length, linked: u.partsLayout.comps.filter((c) => c.labelId).length } : null; });
+  // the kit's 2W drawer becomes a parts drawer: the Inspector's third option; the engine boots and the shell replaces the GLB
+  await page.evaluate(() => window.__GEN2_VIEWER__.selectUnit(3));
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 15_000 });
+  await btn(page, 'Parts drawer', '#ws-insp').click();
+  await page.waitForFunction(() => { const g = window.__GEN2_VIEWER__.drawerGroupOf(3); return g && g.getObjectByName('parts-body'); }, null, { timeout: 90_000 });
+  assert.equal((await S(page)).placed.find((p) => p.id === 3).variant, 'parts');
+  const box = await page.evaluate(() => { const V = window.__GEN2_VIEWER__; const g = V.drawerGroupOf(3); const b = g.getObjectByName('parts-body'); b.geometry.computeBoundingBox(); const bb = b.geometry.boundingBox; return [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].map((v) => +v.toFixed(2)); });
+  assert.deepEqual(box, [163, 50, 234.3], 'the 240-2W 1H shell: 163 wide, 50 to the rim, 234.3 deep');
+  // Edit compartments: the plan, a drag across two compartments, Merge, Undo through the store
+  await btn(page, 'Edit compartments', '#ws-insp').click();
+  await page.waitForSelector('#ws-plan:not([hidden]) rect.cell', { timeout: 30_000 });
+  await settle(page, 800);
+  const cell = (i) => page.evaluate((i) => { const b = document.querySelector(`#ws-plan rect.cell[data-i="${i}"]`).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }, i);
+  const c6 = await cell(6), c7 = await cell(7);
+  await page.mouse.move(c6.x, c6.y); await page.mouse.down(); await page.mouse.move(c7.x, c7.y, { steps: 6 }); await page.mouse.up();
+  await page.waitForFunction(() => /2 compartments/.test(document.querySelector('#ws-insp .h2')?.textContent || ''), null, { timeout: 15_000 });
+  await btn(page, 'Merge', '#ws-insp').click();
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && u.partsLayout.comps.length === 19; }, null, { timeout: 15_000 });
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return !u.partsLayout || u.partsLayout.comps.length === 20; }, null, { timeout: 15_000 });
+  assert.ok(await page.evaluate(() => document.querySelector('#ws-lib .pd-head')), 'still editing after the undo');
+  // a part in one compartment (M3): its words on the strip in the plan, its row in the Labels workspace
+  await page.mouse.click(c6.x, c6.y);
+  await page.waitForSelector('#ws-insp .pd-part input', { timeout: 15_000 });
+  await page.fill('#ws-insp .pd-part input', 'M3x10 SHCS 100');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && u.partsLayout.comps.some((c) => c.item && c.item.type === 'shcs'); }, null, { timeout: 15_000 });
+  assert.equal(await page.locator('#ws-plan text.labeltxt').count(), 2, 'the part\'s two lines on its label strip');
+  await btn(page, 'Done', '#ws-dock').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .pd-head'), null, { timeout: 15_000 });
+  await page.click('#ws-tabs button:has-text("Labels")');
+  await page.waitForSelector('#ws-labels .pd-comp-labels', { timeout: 60_000 });
+  assert.match(await text(page, '#ws-labels .pd-comp-labels .crow'), /Drawer \d · R\dC\d.*M3 × 10 SHCS.*not in the list/);
+  await page.locator('#ws-labels .pd-comp-labels button').click();
+  await page.waitForFunction(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length === 1, null, { timeout: 15_000 });
+  assert.deepEqual(await lay(), { comps: 20, parts: 1, linked: 1 });
+  // the Parts list: its own row, and the download the worker builds
+  await page.click('#ws-tabs button:has-text("Parts")');
+  await page.waitForSelector('#ws-parts .prow', { timeout: 60_000 });
+  const row = page.locator('#ws-parts .prow', { hasText: 'Decor Parts Drawer' });
+  assert.equal(await row.count(), 1, 'one row for the parts drawer');
+  assert.match(await row.textContent(), /20 compartments/);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 90_000 }), btn(page, 'Download STL + 3MF', '#ws-parts').click()]);
+  assert.match(dl.suggestedFilename(), /^MODULITH-240-2W-1H-Parts-Drawer-20-compartments-Large-labels-MD-[A-Z0-9]{3}-[A-Z0-9]{3}\.zip$/);
+  assert.ok((await stat(await dl.path())).size > 100_000, 'a real zip');
+  // the link carries the layout, the part and its label link; without the flag the drawer renders standard and keeps them
+  const href = await page.evaluate(() => location.href);
+  await page.goto(href, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
+  assert.deepEqual(await lay(), { comps: 20, parts: 1, linked: 1 });
+  await page.goto(href.replace(/&partsdrawer=1/, ''), { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
+  assert.deepEqual(await lay(), { comps: 20, parts: 1, linked: 1 });
+  assert.equal(await page.locator('#ws-plan').count(), 0, 'no editor without the flag');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
