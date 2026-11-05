@@ -7,16 +7,18 @@
  * surface within TOL, and every generated vertex there has a GLB surface within TOL. The Fusion bodies, 240-2W at 0.5H
  * and 1H, and one stretched case of each kind, a 1.5H, a 270 and a 3W.
  *
- * ⚠ Measured 2026-11-04 against the v2609 GLBs (gen2-parts 1d869e1): only the 0.5H lands within 0.05 mm. The 1H and
- * the stretched sizes differ on the outside by features, up to 0.8 mm at 1H (the front pockets at ±74..78 sit at
- * y 30.7..35.3 on the GLB and at 2.7..7.3 on the shell; a rounded feature on the GLB's right wall 5..17 mm behind the
- * front, proud of the shell's groove) and 1.4 mm at 1.5H (the GLB's back bottom corners filled out to the box over the
- * lowest 1.2 mm, where the shell has its edge chamfer: what the GLB build left of the vault's bed flange). The four are
- * recorded here as they measure, not blessed:
- * each asserts its measured figure so a change in either mesh shows, and the brief's 0.05 stays the target.
- *   blocked-on: Joey's call on the 1H front pockets, the right-wall feature and the 1.5H corners (frame or shells to change?)
- *   blocked-since: 2026-11-04
- *   check-by: 2026-11-18
+ * Measured 2026-11-04 against the v2609 GLBs (gen2-parts 1d869e1): only the 0.5H lands within 0.05 mm. The 1H and the
+ * stretched sizes differ on the outside by features, up to 0.8 mm at 1H (the front pockets at ±74..78 sit at y 30.7..35.3
+ * on the GLB and at 2.7..7.3 on the shell; a rounded feature on the GLB's right wall 5..17 mm behind the front, proud of
+ * the shell's groove) and 1.4 mm at 1.5H (the GLB's back bottom corners filled out to the box over the lowest 1.2 mm,
+ * where the shell has its edge chamfer: what the GLB build left of the vault's bed flange).
+ *
+ * Joey, 2026-11-05: the shells are NOT the v2609 drawer. They come from the unversioned prototype drawers in the "240 Parts
+ * Drawers" Fusion file, the latest iteration, and that prototype is the design of record for the parts drawer's outside;
+ * the two 1H differences are design differences between the prototype and the v2609 release, not export errors. So the
+ * four cases below assert their measured difference from the v2609 GLB, each as the figure it is, so a change in either
+ * mesh shows: when the Decor drawers are next re-exported from the prototype, the GLBs should come back to within 0.05
+ * and these move to the plain assertion (DECISIONS 2026-11-05, "The parts drawer's outside is the prototype drawer").
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -94,7 +96,7 @@ function fit(size, height, L, node) {
 }
 const CASES = [
   { size: '240-2W', height: '0.5H', L: 240, node: 'DecorDrawer_240-2W-05H', within: TOL },
-  // measured 2026-11-04, see the header: the figures below are what the v2609 GLBs give, not the target
+  // measured 2026-11-04, see the header: how far the prototype's outside is from the v2609 GLB, by design (Joey 2026-11-05)
   { size: '240-2W', height: '1H', L: 240, node: 'DecorDrawer_240-2W-1H', within: TOL, measured: { glbToShell: 0.801, shellToGlb: 0.800 } },
   { size: '240-2W', height: '1.5H', L: 240, node: 'DecorDrawer_240-2W-15H', within: TOL, measured: { glbToShell: 1.411, shellToGlb: 0.801 } },
   { size: '270-2W', height: '1H', L: 270, node: 'DecorDrawer_270-2W-1H', within: TOL, measured: { glbToShell: 0.807, shellToGlb: 0.800 } },
@@ -108,8 +110,8 @@ test('the frame: x centred on the outside, up is z, the front faces +z, and the 
 });
 
 for (const c of CASES) {
-  // a measured case passes at its pinned figure, not at the brief's 0.05: the name says so, so a green run never reads as the fit being met
-  const name = c.measured ? `${c.size} ${c.height} on ${c.node}: off by ${c.measured.glbToShell} mm, pinned there until Joey's call (the brief's 0.05 is not met)`
+  // a measured case passes at its pinned figure, not at the brief's 0.05: the name says so, so a green run never reads as the GLB matching
+  const name = c.measured ? `${c.size} ${c.height} on ${c.node}: the prototype drawer, ${c.measured.glbToShell} mm from the v2609 GLB by design (not within 0.05)`
     : `${c.size} ${c.height} on ${c.node}: within ${TOL} mm on the outside`;
   test(name, { skip: havePool ? false : 'no parts/ pool (a junction or clone of gen2-parts)' }, async () => {
     const r = await fit(c.size, c.height, c.L, c.node);
@@ -122,7 +124,7 @@ for (const c of CASES) {
       assert.ok(r.glbToShell.max <= c.within, `${c.size} ${c.height}: a GLB vertex ${r.glbToShell.max.toFixed(3)} mm from the shell at ${r.glbToShell.at}`);
       assert.ok(r.shellToGlb.max <= c.within, `${c.size} ${c.height}: a shell vertex ${r.shellToGlb.max.toFixed(3)} mm from the GLB at ${r.shellToGlb.at}`);
     } else {
-      // not within the brief's 0.05: pinned at what was measured, so either mesh changing is seen (see the header)
+      // the prototype against v2609: pinned at what was measured, so either mesh changing is seen (see the header)
       assert.ok(Math.abs(r.glbToShell.max - c.measured.glbToShell) <= 0.01, `${c.size} ${c.height}: GLB to shell measured ${r.glbToShell.max.toFixed(3)} at ${r.glbToShell.at}, was ${c.measured.glbToShell}`);
       assert.ok(Math.abs(r.shellToGlb.max - c.measured.shellToGlb) <= 0.01, `${c.size} ${c.height}: shell to GLB measured ${r.shellToGlb.max.toFixed(3)} at ${r.shellToGlb.at}, was ${c.measured.shellToGlb}`);
     }
