@@ -498,14 +498,15 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
 
 /* THE POLYMAKER OFFER (Joey 2026-11-04: "could we make it so each time they select a polymaker filament maybe something pops up? but
    if they close it or click the link it remembers to go away?"; Sol 01a1a971; worded support first, Joey the same day): a Polymaker
-   pick brings a card that says buying it supports MODULITH, the commission and the first-order 15%. On a desktop it floats beside the
+   pick brings a card that says buying it helps support MODULITH and the first order is 15% off (Joey's own words, 2026-11-05); the
+   commission is the line under the Buy, said once. On a desktop it floats beside the
    picker, level with the foot's Buy, as the hover hints float (Joey 2026-11-05: at the swatch list's end it "eats up so much
    realestate"), and nothing in the picker moves for it; it never covers a card on the stage. On a phone it wraps the foot's Buy and a
    pill on the sheet's handle brings it. ✕ or the Buy followed retires it in this browser, ignoring it does not; storage that throws
    retires it for the page. Every other case runs with it closed (prepareBrowser), these ask for it (polyOffer) */
 const offerContext = async (o = {}) => { const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...o, polyOffer: true }); contexts.add(c); await c.addInitScript(FAST); return c; };
-const OFFER_TITLE = 'Buying this filament supports MODULITH';
-const OFFER_BODY = 'Polymaker pays me a small commission when you buy through this link, and it helps me keep making free MODULITH files. As a thank-you, your first Polymaker order is 15% off.';
+const OFFER_TITLE = 'Purchasing this filament through this link helps support the MODULITH project.';
+const OFFER_BODY = 'As a thank-you, your first Polymaker order is 15% off.';
 const pickSw = async (page, label, how = 'click') => { const s = page.locator(`#ws-picker .sw[aria-label="${label}"]`).first(); await (how === 'tap' ? s.tap() : s.click()); };
 const openCase = async (page, how = 'click') => {
   const row = page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Case$/ }) }).first();
@@ -553,9 +554,9 @@ test('the Polymaker offer on a desktop:a Polymaker pick floats the support-first
   assert.equal(await page.evaluate(() => { document.querySelector('#ws-picker .sw[aria-label="Panchroma Black"]').click(); return document.querySelector('#ws-offer').checkVisibility(); }), true, 'a Panchroma pick: the card shows in the pick’s own render');
   await settle(page, 300);
   const shown = await offerFoot(page);
-  assert.deepEqual([shown.float, shown.floatBody, shown.card, shown.pill], [OFFER_TITLE, OFFER_BODY, null, null], 'the floating card: support first, the commission and the first order in its words; no card in the picker, no pill');
-  assert.deepEqual([shown.buy, shown.rel, shown.discs, shown.commission], ['Buy Polymaker PLA Black →', 'noopener sponsored', [POLYMAKER_LINE], 2],
-    'the foot keeps its plain Buy, rel=sponsored, and the Polymaker line under it: the commission said by the card and by the line, twice');
+  assert.deepEqual([shown.float, shown.floatBody, shown.card, shown.pill], [OFFER_TITLE, OFFER_BODY, null, null], 'the floating card: the support first, then the first order\'s 15%; no card in the picker, no pill');
+  assert.deepEqual([shown.buy, shown.rel, shown.discs, shown.commission], ['Buy Polymaker PLA Black →', 'noopener sponsored', [POLYMAKER_LINE], 1],
+    'the foot keeps its plain Buy, rel=sponsored, and the Polymaker line under it: the commission said once, by the line, not by the card');
   await floatStill(page);
   const at = await offerFloat(page);
   assert.ok(at && at.gap === 12 && Math.abs(at.mid) <= 1 && at.notch && at.hit && !at.over.length, `beside the picker, 12 px off it, level with the Buy, its notch pointing there, its × on top, over nothing: ${JSON.stringify(at)}`);
@@ -584,8 +585,9 @@ test('the Polymaker offer on a desktop:a Polymaker pick floats the support-first
   const back = await offerFloat(page);
   assert.ok(back && Math.abs(back.mid) <= 1 && back.notch && !back.over.length, `the part card gone: level with the Buy again: ${JSON.stringify(back)}`);
   // a short window, the keyboard on its ×: a part card leaves it no room above, so it hides, and the focus goes to the foot's Buy, not
-  // to the page (Sol 01a1ad36); the part card gone, it comes back
-  await page.setViewportSize({ width: 1280, height: 440 });
+  // to the page (Sol 01a1ad36); the part card gone, it comes back. 400 px: at 440 the shorter card of Joey's wording (111 px, was 164)
+  // found room above the part card and lifted instead
+  await page.setViewportSize({ width: 1280, height: 400 });
   await settle(page, 400);
   assert.ok(await offerFloat(page), `a short window: the card still fits beside the Buy: ${JSON.stringify(await offerFloat(page))}`);
   await page.locator('#ws-offer .ox').focus();
@@ -742,8 +744,8 @@ test('the Polymaker offer on a phone: a pill on the sheet\'s handle, clear of it
   const lit = await handle();
   assert.equal(lit.text, 'Supports MODULITH', 'support first on the pill; the card says the discount');
   const onPhone = await offerFoot(page);
-  assert.deepEqual([onPhone.card, onPhone.body, onPhone.where, onPhone.inCard, onPhone.buy, onPhone.discs, onPhone.commission], [OFFER_TITLE, OFFER_BODY, 'buyarea', true, 'Buy Polymaker PLA Black →', [], 1],
-    'a phone\'s card wraps the foot\'s Buy, its sentence standing in for the line under it: the commission said once');
+  assert.deepEqual([onPhone.card, onPhone.body, onPhone.where, onPhone.inCard, onPhone.buy, onPhone.discs, onPhone.commission], [OFFER_TITLE, OFFER_BODY, 'buyarea', true, 'Buy Polymaker PLA Black →', [POLYMAKER_LINE], 1],
+    'a phone\'s card wraps the foot\'s Buy and the Polymaker line under it: the commission said once, by the line');
   assert.deepEqual([lit.hx, lit.chev], [before.hx, before.chev], `the × and the caret where they were (${JSON.stringify({ before, lit })})`);
   assert.ok(lit.pill[2] + 6 <= lit.hx[0] && lit.ttl[2] <= lit.pill[0] && lit.ttl[2] - lit.ttl[0] >= 60, `the pill between the title and the ×, the title keeping room (${JSON.stringify(lit)})`);
   const covered = await page.evaluate(() => { const s = document.querySelector('#ws-picker .sw[aria-label="Panchroma Black"]'), b = s.getBoundingClientRect(); return document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) !== s; });

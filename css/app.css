@@ -573,8 +573,7 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-picker .offer .ohead b, #ws-offer .ohead b { flex: 1; font-size: 12.5px; line-height: 1.3; color: var(--ink); }
 #ws-picker .offer .ox, #ws-offer .ox { flex: none; width: 32px; height: 32px; margin: -6px -6px -6px 0; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 #ws-picker .offer .ox:focus-visible, #ws-offer .ox:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
-#ws-picker .offer .obody, #ws-offer .obody { margin: 0 0 1px; font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }   /* the commission */
-#ws-picker .offer .oeasy, #ws-offer .oeasy { margin: 0; font-size: 11px; line-height: 1.4; color: var(--ink-3); }
+#ws-picker .offer .obody, #ws-offer .obody { margin: 0 0 1px; font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }   /* the first-order 15%; the commission is the line under the Buy */
 /* a desktop's card, floating 12 px off the picker's left edge (colors.js placeFloat) in the hover hints' glass and width (#ws-hint),
    with the offer's orange edge and a notch toward the Buy; under a hint (60), over the stage and its cards' level (6, 7) */
 #ws-offer { position: fixed; z-index: 55; width: 264px; box-sizing: border-box; padding: 10px 12px 12px; border-radius: 14px; display: flex; flex-direction: column; gap: 6px; }

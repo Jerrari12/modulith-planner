@@ -801,10 +801,10 @@ export function mountColors(stage, ctx) {
      commission line. It covers a corner of the stage instead, never a card on it (placeFloat). Before it: the 200 px support-first
      card in the fixed foot left a 1366 x 768 laptop 15 px of list, and at the list's end (Sol 01a1aa04) it filled that laptop's
      142 px list once scrolled to. On a phone the foot already ends the sheet's own scroll, where growth moves nothing: the card wraps
-     the foot's Buy, its sentence standing in for the line under it, and a pill on the sheet's handle (phone.js badge), in the title's
-     room and clear of its ×, brings it into view. No card floats on a phone: beside a full-width sheet it would cover most of the
-     model, and no hint floats there either (hint.js). A phone's card that goes leaves its height and layout behind until the picker is
-     next built, so a sheet scrolled to its end does not slide under the finger (Sol 01a1aa10).
+     the foot's Buy and the commission line under it, and a pill on the sheet's handle (phone.js badge), in the title's room and clear
+     of its ×, brings it into view. No card floats on a phone: the sheet takes the full width, so a card beside it would have to sit
+     over the model, and no hint shows on a touch screen either (hint.js). A phone's card that goes leaves its height and layout
+     behind until the picker is next built, so a sheet scrolled to its end does not slide under the finger (Sol 01a1aa10).
      Counted: the offer seen (its words or the pill), each line's Buy seen, the pill's tap, the offer's close and click, beside the Buy
      click it always sent. */
   const OFFER_KEY = 'gen2-poly-offer';
@@ -829,19 +829,18 @@ export function mountColors(stage, ctx) {
   const seen = (node, name) => { if (seenObs && !seenOnce.has(name)) { node.dataset.seen = name; seenObs.observe(node); } return node; };
   /* SUPPORT FIRST, THE DISCOUNT SECOND (Joey, 2026-11-04, asked whether the offer would feel scummy: "I want the user to know about the
      deal but first feel like they would be helping the project first and foremost"; he took the title and the body below, "let's send
-     it with the support first wording"). The body's first sentence is the commission. A phone's card wraps the foot's Buy and stands
-     in for its line, which comes back the moment the card goes; a desktop's floating card sits beside the foot's Buy, which keeps its
-     own line (the card closes, or waits hidden where a stage card leaves it no room), so on a desktop the commission is said twice
-     while it shows. Put to Joey 2026-11-05 with the choice of taking the sentence out of the card, he answered "Build it". No Buy is
-     ever without its line. "Free MODULITH files" is the site's own claim (the About page: the core system is free, the Club's faceplates
-     are what funds the work). The no-pressure line promises nothing about other brands (Sol 01a1aa04: "any brand ... works" claims a
-     compatibility nobody measured) and never says "any PLA" (the feet print in TPU, a heavy-duty case in PETG). No pleading. */
+     it with the support first wording"). Shortened in his own words 2026-11-05 ("this feels a bit wordy"; "like purchasing this
+     filament through this link helps support the Modulith project... rather than saying polymaker pays me"), and the no-pressure line
+     dropped ("it's like you are trying to sell filament and then telling them nah you don't need it, i would omit that as it's pretty
+     obvious they can select other materials and colors"). So the card says the support and the first-order 15%, and the commission is
+     said once, by the line under the Buy (disclosureFor), which stays beside every Buy: under the foot's on a desktop, the card floating
+     beside it; inside a phone's card, under the Buy the card wraps. "Supports the project" alone would not tell a buyer that the link
+     earns money, and the line does. No pleading. */
   const OFFER_COPY = {
-    title: 'Buying this filament supports MODULITH',
-    body: 'Polymaker pays me a small commission when you buy through this link, and it helps me keep making free MODULITH files. As a thank-you, your first Polymaker order is 15% off.',
-    easy: 'You don’t need Polymaker to print MODULITH. Buying through this link just helps.',
+    title: 'Purchasing this filament through this link helps support the MODULITH project.',
+    body: 'As a thank-you, your first Polymaker order is 15% off.',
     pill: 'Supports MODULITH',   // the discount is the card's to say; "Supports MODULITH · 15% off" squeezed the S23's sheet title to 25 px
-    pillSays: 'Show the offer: buying this filament supports MODULITH, and your first Polymaker order is 15% off',
+    pillSays: 'Show the offer: buying this filament through this link helps support MODULITH, and your first Polymaker order is 15% off',
   };
   /* a Polymaker Buy names the shop's product (Joey's "Buy Polymaker <filament> →"), in the card and out of it alike, so closing the
      card never relabels a button: the colour's own words without the catalog's brand prefix, and PLA for Panchroma PLA, whose colours
@@ -862,7 +861,6 @@ export function mountColors(stage, ctx) {
     el('div.ohead', {}, [el('b', { text: OFFER_COPY.title }),
       el('button.ox', { type: 'button', title: 'Hide this offer', 'aria-label': 'Hide this offer', onclick: () => { const a = floatBuy; retireOffer('close'); if (a && a.isConnected) a.focus({ preventScroll: true }); } }, [icon('x', { size: 14 })])]),
     el('p.obody', { text: OFFER_COPY.body }),
-    el('p.oeasy', { text: OFFER_COPY.easy }),
     el('i.notch', { 'aria-hidden': 'true' }),
   ]);
   if (floatCard) { picker.after(floatCard); seen(floatCard.querySelector('.ohead'), 'offer:polymaker:shown'); }
@@ -889,16 +887,16 @@ export function mountColors(stage, ctx) {
     if (!phone) { floatBuy = a; return area; }   // the card floats beside it (placeFloat, at renderAll's end)
     const head = el('div.ohead', {}, [el('b', { text: OFFER_COPY.title }),
       el('button.ox', { type: 'button', title: 'Hide this offer', 'aria-label': 'Hide this offer', onclick: () => { retireOffer('close'); dropCard(); a.focus({ preventScroll: true }); } }, [icon('x', { size: 14 })])]);
-    const card = el('div.offer', { role: 'group', 'aria-label': 'Supporting MODULITH' }, [head, el('p.obody', { text: OFFER_COPY.body }), a, el('p.oeasy', { text: OFFER_COPY.easy })]);
+    const card = el('div.offer', { role: 'group', 'aria-label': 'Supporting MODULITH' }, [head, el('p.obody', { text: OFFER_COPY.body }), a, disc]);   // the commission line stays under the Buy
     seen(head, 'offer:polymaker:shown');
-    /* the card goes, its room stays until the picker is next built: the foot keeps the card's height under the Buy and the line that
-       come back, and its layout (.held: the reset stays on its own row, not up where the card's × was), so a sheet scrolled to its end
+    /* the card goes, its room stays until the picker is next built: the foot keeps the card's height under the Buy and its line, which
+       step out of it, and its layout (.held: the reset stays on its own row, not up where the card's × was), so a sheet scrolled to its end
        does not slide under the finger (Sol 01a1aa10: the reset rising to the Buy's row shortened the foot and the sheet slid 127 px) */
     function dropCard() {
       if (!card.isConnected) return;
       area.style.minHeight = area.offsetHeight + 'px'; area.classList.add('held'); card.replaceWith(a, disc);
     }
-    area.replaceChildren(card);   // the card's sentence stands in for the line under the Buy
+    area.replaceChildren(card);
     return area;
   }
   /* a phone's pill while the offer shows, on the sheet's handle, the sheet open or swiped down to it: a tap opens the sheet if it has
