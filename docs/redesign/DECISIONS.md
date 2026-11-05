@@ -6975,7 +6975,7 @@ Twice, a × that was hidden at the scroll's end made Playwright scroll before cl
 
 Joey, of the card at the swatch list's end: "my only concern, this feels like it eats up so much realestate when trying to select filament, what are some other ways we can maybe tackle this?" Mock-ups on the branch's own page, at 1366 x 768 where the list is 142 px tall, measured the options:
 - The card as built filled the whole list once scrolled to.
-- The support sentence as a note under the Buy left 93 px of list on every Polymaker pick.
+- The support sentence as a note under the Buy left 93 px of list. The note sits in the fixed foot, so that cost would have applied to every Polymaker pick.
 - A two-line Buy left 116 px.
 - A popover from the head's pill and a 107 px slim card were the other two.
 
@@ -6984,32 +6984,32 @@ Joey then asked: "what if it's a floating modal like how we do those short tutor
 **Where** (`js/workspaces/colors.js` placeFloat, `#ws-offer` in `css/app.css`). One glass card for the page, 264 px wide like the hover-hint bubble. It sits 12 px left of the picker, level with the foot's Buy, with a notch pointing at the Buy.
 
 Nothing in the picker moves for it:
-- At 1366 x 768 the list stays 142 px tall. That is 16 px less than with an Amazon pick, because the Polymaker line under the Buy is one line longer.
+- At 1366 x 768 the list stays 142 px tall. That is 16 px less than with an Elegoo pick (an Amazon link, 158 px), because the Polymaker line under the Buy is one line longer than Amazon's sentence.
 - The foot keeps its plain Buy and that line.
 
 Gone from the desktop: the card in the list, its second Buy, the head's pill and the `.ogone` placeholder.
 
 **It never covers a card on the stage.** Clicking a part on the model opens the part card at the bottom centre, along with the picker. The floating card then lifts clear above the part card and its notch goes; when the part card closes, it comes back level with the Buy.
 
-The same rule holds for:
+The same rule is coded for:
 - the shopping list;
 - the compare tray;
 - Simplify;
 - the dock;
-- the panels on the left.
+- the panels on the left (the Colors panel, the gallery, Surprise me).
 
-Where nothing clears, or it would rise above the picker's top, it waits hidden, still live. No overlap was measured at 1366 x 768, 1280 x 800, 1440 x 900, 1920 x 1080 or 1024 x 768. Below 1024 px wide the phone layout takes over.
+Where nothing clears, or it would rise above the picker's top, it waits hidden, still live. What was checked open: the part card (no overlap at 1366 x 768, 1280 x 800, 1440 x 900, 1920 x 1080 and 1024 x 768, with it open and without it), the shopping list (in the e2e, at 1280 x 800), and the dock and the Colors panel, which are always there. The compare tray, Simplify, the gallery and Surprise me were not opened with the card showing. Below 1024 px wide the phone layout takes over.
 
 It is re-placed:
 - at the end of renderAll;
 - on a window resize;
 - by a ResizeObserver on the picker and those cards. That catches the shopping list, which opens and closes without renderAll.
 
-**Keyboard.** The card follows the picker in the page's order, so Tab from the foot's Reset reaches its ×. The × puts the focus on the foot's Buy. If the card has to hide for lack of room while the keyboard is on its ×, the focus also goes to the foot's Buy (Sol `01a1ad36`).
+**Keyboard.** The card follows the picker in the page's order, so Tab from the foot's Reset reaches its ×. The × puts the focus on the foot's Buy. If the card has to hide for lack of room while its × has the keyboard focus, the focus also goes to the foot's Buy (Sol `01a1ad36`).
 
 **Disclosure.** The card's body says the commission, and so does the line under the foot's Buy, so a desktop says it twice while the card shows. Joey was offered the choice of taking the sentence out of the card and answered "Build it".
 
-**Phone: unchanged.** The card wraps the foot's Buy at the end of the sheet, and a pill on the handle brings it into view. No card floats on a phone: beside a full-width sheet it would cover most of the model, and no hover hint floats on a phone either.
+**Phone: unchanged in code.** The card wraps the foot's Buy at the end of the sheet, and a pill on the handle brings it into view (checked at 360 x 675 in the e2e, not on a real phone). No card floats on a phone: the sheet takes the full width, so a card beside it would have to sit over the model, and hover hints don't show on a touch screen either.
 
 **Tests.** The desktop case and the click case were rewritten.
 
@@ -7018,7 +7018,7 @@ The desktop case covers:
 - Tab reaching the ×;
 - a search leaving the card in place;
 - the part card lifting the card and its return;
-- a 1280 x 440 window, where the part card hides the card under the keyboard and the focus moves to the Buy;
+- a 1280 x 440 window, where the part card leaves no room, so the card hides while its × has the keyboard focus, and the focus moves to the Buy;
 - the shopping list;
 - an ignored card coming back;
 - the picker closed and reopened;
@@ -7026,17 +7026,17 @@ The desktop case covers:
 
 The click case covers:
 - the Buy followed from the keyboard;
-- another tab;
+- a second browser tab, whose next picker shows no card;
 - storage that throws;
 - a phone's card-wrapped Buy followed from the keyboard.
 
 23 of 23 mutants were killed. The first round left two alive, and both were blind spots in the case:
 - It read the card's `hidden` attribute, not whether the card showed. A rule letting `display` win over `[hidden]` went unseen.
-- It never checked that the card shows during the pick's own render. Each pick also resized the dock, whose observer placed the card anyway.
+- It never checked that the card shows during the pick's own render. With the placeFloat call at renderAll's end removed, the card still appeared: something the ResizeObserver watches changed size on each pick (which one was not established).
 
-The case now checks visibility, and checks the card in the same task as the click. That stricter check then caught the card mid-entrance on the throttled software rasteriser, 6 px off. The case now waits for the entrance to finish before measuring.
+The case now checks visibility, and checks the card in the same task as the click. After that change, the geometry step measured the card 6 px off, the length of its entrance slide; the step now waits for the entrance to finish, and passes.
 
-**Review.** Sol `01a1ad36` (code `a237e7e`) found one defect: when placement hid the card while the keyboard was on it, the focus was lost. It was confirmed and fixed, and the follow-up raised no objection.
+**Review.** Sol `01a1ad36` (code `a237e7e`) found one defect: when placement hid the card while it held the keyboard focus, the focus was lost. It was confirmed and fixed, and the follow-up raised no objection. Terra `01a1ad4f` reviewed this entry against its evidence; six wording points were taken.
 
 **Not verified.**
 - Whether the 15% applies by itself at Polymaker's checkout.
