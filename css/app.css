@@ -474,7 +474,7 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-dock .showcase-hint::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; margin-left: -5px; background: var(--orange); transform: rotate(45deg); }
 @media (prefers-reduced-motion: no-preference) { #ws-dock .showcase-hint { animation: showcase-hint-in .32s ease-out; } }
 @keyframes showcase-hint-in { from { opacity: 0; translate: 0 6px; } }
-@keyframes hbadge-in { from { opacity: 0; scale: .7; } }   /* the offer's pill on a phone sheet's handle, each Polymaker pick (colors.js) */
+@keyframes hbadge-in { from { opacity: 0; scale: .7; } }   /* the offer's pill, on a phone sheet's handle or a desktop picker's head, each Polymaker pick (colors.js) */
 /* the Studio / Room stage toggle (the Done scene's room as a stage, behind ?done=room, 2026-10-23) */
 /* the Room | Neutral backdrop switch is the toolbar's now (#ws-tools .backdrop, the .view chip's look) */
 #ws-colors section { display: flex; flex-direction: column; gap: 6px; }
@@ -561,19 +561,28 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-picker .find { display: contents; }   /* the search and the chips: rows of the column on a desktop, one row on a phone */
 #ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
 /* THE BUY BUTTON AND THE POLYMAKER OFFER (colors.js buyArea; Joey 2026-11-04: "it just feels like hidden text at the moment"). The Buy
-   line is a button for good. While the offer shows it is a small card round that button, in the foot, the picker's last row; .room
-   holds the card's height from a picker's opening so a pick that brings or takes the card moves nothing above it (the phone's rule
-   drops it: there the foot ends the sheet's own scroll) */
+   line is a button for good. While the offer shows it is a card with a Buy of its own: on a desktop the swatch list's last child, the
+   fixed foot keeping its plain Buy and line (a card 200 px tall in the foot left a 1366 x 768 laptop 15 px of list, Sol 01a1aa04), the
+   panel's head carrying a pill to it; on a phone round the foot's Buy, at the end of the sheet's own scroll (the phone block below) */
 #ws-picker .buyarea { display: flex; flex-direction: column; gap: 6px; }
-#ws-picker .buyarea.room { min-height: 140px; }
-#ws-picker .foot .buy { align-self: flex-start; display: inline-flex; align-items: center; min-height: 36px; box-sizing: border-box; padding: 7px 14px; border-radius: 10px; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); font-size: 13px; font-weight: 700; line-height: 1.25; text-decoration: none; }
-#ws-picker .foot .buy:hover { filter: brightness(1.06); }
-#ws-picker .foot .buy:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-#ws-picker .offer { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-radius: 12px; border: 1px solid var(--orange-edge); background: var(--key-bg); }
+#ws-picker a.buy { align-self: flex-start; display: inline-flex; align-items: center; min-height: 36px; box-sizing: border-box; padding: 7px 14px; border-radius: 10px; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); font-size: 13px; font-weight: 700; line-height: 1.25; text-decoration: none; }
+#ws-picker a.buy:hover { filter: brightness(1.06); }
+#ws-picker a.buy:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+#ws-picker .offer { display: flex; flex-direction: column; gap: 5px; padding: 8px 10px 10px; border-radius: 12px; border: 1px solid var(--orange-edge); background: var(--key-bg); }
 #ws-picker .offer .ohead { display: flex; align-items: center; gap: 8px; }
-#ws-picker .offer .ohead b { flex: 1; font-size: 13px; color: var(--ink); }
+#ws-picker .offer .ohead b { flex: 1; font-size: 12.5px; line-height: 1.3; color: var(--ink); }
 #ws-picker .offer .ox { flex: none; width: 32px; height: 32px; margin: -6px -6px -6px 0; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 #ws-picker .offer .ox:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+#ws-picker .offer .obody { margin: 0 0 1px; font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }   /* the commission, beside the card's Buy */
+#ws-picker .offer .oeasy { margin: 0; font-size: 11px; line-height: 1.4; color: var(--ink-3); }
+#ws-picker .brands > .offer { flex: none; margin: 8px 0 2px; }
+#ws-picker .brands > .ogone { flex: none; margin: 8px 0 2px; }   /* a closed card's room, its margins too (Sol 01a1aa10), kept till the picker is next built (an empty flex item shrank to 0 and the list's end slid 209 px) */
+#ws-picker .brands > .offer:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+/* a desktop's pill to the card, in the head between the title and its ×: the title stays one line (it ellipsizes), so nothing under the head moves */
+#ws-picker .head .hbadge { flex: none; height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid var(--orange-edge); background: var(--orange); color: var(--on-orange); font: inherit; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+#ws-picker .head .hbadge:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+#ws-picker .head:has(.hbadge) .h2 { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: no-preference) { #ws-picker .head .hbadge { animation: hbadge-in .26s var(--ease-out) both; } }
 #ws-picker .foot .disc, #ws-shop .disc { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
 #ws-picker .foot .key { align-self: flex-start; }
 #ws-partcard { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 440px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
@@ -1141,11 +1150,10 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws .sheet#ws-picker .foot .disc { grid-column: 1 / -1; }
   /* the Buy and its line share the reset's row; the Polymaker offer's card takes the whole width and the reset drops under it */
   #ws .sheet#ws-picker .foot .buyarea { grid-column: 1; grid-row: 1; }
-  #ws .sheet#ws-picker .foot .buyarea.room { min-height: 0; }
-  #ws .sheet#ws-picker .foot .buyarea:has(.offer) { grid-column: 1 / -1; }
-  #ws .sheet#ws-picker .foot .buyarea:has(.offer) ~ .resets { grid-column: 1 / -1; grid-row: 2; justify-self: end; }
+  #ws .sheet#ws-picker .foot .buyarea:has(.offer), #ws .sheet#ws-picker .foot .buyarea.held { grid-column: 1 / -1; }   /* .held: a card just closed, its layout kept till the next build */
+  #ws .sheet#ws-picker .foot .buyarea:has(.offer) ~ .resets, #ws .sheet#ws-picker .foot .buyarea.held ~ .resets { grid-column: 1 / -1; grid-row: 2; justify-self: end; }
   /* the offer's pill on the handle (colors.js offerBadge): the title gives it room (it ellipsizes), the × and the caret keep their places */
-  #ws .sheet-handle .hbadge { flex: none; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--orange-edge); background: var(--orange); color: var(--on-orange); font: inherit; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+  #ws .sheet-handle .hbadge { flex: none; height: 26px; padding: 0 8px; border-radius: 13px; border: 1px solid var(--orange-edge); background: var(--orange); color: var(--on-orange); font: inherit; font-size: 10.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }   /* "Supports MODULITH" leaves the title 60 px on its side (780 x 260) */
   #ws .sheet-handle .hbadge:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   @media (prefers-reduced-motion: no-preference) { #ws .sheet-handle .hbadge { animation: hbadge-in .26s var(--ease-out) both; } }
   #ws .sheet-handle .hx { flex: none; width: 32px; height: 32px; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
