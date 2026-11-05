@@ -6915,6 +6915,8 @@ Joey: "they do have the hex color for all the galaxy glitter filaments from poly
 
 **The link.** Followed on 2026-11-04, it lands on `/products/galaxy-pla` carrying `utm_campaign=JERRARI` and `ref=superfiliate-JERRARI`.
 
-**Pins moved.** Twelve lines and 177 colours in `test/filament-db.test.mjs`; the glitter family in `test/glitter.test.mjs`; the PLA line order in `test/materials.test.mjs` and the two e2e line lists. The Surprise me pools are computed from hex, and four of the new colours joined them: Dark Red among Warm's earths, Dark Green among Calm's accents, Black and Dark Grey among Workshop's shells, the Hedgehog red among Workshop's reds (`test/styles.test.mjs`).
+**Pins moved.** Twelve lines and 177 colours in `test/filament-db.test.mjs`; the glitter family in `test/glitter.test.mjs`; the PLA line order in `test/materials.test.mjs` and the two e2e line lists. The Surprise me pools are computed from hex, and five of the new colours joined them: Dark Red among Warm's accents (its earths), Dark Green among Calm's accents, Black and Dark Grey among Workshop's shells, Hedgehog Makes - Galaxy Red among Workshop's accents; Dark Blue joined none (`test/styles.test.mjs`; "four" until 2026-11-04, a miscount Terra `01a1a99f` caught in the vault's copy).
 
 Checks: the unit suite (913 pass); on `E2E_SOFT=1` the feet case, the silk sheen case, the Galaxy model case and the glitter swatch case.
+
+**Live** the evening of 2026-11-04 as `07305c4f` (run 41952357035; 02:33 UTC on the 5th). Live checks on that stamp: `swatch-prod.mjs` 21 of 21, now listing all fifteen Galaxy rows; `glitter-prod.mjs` 21 of 21, its old "Hedgehog Makes waits for its link" turned into the six rows present and Hedgehog Makes' red glittering on the model with the Galaxy PLA handle, rel sponsored, the commission line under it.
