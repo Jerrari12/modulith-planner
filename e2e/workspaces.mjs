@@ -498,11 +498,11 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
 
 /* THE POLYMAKER OFFER (Joey 2026-11-04: "could we make it so each time they select a polymaker filament maybe something pops up? but
    if they close it or click the link it remembers to go away?"; Sol 01a1a971; worded support first, Joey the same day): a Polymaker
-   pick brings a card that says buying it supports MODULITH, the commission and the first-order 15%, with a Buy of its own. On a
-   desktop it ends the swatch list's scroll and the fixed foot keeps the plain Buy and its line (a card 200 px tall in the foot left a
-   1366 x 768 laptop 15 px of list: Sol 01a1aa04), and a pill in the head brings it into view; on a phone it wraps the foot's Buy.
-   ✕ or a Buy followed retires it in this browser, ignoring it does not; storage that throws retires it for the page. Every other case
-   runs with it closed (prepareBrowser), these ask for it (polyOffer) */
+   pick brings a card that says buying it supports MODULITH, the commission and the first-order 15%. On a desktop it floats beside the
+   picker, level with the foot's Buy, as the hover hints float (Joey 2026-11-05: at the swatch list's end it "eats up so much
+   realestate"), and nothing in the picker moves for it; it never covers a card on the stage. On a phone it wraps the foot's Buy and a
+   pill on the sheet's handle brings it. ✕ or the Buy followed retires it in this browser, ignoring it does not; storage that throws
+   retires it for the page. Every other case runs with it closed (prepareBrowser), these ask for it (polyOffer) */
 const offerContext = async (o = {}) => { const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...o, polyOffer: true }); contexts.add(c); await c.addInitScript(FAST); return c; };
 const OFFER_TITLE = 'Buying this filament supports MODULITH';
 const OFFER_BODY = 'Polymaker pays me a small commission when you buy through this link, and it helps me keep making free MODULITH files. As a thank-you, your first Polymaker order is 15% off.';
@@ -513,74 +513,125 @@ const openCase = async (page, how = 'click') => {
   await (how === 'tap' ? row.tap() : row.click());
   await page.waitForFunction(() => document.querySelector('#ws-picker .brands button.sw'), null, { timeout: 20_000 }).catch(() => assert.fail('the Case\'s picker has no swatches'));
 };
-/* the picker's foot and its offer, wherever the card is: `where` the card's parent (buyarea on a phone, brands on a desktop), `last`
-   whether it ends that parent, `buys` every Buy's label, `commission` how often the word is said in the picker */
+/* the picker's foot and the offer, wherever it is: `card` a card in the picker (a phone's, round the foot's Buy; `where` its parent),
+   `float` a desktop's floating card while it shows, `commission` how often the word is said in the picker and the floating card */
 const offerFoot = (page) => page.evaluate(() => {
   const p = document.querySelector('#ws-picker'), f = p.querySelector('.foot'), r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.top), Math.round(b.height)]; };
   const card = p.querySelector('.offer'), a = f.querySelector('a.buy'), head = p.querySelector(':scope > .head'), list = p.querySelector('.brands');
-  return { card: card ? card.querySelector('.ohead b').textContent : null, body: card ? card.querySelector('.obody').textContent : null, where: card ? card.parentElement.className : null, last: !!card && card === card.parentElement.lastElementChild,
-    cardBuy: card ? [card.querySelector('a.buy').textContent, card.querySelector('a.buy').rel] : null, inCard: !!(card && card.contains(a)), buy: a.textContent, rel: a.rel, discs: [...f.querySelectorAll('.disc')].map((d) => d.textContent),
-    commission: (p.textContent.match(/commission/g) || []).length, pill: head?.querySelector('.hbadge')?.textContent ?? null, head: r(head), x: r(head?.querySelector('.x')),
-    foot: r(f), list: r(list), scroll: list ? Math.round(list.scrollTop) : null, sw: r(p.querySelector('.sw[aria-label="Panchroma Black"]')) };
+  const fl = document.querySelector('#ws-offer'), on = !!fl && fl.checkVisibility();   // seen, not the attribute: a rule that let display win over [hidden] showed it
+  return { card: card ? card.querySelector('.ohead b').textContent : null, body: card ? card.querySelector('.obody').textContent : null, where: card ? card.parentElement.className : null,
+    inCard: !!(card && card.contains(a)), buy: a.textContent, rel: a.rel, discs: [...f.querySelectorAll('.disc')].map((d) => d.textContent),
+    float: on ? fl.querySelector('.ohead b').textContent : null, floatBody: on ? fl.querySelector('.obody').textContent : null,
+    commission: ((p.textContent + (on ? fl.textContent : '')).match(/commission/g) || []).length, pill: p.querySelector('.hbadge')?.textContent ?? null,
+    head: r(head), x: r(head?.querySelector('.x')), foot: r(f), list: r(list), scroll: list ? Math.round(list.scrollTop) : null, sw: r(p.querySelector('.sw[aria-label="Panchroma Black"]')) };
+});
+/* where the floating card is: `gap` from the picker's left edge, `mid` its centre from the foot's Buy's (0: level with it), the notch
+   shown or not, `over` every stage card or panel it overlaps, `hit` whether its × is what a click there reaches */
+const offerFloat = (page) => page.evaluate(() => {
+  const q = (s) => { const e = document.querySelector(s); if (!e || !e.checkVisibility()) return null; const b = e.getBoundingClientRect(); return b.width ? { l: b.left, t: b.top, r: b.right, b: b.bottom } : null; };
+  const f = q('#ws-offer'), p = q('#ws-picker'), a = q('#ws-picker .foot a.buy');
+  if (!f) return null;
+  const x = document.querySelector('#ws-offer .ox'), xb = x.getBoundingClientRect();
+  return { gap: Math.round(p.l - f.r), mid: Math.round((f.t + f.b) / 2 - (a.t + a.b) / 2), top: Math.round(f.t), bottom: Math.round(f.b), notch: !document.querySelector('#ws-offer .notch').hidden,
+    over: ['#ws-colors', '#ws-partcard', '#ws-dock', '#ws-shop', '#ws-tray', '#ws-simplify', '#ws-picker'].filter((s) => { const b = q(s); return b && f.l < b.r && f.r > b.l && f.t < b.b && f.b > b.t; }),
+    hit: x.contains(document.elementFromPoint(xb.left + xb.width / 2, xb.top + xb.height / 2)) };
 });
 const offerLog = (page) => page.evaluate(() => window.__GEN2_VIEWER__.trackLog.filter((n) => /^(offer|seen|buy):/.test(n)));
+/* the card's entrance done (a 6 px slide, app.css offer-in), so its place is its resting one: a pick's render on a throttled software
+   rasteriser can hold its first frame back past a fixed wait, and the card measured 6 px off (2026-11-05) */
+const floatStill = (page) => page.waitForFunction(() => { const f = document.querySelector('#ws-offer'); return !!f && f.checkVisibility() && f.getAnimations().every((a) => a.playState === 'finished'); }, null, { timeout: 15_000 })
+  .catch(() => assert.fail('the card’s entrance never finished'));
 
-test('the Polymaker offer: a Polymaker pick ends the list with the support-first card, the head\'s pill brings it, and ✕ retires it for good', async () => {
+test('the Polymaker offer on a desktop:a Polymaker pick floats the support-first card beside the picker, level with its Buy, and ✕ retires it for good', async () => {
   const { ctx, page, errors } = await open('colors', { context: await offerContext() });
   await openCase(page);
   await pickSw(page, 'Elegoo PLA Black');
   await settle(page, 400);
   const plain = await offerFoot(page);
-  assert.deepEqual([plain.card, plain.pill, plain.buy, plain.discs], [null, null, 'Buy Elegoo PLA Black →', [AMAZON_SENTENCE]], 'an Elegoo pick: no offer, no pill, Amazon\'s sentence under the Buy');
-  await pickSw(page, 'Panchroma Black');
-  await page.waitForSelector('#ws-picker .offer', { timeout: 15_000 }).catch(() => assert.fail('a Panchroma pick showed no offer'));
+  assert.deepEqual([plain.card, plain.float, plain.pill, plain.buy, plain.discs], [null, null, null, 'Buy Elegoo PLA Black →', [AMAZON_SENTENCE]], 'an Elegoo pick: no offer, no pill, Amazon\'s sentence under the Buy');
+  // placed in the pick's own render (renderAll ends with placeFloat), not left to a later resize of something it keeps clear of
+  assert.equal(await page.evaluate(() => { document.querySelector('#ws-picker .sw[aria-label="Panchroma Black"]').click(); return document.querySelector('#ws-offer').checkVisibility(); }), true, 'a Panchroma pick: the card shows in the pick’s own render');
   await settle(page, 300);
   const shown = await offerFoot(page);
-  assert.deepEqual([shown.card, shown.body, shown.where, shown.last, shown.cardBuy], [OFFER_TITLE, OFFER_BODY, 'brands', true, ['Buy Polymaker PLA Black →', 'noopener sponsored']],
-    'the card: support first, the commission and the first order in its words, the swatch list\'s last child, a Buy of its own with rel=sponsored');
-  assert.deepEqual([shown.inCard, shown.buy, shown.rel, shown.discs, shown.commission], [false, 'Buy Polymaker PLA Black →', 'noopener sponsored', [POLYMAKER_LINE], 2],
-    'the fixed foot keeps its plain Buy and the Polymaker line under it (the card can scroll away from it): the commission said by each Buy, twice in all');
-  assert.equal(shown.pill, 'Supports MODULITH', 'the pill in the head');
-  assert.deepEqual([shown.head, shown.x, shown.list[0]], [plain.head, plain.x, plain.list[0]], `nothing under the head moved: the head, its ×, the list's top (${JSON.stringify({ plain, shown })})`);
-  assert.ok(shown.list[1] >= plain.list[1] - 20, `the list keeps its height, the card not in the foot (${plain.list[1]} -> ${shown.list[1]})`);
+  assert.deepEqual([shown.float, shown.floatBody, shown.card, shown.pill], [OFFER_TITLE, OFFER_BODY, null, null], 'the floating card: support first, the commission and the first order in its words; no card in the picker, no pill');
+  assert.deepEqual([shown.buy, shown.rel, shown.discs, shown.commission], ['Buy Polymaker PLA Black →', 'noopener sponsored', [POLYMAKER_LINE], 2],
+    'the foot keeps its plain Buy, rel=sponsored, and the Polymaker line under it: the commission said by the card and by the line, twice');
+  await floatStill(page);
+  const at = await offerFloat(page);
+  assert.ok(at && at.gap === 12 && Math.abs(at.mid) <= 1 && at.notch && at.hit && !at.over.length, `beside the picker, 12 px off it, level with the Buy, its notch pointing there, its × on top, over nothing: ${JSON.stringify(at)}`);
   await page.waitForFunction(() => window.__GEN2_VIEWER__.trackLog.includes('offer:polymaker:shown'), null, { timeout: 15_000 }).catch(async () => assert.fail(`no offer:polymaker:shown; the log: ${JSON.stringify(await offerLog(page))}`));
-  // a search refills the list: the card stays its last child
+  // the keyboard reaches its × from the foot: the card follows the picker in the page's order
+  await page.locator('#ws-picker .foot .resets button').focus();
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-offer .ox')), true, 'Tab from the foot\'s last button lands on the card\'s ×');
+  // a search refills the list: the card stays where it is
   await page.locator('#ws-picker input.search').fill('grey');
   await settle(page, 300);
-  assert.deepEqual([(await offerFoot(page)).where, (await offerFoot(page)).last], ['brands', true], 'a search: the card still ends the list');
+  assert.equal((await offerFoot(page)).float, OFFER_TITLE, 'a search: the card stays');
   await page.locator('#ws-picker input.search').fill('');
   await settle(page, 300);
-  // ignored, it is not retired: another line and back, it comes again
+  // a part picked on the model opens the part card at the bottom centre: the card lifts clear above it, its notch gone, and comes back
+  // level with the Buy when the part card goes
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setSelected(v.manifest.instances.find((x) => /^case\d+$/.test(x.id)).id); });
+  await page.waitForFunction(() => !document.querySelector('#ws-partcard').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('no part card'));
+  await settle(page, 300);
+  const part = await offerFloat(page), pc = await page.evaluate(() => Math.round(document.querySelector('#ws-partcard').getBoundingClientRect().top));
+  assert.ok(part && !part.over.length && part.bottom <= pc - 8 && !part.notch && part.gap === 12, `the part card shown: the card clear above it, no notch (part card's top ${pc}): ${JSON.stringify(part)}`);
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSelected(null));
+  await page.waitForFunction(() => document.querySelector('#ws-partcard').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('the part card stayed'));
+  await settle(page, 300);
+  assert.equal(await page.locator('#ws-picker').isVisible(), true, 'the picker stays open with the part deselected');
+  const back = await offerFloat(page);
+  assert.ok(back && Math.abs(back.mid) <= 1 && back.notch && !back.over.length, `the part card gone: level with the Buy again: ${JSON.stringify(back)}`);
+  // a short window, the keyboard on its ×: a part card leaves it no room above, so it hides, and the focus goes to the foot's Buy, not
+  // to the page (Sol 01a1ad36); the part card gone, it comes back
+  await page.setViewportSize({ width: 1280, height: 440 });
+  await settle(page, 400);
+  assert.ok(await offerFloat(page), `a short window: the card still fits beside the Buy: ${JSON.stringify(await offerFloat(page))}`);
+  await page.locator('#ws-offer .ox').focus();
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setSelected(v.manifest.instances.find((x) => /^case\d+$/.test(x.id)).id); });
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 15_000 }).catch(async () => assert.fail(`a part card with no room above it: the card stayed ${JSON.stringify(await offerFloat(page))}`));
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'hidden under the keyboard: the focus on the foot\'s Buy');
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSelected(null));
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('the part card gone: the card did not come back'));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await settle(page, 400);
+  // the shopping list rises from the dock: never under the card (it lifts above it, or waits hidden where it cannot), and back after
+  await page.locator('#ws-dock button.status').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-shop').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('no shopping list'));
+  await settle(page, 300);
+  const shop = await offerFloat(page), st = await page.evaluate(() => Math.round(document.querySelector('#ws-shop').getBoundingClientRect().top));
+  assert.ok(shop === null || (!shop.over.length && shop.bottom <= st - 8), `the shopping list open: the card clear of it or hidden (the list's top ${st}): ${JSON.stringify(shop)}`);
+  await page.locator('#ws-shop button.x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-shop').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('the shopping list stayed'));
+  await settle(page, 300);
+  const after = await offerFloat(page);
+  assert.ok(after && Math.abs(after.mid) <= 1 && after.notch, `the shopping list closed: the card back by the Buy: ${JSON.stringify(after)}`);
+  // ignored, it is not retired: another line, or the picker closed, and back, it comes again
   await pickSw(page, 'Elegoo PLA Black');
   await settle(page, 300);
-  const back = await offerFoot(page);
-  assert.deepEqual([back.card, back.pill, back.head, back.sw], [null, null, plain.head, plain.sw], 'an Elegoo pick again: no offer, no pill, nothing moved, the swatch where it was');
+  assert.deepEqual([(await offerFoot(page)).float, (await offerFoot(page)).sw], [null, plain.sw], 'an Elegoo pick again: no card, the swatch where it was');
   await pickSw(page, 'Panchroma Black');
-  await page.waitForSelector('#ws-picker .offer', { timeout: 15_000 }).catch(() => assert.fail('ignored, the offer did not come back'));
-  // the pill: the list scrolls the card's title to its top (taller than this laptop's list, its end would cut the title off), focus on its Buy
-  await page.locator('#ws-picker > .head .hbadge').click();
-  await page.waitForFunction(() => { const l = document.querySelector('#ws-picker .brands'), c = l.querySelector('.offer'); if (!c) return false; const lb = l.getBoundingClientRect(), cb = c.getBoundingClientRect(); return cb.top >= lb.top - 1 && cb.top <= lb.top + 12; }, null, { timeout: 10_000 })
-    .catch(async () => assert.fail(`the pill did not bring the card's title into view: ${JSON.stringify(await offerFoot(page))}`));
-  assert.deepEqual(await page.evaluate(() => [!!document.activeElement && document.activeElement.matches('#ws-picker .brands .offer a.buy'), window.__GEN2_VIEWER__.trackLog.includes('offer:polymaker:jump')]), [true, true], 'the focus on the card\'s Buy, the tap counted');
-  // scrolled to the list's very end, where a lost margin would show (Sol 01a1aa10); on a window tall enough that the card's × is in view
-  // there (at 1280 x 800 the card outgrows the list, and a click on its hidden × made Playwright scroll it into view first)
-  await page.setViewportSize({ width: 1280, height: 1000 });
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('ignored, the offer did not come back'));
+  await page.locator('#ws-picker > .head .x').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('the picker closed, the card stayed'));
+  await openCase(page);
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('the picker again on the Panchroma pick: no card'));
   await settle(page, 300);
-  await page.evaluate(() => { const l = document.querySelector('#ws-picker .brands'); l.scrollTop = l.scrollHeight; });
-  await settle(page, 200);
-  const atCard = await offerFoot(page);
-  // ✕: the card and the pill go, its room stays at the list's end (the scroll does not slide), the foot's Buy takes the focus
-  await page.locator('#ws-picker .offer .ox').click();
+  const open2 = await offerFoot(page);
+  // ✕: the card goes, nothing in the picker moves, the focus goes to the foot's Buy
+  await page.locator('#ws-offer .ox').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('✕ left the card'));
   const closed = await offerFoot(page);
-  assert.deepEqual([closed.card, closed.pill, closed.buy, closed.discs, closed.commission], [null, null, 'Buy Polymaker PLA Black →', [POLYMAKER_LINE], 1], 'closed: no card, no pill, the foot\'s Buy and its line');
-  assert.deepEqual([closed.scroll, closed.list, closed.head], [atCard.scroll, atCard.list, atCard.head], 'the list where it was, scrolled where it was');
+  assert.deepEqual([closed.float, closed.card, closed.pill, closed.buy, closed.discs, closed.commission], [null, null, null, 'Buy Polymaker PLA Black →', [POLYMAKER_LINE], 1], 'closed: no card, the foot\'s Buy and its line');
+  assert.deepEqual([closed.head, closed.list, closed.foot, closed.scroll], [open2.head, open2.list, open2.foot, open2.scroll], `nothing in the picker moved with the card's going (${JSON.stringify({ open2, closed })})`);
   assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'the focus on the foot\'s Buy, not lost with the ✕');
   assert.equal(await page.evaluate(() => localStorage.getItem('gen2-poly-offer')), 'close', 'remembered as closed');
   await pickSw(page, 'Elegoo PLA Black'); await settle(page, 200);
   await pickSw(page, 'Panchroma Black'); await settle(page, 300);
-  assert.deepEqual([(await offerFoot(page)).card, (await offerFoot(page)).pill], [null, null], 'closed stays closed in this page');
+  assert.deepEqual([(await offerFoot(page)).float, (await offerFoot(page)).pill], [null, null], 'closed stays closed in this page');
   const log = await offerLog(page);
-  assert.deepEqual(log.filter((n) => n.startsWith('offer:')), ['offer:polymaker:shown', 'offer:polymaker:jump', 'offer:polymaker:close'], `the offer seen once a page, the pill tapped, then closed: ${JSON.stringify(log)}`);
+  assert.deepEqual(log.filter((n) => n.startsWith('offer:')), ['offer:polymaker:shown', 'offer:polymaker:close'], `the offer seen once a page, then closed: ${JSON.stringify(log)}`);
   assert.ok(log.includes('seen:filament:elegoo-pla-petg') && log.includes('seen:filament:polymaker-panchroma-pla'), `each line's Buy seen once: ${JSON.stringify(log)}`);
   assert.ok(!log.some((n) => n.startsWith('buy:')), 'no buy without a click');
   // and in this browser: a reload, the picker again, no offer
@@ -590,25 +641,24 @@ test('the Polymaker offer: a Polymaker pick ends the list with the support-first
   await pickSw(page, 'Panchroma Black');
   await settle(page, 400);
   const later = await offerFoot(page);
-  assert.deepEqual([later.card, later.pill, later.buy], [null, null, 'Buy Polymaker PLA Black →'], 'after a reload: the plain Buy, no card, no pill');
+  assert.deepEqual([later.float, later.card, later.pill, later.buy], [null, null, null, 'Buy Polymaker PLA Black →'], 'after a reload: the plain Buy, no card');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
 
-test('the Polymaker offer: following either Buy retires it too, and storage that throws retires it for the page', async () => {
+test('the Polymaker offer: following the Buy retires it too, and storage that throws retires it for the page', async () => {
   const { ctx, page, errors } = await open('colors', { context: await offerContext() });
   const other = await open('colors', { context: ctx });   // a second tab of the same browser, open before the click
   // the link's own handler runs first; this one cancels the navigation, so no store tab opens
   await page.evaluate(() => { document.addEventListener('click', (e) => { if (e.target.closest('a[target="_blank"]')) e.preventDefault(); }); });
   await openCase(page);
   await pickSw(page, 'Panchroma Black');
-  await page.waitForSelector('#ws-picker .offer', { timeout: 15_000 }).catch(() => assert.fail('a Panchroma pick showed no offer'));
-  // the card's Buy followed from the keyboard: Enter on it is its click, and when the card gives way the focus goes to the foot's Buy,
-  // not to the page (Sol 01a1a995)
-  await page.locator('#ws-picker .offer a.buy').focus();
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('a Panchroma pick floated no offer'));
+  // the foot's Buy followed from the keyboard: Enter on it is its click; the card goes and the focus stays on the Buy
+  await page.locator('#ws-picker .foot a.buy').focus();
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => !document.querySelector('#ws-picker .offer') && !document.querySelector('#ws-picker > .head .hbadge') && document.querySelector('#ws-picker .foot a.buy'), null, { timeout: 10_000 }).catch(() => assert.fail('the card or its pill stayed after its Buy was followed'));
-  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'the focus on the foot\'s Buy');
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('the card stayed after the Buy was followed'));
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'the focus still on the foot\'s Buy');
   assert.deepEqual(await page.evaluate(() => [localStorage.getItem('gen2-poly-offer'), window.__GEN2_VIEWER__.trackLog.filter((n) => /^(offer:polymaker:(click|close)|buy:)/.test(n))]),
     ['click', ['buy:filament:polymaker-panchroma-pla', 'offer:polymaker:click']], 'the click counted as a buy and retired the offer');
   // the other tab loaded while the offer lived; its next picker reads the browser's word again and offers nothing
@@ -616,11 +666,11 @@ test('the Polymaker offer: following either Buy retires it too, and storage that
   await pickSw(other.page, 'Panchroma Black');
   await settle(other.page, 400);
   const there = await offerFoot(other.page);
-  assert.deepEqual([there.card, there.pill], [null, null], 'the other tab: no card and no pill once this one retired it');
+  assert.deepEqual([there.float, there.pill], [null, null], 'the other tab: no card once this one retired it');
   assert.deepEqual(clean(errors), []);
   assert.deepEqual(clean(other.errors), []);
   await ctx.close();
-  // storage that throws (a blocked site's): the offer shows, and following the foot's plain Buy retires it for the page, without an error
+  // storage that throws (a blocked site's): the offer shows, and following the foot's Buy retires it for the page, without an error
   const c2 = await offerContext();
   await c2.addInitScript(() => {
     const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
@@ -630,28 +680,36 @@ test('the Polymaker offer: following either Buy retires it too, and storage that
   const b = await open('colors', { context: c2 });
   await openCase(b.page);
   await pickSw(b.page, 'Panchroma Black');
-  await b.page.waitForSelector('#ws-picker .offer', { timeout: 15_000 }).catch(() => assert.fail('with storage throwing, no offer'));
-  // a laptop's list too short for the card: the pill brings its title to the top and focuses the card, not a Buy cut off below (Sol 01a1aa10)
-  await b.page.setViewportSize({ width: 1280, height: 680 });
-  await settle(b.page, 400);
-  await b.page.locator('#ws-picker > .head .hbadge').click();
-  await b.page.waitForFunction(() => { const l = document.querySelector('#ws-picker .brands'), c = l.querySelector('.offer'); if (!c) return false; const lb = l.getBoundingClientRect(), cb = c.getBoundingClientRect(); return cb.top >= lb.top - 1 && cb.top <= lb.top + 12; }, null, { timeout: 10_000 })
-    .catch(() => assert.fail('a short list: the pill did not bring the card\'s title into view'));
-  const shortList = await b.page.evaluate(() => { const l = document.querySelector('#ws-picker .brands'), f = document.activeElement, fb = f.getBoundingClientRect(), lb = l.getBoundingClientRect(); return { list: Math.round(lb.height), focus: f.matches('#ws-picker .brands > .offer') ? 'card' : f.matches('#ws-picker .offer a.buy') ? 'buy' : f.tagName, inView: fb.top >= lb.top - 1 && Math.min(fb.bottom, fb.top + 40) <= lb.bottom + 1 }; });
-  assert.ok(shortList.list < 160, `the short list: ${JSON.stringify(shortList)}`);
-  assert.deepEqual([shortList.focus, shortList.inView], ['card', true], `the focus on the card, in view: ${JSON.stringify(shortList)}`);
-  await b.page.setViewportSize({ width: 1280, height: 800 });
-  await settle(b.page, 300);
+  await b.page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('with storage throwing, no offer'));
   await b.page.evaluate(() => { document.addEventListener('click', (e) => { if (e.target.closest('a[target="_blank"]')) e.preventDefault(); }); });
   await b.page.locator('#ws-picker .foot a.buy').click();
-  await b.page.waitForFunction(() => !document.querySelector('#ws-picker .offer'), null, { timeout: 10_000 }).catch(() => assert.fail('the foot\'s Buy followed, the card stayed'));
+  await b.page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('the foot\'s Buy followed, the card stayed'));
   await pickSw(b.page, 'Elegoo PLA Black'); await settle(b.page, 200);
   await pickSw(b.page, 'Panchroma Black'); await settle(b.page, 300);
   const gone = await offerFoot(b.page);
-  assert.deepEqual([gone.card, gone.pill], [null, null], 'retired for the page though storage would not keep it');
+  assert.deepEqual([gone.float, gone.pill], [null, null], 'retired for the page though storage would not keep it');
+  // and the next opening's re-read throws too: the page's word holds
+  await b.page.locator('#ws-picker > .head .x').click();
+  await openCase(b.page);
+  await settle(b.page, 300);
+  assert.equal((await offerFoot(b.page)).float, null, 'a new opening: still retired');
   assert.deepEqual(await b.page.evaluate(() => window.__GEN2_VIEWER__.trackLog.filter((n) => /^(offer:polymaker:(click|close)|buy:)/.test(n))), ['buy:filament:polymaker-panchroma-pla', 'offer:polymaker:click'], 'the foot\'s Buy counted and retired it');
   assert.deepEqual(clean(b.errors), []);
   await c2.close();
+  // a phone's card wraps the Buy: followed from a keyboard (a narrow window with one gets the sheets too), the card gives way after
+  // the click and the focus stays on the Buy it unwraps, not dropped to the page (Sol 01a1a995)
+  const c3 = await offerContext({ viewport: { width: 360, height: 675 }, isMobile: true, hasTouch: true });
+  const ph = await open('colors', { phone: true, context: c3 });
+  await ph.page.evaluate(() => { document.addEventListener('click', (e) => { if (e.target.closest('a[target="_blank"]')) e.preventDefault(); }); });
+  await openCase(ph.page, 'tap');
+  await pickSw(ph.page, 'Panchroma Black', 'tap');
+  await ph.page.waitForSelector('#ws-picker .foot .offer a.buy', { timeout: 15_000 }).catch(() => assert.fail('a phone\'s Panchroma pick: no card round the Buy'));
+  await ph.page.locator('#ws-picker .foot .offer a.buy').focus();
+  await ph.page.keyboard.press('Enter');
+  await ph.page.waitForFunction(() => !document.querySelector('#ws-picker .foot .offer'), null, { timeout: 10_000 }).catch(() => assert.fail('a phone\'s card stayed after its Buy was followed'));
+  assert.equal(await ph.page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'a phone: the focus on the Buy the card let go of');
+  assert.deepEqual(clean(ph.errors), []);
+  await c3.close();
 });
 
 /* on Joey's S23 (360 x 675) the foot is the end of a long sheet: the offer also puts a pill on the sheet's handle, in the title's room,

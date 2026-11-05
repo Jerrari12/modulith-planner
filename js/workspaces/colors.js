@@ -794,15 +794,17 @@ export function mountColors(stage, ctx) {
      on that"). Consulted (Sol 01a1a971): not a pop-up over the colours on every pick, which would make shopping compete with choosing
      them, but a card by the Buy button, worded support first (OFFER_COPY). Closing it or following a Buy retires it in this browser
      (gen2-poly-offer); ignoring it does not. The Buy line is a button for good, offer or not.
-     WHERE THE CARD GOES (Sol 01a1aa04, once the support-first words made it 200 px tall at the picker's 287): on a desktop the swatch
-     list is the panel's one flexible part, and a card that tall in the fixed foot left a 1366 x 768 laptop 15 px of list (and held
-     from the opening for everyone, as the first card's 140 px were, 15 px whatever was picked). So on a desktop the card ends the
-     list's own scroll, the fixed foot keeps the plain Buy and its commission line (a Buy that can be scrolled away from the card's
-     sentence needs its own), and a pill in the panel's head brings the card into view. On a phone the foot already ends the sheet's
-     own scroll, where growth moves nothing: the card wraps the foot's Buy, its sentence standing in for the line under it, and the
-     pill sits on the sheet's handle (phone.js badge) in the title's room, clear of its ×. A foot pinned in view under the list was
-     tried first and dropped: on the S23 it covered all but a row of the half-open sheet. Nothing slides under a second tap: a card that
-     goes leaves its height behind until the picker is next built, so a list or a sheet scrolled to its end stays put (Sol 01a1aa04).
+     WHERE THE CARD GOES. On a desktop it FLOATS beside the picker, level with the foot's Buy, as the hover hints float beside a panel
+     (Joey 2026-11-05, of the card at the swatch list's end: "this feels like it eats up so much realestate when trying to select
+     filament ... what if it's a floating modal like how we do those short tutorial video clips on hover? and maybe a small x button to
+     make it disapear?", then "Build it"). Nothing in the picker moves for it: the list keeps its height, the foot its plain Buy and
+     commission line. It covers a corner of the stage instead, never a card on it (placeFloat). Before it: the 200 px support-first
+     card in the fixed foot left a 1366 x 768 laptop 15 px of list, and at the list's end (Sol 01a1aa04) it filled that laptop's
+     142 px list once scrolled to. On a phone the foot already ends the sheet's own scroll, where growth moves nothing: the card wraps
+     the foot's Buy, its sentence standing in for the line under it, and a pill on the sheet's handle (phone.js badge), in the title's
+     room and clear of its ×, brings it into view. No card floats on a phone: beside a full-width sheet it would cover most of the
+     model, and no hint floats there either (hint.js). A phone's card that goes leaves its height and layout behind until the picker is
+     next built, so a sheet scrolled to its end does not slide under the finger (Sol 01a1aa10).
      Counted: the offer seen (its words or the pill), each line's Buy seen, the pill's tap, the offer's close and click, beside the Buy
      click it always sent. */
   const OFFER_KEY = 'gen2-poly-offer';
@@ -812,8 +814,8 @@ export function mountColors(stage, ctx) {
     offer.retired = true; offer.live = false;
     stage.track('offer:polymaker:' + how);
     try { localStorage.setItem(OFFER_KEY, how); } catch { /* this page still remembers */ }
-    picker.querySelector(':scope > .head .hbadge')?.remove();   // the pill goes with it: a desktop's in the head,
-    if (phone) phone.refresh();   // a phone's on the sheet's handle
+    if (floatCard) floatCard.hidden = true;   // a desktop's floating card goes at once,
+    if (phone) phone.refresh();   // a phone's pill on the sheet's handle with its card
   };
   const seenOnce = new Set();
   const seenObs = typeof IntersectionObserver === 'function'
@@ -827,9 +829,11 @@ export function mountColors(stage, ctx) {
   const seen = (node, name) => { if (seenObs && !seenOnce.has(name)) { node.dataset.seen = name; seenObs.observe(node); } return node; };
   /* SUPPORT FIRST, THE DISCOUNT SECOND (Joey, 2026-11-04, asked whether the offer would feel scummy: "I want the user to know about the
      deal but first feel like they would be helping the project first and foremost"; he took the title and the body below, "let's send
-     it with the support first wording"). The body's first sentence is the commission, beside the card's Buy; wherever the card is not
-     beside a Buy, that Buy keeps its own line (a phone's card stands in for it, and it comes back the moment the card goes), so no Buy
-     is ever without one. "Free MODULITH files" is the site's own claim (the About page: the core system is free, the Club's faceplates
+     it with the support first wording"). The body's first sentence is the commission. A phone's card wraps the foot's Buy and stands
+     in for its line, which comes back the moment the card goes; a desktop's floating card sits beside the foot's Buy, which keeps its
+     own line (the card closes, or waits hidden where a stage card leaves it no room), so on a desktop the commission is said twice
+     while it shows. Put to Joey 2026-11-05 with the choice of taking the sentence out of the card, he answered "Build it". No Buy is
+     ever without its line. "Free MODULITH files" is the site's own claim (the About page: the core system is free, the Club's faceplates
      are what funds the work). The no-pressure line promises nothing about other brands (Sol 01a1aa04: "any brand ... works" claims a
      compatibility nobody measured) and never says "any PLA" (the feet print in TPU, a heavy-duty case in PETG). No pleading. */
   const OFFER_COPY = {
@@ -849,7 +853,19 @@ export function mountColors(stage, ctx) {
     const nm = c.name.replace(/\bPolymaker /g, '');   // a colour named for the brand ("Polymaker Teal") says it once
     return `Buy Polymaker ${b.line === 'Panchroma™ PLA' ? 'PLA ' : ''}${nm} →`;
   };
-  let listCard = null;   // a desktop's card, the swatch list's last child (fillBrands puts it back when a search refills the list)
+  /* A DESKTOP'S CARD, one for the page: shown while the foot's Buy is a live offer's (floatBuy) and there is room beside the picker
+     (placeFloat). It follows the picker in the page's order, so the keyboard reaches its × from the foot; × puts the focus back on the
+     foot's Buy */
+  let floatBuy = null;
+  // isPhone(): the same call that makes `phone`, which is made further down
+  const floatCard = isPhone() ? null : el('div.glass', { id: 'ws-offer', role: 'group', 'aria-label': 'Supporting MODULITH', hidden: true }, [
+    el('div.ohead', {}, [el('b', { text: OFFER_COPY.title }),
+      el('button.ox', { type: 'button', title: 'Hide this offer', 'aria-label': 'Hide this offer', onclick: () => { const a = floatBuy; retireOffer('close'); if (a && a.isConnected) a.focus({ preventScroll: true }); } }, [icon('x', { size: 14 })])]),
+    el('p.obody', { text: OFFER_COPY.body }),
+    el('p.oeasy', { text: OFFER_COPY.easy }),
+    el('i.notch', { 'aria-hidden': 'true' }),
+  ]);
+  if (floatCard) { picker.after(floatCard); seen(floatCard.querySelector('.ohead'), 'offer:polymaker:shown'); }
   /* the foot's Buy, for a region's picker and a spool's alike: `pick` is what buyFilamentEvent names, `url` where it goes */
   function buyArea(url, text, pick) {
     const ev = stage.buyFilamentEvent(pick);
@@ -858,57 +874,45 @@ export function mountColors(stage, ctx) {
     if (isPolymaker(url)) text = polyBuyText(pick && pick.name);
     const rel = isPaid(url) ? 'noopener sponsored' : 'noopener';
     const disc = el('span.disc', { text: disclosureFor([url]) });   // the one line under the Buy: Amazon's sentence or the Polymaker sentence
-    const follow = (link) => {
+    const follow = () => {
       stage.track(ev);
       if (!live || offer.retired) return;
-      retireOffer('click');
-      // the card gives way once the new tab has its click (moving the link inside its own click handler could cost the navigation)
-      // and a keyboard's Enter left the focus on it, which a move would drop (Sol 01a1a995)
-      setTimeout(() => { const had = document.activeElement === link; dropCard(); if (had) a.focus({ preventScroll: true }); }, 0);
+      retireOffer('click');   // a desktop's floating card goes with it, the Buy itself staying where it is
+      // a phone's card gives way once the new tab has its click (moving the link inside its own click handler could cost the
+      // navigation) and a keyboard's Enter left the focus on it, which a move would drop (Sol 01a1a995)
+      if (phone) setTimeout(() => { const had = document.activeElement === a; dropCard(); if (had) a.focus({ preventScroll: true }); }, 0);
     };
-    const a = el('a.buy', { href: url, target: '_blank', rel, text, onclick: () => follow(a) });
+    const a = el('a.buy', { href: url, target: '_blank', rel, text, onclick: follow });
     seen(a, ev.replace(/^buy:/, 'seen:'));
     const area = el('div.buyarea', {}, [a, disc]);
     if (!live) return area;
+    if (!phone) { floatBuy = a; return area; }   // the card floats beside it (placeFloat, at renderAll's end)
     const head = el('div.ohead', {}, [el('b', { text: OFFER_COPY.title }),
       el('button.ox', { type: 'button', title: 'Hide this offer', 'aria-label': 'Hide this offer', onclick: () => { retireOffer('close'); dropCard(); a.focus({ preventScroll: true }); } }, [icon('x', { size: 14 })])]);
-    const cardBuy = phone ? a : el('a.buy', { href: url, target: '_blank', rel, text, onclick: () => follow(cardBuy) });
-    const card = el('div.offer', { role: 'group', 'aria-label': 'Supporting MODULITH', tabindex: phone ? null : '-1' }, [head, el('p.obody', { text: OFFER_COPY.body }), cardBuy, el('p.oeasy', { text: OFFER_COPY.easy })]);
+    const card = el('div.offer', { role: 'group', 'aria-label': 'Supporting MODULITH' }, [head, el('p.obody', { text: OFFER_COPY.body }), a, el('p.oeasy', { text: OFFER_COPY.easy })]);
     seen(head, 'offer:polymaker:shown');
-    /* the card goes, its room stays until the picker is next built: on a phone the foot keeps the card's height under the Buy and the
-       line that come back, and its layout (.held: the reset stays on its own row, not up where the card's × was), on a desktop an empty
-       block keeps the list's end, so neither scroll is cut short under the finger (Sol 01a1aa10: the reset rising to the Buy's row
-       shortened the foot and the sheet slid 127 px) */
+    /* the card goes, its room stays until the picker is next built: the foot keeps the card's height under the Buy and the line that
+       come back, and its layout (.held: the reset stays on its own row, not up where the card's × was), so a sheet scrolled to its end
+       does not slide under the finger (Sol 01a1aa10: the reset rising to the Buy's row shortened the foot and the sheet slid 127 px) */
     function dropCard() {
-      if (listCard === card) listCard = null;
       if (!card.isConnected) return;
-      if (phone) { area.style.minHeight = area.offsetHeight + 'px'; area.classList.add('held'); card.replaceWith(a, disc); return; }
-      const gap = el('div.ogone', { 'aria-hidden': 'true' }); gap.style.height = card.offsetHeight + 'px'; card.replaceWith(gap);
+      area.style.minHeight = area.offsetHeight + 'px'; area.classList.add('held'); card.replaceWith(a, disc);
     }
-    if (phone) { area.replaceChildren(card); return area; }   // the card's sentence stands in for the line under the Buy
-    listCard = card;   // renderPicker puts it at the list's end
+    area.replaceChildren(card);   // the card's sentence stands in for the line under the Buy
     return area;
   }
-  /* the pill while the offer shows: on a phone on the sheet's handle, the sheet open or swiped down to it; on a desktop in the panel's
-     head. A tap opens the sheet if it has to, brings the card into view (a phone's sheet scrolled to its end, the foot; a desktop's
-     list scrolled to the card's title) and puts focus on the card's Buy */
-  const offerBadge = () => !offer.live ? null : seen(el('button.hbadge', { type: 'button', text: OFFER_COPY.pill, title: OFFER_COPY.pillSays.replace(/^Show the offer: b/, 'B'), 'aria-label': OFFER_COPY.pillSays, onclick: (e) => {
+  /* a phone's pill while the offer shows, on the sheet's handle, the sheet open or swiped down to it: a tap opens the sheet if it has
+     to, scrolls it to its end, where the card is, and puts the focus on the card's Buy */
+  const offerBadge = () => !offer.live || !phone ? null : seen(el('button.hbadge', { type: 'button', text: OFFER_COPY.pill, title: OFFER_COPY.pillSays.replace(/^Show the offer: b/, 'B'), 'aria-label': OFFER_COPY.pillSays, onclick: (e) => {
     e.stopPropagation();   // the handle's own click would open or close the sheet
     stage.track('offer:polymaker:jump');
     const go = () => {
       const c = picker.querySelector('.offer');
       if (!c) return;
-      const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-      if (phone) picker.scrollTo({ top: picker.scrollHeight, behavior });
-      // a desktop's list scrolls the card's title to its top: on a laptop the card is taller than the list, and its end would cut the title off
-      else { const box = c.closest('.brands'); box.scrollTo({ top: box.scrollTop + c.getBoundingClientRect().top - box.getBoundingClientRect().top - 6, behavior }); }
-      // the focus goes to the card's Buy where that is in view once the title is at the top; a list too short for it (a 1366 x 768
-      // laptop's 142 px) takes the focus to the card itself, never to a button cut off below the list's edge (Sol 01a1aa10)
-      const buy = c.querySelector('a.buy'), box = phone ? null : c.closest('.brands');
-      const fits = !box || buy.getBoundingClientRect().bottom - c.getBoundingClientRect().top + 6 <= box.clientHeight;
-      (fits ? buy : c).focus({ preventScroll: true });
+      picker.scrollTo({ top: picker.scrollHeight, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      c.querySelector('a.buy').focus({ preventScroll: true });
     };
-    if (phone && !picker.classList.contains('open')) { phone.open(picker); requestAnimationFrame(() => requestAnimationFrame(go)); } else go();
+    if (!picker.classList.contains('open')) { phone.open(picker); requestAnimationFrame(() => requestAnimationFrame(go)); } else go();
   } }), 'offer:polymaker:shown');
   function openPicker(key) { st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
   function closePicker() { st.key = null; st.swap = null; renderAll(); if (phone) phone.collapse(picker); if (st.scHintDue) { st.scHintDue = false; showcaseHint(); } }
@@ -960,7 +964,7 @@ export function mountColors(stage, ctx) {
     // the spool whose picker this is, lit in the room; and a region's row picked, the spool it prints in (Astra's review,
     // brought by Joey 2026-10-28: "selecting its row could also briefly highlight the corresponding spool")
     if (room && room.handle && room.handle.selectSpool) room.handle.selectSpool(swap ? swap.hex : key && stage.activeHex ? stage.activeHex(key) : null);
-    offer.live = false; listCard = null;   // the foot's buyArea says again whether the offer shows, and where
+    offer.live = false; floatBuy = null;   // the foot's buyArea says again whether the offer shows
     if (!key && !swap) { picker.hidden = true; st.offerFor = null; return; }
     // another tab may have retired it since this page loaded: each opening (another region, another spool) reads the browser's word
     // again, once, so no pick inside an opening takes the card away unasked
@@ -1011,7 +1015,6 @@ export function mountColors(stage, ctx) {
         ? [el('button.key.sm', { text: 'Use build colour', title: `Drop this ${unitWord()}’s own ${regionOf(key).toLowerCase()} colour · it follows the build again`, disabled: !unitPick, onclick: () => commitColors('color-unit', () => stage.setOverride(uid, key, null)) })]
         : [el('button.key.sm', { text: isFeet(key) ? 'Reset to TPU95 Black' : 'Reset to instruction colour', title: isFeet(key) ? 'Every foot back to PolyFlex TPU95 Black, own colours included' : `Every ${typePlural(key).replace(/s$/, '')} ${regionOf(key).toLowerCase()} back to the kit’s colour, own colours included`, disabled: isFeet(key) ? !!w && w.name === 'Polymaker PolyFlex TPU95 Black' && !own : !w && !own, onclick: () => commitColors('color', () => { stage.setColor(key, null); if (own) stage.clearOverrides(null, key); }) })]),
     ]));
-    placeOffer(brands);
   }
 
   /* the filaments to pick from: those already in this build, then every brand's, TPU for the feet and only for them;
@@ -1037,15 +1040,37 @@ export function mountColors(stage, ctx) {
       if (open) brands.appendChild(el('div.swatches', {}, colors.map((f) => el('button.sw' + (active === f.label ? '.active' : '') + (f.pick ? '.pick' : '') + finishClass(f.label), { style: swatchStyle(f.label, f.hex), title: f.label + (f.pick ? (f.pickNote || ' · ★ Used by Jerrari') : ''), 'aria-label': f.label, onclick: () => onPick(f) }))));
     }
     if (!any) brands.appendChild(el('p.note', { text: 'No filaments match.' }));
-    if (listCard) brands.appendChild(listCard);   // a desktop's offer stays the list's end through a search or a folded brand
     pickerSparkle.sync();
   }
-  /* a desktop's offer card at the swatch list's end, and its pill in the panel's head, clear of the × (buyArea, offerBadge) */
-  function placeOffer(brands) {
-    if (!listCard) return;
-    brands.appendChild(listCard);
-    const hd = picker.querySelector(':scope > .head'), pill = offerBadge();
-    if (hd && pill) hd.insertBefore(pill, hd.querySelector('.x'));
+  /* WHERE A DESKTOP'S CARD FLOATS: 12 px off the picker's left edge, as a hover hint sits beside its panel (hint.js), level with the
+     foot's Buy and its notch pointing there. Never over a card on the stage (the part card a click on the model opens, the shopping
+     list, the compare tray, Simplify), the dock, or the panels on the left: a card in its way lifts it clear above, the notch going
+     when the Buy is no longer beside it, and where nothing clears (or it would rise past the picker's top) it waits hidden, still
+     live, until there is room. Run at renderAll's end and whenever one of those changes size, appears or goes */
+  const FLOAT_CLEAR = '#ws-colors, #ws-gallery, #ws-surprise, #ws-partcard, #ws-shop, #ws-tray, #ws-simplify, #ws-dock';
+  /* hidden with the keyboard on its ×, the focus goes to the foot's Buy, not to the page (Sol 01a1ad36: a part card or a window that
+     leaves it no room hides it under the keyboard); a closed picker takes its own focus with it, as for any of its controls */
+  function hideFloat() {
+    const had = floatCard.contains(document.activeElement);
+    floatCard.hidden = true;
+    if (had && floatBuy && floatBuy.isConnected && !picker.hidden) floatBuy.focus({ preventScroll: true });
+  }
+  function placeFloat() {
+    if (!floatCard) return;
+    const buy = offer.live && !offer.retired && !picker.hidden && floatBuy && floatBuy.isConnected ? floatBuy : null;
+    if (!buy) { hideFloat(); return; }
+    floatCard.hidden = false;
+    const P = picker.getBoundingClientRect(), B = buy.getBoundingClientRect(), w = floatCard.offsetWidth, h = floatCard.offsetHeight;
+    const x = P.left - w - 12, mid = B.top + B.height / 2;
+    let y = Math.min(innerHeight - h - 8, mid - h / 2);
+    const blocks = [...root.querySelectorAll(FLOAT_CLEAR)].map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0 && q.height > 0);
+    const hit = () => blocks.find((q) => x < q.right + 8 && x + w > q.left - 8 && y < q.bottom + 8 && y + h > q.top - 8);
+    for (let q = hit(), n = 0; q && n < blocks.length; q = hit(), n++) y = q.top - 8 - h - 4;
+    if (hit() || y < P.top || x < 8) { hideFloat(); return; }
+    floatCard.style.left = `${Math.round(x)}px`; floatCard.style.top = `${Math.round(y)}px`;
+    const notch = floatCard.querySelector('.notch'), at = mid - y;
+    notch.hidden = at < 16 || at > h - 16;
+    notch.style.top = `${Math.round(at - 6)}px`;
   }
   /* the picker on a spool (swapTarget): what it prints, and one pick changes all of it */
   const swapName = (t) => t.names.length === 1 ? short(t.names[0]) : t.names.length ? t.names.map(short).join(' & ') : 'Instruction colour';
@@ -1065,7 +1090,6 @@ export function mountColors(stage, ctx) {
       // the region picker's foot, the same buyArea: a plain label (this one still said "· paid link" after 2026-10-24), the
       // offer while it lives, and the one disclosure line
       picker.appendChild(el('div.foot', {}, [buyArea(t.url, `Buy ${name} →`, { name: t.names[0], url: t.url })]));
-      placeOffer(brands);
     }
   }
 
@@ -1206,8 +1230,16 @@ export function mountColors(stage, ctx) {
   }
   function safeArea() { if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phoneBottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
   function safe() { safeArea(); if (room && room.handle) room.handle.refit(); }   // the room's shot follows the free region too (the picker opening narrows it)
-  function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); }
+  function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); placeFloat(); }
   addEventListener('resize', safe, { signal });
+  if (floatCard) {   // the floating card follows the window, the picker, and the cards it keeps clear of as they come and go (placeFloat)
+    addEventListener('resize', placeFloat, { signal });
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(() => placeFloat());
+      for (const e of [picker, ...root.querySelectorAll(FLOAT_CLEAR)]) ro.observe(e);
+      signal.addEventListener('abort', () => ro.disconnect());
+    }
+  }
   for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown', 'touchstart']) document.addEventListener(type, autoArm, { signal, passive: true, capture: true });
   document.addEventListener('visibilitychange', autoArm, { signal });
   signal.addEventListener('abort', () => clearTimeout(autoTimer));
