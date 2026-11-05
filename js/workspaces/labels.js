@@ -289,7 +289,7 @@ export function mountLabels(stage, ctx) {
     const body = [`Place ${n(k, 'label')} in the empty ${k === 1 ? 'drawer' : 'drawers'}` + (rest.length ? `; ${rest.length} ${rest.length === 1 ? 'stays' : 'stay'} ready to place.` : '.'), list];
     if (rest.length) body.push(el('p.rest', { text: 'Stay ready to place: ' + rest.map((l) => shown(R.labelShort(l)) || '(icon only)').join(', ') }));
     body.push('Order: top row first, left to right. One Undo takes the whole fill back.');
-    openModal({ title: 'Fill empty drawers', body, ok: `Place ${n(k, 'label')}`, onOk: () => { closeModal(); labelCommit(R.fill(L, S(), pairs)); }, onCancel: () => closeModal() });
+    openModal({ title: 'Fill empty drawers', body, ok: `Place ${n(k, 'label')}`, onOk: () => { closeModal(); if (labelCommit(R.fill(L, S(), pairs)) !== false) stage.trackOnce('label:fill-empty'); }, onCancel: () => closeModal() });
   }
 
   /* ---------------- the modal (Replace, Fill, Use custom wording) ---------------- */
@@ -395,6 +395,7 @@ export function mountLabels(stage, ctx) {
     try { p.frame.contentWindow.postMessage({ gen2parts: 'open', v: 1, session: p.session, req: p.req, id: want.id, item: want.item }, STUDIO_ORIGIN); } catch { /* the frame went away */ }
   }
   function openPicker({ open = null } = {}) {
+    stage.trackOnce('label:picker');   // the Part Picker, in its modal (2026-11-04)
     if (picker && picker.buildId !== S().buildId) { picker.veil.remove(); picker = null; }   // another build: a new frame and session, so a batch still in flight for the old one is a stranger here (Sol 01a13844); the Picker keeps its list in its own storage
     if (!picker) {
       const session = newSession();
@@ -475,6 +476,7 @@ export function mountLabels(stage, ctx) {
   // app's exact address (its PLANNER_RETURNS, live since 2026-10-13; DECISIONS.md 2026-10-13)
   const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
   function openStudio(parts) {
+    stage.trackOnce('label:studio');   // out to the Label Studio's own tab (2026-11-04)
     ctx.builds?.keepCurrent?.();   // its Add to planner build reopens this browser's current build: this one (app.js)
     try { window.open(studioHref(parts), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
   }
@@ -698,8 +700,8 @@ export function mountLabels(stage, ctx) {
       el('h2', { text: 'Labels' }),
       el('span.count', { text: ready.length ? `${n(ready.length, 'label')} ready to place` : labels.length ? (slots ? `${onN} of ${slots} drawers labelled` : `${n(labels.length, 'label')}`) : '' }),
       labels.length ? el('span.tools', {}, [
-        el('button.mini', { title: 'Download the list · a MODULITH label list (.json) the Label Studio opens', 'aria-label': 'Download the label list', onclick: () => download(`modulith-${s.length}-labels.json`, JSON.stringify({ ...R.exportDoc(L, s), output: P.printOutput(st.print) }, null, 2), 'application/json') }, [icon('download-simple', { size: 16 })]),
-        el('button.mini', { title: 'Copy the labels as text, in drawer order', 'aria-label': 'Copy the labels as text', onclick: async () => { try { await navigator.clipboard.writeText(R.exportText(L, s)); say('Labels copied.'); } catch { say('Could not reach the clipboard.'); } } }, [icon('copy', { size: 16 })]),
+        el('button.mini', { title: 'Download the list · a MODULITH label list (.json) the Label Studio opens', 'aria-label': 'Download the label list', onclick: () => { stage.trackOnce('label:download'); download(`modulith-${s.length}-labels.json`, JSON.stringify({ ...R.exportDoc(L, s), output: P.printOutput(st.print) }, null, 2), 'application/json'); } }, [icon('download-simple', { size: 16 })]),
+        el('button.mini', { title: 'Copy the labels as text, in drawer order', 'aria-label': 'Copy the labels as text', onclick: async () => { stage.trackOnce('label:copy'); try { await navigator.clipboard.writeText(R.exportText(L, s)); say('Labels copied.'); } catch { say('Could not reach the clipboard.'); } } }, [icon('copy', { size: 16 })]),
       ]) : null,
     ]));
     panel.appendChild(renderViewBar());
@@ -755,7 +757,7 @@ export function mountLabels(stage, ctx) {
     // the hint. None under the faceplate callout: it already says so and offers the switch (the stress test, 2026-10-15:
     // on a Classic build the same sentence stood three times and squeezed the list to two rows)
     // the empty list's sentence carries the one link to the full Label Studio (a new tab; the tile went on 2026-10-20)
-    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => ctx.builds?.keepCurrent?.(), title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
+    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => { stage.trackOnce('label:studio'); ctx.builds?.keepCurrent?.(); }, title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
       : !faceOk ? null
       : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
       : sel && R.eligible(s, sel) && ready.length ? (selL ? `Drawer ${R.drawerNumber(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on drawer ${R.drawerNumber(s, sel.id)}. The drawer stays selected afterwards.`)
@@ -971,7 +973,7 @@ export function mountLabels(stage, ctx) {
   root.appendChild(editor);
   function openAdd() {
     openModal({ title: 'Add a label', body: ['Type what goes in the drawer. The icon is guessed from the words; change it after with Edit.'], ok: 'Add label', field: { placeholder: 'e.g. M3 screws' },
-      onOk: () => { const t = modalField(); const r = R.add(L, S(), { text: t }); if (!r.ok) { say(r.msg); return; } closeModal(); labelCommit(r); if (phone) phone.open(panel); }, onCancel: () => closeModal() });
+      onOk: () => { const t = modalField(); const r = R.add(L, S(), { text: t }); if (!r.ok) { say(r.msg); return; } closeModal(); labelCommit(r); stage.trackOnce('label:type'); if (phone) phone.open(panel); }, onCancel: () => closeModal() });
   }
   // on the phone the editor is a sheet of its own: opening it must raise it, or it waits collapsed behind the open Labels
   // sheet and the dock and the pencil seems to do nothing (the spacing audit, 2026-10-15: its close sat under Print labels)

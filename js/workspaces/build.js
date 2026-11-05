@@ -390,11 +390,15 @@ export function mountBuild(stage, ctx) {
       s.placed.push(u); s.selectedUnit = id;
     }, 'add');
     st.selId = id; ctx.memo.buildSel = id;
+    // the funnel's BUILDS STARTED (the old planner's name, kept so the dashboard's history lines up) and which unit types a
+    // visit builds with: once per visit each (2026-11-04)
+    stage.trackOnce('build-start'); stage.trackOnce('fill:' + fill);
   }
   function moveTo(id, x, y, { exact = false } = {}) {
     const u = S().placed.find((p) => p.id === id); if (!u) return;
     // the shared move check first (a 3D drag's spot already passed it, in its own headroom frame)
     if (!exact) { const c = moveCheck(u, x, y); if (!c.g) { say(c.why); return; } }
+    const was = JSON.stringify(S().placed.map((p) => [p.id, p.x, p.y]));
     edit((s, Rs) => {
       const before = s.gridH * 2;
       if (exact) { s.selected = { w: u.w, h: u.hh / 2 }; Rs.syncTabletopGrid(); }   // headroom for the unit's own height (a stage spot may sit above the live grid)
@@ -409,12 +413,16 @@ export function mountBuild(stage, ctx) {
       p.x = x + g.k; p.y = ty;
       if (exact) { const a = armedSize(); s.selected = { w: a.w, h: a.h }; }
     }, 'move');
+    // a refused move commits nothing new, so only a move that landed counts. A drag (the board's or the stage's, `exact`) and
+    // the Move buttons or arrow keys report apart: Joey's open question is whether people drag (2026-11-04)
+    if (JSON.stringify(S().placed.map((p) => [p.id, p.x, p.y])) !== was) stage.trackOnce(exact ? 'unit:drag' : 'unit:move');
   }
   function removeUnit(id) {
     const u = S().placed.find((p) => p.id === id); if (!u) return;
     if (st.peeking === id) { stage.unpeek(); st.peeking = null; }
     edit((s) => { s.placed = s.placed.filter((p) => p.id !== id); if (s.selectedUnit === id) s.selectedUnit = null; s.removedStoppers = s.removedStoppers.filter((k) => !k.startsWith(id + ':')); }, 'remove');
     if (st.selId === id) { st.selId = null; st.sel = null; ctx.memo.buildSel = null; stage.setSelected(null); }
+    stage.trackOnce('unit:remove');   // the planner's most-asked "how do I remove a unit": whether people find it (2026-11-04)
     say(settledNote ? `Removed ${u.w}W·${u.hh / 2}H · ${settledNote} · Ctrl+Z puts it all back.` : `Removed ${u.w}W·${u.hh / 2}H · Ctrl+Z puts it back.`);
   }
   function duplicateUnit(id) {
@@ -426,26 +434,32 @@ export function mountBuild(stage, ctx) {
     edit((s, Rs) => { s.gridH = Math.max(s.gridH, tallFor(near.y, u.hh, s, Rs) || 0);   // a spot below a hanging build grows the grid down (hug() takes care of the width)
       nid = s.nextId++; const c = { ...clone(u), id: nid, x: near.x, y: near.y }; delete c.label; delete c.labelBadge; s.placed.push(c); s.selectedUnit = nid; }, 'duplicate');
     st.selId = nid; ctx.memo.buildSel = nid;
+    stage.trackOnce('build-start'); stage.trackOnce('unit:duplicate');
   }
   function nudge(dir) {
     if (st.selId == null) return;
     // left and right go through the move calculation, so a unit can step past the build's edge (the redesign's
     // alternative to dragging: the arrow keys and the inspector's Move buttons); up and down stay the rules' nudge
     if (dir === 'left' || dir === 'right') { const u = S().placed.find((p) => p.id === st.selId); if (u) moveTo(u.id, u.x + (dir === 'left' ? -1 : 1), u.y); return; }
+    const was = JSON.stringify(S().placed.map((p) => [p.id, p.x, p.y]));
     edit((s, Rs) => { s.selectedUnit = st.selId; return Rs.nudgeSelected(dir); }, 'nudge');
+    if (JSON.stringify(S().placed.map((p) => [p.id, p.x, p.y])) !== was) stage.trackOnce('unit:move');
   }
   function fixStructure() {
     const r = edit((s, Rs) => Rs.fixStructure(), 'fix', { gravity: false });
+    stage.trackOnce('tool:fix-structure');
     say(`✓ Structure fixed · ${n(r.moved, 'unit')} moved${r.added ? `, ${n(r.added, 'support case')} added` : ''}.`);
   }
   /* FILL ALL (2026-10-21, Joey: "I don't mind having an auto fix button"): a 1W case in every empty slot, in the build's
      majority drawer type, nothing moved (standUp); one Undo takes them out */
   function fillGaps() {
     const r = edit((s, Rs) => standUp(s, Rs), 'fix', { gravity: false });
+    stage.trackOnce('tool:fill-all');
     say(`✓ ${n(r.added, 'empty slot')} filled with 1W cases · Undo takes them out.`);
   }
   function fixWallTops() {
     const r = edit((s, Rs) => Rs.fixWallTops(), 'fix', { gravity: false });
+    stage.trackOnce('tool:fix-walltops');
     say(r ? `✓ Top row fixed · ${n(r.grown, 'case')} grown to 1H${r.moved ? `, ${n(r.moved, 'unit')} shifted down` : ''} · names and drawer contents kept.` : '⚠ Can’t grow the top row · the grid is already at its max height. Remove a row below, then try again.');
   }
   function convertAll(to) {
@@ -453,6 +467,7 @@ export function mountBuild(stage, ctx) {
     if (!plan.eligible.length) { say(plan.skipped.length ? `No drawer can change: ${plan.reasons.map((r) => r.text).join('; ')}` : 'Every drawer is already that type.'); return; }
     const ids = new Set(plan.eligible.map((p) => p.id));
     edit((s) => { s.placed.forEach((p) => { if (ids.has(p.id)) p.fill = to; }); }, 'convert', { gravity: false });
+    stage.trackOnce('convert-all:' + to + ':build');   // the old planner's convert-all:<to>:<surface>, this surface being Build
     const label = G.fills.find((f) => f.id === to)?.label || to;
     say(`✓ ${n(plan.eligible.length, 'drawer')} converted to ${label}${plan.skipped.length ? ` · ${plan.skipped.length} stay: ${plan.reasons.map((r) => r.text).join('; ')}` : ''}.`);
   }

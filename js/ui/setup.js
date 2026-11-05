@@ -214,6 +214,9 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     store.flush();
     store.commit((s, R) => { applyDraft(s, R); }, 'setup');
     store.flush();
+    // the printer step is optional (Joey, 2026-10): whether people fill it in or skip it, once per visit (2026-11-04).
+    // Sent before the reload below; an event still waiting in the 400 ms pace queue when the page reloads is lost
+    stage?.trackOnce?.(draft.printer === 'any' ? 'setup:printer-skip' : 'setup:printer');
     if (mountChange && slots) { try { sessionStorage.setItem('gen2-setup-note', `${mountDef(draft.mount)?.label || draft.mount}: ${slotWords(draft.mount, slots)} to fill · they show red in Build, where Fill all adds 1W cases.`); } catch { /* no storage: no note */ } }
     if (ctx.builds && draft.name.trim()) await ctx.builds.rename(draft.name);
     await ctx.builds?.settled?.();   // the save lands first (the stale-tab guard reads it at the reload)

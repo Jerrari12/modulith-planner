@@ -79,6 +79,16 @@ export function mountAssemble(stage, ctx) {
     };
   }
 
+  /* INSTRUCTIONS OPENED (2026-11-04): a build with instructions reached the player. The old planner's name for its 3D-guide
+     button, per mount and length, so the dashboard's INSTRUCTIONS OPENED tile and its history read on unchanged; a build
+     that is not ready (above) has no instructions and does not count. Once per visit */
+  {
+    const s = ctx.store?.state || {};
+    const mount = s.mount || stage.build?.mount || 'unknown';
+    const length = s.length || stage.manifest?.collection || 'unknown';
+    stage.trackOnce(`3d-instructions:${mount}-${length}`);
+  }
+
   /* Part colors by default here, and only here: remember the visitor's own palette switch and put it back on leave */
   const hadOwnColors = !!stage.useCustom;
   let mine = false;
@@ -256,8 +266,8 @@ export function mountAssemble(stage, ctx) {
         el('span.num', { text: num }),
         el('div', {}, [el('div.title', { text: title }), el('div.text', { text })]),
         el('div.colors', { role: 'group', 'aria-label': 'Model colors', title: 'Part colors give every part type its own color, like LEGO instructions' }, [
-          el('button.seg' + (!mine ? '.on' : ''), { text: 'Part colors', 'aria-pressed': String(!mine), onclick: () => setColors(false) }),
-          el('button.seg' + (mine ? '.on' : ''), { text: 'My colors', 'aria-pressed': String(mine), onclick: () => setColors(true) }),
+          el('button.seg' + (!mine ? '.on' : ''), { text: 'Part colors', 'aria-pressed': String(!mine), onclick: () => { stage.trackOnce('assemble:colors:part'); setColors(false); } }),
+          el('button.seg' + (mine ? '.on' : ''), { text: 'My colors', 'aria-pressed': String(mine), onclick: () => { stage.trackOnce('assemble:colors:mine'); setColors(true); } }),
         ]),
       ]),
       el('div.row2', {}, [
@@ -273,7 +283,7 @@ export function mountAssemble(stage, ctx) {
     if (isDone) {
       player.appendChild(el('div.row3', {}, [
         el('span.hint', { text: 'End of instructions.' }),
-        el('button.key.on', { text: 'Share', onclick: async () => { try { await navigator.clipboard.writeText(location.href); say('Link copied.'); } catch { say('Copy the address bar to share this build.'); } } }),
+        el('button.key.on', { text: 'Share', onclick: async () => { stage.trackOnce('assemble:share'); try { await navigator.clipboard.writeText(location.href); say('Link copied.'); } catch { say('Copy the address bar to share this build.'); } } }),
       ]));
     }
   }

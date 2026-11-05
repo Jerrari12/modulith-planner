@@ -376,13 +376,14 @@ export function mountParts(stage, ctx) {
       ]),
       el('div.row3', {}, [
         el('div.track.sites', { role: 'group', 'aria-label': 'Download site' }, STORES.map(([id, name]) =>
-          el('button.seg' + (st.site === id ? '.on' : ''), { text: name, 'aria-pressed': String(st.site === id), onclick: () => { st.site = id; try { localStorage.setItem(STORE_KEY, id); } catch {} renderPanel(); } }))),
-        attachHint(el('button.key' + (st.tracking ? '.on' : ''), { 'aria-pressed': String(st.tracking), text: st.tracking ? '☑ Tracking' : '☐ Track my build', title: 'Adds Had and Printed counters to every row and a progress bar to the dock: what you already had, and what you have printed or bought toward this build', onclick: () => { st.tracking = !st.tracking; saveProgress(); renderPanel(); renderDock(); } }), TRACK_HINT, panel),
+          el('button.seg' + (st.site === id ? '.on' : ''), { text: name, 'aria-pressed': String(st.site === id), onclick: () => { st.site = id; try { localStorage.setItem(STORE_KEY, id); } catch {} stage.trackOnce('store-pref:' + id); renderPanel(); } }))),
+        attachHint(el('button.key' + (st.tracking ? '.on' : ''), { 'aria-pressed': String(st.tracking), text: st.tracking ? '☑ Tracking' : '☐ Track my build', title: 'Adds Had and Printed counters to every row and a progress bar to the dock: what you already had, and what you have printed or bought toward this build', onclick: () => { st.tracking = !st.tracking; if (st.tracking) stage.trackOnce('bom-track:on'); saveProgress(); renderPanel(); renderDock(); } }), TRACK_HINT, panel),
       ]),
       el('div.row4', {}, [
-        el('button.key', { text: 'Copy as text', onclick: copyText }),
-        el('button.key', { text: 'Download CSV', onclick: downloadCsv }),
-        el('button.key', { text: 'Print', onclick: () => window.print() }),
+        // the exports, once per visit each (2026-11-04): bom:copy and bom:csv are the old viewer's names for the same two
+        el('button.key', { text: 'Copy as text', onclick: () => { stage.trackOnce('bom:copy'); copyText(); } }),
+        el('button.key', { text: 'Download CSV', onclick: () => { stage.trackOnce('bom:csv'); downloadCsv(); } }),
+        el('button.key', { text: 'Print', onclick: () => { stage.trackOnce('bom:print'); window.print(); } }),
         el('button.key', { text: 'Save build image', onclick: soon('Save build image', 'the Done scene (5b)') }),
         el('button.key', { text: 'Download labels', onclick: soon('Download labels', 'the Labels workspace (phase 5)') }),
       ]),
@@ -446,7 +447,7 @@ export function mountParts(stage, ctx) {
      a plain label, "Amazon ↗": the "· paid link" mark of 2026-10-21 went on 2026-10-24 (Joey: "paid" read as a brand paying to
      be listed); the foot's one disclosure line, right under the hardware rows (renderPanel), discloses it */
   function storeLink(r, link) {
-    return el('a.link', { href: link.url, target: '_blank', rel: isPaid(link.url) ? 'noopener sponsored' : 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null });
+    return el('a.link', { href: link.url, target: '_blank', rel: isPaid(link.url) ? 'noopener sponsored' : 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : () => stage.track(link.id ? 'out:' + link.id : stage.outEvent(link.url)) });   // a model link is a download: every click counts, under the viewer's out:<store>, named by the row's own store (a jerrari3d.com redirect would read as out:jerrari by host). 2026-11-04: the Parts list sent none, so MODEL DOWNLOADS read near zero after the cutover
   }
   /* the wide list's row: one column per quantity, the counters readable, a finished row still editable */
   function renderTableRow(r) {
