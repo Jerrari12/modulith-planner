@@ -26,6 +26,7 @@ const LABEL_PREFIX = {
   'Panchroma™ PLA': 'Panchroma ',
   'Panchroma™ Silk PLA': 'Panchroma ',
   'Panchroma™ Translucent PLA': 'Panchroma ',
+  'Panchroma™ Galaxy PLA': 'Panchroma ',   // 2026-11-04
   'PolyFlex™ TPU95': 'Polymaker ',   // the feet's TPU (2026-10-21)
   'PolyFlex™ TPU90': 'Polymaker ',
   PETG: 'Polymaker ',
@@ -40,7 +41,7 @@ const prefixOf = (b) => Object.hasOwn(BRAND_LINE_PREFIX, `${b.brand}|${b.line}`)
 
 test('the catalog is the shape main.js reads', () => {
   assert.ok(Array.isArray(FILAMENT_DB), 'FILAMENT_DB is an array');
-  assert.equal(FILAMENT_DB.length, 11, 'eleven brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26, Prusament Galaxy PLA 2026-11-01)');
+  assert.equal(FILAMENT_DB.length, 12, 'twelve brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26, Prusament Galaxy PLA 2026-11-01, Panchroma Galaxy PLA 2026-11-04)');
 
   for (const b of FILAMENT_DB) {
     const where = `${b.brand} / ${b.line}`;
@@ -71,7 +72,7 @@ test('every colour carries the four fields a consumer may rely on', () => {
       if ('pickNote' in c) assert.ok(c.pick === true, `${where}: pickNote without pick`);
     }
   }
-  assert.equal(n, 171, 'one hundred and seventy-one colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21, 44 Polar PLA 2026-10-26, 5 Prusament Galaxy PLA 2026-11-01)');
+  assert.equal(n, 177, 'one hundred and seventy-seven colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21, 44 Polar PLA 2026-10-26, 5 Prusament Galaxy PLA 2026-11-01, 6 Panchroma Galaxy PLA 2026-11-04)');
 });
 
 test('⚔ every label is unique across every brand', () => {
@@ -84,7 +85,7 @@ test('⚔ every label is unique across every brand', () => {
     }
   }
   assert.deepEqual(clashes, [], 'labels collide, and customColors keys on them');
-  assert.equal(seen.size, 171, 'every colour contributed a distinct label');
+  assert.equal(seen.size, 177, 'every colour contributed a distinct label');
 });
 
 test('⚔ each brand builds its labels the way its block says it does', () => {

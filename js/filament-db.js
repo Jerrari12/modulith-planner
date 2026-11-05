@@ -67,6 +67,9 @@ const PM_TRANS = POLY_LINK('translucent-pla');
 /* Joey's minted TPU handles (2026-10-21, sent as https://shop.polymaker.com/JERRARI?q=polyflex-tpu95 and ?q=polyflex-tpu90) */
 const PM_TPU95 = POLY_LINK('polyflex-tpu95');
 const PM_TPU90 = POLY_LINK('polyflex-tpu90');
+/* Joey's minted Galaxy PLA handle (2026-11-04, sent as https://shop.polymaker.com/JERRARI?q=galaxy-pla). Followed that day: it
+   lands on /products/galaxy-pla carrying utm_campaign=JERRARI and ref=superfiliate-JERRARI. */
+const PM_GALAXY = POLY_LINK('galaxy-pla');
 const POLAR = 'https://polarfilament.com/products';   // Polar Filament's product pages (the Polar block, 2026-10-26)
 const POLYMAKER_URL = PM(44863271895097);
 const FILAMENT_DB = [
@@ -200,6 +203,19 @@ const FILAMENT_DB = [
      The viewer reads it to decide which filaments a SUPPORTED component previews as translucent (main.js
      SEE_INTO_COMPONENTS). A transmission distance is a Lab measurement and does not live here. */
   ].map(f => ({ ...f, translucent: 'extra', label: `Panchroma ${f.name}`, url: PM_TRANS })) },
+  /* Polymaker Panchroma™ Galaxy PLA (Joey, 2026-11-04: "they do have the hex color for all the galaxy glitter filaments from
+     polymaker if we can add those too"). ⚠ HEXES AND IDS ARE THE SHOP'S OWN: the product page prints a "HEX Code" for each
+     colour, read 2026-11-04 one variant at a time, and the ids are the same variants (TD 0.1 Black, 0.2 Dark Red, 0.4 the
+     others, none for the Hedgehog). Hedgehog Makes' Galaxy Red, the collaboration Joey asked about on 2026-11-01, is a colour
+     of this same product, so his handle below covers it too. They glitter like the other Galaxy rows (glitter.js). */
+  { brand: 'Polymaker', line: 'Panchroma™ Galaxy PLA', url: PM_GALAXY, colors: [
+    { name: 'Galaxy Black',              hex: '#161617', id: 43595081711673 },
+    { name: 'Galaxy Dark Blue',          hex: '#18192D', id: 43595081744441 },
+    { name: 'Galaxy Dark Red',           hex: '#451E14', id: 43595081777209 },
+    { name: 'Galaxy Dark Green',         hex: '#13484D', id: 43595081809977 },
+    { name: 'Galaxy Dark Grey',          hex: '#4E5658', id: 43595081842745 },
+    { name: 'Hedgehog Makes - Galaxy Red', hex: '#760007', id: 44933539987513 },
+  ].map(f => ({ ...f, finish: 'glitter', label: `Panchroma ${f.name}`, url: PM_GALAXY })) },
   /* Polymaker PolyFlex™ TPU — THE FEET'S FILAMENT (Joey, 2026-10-21: "when selecting the feet, i feel like we should only
      list TPU filaments as an option ... default for feet should always be TPU black"; "you can use any TPU, so polymakers
      TPU lineup would be fine to add"). The printed foot is the flexible part (parts catalogue: "Printed in TPU, or bought as
@@ -353,7 +369,7 @@ const FILAMENT_DB = [
   //   it as a purple: the median of their centre third reads #4B2E7E (1 kg) and #44257A (2 kg). A print would settle the digits.
   // - Red: NO chart row and no FilamentColors swatch, so the median of the centre third of Prusa's own swatch photo, as Jessie Neon
   //   Yellow's above. Those photos run dark on the three colours where the chart and FilamentColors agree (Black 2D2D2D, Silver 85898B, Green 162F18), so
-  //   this may be too; a measured hex replaces it. Polymaker's Hedgehog Makes Galaxy Red (#760007, PA02106) waits for Joey's minted link.
+  //   this may be too; a measured hex replaces it. Polymaker's Hedgehog Makes - Galaxy Red (#760007, PA02106) is in the Panchroma Galaxy PLA block.
   { brand: 'Prusament', line: 'Galaxy PLA', url: 'https://www.prusa3d.com/category/prusament-pla/', colors: [
     { name: 'Galaxy Black',  hex: '#3D3E3C', url: 'https://www.prusa3d.com/product/prusament-pla-prusa-galaxy-black-1kg-nfc/' },
     { name: 'Galaxy Silver', hex: '#999A9F', url: 'https://www.prusa3d.com/product/prusament-pla-galaxy-silver-1kg-nfc/' },
