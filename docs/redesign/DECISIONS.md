@@ -6970,3 +6970,75 @@ Twice, a × that was hidden at the scroll's end made Playwright scroll before cl
 **Review.** Sol `01a1aa04` chose the layout and the pill and dropped the "any brand" line. Sol `01a1aa10` found three defects, all confirmed and fixed: the phone foot's layout, the placeholder's margins, and focus on a clipped Buy. Its follow-up raised no objection.
 
 **Not verified.** Whether the 15% applies by itself at Polymaker's checkout: the link is known to carry `ref=superfiliate-JERRARI`, but no cart was tried. The look on a real phone has not been checked either.
+
+## 2026-11-05 · On a desktop the offer floats beside the picker
+
+Joey, of the card at the swatch list's end: "my only concern, this feels like it eats up so much realestate when trying to select filament, what are some other ways we can maybe tackle this?" Mock-ups on the branch's own page, at 1366 x 768 where the list is 142 px tall, measured the options:
+- The card as built filled the whole list once scrolled to.
+- The support sentence as a note under the Buy left 93 px of list on every Polymaker pick.
+- A two-line Buy left 116 px.
+- A popover from the head's pill and a 107 px slim card were the other two.
+
+Joey then asked: "what if it's a floating modal like how we do those short tutorial video clips on hover? and maybe a small x button to make it disapear?" That was mocked too, and he answered "Build it".
+
+**Where** (`js/workspaces/colors.js` placeFloat, `#ws-offer` in `css/app.css`). One glass card for the page, 264 px wide like the hover-hint bubble. It sits 12 px left of the picker, level with the foot's Buy, with a notch pointing at the Buy.
+
+Nothing in the picker moves for it:
+- At 1366 x 768 the list stays 142 px tall. That is 16 px less than with an Amazon pick, because the Polymaker line under the Buy is one line longer.
+- The foot keeps its plain Buy and that line.
+
+Gone from the desktop: the card in the list, its second Buy, the head's pill and the `.ogone` placeholder.
+
+**It never covers a card on the stage.** Clicking a part on the model opens the part card at the bottom centre, along with the picker. The floating card then lifts clear above the part card and its notch goes; when the part card closes, it comes back level with the Buy.
+
+The same rule holds for:
+- the shopping list;
+- the compare tray;
+- Simplify;
+- the dock;
+- the panels on the left.
+
+Where nothing clears, or it would rise above the picker's top, it waits hidden, still live. No overlap was measured at 1366 x 768, 1280 x 800, 1440 x 900, 1920 x 1080 or 1024 x 768. Below 1024 px wide the phone layout takes over.
+
+It is re-placed:
+- at the end of renderAll;
+- on a window resize;
+- by a ResizeObserver on the picker and those cards. That catches the shopping list, which opens and closes without renderAll.
+
+**Keyboard.** The card follows the picker in the page's order, so Tab from the foot's Reset reaches its ×. The × puts the focus on the foot's Buy. If the card has to hide for lack of room while the keyboard is on its ×, the focus also goes to the foot's Buy (Sol `01a1ad36`).
+
+**Disclosure.** The card's body says the commission, and so does the line under the foot's Buy, so a desktop says it twice while the card shows. Joey was offered the choice of taking the sentence out of the card and answered "Build it".
+
+**Phone: unchanged.** The card wraps the foot's Buy at the end of the sheet, and a pill on the handle brings it into view. No card floats on a phone: beside a full-width sheet it would cover most of the model, and no hover hint floats on a phone either.
+
+**Tests.** The desktop case and the click case were rewritten.
+
+The desktop case covers:
+- where the card sits: 12 px off the picker, level with the Buy, the notch showing, its × on top, overlapping nothing;
+- Tab reaching the ×;
+- a search leaving the card in place;
+- the part card lifting the card and its return;
+- a 1280 x 440 window, where the part card hides the card under the keyboard and the focus moves to the Buy;
+- the shopping list;
+- an ignored card coming back;
+- the picker closed and reopened;
+- the ×: nothing in the picker moves, the focus moves to the Buy, storage remembers, and a reload stays closed.
+
+The click case covers:
+- the Buy followed from the keyboard;
+- another tab;
+- storage that throws;
+- a phone's card-wrapped Buy followed from the keyboard.
+
+23 of 23 mutants were killed. The first round left two alive, and both were blind spots in the case:
+- It read the card's `hidden` attribute, not whether the card showed. A rule letting `display` win over `[hidden]` went unseen.
+- It never checked that the card shows during the pick's own render. Each pick also resized the dock, whose observer placed the card anyway.
+
+The case now checks visibility, and checks the card in the same task as the click. That stricter check then caught the card mid-entrance on the throttled software rasteriser, 6 px off. The case now waits for the entrance to finish before measuring.
+
+**Review.** Sol `01a1ad36` (code `a237e7e`) found one defect: when placement hid the card while the keyboard was on it, the focus was lost. It was confirmed and fixed, and the follow-up raised no objection.
+
+**Not verified.**
+- Whether the 15% applies by itself at Polymaker's checkout.
+- A real phone.
+- The full CI run.
