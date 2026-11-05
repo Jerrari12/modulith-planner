@@ -7042,3 +7042,36 @@ The case now checks visibility, and checks the card in the same task as the clic
 - Whether the 15% applies by itself at Polymaker's checkout.
 - A real phone.
 - The full CI run.
+
+## 2026-11-05 · The offer in Joey's words: support and the first-order 15%, the commission once under the Buy
+
+Joey, of the floating card: "this feels a bit wordy don't you think?" Two shorter wordings were mocked; the first still opened its body with "Polymaker pays me", and both still said the commission in the card. He answered: "i mean i feel like you could say this differently, like purchasing this filament through this link helps support the Modulith project... rather than saying polymaker pays me". Of the small print "You don't need Polymaker to print MODULITH": "it also sounds really weird, it's like you are trying to sell filament and then telling them nah you don't need it, i would omit that as it's pretty obvious they can select other materials and colors".
+
+**Copy** (`js/workspaces/colors.js` OFFER_COPY):
+- Bold lead: "Purchasing this filament through this link helps support the MODULITH project."
+- Body: "As a thank-you, your first Polymaker order is 15% off."
+
+That is 22 words where the card had 53. The "26" and "47" Joey was shown in chat counted a mock-up that still had the small print, and joined words across elements. The card is now 111 px tall where it was 164 px. It is a fixed 264 px wide, so its text wraps the same in any window; 111 px was measured in a 1280 x 440 window. The no-pressure line is gone. Two mock-ups of his wording were shown: a bold lead keeping "As a thank-you", and a lighter lead without those words. The bold one was recommended and is the one built; Joey did not say which he preferred.
+
+**The commission, once.** The card no longer says it. The line under the picker's Buy says it, the sentence `disclosureFor` gives any Polymaker link: "Polymaker links apply the JERRARI discount and earn me a small commission." "Helps support the project" on its own would not tell a buyer that the link earns money; the line does.
+- On a desktop the line stays under the foot's Buy, with the card floating beside it. The commission was said twice there before; it is said once now.
+- On a phone the card used to carry no such line: its body said the commission instead. The line now stays inside the card, under the Buy the card wraps. When the card goes, the Buy and its line step out of it together.
+
+**Tests.**
+- The offer cases now expect the new words.
+- On a desktop the commission is counted once. On a phone it is counted once, by the line inside the card.
+- The short-window step now runs at 1280 x 400. At 440 px that step failed: the shorter card did not hide. It was measured 213 px above the Buy's level with its notch gone, clear of the part card, so it had found room to lift.
+
+Five mutants were re-run for this change, and all were killed:
+- the old body;
+- a phone card without its line;
+- a phone line that does not come back;
+- a card hidden instead of lifted;
+- a hide that drops the focus.
+
+**Review.** Terra `01a1ad8f` reviewed the code and copy diff and raised no objection. Terra `01a1ad98` reviewed this entry; six of its seven points were taken. The seventh was discarded: the sentence on the mock-ups already says Joey did not choose between them. The code commit `cb7e805` still gives the old counts (26 and 47) in its message.
+
+**Not verified.** As before:
+- whether the 15% applies by itself at Polymaker's checkout;
+- a real phone;
+- the full CI run.
