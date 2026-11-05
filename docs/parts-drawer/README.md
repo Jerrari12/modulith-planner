@@ -27,6 +27,14 @@ moves on.
   Large). Binary STL, byte for byte the prototype's JSON payloads.
 - `zip.js`: the download's archive writer (deflate through `CompressionStream`), replacing the prototype's JSZip.
 - `frame.js` (M1): the generated drawer in the planner's frame, on the Decor drawer GLB's pose.
+- M2 (2026-11-05), the prototype behind `?partsdrawer=1`: `flag.js` (the flag), `unit.js` (a planner unit as a parts
+  drawer: its size and height, the record's `partsLayout` cleaned against the unit's size, the default grid, a layout
+  moved to another size, the full layout the generator reads), `engine.js` (manifold booted once in the page, the shell
+  and drawer geometries for the stage with crease-angle normals, cached), `plan.js` (the 2D plan: the SVG drawing and
+  its wall and selection dragging), `editor.js` (the Build workspace's parts drawer: the closed drawers' shells, the
+  edit mode's panels, 3D overlays, picking, keys), `download.js` (the zip as the prototype made it, through `zip.js`).
+  The stage's part is in `js/main.js` under "the parts drawer (M2": `setDrawerBody`, `isolateUnit`, `frameUnit`,
+  `setOutlineObjects`; the record fields in `js/rules/schema.js` under `setPartsDrawerFields`.
 
 ## Tests
 
@@ -40,3 +48,6 @@ shells the stretch is checked against and the LDO kit list.
 
 `frame.test.mjs` is M1's: the generated empty shell against the planner's Decor drawer GLBs, read from `parts/` like
 every other GLB test here.
+`unit.test.mjs` and `schema.test.mjs` are M2's: the unit-to-layout mapping and the size change rule, and the record
+fields behind the flag. The editor itself is checked in a browser (the M2 screenshots were taken headless with
+`GEN2_PARTS_LOCAL=1`, as the e2e suite runs); its e2e cases are M3's.

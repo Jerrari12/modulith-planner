@@ -154,6 +154,15 @@ export function serializeBuild(build) {
   BUILD_FIELDS.forEach((k) => { o[k] = build[k]; });
   return JSON.parse(JSON.stringify(o));   // deep copy (placed array)
 }
+/* THE PARTS DRAWER'S FIELDS (M2, 2026-11-05, behind the ?partsdrawer=1 flag; docs/parts-drawer/SPEC.md): `variant:
+   'parts'` on a decor unit, and `partsLayout`, its compartments. Kept only while the flag has switched them on (app.js
+   at the boot); off, both are dropped here as any unknown field is, so a page without the flag never carries them in
+   its record, its hash or its history. The layout is kept as it came, bounded in size; js/parts-drawer/unit.js cleans
+   it against the unit's size every time it is read. Whether and how the record carries it for good is M3's data-model
+   decision (SPEC "M3"). */
+let partsDrawerFields = false;
+export function setPartsDrawerFields(on) { partsDrawerFields = !!on; }
+const PARTS_LAYOUT_MAX = 40000;   // characters of JSON: a layout is a few hundred; the cap keeps a hostile link from bloating the history
 export function sanitizeBuild(d, GEN2) {
   const build = d;
   const sizeToken = (w, h) => `${w}W-${h}H`;
@@ -303,6 +312,13 @@ export function sanitizeBuild(d, GEN2) {
        unchanged. KEPT on a size with no Gridfinity version (billed standard
        there), the way "both" is kept on a lip, so the choice survives. */
     if (u.fill === "decor" && u.variant === "gridfinity") unit.variant = "gridfinity";
+    // the parts drawer (M2, behind the flag): the third variant and its layout; see setPartsDrawerFields above
+    if (partsDrawerFields && u.fill === "decor" && u.variant === "parts") {
+      unit.variant = "parts";
+      if (u.partsLayout && typeof u.partsLayout === "object" && !Array.isArray(u.partsLayout)) {
+        try { const s = JSON.stringify(u.partsLayout); if (s.length <= PARTS_LAYOUT_MAX) unit.partsLayout = JSON.parse(s); } catch { /* not a layout */ }
+      }
+    }
     if (u.fill === "cabinet" && Array.isArray(u.interior) && u.interior.length) {
       // compartment coords are FULL 1H rows within the shell; any invalid
       // compartment discards the whole interior (falls back to simple mode)

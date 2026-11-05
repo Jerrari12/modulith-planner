@@ -37,6 +37,8 @@ import { refusalReason, standUp, openCells, armedSpots } from '../rules/stand.js
 import { settleToward, settleWord } from '../rules/settle.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
+import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer prototype (M2, 2026-11-05): ?partsdrawer=1
+import { partsDrawerTools } from '../parts-drawer/editor.js';
 
 /* `const GEN2` at a classic script's top level is a global LEXICAL binding: visible to modules by name, absent from globalThis */
 // eslint-disable-next-line no-undef
@@ -103,6 +105,11 @@ export function mountBuild(stage, ctx) {
   root.prepend(top);
   const baseName = () => (ctx.builds ? ctx.builds.name : ctx.kitTitle || stage.manifest?.title || 'Workbench build');   // the build store's name (a rename shows at once)
   const nameEl = top.querySelector('#ws-switch > .chip-btn > span');
+  /* THE PARTS DRAWER (M2, 2026-11-05, behind ?partsdrawer=1; js/parts-drawer/editor.js): the third Decor drawer variant, its
+     generated body on the stage, and the compartment editor that takes over the Library, the Inspector, the toolbar and the
+     Dock while a drawer is being edited. Null without the flag: every branch on `pd` below is then the planner as it was. */
+  const pd = partsDrawerOn() ? partsDrawerTools(stage, { store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
+  const editing = () => !!pd && pd.editing != null;
 
   /* ---------------- the record ↔ the stage ---------------- */
   let lastSig = null, syncing = false, unmounting = false, queue = Promise.resolve();
@@ -146,6 +153,7 @@ export function mountBuild(stage, ctx) {
         // still the peeked unit (a select or a removal during the await may have let it go - Terra 01a175a2); gone, or a
         // shelf now: the button says Peek inside again
         if (peeked != null && st.peeking === peeked) st.peeking = !st.stageErrors && stage.peekUnit(peeked) ? peeked : null;
+        if (pd) pd.afterUpdate();   // the rebuild replaced every drawer: the parts drawers' bodies, and the edited one's open state, go back on
       }
       renderAll();
       if (st.pulse && st.pulse.length) { if (st.view !== '2d') stage.pulseUnits(st.pulse); brd.flash(st.pulse); st.pulse = null; }
@@ -386,6 +394,7 @@ export function mountBuild(stage, ctx) {
       id = s.nextId++;
       const u = { id, x: x + g.k, y, w: size.w, hh: size.hh, fill, shelves: 0 };
       if (fill === 'decor' && st.gf === 'gridfinity' && s.fill === 'decor') u.variant = 'gridfinity';
+      if (pd && fill === 'decor' && st.gf === 'parts' && s.fill === 'decor') u.variant = 'parts';   // the parts drawer (M2): the variant rule's third value
       if (fill === 'shelf') u.lip = 'front';   // a new shelf starts with its front lip (Joey 2026-10-28); the inspector's Lip takes it off
       s.placed.push(u); s.selectedUnit = id;
     }, 'add');
@@ -471,7 +480,7 @@ export function mountBuild(stage, ctx) {
     if (!Rs.fillFits(w, u.fill)) { say(Rs.fitProblem(w, u.fill) || 'That size won’t print on the selected printer.'); return; }
     const hh = h * 2; const y = S().mount === 'tabletop' ? u.y + u.hh - hh : u.y;
     if (!Rs.canPlace(u.x, y, w, hh, u.id)) { say('No room for that size here · move it, or make room first.'); return; }
-    edit((s) => { const p = s.placed.find((q) => q.id === id); p.w = w; p.hh = hh; p.y = y; s.removedStoppers = s.removedStoppers.filter((k) => { const [kid, col] = k.split(':').map(Number); return kid !== id || col < w; }); }, 'resize');
+    edit((s) => { const p = s.placed.find((q) => q.id === id); if (pd) pd.resized(p, w, hh); p.w = w; p.hh = hh; p.y = y; s.removedStoppers = s.removedStoppers.filter((k) => { const [kid, col] = k.split(':').map(Number); return kid !== id || col < w; }); }, 'resize');
   }
   function setUnitOption(id, fn) { edit((s) => { const p = s.placed.find((q) => q.id === id); if (p) fn(p, s); }, 'option', { gravity: false }); }
   function gridOp(op) {
@@ -529,6 +538,7 @@ export function mountBuild(stage, ctx) {
   function renderLib() {
     hideHint();   // a control under a bubble is about to be rebuilt; a removed button never fires mouseleave
     lib.replaceChildren();
+    if (editing()) { lib.classList.remove('rail'); pd.renderLib(lib); return; }   // the drawer tools (M2)
     lib.classList.toggle('rail', st.collapsed);
     if (st.collapsed) {
       lib.append(
@@ -560,6 +570,7 @@ export function mountBuild(stage, ctx) {
     if (!Rs.fillFits(w, fill)) return Rs.fitProblem(w, fill) || 'Won’t fit the selected printer';
     if (fill === 'decor' && st.gf === 'gridfinity' && !G.gridfinity.heights.includes(h)) return `Gridfinity drawers come in ${G.gridfinity.heights.join(', ')}H`;
     if (fill === 'decor' && st.gf === 'gridfinity' && !G.gridfinity.lengths.includes(+s.length)) return `No Gridfinity drawers for ${s.length}`;
+    if (pd && fill === 'decor' && st.gf === 'parts') { const why = pd.sizeWhy(w, h); if (why) return why; }
     return null;
   }
   function renderAdd() {
@@ -577,10 +588,11 @@ export function mountBuild(stage, ctx) {
     }
     sec.appendChild(grid);
     if (st.unit === 'decor') {
-      sec.appendChild(el('div.track.gf', { role: 'group', 'aria-label': 'Decor drawer variant' }, [
+      sec.appendChild(el('div.track.gf' + (pd ? '.seg3' : ''), { role: 'group', 'aria-label': 'Decor drawer variant' }, [
         el('button.seg' + (st.gf === 'standard' ? '.on' : ''), { text: 'Standard', onclick: () => { st.gf = 'standard'; renderAll(); } }),
         el('button.seg' + (st.gf === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', onclick: () => { st.gf = 'gridfinity'; renderAll(); } }),
-      ]));
+        pd ? el('button.seg' + (st.gf === 'parts' ? '.on' : ''), { text: 'Parts drawer', title: 'A Decor drawer with compartments, label holders, scoops and ramps inside, generated to your layout', onclick: () => { st.gf = 'parts'; renderAll(); } }) : null,
+      ].filter(Boolean)));
     }
     lib.appendChild(sec);
 
@@ -728,6 +740,7 @@ export function mountBuild(stage, ctx) {
   const insp = el('aside.glass.glass-edge', { id: 'ws-insp', 'aria-label': 'This unit only', hidden: true });
   root.appendChild(insp);
   function renderInspector() {
+    if (editing()) { pd.renderInspector(insp); return; }   // "This compartment" (M2)
     const sel = st.sel; const s = S();
     insp.replaceChildren();
     const unit = st.selId != null ? s.placed.find((u) => u.id === st.selId) : null;
@@ -746,7 +759,7 @@ export function mountBuild(stage, ctx) {
     const cur = stage.currentFaceplateStyle();
     const kind = unit.fill === 'classic' ? 'classicDrawer' : unit.fill === 'shelf' ? 'shelf' : unit.variant === 'gridfinity' ? 'gridfinity' : (FACEK[cur?.key] || 'edgelabel');
     const wall = G?.interior || { wWall: 17, hWall: 8 };
-    const src = unit.fill === 'decor' ? `${FACE_LABEL[cur?.key] || 'Decor'} faceplate${CLUB[cur?.key] ? ' · ✦ Club' : ''}` : unit.fill === 'classic' ? 'Print-in-place handle' : 'Open shelf';
+    const src = unit.fill === 'decor' ? `${FACE_LABEL[cur?.key] || 'Decor'} faceplate${CLUB[cur?.key] ? ' · ✦ Club' : ''}${pd && pd.isParts(unit) ? ' · parts drawer' : unit.variant === 'gridfinity' ? ' · Gridfinity' : ''}` : unit.fill === 'classic' ? 'Print-in-place handle' : 'Open shelf';
     insp.append(
       el('div.head', {}, [el('h2.h2', { text: 'This unit only' }), el('span.idx', { text: `Unit ${idx} of ${s.placed.length}` }), closeBtn]),
       el('div.ident', {}, [
@@ -782,10 +795,13 @@ export function mountBuild(stage, ctx) {
         el('button.seg.sm' + (removedHere === 0 ? '.on' : ''), { text: 'All', onclick: () => setUnitOption(unit.id, (p, s2) => { s2.removedStoppers = s2.removedStoppers.filter((k) => !keys.includes(k)); }) }),
         el('button.seg.sm' + (removedHere === keys.length ? '.on' : ''), { text: 'None', onclick: () => setUnitOption(unit.id, (p, s2) => { s2.removedStoppers = [...new Set([...s2.removedStoppers, ...keys])]; }) }),
       ])]));
-      if (unit.fill === 'decor' && Rs.gridfinityOk(unit)) insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.seg2.mini', { role: 'group' }, [
-        el('button.seg.sm' + (unit.variant !== 'gridfinity' ? '.on' : ''), { text: 'Standard', onclick: () => setUnitOption(unit.id, (p) => { delete p.variant; }) }),
-        el('button.seg.sm' + (unit.variant === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'gridfinity'; }) }),
-      ])]));
+      const gfOk = Rs.gridfinityOk(unit), pdOk = !!pd && pd.sizeOk(unit);
+      if (unit.fill === 'decor' && (gfOk || pdOk)) insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.mini' + (pd ? '.seg3' : '.seg2'), { role: 'group', 'aria-label': 'Drawer body' }, [
+        el('button.seg.sm' + (unit.variant !== 'gridfinity' && !(pd && pd.isParts(unit)) ? '.on' : ''), { text: 'Standard', onclick: () => setUnitOption(unit.id, (p) => { delete p.variant; }) }),
+        el('button.seg.sm' + (unit.variant === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', disabled: !gfOk, title: gfOk ? 'The Gridfinity drawer body' : `Gridfinity drawers come in ${G.gridfinity.heights.join(', ')}H for ${G.gridfinity.lengths.join(', ')}`, onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'gridfinity'; }) }),
+        pd ? el('button.seg.sm' + (pd.isParts(unit) ? '.on' : ''), { text: 'Parts drawer', disabled: !pdOk, title: pdOk ? 'Compartments, label holders, scoops and ramps inside, generated to your layout' : pd.sizeWhy(unit.w, unit.hh / 2), onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'parts'; }) }) : null,
+      ].filter(Boolean))]));
+      if (pd && pd.isParts(unit)) insp.appendChild(pd.unitSection(unit));   // the plan thumbnail, the layout code, Edit compartments, the download
     }
     if (unit.fill === 'shelf') {
       const stops = [['none', 'None'], ['front', 'Front']]; if (G.shelfMidLipLengths.includes(+s.length)) stops.push(['both', 'Front + mid']);
@@ -854,6 +870,7 @@ export function mountBuild(stage, ctx) {
   const sectionCount = () => { const cols = [...new Set(S().placed.flatMap((p) => Array.from({ length: p.w }, (_, i) => p.x + i)))].sort((a, b) => a - b); return cols.filter((c, i) => i === 0 || c !== cols[i - 1] + 1).length; };
   const SECTION_WHY = { tabletop: 'its own top covers, foot rails and feet', wall: 'its own wall brackets', 'under-table': 'its own under-table rails' };
   function renderDock() {
+    if (editing()) { pd.renderDock(dock); return; }   // compartments, weight, print size, Done (M2)
     const list = issues(); const k = list.length; const secs = sectionCount();
     dock.replaceChildren(...[
       el('button.status' + (k ? '.issue' : ''), { title: k ? 'Open the issue card' : 'Every unit is supported and in the collection', 'aria-expanded': String(st.issuesOpen), onclick: () => { st.issuesOpen = !st.issuesOpen; if (st.issuesOpen && phone) phone.collapse(); renderIssues(); renderDock(); } }, [el('span.dot'), k ? n(k, 'issue') : 'Layout valid']),   // on a phone the card shows over the sheets' handles: an open sheet would cover it
@@ -869,7 +886,7 @@ export function mountBuild(stage, ctx) {
   function renderIssues() {
     const list = issues();
     hideHint();   // its Fill all may be under the bubble and is about to be rebuilt
-    if (!st.issuesOpen || !list.length) { card.hidden = true; st.issuesOpen = st.issuesOpen && list.length > 0; return; }
+    if (editing() || !st.issuesOpen || !list.length) { card.hidden = true; st.issuesOpen = st.issuesOpen && list.length > 0 && !editing(); return; }
     card.hidden = false;
     const hard = list.filter((i) => i.sev !== 'guide').length;
     // Fill all (the empty slots) takes the hover hint; the other fixes keep their one-line text
@@ -930,6 +947,7 @@ export function mountBuild(stage, ctx) {
   /* ---------------- the overlays on the stage ---------------- */
   function renderOverlays() {
     const s = S();
+    if (editing()) { stage.setFlags([]); stage.setEraser(null); stage.setSpots(null); stage.setDrag(null); return; }   // the editor owns the stage (M2)
     const show3d = st.view !== '2d';
     stage.setFlags(show3d ? [...flaggedIds(issues())] : []);
     stage.setEraser(show3d && st.eraser ? (id) => removeUnit(id) : null);
@@ -976,8 +994,10 @@ export function mountBuild(stage, ctx) {
     tools.style.left = left + 'px';
     brd.el.style.left = left + 'px';
     brd.el.style.right = (insp.hidden ? 20 : 324 + 40) + 'px';
+    if (pd) { pd.toolbar.el.style.left = left + 'px'; pd.plan.el.style.left = left + 'px'; pd.plan.el.style.right = (insp.hidden ? 20 : 324 + 40) + 'px'; }
     safe();
     if (st.view === '2d') brd.render();
+    if (editing() && pd.view === '2d') pd.render2d();
   }
   function safe() {
     if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phone.bottom() }); return; }
@@ -995,9 +1015,14 @@ export function mountBuild(stage, ctx) {
   addEventListener('resize', () => { applyNarrow(); renderLib(); layout(); }, { signal });
 
   function renderAll() {
-    renderLib(); renderInspector(); renderDock(); renderIssues(); bar.sync();
-    brd.el.hidden = st.view !== '2d'; if (st.view === '2d') brd.render();
-    document.documentElement.classList.toggle('ws-2d', st.view === '2d');
+    if (pd) pd.sync();   // the parts drawers' bodies follow the record (cached geometry; the edited drawer rebuilds on a shape change)
+    renderLib(); renderInspector(); renderDock(); renderIssues();
+    const ed = editing(), v2d = ed ? pd.view === '2d' : st.view === '2d';
+    tools.hidden = ed; if (pd) { pd.toolbar.el.hidden = !ed; pd.plan.el.hidden = !(ed && v2d); }
+    if (ed) pd.setPanels(); else bar.sync();
+    brd.el.hidden = ed || st.view !== '2d'; if (!ed && st.view === '2d') brd.render();
+    if (ed && v2d) pd.render2d();
+    document.documentElement.classList.toggle('ws-2d', v2d);
     renderOverlays(); layout();
     if (nameEl) nameEl.textContent = buildName(baseName()) + (store.canUndo && !ctx.builds ? ' · edited' : '');   // autosaved builds need no 'edited' mark
   }
@@ -1006,6 +1031,7 @@ export function mountBuild(stage, ctx) {
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
+    if (pd && pd.key(e)) { e.preventDefault(); return; }   // the editor's keys while a drawer is being edited (M2)
     if (e.key === 'Escape') { closeMenu(); stage.cancelDrag(); brd.cancel(); if (st.chosen) { stage.clearSpotChoice(); st.chosen = null; renderChoice(); return; } if (st.armed || st.eraser || st.issuesOpen) { st.armed = false; st.eraser = false; st.issuesOpen = false; } else select(null); renderAll(); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && st.selId != null) { e.preventDefault(); removeUnit(st.selId); return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }
@@ -1024,7 +1050,7 @@ export function mountBuild(stage, ctx) {
 
   return {
     onSelect(sel) {
-      if (syncing || unmounting) return;   // the rebuild's own deselect (the selection comes back right after), or the unmount's (the memo keeps it)
+      if (syncing || unmounting || editing()) return;   // the rebuild's own deselect (the selection comes back right after), or the unmount's (the memo keeps it); the editor's taps are its own
       const before = st.selId;
       st.sel = sel; st.selId = sel ? (sel.owner ?? null) : null;
       S().selectedUnit = st.selId; ctx.memo.buildSel = st.selId;
@@ -1049,6 +1075,7 @@ export function mountBuild(stage, ctx) {
     unmount() {
       unmounting = true;
       ac.abort(); unsub();
+      if (pd) pd.destroy();   // leaves edit mode, puts the Decor drawer GLBs back
       stage.setSpots(null); stage.setFlags([]); stage.setDrag(null); stage.setEraser(null); stage.cancelDrag(); stage.unpeek(); stage.clearSpotChoice();
       stage.setSelected(null); stage.setSafeArea(null);
       document.documentElement.classList.remove('ws-2d');

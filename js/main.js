@@ -9407,6 +9407,99 @@ canvas.addEventListener('pointerup', e => {
    selects nothing; false, and the build's nearest hit selects as ever. */
 let tapTargets = null;
 function setTapTargets(t) { tapTargets = t || null; }
+
+/* ---- the parts drawer (M2, 2026-11-05; docs/parts-drawer/SPEC.md "Planner integration") ------------------------
+   What the Build workspace's parts drawer editor (js/parts-drawer/editor.js) needs of the stage, and nothing the
+   workspace could do itself: a generated body in a drawer's place, the rest of the build ghosted, a camera framed on
+   the open drawer, and the selection outline on objects of the workspace's own. All of it is a no-op until called, so a
+   page without the flag runs exactly as before. */
+function drawerInstanceOf(unitId) { return unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer') || null; }
+/* `geometry` (a BufferGeometry in the drawer's own frame: x centred on the outside, up y, the front +z, the frame the GLB
+   has) stands in for the drawer's GLB meshes, which are hidden; null puts the GLB back. The stand-in wears the Drawer
+   material, so it is painted, outlined and shaded like the part it replaces. A rebuild of the instances drops it; the
+   workspace sets it again after every update. Returns the drawer's group, or null when the unit has no drawer. */
+function setDrawerBody(unitId, geometry) {
+  const d = drawerInstanceOf(unitId); if (!d) return null;
+  const g = d.group;
+  const old = g.getObjectByName('parts-body');
+  if (old && geometry && old.geometry === geometry) return g;   // already wearing it
+  if (old) { g.remove(old); }
+  let caster = false, layers = null;
+  g.traverse(o => {
+    if (!o.isMesh || o === old) return;
+    if (geometry) { if (o.visible) { o.visible = false; o.userData.partsHidden = true; } if (o.castShadow) caster = true; if (layers === null) layers = o.layers.mask; }
+    else if (o.userData.partsHidden) { o.visible = true; delete o.userData.partsHidden; }
+  });
+  if (geometry) {
+    const m = new THREE.Mesh(geometry, baseMatFor('Drawer'));
+    m.name = 'parts-body'; m.castShadow = caster || !!(old && old.castShadow); m.receiveShadow = true;
+    m.userData.zone = '';
+    if (layers !== null) m.layers.mask = layers;   // a unit outlined before its body arrived keeps the outline on the body (the selection layer rides the GLB meshes' mask; Sol 01a1ad82)
+    g.add(m);
+  }
+  markShadowDirty(); invalidateFrame();
+  return g;
+}
+const drawerGroupOf = (unitId) => { const d = drawerInstanceOf(unitId); return d ? d.group : null; };
+/* every other unit's parts in one translucent ghost material (the brief's "fades to a faint ghost on one shared
+   material"), their shadows off; null restores them. A rebuild restores them by itself (new meshes). */
+let isolated = null;
+const ghostMats = {};
+function ghostMat() {
+  const dark = stageTheme !== 'light';
+  const key = dark ? 'dark' : 'light';
+  if (!ghostMats[key]) ghostMats[key] = new THREE.MeshBasicMaterial({ color: dark ? 0xc9cde0 : 0x5a5c66, transparent: true, opacity: dark ? 0.12 : 0.14, depthWrite: false });
+  return ghostMats[key];
+}
+function isolateUnit(unitId) {
+  if (isolated != null) {
+    for (const inst of instances.values()) inst.group.traverse(o => { if (o.isMesh && o.userData.ghostedMat) { o.material = o.userData.ghostedMat; delete o.userData.ghostedMat; if (o.userData.ghostedCast) { o.castShadow = true; delete o.userData.ghostedCast; } } });
+    isolated = null;
+  }
+  if (unitId != null) {
+    const mat = ghostMat();
+    for (const inst of instances.values()) {
+      if (unitOf(inst) === unitId || !inst.group.visible) continue;
+      inst.group.traverse(o => { if (o.isMesh && !o.userData.ghostedMat) { o.userData.ghostedMat = o.material; o.material = mat; if (o.castShadow) { o.castShadow = false; o.userData.ghostedCast = true; } } });
+    }
+    isolated = unitId;
+  }
+  markShadowDirty(); invalidateFrame();
+}
+/* the camera on a unit's OPEN drawer from above and in front (a top-down 3/4), fitted to the free region; the preset it
+   leaves is kept, and endFrameUnit returns to it. Reduced motion snaps. */
+let framedFrom = null;
+function frameUnit(unitId) {
+  const d = drawerInstanceOf(unitId); if (!d) return false;
+  const open = basePos(d, false); open.z += drawerStop();
+  const box = new THREE.Box3().setFromObject(d.group).translate(d.group.position.clone().negate());   // the drawer's own box
+  if (box.isEmpty()) return false;
+  const target = box.getCenter(new THREE.Vector3()).add(open);
+  const R = box.getSize(new THREE.Vector3()).length() / 2;
+  if (!framedFrom) framedFrom = { preset: curCamPreset, override: camOverride };
+  const r = fitDistanceFor(R * 1.12, 40);
+  const p = THREE.MathUtils.degToRad(36), t = THREE.MathUtils.degToRad(14);
+  const pos = new THREE.Vector3(r * Math.sin(p) * Math.sin(t), r * Math.cos(p), r * Math.sin(p) * Math.cos(t)).add(target);
+  setCamOverride(false);
+  const my = ++camTweenToken;
+  const p0 = camera.position.clone(), t0 = controls.target.clone(), fov0 = camera.fov, fov1 = 40;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const at = (k) => { camera.position.lerpVectors(p0, pos, k); controls.target.lerpVectors(t0, target, k); if (fov0 !== fov1) { camera.fov = fov0 + (fov1 - fov0) * k; camera.updateProjectionMatrix(); } invalidateFrame(); };
+  if (still) { at(1); return true; }
+  tween({ duration: 700, onUpdate: k => { if (my === camTweenToken) at(k); } });
+  return true;
+}
+function endFrameUnit() {
+  if (!framedFrom) return;
+  const { preset } = framedFrom; framedFrom = null;
+  if (preset) tweenCamera(preset, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600, true);
+}
+/* the two-rim selection outline around objects of the caller's (meshes on the selection layer alone are drawn by nothing
+   else); null clears it. setSelected and a rebuild clear it too, as they clear the unit outline. */
+function setOutlineObjects(list) {
+  if (!list || !list.length) { clearSelOutline(); return; }
+  showSelOutline(list.map(group => ({ group })));
+}
 // the nearest visible part of the build along a ray (Infinity: none), for an owner's hover that must not see through it
 function buildHitDistance(r) { const h = r.intersectObjects([...instances.values()].filter((i) => i.group.visible).map((i) => i.group), true); return h.length ? h[0].distance : Infinity; }
 
@@ -12267,6 +12360,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
     update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, warmRelief, reliefLive: () => reliefApplied, setLens, lens: () => (lens ? { ...lens } : null), accTotal, accumulates: () => !!QUALITY[quality].accum, unitPartBox, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
+    // the parts drawer (M2, 2026-11-05): a generated body in a drawer's place, the rest ghosted, the camera on the open drawer, outlines on the editor's own objects
+    setDrawerBody, drawerGroupOf, isolateUnit, frameUnit, endFrameUnit, setOutlineObjects, partMaterial: (type, zone = '') => baseMatFor(type, zone), selLayer: SEL_LAYER, markShadowDirty,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,
