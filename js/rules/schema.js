@@ -19,6 +19,18 @@ export function newBuildId() {
   return Array.from(a, (b) => (b % 36).toString(36)).join("");
 }
 export const LABEL_MAX = 40;   // mirrors the #ut-label input's maxlength
+/* A UNIT'S NAME (2026-11-06; Joey: "it might still be helpful for them to keep track of what this drawer is for ... rather
+   than just a no-name unit"): one line of up to 40 characters, the unit's own, apart from the label on its faceplate.
+   unitName gives the name a surface shows: the typed name, else the faceplate label's first line, else nothing. */
+export const UNIT_NAME_MAX = 40;
+export function cleanUnitName(v) {
+  return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, UNIT_NAME_MAX) : "";
+}
+export function unitName(u) {
+  if (!u) return "";
+  const n = cleanUnitName(u.name); if (n) return n;
+  return typeof u.label === "string" ? u.label.split("\n")[0].trim().slice(0, UNIT_NAME_MAX) : "";
+}
 export function cleanLabelText(v) {
   return typeof v === "string" ? v.trim().slice(0, LABEL_MAX) : "";
 }
@@ -331,6 +343,7 @@ export function sanitizeBuild(d, GEN2) {
     const unit = { id, x, y, w, hh, fill: u.fill,
                    shelves: int(u.shelves, 0, Math.max(0, h - 1), 0) };
     { const lt = cleanLabelText(u.label); if (lt) unit.label = lt; }
+    { const nm = cleanUnitName(u.name); if (nm) unit.name = nm; }   // the unit's own name (2026-11-06)
     // a label's icon or letter lives and dies with its words (cleanLabelBadge)
     if (unit.label) { const b = cleanLabelBadge(u.labelBadge); if (b) unit.labelBadge = b; }
     // closures: drawers only, whitelisted to released options ("none" is

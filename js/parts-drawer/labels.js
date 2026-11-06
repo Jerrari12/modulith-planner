@@ -23,7 +23,7 @@ export function compartmentLabels(L, b) {
       const text = compLabelText(c); if (!text) continue;
       const r = ys.indexOf(c.y0) + 1, col = all.filter((k) => k.c.y0 === c.y0).findIndex((k) => k.i === i) + 1;
       const row = c.labelId ? labels.find((l) => l.id === c.labelId) : null;
-      out.push({ unitId: u.id, drawerNo: R.drawerNumber(b, u.id), comp: i, position: `R${r}C${col}`, text, labelId: row ? c.labelId : null, linked: !!row, stale: !!row && R.labelWords(row) !== text });
+      out.push({ unitId: u.id, drawerNo: R.drawerNumber(b, u.id), drawer: R.drawerName(b, u.id), comp: i, position: `R${r}C${col}`, text, labelId: row ? c.labelId : null, linked: !!row, stale: !!row && R.labelWords(row) !== text });
     }
   }
   return out;

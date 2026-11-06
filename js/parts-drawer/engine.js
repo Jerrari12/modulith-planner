@@ -88,6 +88,6 @@ export function drawerGeometry(full, onReady = null) {
 /* the download's bytes for a full layout: { bytes, filename, code } */
 export async function zipFor(full, opts = {}) {
   await partsEngine();
-  return ask('zip', { full, bodyHex: opts.bodyHex, stamp: opts.stamp });
+  return ask('zip', { full, bodyHex: opts.bodyHex, stamp: opts.stamp, name: opts.name || '' });   // the unit's name, for the README
 }
 export const engineStats = () => ({ shells: shells.size, drawers: drawers.size, worker: !!worker, inFlight: inFlight.size });

@@ -23,6 +23,7 @@ import { partName, noteText } from '../ui/names.js';   // shown names: "Case 185
 import { assetUrl } from '../config.js';
 import { ZONE_LABEL, isPaid, disclosureFor, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid link's disclosure, and its click event
 import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer (M3, 2026-11-05): a row of its own with the download
+import { unitName } from '../rules/schema.js';
 import { withPartsDrawers } from '../parts-drawer/row.js';
 import { fullLayout } from '../parts-drawer/unit.js';
 import { saveBytes } from '../parts-drawer/download.js';   // the engine itself (three.js, the worker) loads at the click: this module is also read under node
@@ -463,7 +464,7 @@ export function mountParts(stage, ctx) {
     return el('button.key.sm', { text: zipping.has(id) ? 'Building…' : 'Download STL + 3MF', disabled: zipping.has(id), title: 'The drawer as the generator makes it for this layout: STL and 3MF, README and layout.json (.zip)', onclick: async () => {
       const u = (build.placed || []).find((p) => p.id === id); if (!u || zipping.has(id)) return;
       zipping.add(id); renderPanel();
-      try { const { zipFor } = await import('../parts-drawer/engine.js'); const { bytes, filename } = await zipFor(fullLayout(length, u), { bodyHex: stage.activeHex('Drawer') }); saveBytes(bytes, filename); say(`Saved ${filename}`); }
+      try { const { zipFor } = await import('../parts-drawer/engine.js'); const { bytes, filename } = await zipFor(fullLayout(length, u), { bodyHex: stage.activeHex('Drawer'), name: unitName(u) }); saveBytes(bytes, filename); say(`Saved ${filename}`); }
       catch (e) { console.error(e); say(`The files could not be built (${e && e.message || e}).`); }
       zipping.delete(id); renderPanel();
     } });

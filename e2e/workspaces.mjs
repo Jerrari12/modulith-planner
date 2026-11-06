@@ -1300,7 +1300,7 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   await page.mouse.move(w0.x, w0.y); await settle(page, 300);
   assert.equal(await page.evaluate(() => document.querySelector('canvas').style.cursor), 'grab', 'the wall under the pointer');
   await page.mouse.down(); await page.mouse.move(w1.x, w1.y, { steps: 8 }); await settle(page, 200); await page.mouse.up();
-  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && Math.abs(u.partsLayout.comps[0].x1 - 38.6) < 1e-6; }, null, { timeout: 15_000 });
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && Math.abs(u.partsLayout.comps[0].x1 - 39) < 1e-6; }, null, { timeout: 15_000 });   // 39.0, not 38.6: a whole-millimetre width wins within 2 mm once no neighbour magnet does (walls.js, 2026-11-06)
   assert.deepEqual(await page.evaluate(() => window.__GEN2_VIEWER__.camera.position.toArray().map((v) => +v.toFixed(2))), camBefore, 'the drag did not orbit');
   await page.evaluate(() => window.__GEN2_STORE__.flush());
   await page.keyboard.press('Control+z');
@@ -8625,12 +8625,12 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: d.id, owner: v.partInfo(d.id).owner, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
   await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
   await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
-  const peek = btn(page, 'Peek inside', '#ws-insp');
+  const peek = btn(page, 'Open drawer', '#ws-insp');
   await peek.click({ timeout: 30_000 });
   const stop = drawer.collection - 13.5;
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 })
     .catch(async () => assert.fail(`the drawer did not land at base + ${stop}: z ${await page.evaluate((id) => window.__GEN2_VIEWER__.instances.get(id).group.position.z, drawer.id)} from ${drawer.z0}`));
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 })
     .catch(() => assert.fail('Close it did not bring the drawer back'));
   assert.deepEqual(clean(errors), []);
@@ -8659,7 +8659,7 @@ test('Build: a peeked drawer stays open when its type changes to Gridfinity, and
   const zOf = (owner) => page.evaluate((owner) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d ? v.instances.get(d.id).group.position.z : null; }, owner);
   await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
   await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
   // the type change rebuilds the stage with a new drawer instance for the same unit
   await btn(page, 'Gridfinity', '#ws-insp').click({ timeout: 30_000 });
@@ -8668,11 +8668,11 @@ test('Build: a peeked drawer stays open when its type changes to Gridfinity, and
   // and Close it brings it back by the stopper distance
   await settle(page, 1200);   // the re-peek's 380 ms slide, with margin
   const zOpen = await zOf(drawer.owner);
-  assert.equal(await btn(page, 'Close it', '#ws-insp').count(), 1, 'the button still says Close it');
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  assert.equal(await btn(page, 'Close drawer', '#ws-insp').count(), 1, 'the button still says Close it');
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([owner, z, stop]) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d && Math.abs(v.instances.get(d.id).group.position.z - (z - stop)) < 1; }, [drawer.owner, zOpen, stop], { timeout: 30_000 })
     .catch(async () => assert.fail(`the new drawer was not open by the stopper distance: open z ${zOpen}, now ${await zOf(drawer.owner)} (expected ${zOpen - stop})`));
-  assert.equal(await btn(page, 'Peek inside', '#ws-insp').count(), 1, 'the button says Peek inside again');
+  assert.equal(await btn(page, 'Open drawer', '#ws-insp').count(), 1, 'the button says Peek inside again');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -9066,7 +9066,7 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   const cam = () => page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.probe().camera));
   let cam0 = await cam();
   for (let i = 0; i < 40; i++) { await settle(page, 250); const c = await cam(); if (c === cam0) break; cam0 = c; }
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   const stop = drawer.collection - 13.5;
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
   await settle(page, 600);
@@ -9087,13 +9087,13 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   assert.deepEqual((await pills()).w, inside.w, 'still the inside width');
   assert.ok(await page.evaluate(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop]), 'still open');
   // Close it: the build’s pills come back as they were
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 }).catch(() => assert.fail('Close it did not bring the drawer back'));
   await settle(page, 400);
   const build1 = await pills();
   assert.ok(build1.w.shown && build1.w.mm === build0.w.mm && build1.l.mm === build0.l.mm && build1.h.mm === build0.h.mm, `the build’s pills are back: ${JSON.stringify(build1)} vs ${JSON.stringify(build0)}`);
   // the ruler during a peek: the build’s pills take over, the drawer stays open
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction((mm) => { const t = (document.getElementById('dim-w').textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return Number(t) !== mm; }, build0.w.mm, { timeout: 30_000 }).catch(() => assert.fail('the second peek did not show the inside sizes'));
   // the ruler reads the visitor's own setting during a peek (on), and a click is theirs: off hides every pill, the drawer
   // stays open; on again shows the build's
@@ -9106,15 +9106,15 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   await page.locator('#ws-tools button.measure').click();
   await page.waitForFunction((mm) => { const t = (document.getElementById('dim-w').textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return Number(t) === mm && !document.getElementById('dim-w').classList.contains('hidden'); }, build0.w.mm, { timeout: 30_000 }).catch(() => assert.fail('the ruler on did not show the build pills'));
   // with the ruler off, a peek and a close leave no pills at all (the stage's old exit turned the build's on)
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.locator('#ws-tools button.measure').click();
   await page.waitForFunction(() => document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 });
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(() => { const e = document.getElementById('dim-w'); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, null, { timeout: 30_000 }).catch(() => assert.fail('a peek with the ruler off showed no inside sizes (live 2026-10-21: the shell CSS hid them)'));
   await settle(page, 600);
   const c2 = await clearOf();
   assert.ok(c2.inside && c2.apart, `with the ruler off too: ${JSON.stringify(c2)}`);
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 });
   await settle(page, 400);
   assert.ok(await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].every((id) => { const e = document.getElementById(id); return e.classList.contains('hidden') || getComputedStyle(e).display === 'none'; })), 'closed with the ruler off: no pills');

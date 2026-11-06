@@ -35,7 +35,7 @@ import { buildName } from '../ui/names.js';   // the chip shows the name without
 import { layoutRules } from '../rules/layout.js';
 import { refusalReason, standUp, openCells, armedSpots } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
 import { settleToward, settleWord } from '../rules/settle.js';
-import { serializeBuild } from '../rules/schema.js';
+import { serializeBuild , unitName, cleanUnitName, UNIT_NAME_MAX } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
 import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer prototype (M2, 2026-11-05): ?partsdrawer=1
 import { partsDrawerTools } from '../parts-drawer/editor.js';
@@ -108,7 +108,7 @@ export function mountBuild(stage, ctx) {
   /* THE PARTS DRAWER (M2, 2026-11-05, behind ?partsdrawer=1; js/parts-drawer/editor.js): the third Decor drawer variant, its
      generated body on the stage, and the compartment editor that takes over the Library, the Inspector, the toolbar and the
      Dock while a drawer is being edited. Null without the flag: every branch on `pd` below is then the planner as it was. */
-  const pd = partsDrawerOn() ? partsDrawerTools(stage, { store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
+  const pd = partsDrawerOn() ? partsDrawerTools(stage, { onStop: editStopped, store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
   const editing = () => !!pd && pd.editing != null;
 
   /* ---------------- the record ↔ the stage ---------------- */
@@ -483,6 +483,29 @@ export function mountBuild(stage, ctx) {
     edit((s) => { const p = s.placed.find((q) => q.id === id); if (pd) pd.resized(p, w, hh); p.w = w; p.hh = hh; p.y = y; s.removedStoppers = s.removedStoppers.filter((k) => { const [kid, col] = k.split(':').map(Number); return kid !== id || col < w; }); }, 'resize');
   }
   function setUnitOption(id, fn) { edit((s) => { const p = s.placed.find((q) => q.id === id); if (p) fn(p, s); }, 'option', { gravity: false }); }
+  /* the unit's own name (schema.js unitName; Joey, 2026-11-06: a drawer someone laid out deserves more than "unit 3"): one
+     line, committed on Enter or blur as the Part field is, cleared by an empty field. The placeholder suggests a name
+     for a parts drawer with parts; a drawer with a faceplate label shows that label's words until a name is typed. */
+  let inspRebuilding = false;   // renderInspector is clearing the panel: a blur then is the removal, not the user
+  let nameDraft = null;   // { id, value }: a name being typed, kept across a rebuild of the Inspector (a re-render removes a focused input without a blur, so the words would be lost: Sol 01a1b264)
+  function nameRow(unit) {
+    const parts = pd && pd.isParts(unit) ? pd.partsSummary(unit) : '';
+    const typed = typeof unit.name === 'string' ? unit.name : '';
+    const draft = nameDraft && nameDraft.id === unit.id ? nameDraft.value : null;
+    const inp = el('input', { type: 'text', maxlength: String(UNIT_NAME_MAX), spellcheck: 'false', autocomplete: 'off', value: draft ?? typed, placeholder: typed ? '' : (unitName(unit) || parts || 'e.g. M3 screws'), 'aria-label': 'Name this unit' });
+    // a blur from the input being removed (the Inspector rebuilt under it: Chromium fires one) keeps the draft for the next
+    // field and commits nothing mid-render; a blur from leaving the field commits
+    const commit = () => { if (inspRebuilding || !inp.isConnected) { nameDraft = { id: unit.id, value: inp.value }; return; } nameDraft = null; const v = cleanUnitName(inp.value); if (v === typed) return; setUnitOption(unit.id, (p) => { if (v) p.name = v; else delete p.name; }); };
+    inp.addEventListener('input', () => { nameDraft = { id: unit.id, value: inp.value }; });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') { inp.value = typed; nameDraft = null; inp.blur(); } e.stopPropagation(); });
+    inp.addEventListener('blur', commit);
+    if (draft != null) queueMicrotask(() => { if (inp.isConnected) { inp.focus(); const n = inp.value.length; inp.setSelectionRange(n, n); } });
+    return el('div.row.namerow', {}, ['Name', el('div.pd-part', {}, [inp])]);
+  }
+  /* a drawer type chosen is a drawer opened, so the choice is seen inside (Joey, 2026-11-06): before the option commits,
+     since the rebuild that follows re-opens the drawer it finds in st.peeking */
+  function openDrawer(id) { const u = S().placed.find((p) => p.id === id); if (!u || u.fill === 'shelf' || st.peeking === id) return; stage.peekUnit(id); st.peeking = id; }
+  function editStopped(id) { if (st.peeking === id) st.peeking = null; }   // (hoisted: passed to partsDrawerTools above) edit mode closes the drawer it opened (editor.js stop): the button must not say Close drawer for a closed one (Sol 01a1b264)
   function gridOp(op) {
     edit((s, Rs) => {
       if (op === 'h+') s.gridH = Math.min(Rs.capH(), s.gridH + 1);
@@ -742,7 +765,7 @@ export function mountBuild(stage, ctx) {
   function renderInspector() {
     if (editing()) { pd.renderInspector(insp); return; }   // "This compartment" (M2)
     const sel = st.sel; const s = S();
-    insp.replaceChildren();
+    inspRebuilding = true; insp.replaceChildren(); inspRebuilding = false;   // a blur the clearing fires on a focused field is not the user leaving it (nameRow)
     const unit = st.selId != null ? s.placed.find((u) => u.id === st.selId) : null;
     if (!sel && !unit) { insp.hidden = true; return; }
     insp.hidden = false;
@@ -762,10 +785,11 @@ export function mountBuild(stage, ctx) {
     const src = unit.fill === 'decor' ? `${FACE_LABEL[cur?.key] || 'Decor'} faceplate${CLUB[cur?.key] ? ' · ✦ Club' : ''}${pd && pd.isParts(unit) ? ' · parts drawer' : unit.variant === 'gridfinity' ? ' · Gridfinity' : ''}` : unit.fill === 'classic' ? 'Print-in-place handle' : 'Open shelf';
     insp.append(
       el('div.head', {}, [el('h2.h2', { text: 'This unit only' }), el('span.idx', { text: `Unit ${idx} of ${s.placed.length}` }), closeBtn]),
+      nameRow(unit),   // the unit's own name (2026-11-06)
       el('div.ident', {}, [
         el('div.wellbox.well', {}, [preview(glyphEl(kind, 79, 50, { ...colors, front: frontFor(unit.fill) }), { fill: unit.fill, w: unit.w, hh: unit.hh, variant: unit.variant || null, lip: unit.lip || null, view: 'three', fit: 1.0, size: 512, unitId: unit.id }, 'insp')]),
         el('div.col', {}, [
-          el('h3', { text: fill?.label || unit.fill }),
+          el('h3', { text: unitName(unit) || fill?.label || unit.fill }),
           el('div.dims', { text: `${unit.w}W·${unit.hh / 2}H · inside ${unit.w * 88 - wall.wWall} × ${Math.round((unit.hh / 2) * 56 - wall.hWall)} × ${INSIDE[length] ?? length} mm` }),
           el('div.src', { text: src }),
         ]),
@@ -797,9 +821,9 @@ export function mountBuild(stage, ctx) {
       ])]));
       const gfOk = Rs.gridfinityOk(unit), pdOk = !!pd && pd.sizeOk(unit);
       if (unit.fill === 'decor' && (gfOk || pdOk)) insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.mini' + (pd ? '.seg3' : '.seg2'), { role: 'group', 'aria-label': 'Drawer body' }, [
-        el('button.seg.sm' + (unit.variant !== 'gridfinity' && !(pd && pd.isParts(unit)) ? '.on' : ''), { text: 'Standard', onclick: () => setUnitOption(unit.id, (p) => { delete p.variant; }) }),
-        el('button.seg.sm' + (unit.variant === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', disabled: !gfOk, title: gfOk ? 'The Gridfinity drawer body' : `Gridfinity drawers come in ${G.gridfinity.heights.join(', ')}H for ${G.gridfinity.lengths.join(', ')}`, onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'gridfinity'; }) }),
-        pd ? el('button.seg.sm' + (pd.isParts(unit) ? '.on' : ''), { text: 'Parts drawer', disabled: !pdOk, title: pdOk ? 'Compartments, label holders, scoops and ramps inside, generated to your layout' : pd.sizeWhy(unit.w, unit.hh / 2), onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'parts'; }) }) : null,
+        el('button.seg.sm' + (unit.variant !== 'gridfinity' && !(pd && pd.isParts(unit)) ? '.on' : ''), { text: 'Standard', onclick: () => { openDrawer(unit.id); setUnitOption(unit.id, (p) => { delete p.variant; }); } }),
+        el('button.seg.sm' + (unit.variant === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', disabled: !gfOk, title: gfOk ? 'The Gridfinity drawer body' : `Gridfinity drawers come in ${G.gridfinity.heights.join(', ')}H for ${G.gridfinity.lengths.join(', ')}`, onclick: () => { openDrawer(unit.id); setUnitOption(unit.id, (p) => { p.variant = 'gridfinity'; }); } }),
+        pd ? el('button.seg.sm' + (pd.isParts(unit) ? '.on' : ''), { text: 'Parts drawer', disabled: !pdOk, title: pdOk ? 'Compartments, label holders, scoops and ramps inside, generated to your layout' : pd.sizeWhy(unit.w, unit.hh / 2), onclick: () => { openDrawer(unit.id); setUnitOption(unit.id, (p) => { p.variant = 'parts'; }); } }) : null,
       ].filter(Boolean))]));
       if (pd && pd.isParts(unit)) insp.appendChild(pd.unitSection(unit));   // the plan thumbnail, the layout code, Edit compartments, the download
     }
@@ -815,7 +839,7 @@ export function mountBuild(stage, ctx) {
       el('button.seg.sm', { text: 'Right ▶', title: 'One column right · →', onclick: () => { select(unit.id); nudge('right'); } }),
     ])]));
     insp.appendChild(el('div.actions', {}, [
-      el('button.key' + (st.peeking === unit.id ? '.on' : ''), { text: st.peeking === unit.id ? 'Close it' : 'Peek inside', title: unit.fill === 'shelf' ? 'A shelf has nothing to open' : 'Slide the drawer open on the model', disabled: unit.fill === 'shelf', onclick: () => togglePeek(unit.id) }),
+      el('button.key' + (st.peeking === unit.id ? '.on' : ''), { text: st.peeking === unit.id ? 'Close drawer' : 'Open drawer', title: unit.fill === 'shelf' ? 'A shelf has nothing to open' : 'Slide the drawer open on the model', disabled: unit.fill === 'shelf', onclick: () => togglePeek(unit.id) }),
       el('button.key', { text: 'Duplicate', title: 'A copy on the nearest valid spot', onclick: () => duplicateUnit(unit.id) }),
       el('button.key.danger', { text: 'Remove', title: 'Remove this unit · Delete', onclick: () => removeUnit(unit.id) }),
     ]));
@@ -933,7 +957,7 @@ export function mountBuild(stage, ctx) {
     select(u.id);
     menu.replaceChildren(
       el('div.label', { text: `Unit · ${u.w}W·${u.hh / 2}H ${G.fills.find((f) => f.id === u.fill)?.label || u.fill}` }),
-      el('button.item', { role: 'menuitem', text: st.peeking === u.id ? 'Close it' : 'Peek inside', disabled: u.fill === 'shelf', onclick: () => { closeMenu(); togglePeek(u.id); } }),
+      el('button.item', { role: 'menuitem', text: st.peeking === u.id ? 'Close drawer' : 'Open drawer', disabled: u.fill === 'shelf', onclick: () => { closeMenu(); togglePeek(u.id); } }),
       el('button.item', { role: 'menuitem', text: 'Duplicate', onclick: () => { closeMenu(); duplicateUnit(u.id); } }),
       el('button.item.danger', { role: 'menuitem', text: 'Remove', onclick: () => { closeMenu(); removeUnit(u.id); } }),
     );
@@ -985,7 +1009,7 @@ export function mountBuild(stage, ctx) {
      closed so the next spot stays uncovered (Joey, 2026-10-11); the inspector's handle names the selected unit. */
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'build', soon }, { panels: [
     { el: lib, title: () => st.tab === 'add' ? (st.armed ? `Placing ${armedSize().w}W·${armedSize().h}H · tap a spot` : 'Add units') : 'Build style', open: false },   // the model first; the handle opens the library
-    { el: insp, title: () => { const u = S().placed.find((p) => p.id === st.selId); return u ? `Unit ${S().placed.indexOf(u) + 1} · ${u.w}W·${u.hh / 2}H ${(G?.fills || []).find((f) => f.id === u.fill)?.label || u.fill}` : 'This unit'; } },
+    { el: insp, title: () => { const u = S().placed.find((p) => p.id === st.selId); return u ? `${unitName(u) || `Unit ${S().placed.indexOf(u) + 1}`} · ${u.w}W·${u.hh / 2}H ${(G?.fills || []).find((f) => f.id === u.fill)?.label || u.fill}` : 'This unit'; } },
   ] }) : null;
   if (phone) phone.onLayout(() => { safe(); if (st.view === '2d') brd.render(); });
   function layout() {

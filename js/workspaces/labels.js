@@ -296,7 +296,7 @@ export function mountLabels(stage, ctx) {
   function openFill() {
     const pairs = R.fillPairs(L, S()); if (!pairs.length) return;
     const ready = R.waiting(L, S()), rest = ready.slice(pairs.length), k = pairs.length;
-    const list = el('div.pairs', {}, pairs.map(([u, id]) => el('div.pair', {}, [el('b', { text: `Drawer ${R.drawerNumber(S(), u)}` }), el('span', { text: shown(R.labelShort(R.labelById(S(), id))) || '(icon only)' })])));
+    const list = el('div.pairs', {}, pairs.map(([u, id]) => el('div.pair', {}, [el('b', { text: R.drawerName(S(), u) }), el('span', { text: shown(R.labelShort(R.labelById(S(), id))) || '(icon only)' })])));
     const body = [`Place ${n(k, 'label')} in the empty ${k === 1 ? 'drawer' : 'drawers'}` + (rest.length ? `; ${rest.length} ${rest.length === 1 ? 'stays' : 'stay'} ready to place.` : '.'), list];
     if (rest.length) body.push(el('p.rest', { text: 'Stay ready to place: ' + rest.map((l) => shown(R.labelShort(l)) || '(icon only)').join(', ') }));
     body.push('Order: top row first, left to right. One Undo takes the whole fill back.');
@@ -769,7 +769,7 @@ export function mountLabels(stage, ctx) {
     const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => ctx.builds?.keepCurrent?.(), title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
       : !faceOk ? null
       : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
-      : sel && R.eligible(s, sel) && ready.length ? (selL ? `Drawer ${R.drawerNumber(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on drawer ${R.drawerNumber(s, sel.id)}. The drawer stays selected afterwards.`)
+      : sel && R.eligible(s, sel) && ready.length ? (selL ? `${R.drawerName(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on ${R.drawerName(s, sel.id)}. The drawer stays selected afterwards.`)
       : !ready.length ? 'Tap a drawer on the model to change or remove its label.'
       : !empties.length ? 'Every drawer has a label. Tap one on the model to replace its label.'
       : 'Tap a drawer on the model to give it a label, or use Place several to label drawers one after another.';
@@ -790,8 +790,8 @@ export function mountLabels(stage, ctx) {
     const onUnits = R.drawers(s).filter((u) => carried[u.id] && R.labelById(s, carried[u.id]));
     if (onUnits.length) scroll.appendChild(el('div.placed', {}, [el('h4', { text: `On drawers (${onUnits.length})` }), el('div.rows', {}, onUnits.map((u) => {
       const l = R.labelById(s, carried[u.id]); const isSel = !!sel && sel.id === u.id;
-      return el('button.prow' + (isSel ? '.sel' : '') + (st.selLabel === l.id ? '.lsel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on drawer ${R.drawerNumber(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
-        [preview(l, false, u, 56), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: 'Drawer ' + R.drawerNumber(s, u.id) })]);
+      return el('button.prow' + (isSel ? '.sel' : '') + (st.selLabel === l.id ? '.lsel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on ${R.drawerName(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
+        [preview(l, false, u, 56), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: R.drawerName(s, u.id) })]);
     }))]));
     /* COMPARTMENT LABELS (M3, js/parts-drawer/labels.js): a parts drawer's compartments that carry a part, as the Studio's
        print set; a row in this list per compartment, never on a faceplate */
@@ -801,7 +801,7 @@ export function mountLabels(stage, ctx) {
         const open = crows.filter((r) => !r.linked);
         scroll.appendChild(el('div.placed.pd-comp-labels', {}, [
           el('h4', { text: `Compartment labels (${crows.length})` }),
-          el('div.rows', {}, crows.map((r) => el('div.crow', {}, [el('span.where', { text: `Drawer ${r.drawerNo} · ${r.position}` }), el('span.words', { text: r.text }), el('span.state', { text: r.linked ? (r.stale ? 'words changed' : 'In list') : 'not in the list' })]))),
+          el('div.rows', {}, crows.map((r) => el('div.crow', {}, [el('span.where', { text: `${r.drawer} · ${r.position}` }), el('span.words', { text: r.text }), el('span.state', { text: r.linked ? (r.stale ? 'words changed' : 'In list') : 'not in the list' })]))),
           open.length ? el('div.fillrow', {}, [el('button.key.tile.wide', { onclick: () => compCommit(open) }, [icon('plus', { size: 16 }), `Add ${open.length === crows.length ? 'all' : open.length} to the list`])]) : el('p.hint', { text: 'Every compartment label is in the list; the Studio prints them with the rest.' }),
         ]));
       }
@@ -834,7 +834,7 @@ export function mountLabels(stage, ctx) {
     const s = S();
     const no = R.drawerNumber(s, u.id);
     const box = el('div.drawer', { 'aria-label': 'Selected drawer' });
-    box.appendChild(el('div.dhead', {}, [el('span.tag', { text: no ? `Drawer ${no}` : 'Selected' }), el('span.size', { text: [`${u.w}W·${u.hh / 2}H`, FILL_LABEL(u.fill), u.fill === 'decor' && FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] : ''].filter(Boolean).join(' · ') }),
+    box.appendChild(el('div.dhead', {}, [el('span.tag', { text: no ? R.drawerName(s, u.id) : 'Selected' }), el('span.size', { text: [`${u.w}W·${u.hh / 2}H`, FILL_LABEL(u.fill), u.fill === 'decor' && FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] : ''].filter(Boolean).join(' · ') }),
       el('button.x', { title: 'Deselect', 'aria-label': 'Deselect the drawer', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })])]));
     // a Decor drawer on a faceplate without labels: the callout above the card explains it and offers the switch
     if (!R.eligible(s, u) && !l) { box.appendChild(el('p.none', { text: u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : 'This faceplate style takes no label.' })); return box; }

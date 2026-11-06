@@ -31,6 +31,7 @@ import { hitWall, startWallDrag, moveWallDrag, dragMoved, chainKey } from './wal
 import { attachHint } from '../ui/hint.js';   // the hover clips on the editor's controls (2026-11-06)
 import { GUIDE } from './guide.js';
 import { saveBytes } from './download.js';
+import { unitName } from '../rules/schema.js';
 
 const EPS = 1e-6, WALL = G.C.WALL;
 const fmt = (v) => v.toFixed(1);
@@ -376,6 +377,14 @@ export function partsDrawerTools(stage, ctx) {
         extras.add(m);
       }
     }
+    // the clear size over each selected compartment, and over the compartments either side of a dragged wall as it goes,
+    // with the drag's delta on the wall (Joey, 2026-11-06: "it would be nice to know the dimensions" in 3D)
+    const dimOn = st.wdrag ? [...new Set([...st.wdrag.ch.L, ...st.wdrag.ch.R])].map((i) => st.wdrag.comps[i]) : selected();
+    for (const c of dimOn) extras.add(dimSprite(`${fmt(c.x1 - c.x0)} × ${fmt(c.y1 - c.y0)}`, X((c.x0 + c.x1) / 2), top + 7, Z((c.y0 + c.y1) / 2)));
+    if (st.wdrag && dragMoved(st.wdrag)) {
+      const d = st.wdrag.c - st.wdrag.ch.c, mid = (st.wdrag.ch.J[0] + st.wdrag.ch.J[1]) / 2, v = st.wdrag.ch.orient === 'v';
+      extras.add(dimSprite(`${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}`, v ? X(st.wdrag.c) : X(mid), top + 20, v ? Z(mid) : Z(st.wdrag.c), true));
+    }
     // the hovered compartment (3D hover, the plan's hover too)
     if (st.hover && !inSel(st.hover)) {
       const c = st.hover, m = new THREE.Mesh(new THREE.PlaneGeometry(c.x1 - c.x0, c.y1 - c.y0), new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0.2, depthWrite: false }));
@@ -414,6 +423,28 @@ export function partsDrawerTools(stage, ctx) {
     } else { g2.font = `800 ${Math.round(cv.height * 0.56)}px ${fam}`; g2.fillText(lines.filter(Boolean).join(' '), cv.width / 2, cv.height * 0.53, cv.width * 0.92); }
     const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
     labelTex.set(key, t); return t;
+  }
+  /* a dimension as a sprite that faces the camera: white mono figures on the measurement colour's dark pill, a canvas per
+     text (cached; the sprite shares three's one sprite geometry, so keepGeo) */
+  const dimTex = new Map();
+  function dimTexture(text, accent) {
+    const key = (accent ? '!' : '') + text;
+    if (dimTex.has(key)) return dimTex.get(key);
+    const cv = document.createElement('canvas'); cv.width = 320; cv.height = 96;
+    const g2 = cv.getContext('2d');
+    g2.font = `600 52px "IBM Plex Mono", ui-monospace, Menlo, monospace`;
+    const tw = Math.min(cv.width - 24, g2.measureText(text).width + 40), x0 = (cv.width - tw) / 2;
+    g2.fillStyle = accent ? '#FF6A1A' : 'rgba(10,8,36,.92)'; g2.beginPath(); g2.roundRect(x0, 10, tw, 76, 20); g2.fill();
+    g2.fillStyle = '#ffffff'; g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(text, cv.width / 2, 50, tw - 24);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    dimTex.set(key, t); return t;
+  }
+  function dimSprite(text, x, y, z, accent = false) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: dimTexture(text, accent), transparent: true, depthTest: false, depthWrite: false }));
+    const w = 7 + 2.3 * text.length;   // mm across, roughly the figures' width at this font (small enough for a 23 mm compartment)
+    m.scale.set(w, w * 96 / 320, 1); m.position.set(x, y, z); m.renderOrder = 6;
+    m.userData.ghost = true; m.userData.ownMat = true; m.userData.keepGeo = true;
+    return m;
   }
   const compAt = (pt, size) => { const Sz = G.SIZES[size]; if (pt.x < -0.2 || pt.x > Sz.W + 0.2 || pt.y < -0.2 || pt.y > Sz.D + 0.2) return null; let best = null, bd = Infinity; for (const c of comps()) { const dx = Math.max(c.x0 - pt.x, 0, pt.x - c.x1), dy = Math.max(c.y0 - pt.y, 0, pt.y - c.y1), dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = c; } } return best; };
   function compUnderRay(ray) {
@@ -488,7 +519,7 @@ export function partsDrawerTools(stage, ctx) {
     canvas.addEventListener('pointermove', onCanvasMove); canvas.addEventListener('pointerleave', onCanvasLeave);
     stage.peekUnit(id, { pills: false });
     sync();
-    stage.frameUnit(id);
+    frameDrawer();
     editBar.sync();
     pl.firstTip();   // the gestures, once per device (guide.js)
     return true;
@@ -496,6 +527,7 @@ export function partsDrawerTools(stage, ctx) {
   function stop({ quiet = false } = {}) {
     const id = st.editing; if (id == null) return;
     st.editing = null; st.sel = null; st.hover = null; st.hot = null; st.hotKey = ''; st.wdrag = null; st.picker = null; closeInventory(); pl.hideTip();
+    if (ctx.onStop) ctx.onStop(id);   // the Build workspace: the drawer this closes is no longer its open one
     stage.setTapTargets(null);
     canvas.removeEventListener('pointermove', onCanvasMove); canvas.removeEventListener('pointerleave', onCanvasLeave);
     canvas.style.cursor = '';
@@ -528,19 +560,30 @@ export function partsDrawerTools(stage, ctx) {
 
   /* ---------------- the toolbar in edit mode: 2D / 3D, Reset frames the drawer, Undo / Redo ---------------- */
   const editBar = toolbar(stage, {
-    view: { get: () => st.view, set: (v) => { st.view = v; ctx.renderAll(); } },
+    view: { get: () => st.view, set: (v) => { st.view = v; ctx.renderAll(); if (v === '3d') frameDrawer(); } },   // the 3D view opens on the drawer, centred (Joey, 2026-11-06)
     history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } },
-    reset: () => { if (st.editing != null) stage.frameUnit(st.editing); },
+    reset: () => frameDrawer(),
   });
   editBar.el.hidden = true;
   root.appendChild(editBar.el);
+
+  /* the camera on the edited drawer, centred in the free region between the Library and the Inspector (the stage centres
+     on the canvas, and the panels cover its sides, so the drawer sat off to one side: Joey, 2026-11-06) */
+  function frameDrawer() {
+    if (st.editing == null) return;
+    const cv = canvas.getBoundingClientRect();
+    const shown = (sel) => [...document.querySelectorAll(sel)].find((e) => !e.hidden && e.offsetWidth > 0);
+    const lib = shown('#ws-lib'), insp = shown('#ws-insp');
+    const left = lib ? Math.max(cv.left, lib.getBoundingClientRect().right) : cv.left, right = insp ? Math.min(cv.right, insp.getBoundingClientRect().left) : cv.right;
+    stage.frameUnit(st.editing, { centreX: cv.width > 0 && right > left ? ((left + right) / 2 - cv.left) / cv.width : 0.5 });
+  }
 
   /* ---------------- the Library: the drawer tools ---------------- */
   function renderLib(lib) {
     const u = editedUnit(); if (!u) return;
     const full = fullOf(u), lay = layoutOfUnit(u), size = full.size, Sz = G.SIZES[size], g = G.maxGrid(size);
     lib.appendChild(el('div.pd-head', {}, [
-      el('div.col', {}, [el('h2.h2', { text: 'Editing compartments' }), el('h3', { text: `${u.w}W·${u.hh / 2}H parts drawer` }), el('div.readout', { text: `${Sz.label} · cavity ${fmt(Sz.W)} × ${fmt(Sz.D)} mm · ${full.height}` })]),
+      el('div.col', {}, [el('h2.h2', { text: 'Editing compartments' }), el('h3', { text: unitName(u) || `${u.w}W·${u.hh / 2}H parts drawer` }), el('div.readout', { text: `${Sz.label} · cavity ${fmt(Sz.W)} × ${fmt(Sz.D)} mm · ${full.height}` })]),
       el('button.key.sm', { text: 'Done', title: 'Back to the build · Esc', onclick: () => stop() }),
     ]));
     if (st.engineErr) lib.appendChild(el('div.warnbox', {}, [el('b', { text: 'The geometry engine could not start. ' }), `The plan still works; the 3D drawer and the download are off. ${st.engineErr}`]));
@@ -677,7 +720,7 @@ export function partsDrawerTools(stage, ctx) {
     const u = unitById(id); if (!u || !engineReady() || st.downloading) return;
     st.downloading = true; st.status = u.partsLayout && layoutOfUnit(u).floor.mode !== 'off' ? 'Building the colour parts…' : 'Packing STL and 3MF…'; ctx.renderAll();
     try {
-      const { bytes, filename } = await zipFor(fullOf(u), { bodyHex: stage.activeHex('Drawer') });
+      const { bytes, filename } = await zipFor(fullOf(u), { bodyHex: stage.activeHex('Drawer'), name: unitName(u) });
       saveBytes(bytes, filename);
       st.status = `Saved ${filename}`;
     } catch (e) { console.error(e); st.status = `The files could not be built (${e && e.message || e}).`; }
@@ -802,6 +845,7 @@ export function partsDrawerTools(stage, ctx) {
     get editing() { return st.editing; }, get view() { return st.view; },
     start, stop, key, sync, afterUpdate, unitSection,
     isParts: (u) => isPartsDrawer(L(), u), sizeOk: (u) => partsSizeOk(L(), u), sizeWhy: (w, h) => partsSizeWhy(L(), w, h),
+    partsSummary: (u) => { const items = layoutOf(L(), u).comps.filter((c) => c.item && I.known(c.item)).map((c) => I.labelText(c.item)); const seen = [...new Set(items)]; return seen.length ? seen.slice(0, 2).join(', ') + (seen.length > 2 ? `, +${seen.length - 2}` : '') : ''; },   // a name to suggest for the unit, from its parts (the Build Inspector's Name field)
     /* a parts drawer resized: its layout moved to the new size (unit.js layoutForSize), said when the grid started over */
     resized(p, w, hh) {
       if (p.variant !== PARTS) return;
@@ -814,6 +858,6 @@ export function partsDrawerTools(stage, ctx) {
     plan: pl, toolbar: editBar,
     render2d() { pl.render(); },
     setPanels() { editBar.sync(); },
-    destroy() { alive = false; if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); for (const t of labelTex.values()) t.dispose(); },
+    destroy() { alive = false; if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); for (const t of labelTex.values()) t.dispose(); for (const t of dimTex.values()) t.dispose(); },
   };
 }

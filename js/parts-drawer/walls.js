@@ -23,23 +23,32 @@ export function magnets(ch, list, full) {
   return m;
 }
 export const along = (ch, pt) => (ch.orient === 'v' ? pt.x : pt.y);
-/* where the wall lands for a raw position: 0.5 mm steps from where it started, a magnet within `tol` mm instead, never
-   past the chain's range; `free` (Alt) keeps only the range */
+/* where the wall lands for a raw position, in this order: a magnet within `tol` mm (another wall's face, a label's fit);
+   else a position that makes a neighbouring compartment a whole number of mm wide, within `tol`; else 0.5 mm steps from
+   where it started; never past the chain's range. `free` (Alt) keeps only the range. */
 export function snapWall(ch, raw, free, tol) {
   let c = raw;
   if (!free) {
     c = ch.c + Math.round((raw - ch.c) / 0.5) * 0.5;
-    let best = null;
-    for (const m of ch.mags) if (Math.abs(m - raw) <= tol && (best === null || Math.abs(m - raw) < Math.abs(best - raw))) best = m;
+    const nearest = (cands) => { let best = null; for (const m of cands) if (Math.abs(m - raw) <= tol && (best === null || Math.abs(m - raw) < Math.abs(best - raw))) best = m; return best; };
+    let best = nearest(ch.mags);
+    if (best === null && ch.lat) best = nearest([...ch.lat.L.map((o) => o + Math.round(raw - o)), ...ch.lat.R.map((o) => o - Math.round(o - raw))]);
     if (best !== null) c = best;
   }
   return G.snapMM(Math.min(ch.range[1], Math.max(ch.range[0], c)));
 }
 /* a drag in progress: the chain with its magnets, the compartments as they were, as they are, the grab offset, the wall's
    position now */
+/* the far faces of the compartments on each side of the chain: a wall at (face + a whole number of mm + half a wall) gives
+   that compartment a whole-millimetre clear width (Joey, 2026-11-06: "snap into whole integer values if possible, but
+   still snap into neighboring alignments first") */
+export function lattice(ch, list) {
+  const a = ch.orient === 'v' ? 'x' : 'y';
+  return { L: ch.L.map((i) => list[i][a + '0'] + WALL / 2), R: ch.R.map((i) => list[i][a + '1'] - WALL / 2) };
+}
 export function startWallDrag(comps, ch, pt, full) {
   const start = comps.map((c) => ({ ...c }));
-  return { ch: { ...ch, mags: magnets(ch, start, full) }, start, comps: start, grab: along(ch, pt) - ch.c, c: ch.c };
+  return { ch: { ...ch, mags: magnets(ch, start, full), lat: lattice(ch, start) }, start, comps: start, grab: along(ch, pt) - ch.c, c: ch.c };
 }
 /* the pointer at a new plan point: true when the wall moved (the drag's comps are then the layout as it would be) */
 export function moveWallDrag(wd, pt, free, tol) {

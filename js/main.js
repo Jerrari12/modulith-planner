@@ -9495,7 +9495,7 @@ function isolateUnit(unitId) {
 /* the camera on a unit's OPEN drawer from above and in front (a top-down 3/4), fitted to the free region; the preset it
    leaves is kept, and endFrameUnit returns to it. Reduced motion snaps. */
 let framedFrom = null;
-function frameUnit(unitId) {
+function frameUnit(unitId, { centreX = 0.5 } = {}) {   // centreX: where across the canvas (0..1) the drawer should sit (the editor: the middle of the free region between its panels, 2026-11-06)
   const d = drawerInstanceOf(unitId); if (!d) return false;
   const open = basePos(d, false); open.z += drawerStop();
   const box = new THREE.Box3().setFromObject(d.group).translate(d.group.position.clone().negate());   // the drawer's own box
@@ -9506,6 +9506,11 @@ function frameUnit(unitId) {
   const r = fitDistanceFor(R * 1.12, 40);
   const p = THREE.MathUtils.degToRad(36), t = THREE.MathUtils.degToRad(14);
   const pos = new THREE.Vector3(r * Math.sin(p) * Math.sin(t), r * Math.cos(p), r * Math.sin(p) * Math.cos(t)).add(target);
+  if (centreX !== 0.5) {   // camera and target slide sideways together, so the drawer lands at centreX instead of the middle
+    const nx = 2 * centreX - 1, half = r * Math.tan(THREE.MathUtils.degToRad(40) / 2) * (canvas.clientWidth / Math.max(1, canvas.clientHeight));
+    const shift = new THREE.Vector3().subVectors(target, pos).cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(nx * half);
+    pos.sub(shift); target.sub(shift);
+  }
   setCamOverride(false);
   const my = ++camTweenToken;
   const p0 = camera.position.clone(), t0 = controls.target.clone(), fov0 = camera.fov, fov1 = 40;

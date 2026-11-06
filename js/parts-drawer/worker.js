@@ -50,7 +50,7 @@ export async function handle(op, args, eng = engine) {
     const positions = framePositions(args.full.size, m.getMesh()), grams = G.grams(m); m.delete();
     return { result: { positions, grams, ms: (globalThis.performance || Date).now() - t0 }, transfer: [positions.buffer] };
   }
-  if (op === 'zip') { const r = await buildFiles(eng, args.full, { bodyHex: args.bodyHex, stamp: args.stamp }); return { result: r, transfer: [r.bytes.buffer] }; }
+  if (op === 'zip') { const r = await buildFiles(eng, args.full, { bodyHex: args.bodyHex, stamp: args.stamp, name: args.name }); return { result: r, transfer: [r.bytes.buffer] }; }
   throw new Error(`unknown ask: ${op}`);
 }
 /* in a worker: answer messages; elsewhere (the main thread's fallback, node) this module is just its functions */

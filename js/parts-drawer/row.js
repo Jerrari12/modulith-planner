@@ -4,6 +4,7 @@
    download of the zip where the store link would be (js/workspaces/parts.js). Pure over the rows the BOM gives
    (js/rules/bom.js bomRows; generated from the planner, never edited by hand, so this runs after it). */
 import { isPartsDrawer, layoutOf } from './unit.js';
+import { unitName } from '../rules/schema.js';
 
 export const PARTS_DRAWER_SECTION = 'Drawers';
 /* the rows with every parts drawer moved out of its Decor Drawer row into its own; `on` false returns the rows as they came */
@@ -20,7 +21,7 @@ export function withPartsDrawers(rows, build, GEN2, length, on = true) {
     if (base) { base.qty -= 1; if (base.qty <= 0) out.splice(at, 1); }
     const lay = layoutOf(length, u);
     const labels = lay.label === 'small' ? 'Small' : 'Large';
-    const row = { section: PARTS_DRAWER_SECTION, mountSection: false, name: GEN2.partNames.drawer(length, size, 'Decor Parts Drawer'), variant: `unit ${idx + 1}`, qty: 1,
+    const row = { section: PARTS_DRAWER_SECTION, mountSection: false, name: GEN2.partNames.drawer(length, size, 'Decor Parts Drawer'), variant: unitName(u) || `unit ${idx + 1}`, qty: 1,
       partsDrawer: { unitId: u.id, compartments: lay.comps.length, parts: lay.comps.filter((c) => c.item).length },
       note: `Custom: ${lay.comps.length} compartments, ${labels} labels${lay.floor.mode !== 'off' ? ', coloured floors' : ''} · generated to this unit's layout.`,
       links: null, requirement: base ? base.requirement : undefined, basis: base ? base.basis : undefined };

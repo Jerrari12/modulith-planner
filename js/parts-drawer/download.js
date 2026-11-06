@@ -64,7 +64,7 @@ export async function buildFiles(engine, full, { bodyHex = '#ff6a1a', stamp = 'p
   const how = G.shellChanges(L.size, L.height).join(', '), [fa, fb] = G.footprint(L.size);
   const notes = S.heights[L.height].stretched ? ['NEW SIZE', `  The ${L.size}-${L.height} drawer is made from the 240-2W drawer (${how}): cut and rejoined or stretched`, '  only where its walls run straight. It has not been checked against a modelled part yet: print one and check',
     '  that it slides in its case before you print a set.', `  It prints ${fmt(fa)} x ${fmt(fb)} mm.`] : [];
-  files['README.txt'] = X.readme({ title: base, floor: L.floor, bodyColor: bodyHex, files: listed, notes, ribs: 0 });
+  files['README.txt'] = X.readme({ title: opts.name ? `${opts.name} · ${base}` : base, floor: L.floor, bodyColor: bodyHex, files: listed, notes, ribs: 0 });   // the unit's name first, when it has one
   files['layout.json'] = JSON.stringify({ generator: 'MODULITH Planner, parts drawer', stamp, code: Mk.pretty(code), share, ...L, labelSize: H.label.join(' x ') + ' mm',
     units: 'mm; compartment x/y are the clear inside, measured from the cavity front-left corner' }, null, 2);
   const bytes = await zip(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, typeof v === 'string' ? enc.encode(v) : v])), { compress: true });
