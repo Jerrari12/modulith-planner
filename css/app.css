@@ -1425,3 +1425,119 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
 #ws-labels .palette .pitem:hover { background: var(--key-bg); }
 #ws-labels .palette .pitem.on { outline: 2px solid var(--orange); outline-offset: -2px; }
 #ws-labels .palette .pitem .own { margin-left: auto; font-size: 11px; }
+
+/* ---- the parts drawer (M2, 2026-11-05; js/parts-drawer/editor.js, plan.js), behind ?partsdrawer=1 ---- */
+#ws .seg5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+#ws-tools[hidden] { display: none; }   /* the edit toolbar stands in for the Build one; an explicit display beats the hidden attribute */
+#ws-plan { position: absolute; top: 150px; left: 344px; right: 364px; bottom: 116px; border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; }
+#ws-plan[hidden] { display: none; }
+#ws-plan .bhead { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--hair); }
+#ws-plan .bttl { font-family: var(--font-display); font-weight: 800; font-size: 16px; font-stretch: 108%; white-space: nowrap; }
+#ws-plan .bhint { flex: 1; font-size: 12px; color: var(--ink-2); }
+#ws-plan .bsvg { flex: 1; min-height: 0; width: 100%; display: block; padding: 10px 14px; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
+/* the gestures as a tip card (js/parts-drawer/guide.js howToCard): the shape of the Colors buy-tip (an opaque card, the orange
+   edge, a pointer at what it explains, a ×). In the panel's empty left, pointing at the drawing; over the drawing where the
+   panel is narrow; its body scrolls where the panel is short. The How-to button in the header brings it back. */
+#ws-plan { container-type: size; }
+#ws-plan .bhead .howto { flex: none; }
+#ws-plan .pd-tip { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); width: 252px; max-height: calc(100% - 24px); box-sizing: border-box; display: flex; flex-direction: column; padding: 8px 10px 12px 12px; border-radius: 14px; border: 1px solid var(--orange); background: var(--menu-bg); color: var(--ink); box-shadow: var(--glass-shadow); z-index: 2; }
+#ws-plan .pd-tip::after { content: ''; position: absolute; right: -6px; top: 50%; width: 10px; height: 10px; margin-top: -5px; background: var(--menu-bg); border-top: 1px solid var(--orange); border-right: 1px solid var(--orange); transform: rotate(45deg); }
+#ws-plan .pd-tip .ihead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+#ws-plan .pd-tip .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-plan .pd-tip .ihead .x:hover { background: var(--track); color: var(--ink); }
+#ws-plan .pd-tip .body { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+#ws-plan .gclip .scene { border-radius: 9px; overflow: hidden; background: #1d2230; border: 1px solid var(--hair); }
+#ws-plan .gclip .scene svg { display: block; width: 100%; height: auto; aspect-ratio: 240 / 110; }
+#ws-plan .gclip .t { margin: 6px 2px 0; font-size: 12px; font-weight: 700; }
+#ws-plan .gclip .d { margin: 2px 2px 0; font-size: 11.5px; line-height: 1.35; color: var(--ink-2); }
+/* a short panel (a 768-high laptop) has width to spare instead: the three in a row, centred over the drawing, no pointer; a narrow one a column over the drawing (the last rule wins where both hold: a phone, which scrolls) */
+@container (max-height: 620px) { #ws-plan .pd-tip { left: 50%; transform: translate(-50%, -50%); width: auto; max-width: calc(100% - 36px); } #ws-plan .pd-tip::after { display: none; } #ws-plan .pd-tip .body { flex-direction: row; gap: 14px; } #ws-plan .pd-tip .gclip { flex: 1 1 0; min-width: 0; width: 200px; } }
+@container (max-width: 760px) { #ws-plan .pd-tip { left: 50%; transform: translate(-50%, -50%); width: min(300px, calc(100% - 24px)); max-width: none; } #ws-plan .pd-tip::after { display: none; } #ws-plan .pd-tip .body { flex-direction: column; gap: 12px; } #ws-plan .pd-tip .gclip { flex: none; width: auto; } }
+@media (prefers-reduced-motion: reduce) { #ws-plan .gclip svg animate, #ws-plan .gclip svg animateTransform { display: none; } }
+/* the plan drawing: the shell and walls in ink, cells on the input surface, the selection orange, labels white, dimensions in the measurement colour */
+#ws .pd-thumb, #ws-plan .bsvg { --plan-shell: rgba(29,30,32,.22); --plan-wall: var(--ink-2); --plan-cell: var(--input-bg); --plan-ramp: rgba(29,30,32,.18); --plan-sel: rgba(255,106,26,.18); --plan-hov: rgba(255,106,26,.08); }
+[data-mode="dark"] #ws .pd-thumb, [data-mode="dark"] #ws-plan .bsvg { --plan-shell: rgba(255,255,255,.14); --plan-wall: #8b8fa8; --plan-cell: #202130; --plan-ramp: rgba(255,255,255,.16); --plan-sel: rgba(255,106,26,.3); --plan-hov: rgba(255,106,26,.14); }   /* the cells are drawn over the cavity, so they are opaque */
+#ws .pd-thumb .shell, #ws-plan .shell { fill: var(--plan-shell); }
+#ws .pd-thumb .cavity, #ws-plan .cavity, #ws .pd-thumb .wallfill, #ws-plan .wallfill { fill: var(--plan-wall); }
+#ws .pd-thumb .cell, #ws-plan .cell { fill: var(--plan-cell); cursor: pointer; }
+#ws-plan .cell.hov { fill: var(--plan-hov); }
+#ws-plan .cell.sel { fill: var(--plan-sel); }
+#ws-plan .selring { fill: none; stroke: var(--orange); stroke-width: 0.9; pointer-events: none; }
+#ws .pd-thumb .ramp, #ws-plan .ramp { fill: var(--plan-ramp); pointer-events: none; }
+#ws .pd-thumb .holder, #ws-plan .holder { fill: var(--plan-wall); opacity: .7; pointer-events: none; }
+#ws .pd-thumb .gusset, #ws-plan .gusset { fill: var(--plan-wall); opacity: .5; pointer-events: none; }
+#ws .pd-thumb .labelstrip, #ws-plan .labelstrip { fill: #FFFFFF; pointer-events: none; }
+#ws .pd-thumb .floorfill, #ws-plan .floorfill { pointer-events: none; opacity: .9; }
+#ws-plan .wallhot { fill: var(--orange); opacity: .55; pointer-events: none; }
+#ws-plan .wallhot.drag { opacity: .95; }
+#ws-plan .delta { font-family: var(--font-mono); font-weight: 500; fill: var(--measure); pointer-events: none; }
+#ws .pd-thumb .nofit, #ws-plan .nofit { fill: none; stroke: var(--ink-3); stroke-width: 0.5; stroke-dasharray: 1.6 1.2; pointer-events: none; }
+#ws .pd-thumb .deep, #ws-plan .deep { fill: rgba(227,162,26,.18); stroke: var(--warning); stroke-width: 0.7; stroke-dasharray: 2 1.2; pointer-events: none; }
+#ws-plan .dim { font-family: var(--font-mono); fill: var(--measure); pointer-events: none; font-variant-numeric: tabular-nums; }
+#ws-plan .dim.small { opacity: .75; }
+#ws-plan .axis { stroke: var(--ink-3); stroke-width: 0.35; fill: none; }
+#ws-plan .axis-t { font-family: var(--font-mono); font-size: 4.4px; fill: var(--measure); }
+#ws-plan .face-t { font-family: var(--font-display); font-weight: 800; font-size: 5px; letter-spacing: 0.9px; fill: var(--ink-3); }
+/* the drawer tools in the Library and This compartment in the Inspector */
+#ws-lib .pd-head { display: flex; align-items: flex-start; gap: 10px; }
+#ws-lib .pd-head .col { flex: 1; min-width: 0; }
+#ws-lib .pd-head h3 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 800; font-size: 18px; font-stretch: 108%; line-height: 1.15; }
+#ws-lib .pd-head .readout { margin-top: 2px; }
+#ws-lib .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; }
+#ws-lib .row + .row { margin-top: 8px; }
+#ws-lib .stepper { display: inline-flex; align-items: center; gap: 6px; }
+#ws-lib .stepper .key { width: 30px; height: 30px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; }
+#ws-lib .stepper b { min-width: 34px; text-align: center; font-size: 12px; }
+#ws-lib .track.mini { padding: 3px; gap: 3px; border-radius: 9px; min-width: 150px; }
+#ws-lib .track.mini .seg { height: 28px; font-size: 11px; }
+#ws .pd-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#ws-lib .warnbox { padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.4; background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-border); }
+#ws-lib .warnbox .iact { display: flex; gap: 6px; margin-top: 8px; }
+#ws .pd-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+#ws .pd-swatch { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 6px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+#ws .pd-swatch .sw { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--hair); flex: none; }
+#ws .pd-swatch .name { font-weight: 400; color: var(--ink-2); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ws .pd-swatch.sm { height: 28px; padding: 0 8px 0 5px; font-size: 11px; }
+#ws .pd-swatch.sm .sw { width: 14px; height: 14px; }
+#ws .pd-colors { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+#ws .pd-picker { margin-top: 8px; padding: 8px; border-radius: 12px; }
+#ws .pd-picker input.search { width: 100%; box-sizing: border-box; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 12px; }
+#ws .pd-filaments { max-height: 220px; overflow-y: auto; margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+#ws .pd-fil { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+#ws .pd-fil:hover { background: var(--key-bg); }
+#ws .pd-fil .sw { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--hair); flex: none; }
+#ws .pd-download { width: 100%; height: 40px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-insp .pd-num { display: inline-flex; align-items: center; gap: 6px; }
+#ws-insp .pd-num input { width: 74px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font-size: 12px; text-align: right; }
+#ws-insp .pd-num .unit-lbl { font-size: 11px; color: var(--ink-3); }
+#ws-insp .pd-unit { display: flex; flex-direction: column; gap: 10px; }
+#ws-insp .pd-unit .pd-plan { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+#ws-insp .pd-unit .pd-plan .wellbox { display: flex; align-items: center; justify-content: center; width: 124px; height: 93px; flex: none; border-radius: 12px; overflow: hidden; }
+#ws-insp .pd-unit .pd-plan .col { min-width: 0; }
+#ws-insp .pd-unit .actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* M3 (2026-11-05): the parts on the plan, the Part field, the parts list dialog */
+#ws .pd-thumb .outline, #ws-plan .outline { fill: rgba(0,0,0,.32); fill-rule: evenodd; pointer-events: none; }
+#ws .pd-thumb .outline.inlay, #ws-plan .outline.inlay { fill: var(--ink-2); opacity: .55; }
+#ws .pd-thumb .labeltxt, #ws-plan .labeltxt { font-family: var(--font-display); font-weight: 800; fill: #1D1E20; pointer-events: none; }
+#ws .pd-thumb .labeltxt { display: none; }
+#ws-insp .pd-part input { width: 150px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font-size: 12px; font-family: var(--font-mono); }
+#ws-modal .box.pd-inv { width: 640px; gap: 10px; }
+#ws-modal .pd-inv .ihead { display: flex; justify-content: space-between; align-items: center; }
+#ws-modal .pd-inv .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-modal .pd-inv .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+#ws-modal .pd-inv label { font-size: 12px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+#ws-modal .pd-inv label.pd-inv-text { flex-direction: column; align-items: stretch; }
+#ws-modal .pd-inv select, #ws-modal .pd-inv textarea, #ws-modal .pd-inv input[type="number"] { font: inherit; font-size: 12px; color: var(--ink); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px; padding: 5px 8px; }
+#ws-modal .pd-inv textarea { font-family: var(--font-mono); resize: vertical; }
+#ws-modal .pd-inv input[type="number"] { width: 70px; }
+#ws-modal .pd-inv .pd-inv-head, #ws-modal .pd-inv .pd-inv-row { display: grid; grid-template-columns: 1.4fr 1fr 80px 80px 44px; gap: 6px; align-items: center; }
+#ws-modal .pd-inv .pd-inv-head span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+#ws-modal .pd-inv .pd-inv-table { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+#ws-modal .pd-inv .pd-inv-sum { margin: 0; font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border-radius: 10px; background: var(--well); border-left: 3px solid var(--measure); }
+#ws-modal .pd-inv .pd-inv-sum.warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: var(--warning); }
+#ws-modal .pd-inv .btns { display: flex; justify-content: flex-end; gap: 8px; }
+#ws-modal .pd-inv .btns .key { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+#ws-labels .pd-comp-labels .crow { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; }
+#ws-labels .pd-comp-labels .crow .where { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); min-width: 110px; }
+#ws-labels .pd-comp-labels .crow .words { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ws-labels .pd-comp-labels .crow .state { font-size: 11px; color: var(--ink-3); }

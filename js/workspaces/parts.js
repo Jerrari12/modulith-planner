@@ -22,6 +22,11 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName, noteText } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
 import { assetUrl } from '../config.js';
 import { ZONE_LABEL, isPaid, disclosureFor, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid link's disclosure, and its click event
+import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer (M3, 2026-11-05): a row of its own with the download
+import { unitName } from '../rules/schema.js';
+import { withPartsDrawers } from '../parts-drawer/row.js';
+import { fullLayout } from '../parts-drawer/unit.js';
+import { saveBytes } from '../parts-drawer/download.js';   // the engine itself (three.js, the worker) loads at the click: this module is also read under node
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -257,7 +262,10 @@ function thumbEl(r) {
 export function mountParts(stage, ctx) {
   const ac = new AbortController();
   const signal = ac.signal;
-  const build = stage.build;
+  /* the record this list bills: the store's (M3, 2026-11-05), not the stage's copy, which only follows a rebuild of the
+     scene - a drawer made a parts drawer rebuilds nothing (its body is generated), so the stage's copy did not know it
+     (app.js badges count the record for the same reason); the plain viewer, with no store, keeps the stage's build */
+  let build = ctx.store && typeof ctx.store.serialize === 'function' ? ctx.store.serialize() : stage.build;
   const length = Number(build?.length || 185);
   // progress is per BUILD: the kit this page opened with (kept in the address through every edit), else the record's own id
   const buildId = ctx.kitId || stage.manifest?.id || build?.buildId || 'build';
@@ -276,7 +284,7 @@ export function mountParts(stage, ctx) {
 
   /* ---------------- the list ---------------- */
   const sections = () => computeBom(build, G) || [];
-  const rows = () => bomRows(sections(), LINKS).map((r) => releasedOverride(r, length));
+  const rows = () => withPartsDrawers(bomRows(sections(), LINKS).map((r) => releasedOverride(r, length)), build, G, length, partsDrawerOn());
   const counts = () => {
     const rs = rows();
     const print = rs.filter((r) => !r.hardware);
@@ -437,7 +445,8 @@ export function mountParts(stage, ctx) {
       row.appendChild(el('div.progress', {}, [counter('had', 'had'), counter('made', r.hardware ? 'bought' : 'printed'), el('span.left.mono', { text: left ? `${left} to go` : '✓' })]));
     }
     const link = r.hardware ? (BUY[r.name] || [])[0] : r.links?.stores?.find((s) => s.id === st.site);
-    if (link) row.appendChild(storeLink(r, link));
+    if (r.partsDrawer) row.appendChild(partsDownload(r));
+    else if (link) row.appendChild(storeLink(r, link));
     else if (r.unreleased) row.appendChild(el('span.link.dim', { text: 'Not released' }));
     return row;
   }
@@ -447,6 +456,18 @@ export function mountParts(stage, ctx) {
      be listed); the foot's one disclosure line, right under the hardware rows (renderPanel), discloses it */
   function storeLink(r, link) {
     return el('a.link', { href: link.url, target: '_blank', rel: isPaid(link.url) ? 'noopener sponsored' : 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null });
+  }
+  /* a parts drawer's download (M3): the zip the generator makes for this unit's layout, built in the worker (engine.js) */
+  const zipping = new Set();
+  function partsDownload(r) {
+    const id = r.partsDrawer.unitId;
+    return el('button.key.sm', { text: zipping.has(id) ? 'Building…' : 'Download STL + 3MF', disabled: zipping.has(id), title: 'The drawer as the generator makes it for this layout: STL and 3MF, README and layout.json (.zip)', onclick: async () => {
+      const u = (build.placed || []).find((p) => p.id === id); if (!u || zipping.has(id)) return;
+      zipping.add(id); renderPanel();
+      try { const { zipFor } = await import('../parts-drawer/engine.js'); const { bytes, filename } = await zipFor(fullLayout(length, u), { bodyHex: stage.activeHex('Drawer'), name: unitName(u) }); saveBytes(bytes, filename); say(`Saved ${filename}`); }
+      catch (e) { console.error(e); say(`The files could not be built (${e && e.message || e}).`); }
+      zipping.delete(id); renderPanel();
+    } });
   }
   /* the wide list's row: one column per quantity, the counters readable, a finished row still editable */
   function renderTableRow(r) {
@@ -525,7 +546,7 @@ export function mountParts(stage, ctx) {
     const h = u.hh / 2, size = `${u.w}W-${h}H`, out = [];
     const fill = (G.fills || []).find((f) => f.id === u.fill);
     if (u.fill === 'classic' || u.fill === 'decor') {
-      out.push([P.drawer(length, size, fill?.label || u.fill), 1]);
+      out.push([P.drawer(length, size, partsDrawerOn() && u.variant === 'parts' ? 'Decor Parts Drawer' : (fill?.label || u.fill)), 1]);
       out.push([P.case(length, size), 1]);
       if (u.fill === 'decor') { const f = (G.faceplateStyles || []).find((s) => s.id === build.faceStyle); out.push([P.faceplate(length, size, f?.label || ''), 1]); }
       out.push(['QuickLock L + R', 2]);
@@ -611,7 +632,7 @@ export function mountParts(stage, ctx) {
   /* a commit while this tab is open is a palette change or an undo of one (the store restores the palette beside the
      record): the chips and the "Print in" lines follow it, in the list and in the inspector's rows (renderPanel reads the
      snapshot the inspector's rows resolve against, so it goes first) */
-  const unsub = ctx.store?.subscribe ? ctx.store.subscribe((state, why) => { if (why === 'adopt') return; renderPanel(); renderInspector(); }) : null;
+  const unsub = ctx.store?.subscribe ? ctx.store.subscribe((state, why) => { if (why === 'adopt') return; build = ctx.store.serialize(); renderPanel(); renderInspector(); }) : null;
 
   return {
     onSelect(sel) { st.sel = sel; renderInspector(); if (phone) { if (sel) phone.open(insp); else phone.collapse(insp); phone.refresh(); safe(); } },

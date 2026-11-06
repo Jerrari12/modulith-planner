@@ -20,6 +20,7 @@ import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
 import { readLabelDefaults, paletteOfDefaults, urlFor, NEW_SET } from './label-palette.js';   // the label palette's defaults and suggestion set for new builds (2026-10-28)
 import { cleanLook, buildTooNew } from './rules/schema.js';   // a shared build's look, cleaned once at the boot (SHARE-LOOK.md)
+import { partsDrawerOn, PARTS_DRAWER_PARAM } from './parts-drawer/flag.js';   // the parts drawer prototype (M2, 2026-11-05): ?partsdrawer=1
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
@@ -261,6 +262,7 @@ export async function boot() {
      leaves the history (the stale notice's Reload: Back never returns to the version it set aside) */
   const go = (q, hash = '', { replace = false } = {}) => {
     const u = new URLSearchParams(q); if (QS.get('debug')) u.set('debug', QS.get('debug'));
+    if (partsDrawerOn()) u.set(PARTS_DRAWER_PARAM, '1');   // the prototype's flag rides the page's own reloads (a mount or length change, a build switch)
     const url = `${location.pathname}?${u}${hash}`;
     const sameDocument = url.split('#')[0] === location.pathname + location.search;
     if (replace) location.replace(url); else location.href = url;

@@ -1,0 +1,52 @@
+1. Bearing, F695-2RS 20
+Bearing, 625-2RS 12
+Pulley, 2GT, 16T, (5mm ID 6mm W) 4
+Pulley, 2GT, 20T, (5mm ID 6mm W) 2
+Pulley, 2GT, 20T, (5mm ID 9mm W) 4
+Pulley, 2GT, 80T, (5mm ID 6mm W) 4
+Idler, 2GT, 20T, (5mm ID 6mm W) 2
+Idler, 2GT, 20T, (5mm ID 9mm W) 4
+Shaft, 5x60mm 4
+Shaft, for Nozzle Probe 1
+Thumb Screw Kit 1
+MR85 Bearing 2
+Bondtech IDGA Gear Set 1
+4mm Bowden Coupler 1 Machine Screw, BHCS, M3x6 14
+Machine Screw, BHCS, M3x25 6
+Machine Screw, BHCS, M4x6 8
+Machine Screw, BHCS, M5x6 1
+Machine Screw, BHCS, M5x10 54
+Machine Screw, BHCS, M5x14 4
+Machine Screw, BHCS, M5x16 43
+Machine Screw, BHCS, M5x30 26
+Machine Screw, SHCS, M3x8 283
+Machine Screw, SHCS, M3x12 50
+Machine Screw, SHCS, M3x16 30
+Machine Screw, SHCS, M3x20 40
+Machine Screw, SHCS, M3x25 12
+Machine Screw, SHCS, M3x30 44
+Machine Screw, SHCS, M3x35 6
+Machine Screw, SHCS, M3x40 34
+Machine Screw, SHCS, M3x50 4
+Machine Screw, SHCS, M5x40 26
+Machine Screw, FHCS, M3x6 42
+Machine Screw, FHCS, M3x10 8
+Machine Screw, Wafer head, M3x25 3
+Machine Screw, Captive, M3x6 2
+Self-tapping Screw, M2x10 43
+Hexnut, M5 30
+Hexnut, M3 14
+T-nut, Roll-in, 2020, M5 80
+T-nut, Roll-in, 2020, M3 135
+Heatset Insert, Brass, M3x5x4 153
+Washer, M3 6
+Washer, M5, 1mm 9
+Precision Spacer, M5, 1mm 46
+Locking Washer, M5 2
+Knurled Nut, M4 4
+T-nut, Hammer Head, 2020, M3 75
+T-nut, Hammer Head, 2020, M5 16
+Set Screw, M3x2, Pre-applied Threadlocker 5
+Set Screw, M4x4, Pre-applied Threadlocker 32
+6x3mm Neodymium Magnet 16
+Teflon Tube (4mm OD 3mm ID) - 1.2m 1

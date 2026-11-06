@@ -9346,7 +9346,33 @@ function noteBuildMismatch(o) {
   trackOnce('relay:build-mismatch');
 }
 
-canvas.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerdown', e => {
+  if (grab) return;   // a press while a target holds the gesture (a second finger, another button) is nothing: not a tap, not a claim (Sol 01a1b227)
+  downXY = [e.clientX, e.clientY];
+  /* a tap target may CLAIM the press (setTapTargets' optional onDown, 2026-11-06: the parts drawer's wall drag in 3D): it
+     answers a handler { move(ray, e), up(e) } and the gesture is its until that pointer and button release, the orbit held
+     off as for the carry and the release never read as a tap */
+  if (tapTargets && tapTargets.onDown && e.button === 0 && !carry && !eraser) {
+    const h = tapTargets.onDown(rayAt(e), e);
+    if (h) { grab = { h, pointerId: e.pointerId, button: e.button }; downXY = null; controls.enabled = false; try { canvas.setPointerCapture(e.pointerId); } catch { /* a synthetic event */ } }
+  }
+});
+let grab = null;   // { h: the target's handler, pointerId, button } while a target holds the gesture
+function rayAt(e) {
+  const r = canvas.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  return ray;
+}
+canvas.addEventListener('pointermove', e => { if (grab && e.pointerId === grab.pointerId) grab.h.move(rayAt(e), e); });
+// the pointer that pressed, and (for a mouse) the button that pressed, end it; another finger's lift or another button's click does not
+const endGrab = (e) => {
+  if (!grab || e.pointerId !== grab.pointerId || (e.type === 'pointerup' && e.button !== grab.button)) return;
+  const g = grab; grab = null; controls.enabled = true;
+  try { canvas.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+  g.h.up(e);
+};
+canvas.addEventListener('pointerup', endGrab); canvas.addEventListener('pointercancel', endGrab);
+canvas.addEventListener('lostpointercapture', e => { if (grab && e.pointerId === grab.pointerId) endGrab({ pointerId: e.pointerId, type: 'pointercancel', button: grab.button }); });   // the capture gone (a dialog, a menu): the gesture ends as a cancel, never as a release
 canvas.addEventListener('pointerup', e => {
   // the Build workspace's carry (phase 3) ends on release wherever the pointer is: a drop on a spot, else a cancel
   if (carry) { if (!(e.button === 0 || e.pointerType === 'touch')) return; if (endCarry(true)) return; }   // only the button that picked it up ends it; another button's release mid-carry does nothing
@@ -9402,11 +9428,109 @@ canvas.addEventListener('pointerup', e => {
   setSelected(o ? o.userData.instanceId : null);
 });
 /* THE TAP TARGETS (2026-10-26, the Done room's spools on the Colors stage; Joey: "what if i could select a spool and change
-   it's color"): { onTap(ray, buildDistance, event) } or null. The owner casts the ray against its own scene (what hides
+   it's color"): { onTap(ray, buildDistance, event), onDown?(ray, event) } or null. The owner casts the ray against its own scene (what hides
    its targets is its to know: Sol 01a17823, a mug in front of a spool) and returns true when the tap was its, which then
    selects nothing; false, and the build's nearest hit selects as ever. */
 let tapTargets = null;
 function setTapTargets(t) { tapTargets = t || null; }
+
+/* ---- the parts drawer (M2, 2026-11-05; docs/parts-drawer/SPEC.md "Planner integration") ------------------------
+   What the Build workspace's parts drawer editor (js/parts-drawer/editor.js) needs of the stage, and nothing the
+   workspace could do itself: a generated body in a drawer's place, the rest of the build ghosted, a camera framed on
+   the open drawer, and the selection outline on objects of the workspace's own. All of it is a no-op until called, so a
+   page without the flag runs exactly as before. */
+function drawerInstanceOf(unitId) { return unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer') || null; }
+/* `geometry` (a BufferGeometry in the drawer's own frame: x centred on the outside, up y, the front +z, the frame the GLB
+   has) stands in for the drawer's GLB meshes, which are hidden; null puts the GLB back. The stand-in wears the Drawer
+   material, so it is painted, outlined and shaded like the part it replaces. A rebuild of the instances drops it; the
+   workspace sets it again after every update. Returns the drawer's group, or null when the unit has no drawer. */
+function setDrawerBody(unitId, geometry) {
+  const d = drawerInstanceOf(unitId); if (!d) return null;
+  const g = d.group;
+  const old = g.getObjectByName('parts-body');
+  if (old && geometry && old.geometry === geometry) return g;   // already wearing it
+  if (old) { g.remove(old); }
+  let caster = false, layers = null;
+  g.traverse(o => {
+    if (!o.isMesh || o === old) return;
+    if (geometry) { if (o.visible) { o.visible = false; o.userData.partsHidden = true; } if (o.castShadow) caster = true; if (layers === null) layers = o.layers.mask; }
+    else if (o.userData.partsHidden) { o.visible = true; delete o.userData.partsHidden; }
+  });
+  if (geometry) {
+    const m = new THREE.Mesh(geometry, baseMatFor('Drawer'));
+    m.name = 'parts-body'; m.castShadow = caster || !!(old && old.castShadow); m.receiveShadow = true;
+    m.userData.zone = '';
+    if (layers !== null) m.layers.mask = layers;   // a unit outlined before its body arrived keeps the outline on the body (the selection layer rides the GLB meshes' mask; Sol 01a1ad82)
+    g.add(m);
+  }
+  markShadowDirty(); invalidateFrame();
+  return g;
+}
+const drawerGroupOf = (unitId) => { const d = drawerInstanceOf(unitId); return d ? d.group : null; };
+/* every other unit's parts in one translucent ghost material (the brief's "fades to a faint ghost on one shared
+   material"), their shadows off; null restores them. A rebuild restores them by itself (new meshes). */
+let isolated = null;
+const ghostMats = {};
+function ghostMat() {
+  const dark = stageTheme !== 'light';
+  const key = dark ? 'dark' : 'light';
+  if (!ghostMats[key]) ghostMats[key] = new THREE.MeshBasicMaterial({ color: dark ? 0xc9cde0 : 0x5a5c66, transparent: true, opacity: dark ? 0.12 : 0.14, depthWrite: false });
+  return ghostMats[key];
+}
+function isolateUnit(unitId) {
+  if (isolated != null) {
+    for (const inst of instances.values()) inst.group.traverse(o => { if (o.isMesh && o.userData.ghostedMat) { o.material = o.userData.ghostedMat; delete o.userData.ghostedMat; if (o.userData.ghostedCast) { o.castShadow = true; delete o.userData.ghostedCast; } } });
+    isolated = null;
+  }
+  if (unitId != null) {
+    const mat = ghostMat();
+    for (const inst of instances.values()) {
+      if (unitOf(inst) === unitId || !inst.group.visible) continue;
+      inst.group.traverse(o => { if (o.isMesh && !o.userData.ghostedMat) { o.userData.ghostedMat = o.material; o.material = mat; if (o.castShadow) { o.castShadow = false; o.userData.ghostedCast = true; } } });
+    }
+    isolated = unitId;
+  }
+  markShadowDirty(); invalidateFrame();
+}
+/* the camera on a unit's OPEN drawer from above and in front (a top-down 3/4), fitted to the free region; the preset it
+   leaves is kept, and endFrameUnit returns to it. Reduced motion snaps. */
+let framedFrom = null;
+function frameUnit(unitId, { centreX = 0.5 } = {}) {   // centreX: where across the canvas (0..1) the drawer should sit (the editor: the middle of the free region between its panels, 2026-11-06)
+  const d = drawerInstanceOf(unitId); if (!d) return false;
+  const open = basePos(d, false); open.z += drawerStop();
+  const box = new THREE.Box3().setFromObject(d.group).translate(d.group.position.clone().negate());   // the drawer's own box
+  if (box.isEmpty()) return false;
+  const target = box.getCenter(new THREE.Vector3()).add(open);
+  const R = box.getSize(new THREE.Vector3()).length() / 2;
+  if (!framedFrom) framedFrom = { preset: curCamPreset, override: camOverride };
+  const r = fitDistanceFor(R * 1.12, 40);
+  const p = THREE.MathUtils.degToRad(36), t = THREE.MathUtils.degToRad(14);
+  const pos = new THREE.Vector3(r * Math.sin(p) * Math.sin(t), r * Math.cos(p), r * Math.sin(p) * Math.cos(t)).add(target);
+  if (centreX !== 0.5) {   // camera and target slide sideways together, so the drawer lands at centreX instead of the middle
+    const nx = 2 * centreX - 1, half = r * Math.tan(THREE.MathUtils.degToRad(40) / 2) * (canvas.clientWidth / Math.max(1, canvas.clientHeight));
+    const shift = new THREE.Vector3().subVectors(target, pos).cross(new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(nx * half);
+    pos.sub(shift); target.sub(shift);
+  }
+  setCamOverride(false);
+  const my = ++camTweenToken;
+  const p0 = camera.position.clone(), t0 = controls.target.clone(), fov0 = camera.fov, fov1 = 40;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const at = (k) => { camera.position.lerpVectors(p0, pos, k); controls.target.lerpVectors(t0, target, k); if (fov0 !== fov1) { camera.fov = fov0 + (fov1 - fov0) * k; camera.updateProjectionMatrix(); } invalidateFrame(); };
+  if (still) { at(1); return true; }
+  tween({ duration: 700, onUpdate: k => { if (my === camTweenToken) at(k); } });
+  return true;
+}
+function endFrameUnit() {
+  if (!framedFrom) return;
+  const { preset } = framedFrom; framedFrom = null;
+  if (preset) tweenCamera(preset, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 600, true);
+}
+/* the two-rim selection outline around objects of the caller's (meshes on the selection layer alone are drawn by nothing
+   else); null clears it. setSelected and a rebuild clear it too, as they clear the unit outline. */
+function setOutlineObjects(list) {
+  if (!list || !list.length) { clearSelOutline(); return; }
+  showSelOutline(list.map(group => ({ group })));
+}
 // the nearest visible part of the build along a ray (Infinity: none), for an owner's hover that must not see through it
 function buildHitDistance(r) { const h = r.intersectObjects([...instances.values()].filter((i) => i.group.visible).map((i) => i.group), true); return h.length ? h[0].distance : Infinity; }
 
@@ -9594,7 +9718,7 @@ function setEraser(cb) { eraser = cb || null; eraseBox(null); canvas.style.curso
 // can be picked up, selected or not; a finger still drags only the selected unit, so touching the model orbits it
 function setDrag(spec) { dragSpec = spec || null; }
 canvas.addEventListener('pointerdown', e => {
-  if (!dragSpec || e.button !== 0 || carry || eraser) return;
+  if (!dragSpec || e.button !== 0 || carry || eraser || grab) return;   // not while a tap target holds the gesture (a second finger on a wall drag)
   if (spotSpec && spotAt(e)) return;   // a "+" under the pointer is a placement, not a unit to pick up (they sit on units)
   const id = unitAtEvent(e); if (id == null) return;
   if (id !== dragSpec.unitId && !(dragSpec.any && e.pointerType !== 'touch')) return;
@@ -9680,6 +9804,7 @@ canvas.addEventListener('contextmenu', e => {
   // a touch or pen HOLD arrives as a contextmenu (the system's long-press): held still it opens the menu, as on a phone;
   // a hold that became a drag never does (Joey 2026-10-16: holding brought the menu up instead of moving the unit)
   if (carry) { if (carry.moved) { e.preventDefault(); return; } endCarry(false); }
+  if (grab) { e.preventDefault(); return; }   // nor while a tap target holds the gesture: the menu took the capture, and the release never came back (2026-11-06)
   if (typeof opts === 'undefined' || !opts.onContext || !build) return;
   const id = unitAtEvent(e); if (id == null) return;
   e.preventDefault(); opts.onContext({ unitId: id, x: e.clientX, y: e.clientY });
@@ -12267,6 +12392,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     // the Build workspace's editing surface (phase 3): the record swap, unit identity, the overlays and the carry
     update: updateBuild, setLabels, selectUnit, peekUnit, unpeek, unitHasDrawer, slideUnitDrawer, setInteriorHidden, interiorState, setMotionFull, motionFull: () => motionFull, setReliefOverride, reliefOverride: () => reliefOverride, warmRelief, reliefLive: () => reliefApplied, setLens, lens: () => (lens ? { ...lens } : null), accTotal, accumulates: () => !!QUALITY[quality].accum, unitPartBox, reliefBand: { pitchMm: LAYER_PITCH_MM, cutoffPx: LAYER_DETAIL_DEFAULTS.cutoffPxPerLayer }, unitOf: (instId) => unitOf(instances.get(instId)), unitBox, unitScreen, spotScreens, idleStats: () => ({ skipped: idle.skipped, drawn: idle.drawn, woken: idle.woken }), spotWorld,
     setSpots, setFlags, setDrag, cancelDrag: () => endCarry(false), setEraser, confirmSpot, clearSpotChoice: () => chooseSpot(null), pulseUnits, watchHover,
+    // the parts drawer (M2, 2026-11-05): a generated body in a drawer's place, the rest ghosted, the camera on the open drawer, outlines on the editor's own objects
+    setDrawerBody, drawerGroupOf, isolateUnit, frameUnit, endFrameUnit, setOutlineObjects, partMaterial: (type, zone = '') => baseMatFor(type, zone), selLayer: SEL_LAYER, markShadowDirty,
     unitAt: (clientX, clientY) => (build ? unitAtEvent({ clientX, clientY }) : null),   // the unit under a page point (a drag from a panel ends over the canvas)
     // product-faithful previews: one unit from the real GLBs with the live materials, cached as a data URL
     thumb: renderThumb,

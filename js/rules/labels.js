@@ -7,6 +7,7 @@
    refusal) and the caller commits it as one history entry and writes the mirror (writeMirror) for the tools that read only
    unit.label / unit.labelBadge - the stage among them. */
 import { labelOrder } from '../label-panel.js';
+import { unitName } from './schema.js';
 
 export const LABEL_FACES = ['edgelabel', 'classicpro'];
 export const faceCarriesLabels = (b) => !!b && LABEL_FACES.includes(b.faceStyle);
@@ -17,6 +18,8 @@ export const NO_FACE_MSG = 'Labels show on EdgeLabel and Classic Pro faceplates.
 
 export const drawers = (b) => labelOrder((b.placed || []).filter((u) => u.fill === 'decor'));
 export const drawerNumber = (b, unitId) => drawers(b).findIndex((u) => u.id === unitId) + 1;
+/* how a surface names a drawer: its own name (schema.js unitName: the typed name, else its label's first line), else "Drawer N" */
+export const drawerName = (b, unitId) => { const u = (b.placed || []).find((p) => p.id === unitId); const n = unitName(u); return n || `Drawer ${drawerNumber(b, unitId)}`; };
 export const labelsOf = (b) => (b && b.labelList && Array.isArray(b.labelList.labels) ? b.labelList.labels : []);
 export const labelById = (b, id) => labelsOf(b).find((l) => l.id === id) || null;
 export const labelWords = (l) => (l && typeof l.text === 'string' ? l.text.trim() : '');
