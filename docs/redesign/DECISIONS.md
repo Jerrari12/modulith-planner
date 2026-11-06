@@ -7074,4 +7074,11 @@ Five mutants were re-run for this change, and all were killed:
 **Not verified.** As before:
 - whether the 15% applies by itself at Polymaker's checkout;
 - a real phone;
-- the full CI run.
+- the full CI run (it passed on 2026-11-06; see Live below).
+
+**Live** on 2026-11-06 as `35332c02` (run 42258062602; deployed 17:42 UTC), on Joey's "Deploy it". The push of `55a849b` on the evening of 2026-11-05 (run 42126575772) failed in shard 6, on the TPU feet case, which the offer did not change: after its reload the feet read TPU95 Orange. That case passed alone locally four times on `55a849b`. The cause was in the test: its reload took its colours from a `#build=` address that still held the Orange look. `35332c0` changes only that case (all three hunks inside it; Terra `01a1b1b8`). Joey twice reported clicking a re-run of the failed job; both times the run stayed at its first attempt and no planner run was queued or running. Pushing `35332c0` started the run that deployed both, and every shard passed. Live checks on that stamp:
+- `offer-prod.mjs` (new), 15 of 15. In a 1366 x 768 window a Panchroma pick floats the card with the title and body above, 12 px from the picker and level with its Buy, covering no panel. The word "commission" appears once, in the Polymaker line under the Buy. The Buy's address starts `https://shop.polymaker.com/JERRARI?q=`, its rel includes `sponsored`, and its label starts "Buy Polymaker". A Prusament pick hides the card, and × retires it across a reload. At 360 x 675 and 780 x 260 the pill sits on the sheet's handle clear of its ×, and the card wraps the Buy and the Polymaker line under it. Run against the old site (`07305c4f`) as a control, it failed 11 of 15; the four it passed also hold on a page with no card.
+- `disclosure-once-prod.mjs`, 6 of 6.
+- `glitter-prod.mjs`, 21 of 21.
+
+Still not verified: whether the 15% applies by itself at Polymaker's checkout, and a real phone.
