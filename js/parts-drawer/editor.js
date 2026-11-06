@@ -27,6 +27,8 @@ import * as I from './inventory.js';
 import { partsEngine, engineReady, shellGeometry, drawerGeometry, zipFor } from './engine.js';
 import { PARTS, sizeOfUnit, heightOfUnit, partsSizeOk, isPartsDrawer, partsSizeWhy, layoutOf, layoutForSize, fullLayout, FLOOR_KEYS, FLOOR_DEFAULT_HEX, keepOf, defaultLayout, cleanItem, outlinesOf, compLabelText } from './unit.js';
 import { plan, planThumb } from './plan.js';
+import { attachHint } from '../ui/hint.js';   // the hover clips on the editor's controls (2026-11-06)
+import { GUIDE } from './guide.js';
 import { saveBytes } from './download.js';
 
 const EPS = 1e-6, WALL = G.C.WALL;
@@ -512,8 +514,8 @@ export function partsDrawerTools(stage, ctx) {
     const stepper = (label, value, dec, inc, canDec, canInc) => el('div.row', {}, [label, el('div.stepper', {}, [el('button.key', { text: '−', 'aria-label': `Fewer ${label.toLowerCase()}`, disabled: !canDec, onclick: dec }), el('b.mono', { text: String(value) }), el('button.key', { text: '+', 'aria-label': `More ${label.toLowerCase()}`, disabled: !canInc, onclick: inc })])]);
     const grid = el('section');
     grid.appendChild(el('h2.h2', { text: 'Grid' }));
-    grid.appendChild(stepper('Columns', lay.nc, () => setGrid(lay.nc - 1, lay.nr), () => setGrid(lay.nc + 1, lay.nr), lay.nc > 1, lay.nc < g.nc));
-    grid.appendChild(stepper('Rows', lay.nr, () => setGrid(lay.nc, lay.nr - 1), () => setGrid(lay.nc, lay.nr + 1), lay.nr > 1, lay.nr < g.nr));
+    grid.appendChild(attachHint(stepper('Columns', lay.nc, () => setGrid(lay.nc - 1, lay.nr), () => setGrid(lay.nc + 1, lay.nr), lay.nc > 1, lay.nc < g.nc), GUIDE.grid, lib));
+    grid.appendChild(attachHint(stepper('Rows', lay.nr, () => setGrid(lay.nc, lay.nr - 1), () => setGrid(lay.nc, lay.nr + 1), lay.nr > 1, lay.nr < g.nr), GUIDE.grid, lib));
     grid.appendChild(el('div.pd-btns', {}, [
       Sz.shipped ? el('button.key.sm', { text: 'Shipped 5×4', title: 'The layout the parts drawer ships with', onclick: shippedGrid }) : null,
       el('button.key.sm', { text: 'Reset grid', title: 'Start over from single compartments', onclick: () => setGrid(lay.nc, lay.nr) }),
@@ -538,17 +540,17 @@ export function partsDrawerTools(stage, ctx) {
       el('button.seg.sm' + (scoops.size === 1 && scoops.has(id) ? '.on' : ''), { text: name, onclick: () => setAll('scoop', id) })))]));
     fl.appendChild(el('div.row', {}, [RAMP_NAME, el('div.track.mini.seg5', { role: 'group', 'aria-label': `${RAMP_NAME} for every compartment, mm` }, G.TRAYS.map((v) =>
       el('button.seg.sm' + (trays.size === 1 && trays.has(v) ? '.on' : ''), { text: v ? String(v) : 'Off', 'aria-label': v ? `${v} mm` : 'Off', onclick: () => setAll('tray', v) })))]));
-    fl.appendChild(el('div.row', {}, ['Part outlines', el('div.track.mini.seg2', { role: 'group', 'aria-label': 'Part outlines on the floors' }, [
+    fl.appendChild(attachHint(el('div.row', {}, ['Part outlines', el('div.track.mini.seg2', { role: 'group', 'aria-label': 'Part outlines on the floors' }, [
       el('button.seg.sm' + (!lay.outlines ? '.on' : ''), { text: 'Off', onclick: () => { if (lay.outlines) commitLayout((x) => { x.outlines = false; }); } }),
       el('button.seg.sm' + (lay.outlines ? '.on' : ''), { text: 'On', title: 'Each compartment\'s part on its floor at 1:1, so you can lay a screw on it to check the length', onclick: () => { if (!lay.outlines) commitLayout((x) => { x.outlines = true; }); } }),
-    ])]));
+    ])]), GUIDE.outlines, lib));
     fl.appendChild(el('p.hint', { text: `Standard is the shipped 6 mm front scoop, Deep up to 12 mm. ${RAMP_NAME} adds 45° ramps on the sides and back, in mm, so small parts slide to the middle. Part outlines put each compartment's part on its floor at 1:1. ${scoops.size > 1 || trays.size > 1 ? 'Mixed right now; these set every compartment.' : ''}` }));
     lib.appendChild(fl);
 
     const parts = el('section');
     parts.appendChild(el('h2.h2', { text: 'Parts' }));
     const withParts = lay.comps.filter((c) => c.item).length;
-    parts.appendChild(el('div.pd-btns', {}, [el('button.key.sm', { text: 'From a parts list…', title: 'A kit, typed lines or a file: every part gets a compartment sized for its quantity', onclick: openInventory })]));
+    parts.appendChild(el('div.pd-btns', {}, [attachHint(el('button.key.sm', { text: 'From a parts list…', title: 'A kit, typed lines or a file: every part gets a compartment sized for its quantity', onclick: openInventory }), GUIDE.list, lib)]));
     parts.appendChild(el('p.hint', { text: withParts ? `${n(withParts, 'compartment')} with a part · the words go on the label holders, into labels.csv in the download, and into the Labels workspace.` : 'Give a compartment a part in This compartment, or lay the whole drawer out from a list.' }));
     lib.appendChild(parts);
 
@@ -690,9 +692,10 @@ export function partsDrawerTools(stage, ctx) {
           [el('span.sw', { style: `background:${k ? hexes[k - 1] : stage.activeHex('Drawer')}` }), el('span.lbl', { text: k ? String(k) : 'Body' })])))]));
     }
     insp.appendChild(el('div.actions', {}, [
-      el('button.key', { text: 'Merge', title: 'One compartment of the selection · M', disabled: s.length < 2, onclick: doMerge }),
-      el('button.key', { text: 'Split', title: 'Back into grid cells · S', disabled: !canSplit(), onclick: doSplit }),
+      attachHint(el('button.key', { text: 'Merge', title: 'One compartment of the selection · M', disabled: s.length < 2, onclick: doMerge }), GUIDE.select, insp),
+      attachHint(el('button.key', { text: 'Split', title: 'Back into grid cells · S', disabled: !canSplit(), onclick: doSplit }), GUIDE.split, insp),
     ]));
+    if (s.length < 2) insp.appendChild(el('p.hint', { text: 'Drag across two or more compartments to merge them.' }));   // why Merge is grey (Joey, 2026-11-06)
   }
   let inspEl = null;
 

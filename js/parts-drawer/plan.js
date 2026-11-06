@@ -10,6 +10,7 @@
    shows a wall drag as it goes (its own preview of the compartments) and commits it at the end. */
 import { el } from '../ui/dom.js';
 import * as G from './gen.js';
+import { planGuide } from './guide.js';   // the three gesture clips beside the plan (2026-11-06)
 import * as I from './inventory.js';
 import { outlinesOf } from './unit.js';
 
@@ -123,7 +124,9 @@ export function plan(opts) {
   const host = el('div.glass', { id: 'ws-plan', role: 'group', 'aria-label': 'Compartment plan' });
   const head = el('div.bhead', {}, [el('span.bttl', { text: 'Plan · mm' }), el('span.bhint', { text: 'Drag across compartments to select · drag a wall to move it (Shift: the whole line, Alt: no snap) · double-click: label holder' })]);
   const svg = svgEl('svg', { class: 'bsvg', preserveAspectRatio: 'xMidYMid meet', role: 'img', 'aria-label': 'Top-down plan of the drawer layout, front edge at the bottom' });
-  host.append(head, svg);
+  // the clips on the LEFT of the drawing: the panel's right runs under the Inspector at wide widths (its inset follows the
+  // Build board's), the left never under the Library; they hide where the panel is narrow (css)
+  host.append(head, el('div.bbody', {}, [planGuide(), svg]));
   let drag = null, wdrag = null, hover = null, hoverKey = '', hoverComp = null, lastPt = null;
   const full = () => opts.full();
   const comps = () => (wdrag ? wdrag.comps : full().comps);

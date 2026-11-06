@@ -1402,6 +1402,17 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
 #ws-plan .bttl { font-family: var(--font-display); font-weight: 800; font-size: 16px; font-stretch: 108%; white-space: nowrap; }
 #ws-plan .bhint { flex: 1; font-size: 12px; color: var(--ink-2); }
 #ws-plan .bsvg { flex: 1; min-height: 0; width: 100%; display: block; padding: 10px 14px; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
+/* the three gesture clips beside the drawing (js/parts-drawer/guide.js): where the panel has room, else the header line says it */
+#ws-plan { container-type: size; }
+#ws-plan .bbody { flex: 1; min-height: 0; display: flex; align-items: stretch; }
+#ws-plan .bbody .bsvg { width: auto; min-width: 0; }
+#ws-plan .bguide { flex: 0 0 200px; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 10px 0 14px 18px; }
+#ws-plan .gclip .scene { border-radius: 9px; overflow: hidden; background: #1d2230; border: 1px solid var(--hair); }
+#ws-plan .gclip .scene svg { display: block; width: 100%; height: auto; aspect-ratio: 240 / 110; }
+#ws-plan .gclip .t { margin: 7px 2px 0; font-size: 12px; font-weight: 700; }
+#ws-plan .gclip .d { margin: 2px 2px 0; font-size: 11.5px; line-height: 1.35; color: var(--ink-2); }
+@container (max-width: 760px), (max-height: 560px) { #ws-plan .bguide { display: none; } }   /* too narrow, or too short for the three (a 768-high laptop) */
+@media (prefers-reduced-motion: reduce) { #ws-plan .gclip svg animate, #ws-plan .gclip svg animateTransform { display: none; } }
 /* the plan drawing: the shell and walls in ink, cells on the input surface, the selection orange, labels white, dimensions in the measurement colour */
 #ws .pd-thumb, #ws-plan .bsvg { --plan-shell: rgba(29,30,32,.22); --plan-wall: var(--ink-2); --plan-cell: var(--input-bg); --plan-ramp: rgba(29,30,32,.18); --plan-sel: rgba(255,106,26,.18); --plan-hov: rgba(255,106,26,.08); }
 [data-mode="dark"] #ws .pd-thumb, [data-mode="dark"] #ws-plan .bsvg { --plan-shell: rgba(255,255,255,.14); --plan-wall: #8b8fa8; --plan-cell: #202130; --plan-ramp: rgba(255,255,255,.16); --plan-sel: rgba(255,106,26,.3); --plan-hov: rgba(255,106,26,.14); }   /* the cells are drawn over the cavity, so they are opaque */
