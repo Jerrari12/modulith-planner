@@ -11,6 +11,7 @@
 import { el } from '../ui/dom.js';
 import * as G from './gen.js';
 import { howToCard, howToSeen, markHowToSeen } from './guide.js';   // the gesture clips as a first-time tip card (2026-11-06)
+import { hitWall as wallHit, startWallDrag, moveWallDrag, dragMoved, chainKey } from './walls.js';   // a wall drag's rules, shared with the 3D view
 import * as I from './inventory.js';
 import { outlinesOf } from './unit.js';
 
@@ -164,31 +165,9 @@ export function plan(opts) {
     return best;
   }
   const closure = (r) => G.closeBox(comps(), { ...r });
-  function hitWall(pt, e) {
-    const tol = Math.max(1.1, (e.pointerType === 'touch' ? 10 : 5) * mmPerPx());
-    const w = G.wallAt(comps(), full().size, pt, tol); if (!w) return null;
-    const ch = G.wallChain(comps(), w.orient, w.c, w.seed, e.shiftKey);
-    return ch && ch.range[0] <= ch.range[1] + EPS ? ch : null;
-  }
-  function magnets(ch, list) {
-    const a = ch.orient === 'v' ? 'x' : 'y', m = [];
-    for (const k of list) m.push(k[a + '0'] - WALL / 2, k[a + '1'] + WALL / 2);
-    const fit = ch.orient === 'v' ? G.C.HOLDER_W : G.holderOf(full()).MIN_DEPTH;
-    for (const i of ch.L) m.push(list[i][a + '0'] + fit + WALL / 2);
-    for (const i of ch.R) m.push(list[i][a + '1'] - fit - WALL / 2);
-    return m;
-  }
-  function snapWall(ch, raw, free) {
-    let c = raw;
-    if (!free) {
-      c = ch.c + Math.round((raw - ch.c) / 0.5) * 0.5;
-      const tol = Math.max(0.8, 4 * mmPerPx()); let best = null;
-      for (const m of ch.mags) if (Math.abs(m - raw) <= tol && (best === null || Math.abs(m - raw) < Math.abs(best - raw))) best = m;
-      if (best !== null) c = best;
-    }
-    return G.snapMM(Math.min(ch.range[1], Math.max(ch.range[0], c)));
-  }
-  const along = (ch, pt) => (ch.orient === 'v' ? pt.x : pt.y);
+  // the reach of a press on a wall, and a magnet's pull, in mm: a few pixels at the plan's scale (a fat finger more)
+  const hitWall = (pt, e) => wallHit(comps(), full(), pt, { tol: Math.max(1.1, (e.pointerType === 'touch' ? 10 : 5) * mmPerPx()), shift: e.shiftKey });
+  const snapTol = () => Math.max(0.8, 4 * mmPerPx());
   const hotOf = () => (wdrag ? { ...wdrag.ch, c: wdrag.c, drag: true, from: wdrag.ch.c } : hover);
   function render() {
     drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps() });
@@ -199,8 +178,7 @@ export function plan(opts) {
     const pt = planPoint(e);
     const ch = hitWall(pt, e);
     if (ch) {
-      const start = comps().map((c) => ({ ...c }));
-      wdrag = { ch: { ...ch, mags: magnets(ch, start) }, start, comps: start, grab: along(ch, pt) - ch.c, c: ch.c };
+      wdrag = startWallDrag(comps(), ch, pt, full());
       hover = null; svg.setPointerCapture(e.pointerId); render(); return;
     }
     const c = compAt(pt); if (!c) { opts.onSelect(null); render(); return; }
@@ -209,21 +187,17 @@ export function plan(opts) {
   });
   svg.addEventListener('pointermove', (e) => {
     const pt = planPoint(e); lastPt = { pt, pointerType: e.pointerType };
-    if (wdrag) {
-      const c = snapWall(wdrag.ch, along(wdrag.ch, pt) - wdrag.grab, e.altKey);
-      if (c !== wdrag.c) { wdrag.c = c; wdrag.comps = G.moveChain(wdrag.start, wdrag.ch, c); render(); }
-      return;
-    }
+    if (wdrag) { if (moveWallDrag(wdrag, pt, e.altKey, snapTol())) render(); return; }
     if (drag) { const c = compAt(pt); if (c) { opts.onSelect(closure(G.boxOf([drag, c]))); render(); } return; }
     const ch = e.pointerType === 'touch' ? null : hitWall(pt, e);
-    const k = ch ? `${ch.orient}${ch.c}:${ch.L.join(',')}` : '';
+    const k = chainKey(ch);
     const hc = ch ? null : compAt(pt);
     if (k !== hoverKey || hc !== hoverComp) { hover = ch; hoverKey = k; hoverComp = hc; svg.style.cursor = ch ? (ch.orient === 'v' ? 'ew-resize' : 'ns-resize') : hc ? 'pointer' : ''; if (opts.onHover) opts.onHover(hc); render(); }
   });
   function endDrag() {
     if (wdrag) {
-      const moved = Math.abs(wdrag.c - wdrag.ch.c) > EPS, out = wdrag.comps; wdrag = null;
-      if (moved) opts.onWalls(out); else render();
+      const moved = dragMoved(wdrag), out = wdrag.comps, same = JSON.stringify(full().comps) === JSON.stringify(wdrag.start); wdrag = null;   // not onto a layout that changed under the button (an undo mid-drag)
+      if (moved && same) opts.onWalls(out); else render();
       return;
     }
     drag = null;
@@ -235,7 +209,7 @@ export function plan(opts) {
   const shiftWatch = (e) => {
     if (e.key !== 'Shift' || wdrag || drag || !lastPt || lastPt.pointerType === 'touch' || !host.isConnected || host.hidden) return;
     const ch = hitWall(lastPt.pt, { pointerType: lastPt.pointerType, shiftKey: e.type === 'keydown' });
-    const k = ch ? `${ch.orient}${ch.c}:${ch.L.join(',')}` : '';
+    const k = chainKey(ch);
     if (k !== hoverKey) { hover = ch; hoverKey = k; render(); }
   };
   document.addEventListener('keydown', shiftWatch); document.addEventListener('keyup', shiftWatch);

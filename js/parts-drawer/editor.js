@@ -27,6 +27,7 @@ import * as I from './inventory.js';
 import { partsEngine, engineReady, shellGeometry, drawerGeometry, zipFor } from './engine.js';
 import { PARTS, sizeOfUnit, heightOfUnit, partsSizeOk, isPartsDrawer, partsSizeWhy, layoutOf, layoutForSize, fullLayout, FLOOR_KEYS, FLOOR_DEFAULT_HEX, keepOf, defaultLayout, cleanItem, outlinesOf, compLabelText } from './unit.js';
 import { plan, planThumb } from './plan.js';
+import { hitWall, startWallDrag, moveWallDrag, dragMoved, chainKey } from './walls.js';   // the wall drag in 3D (2026-11-06)
 import { attachHint } from '../ui/hint.js';   // the hover clips on the editor's controls (2026-11-06)
 import { GUIDE } from './guide.js';
 import { saveBytes } from './download.js';
@@ -48,7 +49,7 @@ export function partsDrawerTools(stage, ctx) {
   const S = () => store.state;
   const L = () => +ctx.length();
   const unitById = (id) => S().placed.find((p) => p.id === id) || null;
-  const st = { editing: null, view: '2d', sel: null, hover: null, edges: true, picker: null, engineErr: null, booting: false, status: '', downloading: false, inv: null, dockEl: null };
+  const st = { editing: null, view: '2d', sel: null, hover: null, hot: null, hotKey: '', wdrag: null, edges: true, picker: null, engineErr: null, booting: false, status: '', downloading: false, inv: null, dockEl: null };   // hot: the wall chain under the 3D pointer; wdrag: a 3D wall drag in progress
   let alive = true;
   const canvas = document.getElementById('stage');
 
@@ -362,6 +363,19 @@ export function partsDrawerTools(stage, ctx) {
       lines.userData.ghost = true; lines.userData.keepGeo = true; lines.userData.ownMat = true; lines.renderOrder = 2;
       extras.add(lines);
     }
+    // the wall under the 3D pointer, or the one being dragged at its position now: a box just around the wall's segments
+    // (0.2 proud of each face, 0.4 above the top, so it reads from any angle), orange as the plan's wallhot
+    const hot = st.wdrag ? { ...st.wdrag.ch, c: st.wdrag.c, drag: true } : st.hot;
+    if (hot) {
+      const wh = top - G.C.FLOOR + 0.4, lim = hot.orient === 'v' ? Sz.D : Sz.W;
+      for (const [a, b] of hot.segs) {
+        const a0 = Math.max(a, 0), b0 = Math.min(b, lim); if (b0 - a0 <= 0) continue;
+        const m = new THREE.Mesh(new THREE.BoxGeometry(hot.orient === 'v' ? WALL + 0.4 : b0 - a0, wh, hot.orient === 'v' ? b0 - a0 : WALL + 0.4), new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: hot.drag ? 0.85 : 0.55, depthWrite: false }));
+        m.userData.ghost = true; m.userData.ownMat = true; m.renderOrder = 4;
+        m.position.set(hot.orient === 'v' ? X(hot.c) : X((a0 + b0) / 2), G.C.FLOOR + wh / 2, hot.orient === 'v' ? Z((a0 + b0) / 2) : Z(hot.c));
+        extras.add(m);
+      }
+    }
     // the hovered compartment (3D hover, the plan's hover too)
     if (st.hover && !inSel(st.hover)) {
       const c = st.hover, m = new THREE.Mesh(new THREE.PlaneGeometry(c.x1 - c.x0, c.y1 - c.y0), new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0.2, depthWrite: false }));
@@ -409,12 +423,43 @@ export function partsDrawerTools(stage, ctx) {
     const p = body.worldToLocal(hit.point.clone()), { cx, cz } = frameOf(sizeOfUnit(L(), u));
     return compAt({ x: p.x + cx, y: cz - p.z }, sizeOfUnit(L(), u));
   }
+  /* the plan point (mm) where a ray crosses the edited drawer's wall-top plane, or null: the walls are picked and dragged
+     on that plane, so a wall reads the same from any camera angle (the body's local frame is the plan's: frame.js) */
+  function wallPlanePoint(ray) {
+    const u = editedUnit(); if (!u) return null;
+    const group = stage.drawerGroupOf(u.id), body = group && group.getObjectByName('parts-body'); if (!body) return null;
+    const full = fullOf(u), top = G.SIZES[full.size].heights[full.height].top, { cx, cz } = frameOf(full.size);
+    const o = body.worldToLocal(ray.ray.origin.clone()), d = body.worldToLocal(ray.ray.origin.clone().add(ray.ray.direction)).sub(o);
+    if (Math.abs(d.y) < 1e-9) return null;
+    const t = (top - o.y) / d.y; if (t < 0) return null;
+    const p = o.addScaledVector(d, t);
+    return { x: p.x + cx, y: cz - p.z, full };
+  }
+  /* the wall chain under a ray, with the point it was hit at: a 3 mm reach for a mouse (the wall is 1.5), 8 for a finger */
+  function wallUnderRay(ray, e) {
+    const pt = wallPlanePoint(ray); if (!pt) return null;
+    const ch = hitWall(comps(), pt.full, pt, { tol: e && e.pointerType === 'touch' ? 8 : 3, shift: !!(e && e.shiftKey) });
+    return ch ? { ch, pt } : null;
+  }
   const tapTargets = { onTap(ray, dist, e) {
     if (st.editing == null) return false;
     const c = compUnderRay(ray), add = e && (e.shiftKey || e.ctrlKey || e.metaKey);
     if (!c) { if (!add && st.sel) setSel(null); return true; }
     setSel(add && st.sel ? G.boxOf([st.sel, G.compBox(c)]) : G.compBox(c));
     return true;
+  }, onDown(ray, e) {
+    /* a press on a wall top claims the gesture from the orbit (stage.setTapTargets' onDown): the wall follows the pointer
+       on the wall-top plane with the plan's chain and snapping (walls.js; Shift the whole line, Alt no snap; a 2 mm pull
+       for a magnet), shown as the orange box; the release commits one edit (the worker then rebuilds the body) */
+    if (st.editing == null) return null;
+    const w = wallUnderRay(ray, e); if (!w) return null;
+    const wd = startWallDrag(comps(), w.ch, w.pt, w.pt.full);
+    st.wdrag = wd; st.hot = null; st.hotKey = ''; st.hover = null; canvas.style.cursor = 'grabbing'; update3d();
+    return {
+      move: (ray2, e2) => { const p = wallPlanePoint(ray2); if (p && moveWallDrag(wd, p, !!(e2 && e2.altKey), 2)) update3d(); },
+      // a cancel (the capture lost) commits nothing; a release commits, but not onto a layout that changed under the button (an undo mid-drag: Sol 01a1b227)
+      up: (e) => { if (st.wdrag !== wd) return; st.wdrag = null; canvas.style.cursor = ''; if (!(e && e.type === 'pointercancel') && dragMoved(wd) && JSON.stringify(comps()) === JSON.stringify(wd.start)) commitLayout((x) => { x.comps = wd.comps; }); else update3d(); },
+    };
   } };
   const ray = new THREE.Raycaster();
   let hoverQueued = false, hoverEvt = null;
@@ -425,11 +470,12 @@ export function partsDrawerTools(stage, ctx) {
       hoverQueued = false; if (!hoverEvt || st.editing == null) return;
       const r = canvas.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((hoverEvt.clientX - r.left) / r.width) * 2 - 1, -((hoverEvt.clientY - r.top) / r.height) * 2 + 1), stage.camera);
-      const c = compUnderRay(ray);
-      if (c !== st.hover) { st.hover = c; canvas.style.cursor = c ? 'pointer' : ''; update3d(); }
+      const w = wallUnderRay(ray, hoverEvt), ch = w ? w.ch : null, k = chainKey(ch);
+      const c = ch ? null : compUnderRay(ray);
+      if (c !== st.hover || k !== st.hotKey) { st.hover = c; st.hot = ch; st.hotKey = k; canvas.style.cursor = ch ? 'grab' : c ? 'pointer' : ''; update3d(); }
     });
   }
-  function onCanvasLeave() { hoverEvt = null; if (st.hover) { st.hover = null; canvas.style.cursor = ''; update3d(); } }
+  function onCanvasLeave() { hoverEvt = null; if (st.hover || st.hot) { st.hover = null; st.hot = null; st.hotKey = ''; canvas.style.cursor = ''; update3d(); } }
 
   /* ---------------- edit mode ---------------- */
   function start(id) {
@@ -449,7 +495,7 @@ export function partsDrawerTools(stage, ctx) {
   }
   function stop({ quiet = false } = {}) {
     const id = st.editing; if (id == null) return;
-    st.editing = null; st.sel = null; st.hover = null; st.picker = null; closeInventory(); pl.hideTip();
+    st.editing = null; st.sel = null; st.hover = null; st.hot = null; st.hotKey = ''; st.wdrag = null; st.picker = null; closeInventory(); pl.hideTip();
     stage.setTapTargets(null);
     canvas.removeEventListener('pointermove', onCanvasMove); canvas.removeEventListener('pointerleave', onCanvasLeave);
     canvas.style.cursor = '';

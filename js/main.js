@@ -9346,7 +9346,33 @@ function noteBuildMismatch(o) {
   trackOnce('relay:build-mismatch');
 }
 
-canvas.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerdown', e => {
+  if (grab) return;   // a press while a target holds the gesture (a second finger, another button) is nothing: not a tap, not a claim (Sol 01a1b227)
+  downXY = [e.clientX, e.clientY];
+  /* a tap target may CLAIM the press (setTapTargets' optional onDown, 2026-11-06: the parts drawer's wall drag in 3D): it
+     answers a handler { move(ray, e), up(e) } and the gesture is its until that pointer and button release, the orbit held
+     off as for the carry and the release never read as a tap */
+  if (tapTargets && tapTargets.onDown && e.button === 0 && !carry && !eraser) {
+    const h = tapTargets.onDown(rayAt(e), e);
+    if (h) { grab = { h, pointerId: e.pointerId, button: e.button }; downXY = null; controls.enabled = false; try { canvas.setPointerCapture(e.pointerId); } catch { /* a synthetic event */ } }
+  }
+});
+let grab = null;   // { h: the target's handler, pointerId, button } while a target holds the gesture
+function rayAt(e) {
+  const r = canvas.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  return ray;
+}
+canvas.addEventListener('pointermove', e => { if (grab && e.pointerId === grab.pointerId) grab.h.move(rayAt(e), e); });
+// the pointer that pressed, and (for a mouse) the button that pressed, end it; another finger's lift or another button's click does not
+const endGrab = (e) => {
+  if (!grab || e.pointerId !== grab.pointerId || (e.type === 'pointerup' && e.button !== grab.button)) return;
+  const g = grab; grab = null; controls.enabled = true;
+  try { canvas.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+  g.h.up(e);
+};
+canvas.addEventListener('pointerup', endGrab); canvas.addEventListener('pointercancel', endGrab);
+canvas.addEventListener('lostpointercapture', e => { if (grab && e.pointerId === grab.pointerId) endGrab({ pointerId: e.pointerId, type: 'pointercancel', button: grab.button }); });   // the capture gone (a dialog, a menu): the gesture ends as a cancel, never as a release
 canvas.addEventListener('pointerup', e => {
   // the Build workspace's carry (phase 3) ends on release wherever the pointer is: a drop on a spot, else a cancel
   if (carry) { if (!(e.button === 0 || e.pointerType === 'touch')) return; if (endCarry(true)) return; }   // only the button that picked it up ends it; another button's release mid-carry does nothing
@@ -9402,7 +9428,7 @@ canvas.addEventListener('pointerup', e => {
   setSelected(o ? o.userData.instanceId : null);
 });
 /* THE TAP TARGETS (2026-10-26, the Done room's spools on the Colors stage; Joey: "what if i could select a spool and change
-   it's color"): { onTap(ray, buildDistance, event) } or null. The owner casts the ray against its own scene (what hides
+   it's color"): { onTap(ray, buildDistance, event), onDown?(ray, event) } or null. The owner casts the ray against its own scene (what hides
    its targets is its to know: Sol 01a17823, a mug in front of a spool) and returns true when the tap was its, which then
    selects nothing; false, and the build's nearest hit selects as ever. */
 let tapTargets = null;
@@ -9687,7 +9713,7 @@ function setEraser(cb) { eraser = cb || null; eraseBox(null); canvas.style.curso
 // can be picked up, selected or not; a finger still drags only the selected unit, so touching the model orbits it
 function setDrag(spec) { dragSpec = spec || null; }
 canvas.addEventListener('pointerdown', e => {
-  if (!dragSpec || e.button !== 0 || carry || eraser) return;
+  if (!dragSpec || e.button !== 0 || carry || eraser || grab) return;   // not while a tap target holds the gesture (a second finger on a wall drag)
   if (spotSpec && spotAt(e)) return;   // a "+" under the pointer is a placement, not a unit to pick up (they sit on units)
   const id = unitAtEvent(e); if (id == null) return;
   if (id !== dragSpec.unitId && !(dragSpec.any && e.pointerType !== 'touch')) return;
@@ -9773,6 +9799,7 @@ canvas.addEventListener('contextmenu', e => {
   // a touch or pen HOLD arrives as a contextmenu (the system's long-press): held still it opens the menu, as on a phone;
   // a hold that became a drag never does (Joey 2026-10-16: holding brought the menu up instead of moving the unit)
   if (carry) { if (carry.moved) { e.preventDefault(); return; } endCarry(false); }
+  if (grab) { e.preventDefault(); return; }   // nor while a tap target holds the gesture: the menu took the capture, and the release never came back (2026-11-06)
   if (typeof opts === 'undefined' || !opts.onContext || !build) return;
   const id = unitAtEvent(e); if (id == null) return;
   e.preventDefault(); opts.onContext({ unitId: id, x: e.clientX, y: e.clientY });

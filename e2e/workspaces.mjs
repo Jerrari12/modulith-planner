@@ -983,6 +983,30 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   await page.keyboard.press('Control+z');
   await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return !u.partsLayout || u.partsLayout.comps.length === 20; }, null, { timeout: 15_000 });
   assert.ok(await page.evaluate(() => document.querySelector('#ws-lib .pd-head')), 'still editing after the undo');
+  // the wall drag in 3D (2026-11-06): the wall between the first two compartments, pressed on the wall-top plane and
+  // dragged 8 mm along its normal, moves the layout by 8 mm and leaves the camera where it was
+  await page.evaluate(() => { const t = [...document.querySelectorAll('#ws-tools')].find((x) => !x.hidden); [...t.querySelectorAll('button')].find((b) => b.textContent.trim() === '3D').click(); });
+  await settle(page, 2000);
+  const screenOf = (x, y) => page.evaluate(async ([x, y]) => {
+    const THREE = await import('three'); const G = await import('/js/parts-drawer/gen.js'); const F = await import('/js/parts-drawer/frame.js');
+    const V = window.__GEN2_VIEWER__, body = V.drawerGroupOf(3).getObjectByName('parts-body');
+    const { cx, cz } = F.frameOf('240-2W'), top = G.SIZES['240-2W'].heights['1H'].top;
+    const p = body.localToWorld(new THREE.Vector3(x - cx, top, cz - y)).project(V.camera);
+    const r = document.querySelector('canvas').getBoundingClientRect();
+    return { x: r.left + (p.x + 1) / 2 * r.width, y: r.top + (1 - p.y) / 2 * r.height };
+  }, [x, y]);
+  const camBefore = await page.evaluate(() => window.__GEN2_VIEWER__.camera.position.toArray().map((v) => +v.toFixed(2)));
+  const w0 = await screenOf(31.35, 28), w1 = await screenOf(39.35, 28);   // the first wall at x = 30.6 + 0.75, mid-depth of the front row
+  await page.mouse.move(w0.x, w0.y); await settle(page, 300);
+  assert.equal(await page.evaluate(() => document.querySelector('canvas').style.cursor), 'grab', 'the wall under the pointer');
+  await page.mouse.down(); await page.mouse.move(w1.x, w1.y, { steps: 8 }); await settle(page, 200); await page.mouse.up();
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && Math.abs(u.partsLayout.comps[0].x1 - 38.6) < 1e-6; }, null, { timeout: 15_000 });
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_VIEWER__.camera.position.toArray().map((v) => +v.toFixed(2))), camBefore, 'the drag did not orbit');
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return !u.partsLayout || Math.abs(u.partsLayout.comps[0].x1 - 30.6) < 1e-6; }, null, { timeout: 15_000 });
+  await page.evaluate(() => { const t = [...document.querySelectorAll('#ws-tools')].find((x) => !x.hidden); [...t.querySelectorAll('button')].find((b) => b.textContent.trim() === '2D').click(); });
+  await settle(page, 800);
   // a part in one compartment (M3): its words on the strip in the plan, its row in the Labels workspace
   await page.mouse.click(c6.x, c6.y);
   await page.waitForSelector('#ws-insp .pd-part input', { timeout: 15_000 });

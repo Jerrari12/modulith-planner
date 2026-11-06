@@ -29,21 +29,21 @@ const cell = (x, y, w, h, extra = '') => `<rect x="${x}" y="${y}" width="${w}" h
 const chip = (x, y, w, text, at) => `<g opacity="0">${appear(at)}<rect x="${x}" y="${y}" width="${w}" height="18" rx="7" fill="#2a3042" stroke="#3a4156"/><rect x="${x}" y="${y}" width="${w}" height="18" rx="7" fill="#FF6A1A" opacity="0">${appear(at + 0.1, at + 0.18)}</rect><text x="${x + w / 2}" y="${y + 12.5}" text-anchor="middle" ${FONT} font-size="10" font-weight="700" fill="#fff">${text}</text></g>`;
 
 export const GUIDE = {
-  select: { title: 'Select and merge', text: 'Press in one compartment and drag into another, then Merge (M).', scene: () => scene('0 0 240 110', `${BG}
+  select: { title: 'Select and merge', text: 'Press in one compartment and drag into another (in 3D: click one, Shift-click another), then Merge (M).', scene: () => scene('0 0 240 110', `${BG}
     <rect x="28" y="20" width="184" height="56" fill="#8b8fa8"/>${cell(36, 28, 80, 40)}${cell(124, 28, 80, 40)}
     <rect x="36" y="28" width="80" height="40" fill="#FF6A1A" opacity="0"><animate attributeName="opacity" values="0;0;.35;.35;0;0" keyTimes="0;.18;.2;.72;.74;1" dur="${DUR}s" repeatCount="indefinite"/></rect>
     <rect x="124" y="28" width="80" height="40" fill="#FF6A1A" opacity="0"><animate attributeName="opacity" values="0;0;.35;.35;0;0" keyTimes="0;.38;.4;.72;.74;1" dur="${DUR}s" repeatCount="indefinite"/></rect>
     <g opacity="0">${appear(0.74)}${cell(36, 28, 168, 40)}</g>
     ${chip(92, 84, 56, 'Merge', 0.5)}
     ${cursor([[76, 52, 0.16], [164, 52, 0.46], [120, 93, 0.74]], press(0.16) + press(0.62))}`) },
-  wall: { title: 'Move a wall', text: 'Drag a wall. Shift takes the whole line with it, Alt skips the snapping.', scene: () => scene('0 0 240 110', `${BG}
+  wall: { title: 'Move a wall', text: 'Drag a wall, in the plan or in 3D. Shift takes the whole line with it, Alt skips the snapping.', scene: () => scene('0 0 240 110', `${BG}
     <rect x="28" y="20" width="184" height="56" fill="#8b8fa8"/>
     <rect x="36" y="28" width="80" height="40" fill="#202130" stroke="#3a4156">${slide('width', 80, 108, 0.36, 0.14)}</rect><rect x="36" y="28" width="80" height="9" fill="#f3f1ea">${slide('width', 80, 108, 0.36, 0.14)}</rect>
     <rect x="124" y="28" width="80" height="40" fill="#202130" stroke="#3a4156">${slide('x', 124, 152, 0.36, 0.14)}${slide('width', 80, 52, 0.36, 0.14)}</rect><rect x="124" y="28" width="80" height="9" fill="#f3f1ea">${slide('x', 124, 152, 0.36, 0.14)}${slide('width', 80, 52, 0.36, 0.14)}</rect>
     <rect x="116" y="20" width="8" height="56" fill="#FF6A1A" opacity="0">${appear(0.24, 0.8)}${slide('x', 116, 144, 0.36, 0.14)}</rect>
     <text x="120" y="98" text-anchor="middle" ${FONT} font-size="10" fill="#9a9a9a" opacity="0">${appear(0.3, 0.8)}it snaps to 0.5 mm and to a label's fit</text>
     ${cursor([[150, 92, 0.06], [120, 56, 0.36], [148, 56, 0.8]], press(0.3))}`) },
-  holder: { title: 'Label holder', text: 'Double-click a compartment to take its label holder away, or give it back.', scene: () => scene('0 0 240 110', `${BG}
+  holder: { title: 'Label holder', text: 'Double-click a compartment in the plan, or press L, to take its label holder away or give it back.', scene: () => scene('0 0 240 110', `${BG}
     <rect x="52" y="14" width="136" height="74" fill="#8b8fa8"/><rect x="60" y="22" width="120" height="58" fill="#202130" stroke="#3a4156"/>
     <rect x="60" y="22" width="120" height="9" fill="#f3f1ea"><animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;.4;.42;.9;.92;1" dur="${DUR}s" repeatCount="indefinite"/></rect>
     <text x="120" y="102" text-anchor="middle" ${FONT} font-size="10" fill="#9a9a9a" opacity="0">${appear(0.44, 0.9)}no holder: the whole floor is open</text>
