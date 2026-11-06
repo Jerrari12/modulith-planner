@@ -6907,6 +6907,181 @@ Joey, asked whether face-down fronts had the label's wobble: "Yes, check them"; 
 - **Left, stated.** Direction error stays larger at the atlas's smallest scales (p95 6.18 degrees at 0.35). On a plane at 17 and 30 degrees, the new read at 8 bits leaves about 1.5 degrees p95 at 0.9, worst 3.5, where a 16-bit top field reads under 0.2. The check over every field needs the 16-bit extraction, which is local only, so CI holds the plane test's limits and not those figures. If a remnant shows, the next step is 16-bit first-layer fields: a data re-export and a shader change. Not measured on a real phone.
 - **Live 2026-11-02** as `ba4f802`, run 41529294862, stamp `ba4f8024`. The live page at Very High: a Chevron build at scale 0.81 with 17 first-layer fields, an EdgeLabel build at 0.729 with 20, nothing failed to load, no page exceptions (the script listens for those only); the Chevron at 0.81 shows straight beads along its diagonals.
 
+## 2026-11-04 · Polymaker's Panchroma Galaxy PLA joins the catalog, Hedgehog Makes' red with it
+
+Joey: "they do have the hex color for all the galaxy glitter filaments from polymaker if we can add those too", with his minted handle `https://shop.polymaker.com/JERRARI?q=galaxy-pla`.
+
+**What changed.** A new line, Panchroma™ Galaxy PLA, six colours: Galaxy Black `#161617`, Dark Blue `#18192D`, Dark Red `#451E14`, Dark Green `#13484D`, Dark Grey `#4E5658`, and Hedgehog Makes - Galaxy Red `#760007`. Every hex is the shop's own "HEX Code", read from the product page one colour at a time on 2026-11-04, and the ids are the same variants. All six carry `finish: 'glitter'`, so they glisten on the model and wear the speck swatches like the other Galaxy rows. Hedgehog Makes' red, waiting for a link since 2026-11-01, is a colour of this same product, so Joey's handle covers it; its name keeps the shop's hyphen, because the buy button tells a shopper which colour to pick on Polymaker's page (Terra `01a1a96d`).
+
+**The link.** Followed on 2026-11-04, it lands on `/products/galaxy-pla` carrying `utm_campaign=JERRARI` and `ref=superfiliate-JERRARI`.
+
+**Pins moved.** Twelve lines and 177 colours in `test/filament-db.test.mjs`; the glitter family in `test/glitter.test.mjs`; the PLA line order in `test/materials.test.mjs` and the two e2e line lists. The Surprise me pools are computed from hex, and five of the new colours joined them: Dark Red among Warm's accents (its earths), Dark Green among Calm's accents, Black and Dark Grey among Workshop's shells, Hedgehog Makes - Galaxy Red among Workshop's accents; Dark Blue joined none (`test/styles.test.mjs`; "four" until 2026-11-04, a miscount Terra `01a1a99f` caught in the vault's copy).
+
+Checks: the unit suite (913 pass); on `E2E_SOFT=1` the feet case, the silk sheen case, the Galaxy model case and the glitter swatch case.
+
+**Live** the evening of 2026-11-04 as `07305c4f` (run 41952357035; 02:33 UTC on the 5th). Live checks on that stamp: `swatch-prod.mjs` 21 of 21, now listing all fifteen Galaxy rows; `glitter-prod.mjs` 21 of 21, its old "Hedgehog Makes waits for its link" turned into the six rows present and Hedgehog Makes' red glittering on the model with the Galaxy PLA handle, rel sponsored, the commission line under it.
+
+## 2026-11-04 · The Polymaker offer: the Buy is a button, and a first-order 15% sits round it
+
+Joey: "is there a way to make purchasing the affiliate filament more noticeable, i don't think i've had anyone click any of my purchase links yet, like they get 15% percent off their first order of polymaker using that code ... could we make it so each time they select a polymaker filament maybe something pops up? but if they close it or click the link it remembers to go away? it just feels like hidden text at the moment. maybe consult on that." Polymaker's terms, as he relayed them: 15% off a visitor's FIRST order, 5% commission to him.
+
+**Consulted** (Sol `01a1a971`): not a pop-up over the colours on every pick, which makes shopping compete with choosing; an offer round the Buy in the picker's foot, the first-order condition in its title, the one commission line unchanged under it; retire on close or click, never on being seen; no pointer-delay timer, a stable layout instead; count what was seen, not every pick.
+
+**What changed** (`js/workspaces/colors.js` buyArea, `js/ui/phone.js` badge, `css/app.css`). The picker's Buy is an orange button for every filament, offer or not, in the region picker and the spool picker alike. A Polymaker pick, while the offer lives, puts it in a card titled "15% off your first Polymaker order" with a close (×); the line under it is unchanged ("Polymaker links apply the JERRARI discount and earn me a small commission."), so the surface still says it once. Close or a click on its Buy retires it in this browser (`gen2-poly-offer` = close | click; storage that throws retires it for the page), and each picker opening reads the key again while the offer lives here, so another tab's close counts too. Ignoring it does not retire it.
+
+**Nothing moves under a second click.** On a desktop the list is its own scroller above Printed on and the foot, and the card took 100 px from it, so a click at the list's bottom could land on Printed on. While the offer can still show, the foot keeps the card's room (140 px) from the picker's opening, whatever is picked, and a retired offer gives it back only at the next opening: foot and list measured equal for an Elegoo opening, an Elegoo pick and a Polymaker pick. On a phone the foot is the end of the sheet's own scroll, where growing moves nothing, but it is 1,400 px of colours away, so the sheet's handle also carries a "15% off first order" pill in the title's room (the × and the caret stay put); it opens the sheet if it was swiped down and scrolls to the offer. **Tried and dropped:** the consult's foot pinned under the list; on Joey's S23 (360 x 675) it covered all but one row of the half-open sheet.
+
+**Counted** (GoatCounter counts each event path once per visitor per 8-hour session): `seen:filament:<line>` once a page when a line's Buy is at least 60 % in view (the callback checks the ratio itself: an observer also reports a node merely coming into view, Sol `01a1a995`, and its first look at a node, whatever the ratio), `offer:polymaker:shown` for the card or the pill, `offer:polymaker:jump` for the pill's tap, `offer:polymaker:close` and `offer:polymaker:click`, beside the `buy:filament:<line>` click it always sent. `seen:` rather than `buy:...:shown`, so a `buy:` filter stays clicks only.
+
+**Tests.** Every e2e context starts with the offer closed (`prepareBrowser`, unless `polyOffer: true`). Three new cases: the desktop card, nothing moved, close, memory across a reload; a keyboard-followed Buy retiring it with the focus kept, a second tab, storage that throws; the phone pill, its tap, a collapsed sheet, 780 x 260. Twelve of 13 mutants killed; the one that removes the 60 % ratio check survives, its step taken out because Chromium could not stage that case on demand (no callback for a node scrolled to a sliver; a pick re-scrolls the sheet). Review: Sol `01a1a995`, two findings fixed (the 60 % ratio; focus after a keyboard Enter), then no objection.
+
+## 2026-11-04 · The offer leads with supporting MODULITH, and on a desktop it ends the swatch list
+
+Joey, asked whether the offer would feel scummy: "I want the user to know about the deal but first feel like they would be helping the project first and foremost". He took this wording ("I like this approach, yeah let's send it with the support first wording"): the title "Buying this filament supports MODULITH", the body "Polymaker pays me a small commission when you buy through this link, and it helps me keep making free MODULITH files. As a thank-you, your first Polymaker order is 15% off.", the button "Buy Polymaker <filament> →". "Free MODULITH files" is the site's own claim: its About page says "The core system is free: cases, drawers, covers, rails, hardware and several faceplate styles", and the Club's faceplates fund the work.
+
+**Copy** (`js/workspaces/colors.js` OFFER_COPY, polyBuyText). The no-pressure line under the card's Buy reads "You don't need Polymaker to print MODULITH. Buying through this link just helps." It does not say "any brand works", which Sol `01a1aa04` called a compatibility claim nobody measured, and it does not say "any PLA": the feet print in TPU and a heavy-duty case in PETG. Every Polymaker Buy names the shop's product, in the card or not ("Buy Polymaker PLA Black →", "Buy Polymaker PETG Black →", "Buy Polymaker Galaxy Dark Blue →"), so closing the card never relabels a button. With nothing picked, the Buy reads "Shop Polymaker filament →". The pill reads "Supports MODULITH"; "Supports MODULITH · 15% off" was 177 px wide and squeezed the S23 sheet's title to 25 px, and to 5 px on its side.
+
+**Where the card goes.** At the picker's 287 px width the support-first card is 200 px tall; the first card was about 100 px, with 140 px held for it. Measured on the branch, a 200 px card in the fixed foot left the swatch list 47 px at 1280 x 800 and 15 px at 1366 x 768, with no swatch visible. Holding that space from the opening, as the first card's room was held, would have left 15 px for everyone, whatever they picked. Consulted (Sol `01a1aa04`), the desktop layout is now:
+- The card is the swatch list's last child, with a Buy of its own.
+- The fixed foot keeps the plain Buy and its commission line, because a Buy the card can scroll away from needs its own line.
+- A "Supports MODULITH" pill in the panel's head scrolls the card's title to the top of the list.
+
+The list keeps its height: at 1366 x 768 it goes from 158 px to 142 px, because the Polymaker line is one line longer than Amazon's sentence. The reserved room (`.room`) is gone. On a phone nothing moved: the card wraps the foot's Buy at the end of the sheet, its body stands in for the line under the Buy, and the line comes back when the card goes.
+
+**Disclosure.** The card's body is the commission sentence, next to the card's Buy. On a desktop the foot's Buy keeps its own line too, so with the card in view the picker says "commission" twice, once for each Buy. That breaks the literal "once per surface" rule (2026-10-27); it is put to Joey as an exception (Sol `01a1aa10`: proximity justifies it, the rule's owner decides). On a phone it says it once. No Buy is ever without its line.
+
+**Nothing slides** (Sol `01a1aa10`). A card that goes leaves its room behind until the picker is next built, so a list or a sheet scrolled to its end does not move under the next tap:
+- On a desktop, an empty `.ogone` block keeps the list's end, with the card's margins. At first it was an empty flex item, which shrank to 0 and let the scroll slide 209 px.
+- On a phone, the foot keeps its min-height and its layout (`.held`). Without the layout, the Reset rose to the Buy's row, roughly where the card's × had been, and the sheet slid 127 px.
+
+The first `.held` rule nested `:has()` inside `:is()`, Chrome ignored the whole rule, and the e2e failed. It is now a plain selector list.
+
+**Focus.** The pill puts the focus on the card's Buy only when that Buy is in view with the title at the top of the list. A list too short for it takes the focus to the card itself: at 1366 x 768 the list is 142 px and the Buy ends 152 px below the card's top.
+
+**Tests.** The three offer cases were rewritten for this layout:
+- **Desktop:** the card is the list's last child, including after a search refills the list. The foot keeps its Buy and line, and "commission" appears twice while the card shows and once after ×. The pill is in the head, and nothing under the head moves. The pill brings the card's title to the top of the list and focuses its Buy. A × at the list's very end keeps the scroll, on a window tall enough for the × to be in view. The close is remembered across a reload.
+- **Click:** following the card's Buy with the keyboard moves the focus to the foot's Buy. A second tab's picker shows no card. On a 680 px window, with the list at 54 px, the pill focuses the card. With storage that throws, following the foot's Buy retires the offer for the page.
+- **Phone:** the pill reads "Supports MODULITH". The card wraps the foot's Buy and the commission is said once. The title keeps at least 60 px upright and on its side. A × at the sheet's end keeps the scroll and keeps the Reset on its own row.
+
+The analytics case takes the new label. All four cases pass at soft rendering and half speed. 20 of 20 mutants were killed.
+
+Twice, a × that was hidden at the scroll's end made Playwright scroll before clicking, and that showed up as an 18 px slide and a 127 px slide. A probe showed the page itself held still. Those steps now run where the × is in view, and the phone step asserts that the × can be hit.
+
+**Review.** Sol `01a1aa04` chose the layout and the pill and dropped the "any brand" line. Sol `01a1aa10` found three defects, all confirmed and fixed: the phone foot's layout, the placeholder's margins, and focus on a clipped Buy. Its follow-up raised no objection.
+
+**Not verified.** Whether the 15% applies by itself at Polymaker's checkout: the link is known to carry `ref=superfiliate-JERRARI`, but no cart was tried. The look on a real phone has not been checked either.
+
+## 2026-11-05 · On a desktop the offer floats beside the picker
+
+Joey, of the card at the swatch list's end: "my only concern, this feels like it eats up so much realestate when trying to select filament, what are some other ways we can maybe tackle this?" Mock-ups on the branch's own page, at 1366 x 768 where the list is 142 px tall, measured the options:
+- The card as built filled the whole list once scrolled to.
+- The support sentence as a note under the Buy left 93 px of list. The note sits in the fixed foot, so that cost would have applied to every Polymaker pick.
+- A two-line Buy left 116 px.
+- A popover from the head's pill and a 107 px slim card were the other two.
+
+Joey then asked: "what if it's a floating modal like how we do those short tutorial video clips on hover? and maybe a small x button to make it disapear?" That was mocked too, and he answered "Build it".
+
+**Where** (`js/workspaces/colors.js` placeFloat, `#ws-offer` in `css/app.css`). One glass card for the page, 264 px wide like the hover-hint bubble. It sits 12 px left of the picker, level with the foot's Buy, with a notch pointing at the Buy.
+
+Nothing in the picker moves for it:
+- At 1366 x 768 the list stays 142 px tall. That is 16 px less than with an Elegoo pick (an Amazon link, 158 px), because the Polymaker line under the Buy is one line longer than Amazon's sentence.
+- The foot keeps its plain Buy and that line.
+
+Gone from the desktop: the card in the list, its second Buy, the head's pill and the `.ogone` placeholder.
+
+**It never covers a card on the stage.** Clicking a part on the model opens the part card at the bottom centre, along with the picker. The floating card then lifts clear above the part card and its notch goes; when the part card closes, it comes back level with the Buy.
+
+The same rule is coded for:
+- the shopping list;
+- the compare tray;
+- Simplify;
+- the dock;
+- the panels on the left (the Colors panel, the gallery, Surprise me).
+
+Where nothing clears, or it would rise above the picker's top, it waits hidden, still live. What was checked open: the part card (no overlap at 1366 x 768, 1280 x 800, 1440 x 900, 1920 x 1080 and 1024 x 768, with it open and without it), the shopping list (in the e2e, at 1280 x 800), and the dock and the Colors panel, which are always there. The compare tray, Simplify, the gallery and Surprise me were not opened with the card showing. Below 1024 px wide the phone layout takes over.
+
+It is re-placed:
+- at the end of renderAll;
+- on a window resize;
+- by a ResizeObserver on the picker and those cards. That catches the shopping list, which opens and closes without renderAll.
+
+**Keyboard.** The card follows the picker in the page's order, so Tab from the foot's Reset reaches its ×. The × puts the focus on the foot's Buy. If the card has to hide for lack of room while its × has the keyboard focus, the focus also goes to the foot's Buy (Sol `01a1ad36`).
+
+**Disclosure.** The card's body says the commission, and so does the line under the foot's Buy, so a desktop says it twice while the card shows. Joey was offered the choice of taking the sentence out of the card and answered "Build it".
+
+**Phone: unchanged in code.** The card wraps the foot's Buy at the end of the sheet, and a pill on the handle brings it into view (checked at 360 x 675 in the e2e, not on a real phone). No card floats on a phone: the sheet takes the full width, so a card beside it would have to sit over the model, and hover hints don't show on a touch screen either.
+
+**Tests.** The desktop case and the click case were rewritten.
+
+The desktop case covers:
+- where the card sits: 12 px off the picker, level with the Buy, the notch showing, its × on top, overlapping nothing;
+- Tab reaching the ×;
+- a search leaving the card in place;
+- the part card lifting the card and its return;
+- a 1280 x 440 window, where the part card leaves no room, so the card hides while its × has the keyboard focus, and the focus moves to the Buy;
+- the shopping list;
+- an ignored card coming back;
+- the picker closed and reopened;
+- the ×: nothing in the picker moves, the focus moves to the Buy, storage remembers, and a reload stays closed.
+
+The click case covers:
+- the Buy followed from the keyboard;
+- a second browser tab, whose next picker shows no card;
+- storage that throws;
+- a phone's card-wrapped Buy followed from the keyboard.
+
+23 of 23 mutants were killed. The first round left two alive, and both were blind spots in the case:
+- It read the card's `hidden` attribute, not whether the card showed. A rule letting `display` win over `[hidden]` went unseen.
+- It never checked that the card shows during the pick's own render. With the placeFloat call at renderAll's end removed, the card still appeared: something the ResizeObserver watches changed size on each pick (which one was not established).
+
+The case now checks visibility, and checks the card in the same task as the click. After that change, the geometry step measured the card 6 px off, the length of its entrance slide; the step now waits for the entrance to finish, and passes.
+
+**Review.** Sol `01a1ad36` (code `a237e7e`) found one defect: when placement hid the card while it held the keyboard focus, the focus was lost. It was confirmed and fixed, and the follow-up raised no objection. Terra `01a1ad4f` reviewed this entry against its evidence; six wording points were taken.
+
+**Not verified.**
+- Whether the 15% applies by itself at Polymaker's checkout.
+- A real phone.
+- The full CI run.
+
+## 2026-11-05 · The offer in Joey's words: support and the first-order 15%, the commission once under the Buy
+
+Joey, of the floating card: "this feels a bit wordy don't you think?" Two shorter wordings were mocked; the first still opened its body with "Polymaker pays me", and both still said the commission in the card. He answered: "i mean i feel like you could say this differently, like purchasing this filament through this link helps support the Modulith project... rather than saying polymaker pays me". Of the small print "You don't need Polymaker to print MODULITH": "it also sounds really weird, it's like you are trying to sell filament and then telling them nah you don't need it, i would omit that as it's pretty obvious they can select other materials and colors".
+
+**Copy** (`js/workspaces/colors.js` OFFER_COPY):
+- Bold lead: "Purchasing this filament through this link helps support the MODULITH project."
+- Body: "As a thank-you, your first Polymaker order is 15% off."
+
+That is 22 words where the card had 53. The "26" and "47" Joey was shown in chat counted a mock-up that still had the small print, and joined words across elements. The card is now 111 px tall where it was 164 px. It is a fixed 264 px wide, so its text wraps the same in any window; 111 px was measured in a 1280 x 440 window. The no-pressure line is gone. Two mock-ups of his wording were shown: a bold lead keeping "As a thank-you", and a lighter lead without those words. The bold one was recommended and is the one built; Joey did not say which he preferred.
+
+**The commission, once.** The card no longer says it. The line under the picker's Buy says it, the sentence `disclosureFor` gives any Polymaker link: "Polymaker links apply the JERRARI discount and earn me a small commission." "Helps support the project" on its own would not tell a buyer that the link earns money; the line does.
+- On a desktop the line stays under the foot's Buy, with the card floating beside it. The commission was said twice there before; it is said once now.
+- On a phone the card used to carry no such line: its body said the commission instead. The line now stays inside the card, under the Buy the card wraps. When the card goes, the Buy and its line step out of it together.
+
+**Tests.**
+- The offer cases now expect the new words.
+- On a desktop the commission is counted once. On a phone it is counted once, by the line inside the card.
+- The short-window step now runs at 1280 x 400. At 440 px that step failed: the shorter card did not hide. It was measured 213 px above the Buy's level with its notch gone, clear of the part card, so it had found room to lift.
+
+Five mutants were re-run for this change, and all were killed:
+- the old body;
+- a phone card without its line;
+- a phone line that does not come back;
+- a card hidden instead of lifted;
+- a hide that drops the focus.
+
+**Review.** Terra `01a1ad8f` reviewed the code and copy diff and raised no objection. Terra `01a1ad98` reviewed this entry; six of its seven points were taken. The seventh was discarded: the sentence on the mock-ups already says Joey did not choose between them. The code commit `cb7e805` still gives the old counts (26 and 47) in its message.
+
+**Not verified.** As before:
+- whether the 15% applies by itself at Polymaker's checkout;
+- a real phone;
+- the full CI run (it passed on 2026-11-06; see Live below).
+
+**Live** on 2026-11-06 as `35332c02` (run 42258062602; deployed 17:42 UTC), on Joey's "Deploy it". The push of `55a849b` on the evening of 2026-11-05 (run 42126575772) failed in shard 6, on the TPU feet case, which the offer did not change: after its reload the feet read TPU95 Orange. That case passed alone locally four times on `55a849b`. The cause was in the test: its reload took its colours from a `#build=` address that still held the Orange look. `35332c0` changes only that case (all three hunks inside it; Terra `01a1b1b8`). Joey twice reported clicking a re-run of the failed job; both times the run stayed at its first attempt and no planner run was queued or running. Pushing `35332c0` started the run that deployed both, and every shard passed. Live checks on that stamp:
+- `offer-prod.mjs` (new), 15 of 15. In a 1366 x 768 window a Panchroma pick floats the card with the title and body above, 12 px from the picker and level with its Buy, covering no panel. The word "commission" appears once, in the Polymaker line under the Buy. The Buy's address starts `https://shop.polymaker.com/JERRARI?q=`, its rel includes `sponsored`, and its label starts "Buy Polymaker". A Prusament pick hides the card, and × retires it across a reload. At 360 x 675 and 780 x 260 the pill sits on the sheet's handle clear of its ×, and the card wraps the Buy and the Polymaker line under it. Run against the old site (`07305c4f`) as a control, it failed 11 of 15; the four it passed also hold on a page with no card.
+- `disclosure-once-prod.mjs`, 6 of 6.
+- `glitter-prod.mjs`, 21 of 21.
+
+Still not verified: whether the 15% applies by itself at Polymaker's checkout, and a real phone.
 ## 2026-11-04 · The parts drawer generator moves into the planner (M0): modules, meshes, docs and its tests
 
 Joey's kickoff (`docs/parts-drawer/KICKOFF-PROMPT.md`, from the generator's `SPEC.md` "Planner integration: the next session"): branch `parts-drawer` off main, copy the generator in, port its Node tests, and leave the planner looking and behaving exactly as it did. Rules for the whole session: the planner's style brief and tokens win over the prototype's look; the generator's geometry is not changed here; with the flag off nothing changes; the open decisions at the end of the spec section are Joey's.

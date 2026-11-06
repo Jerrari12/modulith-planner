@@ -100,9 +100,19 @@ const ROOM_SOFT_SKIP = SOFTWARE_GL && 'the Done room on a software rasteriser ra
 /* a software rasteriser's actions get 120 s: the runner ran out of the default 30 s on a click in two different cases on 2026-10-31 (runs 41247969961 and 41257763151; the annotation does not say which click). Neither case has grown: 385 to 407 s and 94 to 120 s in green runs, before that day's work and after. A fresh Colors page's Room click alone took 10 s on a laptop's SwiftShader. A control that cannot be clicked still fails the case */
 /* and the Showcase's own clock stays out of every case but its own (showcaseKit shortens it): two quiet minutes on High or Very High in Colors start the final scene,
    and on a slow run they ran out inside the steam case, whose frames were then of another scene (run 41386208239: 898,000 pixels changed; firing it there locally, 849,000) */
+/* and the Polymaker offer (colors.js buyArea) is closed in every context but its own cases' (polyOffer: true, stripped here before
+   Playwright sees it): its card in the picker's foot is taller than the Buy it wraps, and a case about something else measures that foot
+   (the Showcase hint's lesson: a new thing on screen by default breaks a case that never asked for it) */
 const prepareBrowser = (b) => {
   const make = b.newContext.bind(b);
-  b.newContext = async (o) => { const c = await make(o); if (SOFTWARE_GL) { c.setDefaultTimeout(WAIT_FLOOR_MS); c.setDefaultNavigationTimeout(LOAD_FLOOR_MS); } await c.addInitScript(() => { window.__SHOWCASE_IDLE_MS__ = 3_600_000; }); return c; };
+  b.newContext = async (o = {}) => {
+    const { polyOffer = false, ...opts } = o;
+    const c = await make(opts);
+    if (SOFTWARE_GL) { c.setDefaultTimeout(WAIT_FLOOR_MS); c.setDefaultNavigationTimeout(LOAD_FLOOR_MS); }
+    await c.addInitScript(() => { window.__SHOWCASE_IDLE_MS__ = 3_600_000; });
+    if (!polyOffer) await c.addInitScript(() => { try { localStorage.setItem('gen2-poly-offer', 'e2e'); } catch {} });
+    return c;
+  };
   localParts(b, root);   // GEN2_PARTS_LOCAL=1 reads unpublished parts from this checkout (test/lib/local-parts.mjs)
 };
 prepareBrowser(browser);
@@ -422,8 +432,8 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   const foot = () => page.evaluate(() => { const f = document.querySelector('#ws-picker .foot'); const a = f.querySelector('a.buy'); return [a.textContent, a.rel, f.querySelector('.disc').textContent]; });
   assert.deepEqual(await foot(), ['Buy Elegoo PLA Black →', 'noopener sponsored', AMAZON_SENTENCE], 'the picker\'s Amazon buy: a plain label, rel=sponsored, Amazon\'s sentence under it');
   await page.locator('#ws-picker .sw[aria-label="Panchroma Black"]').first().click();
-  await click(page.locator('#ws-picker .foot a.buy', { hasText: /^Buy Black →/ }), 'the picker\'s Panchroma');
-  assert.deepEqual(await foot(), ['Buy Black →', 'noopener sponsored', POLYMAKER_LINE], 'the picker\'s Polymaker buy: a plain label, rel=sponsored, the Polymaker sentence under it');
+  await click(page.locator('#ws-picker .foot a.buy', { hasText: /^Buy Polymaker PLA Black →/ }), 'the picker\'s Panchroma');
+  assert.deepEqual(await foot(), ['Buy Polymaker PLA Black →', 'noopener sponsored', POLYMAKER_LINE], 'the picker\'s Polymaker buy: the shop\'s product named (Joey 2026-11-04), rel=sponsored, the Polymaker sentence under it');
   // the Dock's filament stack: the shopping list, one Buy per filament
   await page.locator('#ws-picker button[aria-label="Close the picker"]').click();
   await page.locator('#ws-dock .status.stack').click();
@@ -484,6 +494,296 @@ test('analytics: every buy link in Colors and Parts reports the stage\'s buy: ev
   assert.ok(hrefs.every((h) => /^https:\/\//.test(h)), `store addresses: ${hrefs.join(', ')}`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
+});
+
+/* THE POLYMAKER OFFER (Joey 2026-11-04: "could we make it so each time they select a polymaker filament maybe something pops up? but
+   if they close it or click the link it remembers to go away?"; Sol 01a1a971; worded support first, Joey the same day): a Polymaker
+   pick brings a card that says buying it helps support MODULITH and the first order is 15% off (Joey's own words, 2026-11-05); the
+   commission is the line under the Buy, said once. On a desktop it floats beside the
+   picker, level with the foot's Buy, as the hover hints float (Joey 2026-11-05: at the swatch list's end it "eats up so much
+   realestate"), and nothing in the picker moves for it; it never covers a card on the stage. On a phone it wraps the foot's Buy and a
+   pill on the sheet's handle brings it. ✕ or the Buy followed retires it in this browser, ignoring it does not; storage that throws
+   retires it for the page. Every other case runs with it closed (prepareBrowser), these ask for it (polyOffer) */
+const offerContext = async (o = {}) => { const c = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...o, polyOffer: true }); contexts.add(c); await c.addInitScript(FAST); return c; };
+const OFFER_TITLE = 'Purchasing this filament through this link helps support the MODULITH project.';
+const OFFER_BODY = 'As a thank-you, your first Polymaker order is 15% off.';
+const pickSw = async (page, label, how = 'click') => { const s = page.locator(`#ws-picker .sw[aria-label="${label}"]`).first(); await (how === 'tap' ? s.tap() : s.click()); };
+const openCase = async (page, how = 'click') => {
+  const row = page.locator('#ws-colors .crow').filter({ has: page.locator('b', { hasText: /^Case$/ }) }).first();
+  await row.waitFor({ timeout: 60_000 }).catch(() => assert.fail('no Case row in Colors'));
+  await (how === 'tap' ? row.tap() : row.click());
+  await page.waitForFunction(() => document.querySelector('#ws-picker .brands button.sw'), null, { timeout: 20_000 }).catch(() => assert.fail('the Case\'s picker has no swatches'));
+};
+/* the picker's foot and the offer, wherever it is: `card` a card in the picker (a phone's, round the foot's Buy; `where` its parent),
+   `float` a desktop's floating card while it shows, `commission` how often the word is said in the picker and the floating card */
+const offerFoot = (page) => page.evaluate(() => {
+  const p = document.querySelector('#ws-picker'), f = p.querySelector('.foot'), r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.top), Math.round(b.height)]; };
+  const card = p.querySelector('.offer'), a = f.querySelector('a.buy'), head = p.querySelector(':scope > .head'), list = p.querySelector('.brands');
+  const fl = document.querySelector('#ws-offer'), on = !!fl && fl.checkVisibility();   // seen, not the attribute: a rule that let display win over [hidden] showed it
+  return { card: card ? card.querySelector('.ohead b').textContent : null, body: card ? card.querySelector('.obody').textContent : null, where: card ? card.parentElement.className : null,
+    inCard: !!(card && card.contains(a)), buy: a.textContent, rel: a.rel, discs: [...f.querySelectorAll('.disc')].map((d) => d.textContent),
+    float: on ? fl.querySelector('.ohead b').textContent : null, floatBody: on ? fl.querySelector('.obody').textContent : null,
+    commission: ((p.textContent + (on ? fl.textContent : '')).match(/commission/g) || []).length, pill: p.querySelector('.hbadge')?.textContent ?? null,
+    head: r(head), x: r(head?.querySelector('.x')), foot: r(f), list: r(list), scroll: list ? Math.round(list.scrollTop) : null, sw: r(p.querySelector('.sw[aria-label="Panchroma Black"]')) };
+});
+/* where the floating card is: `gap` from the picker's left edge, `mid` its centre from the foot's Buy's (0: level with it), the notch
+   shown or not, `over` every stage card or panel it overlaps, `hit` whether its × is what a click there reaches */
+const offerFloat = (page) => page.evaluate(() => {
+  const q = (s) => { const e = document.querySelector(s); if (!e || !e.checkVisibility()) return null; const b = e.getBoundingClientRect(); return b.width ? { l: b.left, t: b.top, r: b.right, b: b.bottom } : null; };
+  const f = q('#ws-offer'), p = q('#ws-picker'), a = q('#ws-picker .foot a.buy');
+  if (!f) return null;
+  const x = document.querySelector('#ws-offer .ox'), xb = x.getBoundingClientRect();
+  return { gap: Math.round(p.l - f.r), mid: Math.round((f.t + f.b) / 2 - (a.t + a.b) / 2), top: Math.round(f.t), bottom: Math.round(f.b), notch: !document.querySelector('#ws-offer .notch').hidden,
+    over: ['#ws-colors', '#ws-partcard', '#ws-dock', '#ws-shop', '#ws-tray', '#ws-simplify', '#ws-picker'].filter((s) => { const b = q(s); return b && f.l < b.r && f.r > b.l && f.t < b.b && f.b > b.t; }),
+    hit: x.contains(document.elementFromPoint(xb.left + xb.width / 2, xb.top + xb.height / 2)) };
+});
+const offerLog = (page) => page.evaluate(() => window.__GEN2_VIEWER__.trackLog.filter((n) => /^(offer|seen|buy):/.test(n)));
+/* the card's entrance done (a 6 px slide, app.css offer-in), so its place is its resting one: a pick's render on a throttled software
+   rasteriser can hold its first frame back past a fixed wait, and the card measured 6 px off (2026-11-05) */
+const floatStill = (page) => page.waitForFunction(() => { const f = document.querySelector('#ws-offer'); return !!f && f.checkVisibility() && f.getAnimations().every((a) => a.playState === 'finished'); }, null, { timeout: 15_000 })
+  .catch(() => assert.fail('the card’s entrance never finished'));
+
+test('the Polymaker offer on a desktop:a Polymaker pick floats the support-first card beside the picker, level with its Buy, and ✕ retires it for good', async () => {
+  const { ctx, page, errors } = await open('colors', { context: await offerContext() });
+  await openCase(page);
+  await pickSw(page, 'Elegoo PLA Black');
+  await settle(page, 400);
+  const plain = await offerFoot(page);
+  assert.deepEqual([plain.card, plain.float, plain.pill, plain.buy, plain.discs], [null, null, null, 'Buy Elegoo PLA Black →', [AMAZON_SENTENCE]], 'an Elegoo pick: no offer, no pill, Amazon\'s sentence under the Buy');
+  // placed in the pick's own render (renderAll ends with placeFloat), not left to a later resize of something it keeps clear of
+  assert.equal(await page.evaluate(() => { document.querySelector('#ws-picker .sw[aria-label="Panchroma Black"]').click(); return document.querySelector('#ws-offer').checkVisibility(); }), true, 'a Panchroma pick: the card shows in the pick’s own render');
+  await settle(page, 300);
+  const shown = await offerFoot(page);
+  assert.deepEqual([shown.float, shown.floatBody, shown.card, shown.pill], [OFFER_TITLE, OFFER_BODY, null, null], 'the floating card: the support first, then the first order\'s 15%; no card in the picker, no pill');
+  assert.deepEqual([shown.buy, shown.rel, shown.discs, shown.commission], ['Buy Polymaker PLA Black →', 'noopener sponsored', [POLYMAKER_LINE], 1],
+    'the foot keeps its plain Buy, rel=sponsored, and the Polymaker line under it: the commission said once, by the line, not by the card');
+  await floatStill(page);
+  const at = await offerFloat(page);
+  assert.ok(at && at.gap === 12 && Math.abs(at.mid) <= 1 && at.notch && at.hit && !at.over.length, `beside the picker, 12 px off it, level with the Buy, its notch pointing there, its × on top, over nothing: ${JSON.stringify(at)}`);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.trackLog.includes('offer:polymaker:shown'), null, { timeout: 15_000 }).catch(async () => assert.fail(`no offer:polymaker:shown; the log: ${JSON.stringify(await offerLog(page))}`));
+  // the keyboard reaches its × from the foot: the card follows the picker in the page's order
+  await page.locator('#ws-picker .foot .resets button').focus();
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-offer .ox')), true, 'Tab from the foot\'s last button lands on the card\'s ×');
+  // a search refills the list: the card stays where it is
+  await page.locator('#ws-picker input.search').fill('grey');
+  await settle(page, 300);
+  assert.equal((await offerFoot(page)).float, OFFER_TITLE, 'a search: the card stays');
+  await page.locator('#ws-picker input.search').fill('');
+  await settle(page, 300);
+  // a part picked on the model opens the part card at the bottom centre: the card lifts clear above it, its notch gone, and comes back
+  // level with the Buy when the part card goes
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setSelected(v.manifest.instances.find((x) => /^case\d+$/.test(x.id)).id); });
+  await page.waitForFunction(() => !document.querySelector('#ws-partcard').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('no part card'));
+  await settle(page, 300);
+  const part = await offerFloat(page), pc = await page.evaluate(() => Math.round(document.querySelector('#ws-partcard').getBoundingClientRect().top));
+  assert.ok(part && !part.over.length && part.bottom <= pc - 8 && !part.notch && part.gap === 12, `the part card shown: the card clear above it, no notch (part card's top ${pc}): ${JSON.stringify(part)}`);
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSelected(null));
+  await page.waitForFunction(() => document.querySelector('#ws-partcard').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('the part card stayed'));
+  await settle(page, 300);
+  assert.equal(await page.locator('#ws-picker').isVisible(), true, 'the picker stays open with the part deselected');
+  const back = await offerFloat(page);
+  assert.ok(back && Math.abs(back.mid) <= 1 && back.notch && !back.over.length, `the part card gone: level with the Buy again: ${JSON.stringify(back)}`);
+  // a short window, the keyboard on its ×: a part card leaves it no room above, so it hides, and the focus goes to the foot's Buy, not
+  // to the page (Sol 01a1ad36); the part card gone, it comes back. 400 px: at 440 the shorter card of Joey's wording (111 px, was 164)
+  // found room above the part card and lifted instead
+  await page.setViewportSize({ width: 1280, height: 400 });
+  await settle(page, 400);
+  assert.ok(await offerFloat(page), `a short window: the card still fits beside the Buy: ${JSON.stringify(await offerFloat(page))}`);
+  await page.locator('#ws-offer .ox').focus();
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setSelected(v.manifest.instances.find((x) => /^case\d+$/.test(x.id)).id); });
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 15_000 }).catch(async () => assert.fail(`a part card with no room above it: the card stayed ${JSON.stringify(await offerFloat(page))}`));
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'hidden under the keyboard: the focus on the foot\'s Buy');
+  await page.evaluate(() => window.__GEN2_VIEWER__.setSelected(null));
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('the part card gone: the card did not come back'));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await settle(page, 400);
+  // the shopping list rises from the dock: never under the card (it lifts above it, or waits hidden where it cannot), and back after
+  await page.locator('#ws-dock button.status').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-shop').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('no shopping list'));
+  await settle(page, 300);
+  const shop = await offerFloat(page), st = await page.evaluate(() => Math.round(document.querySelector('#ws-shop').getBoundingClientRect().top));
+  assert.ok(shop === null || (!shop.over.length && shop.bottom <= st - 8), `the shopping list open: the card clear of it or hidden (the list's top ${st}): ${JSON.stringify(shop)}`);
+  await page.locator('#ws-shop button.x').click();
+  await page.waitForFunction(() => document.querySelector('#ws-shop').hidden, null, { timeout: 15_000 }).catch(() => assert.fail('the shopping list stayed'));
+  await settle(page, 300);
+  const after = await offerFloat(page);
+  assert.ok(after && Math.abs(after.mid) <= 1 && after.notch, `the shopping list closed: the card back by the Buy: ${JSON.stringify(after)}`);
+  // ignored, it is not retired: another line, or the picker closed, and back, it comes again
+  await pickSw(page, 'Elegoo PLA Black');
+  await settle(page, 300);
+  assert.deepEqual([(await offerFoot(page)).float, (await offerFoot(page)).sw], [null, plain.sw], 'an Elegoo pick again: no card, the swatch where it was');
+  await pickSw(page, 'Panchroma Black');
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('ignored, the offer did not come back'));
+  await page.locator('#ws-picker > .head .x').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('the picker closed, the card stayed'));
+  await openCase(page);
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('the picker again on the Panchroma pick: no card'));
+  await settle(page, 300);
+  const open2 = await offerFoot(page);
+  // ✕: the card goes, nothing in the picker moves, the focus goes to the foot's Buy
+  await page.locator('#ws-offer .ox').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('✕ left the card'));
+  const closed = await offerFoot(page);
+  assert.deepEqual([closed.float, closed.card, closed.pill, closed.buy, closed.discs, closed.commission], [null, null, null, 'Buy Polymaker PLA Black →', [POLYMAKER_LINE], 1], 'closed: no card, the foot\'s Buy and its line');
+  assert.deepEqual([closed.head, closed.list, closed.foot, closed.scroll], [open2.head, open2.list, open2.foot, open2.scroll], `nothing in the picker moved with the card's going (${JSON.stringify({ open2, closed })})`);
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'the focus on the foot\'s Buy, not lost with the ✕');
+  assert.equal(await page.evaluate(() => localStorage.getItem('gen2-poly-offer')), 'close', 'remembered as closed');
+  await pickSw(page, 'Elegoo PLA Black'); await settle(page, 200);
+  await pickSw(page, 'Panchroma Black'); await settle(page, 300);
+  assert.deepEqual([(await offerFoot(page)).float, (await offerFoot(page)).pill], [null, null], 'closed stays closed in this page');
+  const log = await offerLog(page);
+  assert.deepEqual(log.filter((n) => n.startsWith('offer:')), ['offer:polymaker:shown', 'offer:polymaker:close'], `the offer seen once a page, then closed: ${JSON.stringify(log)}`);
+  assert.ok(log.includes('seen:filament:elegoo-pla-petg') && log.includes('seen:filament:polymaker-panchroma-pla'), `each line's Buy seen once: ${JSON.stringify(log)}`);
+  assert.ok(!log.some((n) => n.startsWith('buy:')), 'no buy without a click');
+  // and in this browser: a reload, the picker again, no offer
+  await page.reload({ waitUntil: 'load' });
+  await waitBoot(page);
+  await openCase(page);
+  await pickSw(page, 'Panchroma Black');
+  await settle(page, 400);
+  const later = await offerFoot(page);
+  assert.deepEqual([later.float, later.card, later.pill, later.buy], [null, null, null, 'Buy Polymaker PLA Black →'], 'after a reload: the plain Buy, no card');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('the Polymaker offer: following the Buy retires it too, and storage that throws retires it for the page', async () => {
+  const { ctx, page, errors } = await open('colors', { context: await offerContext() });
+  const other = await open('colors', { context: ctx });   // a second tab of the same browser, open before the click
+  // the link's own handler runs first; this one cancels the navigation, so no store tab opens
+  await page.evaluate(() => { document.addEventListener('click', (e) => { if (e.target.closest('a[target="_blank"]')) e.preventDefault(); }); });
+  await openCase(page);
+  await pickSw(page, 'Panchroma Black');
+  await page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('a Panchroma pick floated no offer'));
+  // the foot's Buy followed from the keyboard: Enter on it is its click; the card goes and the focus stays on the Buy
+  await page.locator('#ws-picker .foot a.buy').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('the card stayed after the Buy was followed'));
+  assert.equal(await page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'the focus still on the foot\'s Buy');
+  assert.deepEqual(await page.evaluate(() => [localStorage.getItem('gen2-poly-offer'), window.__GEN2_VIEWER__.trackLog.filter((n) => /^(offer:polymaker:(click|close)|buy:)/.test(n))]),
+    ['click', ['buy:filament:polymaker-panchroma-pla', 'offer:polymaker:click']], 'the click counted as a buy and retired the offer');
+  // the other tab loaded while the offer lived; its next picker reads the browser's word again and offers nothing
+  await openCase(other.page);
+  await pickSw(other.page, 'Panchroma Black');
+  await settle(other.page, 400);
+  const there = await offerFoot(other.page);
+  assert.deepEqual([there.float, there.pill], [null, null], 'the other tab: no card once this one retired it');
+  assert.deepEqual(clean(errors), []);
+  assert.deepEqual(clean(other.errors), []);
+  await ctx.close();
+  // storage that throws (a blocked site's): the offer shows, and following the foot's Buy retires it for the page, without an error
+  const c2 = await offerContext();
+  await c2.addInitScript(() => {
+    const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (k) { if (k === 'gen2-poly-offer') throw new Error('blocked'); return get.call(this, k); };
+    Storage.prototype.setItem = function (k, v) { if (k === 'gen2-poly-offer') throw new Error('blocked'); return set.call(this, k, v); };
+  });
+  const b = await open('colors', { context: c2 });
+  await openCase(b.page);
+  await pickSw(b.page, 'Panchroma Black');
+  await b.page.waitForSelector('#ws-offer:not([hidden])', { timeout: 15_000 }).catch(() => assert.fail('with storage throwing, no offer'));
+  await b.page.evaluate(() => { document.addEventListener('click', (e) => { if (e.target.closest('a[target="_blank"]')) e.preventDefault(); }); });
+  await b.page.locator('#ws-picker .foot a.buy').click();
+  await b.page.waitForFunction(() => !document.querySelector('#ws-offer').checkVisibility(), null, { timeout: 10_000 }).catch(() => assert.fail('the foot\'s Buy followed, the card stayed'));
+  await pickSw(b.page, 'Elegoo PLA Black'); await settle(b.page, 200);
+  await pickSw(b.page, 'Panchroma Black'); await settle(b.page, 300);
+  const gone = await offerFoot(b.page);
+  assert.deepEqual([gone.float, gone.pill], [null, null], 'retired for the page though storage would not keep it');
+  // and the next opening's re-read throws too: the page's word holds
+  await b.page.locator('#ws-picker > .head .x').click();
+  await openCase(b.page);
+  await settle(b.page, 300);
+  assert.equal((await offerFoot(b.page)).float, null, 'a new opening: still retired');
+  assert.deepEqual(await b.page.evaluate(() => window.__GEN2_VIEWER__.trackLog.filter((n) => /^(offer:polymaker:(click|close)|buy:)/.test(n))), ['buy:filament:polymaker-panchroma-pla', 'offer:polymaker:click'], 'the foot\'s Buy counted and retired it');
+  assert.deepEqual(clean(b.errors), []);
+  await c2.close();
+  // a phone's card wraps the Buy: followed from a keyboard (a narrow window with one gets the sheets too), the card gives way after
+  // the click and the focus stays on the Buy it unwraps, not dropped to the page (Sol 01a1a995)
+  const c3 = await offerContext({ viewport: { width: 360, height: 675 }, isMobile: true, hasTouch: true });
+  const ph = await open('colors', { phone: true, context: c3 });
+  await ph.page.evaluate(() => { document.addEventListener('click', (e) => { if (e.target.closest('a[target="_blank"]')) e.preventDefault(); }); });
+  await openCase(ph.page, 'tap');
+  await pickSw(ph.page, 'Panchroma Black', 'tap');
+  await ph.page.waitForSelector('#ws-picker .foot .offer a.buy', { timeout: 15_000 }).catch(() => assert.fail('a phone\'s Panchroma pick: no card round the Buy'));
+  await ph.page.locator('#ws-picker .foot .offer a.buy').focus();
+  await ph.page.keyboard.press('Enter');
+  await ph.page.waitForFunction(() => !document.querySelector('#ws-picker .foot .offer'), null, { timeout: 10_000 }).catch(() => assert.fail('a phone\'s card stayed after its Buy was followed'));
+  assert.equal(await ph.page.evaluate(() => !!document.activeElement && document.activeElement.matches('#ws-picker .foot a.buy')), true, 'a phone: the focus on the Buy the card let go of');
+  assert.deepEqual(clean(ph.errors), []);
+  await c3.close();
+});
+
+/* on Joey's S23 (360 x 675) the foot is the end of a long sheet: the offer also puts a pill on the sheet's handle, in the title's room,
+   the × and the caret where they were; the tapped swatch is not covered; the pill brings the offer into view without closing the sheet */
+test('the Polymaker offer on a phone: a pill on the sheet\'s handle, clear of its ×, brings the offer into view', async () => {
+  const c = await browser.newContext({ viewport: { width: 360, height: 675 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, polyOffer: true });
+  contexts.add(c);
+  await c.addInitScript(FAST);
+  const { page, errors } = await open('colors', { phone: true, context: c });
+  await openCase(page, 'tap');
+  await settle(page, 600);
+  // seen means seen: the foot's Buy below the fold counts nothing, in full view it counts once. (A sliver counts nothing either, by the
+  // ratio check of Sol 01a1a995; no step here, since Chromium gave no callback for a node scrolled to a sliver, and its first look at a
+  // node shown partly could not be staged on demand: a pick re-scrolls the sheet. Probed 2026-11-04.)
+  const seenBuy = () => page.evaluate(() => window.__GEN2_VIEWER__.trackLog.includes('seen:filament:elegoo-pla-petg'));
+  assert.equal(await seenBuy(), false, 'the Buy below the fold: not seen');
+  await page.evaluate(() => { const s = document.querySelector('#ws-picker'); s.scrollTop = s.scrollHeight; });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.trackLog.includes('seen:filament:elegoo-pla-petg'), null, { timeout: 10_000 }).catch(() => assert.fail('the Buy in full view was not counted as seen'));
+  await page.evaluate(() => { document.querySelector('#ws-picker').scrollTop = 0; });
+  await settle(page, 300);
+  const handle = () => page.evaluate(() => {
+    const h = document.querySelector('#ws-picker .sheet-handle'), r = (q) => { const e = h.querySelector(q); if (!e) return null; const b = e.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)]; };
+    return { pill: r('.hbadge'), text: h.querySelector('.hbadge')?.textContent ?? null, hx: r('.hx'), chev: r('.chev'), ttl: r('.ttl'), open: document.querySelector('#ws-picker').classList.contains('open') };
+  });
+  const before = await handle();
+  assert.equal(before.pill, null, 'the Case\'s own Elegoo: no pill');
+  await pickSw(page, 'Panchroma Black', 'tap');
+  await page.waitForSelector('#ws-picker .sheet-handle .hbadge', { timeout: 15_000 }).catch(() => assert.fail('a Panchroma pick put no pill on the handle'));
+  await settle(page, 400);
+  const lit = await handle();
+  assert.equal(lit.text, 'Supports MODULITH', 'support first on the pill; the card says the discount');
+  const onPhone = await offerFoot(page);
+  assert.deepEqual([onPhone.card, onPhone.body, onPhone.where, onPhone.inCard, onPhone.buy, onPhone.discs, onPhone.commission], [OFFER_TITLE, OFFER_BODY, 'buyarea', true, 'Buy Polymaker PLA Black →', [POLYMAKER_LINE], 1],
+    'a phone\'s card wraps the foot\'s Buy and the Polymaker line under it: the commission said once, by the line');
+  assert.deepEqual([lit.hx, lit.chev], [before.hx, before.chev], `the × and the caret where they were (${JSON.stringify({ before, lit })})`);
+  assert.ok(lit.pill[2] + 6 <= lit.hx[0] && lit.ttl[2] <= lit.pill[0] && lit.ttl[2] - lit.ttl[0] >= 60, `the pill between the title and the ×, the title keeping room (${JSON.stringify(lit)})`);
+  const covered = await page.evaluate(() => { const s = document.querySelector('#ws-picker .sw[aria-label="Panchroma Black"]'), b = s.getBoundingClientRect(); return document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2) !== s; });
+  assert.equal(covered, false, 'the tapped swatch is not covered');
+  await page.locator('#ws-picker .sheet-handle .hbadge').tap();
+  await page.waitForFunction(() => { const s = document.querySelector('#ws-picker'), c = s.querySelector('.foot .offer'), h = s.querySelector('.sheet-handle'); if (!c) return false; const a = c.getBoundingClientRect(), sh = s.getBoundingClientRect(), hb = h.getBoundingClientRect(); return a.top >= hb.bottom - 1 && a.bottom <= sh.bottom + 1; }, null, { timeout: 10_000 })
+    .catch(async () => assert.fail(`the pill did not bring the offer into view: ${JSON.stringify(await page.evaluate(() => [document.querySelector('#ws-picker .foot .offer')?.getBoundingClientRect(), document.querySelector('#ws-picker').getBoundingClientRect()]))}`));
+  assert.deepEqual(await page.evaluate(() => [document.querySelector('#ws-picker').classList.contains('open'), !!document.activeElement && document.activeElement.matches('#ws-picker .offer a.buy'), window.__GEN2_VIEWER__.trackLog.includes('offer:polymaker:jump')]),
+    [true, true, true], 'the sheet stays open, the focus on the offer\'s Buy, the tap counted');
+  // swiped down to its handle, the sheet still carries the pill, and the pill opens it onto the offer
+  await page.locator('#ws-picker .sheet-handle .ttl').tap();
+  await page.waitForFunction(() => !document.querySelector('#ws-picker').classList.contains('open'), null, { timeout: 10_000 }).catch(() => assert.fail('a tap on the handle\'s title did not collapse the sheet'));
+  assert.ok((await handle()).pill, 'the collapsed handle keeps the pill');
+  await page.locator('#ws-picker .sheet-handle .hbadge').tap();
+  await page.waitForFunction(() => { const s = document.querySelector('#ws-picker'), c = s.querySelector('.foot .offer'), h = s.querySelector('.sheet-handle'); if (!c || !s.classList.contains('open')) return false; const a = c.getBoundingClientRect(), sh = s.getBoundingClientRect(), hb = h.getBoundingClientRect(); return a.top >= hb.bottom - 1 && a.bottom <= sh.bottom + 1; }, null, { timeout: 10_000 })
+    .catch(() => assert.fail('the pill on a collapsed sheet did not open it onto the offer'));
+  // Joey's phone on its side (780 x 260): the pill still clear of the ×
+  await page.setViewportSize({ width: 780, height: 260 });
+  await settle(page, 600);
+  const side = await handle();
+  assert.ok(side.pill && side.pill[2] + 6 <= side.hx[0] && side.ttl[2] <= side.pill[0] && side.ttl[2] - side.ttl[0] >= 60, `landscape: the pill between the title and the ×, the title keeping room (${JSON.stringify(side)})`);
+  // upright again, the sheet scrolled to its end with the card's × in view (on its side the card outgrows the sheet, and a tap on its
+  // hidden × made Playwright scroll it into view first): ✕ takes the pill with it, the Buy's own line comes back, and nothing slides
+  // under the finger (Sol 01a1aa04, 01a1aa10)
+  await page.setViewportSize({ width: 360, height: 675 });
+  await settle(page, 600);
+  await page.evaluate(() => { const s = document.querySelector('#ws-picker'); s.scrollTop = s.scrollHeight; });
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => { const x = document.querySelector('#ws-picker .offer .ox'), b = x.getBoundingClientRect(); return x.contains(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)); }), true, 'the card\'s × is in view and on top at the sheet\'s end');
+  const endAt = await page.evaluate(() => [Math.round(document.querySelector('#ws-picker').scrollTop), Math.round(document.querySelector('#ws-picker .foot .resets').getBoundingClientRect().top)]);
+  await page.locator('#ws-picker .offer .ox').tap();
+  await page.waitForFunction(() => !document.querySelector('#ws-picker .sheet-handle .hbadge') && !document.querySelector('#ws-picker .foot .offer'), null, { timeout: 10_000 }).catch(() => assert.fail('the ✕ left the pill or the card'));
+  const afterX = await offerFoot(page);
+  assert.deepEqual([afterX.buy, afterX.discs], ['Buy Polymaker PLA Black →', [POLYMAKER_LINE]], 'closed: the Buy and its line back');
+  assert.deepEqual(await page.evaluate(() => [Math.round(document.querySelector('#ws-picker').scrollTop), Math.round(document.querySelector('#ws-picker .foot .resets').getBoundingClientRect().top)]), endAt,
+    'the sheet\'s scroll where it was, and the reset on its own row, not risen to where the card\'s × was (Sol 01a1aa10)');
+  assert.deepEqual(clean(errors), []);
+  await c.close();
 });
 
 /* THE BOARD REDESIGN (Joey + Astra, 2026-10-16): the 2D board hugs the build and shows the 3D view's "+" spots (one
@@ -8392,7 +8692,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-colors .crow').first().click();
   await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   const caseHeads = await heads();
-  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
+  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['Panchroma™ Galaxy PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
   // THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a case's lines sell PLA and
   // PETG, so a row of All · PLA · PETG stands above the list, All pressed, 8 px between the chips (the planner's floor)
@@ -8425,7 +8725,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).focus();
   await page.keyboard.press('Space');
   assert.deepEqual(await page.evaluate(() => [document.activeElement.textContent.trim(), document.activeElement.getAttribute('aria-pressed')]), ['PLA', 'true'], 'Space presses the focused chip and keeps the focus on it');
-  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
+  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['Panchroma™ Galaxy PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
   // a shared or uploaded palette can name a filament the catalogue does not know: its own words place it under a chip (Terra 01a16a51)
   await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const p = v.palette(); v.setPalette({ on: true, colors: { ...p.colors, Accent: { name: 'PETG Blue (custom)', hex: '#2f66b8' } }, over: p.over || {} }); });
   await page.locator('#ws-colors .crow').first().click();   // the case picker opened again: it reads the palette afresh and starts at All
@@ -8452,20 +8752,48 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   // the stage refuses PLA on the feet: a whole palette naming PLA feet, and a unit's own PLA pick
   const r = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__; const p = v.palette();
-    v.setPalette({ on: true, colors: { ...p.colors, Foot: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, over: {} });
-    const whole = v.palette().colors.Foot.name;
-    v.setOverride(1, 'Foot', { name: 'Panchroma Red', hex: '#d03a2e' });
-    return { whole, over: JSON.stringify(v.palette().over) };
+    // the key the stage saves its palette under, for the diagnostics below: the one these two edits write (the stage's exported
+    // COLOR_STORE_KEY is the boot's, and Colors moves the palette to the build's own key on its first edit)
+    const wrote = []; const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, val) { if (String(k).startsWith('gen2-colors:')) wrote.push(String(k)); return set.call(this, k, val); };
+    try {
+      v.setPalette({ on: true, colors: { ...p.colors, Foot: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, over: {} });
+      const whole = v.palette().colors.Foot.name;
+      v.setOverride(1, 'Foot', { name: 'Panchroma Red', hex: '#d03a2e' });
+      return { whole, over: JSON.stringify(v.palette().over), stageKey: wrote[wrote.length - 1] || null };
+    } finally { Storage.prototype.setItem = set; }
   });
   assert.equal(r.whole, TPU_BLACK, 'a palette naming PLA feet wears TPU95 Black');
   assert.doesNotMatch(r.over, /Panchroma Red/, 'a unit’s own PLA feet pick is refused');
-  // a saved palette naming PLA feet (an old one): the reload wears TPU95 Black
-  const key = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith('gen2-colors:') && /PolyFlex TPU95 Black/.test(localStorage.getItem(k))));
-  assert.ok(key, 'the palette is saved');
-  await page.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k)); s.colors.Foot = { name: 'Elegoo PLA Black', hex: '#1c1d20' }; localStorage.setItem(k, JSON.stringify(s)); }, key);
+  /* a saved palette naming PLA feet (an old one): the reload wears TPU95 Black. A reload takes its colours from the ADDRESS
+     first: every save of the build stamps them there (`look`, SHARE-LOOK.md) and app.js's bootLook puts them on over this
+     browser's saved palette. The store writes the address 350 ms after the last edit, so on a slow runner the reload could still
+     find the Orange of before the reset in it (CI run 42126575772, shard 6: "TPU95 Orange"; holding the reset's save back
+     reproduces it). And the saved palette it reads is the address's key (app.js colorKeyAtBoot: gen2-colors:build-<id>), not the key
+     this page booted with (gen2-colors:custom-build), which the case used to edit and nothing read. So: the waiting save
+     written now, the address as an old link writes it (no colours), and the edit made to the key that address boots from,
+     with a marker colour that proves the reload read it. */
+  const MARK = { name: 'Saved Teal (custom)', hex: '#1a9e8f' };
+  const before = await page.evaluate(({ MARK }) => {
+    const st = window.__GEN2_STORE__;
+    const dec = (h) => { const m = /#build=([^&]+)/.exec(h || ''); if (!m) return null; try { const rec = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); return { buildId: rec.buildId, lookFoot: rec.look ? (rec.look.colors?.Foot?.name ?? null) : 'no look' }; } catch (e) { return { bad: String(e) }; } };
+    const pending = dec(location.hash);   // the address as the case found it: its colours lag the reset while the save waits
+    st.flush();   // the waiting save written now, and nothing edits after it (a save firing during the reload would put the colours back)
+    const rec = st.serialize(); delete rec.look;
+    history.replaceState(history.state, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(JSON.stringify(rec))))}`);
+    const key = 'gen2-colors:build-' + rec.buildId;   // what colorKeyAtBoot reads for this address
+    const s = JSON.parse(localStorage.getItem(key) || 'null');
+    if (s && s.colors) { s.colors.Foot = { name: 'Elegoo PLA Black', hex: '#1c1d20' }; s.colors.Accent = MARK; localStorage.setItem(key, JSON.stringify(s)); }
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith('gen2-colors:')).sort().map((k) => { try { const c = JSON.parse(localStorage.getItem(k)).colors || {}; return `${k}: Foot ${c.Foot?.name}, Accent ${c.Accent?.name}`; } catch { return `${k}: unreadable`; } });
+    return { saved: !!(s && s.colors), edited: key, addressFound: pending, addressNow: dec(location.hash), keys };
+  }, { MARK });
+  const diag = (after) => `edited ${before.edited}; the stage saved under ${r.stageKey}; the address as found ${JSON.stringify(before.addressFound)}, as reloaded ${JSON.stringify(before.addressNow)}; saved palettes: ${before.keys.join(' | ')}${after ? `; after the reload Foot ${after.Foot}, Accent ${after.Accent}` : ''}`;
+  assert.ok(before.saved, `the build's palette is saved under the key its address boots from: ${diag()}`);
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#ws-colors .crow', { timeout: 120_000 });
-  assert.equal(await feet(), TPU_BLACK, 'the saved PLA feet load as TPU95 Black');
+  const after = await page.evaluate(() => { const c = window.__GEN2_VIEWER__.palette().colors; return { Foot: c.Foot?.name, Accent: c.Accent?.name }; });
+  assert.equal(after.Accent, MARK.name, `the reload read the edited saved palette (its marker colour): ${diag(after)}`);
+  assert.equal(after.Foot, TPU_BLACK, `the saved PLA feet load as TPU95 Black: ${diag(after)}`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

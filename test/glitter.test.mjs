@@ -154,9 +154,10 @@ test('who wears it: the family by default, none under =off; the grip whatever it
   assert.equal(G.glitterWanted('all', 'Case', partMaterialSpec('Case')), true);
 });
 
-test('the catalog decides: Prusament\'s five Galaxy colours and Polymaker\'s four PETG Galaxy rows, by their field and never their name', () => {
+test('the catalog decides: Prusament\'s five Galaxy colours, Polymaker\'s four PETG Galaxy rows and its six Galaxy PLA, by their field and never their name', () => {
   const family = FILAMENT_DB.flatMap((b) => b.colors.filter((c) => c.finish === 'glitter').map((c) => c.label)).sort();
-  assert.deepEqual(family, ['Polymaker PETG Galaxy Black', 'Polymaker PETG Galaxy Blue', 'Polymaker PETG Galaxy Dark Grey', 'Polymaker PETG Galaxy Red',
+  assert.deepEqual(family, ['Panchroma Galaxy Black', 'Panchroma Galaxy Dark Blue', 'Panchroma Galaxy Dark Green', 'Panchroma Galaxy Dark Grey', 'Panchroma Galaxy Dark Red',
+    'Panchroma Hedgehog Makes - Galaxy Red', 'Polymaker PETG Galaxy Black', 'Polymaker PETG Galaxy Blue', 'Polymaker PETG Galaxy Dark Grey', 'Polymaker PETG Galaxy Red',
     'Prusament Galaxy Black', 'Prusament Galaxy Green', 'Prusament Galaxy Purple', 'Prusament Galaxy Red', 'Prusament Galaxy Silver']);
   assert.equal(finishOfLabel('Prusament Galaxy Black'), 'glitter');
   /* the plastic round the flakes is the ordinary part's, a label-free call and an unknown one answer no glitter */

@@ -474,6 +474,7 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-dock .showcase-hint::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; margin-left: -5px; background: var(--orange); transform: rotate(45deg); }
 @media (prefers-reduced-motion: no-preference) { #ws-dock .showcase-hint { animation: showcase-hint-in .32s ease-out; } }
 @keyframes showcase-hint-in { from { opacity: 0; translate: 0 6px; } }
+@keyframes hbadge-in { from { opacity: 0; scale: .7; } }   /* the offer's pill on a phone sheet's handle, each Polymaker pick (colors.js) */
 /* the Studio / Room stage toggle (the Done scene's room as a stage, behind ?done=room, 2026-10-23) */
 /* the Room | Neutral backdrop switch is the toolbar's now (#ws-tools .backdrop, the .view chip's look) */
 #ws-colors section { display: flex; flex-direction: column; gap: 6px; }
@@ -559,7 +560,31 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 }
 #ws-picker .find { display: contents; }   /* the search and the chips: rows of the column on a desktop, one row on a phone */
 #ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
-#ws-picker .foot .buy { font-size: 13px; font-weight: 700; color: var(--ink); text-decoration: none; }
+/* THE BUY BUTTON AND THE POLYMAKER OFFER (colors.js buyArea; Joey 2026-11-04: "it just feels like hidden text at the moment"). The Buy
+   line is a button for good. While the offer shows, on a phone it is a card round the foot's Buy, at the end of the sheet's own scroll
+   (the phone block below); on a desktop the card floats beside the picker, level with the Buy (#ws-offer, below), and nothing in the
+   picker moves for it (Joey 2026-11-05: at the swatch list's end it "eats up so much realestate when trying to select filament") */
+#ws-picker .buyarea { display: flex; flex-direction: column; gap: 6px; }
+#ws-picker a.buy { align-self: flex-start; display: inline-flex; align-items: center; min-height: 36px; box-sizing: border-box; padding: 7px 14px; border-radius: 10px; background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange-edge); font-size: 13px; font-weight: 700; line-height: 1.25; text-decoration: none; }
+#ws-picker a.buy:hover { filter: brightness(1.06); }
+#ws-picker a.buy:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+#ws-picker .offer { display: flex; flex-direction: column; gap: 5px; padding: 8px 10px 10px; border-radius: 12px; border: 1px solid var(--orange-edge); background: var(--key-bg); }
+#ws-picker .offer .ohead, #ws-offer .ohead { display: flex; align-items: center; gap: 8px; }
+#ws-picker .offer .ohead b, #ws-offer .ohead b { flex: 1; font-size: 12.5px; line-height: 1.3; color: var(--ink); }
+#ws-picker .offer .ox, #ws-offer .ox { flex: none; width: 32px; height: 32px; margin: -6px -6px -6px 0; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-picker .offer .ox:focus-visible, #ws-offer .ox:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+#ws-picker .offer .obody, #ws-offer .obody { margin: 0 0 1px; font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }   /* the first-order 15%; the commission is the line under the Buy */
+/* a desktop's card, floating 12 px off the picker's left edge (colors.js placeFloat) in the hover hints' glass and width (#ws-hint),
+   with the offer's orange edge and a notch toward the Buy; under a hint (60), over the stage and its cards' level (6, 7) */
+#ws-offer { position: fixed; z-index: 55; width: 264px; box-sizing: border-box; padding: 10px 12px 12px; border-radius: 14px; display: flex; flex-direction: column; gap: 6px; }
+#ws #ws-offer { border-color: var(--orange-edge); }   /* over #ws .glass's own edge */
+#ws-offer[hidden] { display: none; }
+#ws-offer .ohead { align-items: flex-start; }
+#ws-offer .ox { width: 28px; height: 28px; margin: -5px -6px -4px 0; }
+#ws-offer .obody { margin: 0; }
+#ws-offer .notch { position: absolute; right: -7px; width: 12px; height: 12px; transform: rotate(45deg); background: inherit; border-top: 1px solid var(--orange-edge); border-right: 1px solid var(--orange-edge); }
+@keyframes offer-in { from { opacity: 0; translate: 6px 0; } }
+@media (prefers-reduced-motion: no-preference) { #ws-offer { animation: offer-in var(--d-pop) var(--ease-out) both; } }
 #ws-picker .foot .disc, #ws-shop .disc { font-size: 11px; color: var(--ink-3); line-height: 1.4; }
 #ws-picker .foot .key { align-self: flex-start; }
 #ws-partcard { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: 440px; box-sizing: border-box; padding: 12px 14px; border-radius: 16px; display: flex; flex-direction: column; gap: 10px; z-index: 6; }
@@ -1125,6 +1150,14 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws .sheet#ws-picker .foot { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px var(--gap-ctl); }
   #ws .sheet#ws-picker .foot .resets { grid-column: 2; grid-row: 1; }
   #ws .sheet#ws-picker .foot .disc { grid-column: 1 / -1; }
+  /* the Buy and its line share the reset's row; the Polymaker offer's card takes the whole width and the reset drops under it */
+  #ws .sheet#ws-picker .foot .buyarea { grid-column: 1; grid-row: 1; }
+  #ws .sheet#ws-picker .foot .buyarea:has(.offer), #ws .sheet#ws-picker .foot .buyarea.held { grid-column: 1 / -1; }   /* .held: a card just closed, its layout kept till the next build */
+  #ws .sheet#ws-picker .foot .buyarea:has(.offer) ~ .resets, #ws .sheet#ws-picker .foot .buyarea.held ~ .resets { grid-column: 1 / -1; grid-row: 2; justify-self: end; }
+  /* the offer's pill on the handle (colors.js offerBadge): the title gives it room (it ellipsizes), the × and the caret keep their places */
+  #ws .sheet-handle .hbadge { flex: none; height: 26px; padding: 0 8px; border-radius: 13px; border: 1px solid var(--orange-edge); background: var(--orange); color: var(--on-orange); font: inherit; font-size: 10.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }   /* "Supports MODULITH" leaves the title 60 px on its side (780 x 260) */
+  #ws .sheet-handle .hbadge:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  @media (prefers-reduced-motion: no-preference) { #ws .sheet-handle .hbadge { animation: hbadge-in .26s var(--ease-out) both; } }
   #ws .sheet-handle .hx { flex: none; width: 32px; height: 32px; padding: 0; border: none; border-radius: 8px; background: transparent; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
   #ws .sheet-handle .hx:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
   /* the handle's glass is tripled (99 % cover): at the sheet's one layer the rows scrolled under it read through its title
