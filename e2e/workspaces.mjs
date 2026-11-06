@@ -8660,20 +8660,48 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   // the stage refuses PLA on the feet: a whole palette naming PLA feet, and a unit's own PLA pick
   const r = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__; const p = v.palette();
-    v.setPalette({ on: true, colors: { ...p.colors, Foot: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, over: {} });
-    const whole = v.palette().colors.Foot.name;
-    v.setOverride(1, 'Foot', { name: 'Panchroma Red', hex: '#d03a2e' });
-    return { whole, over: JSON.stringify(v.palette().over) };
+    // the key the stage saves its palette under, for the diagnostics below: the one these two edits write (the stage's exported
+    // COLOR_STORE_KEY is the boot's, and Colors moves the palette to the build's own key on its first edit)
+    const wrote = []; const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, val) { if (String(k).startsWith('gen2-colors:')) wrote.push(String(k)); return set.call(this, k, val); };
+    try {
+      v.setPalette({ on: true, colors: { ...p.colors, Foot: { name: 'Elegoo PLA Black', hex: '#1c1d20' } }, over: {} });
+      const whole = v.palette().colors.Foot.name;
+      v.setOverride(1, 'Foot', { name: 'Panchroma Red', hex: '#d03a2e' });
+      return { whole, over: JSON.stringify(v.palette().over), stageKey: wrote[wrote.length - 1] || null };
+    } finally { Storage.prototype.setItem = set; }
   });
   assert.equal(r.whole, TPU_BLACK, 'a palette naming PLA feet wears TPU95 Black');
   assert.doesNotMatch(r.over, /Panchroma Red/, 'a unit’s own PLA feet pick is refused');
-  // a saved palette naming PLA feet (an old one): the reload wears TPU95 Black
-  const key = await page.evaluate(() => Object.keys(localStorage).find((k) => k.startsWith('gen2-colors:') && /PolyFlex TPU95 Black/.test(localStorage.getItem(k))));
-  assert.ok(key, 'the palette is saved');
-  await page.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k)); s.colors.Foot = { name: 'Elegoo PLA Black', hex: '#1c1d20' }; localStorage.setItem(k, JSON.stringify(s)); }, key);
+  /* a saved palette naming PLA feet (an old one): the reload wears TPU95 Black. A reload takes its colours from the ADDRESS
+     first: every save of the build stamps them there (`look`, SHARE-LOOK.md) and app.js's bootLook puts them on over this
+     browser's saved palette. The store writes the address 350 ms after the last edit, so on a slow runner the reload could still
+     find the Orange of before the reset in it (CI run 42126575772, shard 6: "TPU95 Orange"; holding the reset's save back
+     reproduces it). And the saved palette it reads is the address's key (app.js colorKeyAtBoot: gen2-colors:build-<id>), not the key
+     this page booted with (gen2-colors:custom-build), which the case used to edit and nothing read. So: the waiting save
+     written now, the address as an old link writes it (no colours), and the edit made to the key that address boots from,
+     with a marker colour that proves the reload read it. */
+  const MARK = { name: 'Saved Teal (custom)', hex: '#1a9e8f' };
+  const before = await page.evaluate(({ MARK }) => {
+    const st = window.__GEN2_STORE__;
+    const dec = (h) => { const m = /#build=([^&]+)/.exec(h || ''); if (!m) return null; try { const rec = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1]))))); return { buildId: rec.buildId, lookFoot: rec.look ? (rec.look.colors?.Foot?.name ?? null) : 'no look' }; } catch (e) { return { bad: String(e) }; } };
+    const pending = dec(location.hash);   // the address as the case found it: its colours lag the reset while the save waits
+    st.flush();   // the waiting save written now, and nothing edits after it (a save firing during the reload would put the colours back)
+    const rec = st.serialize(); delete rec.look;
+    history.replaceState(history.state, '', `${location.pathname}${location.search}#build=${btoa(unescape(encodeURIComponent(JSON.stringify(rec))))}`);
+    const key = 'gen2-colors:build-' + rec.buildId;   // what colorKeyAtBoot reads for this address
+    const s = JSON.parse(localStorage.getItem(key) || 'null');
+    if (s && s.colors) { s.colors.Foot = { name: 'Elegoo PLA Black', hex: '#1c1d20' }; s.colors.Accent = MARK; localStorage.setItem(key, JSON.stringify(s)); }
+    const keys = Object.keys(localStorage).filter((k) => k.startsWith('gen2-colors:')).sort().map((k) => { try { const c = JSON.parse(localStorage.getItem(k)).colors || {}; return `${k}: Foot ${c.Foot?.name}, Accent ${c.Accent?.name}`; } catch { return `${k}: unreadable`; } });
+    return { saved: !!(s && s.colors), edited: key, addressFound: pending, addressNow: dec(location.hash), keys };
+  }, { MARK });
+  const diag = (after) => `edited ${before.edited}; the stage saved under ${r.stageKey}; the address as found ${JSON.stringify(before.addressFound)}, as reloaded ${JSON.stringify(before.addressNow)}; saved palettes: ${before.keys.join(' | ')}${after ? `; after the reload Foot ${after.Foot}, Accent ${after.Accent}` : ''}`;
+  assert.ok(before.saved, `the build's palette is saved under the key its address boots from: ${diag()}`);
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#ws-colors .crow', { timeout: 120_000 });
-  assert.equal(await feet(), TPU_BLACK, 'the saved PLA feet load as TPU95 Black');
+  const after = await page.evaluate(() => { const c = window.__GEN2_VIEWER__.palette().colors; return { Foot: c.Foot?.name, Accent: c.Accent?.name }; });
+  assert.equal(after.Accent, MARK.name, `the reload read the edited saved palette (its marker colour): ${diag(after)}`);
+  assert.equal(after.Foot, TPU_BLACK, `the saved PLA feet load as TPU95 Black: ${diag(after)}`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
