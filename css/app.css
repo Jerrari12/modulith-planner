@@ -1402,16 +1402,24 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
 #ws-plan .bttl { font-family: var(--font-display); font-weight: 800; font-size: 16px; font-stretch: 108%; white-space: nowrap; }
 #ws-plan .bhint { flex: 1; font-size: 12px; color: var(--ink-2); }
 #ws-plan .bsvg { flex: 1; min-height: 0; width: 100%; display: block; padding: 10px 14px; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
-/* the three gesture clips beside the drawing (js/parts-drawer/guide.js): where the panel has room, else the header line says it */
+/* the gestures as a tip card (js/parts-drawer/guide.js howToCard): the shape of the Colors buy-tip (an opaque card, the orange
+   edge, a pointer at what it explains, a ×). In the panel's empty left, pointing at the drawing; over the drawing where the
+   panel is narrow; its body scrolls where the panel is short. The How-to button in the header brings it back. */
 #ws-plan { container-type: size; }
-#ws-plan .bbody { flex: 1; min-height: 0; display: flex; align-items: stretch; }
-#ws-plan .bbody .bsvg { width: auto; min-width: 0; }
-#ws-plan .bguide { flex: 0 0 200px; display: flex; flex-direction: column; justify-content: center; gap: 14px; padding: 10px 0 14px 18px; }
+#ws-plan .bhead .howto { flex: none; }
+#ws-plan .pd-tip { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); width: 252px; max-height: calc(100% - 24px); box-sizing: border-box; display: flex; flex-direction: column; padding: 8px 10px 12px 12px; border-radius: 14px; border: 1px solid var(--orange); background: var(--menu-bg); color: var(--ink); box-shadow: var(--glass-shadow); z-index: 2; }
+#ws-plan .pd-tip::after { content: ''; position: absolute; right: -6px; top: 50%; width: 10px; height: 10px; margin-top: -5px; background: var(--menu-bg); border-top: 1px solid var(--orange); border-right: 1px solid var(--orange); transform: rotate(45deg); }
+#ws-plan .pd-tip .ihead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }
+#ws-plan .pd-tip .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-plan .pd-tip .ihead .x:hover { background: var(--track); color: var(--ink); }
+#ws-plan .pd-tip .body { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
 #ws-plan .gclip .scene { border-radius: 9px; overflow: hidden; background: #1d2230; border: 1px solid var(--hair); }
 #ws-plan .gclip .scene svg { display: block; width: 100%; height: auto; aspect-ratio: 240 / 110; }
-#ws-plan .gclip .t { margin: 7px 2px 0; font-size: 12px; font-weight: 700; }
+#ws-plan .gclip .t { margin: 6px 2px 0; font-size: 12px; font-weight: 700; }
 #ws-plan .gclip .d { margin: 2px 2px 0; font-size: 11.5px; line-height: 1.35; color: var(--ink-2); }
-@container (max-width: 760px), (max-height: 560px) { #ws-plan .bguide { display: none; } }   /* too narrow, or too short for the three (a 768-high laptop) */
+/* a short panel (a 768-high laptop) has width to spare instead: the three in a row, centred over the drawing, no pointer; a narrow one a column over the drawing (the last rule wins where both hold: a phone, which scrolls) */
+@container (max-height: 620px) { #ws-plan .pd-tip { left: 50%; transform: translate(-50%, -50%); width: auto; max-width: calc(100% - 36px); } #ws-plan .pd-tip::after { display: none; } #ws-plan .pd-tip .body { flex-direction: row; gap: 14px; } #ws-plan .pd-tip .gclip { flex: 1 1 0; min-width: 0; width: 200px; } }
+@container (max-width: 760px) { #ws-plan .pd-tip { left: 50%; transform: translate(-50%, -50%); width: min(300px, calc(100% - 24px)); max-width: none; } #ws-plan .pd-tip::after { display: none; } #ws-plan .pd-tip .body { flex-direction: column; gap: 12px; } #ws-plan .pd-tip .gclip { flex: none; width: auto; } }
 @media (prefers-reduced-motion: reduce) { #ws-plan .gclip svg animate, #ws-plan .gclip svg animateTransform { display: none; } }
 /* the plan drawing: the shell and walls in ink, cells on the input surface, the selection orange, labels white, dimensions in the measurement colour */
 #ws .pd-thumb, #ws-plan .bsvg { --plan-shell: rgba(29,30,32,.22); --plan-wall: var(--ink-2); --plan-cell: var(--input-bg); --plan-ramp: rgba(29,30,32,.18); --plan-sel: rgba(255,106,26,.18); --plan-hov: rgba(255,106,26,.08); }

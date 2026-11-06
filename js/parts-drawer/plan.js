@@ -10,7 +10,7 @@
    shows a wall drag as it goes (its own preview of the compartments) and commits it at the end. */
 import { el } from '../ui/dom.js';
 import * as G from './gen.js';
-import { planGuide } from './guide.js';   // the three gesture clips beside the plan (2026-11-06)
+import { howToCard, howToSeen, markHowToSeen } from './guide.js';   // the gesture clips as a first-time tip card (2026-11-06)
 import * as I from './inventory.js';
 import { outlinesOf } from './unit.js';
 
@@ -122,11 +122,30 @@ export function planThumb(full, { width = 120, height = 93 } = {}) {
    onWalls(comps) (a wall drag's result), onHolder(), onHover?(comp | null) } */
 export function plan(opts) {
   const host = el('div.glass', { id: 'ws-plan', role: 'group', 'aria-label': 'Compartment plan' });
-  const head = el('div.bhead', {}, [el('span.bttl', { text: 'Plan · mm' }), el('span.bhint', { text: 'Drag across compartments to select · drag a wall to move it (Shift: the whole line, Alt: no snap) · double-click: label holder' })]);
+  const howBtn = el('button.key.sm.howto', { text: 'How to', title: 'The gestures, shown', 'aria-expanded': 'false', onclick: () => (tip ? closeTip() : showTip()) });
+  const head = el('div.bhead', {}, [el('span.bttl', { text: 'Plan · mm' }), el('span.bhint', { text: 'Drag across compartments to select · drag a wall to move it (Shift: the whole line, Alt: no snap) · double-click: label holder' }), howBtn]);
   const svg = svgEl('svg', { class: 'bsvg', preserveAspectRatio: 'xMidYMid meet', role: 'img', 'aria-label': 'Top-down plan of the drawer layout, front edge at the bottom' });
-  // the clips on the LEFT of the drawing: the panel's right runs under the Inspector at wide widths (its inset follows the
-  // Build board's), the left never under the Library; they hide where the panel is narrow (css)
-  host.append(head, el('div.bbody', {}, [planGuide(), svg]));
+  host.append(head, svg);
+  /* the tip card (guide.js): the first time edit mode opens on this device, and from the How-to button after; the × (or
+     Esc, or the button) closes it and remembers that. It sits in the panel's empty left, pointing at the drawing; on a
+     narrow panel it sits over the drawing (css). stop() hides it without remembering, so a first visit cut short still
+     gets it next time. */
+  let tip = null;
+  function showTip() { if (tip) return; tip = howToCard({ onClose: closeTip }); host.appendChild(tip); howBtn.setAttribute('aria-expanded', 'true'); placeTip(); }
+  function hideTip() { if (!tip) return; tip.remove(); tip = null; howBtn.setAttribute('aria-expanded', 'false'); }
+  function closeTip() { markHowToSeen(); hideTip(); }
+  /* the card hugs the drawing's left edge with its pointer on it (the mock's card hugs the button), as far left as the
+     panel's inset allows; on a narrow or short panel the css centres it over the drawing and this leaves `left` alone */
+  const TIP_GAP = 16, TIP_INSET = 18;
+  function placeTip() {
+    if (!tip) return;
+    // a narrow or short panel: the css centres the card and drops its pointer; that verdict, read back, decides (one threshold, the css's: Terra 01a1b1b9)
+    if (getComputedStyle(tip, '::after').display === 'none') { tip.style.left = ''; return; }
+    const shell = svg.querySelector('.shell'); if (!shell) return;
+    const h = host.getBoundingClientRect(), d = shell.getBoundingClientRect();
+    tip.style.left = `${Math.max(TIP_INSET, Math.round(d.left - h.left - TIP_GAP - tip.offsetWidth))}px`;
+  }
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => placeTip()) : null; if (ro) ro.observe(host);
   let drag = null, wdrag = null, hover = null, hoverKey = '', hoverComp = null, lastPt = null;
   const full = () => opts.full();
   const comps = () => (wdrag ? wdrag.comps : full().comps);
@@ -173,6 +192,7 @@ export function plan(opts) {
   const hotOf = () => (wdrag ? { ...wdrag.ch, c: wdrag.c, drag: true, from: wdrag.ch.c } : hover);
   function render() {
     drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps() });
+    placeTip();
   }
   svg.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -221,7 +241,8 @@ export function plan(opts) {
   document.addEventListener('keydown', shiftWatch); document.addEventListener('keyup', shiftWatch);
   return {
     el: host, render,
+    firstTip() { if (!howToSeen()) showTip(); }, closeTip, hideTip, tipOpen: () => !!tip,
     cancel() { if (wdrag) { wdrag = null; render(); } drag = null; },
-    destroy() { document.removeEventListener('keydown', shiftWatch); document.removeEventListener('keyup', shiftWatch); host.remove(); },
+    destroy() { document.removeEventListener('keydown', shiftWatch); document.removeEventListener('keyup', shiftWatch); if (ro) ro.disconnect(); host.remove(); },
   };
 }

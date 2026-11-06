@@ -1,10 +1,15 @@
 /* The compartment editor's teaching clips (2026-11-06; Joey on the M3 plan at 4K: "it's not very self explanatory, for
    instance i didn't know i had to hold and drag to select more than one cell to merge or to drag rows and columns").
    Looping SVG scenes in the planner's hover-hint idiom (js/ui/hint.js: "like Photoshop or Illustrator - hover a tool and
-   a tiny looping clip shows what it does"), each the plan's own gesture drawn small: the three the plan needs (select
-   and merge, move a wall, the label holder) stand beside the plan where the drawer leaves room, and the editor's
-   controls carry theirs as hover hints. Every scene is this file's own markup; no outside string reaches it. */
+   a tiny looping clip shows what it does"), each the plan's own gesture drawn small. The three the plan needs (select
+   and merge, move a wall, the label holder) come as a TIP CARD the first time edit mode opens on a device (Joey: "a
+   helpful tip notification after selecting something that triggers it, when accessing it for the first time", in the
+   shape of his Colors buy-tip mock: an opaque card with the orange edge, a pointer at what it explains, a × that
+   dismisses it; a side column tried first "felt like it's floating in a weird place"), and the plan's header has a
+   How-to button that brings it back; the editor's controls carry theirs as hover hints. Every scene is this file's
+   own markup; no outside string reaches it. */
 import { el } from '../ui/dom.js';
+import { icon } from '../ui/icons.js';
 import { scene, appear, slide, DUR } from '../ui/hint.js';
 
 const BG = '<rect width="240" height="110" fill="#1d2230"/>';
@@ -72,10 +77,18 @@ export const GUIDE = {
     <g opacity="0">${appear(0.66)}${cell(180, 46, 40, 40)}<text x="200" y="53.5" text-anchor="middle" font-family="Archivo, system-ui" font-weight="800" font-size="6" fill="#1b1b1b">M3 WASHER</text></g>`) },
 };
 
-/* the three clips beside the plan (plan.js), in the order a first edit meets them */
-export function planGuide() {
-  return el('div.bguide', { 'aria-label': 'How to edit the plan' }, ['select', 'wall', 'holder'].map((k) => {
-    const g = GUIDE[k];
-    return el('div.gclip', {}, [el('div.scene', {}, [g.scene()]), el('div.t', { text: g.title }), el('div.d', { text: g.text })]);
-  }));
+/* the tip was dismissed once on this device (a browser that blocks storage shows it every time, which is the safe side) */
+export const HOWTO_KEY = 'gen2-pd-howto';
+export const howToSeen = () => { try { return localStorage.getItem(HOWTO_KEY) === '1'; } catch { return false; } };
+export const markHowToSeen = () => { try { localStorage.setItem(HOWTO_KEY, '1'); } catch { /* private mode */ } };
+/* the tip card (plan.js puts it in the plan panel, pointing at the drawing): the three clips in the order a first edit
+   meets them, a title and the × */
+export function howToCard({ onClose }) {
+  return el('div.pd-tip', { role: 'note', 'aria-label': 'How to edit the plan' }, [
+    el('div.ihead', {}, [el('b', { text: 'Editing the plan' }), el('button.x', { 'aria-label': 'Close', title: 'Close · Esc', onclick: onClose }, [icon('x', { size: 16 })])]),
+    el('div.body', {}, ['select', 'wall', 'holder'].map((k) => {
+      const g = GUIDE[k];
+      return el('div.gclip', {}, [el('div.scene', {}, [g.scene()]), el('div.t', { text: g.title }), el('div.d', { text: g.text })]);
+    })),
+  ]);
 }

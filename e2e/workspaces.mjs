@@ -968,6 +968,11 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   await btn(page, 'Edit compartments', '#ws-insp').click();
   await page.waitForSelector('#ws-plan:not([hidden]) rect.cell', { timeout: 30_000 });
   await settle(page, 800);
+  // the first edit on a device gets the gestures as a tip card (guide.js); × dismisses it and the device remembers
+  assert.equal(await page.locator('#ws-plan .pd-tip .gclip').count(), 3, 'the three gesture clips, the first time');
+  await page.locator('#ws-plan .pd-tip .x').click();
+  assert.equal(await page.locator('#ws-plan .pd-tip').count(), 0, 'dismissed');
+  assert.equal(await page.evaluate(() => localStorage.getItem('gen2-pd-howto')), '1', 'remembered on this device');
   const cell = (i) => page.evaluate((i) => { const b = document.querySelector(`#ws-plan rect.cell[data-i="${i}"]`).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }, i);
   const c6 = await cell(6), c7 = await cell(7);
   await page.mouse.move(c6.x, c6.y); await page.mouse.down(); await page.mouse.move(c7.x, c7.y, { steps: 6 }); await page.mouse.up();

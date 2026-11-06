@@ -444,11 +444,12 @@ export function partsDrawerTools(stage, ctx) {
     sync();
     stage.frameUnit(id);
     editBar.sync();
+    pl.firstTip();   // the gestures, once per device (guide.js)
     return true;
   }
   function stop({ quiet = false } = {}) {
     const id = st.editing; if (id == null) return;
-    st.editing = null; st.sel = null; st.hover = null; st.picker = null; closeInventory();
+    st.editing = null; st.sel = null; st.hover = null; st.picker = null; closeInventory(); pl.hideTip();
     stage.setTapTargets(null);
     canvas.removeEventListener('pointermove', onCanvasMove); canvas.removeEventListener('pointerleave', onCanvasLeave);
     canvas.style.cursor = '';
@@ -739,7 +740,7 @@ export function partsDrawerTools(stage, ctx) {
     if (st.editing == null) return false;
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
-    if (k === 'escape') { if (st.inv) { closeInventory(); return true; } if (st.picker) { st.picker = null; ctx.renderAll(); return true; } if (st.sel) { setSel(null); return true; } stop(); return true; }
+    if (k === 'escape') { if (st.inv) { closeInventory(); return true; } if (pl.tipOpen()) { pl.closeTip(); return true; } if (st.picker) { st.picker = null; ctx.renderAll(); return true; } if (st.sel) { setSel(null); return true; } stop(); return true; }
     if (st.inv) return true;   // the parts list dialog has the keys
     if (k === 'delete' || k === 'backspace') return true;   // not the unit under edit (build.js would remove it); compartments are merged, not deleted
     if (k === 'm') { doMerge(); return true; }
