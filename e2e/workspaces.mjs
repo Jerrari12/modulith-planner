@@ -8551,7 +8551,7 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
    peeks the same unit again on the new one; the button keeps saying Close it, and Close it closes it. */
 test('Build: a peeked drawer stays open when its type changes to Gridfinity, and Close it still closes it', async () => {
   const { ctx, page, errors } = await open('build');
-  // a decor drawer whose size has a Gridfinity variant (the inspector shows the Drawer row only for those)
+  // a decor drawer whose size has a Gridfinity variant (the inspector's Gridfinity is live only for those)
   const drawer = await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__, S = window.__GEN2_STORE__, R = S.rules();
     for (const x of v.manifest.instances) {
@@ -8581,6 +8581,63 @@ test('Build: a peeked drawer stays open when its type changes to Gridfinity, and
   await page.waitForFunction(([owner, z, stop]) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d && Math.abs(v.instances.get(d.id).group.position.z - (z - stop)) < 1; }, [drawer.owner, zOpen, stop], { timeout: 30_000 })
     .catch(async () => assert.fail(`the new drawer was not open by the stopper distance: open z ${zOpen}, now ${await zOf(drawer.owner)} (expected ${zOpen - stop})`));
   assert.equal(await btn(page, 'Peek inside', '#ws-insp').count(), 1, 'the button says Peek inside again');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE CHIP DRAWER (2026-11-07, the Filament Sample Chip Drawers, v2611): the inspector's drawer type offers Chip on a 1W-0.5H
+   drawer of either style and greys it with the reason on any other size; Gridfinity is Decor's alone. Chip swaps the body on
+   the same pose, and a Classic chip drawer stays one when it becomes Decor. The chip drawer GLBs are unpublished until Joey's
+   go: run with GEN2_PARTS_LOCAL=1 over a gen2-parts checkout that has them (test/lib/local-parts.mjs). */
+test('Build: the drawer type offers Chip on a 1W-0.5H drawer, greyed with the reason elsewhere, and Chip swaps the body', async () => {
+  const rec = { mount: 'tabletop', length: 240, printer: 'xl', faceStyle: 'essential', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 3, gridH: 2, sideCovers: true, plateParts: {}, nextId: 4, labelStyle: null, buildId: 'e2echipdrawer1',
+    placed: [{ id: 1, x: 0, y: 3, w: 1, hh: 1, fill: 'decor', shelves: 0 }, { id: 2, x: 1, y: 3, w: 1, hh: 1, fill: 'classic', shelves: 0 },
+      { id: 3, x: 2, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }] };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('build', { query: `#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__?.manifest?.instances?.length, null, { timeout: 90_000 });
+  // a unit's drawer BODY by its part type and owner (a node-name match would take Drawer_Stoppers_L first)
+  const body = (owner) => page.evaluate((owner) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d ? { id: d.id, node: d.node, pos: d.pos } : null; }, owner);
+  // selected and its card drawn: the card names the unit's type and size, so a card still showing the last unit never passes
+  const pick = async (owner, title, size) => {
+    const b = await body(owner);
+    await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), b.id);
+    await page.waitForFunction(([title, size]) => { const i = document.querySelector('#ws-insp'); return i && !i.hidden && i.querySelector('h3')?.textContent === title && (i.querySelector('.dims')?.textContent || '').startsWith(size); },
+      [title, size], { timeout: 30_000 }).catch(() => assert.fail(`the card for unit ${owner} (${title} ${size}) did not open`));
+    return b;
+  };
+  const types = () => page.evaluate(() => [...document.querySelectorAll('#ws-insp [aria-label="Drawer type"] button')].map((b) => ({ t: b.textContent, on: b.classList.contains('on'), dis: b.disabled, title: b.title })));
+  const swapped = (owner, re) => page.waitForFunction(([owner, src]) => { const v = window.__GEN2_VIEWER__; const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === owner);
+    return u && u.variant === 'chips' && !v.regenBusy && v.manifest.instances.some((x) => new RegExp(src).test(x.node) && v.partInfo(x.id)?.owner === owner); }, [owner, re.source], { timeout: 90_000 });
+
+  // the Decor 1W-0.5H: all three, Gridfinity greyed (no Gridfinity drawer at 0.5H), Chip offered
+  const d0 = await pick(1, 'Decor Drawer', '1W·0.5H');
+  assert.equal(d0.node, 'DecorDrawer_240-1W-05H');
+  let t = await types();
+  assert.deepEqual(t.map((b) => b.t), ['Standard', 'Gridfinity', 'Chip']);
+  assert.deepEqual(t.map((b) => [b.on, b.dis]), [[true, false], [false, true], [false, false]], JSON.stringify(t));
+  assert.match(t[2].title, /up to 106 filament sample chips/);
+  await btn(page, 'Chip', '#ws-insp').click();
+  await swapped(1, /^DecorChipDrawer_240-1W-05H$/).catch(() => assert.fail('the Decor chip drawer did not reach the stage'));
+  const d1 = await body(1);
+  assert.deepEqual(d1.pos, d0.pos, 'the chip drawer lands on the standard drawer\'s pose');
+  await page.waitForFunction(() => document.querySelector('#ws-insp [aria-label="Drawer type"] button.on')?.textContent === 'Chip', null, { timeout: 30_000 });
+
+  // the Decor 1W-1H: Chip greyed, with the reason
+  await pick(3, 'Decor Drawer', '1W·1H');
+  t = await types();
+  const chip = t.find((b) => b.t === 'Chip');
+  assert.equal(chip.dis, true); assert.equal(chip.title, 'Chip drawers are 1W-0.5H');
+
+  // the Classic 1W-0.5H: Standard and Chip only, then Chip, then Decor keeps it a chip drawer
+  await pick(2, 'Classic Drawer', '1W·0.5H');
+  t = await types();
+  assert.deepEqual(t.map((b) => b.t), ['Standard', 'Chip'], 'no Gridfinity Classic drawer');
+  await btn(page, 'Chip', '#ws-insp').click();
+  await swapped(2, /^ClassicChipDrawer_240-1W-05H$/).catch(() => assert.fail('the Classic chip drawer did not reach the stage'));
+  await btn(page, 'Decor drawer', '#ws-insp').click();
+  await swapped(2, /^DecorChipDrawer_240-1W-05H$/).catch(() => assert.fail('the chip drawer did not stay one when it became Decor'));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

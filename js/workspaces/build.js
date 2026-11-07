@@ -36,7 +36,7 @@ import { layoutRules } from '../rules/layout.js';
 import { refusalReason, standUp, openCells, armedSpots } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
 import { settleToward, settleWord } from '../rules/settle.js';
 import { serializeBuild } from '../rules/schema.js';
-import { generateManifest, isGridfinity } from '../generate.js';
+import { generateManifest, isGridfinity, chipSizeOk, isChips } from '../generate.js';
 
 /* `const GEN2` at a classic script's top level is a global LEXICAL binding: visible to modules by name, absent from globalThis */
 // eslint-disable-next-line no-undef
@@ -459,7 +459,8 @@ export function mountBuild(stage, ctx) {
   function setUnitFill(id, to) {
     const u = S().placed.find((p) => p.id === id); if (!u || u.fill === to) return;
     const why = R().convertProblem(u, to); if (why) { say(why); return; }
-    edit((s) => { const p = s.placed.find((q) => q.id === id); p.fill = to; if (to !== 'decor') delete p.variant; }, 'convert', { gravity: false });
+    // a chip drawer stays a chip drawer from Classic to Decor and back (both styles exist); any other variant is Decor's own
+    edit((s) => { const p = s.placed.find((q) => q.id === id); p.fill = to; if (to !== 'decor' && !(to === 'classic' && p.variant === 'chips')) delete p.variant; }, 'convert', { gravity: false });
   }
   function resize(id, dw, dh) {
     const u = S().placed.find((p) => p.id === id); if (!u) return;
@@ -682,10 +683,12 @@ export function mountBuild(stage, ctx) {
        the generator's own rule: a `variant` kept on a size with no Gridfinity drawer renders the standard drawer and
        takes a cover like one (Terra 01a1594c) */
     if (s.backCover) {
-      const std = s.placed.some((u) => u.fill === 'decor' && !isGridfinity(+s.length, u));
+      const std = s.placed.some((u) => u.fill === 'decor' && !isGridfinity(+s.length, u) && !isChips(+s.length, u));
       const grid = s.placed.some((u) => isGridfinity(+s.length, u));
+      const chip = s.placed.some((u) => u.fill === 'decor' && isChips(+s.length, u));   // the Decor chip drawer's front is closed
       const words = [std ? "Take each drawer's tear-away front out first - left in, it and the cover interfere." : '',
-        grid ? 'Not on the Gridfinity drawers: their tear-away front does the same job.' : ''].filter(Boolean).join(' ');
+        grid ? 'Not on the Gridfinity drawers: their tear-away front does the same job.' : '',
+        chip ? 'Not on the chip drawers: their front is closed.' : ''].filter(Boolean).join(' ');
       if (words) lib.appendChild(el('p.hint.bc-hint', { text: words }));
     }
 
@@ -782,10 +785,20 @@ export function mountBuild(stage, ctx) {
         el('button.seg.sm' + (removedHere === 0 ? '.on' : ''), { text: 'All', onclick: () => setUnitOption(unit.id, (p, s2) => { s2.removedStoppers = s2.removedStoppers.filter((k) => !keys.includes(k)); }) }),
         el('button.seg.sm' + (removedHere === keys.length ? '.on' : ''), { text: 'None', onclick: () => setUnitOption(unit.id, (p, s2) => { s2.removedStoppers = [...new Set([...s2.removedStoppers, ...keys])]; }) }),
       ])]));
-      if (unit.fill === 'decor' && Rs.gridfinityOk(unit)) insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.seg2.mini', { role: 'group' }, [
-        el('button.seg.sm' + (unit.variant !== 'gridfinity' ? '.on' : ''), { text: 'Standard', onclick: () => setUnitOption(unit.id, (p) => { delete p.variant; }) }),
-        el('button.seg.sm' + (unit.variant === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'gridfinity'; }) }),
-      ])]));
+      /* the drawer type (2026-11-07): Standard, Gridfinity (Decor, on its sizes) and Chip (Classic and Decor, 1W-0.5H),
+         on every drawer. An option this size cannot take is greyed with the reason, never hidden. The lit one is the body
+         the stage draws: a variant kept on a size without that body renders, and reads, Standard (the generator's rule). */
+      const gfOk = unit.fill === 'decor' && Rs.gridfinityOk(unit), chipOk = chipSizeOk(+s.length, unit);
+      const body = isChips(+s.length, unit) ? 'chips' : gfOk && unit.variant === 'gridfinity' ? 'gridfinity' : 'standard';
+      insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.mini' + (unit.fill === 'decor' ? '.seg3' : '.seg2'), { role: 'group', 'aria-label': 'Drawer type' }, [
+        el('button.seg.sm' + (body === 'standard' ? '.on' : ''), { text: 'Standard', onclick: () => setUnitOption(unit.id, (p) => { delete p.variant; }) }),
+        unit.fill === 'decor' ? el('button.seg.sm' + (body === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', disabled: !gfOk,
+          title: gfOk ? 'A Gridfinity grid in the floor' : `Gridfinity drawers come in ${G.gridfinity.heights.join(', ')}H for ${G.gridfinity.lengths.join(', ')}`,
+          onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'gridfinity'; }) }) : null,
+        el('button.seg.sm' + (body === 'chips' ? '.on' : ''), { text: 'Chip', disabled: !chipOk,
+          title: chipOk ? `Holds up to ${G.chips.lanes * G.chips.slotsPerLane[+s.length]} filament sample chips on edge` : 'Chip drawers are 1W-0.5H',
+          onclick: () => setUnitOption(unit.id, (p) => { p.variant = 'chips'; }) }),
+      ].filter(Boolean))]));
     }
     if (unit.fill === 'shelf') {
       const stops = [['none', 'None'], ['front', 'Front']]; if (G.shelfMidLipLengths.includes(+s.length)) stops.push(['both', 'Front + mid']);

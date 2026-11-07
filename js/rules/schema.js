@@ -303,6 +303,9 @@ export function sanitizeBuild(d, GEN2) {
        unchanged. KEPT on a size with no Gridfinity version (billed standard
        there), the way "both" is kept on a lip, so the choice survives. */
     if (u.fill === "decor" && u.variant === "gridfinity") unit.variant = "gridfinity";
+    /* the chip drawer (2026-11-07, this repo's own): classic OR decor, "chips";
+       kept the same way off 1W-0.5H, where the standard drawer is billed */
+    if ((u.fill === "classic" || u.fill === "decor") && u.variant === "chips") unit.variant = "chips";
     if (u.fill === "cabinet" && Array.isArray(u.interior) && u.interior.length) {
       // compartment coords are FULL 1H rows within the shell; any invalid
       // compartment discards the whole interior (falls back to simple mode)

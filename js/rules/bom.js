@@ -16,6 +16,11 @@ export function computeBom(build, GEN2) {
   const gridfinityOk = (p, len = build.length) => !!p && p.fill === "decor" &&
     GEN2.gridfinity.lengths.includes(+len) && GEN2.gridfinity.heights.includes(p.hh / 2);
   const isGridfinity = (p, len = build.length) => gridfinityOk(p, len) && p.variant === "gridfinity";
+  /* Filament Sample Chip Drawers (2026-11-07, this repo's own; the old planner is a forward page): a classic or decor
+     unit at 1W-0.5H carrying variant "chips". Anywhere else the variant is kept and the standard drawer is billed. */
+  const chipsOk = (p, len = build.length) => !!p && (p.fill === "classic" || p.fill === "decor") &&
+    GEN2.chips.lengths.includes(+len) && p.w === GEN2.chips.width && p.hh / 2 === GEN2.chips.height;
+  const isChips = (p, len = build.length) => chipsOk(p, len) && p.variant === "chips";
   function bedSize() {
     if (build.printer === "any") return null;
     if (build.printer === "custom") {
@@ -114,13 +119,18 @@ export function computeBom(build, GEN2) {
     const lips = new Map();      // w -> qty (shelf fills only, opt-in)
     const doors = new Map();     // size -> qty
     let decorCount = 0, hinges = 0, latches = 0;
+    let chipDrawers = 0, chipSlots = 0;   // the chip drawers and the chips they hold in all
 
     build.placed.forEach((p) => {
       const h = p.hh / 2;
       const size = sizeToken(p.w, h);
       if (p.fill === "classic" || p.fill === "decor") {
         // a Gridfinity body is its own row (its own part), still the decor fill
-        const drawerLabel = isGridfinity(p, len) ? GEN2.gridfinity.label : fillDef(p.fill).label;
+        // and so is a chip drawer, in its own style: "Classic Filament Sample Chip Drawer" / "Decor ..."
+        const chips = isChips(p, len);
+        const drawerLabel = isGridfinity(p, len) ? GEN2.gridfinity.label
+          : chips ? `${p.fill === "classic" ? "Classic" : "Decor"} ${GEN2.chips.label}` : fillDef(p.fill).label;
+        if (chips) { chipDrawers++; chipSlots += GEN2.chips.lanes * GEN2.chips.slotsPerLane[len]; }
         count(drawers, size + "|" + drawerLabel);
         /* the aggregate row is keyed by LABEL, but `basis.choice` must be the
            stable fill id - keep a parallel map rather than parsing the label back */
@@ -174,9 +184,7 @@ export function computeBom(build, GEN2) {
     });
 
     if (drawers.size) {
-      sections.push({
-        title: "Drawers",
-        items: [...drawers.entries()].sort().map(([key, qty]) => {
+      const items = [...drawers.entries()].sort().map(([key, qty]) => {
           const [size, fillLabel] = key.split("|");
           const name = P.drawer(len, size, fillLabel);
           const fill = drawerFill.get(key);
@@ -194,9 +202,27 @@ export function computeBom(build, GEN2) {
               "optional 6x2 mm magnets (4 per cell) · tear-away front: leave it in and no back cover is needed.";
             row.unreleased = row.unreleased || GEN2.unreleased.includes("gridfinityDrawer");
           }
+          if (fillLabel.endsWith(" " + GEN2.chips.label)) {
+            // the same note as the viewer's row: the capacity, the swap, and (Decor) the closed front
+            const holds = GEN2.chips.lanes * GEN2.chips.slotsPerLane[len];
+            row.note = `Holds up to ${holds} filament sample chips on edge in two combed lanes · swaps in for a standard ${size} drawer` +
+              (fill === "decor" ? " · closed front: it takes a faceplate and no back cover." : ".");
+            row.unreleased = row.unreleased || GEN2.unreleased.includes("chipDrawer");
+          }
           return row;
-        }),
+        });
+      /* the chip itself (2026-11-07): ONE optional row however many chip drawers, the capacity in the note, since how many
+         to print is how many filaments you own. It ships in the chip drawer download, so the row links that page. */
+      if (chipDrawers) items.push({
+        name: P.filamentChip(), qty: chipDrawers, optional: true,
+        note: `Optional · print one per filament and put a label-maker strip on its flat face; ` +
+          `${chipDrawers === 1 ? "this drawer holds" : "these drawers hold"} up to ${chipSlots}. Included in the chip drawer download.`,
+        linkAs: `MODULITH ${len} Filament Sample Chip Drawers`,
+        unreleased: GEN2.unreleased.includes("chipDrawer"),
+        /* the drawer is whole without a single chip in it: nothing selected promises filled lanes */
+        requirement: GEN2.req.enhancement("drawer.sample_chips"),
       });
+      sections.push({ title: "Drawers", items });
     }
 
     if (inserts.size || lips.size || doors.size) {
@@ -321,7 +347,8 @@ export function computeBom(build, GEN2) {
       const items = [];
       /* a Gridfinity drawer takes a faceplate like any Decor drawer, but no back
          cover: its tear-away front does that job and physically blocks one */
-      const coverable = build.placed.filter((p) => p.fill === "decor" && !isGridfinity(p, len)).reduce((map, p) => {
+      // nor a Decor chip drawer: its front is closed (the Decor Parts Drawer's front), so there is no opening to close
+      const coverable = build.placed.filter((p) => p.fill === "decor" && !isGridfinity(p, len) && !isChips(p, len)).reduce((map, p) => {
         count(map, sizeToken(p.w, p.hh / 2));
         return map;
       }, new Map());

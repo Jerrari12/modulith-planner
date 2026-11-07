@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDORED = join(root, 'js', 'catalog', 'data.js');
-const PINNED_SHA256 = '433c4211d86c35d3add9007c6fac5fd0060e5165ea2a629f688933299d34ec5b';
-const SOURCE = 'this repo, 2026-11-07: eight printers added (H3C, CORE One L + INDX, K2, K2 Pro, K3, Centauri 2, Kobra X, Creator 5)';
+const PINNED_SHA256 = 'd21b76e1e10f98ff6ae957722dd9c6ab16620eaf0c1e95e77481f5159c47c546';
+const SOURCE = 'this repo, 2026-11-07: the Filament Sample Chip Drawers (GEN2.chips, the chip part, unreleased "chipDrawer")';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 test(`the vendored catalog matches its pin (${SOURCE})`, () => {

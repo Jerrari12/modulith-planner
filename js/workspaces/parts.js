@@ -222,6 +222,9 @@ export function partThumb(name, variant) {
     if (HW_THUMB[name]) return HW_THUMB[name];
     let m;
     if ((m = /^GEN2 (\d+)-(\dW-[\d.]+H) (Decor|Classic|Gridfinity Decor) Drawer$/.exec(name))) return `${m[3]} Drawer ${m[1]}-${d(m[2])}.png`;
+    // the chip drawers and their universal chip (2026-11-07), named as generate.js imgFor names them
+    if ((m = /^GEN2 (\d+)-(\dW-[\d.]+H) (Classic|Decor) Filament Sample Chip Drawer$/.exec(name))) return `${m[3]} Filament Sample Chip Drawer ${m[1]}-${d(m[2])}.png`;
+    if (name === 'GEN2 Filament Sample Chip') return 'Filament Sample Chip.png';
     if ((m = /^GEN2 (\d+) Case Extender - (\dW)-1H$/.exec(name))) return `Case Extender ${m[1]}-${m[2]}.png`;
     if ((m = /^GEN2 (\d+) Case - (\dW-[\d.]+H)$/.exec(name))) return `Case ${m[1]}-${d(m[2])}.png`;
     if ((m = /^GEN2 (\d+) Side Cover - ([\d.]+H)$/.exec(name))) return `SideCover_${m[1]}-${d(m[2])}.png`;

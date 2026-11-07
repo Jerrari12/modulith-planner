@@ -206,6 +206,31 @@ export const gridfinitySizeOk = (L, u) =>
   !!u && u.fill === 'decor' && GRIDFINITY.lengths.includes(+L) && GRIDFINITY.hh.includes(u.hh);
 export const isGridfinity = (L, u) => gridfinitySizeOk(L, u) && u.variant === 'gridfinity';
 
+/* ---- Filament Sample Chip Drawers (v2611, 2026-11-07) -----------------------
+   A per-unit VARIANT of the Classic AND the Decor drawer, the Gridfinity rule's
+   shape: `u.variant === 'chips'`, its ABSENCE is the standard drawer. A 1W-0.5H
+   drawer holding filament sample chips on edge in two combed lanes, in every
+   collection. The envelope is the standard 1W-0.5H drawer's (GLB overlay
+   2026-11-07: Decor identical, Classic 59/115 0.05 mm longer at each end), so
+   it lands on the standard drawer's pose. The Classic keeps its moulded grip;
+   the Decor has the Decor Parts Drawer's CLOSED front, so it takes a faceplate
+   (and its handle) but no back cover. Exists at 1W-0.5H only: a value on any
+   other unit is KEPT and renders the standard drawer.
+   `slotsPerLane` and `pitch` are the release's comb (build_chip_drawer_blend.py
+   checks every slot against them): slot k's centre is the cavity's inner front
+   face + 7.125 + k x pitch, the lanes' chip centre-lines +/-20.125 from the
+   width centre, the lane floor 0.5 above the drawer's bottom.
+   ⚠ Mirrored by the planner (`GEN2.chips` in data.js). Keep both in step. */
+export const CHIPS = {
+  lengths: [59, 115, 165, 185, 240, 270],
+  slotsPerLane: { 59: 8, 115: 22, 165: 35, 185: 40, 240: 53, 270: 61 },
+  pitch: { 59: 4.39286, 115: 4.13095, 165: 4.02206, 185: 4.01923, 240: 4.07212, 270: 4.02917 },
+  lanes: 2,
+};
+export const chipSizeOk = (L, u) =>
+  !!u && (u.fill === 'classic' || u.fill === 'decor') && CHIPS.lengths.includes(+L) && u.w === 1 && u.hh === 1;
+export const isChips = (L, u) => chipSizeOk(L, u) && u.variant === 'chips';
+
 // Shared-hardware pages (same for every collection). Per-length pages live in
 // LINKS_BY_LEN below. All URLs mirror the planner's verified LINK_OVERRIDES
 // (js/catalog/data.js is the source of truth since 2026-10-29 - the old planner's
@@ -489,6 +514,10 @@ const LINKS_BY_LEN = {
      download. Fill all five when the Printables URLs exist (mirror the planner's
      LINK_OVERRIDES in the same commit). */
   gridfinity: {},
+  /* Filament Sample Chip Drawers (2026-11-07): `MODULITH <L> Filament Sample Chip
+     Drawers`, one page per collection carrying both styles and the chip. EMPTY
+     and NO fallback until the pages are live, the Gridfinity rule. */
+  chips: {},
   classic: { // Thangs pages mirrored from the planner 2026-07-12 (240 new; 59 has none yet)
     59:  { p: 'https://www.printables.com/model/234780-gen2-59-classic-drawers-all', m: 'https://makerworld.com/en/models/2364890-gen2-59-classic-drawers-all' },
     115: { p: 'https://www.printables.com/model/1143243-gen2-115-classic-drawers-all', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20115%20Classic%20Drawers-1069181', m: 'https://makerworld.com/en/models/755424-gen2-115-classic-drawers-all' },
@@ -789,6 +818,7 @@ export function generateManifest(build, opts = {}) {
     shelfInsert: LINKS_BY_LEN.shelfInsert[L] || null,   // no fallback — see the table
     decor:   LINKS_BY_LEN.decor[L] || LINKS_BY_LEN.decor[185],
     gridfinity: LINKS_BY_LEN.gridfinity[L] || null,     // no fallback - see the table
+    chips:   LINKS_BY_LEN.chips[L] || null,             // no fallback - see the table
     classic: LINKS_BY_LEN.classic[L] || LINKS_BY_LEN.classic[185],
     covers:  LINKS_BY_LEN.covers[L] || LINKS_BY_LEN.covers[185],
     fr:      LINKS_BY_LEN.fr[L] || LINKS_BY_LEN.fr[185],
@@ -2217,8 +2247,12 @@ export function generateManifest(build, opts = {}) {
     // the same pos and the same 2H nudge; only the body, its row and its
     // links change - and it takes no back cover (its tear-away front is one)
     const grid = !isClassic && isGridfinity(L, u);
-    const hasBc = bcOn && !grid;
-    const drwNode = isClassic ? `ClassicDrawer_${L}-${u.w}W-${H}H`
+    // a chip drawer (either fill, 1W-0.5H): the same pose too, and the Decor one's
+    // closed front leaves no opening for a back cover
+    const chips = isChips(L, u);
+    const hasBc = bcOn && !grid && !chips;
+    const drwNode = chips ? `${isClassic ? 'Classic' : 'Decor'}ChipDrawer_${L}-${u.w}W-${H}H`
+      : isClassic ? `ClassicDrawer_${L}-${u.w}W-${H}H`
       : grid ? `GridfinityDecorDrawer_${L}-${u.w}W-${H}H` : `DecorDrawer_${L}-${u.w}W-${H}H`;
     // `owner` names the planner unit, like the drawer's magnet clip: the identify
     // card's Standard / Gridfinity switch finds the unit to change through it
@@ -2229,6 +2263,12 @@ export function generateManifest(build, opts = {}) {
         `${across} x ${deep} Gridfinity grid plus a half-grid channel · up to ${4 * across * deep} optional 6x2 mm magnets` +
         ` (4 per cell) · tear-away front: leave it in and no back cover is needed.` +
         (links.gridfinity ? '' : ' Not published yet · the model is coming soon.'));
+    } else if (chips) {
+      const holds = CHIPS.lanes * CHIPS.slotsPerLane[L];
+      add(drwNode, `${isClassic ? 'Classic' : 'Decor'} Filament Sample Chip Drawer ${L}-${u.w}W-${H}H`, 'Drawer', links.chips, 1, false, false, null,
+        `Holds up to ${holds} filament sample chips on edge in two combed lanes · swaps in for a standard ${u.w}W-${u.hh / 2}H drawer` +
+        (isClassic ? '.' : ' · closed front: it takes a faceplate and no back cover.') +
+        (links.chips ? '' : ' Not published yet · the model is coming soon.'));
     } else {
       add(drwNode, `${isClassic ? 'Classic' : 'Decor'} Drawer ${L}-${u.w}W-${H}H`, 'Drawer', isClassic ? links.classic : links.decor);
     }
@@ -2620,13 +2660,15 @@ export function generateManifest(build, opts = {}) {
     // Per drawer since the Gridfinity drawers: their tear-away front does the
     // cover's job, so the clause is about the standard Decor drawers only, and
     // a build of nothing but Gridfinity drawers never mentions the cover.
-    const anyBc = bcOn && units.some(v => v.fill === 'decor' && !isGridfinity(L, v));
+    const anyBc = bcOn && units.some(v => v.fill === 'decor' && !isGridfinity(L, v) && !isChips(L, v));
     const gridBc = bcOn && units.some(v => isGridfinity(L, v));
+    const chipBc = bcOn && units.some(v => v.fill === 'decor' && isChips(L, v));   // a closed front: nothing to cover
     // the v2609 drawer's tear-away front and the cover interfere (Joey), so the
     // front comes out before the cover goes in - said here, where the cover is fitted
     const bcClause = anyBc ? (dress ? ", then take the drawer's tear-away front out and clip the back cover in from behind"
       : "take the drawer's tear-away front out and clip the back cover in from behind") +
-      (gridBc ? ' (not on the Gridfinity drawers - leave their tear-away front in instead)' : '') : '';
+      (gridBc ? ' (not on the Gridfinity drawers - leave their tear-away front in instead)' : '') +
+      (chipBc ? ' (not on the chip drawers - their front is closed)' : '') : '';
     const prep = dress || bcClause
       ? `Assemble the faceplate first: ${dress}${bcClause}. `
       : "The faceplate prints complete - its grip is part of the faceplate, so there's nothing to bolt on and no hardware to buy. ";
@@ -2753,6 +2795,9 @@ function imgFor(node, type) {
   // Gridfinity Decor drawers (2026-09-18 batch: each length's own Decor Drawer
   // render scene, validated to reproduce a shipped Decor Drawer thumbnail exactly)
   if ((m = node.match(/^GridfinityDecorDrawer_(\d+)-(\d)W-(\w+)H$/))) return `img/parts/Gridfinity Decor Drawer ${m[1]}-${m[2]}W-${m[3]}H.png`;
+  // Filament Sample Chip Drawers (2026-11-07): the parts list's names, flat like the Gridfinity set; the chip is universal
+  if ((m = node.match(/^(Classic|Decor)ChipDrawer_(\d+)-(\d)W-(\w+)H$/))) return `img/parts/${m[1]} Filament Sample Chip Drawer ${m[2]}-${m[3]}W-${m[4]}H.png`;
+  if (node === 'FilamentChip') return 'img/parts/Filament Sample Chip.png';
   // classic drawers: per-length renders for all six lengths (2026-07-11 batch)
   if ((m = node.match(/^ClassicDrawer_(\d+)-(\d)W-(\w+)H$/))) return `img/parts/Classic Drawer ${m[1]}-${m[2]}W-${m[3]}H.png`;
   // covers + foot rails (2026-07-10 batch, all six lengths): the render files

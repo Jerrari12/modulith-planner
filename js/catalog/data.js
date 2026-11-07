@@ -574,6 +574,8 @@ const GEN2 = {
     backCover:   (len, size)            => `GEN2 Decor Faceplate Back Cover - ${size}`,
     door:        (len, size, style)     => `GEN2 ${len} ${style} Door - ${size}`,
     sideCover:   (len, h)               => `GEN2 ${len} Side Cover - ${h}H`,
+    // universal like the faceplates: one chip fits every chip drawer (2026-11-07)
+    filamentChip: ()                    => "GEN2 Filament Sample Chip",
     coverUpper:    (len, w)             => `GEN2 ${len} Cover Upper (CU) - ${w}W`,
     coverLower:    (len, w)             => `GEN2 ${len} Cover Lower (CL) - ${w}W`,
     footRailUpper: (len, w)             => `GEN2 ${len} Foot Rail Upper (FR-U) - ${w}W`,
@@ -595,7 +597,29 @@ const GEN2 = {
   // (sideCover left this list 2026-10-29 — the six MODULITH Side Covers pages
   // went live 2026-10-10, on Printables and Thangs; first edit made here, in the
   // merged planner, after the old planner became a forward page at cutover.)
-  unreleased: ["door", "hinge", "latch"],
+  // chipDrawer (2026-11-07): the Filament Sample Chip Drawers (v2611) and their
+  // chip, held until Joey's test print passes and the twelve MODULITH pages are
+  // live; then this entry goes and the pages join LINK_OVERRIDES.
+  unreleased: ["door", "hinge", "latch", "chipDrawer"],
+
+  /* Filament Sample Chip Drawers (v2611, 2026-11-07). A 1W-0.5H drawer that
+     holds filament sample chips on edge in two combed lanes, in Classic (the
+     one-piece Classic drawer, grip moulded in) and Decor (the Decor Parts
+     Drawer's closed front: a faceplate, no back cover). Same envelope as the
+     standard 1W-0.5H drawer of the same collection, so it swaps in for one. A
+     classic OR decor unit carries `variant: "chips"`; the field's ABSENCE is the
+     standard drawer. Only 1W-0.5H exists: anywhere else the variant is kept and
+     the standard drawer is billed (the Gridfinity rule). Each chip drawer adds an
+     optional row for the chip itself, which ships in the same download.
+     ⚠ Mirrored as CHIPS in the viewer's generate.js - keep the two in step. */
+  chips: {
+    lengths: [59, 115, 165, 185, 240, 270],
+    width: 1,
+    height: 0.5,
+    lanes: 2,
+    slotsPerLane: { 59: 8, 115: 22, 165: 35, 185: 40, 240: 53, 270: 61 },
+    label: "Filament Sample Chip Drawer",
+  },
 
   /* Gridfinity Decor drawers (v2609, 2026-09-18). A Decor drawer with a 42 mm
      Gridfinity grid in its floor, a half-grid channel down the right side, four
@@ -951,6 +975,10 @@ const HARDWARE_BUY = {
 const COLLECTION_RULES = [
   [/^GEN2 (\d+) Case Extender - /,      (m) => `GEN2 ${m[1]} Case Extenders`],
   [/^GEN2 (\d+) Case - /,               (m) => `GEN2 ${m[1]} Cases - All`],
+  // ⚠ BEFORE the Classic and Decor rules, for the Gridfinity rule's reason: a
+  // chip drawer's name also ends in "Drawer". One MODULITH page per collection
+  // carries both styles and the chip (2026-11-07); its title is the key.
+  [/^GEN2 (\d+)-.+ (?:Classic|Decor) Filament Sample Chip Drawer$/, (m) => `MODULITH ${m[1]} Filament Sample Chip Drawers`],
   [/^GEN2 (\d+)-.+ Classic Drawer$/,    (m) => `GEN2 ${m[1]} Classic Drawers - All`],
   // ⚠ BEFORE the Decor rule: "GEN2 185-2W-1H Gridfinity Decor Drawer" also ends
   // in " Decor Drawer", and would link the standard Decor page. The key is the
@@ -1480,6 +1508,11 @@ function partImage(name, variant) {
   // img/parts/<len>/, "Gridfinity Decor Drawer <len>-<size>", dots dropped
   const gf = name.match(/^GEN2 (\d+)-(.+) Gridfinity Decor Drawer$/);
   if (gf) return "img/parts/" + gf[1] + "/Gridfinity Decor Drawer " + gf[1] + "-" + gf[2].replace(/\./g, "") + ".png";
+  // Filament Sample Chip Drawers (2026-11-07), the same scheme: per length, the
+  // style in the name, dots dropped; the chip is universal, one render
+  const cd = name.match(/^GEN2 (\d+)-(.+) (Classic|Decor) Filament Sample Chip Drawer$/);
+  if (cd) return "img/parts/" + cd[1] + "/" + cd[3] + " Filament Sample Chip Drawer " + cd[1] + "-" + cd[2].replace(/\./g, "") + ".png";
+  if (name === "GEN2 Filament Sample Chip") return "img/parts/Filament Sample Chip.png";
   const file = name.replace(/^GEN2 /, "GEN2_").replace(/\./g, "") + RENDER_SUFFIX + ".png";
   return "img/parts/" + file;
 }
