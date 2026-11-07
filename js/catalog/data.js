@@ -179,10 +179,16 @@ const GEN2 = {
   // Kobra 3 is 250, not the 255 sometimes quoted. Every 350 bed (K2 Plus,
   // SV08, Voron 350) sits just under the 351.6mm 4W parts — the size-fit
   // tooltip explains that, it's not a data error.
+  // 2026-11-07 (Joey: "add them"): H3C 330×320, every one of its nine tools
+  // reaches the whole bed; CORE One L + INDX 298×275, the dock takes the rest
+  // (Prusa's INDX page); K3 260 and Kobra X 260 (the makers' stores); K2 260,
+  // K2 Pro 300, Centauri 2 256, Creator 5 / 5 Pro 256 (retailers and reviews
+  // that agree). The MODULITH site's catalog reads this list.
   printers: [
     { id: "any",        label: "Any printer / not sure", x: null, y: null },
     { id: "coreone",    label: "Prusa CORE One / One+",  x: 250, y: 220, group: "Prusa" },
     { id: "coreonel",   label: "Prusa CORE One L",       x: 300, y: 300, group: "Prusa" },
+    { id: "coreonelindx", label: "Prusa CORE One L + INDX", x: 298, y: 275, group: "Prusa" },
     { id: "mk4",        label: "Prusa MK4S / MK4 / MK3.9", x: 250, y: 210, group: "Prusa" },
     { id: "mini",       label: "Prusa Mini",             x: 180, y: 180, group: "Prusa" },
     { id: "xl",         label: "Prusa XL",               x: 360, y: 360, group: "Prusa" },
@@ -193,17 +199,24 @@ const GEN2 = {
     { id: "h2s",        label: "Bambu H2S",              x: 340, y: 320, group: "Bambu Lab" },
     { id: "x2d",        label: "Bambu X2D",              x: 256, y: 256, group: "Bambu Lab" },
     { id: "p2s",        label: "Bambu P2S",              x: 256, y: 256, group: "Bambu Lab" },
+    { id: "h3c",        label: "Bambu H3C",              x: 330, y: 320, group: "Bambu Lab" },
     { id: "k1",         label: "K1 / K1C",               x: 220, y: 220, group: "Creality" },
     { id: "k1max",      label: "K1 Max",                 x: 300, y: 300, group: "Creality" },
+    { id: "k2",         label: "K2",                     x: 260, y: 260, group: "Creality" },
+    { id: "k2pro",      label: "K2 Pro",                 x: 300, y: 300, group: "Creality" },
     { id: "k2plus",     label: "K2 Plus",                x: 350, y: 350, group: "Creality" },
+    { id: "k3",         label: "K3",                     x: 260, y: 260, group: "Creality" },
     { id: "ender3",     label: "Ender 3 / Neo",          x: 220, y: 220, group: "Creality" },
     { id: "ender5plus", label: "Ender 5 Plus",           x: 350, y: 350, group: "Creality" },
     { id: "centauri",   label: "Centauri Carbon / Carbon 2", x: 256, y: 256, group: "Elegoo" },
+    { id: "centauri2",  label: "Centauri 2",             x: 256, y: 256, group: "Elegoo" },
     { id: "neptune4",   label: "Neptune 4 / 4 Pro",      x: 225, y: 225, group: "Elegoo" },
     { id: "neptune4plus", label: "Neptune 4 Plus",       x: 320, y: 320, group: "Elegoo" },
     { id: "neptune4max", label: "Neptune 4 Max",         x: 420, y: 420, group: "Elegoo" },
     { id: "kobras1",    label: "Kobra S1 / Kobra 3",     x: 250, y: 250, group: "Anycubic" },
+    { id: "kobrax",     label: "Kobra X",                x: 260, y: 260, group: "Anycubic" },
     { id: "ad5m",       label: "Adventurer 5M / Pro / AD5X", x: 220, y: 220, group: "FlashForge" },
+    { id: "creator5",   label: "Creator 5 / 5 Pro",      x: 256, y: 256, group: "FlashForge" },
     { id: "qidiq2",     label: "QIDI Q2",                x: 270, y: 270, group: "QIDI" },
     { id: "qidiplus4",  label: "QIDI Plus4",             x: 305, y: 305, group: "QIDI" },
     { id: "sv06",       label: "SV06 / SV06 ACE",        x: 220, y: 220, group: "Sovol" },
