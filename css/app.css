@@ -1454,6 +1454,12 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
 @container (max-height: 620px) { #ws-plan .pd-tip { left: 50%; transform: translate(-50%, -50%); width: auto; max-width: calc(100% - 36px); } #ws-plan .pd-tip::after { display: none; } #ws-plan .pd-tip .body { flex-direction: row; gap: 14px; } #ws-plan .pd-tip .gclip { flex: 1 1 0; min-width: 0; width: 200px; } }
 @container (max-width: 760px) { #ws-plan .pd-tip { left: 50%; transform: translate(-50%, -50%); width: min(300px, calc(100% - 24px)); max-width: none; } #ws-plan .pd-tip::after { display: none; } #ws-plan .pd-tip .body { flex-direction: column; gap: 12px; } #ws-plan .pd-tip .gclip { flex: none; width: auto; } }
 @media (prefers-reduced-motion: reduce) { #ws-plan .gclip svg animate, #ws-plan .gclip svg animateTransform { display: none; } }
+/* a phone (the sheets' chrome, html.ws-phone): the plan takes the screen between the toolbar and the collapsed sheets instead of the
+   desktop's side insets, which left it 2 px wide (the headless phone pass, 2026-11-07); its header hint wraps, the How-to button stays */
+html.ws-phone #ws-plan { top: 120px; left: 10px; right: 10px; bottom: 182px; border-radius: 14px; }
+html.ws-phone #ws-plan .bhead { flex-wrap: wrap; gap: 6px 12px; padding: 10px 12px; }
+html.ws-phone #ws-plan .bhint { flex: 1 1 100%; order: 3; font-size: 11px; }
+html.ws-phone #ws-plan .bsvg { padding: 6px 8px; }
 /* the plan drawing: the shell and walls in ink, cells on the input surface, the selection orange, labels white, dimensions in the measurement colour */
 #ws .pd-thumb, #ws-plan .bsvg { --plan-shell: rgba(29,30,32,.22); --plan-wall: var(--ink-2); --plan-cell: var(--input-bg); --plan-ramp: rgba(29,30,32,.18); --plan-sel: rgba(255,106,26,.18); --plan-hov: rgba(255,106,26,.08); }
 [data-mode="dark"] #ws .pd-thumb, [data-mode="dark"] #ws-plan .bsvg { --plan-shell: rgba(255,255,255,.14); --plan-wall: #8b8fa8; --plan-cell: #202130; --plan-ramp: rgba(255,255,255,.16); --plan-sel: rgba(255,106,26,.3); --plan-hov: rgba(255,106,26,.14); }   /* the cells are drawn over the cavity, so they are opaque */

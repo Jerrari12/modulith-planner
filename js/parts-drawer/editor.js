@@ -32,6 +32,7 @@ import { attachHint } from '../ui/hint.js';   // the hover clips on the editor's
 import { GUIDE } from './guide.js';
 import { saveBytes } from './download.js';
 import { unitName } from '../rules/schema.js';
+import { isPhone } from '../ui/phone.js';
 
 const EPS = 1e-6, WALL = G.C.WALL;
 const fmt = (v) => v.toFixed(1);
@@ -512,7 +513,7 @@ export function partsDrawerTools(stage, ctx) {
   function start(id) {
     const u = unitById(id); if (!u || !isPartsDrawer(L(), u)) return false;
     if (st.editing != null && st.editing !== id) stop({ quiet: true });
-    st.editing = id; st.sel = null; st.hover = null; st.view = '2d';
+    st.editing = id; st.sel = null; st.hover = null; st.view = shortScreen() ? '3d' : '2d';   // a phone on its side has no room for the plan (Terra 01a1b6be)
     ensureEngine();
     stage.setSelected(null);
     stage.setTapTargets(tapTargets);
@@ -560,13 +561,18 @@ export function partsDrawerTools(stage, ctx) {
 
   /* ---------------- the toolbar in edit mode: 2D / 3D, Reset frames the drawer, Undo / Redo ---------------- */
   const editBar = toolbar(stage, {
-    view: { get: () => st.view, set: (v) => { st.view = v; ctx.renderAll(); if (v === '3d') frameDrawer(); } },   // the 3D view opens on the drawer, centred (Joey, 2026-11-06)
+    view: { get: () => st.view, set: (v) => { if (v === '2d' && shortScreen()) return; st.view = v; ctx.renderAll(); if (v === '3d') frameDrawer(); }, can2d: () => !shortScreen(), why2d: 'No room for the plan on a phone held sideways: turn it upright' },   // the 3D view opens on the drawer, centred (Joey, 2026-11-06)
     history: { undo: () => store.undo(), redo: () => store.redo(), get canUndo() { return store.canUndo; }, get canRedo() { return store.canRedo; } },
     reset: () => frameDrawer(),
   });
   editBar.el.hidden = true;
   root.appendChild(editBar.el);
 
+  /* a phone on its side (the phone chrome below 1024 wide, under 520 high): the toolbar above and the sheets below leave no
+     room for the plan, so the editor shows 3D and the toolbar's 2D is off; turning the phone upright brings the plan back */
+  function shortScreen() { return isPhone() && window.innerHeight < 520; }   // hoisted: the toolbar syncs once while it is built, before this line runs
+  const onResize = () => { if (st.editing == null) return; if (st.view === '2d' && shortScreen()) { st.view = '3d'; ctx.renderAll(); frameDrawer(); } else editBar.sync(); };
+  window.addEventListener('resize', onResize);
   /* the camera on the edited drawer, centred in the free region between the Library and the Inspector (the stage centres
      on the canvas, and the panels cover its sides, so the drawer sat off to one side: Joey, 2026-11-06) */
   function frameDrawer() {
@@ -858,6 +864,6 @@ export function partsDrawerTools(stage, ctx) {
     plan: pl, toolbar: editBar,
     render2d() { pl.render(); },
     setPanels() { editBar.sync(); },
-    destroy() { alive = false; if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); for (const t of labelTex.values()) t.dispose(); for (const t of dimTex.values()) t.dispose(); },
+    destroy() { alive = false; window.removeEventListener('resize', onResize); if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); for (const t of labelTex.values()) t.dispose(); for (const t of dimTex.values()) t.dispose(); },
   };
 }

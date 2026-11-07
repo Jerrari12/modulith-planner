@@ -1008,7 +1008,7 @@ export function mountBuild(stage, ctx) {
   /* the phone chrome: the library and the inspector are bottom sheets, the tabs a bottom bar. Placing keeps the sheets
      closed so the next spot stays uncovered (Joey, 2026-10-11); the inspector's handle names the selected unit. */
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'build', soon }, { panels: [
-    { el: lib, title: () => st.tab === 'add' ? (st.armed ? `Placing ${armedSize().w}W·${armedSize().h}H · tap a spot` : 'Add units') : 'Build style', open: false },   // the model first; the handle opens the library
+    { el: lib, title: () => editing() ? 'Editing compartments' : st.tab === 'add' ? (st.armed ? `Placing ${armedSize().w}W·${armedSize().h}H · tap a spot` : 'Add units') : 'Build style', open: false },   // the parts drawer's tools take the Library while editing   // the model first; the handle opens the library
     { el: insp, title: () => { const u = S().placed.find((p) => p.id === st.selId); return u ? `${unitName(u) || `Unit ${S().placed.indexOf(u) + 1}`} · ${u.w}W·${u.hh / 2}H ${(G?.fills || []).find((f) => f.id === u.fill)?.label || u.fill}` : 'This unit'; } },
   ] }) : null;
   if (phone) phone.onLayout(() => { safe(); if (st.view === '2d') brd.render(); });
