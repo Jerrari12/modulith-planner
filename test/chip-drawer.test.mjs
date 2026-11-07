@@ -193,7 +193,9 @@ test('the parts list and the stage name the same render for each chip drawer and
   assert.equal(partThumb('GEN2 Filament Sample Chip'), 'img/parts/Filament Sample Chip.png');
 });
 
-test('every chip drawer and the chip have a thumbnail on the parts host', { todo: 'the 256 px thumbnails come from the listing rig, after Joey approves the 240 prototype (handoff step 3)' }, () => {
+// the 256 px BOM thumbnails (2026-11-07, D:\Render Projects\Filament Sample Chip Drawers\chip_thumbs.py): each style by its own
+// family's recipe, so a chip drawer looks like its standard drawer in the parts list; the chip flat, label face up
+test('every chip drawer and the chip have a thumbnail on the parts host', () => {
   for (const L of LENGTHS) for (const style of ['Classic', 'Decor'])
     assert.ok(existsSync(join(root, 'img', 'parts', `${style} Filament Sample Chip Drawer ${L}-1W-05H.png`)), `${style} ${L}: thumbnail missing`);
   assert.ok(existsSync(join(root, 'img', 'parts', 'Filament Sample Chip.png')), 'the chip: thumbnail missing');

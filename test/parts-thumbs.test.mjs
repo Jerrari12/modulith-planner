@@ -28,7 +28,10 @@ const KNOWN_GAPS = new Set(['img/parts/Decor Drawer 270-4W-1H.png', 'img/parts/S
 function allRows() {
   const out = new Map();
   const bill = (mount, length, w, h, kind, { faceStyle = 'edgelabel', handleStyle = 'deco', feet = 'tpu' } = {}) => {
-    const unit = { id: 1, x: 0, y: 2, w, hh: h * 2, fill: kind === 'gridfinity' ? 'decor' : kind, closure: 'magnet', ...(kind === 'gridfinity' ? { variant: 'gridfinity' } : {}), ...(kind === 'shelf' ? { lip: 'both' } : {}) };
+    // 'chips-classic' / 'chips-decor' (2026-11-07): the chip drawer variant on either fill, which also bills the chip's own row
+    const chips = kind.startsWith('chips-');
+    const unit = { id: 1, x: 0, y: 2, w, hh: h * 2, fill: kind === 'gridfinity' ? 'decor' : chips ? kind.slice(6) : kind, closure: 'magnet',
+      ...(kind === 'gridfinity' ? { variant: 'gridfinity' } : chips ? { variant: 'chips' } : {}), ...(kind === 'shelf' ? { lip: 'both' } : {}) };
     const b = { mount, length, fill: unit.fill, faceStyle, handleStyle, feet, backCover: true, sideCovers: true, gridH: 8, gridW: 5, nextId: 50,
       placed: [unit, { id: 2, x: w, y: 2, w: 1, hh: 2, fill: 'decor' }] };   // a second bottom case: the foot rails
     sanitizeBuild(b, GEN2);
@@ -38,6 +41,7 @@ function allRows() {
   for (const mount of GEN2.mounts.map((m) => m.id)) for (const len of GEN2.lengths) {
     if (mount === 'tabletop' && len.noTabletop) continue;
     for (const kind of ['decor', 'classic', 'shelf', 'gridfinity']) for (const w of W) for (const h of H) bill(mount, len.id, w, h, kind);
+    for (const kind of ['chips-classic', 'chips-decor']) bill(mount, len.id, 1, 0.5, kind);   // the only size a chip drawer comes in
     for (const faceStyle of GEN2.faceplateStyles.map((s) => s.id)) for (const handleStyle of GEN2.handleStyles.map((s) => s.id)) for (const feet of ['tpu', 'adhesive']) bill(mount, len.id, 2, 1, 'decor', { faceStyle, handleStyle, feet });
   }
   for (const faceStyle of GEN2.faceplateStyles.map((s) => s.id)) for (const w of W) for (const h of H) bill('tabletop', 185, w, h, 'decor', { faceStyle });
