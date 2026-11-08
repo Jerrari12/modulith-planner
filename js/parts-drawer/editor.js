@@ -18,6 +18,7 @@
    decision 7): cells, lid, covers. */
 import { el } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
+import { picOf, PIC_NOTE } from './hwpics.js';
 import { toolbar } from '../ui/toolbar.js';
 import { FILAMENT_DB } from '../filament-db.js';
 import * as G from './gen.js';
@@ -204,7 +205,7 @@ export function partsDrawerTools(stage, ctx) {
     pl.cancel();   // a wall or box drag in progress ends without committing: the drawer stays as it is until Lay out drawer (Sol 01a1b901)
     ctx.renderAll();
   }
-  function closeInventory() { st.inv = null; }
+  function closeInventory() { st.inv = null; st.hover = null; }   // a highlighted proposal is no compartment of the drawer
   /* leaving the list (Back, Esc, the Dock's Done) while a layout is proposed and not applied: the bright Done dropped it
      without a word (Sol 01a1bc8e, 2026-11-08), so the list asks first, in a warnbox at its head (renderInvPanel); `leave`
      is what to do once Lay out drawer or Drop the list has answered */
@@ -253,8 +254,23 @@ export function partsDrawerTools(stage, ctx) {
   };
   // the fill a proposed compartment would have with the COUNTED quantity (inventory.js fillOf), and that against the room chosen
   const invFill = (c, work = st.inv) => { const u = editedUnit(); if (!u || !c.item) return null; const f = I.fillOf(c, heightOfUnit(u), sizeOfUnit(L(), u), layoutOfUnit(u).label); return f == null ? null : { fill: f, load: f / work.cap }; };
-  const invPreview = () => { const l = invLast(); return l ? { comps: l.r.error ? [] : l.r.comps, note: l.text, warn: l.warn } : null; };
-  const invChanged = () => { if (st.inv) { st.inv.last = null; st.inv.dirty = true; } ctx.renderAll(); };
+  const invPreview = () => { const l = invLast(); if (!l) return null; const comps = l.r.error ? [] : l.r.comps, w = st.inv; return { comps, note: l.text, warn: l.warn, hl: w.hl != null ? comps.filter((c) => c.item)[w.hl] || null : null }; };
+  /* a row and its proposed compartment light together (Sol 01a1bd5c, 2026-11-08): the rank among the kept items is the key both
+     ways (the rows map onto the engine's compartments by rank, renderInvPanel). From the plan the row scrolls into view, and a
+     press on a proposed compartment puts the focus in its row's quantity. The classes are toggled in place: a re-render of the
+     panel would take the focus from the field being typed in */
+  const invRankOf = (c) => { const l = invLast(); return l && !l.r.error && c ? l.r.comps.filter((x) => x.item).indexOf(c) : -1; };
+  function invHl(rank, from = 'list') {
+    const w = st.inv; if (!w) return;
+    const r = rank != null && rank >= 0 ? rank : null; if (w.hl === r && from === 'list') return;
+    w.hl = r;
+    (w.rowEls || []).forEach((e, i) => { if (!e) return; e.classList.toggle('hl', i === r); if (i === r && from === 'plan') e.scrollIntoView({ block: 'nearest' }); });
+    const pv = invPreview(); st.hover = pv ? pv.hl : null; update3d(); pl.render();
+  }
+  function invPick(c) { const r = invRankOf(c); if (r < 0) return; invHl(r, 'plan'); const row = st.inv.rowEls[r], q = row && row.querySelector('.pd-inv-sub input'); if (q) q.focus({ preventScroll: true }); }
+  // a change of the list: the proposal is recomputed, and a lit compartment follows the new proposal at the same rank (or goes,
+  // when that rank is gone: a row removed), so the 3D plane never keeps a compartment of a proposal that no longer exists (Sol 01a1bd82)
+  const invChanged = () => { if (st.inv) { st.inv.last = null; st.inv.dirty = true; if (st.inv.hl != null) { const pv = invPreview(); if (!pv || !pv.hl) st.inv.hl = null; st.hover = pv ? pv.hl : null; } } ctx.renderAll(); };
   function invAdd(list) {
     const work = st.inv; if (!work) return 0;
     const items = list.items.filter((it) => I.TYPE_ORDER.includes(it.type)), other = list.items.filter((it) => !I.TYPE_ORDER.includes(it.type));
@@ -275,7 +291,7 @@ export function partsDrawerTools(stage, ctx) {
       x.fit = { cap: work.cap, round: !!work.round, spare: !!work.spare };
       if (work.colorBy !== 'none') { x.floor.mode = 'paint'; x.floor.slots = slots; }
     });
-    st.sel = null; st.inv = null; ctx.renderAll();
+    st.sel = null; st.inv = null; st.hover = null; ctx.renderAll();
   }
   /* the Part Picker (js/ui/partpicker.js, the Labels workspace's modal): a batch becomes list items, not labels */
   let pp = null; const ppAC = new AbortController();
@@ -295,11 +311,26 @@ export function partsDrawerTools(stage, ctx) {
     });
     pp.open();
   }
+  /* the part's fields, the same in a list row, the add row and the Inspector (one editing surface, Sol 01a1bd5c, 2026-11-08):
+     type, thread size, length (screws only). `on(patch)` gets what changed, with a length given to a screw that had none and
+     the size corrected when the new type has no table for the old one. picEl: the hardware library's render beside them
+     (hwpics.js), or an empty frame for a part the library does not draw */
+  const fieldSel = (opts, val, on, attrs = {}) => { const e = el('select', attrs); for (const [v, t] of opts) e.appendChild(el('option', { value: v, text: t })); e.value = val; e.onchange = () => on(e.value); return e; };
+  const fieldNum = (val, on, dis, label) => el('input.mono', { type: 'number', min: '0', step: '1', value: dis ? '' : String(val), disabled: !!dis, 'aria-label': label, onchange: (e) => on(+e.target.value) });
+  const sizesFor = (it) => I.THREADS.filter((sz) => I.known({ ...it, size: sz, length: it.length || 10 }));
+  const picEl = (it) => { const src = picOf(it); return src ? el('img.pd-pic', { src, alt: '', width: 28, height: 28, loading: 'lazy', draggable: 'false', title: PIC_NOTE }) : el('span.pd-pic', { title: 'No picture of this part yet' }); };
+  function partFields(it, on, labels = ['Part type', 'Thread size', 'Length, mm']) {
+    const retype = (v) => { const next = { ...it, type: v }; if (I.TYPES[v].screw && !next.length) next.length = 10; if (!I.known(next)) next.size = I.THREADS.find((sz) => I.known({ ...next, size: sz })) || 'M3'; on({ type: v, length: next.length, size: next.size }); };
+    return [
+      fieldSel(I.TYPE_ORDER.map((k) => [k, I.TYPES[k].short]), it.type, retype, { 'aria-label': labels[0] }),
+      fieldSel(sizesFor(it).map((v) => [v, v]), it.size, (v) => on({ size: v }), { 'aria-label': labels[1] }),
+      fieldNum(it.length, (v) => on({ length: Math.max(1, v) }), !I.TYPES[it.type].screw, labels[2]),
+    ];
+  }
   function renderInvPanel(lib, u) {
     const work = st.inv, { r, text, warn } = invLast();
     const rerender = () => { lib.replaceChildren(); renderLib(lib); };
-    const sel = (opts, val, on, attrs = {}) => { const e = el('select', attrs); for (const [v, t] of opts) e.appendChild(el('option', { value: v, text: t })); e.value = val; e.onchange = () => on(e.value); return e; };
-    const num = (val, on, dis, label) => el('input.mono', { type: 'number', min: '0', step: '1', value: dis ? '' : String(val), disabled: !!dis, 'aria-label': label, onchange: (e) => on(+e.target.value) });
+    const sel = fieldSel, num = fieldNum;
     lib.appendChild(el('div.pd-head', {}, [
       el('div.col', {}, [el('h2.h2', { text: 'Parts list' }), el('h3', { text: unitName(u) || `${u.w}W·${u.hh / 2}H parts drawer` }), el('div.readout', { text: 'Every part gets a compartment sized for its quantity · the plan shows the layout as you go' })]),
       el('button.key.sm', { text: 'Back', title: 'Back to the compartment tools · Esc (a layout still proposed asks first)', onclick: () => invLeave(() => ctx.renderAll()) }),
@@ -345,30 +376,39 @@ export function partsDrawerTools(stage, ctx) {
     const table = el('div.pd-inv-table');
     if (!work.items.length) table.appendChild(el('p.hint', { text: 'No parts yet. Type a line above, open the Part Picker, or start from a kit.' }));
     const move = (i, d) => { const j = i + d; if (j < 0 || j >= work.items.length) return; const t = work.items[i]; work.items[i] = work.items[j]; work.items[j] = t; invChanged(); };
-    list.appendChild(el('div.pd-inv-head', {}, ['', 'Part', 'Size', 'mm', ''].map((t) => el('span', { text: t }))));
-    const sizesFor = (it) => I.THREADS.filter((sz) => I.known({ ...it, size: sz, length: it.length || 10 }));
+    list.appendChild(el('div.pd-inv-head', {}, ['', '', 'Part', 'Size', 'mm', ''].map((t) => el('span', { text: t }))));
     // the fill its compartment would have (the counted quantity, inventory.js fillOf) and that against the room chosen
     // a row's compartment: the engine keeps the known, in-drawer items in the list's order, so the rows map onto them by rank
     const kept = work.items.filter((it) => I.known(it) && !I.TYPES[it.type].outside);
+    work.rowEls = [];   // by that rank, for the row <-> compartment highlight (invHl)
     work.items.forEach((it, i) => {
-      const ki = kept.indexOf(it), T = I.TYPES[it.type], c = ki >= 0 ? withItems[ki] || null : null, f = c ? invFill(c, work) : null;
-      table.appendChild(el('div.pd-inv-row' + (f && f.load > 1 + 1e-9 ? '.over' : ''), {}, [
+      const ki = kept.indexOf(it), c = ki >= 0 ? withItems[ki] || null : null, f = c ? invFill(c, work) : null;
+      const row = el('div.pd-inv-row' + (f && f.load > 1 + 1e-9 ? '.over' : '') + (c && work.hl === ki ? '.hl' : ''), {}, [
         el('div.pd-inv-move', {}, [el('button', { text: '▲', 'aria-label': `Move ${I.labelText(it)} up`, title: 'Move up', disabled: i === 0, onclick: () => move(i, -1) }), el('button', { text: '▼', 'aria-label': `Move ${I.labelText(it)} down`, title: 'Move down', disabled: i === work.items.length - 1, onclick: () => move(i, 1) })]),
-        sel(I.TYPE_ORDER.map((k) => [k, I.TYPES[k].short]), it.type, (v) => { it.type = v; if (I.TYPES[v].screw && !it.length) it.length = 10; if (!I.known(it)) it.size = I.THREADS.find((sz) => I.known({ ...it, size: sz })) || 'M3'; invChanged(); }, { 'aria-label': 'Part type' }),
-        sel(sizesFor(it).map((v) => [v, v]), it.size, (v) => { it.size = v; invChanged(); }, { 'aria-label': 'Thread size' }),
-        num(it.length, (v) => { it.length = Math.max(1, v); invChanged(); }, !T.screw, 'Length, mm'),
+        picEl(it),
+        ...partFields(it, (p) => { Object.assign(it, p); invChanged(); }),
         el('button.x', { 'aria-label': 'Remove ' + I.labelText(it), title: 'Remove', onclick: () => { work.items.splice(i, 1); invChanged(); } }, [icon('x', { size: 14 })]),
         el('div.pd-inv-sub', {}, ['Qty', num(it.qty, (v) => { it.qty = Math.max(0, Math.round(v)); invChanged(); }, false, 'Quantity'),
           el('span.pd-inv-fill', { text: f ? `${Math.round(f.fill * 100)}% full${f.load > 1 + 1e-9 ? ' · over the room chosen' : ''}` : '', title: f ? 'How full its compartment would be with what you counted' : '' })]),
-      ]));
+      ]);
+      // a row under the pointer, or holding the focus, lights its proposed compartment in the plan and in 3D; the plan lights the row
+      // back (invHl). The pointer leaving keeps the light while the row holds the focus, and the focus leaving (Tab) keeps it while
+      // the pointer is over the row (Sol 01a1bd82)
+      if (c) {
+        work.rowEls[ki] = row;
+        row.addEventListener('pointerenter', () => invHl(ki));
+        row.addEventListener('pointerleave', () => { if (!row.contains(document.activeElement)) invHl(null); });
+        row.addEventListener('focusin', () => invHl(ki));
+        row.addEventListener('focusout', (e) => { if (!(e.relatedTarget && row.contains(e.relatedTarget)) && !row.matches(':hover')) invHl(null); });
+      }
+      table.appendChild(row);
     });
     // add a part without typing
     const d = work.draft || (work.draft = { type: 'shcs', size: 'M3', length: 10, qty: 50 });
     table.appendChild(el('div.pd-inv-row.add', {}, [
       el('span'),
-      sel(I.TYPE_ORDER.map((k) => [k, I.TYPES[k].short]), d.type, (v) => { d.type = v; d.length = I.TYPES[v].screw ? (d.length || 10) : 0; if (!I.known(d)) d.size = I.THREADS.find((sz) => I.known({ ...d, size: sz })) || 'M3'; rerender(); }, { 'aria-label': 'Part type to add' }),
-      sel(sizesFor(d).map((v) => [v, v]), d.size, (v) => { d.size = v; rerender(); }, { 'aria-label': 'Thread size to add' }),
-      num(d.length, (v) => { d.length = Math.max(1, v); rerender(); }, !I.TYPES[d.type].screw, 'Length to add, mm'),
+      picEl(d),
+      ...partFields(d, (p) => { Object.assign(d, p); rerender(); }, ['Part type to add', 'Thread size to add', 'Length to add, mm']),
       el('button.key.sm', { text: '+', 'aria-label': 'Add this part', title: 'Add this part to the list', onclick: () => { if (I.known(d)) { invAdd({ items: [{ ...d }], errors: [] }); invChanged(); } } }),
       el('div.pd-inv-sub', {}, ['Qty', num(d.qty, (v) => { d.qty = Math.max(0, Math.round(v)); rerender(); }, false, 'Quantity to add'), el('span.pd-inv-fill', { text: 'a part to add' })]),
     ]));
@@ -680,6 +720,8 @@ export function partsDrawerTools(stage, ctx) {
     onHolder: doHolder,
     onHover: (c) => { if (c !== st.hover) { st.hover = c; update3d(); } },
     preview: invPreview,   // the parts list's layout, dashed, while the list is open (2026-11-07)
+    onPreviewHover: (c) => invHl(c ? invRankOf(c) : null, 'plan'),   // a proposed compartment under the pointer lights its row, a press focuses it (2026-11-08)
+    onPreviewPick: invPick,
   });
   pl.el.hidden = true;
   root.appendChild(pl.el);
@@ -887,12 +929,17 @@ export function partsDrawerTools(stage, ctx) {
       };
       insp.appendChild(num('Width', 'w', w));
       insp.appendChild(num('Depth', 'd', d));
-      // the part in it (M3): typed as "M3x10 SHCS 100"; its fill is an estimate from ISO sizes (inventory.js)
+      // the part in it (M3): typed as "M3x10 SHCS 100", or set field by field with the parts list's own fields and picture (one
+      // editing surface, Sol 01a1bd5c, 2026-11-08; a change is one history entry); its fill is an estimate from ISO sizes (inventory.js)
       const partIn = el('input', { type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'M3x10 SHCS 100', value: c.item && I.known(c.item) ? `${I.labelText(c.item).replace(' × ', 'x')} ${c.item.qty || ''}`.trim() : '', 'aria-label': 'The part in this compartment' });
       partIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') partIn.blur(); else if (e.key === 'Escape') { partIn.dataset.skip = '1'; partIn.blur(); } e.stopPropagation(); });
       partIn.addEventListener('blur', () => { if (partIn.dataset.skip) { delete partIn.dataset.skip; renderInspector(); return; } setPart(partIn.value); });
-      insp.appendChild(el('div.row', {}, ['Part', el('div.pd-part', {}, [partIn])]));
-      if (c.item && I.known(c.item)) {
+      const have = !!(c.item && I.known(c.item)), cur = have ? c.item : { type: 'shcs', size: 'M3', length: 10, qty: 0 };
+      const setItem = (patch) => { const item = cleanItem({ ...cur, ...patch }); if (!item) { say('That part is not one the generator knows.'); renderInspector(); return; } commitLayout((x) => { for (const k of x.comps) if (G.inBox(k, box)) k.item = item; }); };
+      const fields = el('div.pd-fields', {}, [picEl(cur), ...partFields(cur, setItem, ['The part type', 'Its thread size', 'Its length, mm']),
+        el('span.pd-qty', {}, ['×', fieldNum(cur.qty || 0, (v) => setItem({ qty: Math.max(0, Math.round(v)) }), false, 'How many')])]);
+      insp.appendChild(el('div.row', {}, ['Part', el('div.pd-part', {}, [partIn, fields])]));
+      if (have) {
         const f = I.fillOf(c, full.height, full.size, lay.label);
         insp.appendChild(el('div.src', { text: `${I.labelText(c.item)}${c.item.qty ? ' × ' + c.item.qty : ''}${f != null ? `, about ${Math.round(f * 100)}% full${f > 1 ? ' (too full)' : ''}` : ''}.` }));
       }
@@ -964,7 +1011,7 @@ export function partsDrawerTools(stage, ctx) {
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
     if (k === 'escape') { if (pp && pp.isOpen()) { pp.close(); return true; } if (st.inv) { invEsc(); return true; } if (pl.tipOpen()) { pl.closeTip(); return true; } if (st.picker) { st.picker = null; ctx.renderAll(); return true; } if (st.sel) { setSel(null); return true; } stop(); return true; }
-    if (st.inv) return true;   // the parts list dialog has the keys
+    if (st.inv) return !(k === 'tab' || k === 'enter' || k === ' ');   // the parts list has the keys (no merge or split under it), but Tab walks its controls and Enter and Space press its buttons (2026-11-08: all three were swallowed)
     if (k === 'delete' || k === 'backspace') return true;   // not the unit under edit (build.js would remove it); compartments are merged, not deleted
     if (k === 'm') { doMerge(); return true; }
     if (k === 's') { doSplit(); return true; }

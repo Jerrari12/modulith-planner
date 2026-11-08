@@ -1373,6 +1373,9 @@ const addLine = async (page, t) => { const inp = page.locator('#ws-lib .pd-inv-l
 test('Parts drawer: the parts list panel previews its layout in the plan, keeps the list\'s order and its fit, and Back drops the draft', async () => {
   const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
   await toPartsEditor(page);
+  // a unit edit first (a deep scoop), so the undo below, while the list is open, reverts an edit and not the switch to a parts
+  // drawer (undone, the unit is a decor drawer again, and the sanitizer drops any layout laid onto it on every restore)
+  await btn(page, 'Deep', '#ws-lib').click(); await settle(page, 600);
   await btn(page, 'From a parts list', '#ws-lib').click();
   await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'the Library is the list');
@@ -1385,10 +1388,24 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   assert.equal(await page.locator('#ws-plan .cell:not(.preview)').count(), 0, 'nothing of the drawer\'s own layout under it');
   assert.match(await text(page, '#ws-plan .bhint'), /8 parts in 5 rows .* A spare row of 5 at the back/, 'the plan\'s header carries the summary');
   assert.match(await text(page, '#ws-lib .pd-inv-row .pd-inv-fill'), /\d+% full/, 'each row reads its compartment\'s fill');
-  // the plan's gestures are off: a press on a preview cell selects nothing
+  // every row carries the hardware library's picture, loaded (hwpics.js, 2026-11-08)
+  await page.waitForFunction(() => { const p = [...document.querySelectorAll('#ws-lib .pd-inv-row:not(.add) .pd-pic')]; return p.length === 8 && p.every((e) => e.tagName === 'IMG' && e.complete && e.naturalWidth > 0); }, null, { timeout: 15_000 }).catch(() => assert.fail('eight pictures, loaded'));
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) .pd-pic').first().getAttribute('src'), 'img/hw/shcs-m3.webp');
+  // a row and its proposed compartment light together, both ways; a press on the proposal puts the focus in the row's quantity
+  // (the plan's gestures stay off: no selection on a proposal)
+  await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).hover(); await settle(page, 300);
+  assert.equal(await page.locator('#ws-plan .cell.preview.hl').getAttribute('data-i'), '1', 'the second row lights the second compartment');
+  await page.mouse.move(5, 5); await settle(page, 300);
   const cell = page.locator('#ws-plan .cell.preview').first(); const bb = await cell.boundingBox();
+  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row.hl').count(), 1, 'the first compartment under the pointer lights its row');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row.hl input[type="number"]').first().inputValue(), '8');
   await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
   assert.equal(await page.locator('#ws-plan .selring').count(), 0, 'no selection on a proposal');
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Quantity', 'the press puts the focus in the row\'s quantity');
+  assert.equal(await page.evaluate(() => document.activeElement.value), '200');
+  await page.mouse.move(5, 5); await settle(page, 300);
+  assert.equal(await page.locator('#ws-plan .cell.preview.hl, #ws-lib .pd-inv-row.hl').count(), 0, 'nothing lit once the pointer leaves');
   // the knobs change the preview; the spare row goes when the room asked for leaves none
   await btn(page, 'Plenty', '#ws-lib').click(); await settle(page, 400);
   assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Plenty' }).count() === 1);
@@ -1409,6 +1426,20 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'back to the compartment tools');
   assert.equal(await page.locator('#ws-plan .cell.preview').count(), 0, 'the plan is the drawer\'s again');
   assert.equal(await page.locator('#ws-plan .cell').count(), 13);
+  // a compartment's part in the Inspector: the typed line and the list's own fields with the picture (one editing surface,
+  // 2026-11-08); a change by a field is one history entry, and the typed line and the picture follow it
+  const c0 = page.locator('#ws-plan .cell').first(); const b0 = await c0.boundingBox();
+  await page.mouse.click(b0.x + b0.width / 2, b0.y + b0.height / 2); await settle(page, 500);
+  assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 200');
+  assert.deepEqual(await page.evaluate(() => { const f = document.querySelector('#ws-insp .pd-part .pd-fields'); return [f.querySelector('.pd-pic').getAttribute('src'), ...[...f.querySelectorAll('select')].map((s) => s.value), ...[...f.querySelectorAll('input')].map((i) => i.value)]; }), ['img/hw/shcs-m3.webp', 'shcs', 'M3', '8', '200']);
+  await page.fill('#ws-insp .pd-part .pd-qty input', '120'); await page.press('#ws-insp .pd-part .pd-qty input', 'Tab'); await settle(page, 500);
+  assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 120', 'the typed line follows the field');
+  await page.selectOption('#ws-insp .pd-part .pd-fields select >> nth=0', 'bhcs'); await settle(page, 500);
+  assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 BHCS 120');
+  assert.equal(await page.getAttribute('#ws-insp .pd-part .pd-pic', 'src'), 'img/hw/bhcs-m3.webp', 'the picture follows the type');
+  await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 400); await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 500);
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps[0].item), { type: 'shcs', size: 'M3', length: 8, qty: 200 }, 'two undos, one per field change');
+  { const x = page.locator('#ws-insp button[aria-label="Clear the selection"]'); if (await x.count()) { await x.click(); await settle(page, 300); } }
   // reopened, the list is the drawer's parts in reading order with the fit it was laid out with; Esc drops it
   await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
   assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8);

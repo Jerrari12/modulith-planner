@@ -23,8 +23,9 @@ const PAD = { l: 18, r: 8, t: 14, b: 22 };
 
 /* the plan of a full layout (unit.js fullLayout) drawn into an <svg>: `sel` the selection box (mm) or null, `hot` a wall
    highlight { orient, c, segs, J, drag?, from? } or null, `flags` the reach flags, `hover` a hovered compartment */
-// preview: the compartments are a proposal (the parts list's layout, 2026-11-07): drawn dashed, no selection, no hover
-export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false } = {}) {
+// preview: the compartments are a proposal (the parts list's layout, 2026-11-07): drawn dashed, no selection, no hover; hl is the
+// one lit with its row in the list (2026-11-08)
+export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false, hl = null } = {}) {
   const S = G.SIZES[full.size], L = { ...full, comps };
   svg.replaceChildren();
   svg.setAttribute('viewBox', `${-2 - PAD.l} ${-4 - PAD.t} ${S.W + 4 + PAD.l + PAD.r} ${S.D + 8.3 + PAD.t + PAD.b}`);   // the shell: 2 each side, 4.3 in front, 4 behind
@@ -37,7 +38,7 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   const outl = new Map(outlinesOf(L).map((o) => [o.comp, o.polys]));   // the parts on the floors (M3)
   comps.forEach((c, i) => {
     const w = c.x1 - c.x0, d = c.y1 - c.y0;
-    rect('cell' + (preview ? ' preview' : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
+    rect('cell' + (preview ? ' preview' + (hl === c ? ' hl' : '') : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
     const s = G.scoopSize(L, c), t = G.traySize(L, c);
     const fk = G.floorColorOf(L, c);
     let ink = null;
@@ -160,11 +161,11 @@ export function plan(opts) {
     return { x: m.x, y: G.SIZES[full().size].D - m.y };
   }
   // the compartment under a plan point; walls count toward the nearer side
-  function compAt(pt) {
+  function compAt(pt, list = comps()) {   // list: the drawer's compartments, or the proposal's while the parts list is open
     const S = G.SIZES[full().size];
     if (pt.x < -2 || pt.x > S.W + 2 || pt.y < -4.3 || pt.y > S.D + 4) return null;
     let best = null, bd = Infinity;
-    for (const c of comps()) { const dx = Math.max(c.x0 - pt.x, 0, pt.x - c.x1), dy = Math.max(c.y0 - pt.y, 0, pt.y - c.y1), dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = c; } }
+    for (const c of list) { const dx = Math.max(c.x0 - pt.x, 0, pt.x - c.x1), dy = Math.max(c.y0 - pt.y, 0, pt.y - c.y1), dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = c; } }
     return best;
   }
   const closure = (r) => G.closeBox(comps(), { ...r });
@@ -175,16 +176,19 @@ export function plan(opts) {
   /* the parts list's preview (2026-11-07): opts.preview() gives { comps, note, warn } while the list is open, and the plan draws
      those compartments dashed with the note in its header instead of the gestures, which are off */
   const preview = () => (opts.preview ? opts.preview() : null);
+  let pvHover = null;   // the proposed compartment under the pointer (opts.onPreviewHover; a press is opts.onPreviewPick): its row lights in the list (2026-11-08)
   function render() {
     const pv = preview();
     svg.classList.toggle('preview', !!pv);
     hint.textContent = pv ? (pv.note || '') : HINT; hint.classList.toggle('warn', !!(pv && pv.warn));
-    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true }); placeTip(); return; }
+    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true, hl: pv.hl || null }); placeTip(); return; }
     drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps() });
     placeTip();
   }
   svg.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0 || preview()) return;
+    if (e.button !== 0) return;
+    const pv = preview();
+    if (pv) { e.preventDefault(); if (opts.onPreviewPick) opts.onPreviewPick(compAt(planPoint(e), pv.comps || [])); return; }   // the gestures are off: a proposed compartment pressed goes to its row (preventDefault: the mousedown that follows would take the focus back from it)
     const pt = planPoint(e);
     const ch = hitWall(pt, e);
     if (ch) {
@@ -196,7 +200,8 @@ export function plan(opts) {
     opts.onSelect(closure(G.compBox(c))); render();
   });
   svg.addEventListener('pointermove', (e) => {
-    if (preview()) return;
+    const pv = preview();
+    if (pv) { const c = compAt(planPoint(e), pv.comps || []); if (c !== pvHover) { pvHover = c; svg.style.cursor = c ? 'pointer' : ''; if (opts.onPreviewHover) opts.onPreviewHover(c); } return; }
     const pt = planPoint(e); lastPt = { pt, pointerType: e.pointerType };
     if (wdrag) { if (moveWallDrag(wdrag, pt, e.altKey, snapTol())) render(); return; }
     if (drag) { const c = compAt(pt); if (c) { opts.onSelect(closure(G.boxOf([drag, c]))); render(); } return; }
@@ -214,7 +219,7 @@ export function plan(opts) {
     drag = null;
   }
   svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
-  svg.addEventListener('pointerleave', () => { lastPt = null; if (!wdrag && (hover || hoverComp)) { hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; if (opts.onHover) opts.onHover(null); render(); } });
+  svg.addEventListener('pointerleave', () => { lastPt = null; if (pvHover) { pvHover = null; svg.style.cursor = ''; if (opts.onPreviewHover) opts.onPreviewHover(null); } if (!wdrag && (hover || hoverComp)) { hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; if (opts.onHover) opts.onHover(null); render(); } });
   svg.addEventListener('dblclick', () => { if (!preview() && opts.selected()) opts.onHolder(); });
   // Shift changes what a wall drag will move, so the highlight follows it
   const shiftWatch = (e) => {
