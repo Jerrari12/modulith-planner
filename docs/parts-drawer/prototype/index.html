@@ -1,0 +1,1811 @@
+<title>MODULITH Parts Drawer Generator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: tool shell, three panes — controls | to-scale plan (front at bottom) | 3D stage. Stacks below 1100px / 720px.
+   MODULITH tokens: orange is the brand accent, blue is tool-scope only (selection, measurement). Night Grid / Day Grid. */
+:root {
+  --bg: #e9ebf1;
+  --panel: #f8f9fb;
+  --ink: #2c2d31;
+  --muted: #646876;
+  --line: #d3d6df;
+  --accent: #ff6a1a;
+  --accent-ink: #b5470b;
+  --cad: #2f6feb;
+  --cad-soft: rgba(47, 111, 235, 0.16);
+  --shell: #b9bcc8;
+  --wall: #4a4c57;
+  --cell: #ffffff;
+  --ramp: rgba(74, 76, 87, 0.26);
+  --label: #ffd9c2;
+  --stage-top: #f4f5f9;
+  --stage-bottom: #dfe2ec;
+  --stage-grid: #c3c7d6;
+  --stage-grid-major: #a7acc0;
+  --edge: #1d1e22;
+  --ok: #1f8a5b;
+  --warn: #b26a00;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --cut: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11121c; --panel: #181a28; --ink: #ecedf4; --muted: #9a9db4; --line: #2b2e44;
+    --accent: #ff6a1a; --accent-ink: #ff8f52; --cad: #6b93ff; --cad-soft: rgba(107, 147, 255, 0.22);
+    --shell: #3a3d55; --wall: #8b8fae; --cell: #1f2133; --ramp: rgba(139, 143, 174, 0.36); --label: #f2d6c2;
+    --stage-top: #1b1d33; --stage-bottom: #0c0d16; --stage-grid: #262a4a; --stage-grid-major: #3b4175;
+    --edge: #05060a; --ok: #3ccf8e; --warn: #f0a640; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11121c; --panel: #181a28; --ink: #ecedf4; --muted: #9a9db4; --line: #2b2e44;
+  --accent: #ff6a1a; --accent-ink: #ff8f52; --cad: #6b93ff; --cad-soft: rgba(107, 147, 255, 0.22);
+  --shell: #3a3d55; --wall: #8b8fae; --cell: #1f2133; --ramp: rgba(139, 143, 174, 0.36); --label: #f2d6c2;
+  --stage-top: #1b1d33; --stage-bottom: #0c0d16; --stage-grid: #262a4a; --stage-grid-major: #3b4175;
+  --edge: #05060a; --ok: #3ccf8e; --warn: #f0a640; color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px 18px; box-sizing: border-box;
+}
+*, *::before, *::after { box-sizing: inherit; }
+.app { display: grid; grid-template-rows: auto 1fr; gap: 12px; height: 100%; min-height: 680px; max-width: 1720px; margin: 0 auto; }
+header.bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eyebrow { font-family: var(--f-display); font-weight: 600; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-ink); }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(24px, 2.6vw, 32px); line-height: 1.05; margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+.meta { font-family: var(--f-mono); font-size: 12px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+.bar-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; min-width: 0; }
+.export { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.export .btn.primary { padding: 12px 16px; font-size: 15px; }
+.export .status { font-size: 12px; margin: 0; min-height: 0; text-align: right; max-width: 34ch; }
+.selbar { border-top: 1px solid var(--line); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.selbar .hint { margin: 0; }
+.selbar .opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.selbar .opts > span, .selbar .opts > label { font-size: 13px; color: var(--muted); }
+.selbar .opts .optpair { display: inline-flex; align-items: center; gap: 8px; }
+.selbar .opts[hidden] { display: none; }
+.palette { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.palette[hidden], .fills[hidden], .check[hidden], #sel-floor[hidden] { display: none; }
+.swatch { display: inline-flex; align-items: center; gap: 6px; font: 600 12.5px/1 var(--f-display); letter-spacing: 0.04em; color: var(--muted); }
+.swatch input[type="color"] { width: 32px; height: 26px; padding: 0; border: 1px solid var(--line); background: transparent; cursor: pointer; }
+.swatch .bodychip { width: 32px; height: 26px; border: 1px solid var(--line); display: inline-block; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.fseg button i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0, 0, 0, 0.3); }
+.size-in { display: inline-flex; gap: 8px; align-items: center; }
+.size-in[hidden] { display: none; }
+.size-in label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.size-in input { width: 74px; font: 500 14px/1 var(--f-mono); color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 7px 6px; }
+.size-in input:focus-visible { outline: 2px solid var(--cad); outline-offset: 1px; }
+.sel-note { font-size: 13px; color: var(--warn); margin: 0; }
+.sel-note:empty { display: none; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.spacer { flex: 1; }
+.meta b { color: var(--ink); font-weight: 500; }
+
+.work { display: grid; grid-template-columns: 300px minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 12px; min-height: 0; }
+.pane { background: var(--panel); border: 1px solid var(--line); min-width: 0; min-height: 0; display: flex; flex-direction: column;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
+.pane-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pane-title { font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; }
+.controls { overflow-y: auto; }
+.group { padding: 14px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.group:last-child { border-bottom: 0; }
+.group h2 { margin: 0; font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.row > span { font-weight: 500; }
+.hint { font-size: 13px; color: var(--muted); margin: 0; max-width: 60ch; }
+.seg { display: inline-flex; border: 1px solid var(--line); }
+.seg button { border: 0; background: transparent; color: var(--ink); font: 600 13px/1 var(--f-display); letter-spacing: 0.06em; padding: 9px 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.seg button:disabled { color: var(--line); cursor: default; text-decoration: line-through; text-decoration-thickness: 1px; }
+.seg.sm button { padding: 8px 11px; }
+.row.stack { flex-direction: column; align-items: stretch; gap: 8px; }
+.seg.fill { display: flex; }
+.seg.fill button { flex: 1 1 0; padding-inline: 0; }
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); }
+.stepper button { width: 34px; height: 34px; border: 0; background: transparent; color: var(--ink); font: 600 18px/1 var(--f-body); cursor: pointer; }
+.stepper button:disabled { color: var(--line); cursor: default; }
+.stepper output { min-width: 44px; text-align: center; font-family: var(--f-mono); font-size: 15px; font-variant-numeric: tabular-nums; border-inline: 1px solid var(--line); padding: 6px 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1px solid var(--line); background: transparent; color: var(--ink); font: 600 14px/1 var(--f-display); letter-spacing: 0.04em; padding: 10px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.btn:hover:not(:disabled) { border-color: var(--ink); }
+.btn:disabled { color: var(--muted); opacity: 0.55; cursor: default; }
+.btn.sm { padding: 7px 10px; font-size: 13px; }
+.btn kbd { font-family: var(--f-mono); font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 1px 4px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1b0d04;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.06); border-color: var(--accent); }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--cad); outline-offset: 2px; }
+.sel-summary { font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; padding: 8px 10px; background: var(--cad-soft); border-left: 3px solid var(--cad); }
+.sel-summary[hidden] { display: none; }
+dl.stats { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; font-size: 13px; }
+dl.stats dt { color: var(--muted); }
+dl.stats dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.status { font-size: 13px; min-height: 1.4em; margin: 0; }
+.status.err { color: var(--warn); }
+.status.ok { color: var(--ok); }
+.note { font-size: 12.5px; color: var(--muted); margin: 0; }
+.note b { color: var(--ink); font-weight: 600; }
+
+.plan-wrap { flex: 1; min-height: 0; display: flex; padding: 10px; }
+#plan { width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; display: block; }
+#plan .cell { fill: var(--cell); cursor: pointer; }
+#plan .cell.sel { fill: var(--cad-soft); stroke: var(--cad); stroke-width: 0.8; }
+#plan .shell { fill: var(--shell); }
+#plan .cavity, #plan .wallfill { fill: var(--wall); }
+#plan .ramp { fill: var(--ramp); pointer-events: none; }
+#plan .holder { fill: var(--accent); pointer-events: none; }
+#plan .gusset { fill: var(--wall); opacity: 0.5; pointer-events: none; }
+#plan .labelstrip { fill: var(--label); pointer-events: none; }
+#plan .floorfill { pointer-events: none; opacity: 0.88; }
+#plan .selring { fill: none; stroke: var(--cad); stroke-width: 0.9; pointer-events: none; }
+#plan .wallhot { fill: var(--cad); pointer-events: none; }
+#plan .wallhot.drag { fill: var(--accent); }
+#plan .delta { font-family: var(--f-mono); font-weight: 500; fill: var(--accent-ink); pointer-events: none; }
+#plan .nofit { fill: none; stroke: var(--muted); stroke-width: 0.5; stroke-dasharray: 1.6 1.2; pointer-events: none; }
+#plan .dim { font-family: var(--f-mono); fill: var(--ink); pointer-events: none; font-variant-numeric: tabular-nums; }
+#plan .dim.small { fill: var(--muted); }
+#plan .axis { stroke: var(--muted); stroke-width: 0.35; fill: none; }
+#plan .axis-t { font-family: var(--f-mono); font-size: 4.4px; fill: var(--muted); }
+#plan .face-t { font-family: var(--f-display); font-weight: 600; font-size: 5px; letter-spacing: 0.9px; fill: var(--muted); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+
+.stage { flex: 1; min-height: 0; position: relative; background: linear-gradient(180deg, var(--stage-top), var(--stage-bottom)); }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.stagebar { position: absolute; left: 10px; top: 10px; right: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; pointer-events: none; }
+.stagebar[hidden] { display: none; }
+.stagebar > * { pointer-events: auto; }
+.stagebar-t { font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); padding: 6px 9px; }
+.stagebar .seg { background: var(--panel); }
+.fseg[hidden] { display: none; }
+.stage-msg { position: absolute; inset: auto 12px 12px 12px; font-size: 13px; color: var(--muted); pointer-events: none; }
+.chips { display: flex; gap: 6px; align-items: center; }
+.chip { width: 20px; height: 20px; border: 2px solid var(--line); cursor: pointer; padding: 0;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px); }
+.chip[aria-pressed="true"] { border-color: var(--ink); }
+
+dialog.inv { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
+dialog.inv::backdrop { background: rgba(8, 9, 16, 0.55); }
+.inv form { display: flex; flex-direction: column; gap: 12px; padding: 16px; max-height: calc(100vh - 34px); overflow: auto; }
+.inv header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.inv h2 { margin: 0; font-family: var(--f-display); font-weight: 700; font-size: 20px; }
+.inv label { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+.inv label.check { flex-direction: row; align-items: center; gap: 8px; }
+.inv .inv-row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-end; }
+.inv select, .inv textarea, .inv input[type="number"] { font: 500 14px/1.3 var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); padding: 7px 8px; }
+.inv textarea { font-family: var(--f-mono); font-size: 13px; resize: vertical; }
+.inv .file input { display: none; }
+.inv-table-wrap { border: 1px solid var(--line); max-height: 300px; overflow: auto; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.inv-table th { text-align: left; font: 600 12px/1 var(--f-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 8px; position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); }
+.inv-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.inv-table td input[type="number"] { width: 78px; }
+.inv-table .empty { color: var(--muted); padding: 14px 8px; }
+.inv-sum { margin: 0; font-family: var(--f-mono); font-size: 13px; padding: 8px 10px; background: var(--cad-soft); border-left: 3px solid var(--cad); }
+.inv-sum.warn { background: rgba(240, 166, 64, 0.14); border-left-color: var(--warn); }
+.reach { display: grid; gap: 8px; justify-items: start; font-size: 13px; padding: 8px 10px; background: rgba(240, 166, 64, 0.14); border-left: 3px solid var(--warn); }
+.reach[hidden] { display: none; }
+.reach p { margin: 0; max-width: 60ch; }
+#plan .deep { fill: rgba(240, 166, 64, 0.2); stroke: var(--warn); stroke-width: 0.7; stroke-dasharray: 2 1.2; pointer-events: none; }
+.legend .deepkey { background: rgba(240, 166, 64, 0.35); outline: 1px dashed var(--warn); outline-offset: -1px; }
+.inv footer { justify-content: flex-end; }
+.code-big { margin: 0; font: 600 34px/1.1 var(--f-mono); letter-spacing: 0.06em; }
+.inv textarea[readonly] { color: var(--muted); }
+#open-code { font-family: var(--f-mono); font-size: 13px; letter-spacing: 0.04em; }
+#part-in input { width: 190px; font: 500 13px/1 var(--f-mono); color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 7px 6px; }
+#part-in[hidden] { display: none; }
+#plan .outline { pointer-events: none; fill-rule: evenodd; }
+#plan .lidpull { fill: none; stroke: var(--cad); stroke-width: 0.7; stroke-dasharray: 1.6 1.1; pointer-events: none; }
+#plan .coverline { fill: none; stroke: var(--cad); stroke-width: 0.45; stroke-dasharray: 1.2 0.8; pointer-events: none; }
+#plan .cellring { fill: none; stroke: var(--muted); stroke-width: 0.35; stroke-dasharray: 1 0.8; pointer-events: none; }
+#plan .cellsolid { fill: var(--accent); pointer-events: none; }
+#plan .cellhole { fill: var(--cell); pointer-events: none; }
+#plan .cellline { stroke: var(--accent); stroke-width: 0.45; pointer-events: none; }
+#plan .cellarc { fill: none; stroke: var(--accent); pointer-events: none; }
+#sel-bearing-wrap[hidden], #sel-washer-wrap[hidden], #sel-spacing-wrap[hidden] { display: none; }
+#sel-spacing-wrap { display: inline-flex; align-items: center; gap: 8px; }
+#sel-bearing, #sel-washer { font: 600 13px/1 var(--f-display); letter-spacing: 0.04em; padding: 7px 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+#plan .bead { fill: var(--accent); pointer-events: none; }
+#plan .pullhook { fill: var(--cad); pointer-events: none; }
+#plan .nailslot { fill: var(--cad); pointer-events: none; }
+#sel-cover-wrap[hidden] { display: none; }
+#lidview-row[hidden], #lidtest-row[hidden] { display: none; }
+#plan .labeltxt { font-family: var(--f-display); font-weight: 700; fill: #1d1e22; pointer-events: none; }
+@media (max-width: 1100px) {
+  .app { height: auto; }
+  .work { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .controls { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); overflow: visible; }
+  .controls .group { border-right: 1px solid var(--line); }
+  .plan-pane, .view-pane { height: 700px; }
+}
+@media (max-width: 720px) {
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .plan-pane { height: 720px; order: 0; }
+  .view-pane { order: 1; }
+  .controls { order: 2; }
+  .export { align-items: stretch; width: 100%; }
+  .export .status { text-align: left; }
+  .bar-right { width: 100%; }
+  .view-pane { height: 420px; }
+  .controls { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <span class="eyebrow">MODULITH Prototype</span>
+      <h1>Parts Drawer Generator</h1>
+    </div>
+    <div class="bar-right">
+      <div class="meta"><span>Collection <b id="meta-len">240</b></span><span>Width <b id="meta-w">2W</b></span><span>Label <b id="meta-label">29.88 × 13 × 1.35 mm</b></span><span>Stamp <b>v2610</b></span></div>
+      <button type="button" class="btn" id="open-code" title="Layout code: reopen or share this layout">MD-···-···</button>
+      <div class="export">
+        <button type="button" class="btn primary" id="act-export" disabled>Download STL + 3MF (.zip)</button>
+        <p class="status" id="export-status" role="status"></p>
+      </div>
+    </div>
+  </header>
+
+  <main class="work">
+    <section class="pane controls" aria-label="Drawer settings">
+      <div class="group">
+        <h2>Drawer</h2>
+        <div class="row stack"><span>Collection</span>
+          <div class="seg sm fill" role="group" aria-label="Collection: the drawer's length">
+            <button type="button" data-length="59">59</button>
+            <button type="button" data-length="115">115</button>
+            <button type="button" data-length="165">165</button>
+            <button type="button" data-length="185">185</button>
+            <button type="button" data-length="240">240</button>
+            <button type="button" data-length="270">270</button>
+          </div>
+        </div>
+        <div class="row"><span>Width</span>
+          <div class="seg" role="group" aria-label="Drawer width">
+            <button type="button" data-width="1">1W</button>
+            <button type="button" data-width="2">2W</button>
+            <button type="button" data-width="3">3W</button>
+            <button type="button" data-width="4">4W</button>
+          </div>
+        </div>
+        <p class="hint" id="fit-hint"></p>
+        <p class="hint" id="size-note" hidden></p>
+        <div class="row"><span>Height</span>
+          <div class="seg" role="group" aria-label="Drawer height">
+            <button type="button" id="h-05" data-height="0.5H">0.5H</button>
+            <button type="button" id="h-1" data-height="1H">1H</button>
+            <button type="button" id="h-15" data-height="1.5H">1.5H</button>
+            <button type="button" id="h-2" data-height="2H">2H</button>
+          </div>
+        </div>
+        <p class="hint" id="height-hint" hidden></p>
+        <div class="reach" id="reach-warn" role="status" hidden><p id="reach-text"></p><button type="button" class="btn" id="reach-fix">Use a reachable grid</button></div>
+        <div class="row"><span>Label</span>
+          <div class="seg" role="group" aria-label="Label size">
+            <button type="button" id="lb-large" data-label="large">Large</button>
+            <button type="button" id="lb-small" data-label="small">Small</button>
+          </div>
+        </div>
+        <p class="hint" id="label-hint">Large (29.88 × 13 mm) fits 12 mm label-maker tape. Small is the original 29.88 × 8 mm label.</p>
+      </div>
+
+      <div class="group">
+        <h2>Grid</h2>
+        <div class="row"><span>Columns</span>
+          <div class="stepper"><button type="button" id="cols-dec" aria-label="Fewer columns">−</button><output id="cols-out">5</output><button type="button" id="cols-inc" aria-label="More columns">+</button></div>
+        </div>
+        <div class="row"><span>Rows</span>
+          <div class="stepper"><button type="button" id="rows-dec" aria-label="Fewer rows">−</button><output id="rows-out">4</output><button type="button" id="rows-inc" aria-label="More rows">+</button></div>
+        </div>
+        <div class="btns">
+          <button type="button" class="btn" id="preset-shipped">Shipped 5×4</button>
+          <button type="button" class="btn" id="reset-grid">Reset grid</button>
+          <button type="button" class="btn" id="open-inv">From a parts list…</button>
+        </div>
+        <p class="hint">Changing the grid starts over from single compartments.</p>
+      </div>
+
+      <div class="group">
+        <h2>Floor</h2>
+        <div class="row"><span>Scoop</span>
+          <div class="seg sm" role="group" aria-label="Front scoop for every compartment">
+            <button type="button" data-all-scoop="off">Off</button>
+            <button type="button" data-all-scoop="std">Standard</button>
+            <button type="button" data-all-scoop="deep">Deep</button>
+          </div>
+        </div>
+        <div class="row"><span>Tray, mm</span>
+          <div class="seg sm" role="group" aria-label="Tray ramp size for every compartment">
+            <button type="button" data-all-tray="0">Off</button>
+            <button type="button" data-all-tray="3" aria-label="3 mm">3</button>
+            <button type="button" data-all-tray="6" aria-label="6 mm">6</button>
+            <button type="button" data-all-tray="9" aria-label="9 mm">9</button>
+            <button type="button" data-all-tray="12" aria-label="12 mm">12</button>
+          </div>
+        </div>
+        <div class="row"><span>Part outlines</span>
+          <div class="seg sm" role="group" aria-label="Part outlines on the floors">
+            <button type="button" data-outlines="0">Off</button>
+            <button type="button" data-outlines="1">On</button>
+          </div>
+        </div>
+        <p class="hint">Standard is the shipped 6 mm front scoop, Deep goes up to 12 mm. Tray adds 45° ramps on the sides and back so small parts slide to the middle: 6 matches the standard scoop, 12 the deep one. Each ramp stops at a third of the compartment, so small compartments get a little less. Part outlines put each compartment's part on its floor at 1:1, so you can lay a screw on it to check the length. <span id="floor-hint">Applies to every compartment.</span></p>
+      </div>
+
+      <div class="group">
+        <h2>Floor color</h2>
+        <div class="seg sm" role="group" aria-label="Floor color">
+          <button type="button" data-fmode="off">Off</button>
+          <button type="button" data-fmode="one">One color</button>
+          <button type="button" data-fmode="paint">Paint</button>
+        </div>
+        <div class="palette" id="palette" hidden></div>
+        <label class="check" id="slot4-row" hidden><input type="checkbox" id="slot4"> 4th floor color (MMU3, XL)</label>
+        <div class="btns fills" id="fills" hidden>
+          <button type="button" class="btn sm" data-fill="row">By row</button>
+          <button type="button" class="btn sm" data-fill="col">By column</button>
+          <button type="button" class="btn sm" data-fill="mix">Mix</button>
+          <button type="button" class="btn sm" data-fill="clear">Clear</button>
+        </div>
+        <p class="hint" id="fcolor-hint">Off: the drawer prints in one color.</p>
+      </div>
+
+      <div class="group">
+        <h2>Lid</h2>
+        <div class="seg sm" role="group" aria-label="Lid or covers">
+          <button type="button" data-lidmode="off">Off</button>
+          <button type="button" data-lidmode="lid">One lid</button>
+          <button type="button" data-lidmode="covers">Covers</button>
+        </div>
+        <div class="row" id="lidview-row" hidden><span>Preview</span>
+          <div class="seg sm" role="group" aria-label="Lid in the preview">
+            <button type="button" data-lidview="beside" id="lidview-open">Beside</button>
+            <button type="button" data-lidview="closed">Closed</button>
+          </div>
+        </div>
+        <div class="btns" id="lidtest-row" hidden><button type="button" class="btn sm" id="act-lidtest">Download test pieces</button></div>
+        <p class="status" id="lidtest-status" role="status"></p>
+        <p class="hint" id="lid-hint"></p>
+      </div>
+
+      <div class="group">
+        <h2>Build</h2>
+        <dl class="stats">
+          <dt>Compartments</dt><dd id="st-comp">–</dd>
+          <dt>Label holders</dt><dd id="st-labels">–</dd>
+          <dt>Weight, PLA</dt><dd id="st-g">–</dd>
+          <dt>Build time</dt><dd id="st-ms">–</dd>
+        </dl>
+        <p class="note">Weight is solid PLA. Sliced with infill it comes out lighter, a lot lighter with big trays and deep scoops (a 0.5H 5×4 with 12 mm trays: 323 g solid, 191 g sliced at 15%). The shipped 5×4 with Small labels matches the Fusion part to <b>0.0001 mm</b>.</p>
+      </div>
+    </section>
+
+    <section class="pane plan-pane" aria-label="Layout plan">
+      <div class="pane-head">
+        <span class="pane-title">Plan, mm</span>
+        <div class="legend"><span><i style="background:var(--accent)"></i>Label holder</span><span><i style="background:var(--ramp)"></i>Ramp</span><span><i style="background:var(--cad)"></i>Selected</span><span id="legend-deep" hidden><i class="deepkey"></i>Too deep to reach</span></div>
+        <div class="btns"><button type="button" class="btn sm" id="act-undo" title="Ctrl+Z">Undo</button><button type="button" class="btn sm" id="act-redo" title="Ctrl+Shift+Z">Redo</button></div>
+      </div>
+      <div class="plan-wrap"><svg id="plan" role="img" aria-label="Top-down plan of the drawer layout, front edge at the bottom"></svg></div>
+      <div class="selbar">
+        <p class="hint" id="sel-hint">Drag across compartments to select them, or click them in the 3D view (Shift adds). Drag a wall to move it: Shift moves the whole line, Alt turns off snapping. Double-click toggles a label holder, T steps through the tray sizes. Cells turn a compartment into bearing wells, nozzle or bit sockets, or washer rows (a test).</p>
+        <div class="sel-summary" id="sel-summary" hidden></div>
+        <p class="sel-note" id="sel-note" role="status"></p>
+        <div class="btns">
+          <button type="button" class="btn" id="act-merge" disabled>Merge <kbd>M</kbd></button>
+          <button type="button" class="btn" id="act-split" disabled>Split <kbd>S</kbd></button>
+          <button type="button" class="btn" id="act-label" disabled>Label holder <kbd>L</kbd></button>
+        </div>
+        <div class="opts" id="sel-opts" hidden>
+          <span class="size-in" id="size-in" hidden>
+            <label title="Moves the right wall (the left one at the drawer edge)">W <input type="number" id="in-w" step="0.5" min="12" inputmode="decimal" aria-label="Clear width in mm"></label>
+            <label title="Moves the back wall (the front one at the drawer edge)">D <input type="number" id="in-d" step="0.5" min="12" inputmode="decimal" aria-label="Clear depth in mm"></label>
+          </span>
+          <label id="part-in" hidden title="One part, like M3x10 SHCS 100. Empty clears it.">Part <input id="in-part" placeholder="M3x10 SHCS 100" spellcheck="false" autocomplete="off"></label>
+          <span id="sel-floor" hidden><span>Floor</span> <span class="seg sm fseg" id="sel-floor-seg" role="group" aria-label="Floor color for the selection"></span></span>
+          <span class="optpair"><span>Scoop</span>
+          <span class="seg sm" role="group" aria-label="Front scoop for the selection">
+            <button type="button" data-sel-scoop="off">Off</button>
+            <button type="button" data-sel-scoop="std">Standard</button>
+            <button type="button" data-sel-scoop="deep">Deep</button>
+          </span></span>
+          <span id="sel-cover-wrap" hidden><span>Cover</span> <span class="seg sm" role="group" aria-label="Cover for the selection"><button type="button" data-sel-cover="1">On</button><button type="button" data-sel-cover="0">Off</button></span></span>
+          <span class="optpair"><span>Tray, mm</span>
+          <span class="seg sm" role="group" aria-label="Tray ramp size for the selection">
+            <button type="button" data-sel-tray="0">Off</button>
+            <button type="button" data-sel-tray="3" aria-label="3 mm">3</button>
+            <button type="button" data-sel-tray="6" aria-label="6 mm">6</button>
+            <button type="button" data-sel-tray="9" aria-label="9 mm">9</button>
+            <button type="button" data-sel-tray="12" aria-label="12 mm">12</button>
+          </span></span>
+          <span class="optpair"><span>Cells</span>
+          <span class="seg sm" role="group" aria-label="Cells for the selection">
+            <button type="button" data-sel-cell="" title="A loose pile (the scoop and tray you set)">Off</button>
+            <button type="button" data-sel-cell="wells" title="A low split ring per bearing stack: reach in through the gaps front and back">Bearing wells</button>
+            <button type="button" data-sel-cell="nozzles" title="Sockets V6-style (M6) nozzles drop into">Nozzles</button>
+            <button type="button" data-sel-cell="bits" title="Hex sockets 1/4 inch bits stand in (1H drawers)">Bits</button>
+          </span></span>
+          <span id="sel-spacing-wrap" hidden><span>Spacing</span> <span class="seg sm" role="group" aria-label="Cell spacing for the selection"><button type="button" data-sel-spacing="roomy" title="A fingertip (8 mm) between the parts you grip">Roomy</button><button type="button" data-sel-spacing="dense" title="5 mm between them: more parts, fingernails only">Dense</button></span></span>
+          <label id="sel-bearing-wrap" hidden><span>Bearing</span> <select id="sel-bearing" aria-label="Bearing the wells are for"></select></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane view-pane" aria-label="3D preview">
+      <div class="pane-head">
+        <span class="pane-title">Preview</span>
+        <div class="chips" role="group" aria-label="Preview filament">
+          <button type="button" class="chip" data-color="#ff6a1a" title="MODULITH Orange" aria-label="Orange"></button>
+          <button type="button" class="chip" data-color="#3ed2a6" title="Teal" aria-label="Teal"></button>
+          <button type="button" class="chip" data-color="#d8c7a3" title="Sandstone" aria-label="Sandstone"></button>
+          <button type="button" class="chip" data-color="#4a4b52" title="Charcoal" aria-label="Charcoal"></button>
+          <button type="button" class="chip" data-color="#e9e9ec" title="White" aria-label="White"></button>
+        </div>
+      </div>
+      <div class="stage"><canvas id="view"></canvas>
+        <div class="stagebar" id="stagebar" hidden><span class="stagebar-t" id="stagebar-t">Floor</span><span class="seg sm fseg" id="stage-floor-seg" role="group" aria-label="Floor color for the selection, in the 3D view"></span></div><p class="stage-msg" id="stage-msg">Starting the geometry engine…</p></div>
+    </section>
+  </main>
+</div>
+
+<dialog class="inv" id="inv" aria-labelledby="inv-title">
+  <form method="dialog">
+    <header><h2 id="inv-title">Lay out from a parts list</h2><button class="btn sm" value="cancel">Close</button></header>
+    <div class="inv-row">
+      <label>Start from a kit <select id="inv-kit"><option value="">Choose a kit…</option></select></label>
+      <span class="btn sm file" role="button" tabindex="0" id="inv-import">Import a list<input type="file" id="inv-file" accept=".json,.csv,.txt"></span>
+    </div>
+    <label>Add parts, one per line: size, type and quantity
+      <textarea id="inv-text" rows="3" spellcheck="false" placeholder="M3x10 SHCS 100&#10;M3 nut 200&#10;M5 washer 50"></textarea></label>
+    <div class="btns"><button type="button" class="btn sm" id="inv-add">Add these</button><span class="sel-note" id="inv-err"></span></div>
+    <div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Part</th><th>Size</th><th>Length</th><th>Qty</th><th><span class="sr">Remove</span></th></tr></thead><tbody id="inv-body"></tbody></table></div>
+    <div class="inv-row">
+      <label>Floor colors <select id="inv-color"><option value="none">Leave as they are</option><option value="size">By thread size</option><option value="type">By part type</option></select></label>
+      <label class="check"><input type="checkbox" id="inv-labels" checked> Label holders</label>
+      <button type="button" class="btn sm" id="inv-clear">Clear list</button>
+    </div>
+    <p class="inv-sum" id="inv-sum"></p>
+    <p class="hint">Parts go front-left to back-right in order of type, size and length. Each compartment is sized for its quantity, using typical ISO part sizes, so treat the fill as an estimate.</p>
+    <footer class="btns"><button class="btn" value="cancel">Cancel</button><button type="button" class="btn primary" id="inv-apply">Lay out drawer</button></footer>
+  </form>
+</dialog>
+
+<dialog class="inv" id="codedlg" aria-labelledby="code-title">
+  <form method="dialog">
+    <header><h2 id="code-title">Layout code</h2><button class="btn sm" value="cancel">Close</button></header>
+    <p class="code-big" id="code-big">MD-···-···</p>
+    <p class="hint">Every download marks this code under the drawer. Type it here later to reopen this exact layout. In this prototype a code opens where its layout was saved; to send a layout to someone, use the share text.</p>
+    <label class="check"><input type="checkbox" id="code-mark"> Mark the code under the drawer</label>
+    <label>Share text <textarea id="code-share" rows="3" readonly spellcheck="false"></textarea></label>
+    <div class="btns"><button type="button" class="btn sm" id="code-copy">Copy share text</button><span class="status" id="code-status" role="status"></span></div>
+    <label>Open a layout: a code or a share text <input id="code-open-in" placeholder="MD-7KQ-2X9 or mdg1.…" spellcheck="false" autocomplete="off"></label>
+    <footer class="btns"><button class="btn" value="cancel">Cancel</button><button type="button" class="btn primary" id="code-open">Open layout</button></footer>
+  </form>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as G from './gen.js';
+import * as X from './export.js';
+import * as I from './inventory.js';
+import * as Mk from './marks.js';
+
+const $ = (id) => document.getElementById(id);
+// v24: the drawer size is part of the state (st.size, every collection length at 2W); S is its SIZES entry, set from the
+// state whenever it changes (changed(), start())
+const SIZE0 = '240-2W';
+let S = G.SIZES[SIZE0];
+const setS = () => { S = G.SIZES[st?.size] || G.SIZES[SIZE0]; };
+const maxRows = () => G.maxGrid(st.size).nr, maxCols = () => G.maxGrid(st.size).nc;   // v25: 5 columns per width unit
+const WALL = G.C.WALL, EPS = 1e-6, WALL_ = G.C.WALL;
+const fmt = (v) => v.toFixed(1);
+
+// ---------------- state ----------------
+// st = { v: 2, height, label, style, nc, nr, comps: [{ x0, x1, y0, y1, holder, scoop, tray (mm), color }] }
+// nc/nr are the base grid the steppers and Split work from; compartments are free rectangles in mm.
+const EXAMPLE = (() => {
+  const cx = G.spans(G.uniform(S.W, 5)), ry = G.spans(G.uniform(S.D, 4));
+  const R = (c0, c1, r0, r1, p) => G.comp(cx[c0][0], cx[c1][1], ry[r0][0], ry[r1][1], p);
+  return { v: 2, size: SIZE0, height: '1H', label: 'large', style: 'pyramid', nc: 5, nr: 4, floor: { mode: 'off', colors: ['#f2f2f0', '#f5c518', '#3aa0ff', '#e5322d'], slots: 3 }, inventory: { items: [], colorBy: 'none', labels: true }, outlines: false, codeMark: true, lid: false, covers: false,
+    comps: [R(0, 1, 0, 0), R(2, 4, 0, 0, { scoop: 'deep' }), R(0, 0, 1, 2), R(1, 2, 1, 2, { tray: 12 }), R(3, 3, 1, 1, { tray: 6 }), R(4, 4, 1, 1, { tray: 6 }), R(3, 4, 2, 2), R(0, 4, 3, 3)] };
+})();
+let st = null;
+let sel = null;            // selection box in mm, always grown to whole compartments
+const undo = [], redo = [];
+const clone = (o) => JSON.parse(JSON.stringify(o));
+// floor colours: mode off | one | paint; colors holds four slots, slots says how many paint mode uses (3 or 4)
+const FLOOR_DEFAULT = { mode: 'off', colors: ['#f2f2f0', '#f5c518', '#3aa0ff', '#e5322d'], slots: 3 };
+const floorLayout = () => { const f = st.floor; return f.mode === 'off' ? { mode: 'off', colors: [] } : { mode: f.mode, colors: f.mode === 'one' ? [f.colors[0]] : f.colors.slice(0, f.slots) }; };
+const layout = () => ({ v: 2, size: st.size, height: st.height, label: st.label, style: st.style, floor: floorLayout(), covers: !!st.covers, lid: !!st.lid, comps: st.comps });   // the lid: cells keep under its ribs and lips (v19)
+const geomOf = (c) => ({ x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, holder: c.holder, scoop: c.scoop, tray: c.tray, ...(c.cell ? { cell: G.cellKind(c), bearing: G.cellKind(c) === 'wells' ? G.cellBearing(c).code : 0, washer: c.cell === 'washers' ? washerKey(c) : 0, spacing: G.cellSpacing(c) } : {}) });
+const washerKey = (c) => { const w = G.cellWasher(c); return (w.lock ? 'L' : '') + w.size; };
+const outlinesNow = () => (st.outlines ? I.placedOutlines(layout(), G.openFloorRect, 2.5, G.floorRect).filter((o) => !st.comps[o.comp].cell) : []);   // a cell's floor is taken
+const hexOk = (c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+const cleanItem = (it) => ({ type: it.type, size: it.size, length: I.TYPES[it.type].screw || I.TYPES[it.type].len ? +it.length || 0 : 0, qty: Math.max(0, Math.round(+it.qty || 0)) });
+function normInv(v) {
+  const items = Array.isArray(v?.items) ? v.items.filter((it) => it && I.known(it)).map(cleanItem) : [];
+  return { items, colorBy: ['none', 'size', 'type'].includes(v?.colorBy) ? v.colorBy : 'none', labels: v?.labels !== false };
+}
+function normFloor(f) {
+  const d = clone(FLOOR_DEFAULT); if (!f) return d;
+  return { mode: ['off', 'one', 'paint'].includes(f.mode) ? f.mode : 'off', colors: d.colors.map((c, i) => (hexOk(f.colors?.[i]) ? f.colors[i].toLowerCase() : c)), slots: f.slots === 4 ? 4 : 3 };
+}
+
+// a compartment's cell, as saved: v18-v19 bearing posts open as wells; only the size and spacing that cell uses
+function normCell(c) {
+  const kind = G.cellKind(c); if (!c.cell || !G.CELLS[kind]) return {};
+  return { cell: kind, ...(kind === 'wells' && G.bearingDims(c.bearing || '') ? { bearing: G.bearingBase(c.bearing) } : {}), ...(kind === 'washers' && G.WASHERS[c.washer] ? { washer: c.washer } : {}),
+    ...(G.GRID_CELLS.includes(kind) && c.spacing === 'dense' ? { spacing: 'dense' } : {}) };
+}
+function normalize(s) {
+  const size = G.SIZES[s?.size] ? s.size : SIZE0;   // layouts from before v24 are all 240-2W
+  if (!s || !G.SIZES[size].heights[s.height] || (s.label !== undefined && !G.HOLDERS[s.label])) return null;
+  try {
+    const v2 = G.toV2({ ...s, size });
+    G.checkTiling(v2);
+    return { v: 2, size, height: v2.height, label: v2.label, style: 'pyramid', nc: s.nc || s.cols?.length || 5, nr: s.nr || s.rows?.length || 4, floor: normFloor(s.floor),
+      inventory: normInv(s.inventory), outlines: !!s.outlines, codeMark: s.codeMark !== false, lid: !!s.lid, covers: !!s.covers && !s.lid,
+      // v28: washer rows are retired (Joey: washers aren't stored that way, and once a row runs low the rest fall over and
+      // slide about); a layout that had them opens with plain compartments and the standard scoop there
+      comps: v2.comps.map((c) => { const gone = G.cellKind(c) === 'washers'; return { x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, holder: c.holder !== false, scoop: gone ? 'std' : G.SCOOPS[c.scoop] ? c.scoop : 'std', tray: gone ? 0 : G.trayMM(c), color: Math.max(0, Math.min(G.MAX_FLOOR_COLORS, c.color | 0)),
+        ...(c.item && I.known(c.item) ? { item: cleanItem(c.item) } : {}), ...(c.nocover ? { nocover: true } : {}),
+        ...(gone ? {} : normCell(c)) }; }) };
+  } catch { return null; }
+}
+function commit(mut) {
+  const before = JSON.stringify(st);
+  mut(st);
+  if (JSON.stringify(st) === before) { drawPlan(); updateSel(); return false; }   // nothing changed: no undo step
+  undo.push(JSON.parse(before)); if (undo.length > 100) undo.shift(); redo.length = 0;
+  sel = sel && regrow(sel); changed(); return true;
+}
+function back(from, to) { if (!from.length) return; to.push(clone(st)); st = from.pop(); sel = null; changed(); }
+
+// ---------------- selection logic ----------------
+const overlaps = (a, b) => a.x0 < b.x1 - EPS && b.x0 < a.x1 - EPS && a.y0 < b.y1 - EPS && b.y0 < a.y1 - EPS;
+const inside = G.inBox, bbox = G.boxOf;
+const closure = (r) => G.closeBox(st.comps, { ...r });
+function regrow(r) { const hit = st.comps.filter((c) => overlaps(c, r)); return hit.length ? closure(bbox(hit)) : null; }
+const selected = () => (sel ? st.comps.filter((c) => inside(c, sel)) : []);
+const mode = (arr) => { const n = new Map(); let best = arr[0], k = 0; for (const v of arr) { const m = (n.get(v) || 0) + 1; n.set(v, m); if (m > k) { k = m; best = v; } } return best; };
+const sharedProps = (list) => {
+  const same = list.every((c) => JSON.stringify(c.item) === JSON.stringify(list[0].item));
+  return { holder: list.some((c) => c.holder), scoop: mode(list.map((c) => c.scoop)), tray: mode(list.map((c) => c.tray)), color: mode(list.map((c) => c.color)), ...(same && list[0].item ? { item: { ...list[0].item } } : {}) };
+};
+
+function doMerge() {
+  const s = selected(); if (s.length < 2) return;
+  const props = sharedProps(s);
+  commit((x) => { x.comps = x.comps.filter((c) => !inside(c, sel)); x.comps.push(G.comp(sel.x0, sel.x1, sel.y0, sel.y1, props)); });
+}
+// Split a compartment back into the base-grid cells it covers; a single cell splits in half along its long side.
+function splitPieces(c) {
+  const w = c.x1 - c.x0, d = c.y1 - c.y0, min = G.C.MIN_CELL;
+  let nx = Math.max(1, Math.round((w + WALL) / ((S.W + WALL) / st.nc))), ny = Math.max(1, Math.round((d + WALL) / ((S.D + WALL) / st.nr)));
+  if (nx * ny === 1) { if (w >= d) nx = 2; else ny = 2; }
+  while (nx > 1 && (w - (nx - 1) * WALL) / nx < min) nx--;
+  while (ny > 1 && (d - (ny - 1) * WALL) / ny < min) ny--;
+  if (nx * ny === 1) return null;
+  const xs = G.spans(G.uniform(w, nx)), ys = G.spans(G.uniform(d, ny)); const out = [];
+  const { holder, scoop, tray, color } = c;   // a split drops the part: each new compartment gets its own
+  for (const [a, b] of ys) for (const [l, r] of xs) out.push(G.comp(c.x0 + l, c.x0 + r, c.y0 + a, c.y0 + b, { holder, scoop, tray, color }));
+  return out;
+}
+function doSplit() {
+  const s = selected().map((c) => [c, splitPieces(c)]).filter(([, p]) => p); if (!s.length) return;
+  commit((x) => { for (const [c, pieces] of s) { const i = x.comps.findIndex((k) => k.x0 === c.x0 && k.y0 === c.y0); x.comps.splice(i, 1, ...pieces); } });
+}
+function doLabel() {
+  const s = selected(); if (!s.length) return;
+  const fits = s.filter((c) => G.holderStatus(layout(), c).ok);
+  const pool = fits.length ? fits : s;
+  const turnOn = !pool.every((c) => c.holder);
+  commit((x) => { for (const c of x.comps) if (inside(c, sel)) c.holder = turnOn; });
+}
+function setSel(prop, value) {
+  if (!selected().length) return;
+  commit((x) => { for (const c of x.comps) if (inside(c, sel)) c[prop] = value; });
+}
+function applySize(dim, v) {
+  const s = selected(); if (s.length !== 1 || !Number.isFinite(v)) return;
+  const i = st.comps.indexOf(s[0]);
+  const res = G.resizeComp(layout(), i, dim, v);
+  if (res.error) { $('sel-note').textContent = res.error[0].toUpperCase() + res.error.slice(1) + '.'; updateSel(); return; }
+  commit((x) => { x.comps = res.comps; });
+  sel = closure(G.compBox(st.comps[i])); drawPlan(); updateSel();
+  const got = dim === 'w' ? st.comps[i].x1 - st.comps[i].x0 : st.comps[i].y1 - st.comps[i].y0;
+  $('sel-note').textContent = res.clamped ? `Limited to ${fmt(got)} mm: the neighbouring compartments can't get smaller than ${G.C.MIN_CELL} mm.` : '';
+}
+function applyPart() {
+  const s = selected(); if (s.length !== 1) return;
+  const v = $('in-part').value.trim(), i = st.comps.indexOf(s[0]);
+  if (!v) { commit((x) => { delete x.comps[i].item; }); return; }
+  const r = I.parseLine(v);
+  if (!r || r.error) { $('sel-note').textContent = r ? r.error[0].toUpperCase() + r.error.slice(1) + '.' : ''; return; }
+  $('sel-note').textContent = '';
+  commit((x) => { x.comps[i].item = cleanItem(r); });
+}
+$('in-part').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); else if (e.key === 'Escape') { $('in-part').dataset.skip = '1'; e.target.blur(); } });
+$('in-part').addEventListener('blur', () => { if ($('in-part').dataset.skip) { delete $('in-part').dataset.skip; updateSel(); return; } applyPart(); updateSel(); });
+for (const [id, dim] of [['in-w', 'w'], ['in-d', 'd']]) {
+  const typed = () => { const v = parseFloat($(id).value), c = selected()[0]; if (c && Math.abs(v - (dim === 'w' ? c.x1 - c.x0 : c.y1 - c.y0)) > 0.05) applySize(dim, v); };
+  $(id).addEventListener('blur', () => { typed(); updateSel(); });
+  $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); else if (e.key === 'Escape') { const c = selected()[0]; if (c) $(id).value = fmt(dim === 'w' ? c.x1 - c.x0 : c.y1 - c.y0); e.target.blur(); } });
+}
+// quick fills for paint mode
+const neighbours = (a, b) => ((Math.abs(a.x1 + WALL - b.x0) < 1e-4 || Math.abs(b.x1 + WALL - a.x0) < 1e-4) && a.y0 < b.y1 - EPS && b.y0 < a.y1 - EPS)
+  || ((Math.abs(a.y1 + WALL - b.y0) < 1e-4 || Math.abs(b.y1 + WALL - a.y0) < 1e-4) && a.x0 < b.x1 - EPS && b.x0 < a.x1 - EPS);
+function fill(kind) {
+  const n = st.floor.slots;
+  commit((x) => {
+    if (kind === 'clear') { for (const c of x.comps) c.color = 0; return; }
+    if (kind === 'row' || kind === 'col') {
+      const key = kind === 'row' ? 'y0' : 'x0', vals = [...new Set(x.comps.map((c) => c[key]))].sort((a, b) => a - b);
+      for (const c of x.comps) c.color = (vals.indexOf(c[key]) % n) + 1;
+      return;
+    }
+    // mix: neighbours get different colours where the palette allows (greedy, most-connected first)
+    const deg = (c) => x.comps.filter((k) => k !== c && neighbours(c, k)).length;
+    for (const c of x.comps) c.color = 0;
+    for (const c of [...x.comps].sort((a, b) => deg(b) - deg(a) || a.y0 - b.y0 || a.x0 - b.x0)) {
+      const used = x.comps.filter((k) => k !== c && k.color && neighbours(c, k)).map((k) => k.color);
+      const free = [...Array(n)].map((_, i) => i + 1).filter((k) => !used.includes(k));
+      c.color = free.length ? free[0] : 1 + [...Array(n).keys()].sort((p, q) => used.filter((u) => u === p + 1).length - used.filter((u) => u === q + 1).length)[0];
+    }
+  });
+}
+function setFloorMode(m) {
+  if (st.floor.mode === 'off' && m !== 'off') { camera.position.set(150, 560, 300); controls.target.set(0, 0, 0); controls.update(); }
+  commit((x) => { x.floor.mode = m; if (m === 'paint' && !x.comps.some((c) => c.color)) for (const c of x.comps) c.color = 1; }); }
+// T steps the selection to the next tray preset: Off, 3, 6, 9, 12, Off
+function nextTray(list) {
+  const cur = Math.max(...list.map((c) => G.trayMM(c))), same = list.every((c) => G.trayMM(c) === cur);
+  return same ? (G.TRAYS.find((v) => v > cur + EPS) ?? 0) : cur;
+}
+function setAll(prop, value) { commit((x) => { for (const c of x.comps) c[prop] = value; }); }
+function setGrid(nc, nr) {
+  const keep = { scoop: mode(st.comps.map((c) => c.scoop)), tray: mode(st.comps.map((c) => c.tray)) };
+  nr = Math.min(nr, maxRows()); nc = Math.min(nc, maxCols());
+  commit((x) => { x.nc = nc; x.nr = nr; x.comps = G.evenGrid(x.size, nc, nr, keep); });
+  sel = null; changed();
+}
+// v24/v25: another collection length or width. The layout moves with it (wall lines keep their place in proportion,
+// front to back and left to right) unless that would make a compartment too small or cost a label its holder; then
+// the grid starts over. `note` says why the size isn't quite the one asked for (a 59 is 2W at most).
+let sizeNote = '';
+function setSize(size, note = '') {
+  if (size === st.size || !G.SIZES[size]) return;
+  const T = G.SIZES[size], L = layout();
+  let moved = T.D !== S.D ? G.rescaleDepth(st.comps, S.D, T.D) : st.comps;
+  if (moved && T.W !== S.W) moved = G.rescaleWidth(moved, S.W, T.W);
+  const keepsLabels = moved && moved.every((c, i) => !G.hasHolder(L, st.comps[i]) || G.holderStatus({ ...L, size, comps: moved }, c).ok);
+  const height = T.heights[st.height] ? st.height : '1H';
+  sizeNote = [note, height !== st.height ? `The ${T.length} comes in 0.5H and 1H only, so this is the 1H.` : '',
+    keepsLabels ? '' : 'The compartments would get too small for their labels, so the grid started over.'].filter(Boolean).join(' ');
+  commit((x) => {
+    x.size = size; x.height = height;
+    if (keepsLabels) { x.comps = moved; const g = G.maxGrid(size); x.nc = Math.min(x.nc, g.nc); x.nr = Math.min(x.nr, g.nr); }
+    else { const g = G.defaultGrid(size), keep = { scoop: mode(x.comps.map((c) => c.scoop)), tray: mode(x.comps.map((c) => c.tray)) }; x.nc = g.nc; x.nr = g.nr; x.comps = G.evenGrid(size, g.nc, g.nr, keep); }
+  });
+  sel = null; (st.lid && lidView === 'beside' ? frameLid : frameDrawer)();
+}
+function setLength(len) {
+  const w = Math.min(S.w, len === 59 ? 2 : 4);
+  setSize(G.sizeKey(len, w), w !== S.w ? `The ${len} comes in 1W and 2W only, so this is the 2W.` : '');
+}
+// v25: where it prints, against common beds (smallest first; either way round)
+const BEDS = [[180, 180, 'a 180 mm bed (Prusa MINI, Bambu A1 mini)'], [250, 210, 'a 250 × 210 bed (Prusa MK4S)'], [250, 220, 'a 250 × 220 bed (Prusa CORE One)'],
+  [256, 256, 'a 256 mm bed (Bambu X1, P1, A1)'], [300, 300, 'a 300 mm bed (Prusa CORE One L, Creality K1 Max)'], [350, 350, 'a 350 mm bed (Creality K2 Plus, Sovol SV08, Voron 350)'], [360, 360, 'the Prusa XL (360 mm)']];
+function fitHint() {
+  const [a, b] = G.footprint(st.size), bed = BEDS.find(([x, y]) => (a <= x && b <= y) || (a <= y && b <= x));
+  return `Prints ${fmt(a)} × ${fmt(b)} mm: ` + (bed ? `fits ${bed[2]} or bigger.` : 'bigger than a 360 mm bed.');
+}
+
+// ---------------- plan (SVG) ----------------
+const svg = $('plan');
+const NS = 'http://www.w3.org/2000/svg';
+const PAD = { l: 18, r: 8, t: 14, b: 22 };
+const frame = () => svg.setAttribute('viewBox', `${-2 - PAD.l} ${-4 - PAD.t} ${S.W + 4 + PAD.l + PAD.r} ${S.D + 8.3 + PAD.t + PAD.b}`);   // the shell: 2 each side, 4.3 in front, 4 behind
+svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+const Y = (y) => S.D - y;   // drawer y (front = 0) -> svg y (front at bottom)
+const rect = (cls, x0, x1, y0, y1, extra = {}) => el('rect', { class: cls, x: x0, y: Y(y1), width: Math.max(0, x1 - x0), height: Math.max(0, y1 - y0), ...extra });
+
+function drawPlan() {
+  svg.replaceChildren(); frame();
+  el('rect', { class: 'shell', x: -2, y: Y(S.D + 4), width: S.W + 4, height: S.D + 8.3 });
+  el('rect', { class: 'cavity', x: 0, y: 0, width: S.W, height: S.D });
+  const L = layout();
+  const H = G.holderOf(L), HD = H.D;
+  const outl = new Map(outlinesNow().map((o) => [o.comp, o.polys]));
+  const lidPl = st.lid ? G.lidPull(L) : null;
+  // cells: a well as its two arcs round the bearing's outline (dashed); a socket as its ring with the round or hex hole; a
+  // washer row as its groove (dashed) with washers standing across it
+  const drawCells = (cp) => {
+    if (cp.kind === 'washers') {
+      const rw = cp.washer.od / 2, gap = Math.max(1.4, cp.washer.t * 2.5);
+      for (const w of cp.rows) {
+        rect('cellring', w.x - cp.hw, w.x + cp.hw, w.y0, w.y1, { rx: 0.6 });
+        const n = Math.max(1, Math.floor((w.y1 - w.y0 - 1) / gap));
+        for (let j = 0; j < n; j++) { const y = w.y0 + 0.5 + (j + 0.5) * (w.y1 - w.y0 - 1) / n; el('line', { class: 'cellline', x1: w.x - rw * 0.92, x2: w.x + rw * 0.92, y1: Y(y), y2: Y(y) }); }
+      }
+      return;
+    }
+    const k = G.CELLS[cp.kind], hex = (x, y, R) => [0, 1, 2, 3, 4, 5].map((j) => `${(x + R * Math.cos(Math.PI / 6 + j * Math.PI / 3)).toFixed(2)},${Y(y + R * Math.sin(Math.PI / 6 + j * Math.PI / 3)).toFixed(2)}`).join(' ');
+    const wall = G.CELLS.wells.wall, rm = cp.foot / 2 - wall / 2, half = cp.kind === 'wells' ? Math.asin(Math.min(1, cp.notch / 2 / rm)) : 0;
+    const arc = (x, y, a0, a1) => Array.from({ length: 17 }, (_, j) => { const a = a0 + (a1 - a0) * j / 16; return `${(x + rm * Math.cos(a)).toFixed(2)},${Y(y + rm * Math.sin(a)).toFixed(2)}`; }).join(' ');
+    for (const [x, y] of cp.pts) {
+      if (cp.kind === 'wells') {
+        const [, D, , Df] = G.bearingDims(cp.bearing);
+        el('circle', { class: 'cellring', cx: x, cy: Y(y), r: (Df || D) / 2 });
+        el('polyline', { class: 'cellarc', points: arc(x, y, -Math.PI / 2 + half, Math.PI / 2 - half), 'stroke-width': wall });
+        el('polyline', { class: 'cellarc', points: arc(x, y, Math.PI / 2 + half, 1.5 * Math.PI - half), 'stroke-width': wall });
+      } else {
+        el('circle', { class: 'cellsolid', cx: x, cy: Y(y), r: k.od / 2 });
+        if (cp.kind === 'nozzles') el('circle', { class: 'cellhole', cx: x, cy: Y(y), r: k.bore / 2 });
+        else el('polygon', { class: 'cellhole', points: hex(x, y, k.af / Math.sqrt(3)) });
+      }
+    }
+  };
+  const deep = G.isTall(st.size, st.height) ? G.reachFlags(L) : [];
+  st.comps.forEach((c, i) => {
+    const w = c.x1 - c.x0, d = c.y1 - c.y0;
+    rect('cell' + (sel && inside(c, sel) ? ' sel' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
+    if (deep[i]) rect('deep', c.x0 + 0.4, c.x1 - 0.4, c.y0 + 0.4, c.y1 - 0.4);
+    const s = G.scoopSize(L, c), t = G.traySize(L, c);
+    const fk = G.floorColorOf(L, c);
+    let ink = null;
+    if (fk) {
+      const r = G.floorRegion(L, c), hex = L.floor.colors[fk - 1]; rect('floorfill', r.x0, r.x1, r.y0, r.y1, { fill: hex });
+      const [R, Gr, B] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      ink = 0.2126 * R + 0.7152 * Gr + 0.0722 * B > 0.5 ? '#1d1e22' : '#f4f5f9';
+    }
+    if (s) rect('ramp', c.x0, c.x1, c.y0, c.y0 + s);
+    if (t) { rect('ramp', c.x0, c.x0 + t, c.y0 + s, c.y1); rect('ramp', c.x1 - t, c.x1, c.y0 + s, c.y1); rect('ramp', c.x0 + t, c.x1 - t, c.y1 - t, c.y1); }
+    // part outline: left in the body colour on a coloured floor, a recess on a plain one
+    let halo = '';
+    if (outl.has(i)) {
+      const d = outl.get(i).map((p) => 'M' + p.map(([x, y]) => `${x.toFixed(2)} ${Y(y).toFixed(2)}`).join('L') + 'Z').join('');
+      el('path', { class: 'outline', d, fill: fk ? bodyHex() : 'rgba(0,0,0,0.32)' });
+      halo = `;stroke:${fk ? L.floor.colors[fk - 1] : 'var(--cell)'};stroke-width:0.9;paint-order:stroke;stroke-linejoin:round`;
+    }
+    if (c.holder) {
+      const hs = G.holderStatus(L, c);
+      if (hs.ok) {
+        rect('holder', c.x0, c.x0 + G.C.HOLDER_W, c.y1 - HD, c.y1);
+        rect('labelstrip', c.x0 + 0.36, c.x0 + 0.36 + H.label[0], c.y1 - H.label[1], c.y1);
+        if (c.item && I.known(c.item)) {
+          const [big, small] = I.labelLines(c.item), lh = H.label[1], cx = c.x0 + 0.36 + H.label[0] / 2;
+          const fb = Math.min(lh * 0.42, 4.6), fsm = Math.min(lh * 0.24, 2.6);
+          if (lh > 10) el('text', { class: 'labeltxt', x: cx, y: Y(c.y1 - lh * 0.42), 'text-anchor': 'middle', 'font-size': fb }).textContent = big;
+          else el('text', { class: 'labeltxt', x: cx, y: Y(c.y1 - lh * 0.5), 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': Math.min(lh * 0.42, 3.3) }).textContent = `${big} ${small}`;
+          if (lh > 10) el('text', { class: 'labeltxt', x: cx, y: Y(c.y1 - lh * 0.8), 'text-anchor': 'middle', 'font-size': fsm, style: 'font-weight:600' }).textContent = small;
+        }
+        if (w > G.C.HOLDER_W + EPS) {
+          const xc = c.x0 + G.C.HOLDER_W;
+          if (w < G.C.HOLDER_W + G.C.END_FILL) rect('wallfill', xc, c.x1, c.y1 - HD, c.y1);
+          else {
+            rect('wallfill', xc, xc + WALL, c.y1 - HD, c.y1);
+            const xa = xc + WALL, xb = Math.min(xa + HD, c.x1), yb = c.y1 - HD + (xb - xa);
+            el('polygon', { class: 'gusset', points: `${xa},${Y(c.y1 - HD)} ${xb},${Y(yb)} ${xb},${Y(c.y1)} ${xa},${Y(c.y1)}` });
+          }
+        }
+      } else {
+        el('rect', { class: 'nofit', x: c.x0 + 0.6, y: Y(c.y1) + 0.6, width: Math.min(G.C.HOLDER_W, w) - 1.2, height: Math.min(HD, d) - 1.2 });
+      }
+    }
+    const cp = G.cellPlan(L, c);
+    if (cp && cp.count) { drawCells(cp); return; }      // the cells fill it; its size shows in the selection
+    const fs = Math.max(3.2, Math.min(5.2, w / 7));
+    // the size text sits between the scoop (or a pull, which is drawn on top later) and the label holder
+    const pl = st.covers ? (G.isCovered(L, c) ? G.coverPull(L, c) : null) : lidPl && lidPl.comp === i ? lidPl : null;
+    const top = c.y1 - (c.holder ? Math.min(HD, d / 2) : 0), bot = Math.max(c.y0 + s, pl ? pl.box[3] : 0);
+    const cyMid = Y((top + bot) / 2);
+    if (top - bot < (w >= 40 ? fs * 1.4 : fs * 2.6)) { /* no room for the size text */ }
+    else if (w >= 40) {
+      el('text', { class: 'dim', x: c.x0 + w / 2, y: cyMid, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': fs, ...(ink || halo ? { style: `${ink ? `fill:${ink}` : ''}${halo}` } : {}) }).textContent = `${fmt(w)} × ${fmt(d)}`;
+    } else {
+      el('text', { class: 'dim', x: c.x0 + w / 2, y: cyMid - fs * 0.6, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': fs, ...(ink || halo ? { style: `${ink ? `fill:${ink}` : ''}${halo}` } : {}) }).textContent = fmt(w);
+      el('text', { class: 'dim small', x: c.x0 + w / 2, y: cyMid + fs * 0.6, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': fs, ...(ink || halo ? { style: `${ink ? `fill:${ink}; opacity:0.75` : ''}${halo}` } : {}) }).textContent = '× ' + fmt(d);
+    }
+  });
+  // a pull: a nail slot as a solid thin rectangle; a finger pull's opening dashed, with its hook (the cup reaching under
+  // the top) as a solid edge on that side
+  const drawPull = (pl) => {
+    const o = pl.open, k = pl.cav;
+    if (pl.kind === 'nail') { rect('nailslot', o[0], o[1], o[2], o[3], { rx: pl.F.R }); return; }
+    const rx = Math.min(o[1] - o[0], o[3] - o[2]) / 2;
+    rect('lidpull', o[0], o[1], o[2], o[3], { rx });
+    if (pl.along === 'x') rect('pullhook', o[0] + rx, o[1] - rx, k[2], k[2] + 0.6); else rect('pullhook', k[1] - 0.6, k[1], o[2] + rx, o[3] - rx);
+  };
+  if (lidPl) drawPull(lidPl);
+  if (st.covers) {
+    for (const c of st.comps) {
+      if (!G.isCovered(L, c)) continue;
+      // v26: the plate's outline, which leaves a label holder open (an L in a compartment wider than its label)
+      el('polygon', { class: 'coverline', points: G.coverOutline(L, c).map(([x, y]) => `${x},${Y(y)}`).join(' ') });
+      const pl = G.coverPull(L, c);
+      if (pl) drawPull(pl);
+      for (const sd of G.coverSides(L, c)) {
+        const a = sd.at - sd.len / 2, b = sd.at + sd.len / 2, f = sd.face, g = sd.face + sd.sign * G.COVER.BEAD;
+        if (sd.axis === 'x') rect('bead', Math.min(f, g), Math.max(f, g), a, b); else rect('bead', a, b, Math.min(f, g), Math.max(f, g));
+      }
+    }
+  }
+  if (L.floor.mode !== 'off') for (const c of selected()) rect('selring', c.x0, c.x1, c.y0, c.y1);
+  const hot = wdrag ? { ...wdrag.ch, c: wdrag.c } : hover;
+  if (hot) {
+    for (const [a, b] of hot.segs) {
+      if (hot.orient === 'v') rect('wallhot' + (wdrag ? ' drag' : ''), hot.c - WALL / 2, hot.c + WALL / 2, Math.max(a, 0), Math.min(b, S.D));
+      else rect('wallhot' + (wdrag ? ' drag' : ''), Math.max(a, 0), Math.min(b, S.W), hot.c - WALL / 2, hot.c + WALL / 2);
+    }
+    if (wdrag && Math.abs(wdrag.c - wdrag.ch.c) > EPS) {
+      const d = wdrag.c - wdrag.ch.c, mid = (hot.J[0] + hot.J[1]) / 2;
+      const t = `${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}`;
+      if (hot.orient === 'v') el('text', { class: 'delta', x: hot.c, y: Y(Math.min(Math.max(mid, 8), S.D - 8)), 'text-anchor': 'middle', 'font-size': 5, dy: -3 }).textContent = t;
+      else el('text', { class: 'delta', x: Math.min(Math.max(mid, 10), S.W - 10), y: Y(hot.c), 'text-anchor': 'middle', 'font-size': 5, dy: -2.4 }).textContent = t;
+    }
+  }
+  // overall dimensions, shop-drawing style
+  const yb = Y(-4.3) + 8;
+  el('path', { class: 'axis', d: `M0 ${yb - 2}V${yb + 2}M${S.W} ${yb - 2}V${yb + 2}M0 ${yb}H${S.W}` });
+  el('text', { class: 'axis-t', x: S.W / 2, y: yb - 1.6, 'text-anchor': 'middle' }).textContent = `${fmt(S.W)} clear`;
+  const xl = -2 - 8;
+  el('path', { class: 'axis', d: `M${xl - 2} 0H${xl + 2}M${xl - 2} ${S.D}H${xl + 2}M${xl} 0V${S.D}` });
+  el('text', { class: 'axis-t', x: xl - 1.6, y: S.D / 2, 'text-anchor': 'middle', transform: `rotate(-90 ${xl - 1.6} ${S.D / 2})` }).textContent = `${fmt(S.D)} clear`;
+  el('text', { class: 'face-t', x: S.W / 2, y: Y(-4.3) + 17, 'text-anchor': 'middle' }).textContent = 'FRONT';
+  el('text', { class: 'face-t', x: S.W / 2, y: Y(S.D + 4) - 4, 'text-anchor': 'middle' }).textContent = 'BACK';
+}
+
+function planPoint(evt) {
+  const p = svg.createSVGPoint(); p.x = evt.clientX; p.y = evt.clientY;
+  const m = p.matrixTransform(svg.getScreenCTM().inverse());
+  return { x: m.x, y: S.D - m.y };
+}
+// the compartment under a plan point; walls count toward the nearer side
+function compAt(pt) {
+  if (pt.x < -2 || pt.x > S.W + 2 || pt.y < -4.3 || pt.y > S.D + 4) return null;
+  let best = null, bd = Infinity;
+  for (const c of st.comps) {
+    const dx = Math.max(c.x0 - pt.x, 0, pt.x - c.x1), dy = Math.max(c.y0 - pt.y, 0, pt.y - c.y1), dd = dx * dx + dy * dy;
+    if (dd < bd) { bd = dd; best = c; }
+  }
+  return best;
+}
+// ---------------- walls: hover, drag, snap ----------------
+// A wall drag moves the smallest set of collinear edges that keeps every compartment rectangular (G.wallChain).
+// Snaps: 0.5 mm steps from where it started, lining up with other walls, and exactly fitting a label.
+let drag = null, wdrag = null, hover = null, hoverKey = '';
+const mmPerPx = () => { const r = svg.getBoundingClientRect(); const vb = svg.viewBox.baseVal; return r.width ? Math.max(vb.width / r.width, vb.height / r.height) : 0.3; };
+function hitWall(pt, e) {
+  const tol = Math.max(1.1, (e.pointerType === 'touch' ? 10 : 5) * mmPerPx());
+  const w = G.wallAt(st.comps, st.size, pt, tol); if (!w) return null;
+  const ch = G.wallChain(st.comps, w.orient, w.c, w.seed, e.shiftKey);
+  return ch && ch.range[0] <= ch.range[1] + EPS ? ch : null;
+}
+function magnets(ch, comps) {
+  const a = ch.orient === 'v' ? 'x' : 'y', m = [];
+  for (const k of comps) m.push(k[a + '0'] - WALL / 2, k[a + '1'] + WALL / 2);
+  const fit = ch.orient === 'v' ? G.C.HOLDER_W : G.holderOf(layout()).MIN_DEPTH;
+  for (const i of ch.L) m.push(comps[i][a + '0'] + fit + WALL / 2);
+  for (const i of ch.R) m.push(comps[i][a + '1'] - fit - WALL / 2);
+  return m;
+}
+function snapWall(ch, raw, free) {
+  let c = raw;
+  if (!free) {
+    c = ch.c + Math.round((raw - ch.c) / 0.5) * 0.5;
+    const tol = Math.max(0.8, 4 * mmPerPx()); let best = null;
+    for (const m of ch.mags) if (Math.abs(m - raw) <= tol && (best === null || Math.abs(m - raw) < Math.abs(best - raw))) best = m;
+    if (best !== null) c = best;
+  }
+  return G.snapMM(Math.min(ch.range[1], Math.max(ch.range[0], c)));
+}
+const along = (ch, pt) => (ch.orient === 'v' ? pt.x : pt.y);
+svg.addEventListener('pointerdown', (e) => {
+  const pt = planPoint(e);
+  const ch = hitWall(pt, e);
+  if (ch) {
+    wdrag = { ch: { ...ch, mags: magnets(ch, st.comps) }, start: clone(st.comps), grab: along(ch, pt) - ch.c, c: ch.c };
+    hover = null; svg.setPointerCapture(e.pointerId); drawPlan(); return;
+  }
+  $('sel-note').textContent = '';
+  const c = compAt(pt); if (!c) { sel = null; drawPlan(); updateSel(); return; }
+  drag = c; svg.setPointerCapture(e.pointerId);
+  sel = closure(G.compBox(c)); drawPlan(); updateSel();
+});
+svg.addEventListener('pointermove', (e) => {
+  const pt = planPoint(e);
+  if (wdrag) {
+    const c = snapWall(wdrag.ch, along(wdrag.ch, pt) - wdrag.grab, e.altKey);
+    if (c !== wdrag.c) { wdrag.c = c; st.comps = G.moveChain(wdrag.start, wdrag.ch, c); drawPlan(); updateSel(); }
+    return;
+  }
+  if (drag) { const c = compAt(pt); if (c) { sel = closure(bbox([drag, c])); drawPlan(); updateSel(); } return; }
+  const ch = e.pointerType === 'touch' ? null : hitWall(pt, e);
+  const k = ch ? `${ch.orient}${ch.c}:${ch.L.join(',')}` : '';
+  if (k !== hoverKey) { hover = ch; hoverKey = k; svg.style.cursor = ch ? (ch.orient === 'v' ? 'ew-resize' : 'ns-resize') : ''; drawPlan(); }
+});
+function endDrag() {
+  if (wdrag) {
+    const moved = Math.abs(wdrag.c - wdrag.ch.c) > EPS, start = wdrag.start; wdrag = null;
+    if (moved) { undo.push({ ...clone(st), comps: start }); if (undo.length > 100) undo.shift(); redo.length = 0; sel = sel && regrow(sel); changed(); }
+    else { st.comps = start; drawPlan(); }
+    return;
+  }
+  drag = null;
+}
+svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
+// Shift changes what a wall drag will move, so refresh the highlight when it is pressed or released
+let lastPt = null;
+svg.addEventListener('pointermove', (e) => { lastPt = { pt: planPoint(e), pointerType: e.pointerType }; }, true);
+for (const t of ['keydown', 'keyup']) document.addEventListener(t, (e) => {
+  if (e.key !== 'Shift' || wdrag || drag || !lastPt || lastPt.pointerType === 'touch') return;
+  const ch = hitWall(lastPt.pt, { pointerType: lastPt.pointerType, shiftKey: e.type === 'keydown' });
+  const k = ch ? `${ch.orient}${ch.c}:${ch.L.join(',')}` : '';
+  if (k !== hoverKey) { hover = ch; hoverKey = k; drawPlan(); }
+});
+svg.addEventListener('pointerleave', () => { lastPt = null; });
+svg.addEventListener('pointerleave', () => { if (!wdrag && hover) { hover = null; hoverKey = ''; svg.style.cursor = ''; drawPlan(); } });
+svg.addEventListener('dblclick', () => { if (sel) doLabel(); });
+
+// ---------------- controls ----------------
+const scoopName = (k) => (k === 'off' ? 'no' : (G.SCOOPS[k] || G.SCOOPS.std).name.toLowerCase());
+function updateSel() {
+  const s = selected();
+  $('act-merge').disabled = s.length < 2;
+  $('act-split').disabled = !s.some((c) => splitPieces(c));
+  $('act-label').disabled = !s.length;
+  $('sel-opts').hidden = !s.length;
+  $('size-in').hidden = s.length !== 1;
+  $('part-in').hidden = s.length !== 1;
+  if (s.length === 1 && document.activeElement !== $('in-part')) $('in-part').value = s[0].item ? `${I.labelText(s[0].item).replace(' × ', 'x')} ${s[0].item.qty || ''}`.trim() : '';
+  if (s.length === 1 && document.activeElement !== $('in-w') && document.activeElement !== $('in-d')) {
+    $('in-w').value = fmt(s[0].x1 - s[0].x0); $('in-d').value = fmt(s[0].y1 - s[0].y0);
+  }
+  const box = $('sel-summary');
+  const paint = st.floor.mode === 'paint';
+  $('sel-floor').hidden = !paint || !s.length;
+  if (paint && s.length) floorSeg($('sel-floor-seg'), s);
+  $('stagebar').hidden = !paint;
+  $('stage-floor-seg').hidden = !s.length;
+  $('stagebar-t').textContent = s.length ? 'Floor' : 'Click a compartment to paint its floor';
+  if (paint && s.length) floorSeg($('stage-floor-seg'), s);
+  drawSel3d();
+  for (const b of document.querySelectorAll('[data-sel-scoop]')) b.setAttribute('aria-pressed', String(!!s.length && s.every((c) => c.scoop === b.dataset.selScoop)));
+  for (const b of document.querySelectorAll('[data-sel-tray]')) b.setAttribute('aria-pressed', String(!!s.length && s.every((c) => G.trayMM(c) === +b.dataset.selTray)));
+  $('sel-cover-wrap').hidden = !st.covers || !s.length;
+  for (const b of document.querySelectorAll('[data-sel-cell]')) b.setAttribute('aria-pressed', String(!!s.length && s.every((c) => (G.cellKind(c) || '') === b.dataset.selCell)));
+  const wellsPicked = s.filter((c) => G.cellKind(c) === 'wells' && !(c.item && c.item.type === 'bearing'));   // a bearing part sizes its own wells
+  $('sel-bearing-wrap').hidden = !wellsPicked.length;
+  if (wellsPicked.length) $('sel-bearing').value = G.bearingBase(G.cellBearing(wellsPicked[0]).code);
+  const gridPicked = s.filter((c) => G.GRID_CELLS.includes(G.cellKind(c)));
+  $('sel-spacing-wrap').hidden = !gridPicked.length;
+  for (const b of document.querySelectorAll('[data-sel-spacing]')) b.setAttribute('aria-pressed', String(!!gridPicked.length && gridPicked.every((c) => G.cellSpacing(c) === b.dataset.selSpacing)));
+  for (const b of document.querySelectorAll('[data-sel-cover]')) b.setAttribute('aria-pressed', String(!!s.length && s.every((c) => !c.nocover === (b.dataset.selCover === '1'))));
+  if (!s.length) { box.hidden = true; $('sel-hint').hidden = false; $('sel-note').textContent = ''; return; }   // (rings drawn above)
+  $('sel-hint').hidden = true; box.hidden = false;
+  const L = layout(); const b = sel;
+  if (s.length === 1) {
+    const c = s[0], hs = G.holderStatus(L, c);
+    const lab = c.holder ? (hs.ok ? 'label on' : `label won't fit: ${hs.why}`) : 'label off';
+    const sc = G.scoopSize(L, c), deepCut = c.scoop === 'deep' && sc < G.SCOOPS.deep.size - EPS ? ` (${fmt(sc)} mm here)` : '';
+    const tw = G.trayMM(c), te = G.traySize(L, c), tray = tw ? `, tray ${fmt(tw)} mm${te < tw - EPS ? ` (${fmt(te)} here)` : ''}` : '';
+    const f = c.cell ? null : I.fillOf(c, st.height), part = c.item && I.known(c.item) ? `${I.labelText(c.item)}${c.item.qty ? ' × ' + c.item.qty : ''}${f != null ? `, about ${Math.round(f * 100)}% full${f > 1 ? ' (too full)' : ''}` : ''}. ` : '';
+    const pl = st.lid ? G.lidPull(L) : null, pullHere = pl && st.comps[pl.comp] === c ? `, the lid's pull dips ${fmt(pl.depth + pl.F.WALL)} mm in here` : '';
+    const ns = G.coverSides(L, c).length, cp = st.covers && !c.nocover && G.isCovered(L, c) ? G.coverPull(L, c) : null;
+    const cov = !st.covers ? '' : c.nocover ? ', no cover' : !cp ? `, too small for a cover (needs ${coverNeed(L, c)})`
+      : `, cover with ${ns} snap${ns === 1 ? '' : 's'} and a ${cp.P.L} mm nail slot${cp.along === 'y' ? ' running front to back' : ''}`;
+    const rn = G.reachNote(L, c), reach = rn ? `. Deep for its width (${fmt(rn.depth)} mm down, ${fmt(rn.narrow)} across): the last parts are hard to reach, so merge it wider or use a lower drawer` : '';
+    box.textContent = `${part}${fmt(c.x1 - c.x0)} × ${fmt(c.y1 - c.y0)} mm, ${lab}, ${scoopName(c.scoop)} scoop${deepCut}${tray}${pullHere}${cov}${cellNote(L, c)}${reach}`;
+  } else {
+    const mergedFit = G.holderStatus(L, b).ok ? ', merged fits a label' : ', merged still too small for a label';
+    box.textContent = `${s.length} compartments → ${fmt(b.x1 - b.x0)} × ${fmt(b.y1 - b.y0)} mm${mergedFit}`;
+  }
+}
+// what a compartment's cells come to, for the selection summary
+function cellNote(L, c) {
+  const p = G.cellPlan(L, c); if (!p) return '';
+  if (p.why) return `. ${p.name} don't fit here: ${p.why}`;
+  const dense = p.spacing === 'dense' ? ', dense' : '';
+  if (p.kind === 'wells') {
+    const want = c.item && c.item.type === 'bearing' ? c.item.qty : 0;
+    return `. ${p.count} ${p.bearing} bearing well${p.count === 1 ? '' : 's'}, ${p.per} high${dense}: up to ${p.capacity} bearings${want > p.capacity ? `, not all ${want}` : ''}`;
+  }
+  if (p.kind === 'washers') {
+    const want = c.item && (c.item.type === 'washer' || c.item.type === 'lockwasher') ? c.item.qty : 0;
+    return `. ${p.count} row${p.count === 1 ? '' : 's'} of ${p.washer.what} on edge: about ${p.capacity}${want > p.capacity ? `, not all ${want}` : ''}`;
+  }
+  return `. ${p.count} ${p.kind === 'nozzles' ? 'nozzle' : 'bit'} socket${p.count === 1 ? '' : 's'}${dense}`;
+}
+function floorSeg(seg, s) {
+  seg.replaceChildren();
+  const eff = (c) => (c.color >= 1 && c.color <= st.floor.slots ? c.color : 0);
+  for (let k = 0; k <= st.floor.slots; k++) {
+    const b = document.createElement('button'); b.type = 'button';
+    const i = document.createElement('i'); i.style.background = k ? st.floor.colors[k - 1] : bodyHex();
+    b.append(i, k ? String(k) : 'Body'); b.title = k ? `Floor color ${k} (key ${k})` : 'No floor color (key 0)';
+    b.setAttribute('aria-pressed', String(s.every((c) => eff(c) === k)));
+    b.onclick = () => setSel('color', k); seg.append(b);
+  }
+}
+function syncControls() {
+  $('cols-out').textContent = st.nc; $('rows-out').textContent = st.nr;
+  $('cols-dec').disabled = st.nc <= 1; $('cols-inc').disabled = st.nc >= maxCols();
+  $('rows-dec').disabled = st.nr <= 1; $('rows-inc').disabled = st.nr >= maxRows();
+  for (const b of document.querySelectorAll('[data-length]')) b.setAttribute('aria-pressed', String(+b.dataset.length === S.length));
+  for (const b of document.querySelectorAll('[data-width]')) { b.setAttribute('aria-pressed', String(+b.dataset.width === S.w)); b.disabled = !G.SIZES[G.sizeKey(S.length, +b.dataset.width)]; }
+  $('meta-len').textContent = S.length; $('meta-w').textContent = S.width; $('fit-hint').textContent = fitHint();
+  $('size-note').textContent = sizeNote; $('size-note').hidden = !sizeNote; sizeNote = '';
+  for (const b of document.querySelectorAll('[data-height]')) { b.setAttribute('aria-pressed', String(b.dataset.height === st.height)); b.disabled = !S.heights[b.dataset.height]; }
+  $('preset-shipped').hidden = !S.shipped;
+  $('height-hint').hidden = !S.heights[st.height].stretched;
+  $('height-hint').textContent = heightHint();
+  reachWarn();
+  for (const b of document.querySelectorAll('[data-label]')) b.setAttribute('aria-pressed', String(b.dataset.label === st.label));
+  const scoops = new Set(st.comps.map((c) => c.scoop)), trays = new Set(st.comps.map((c) => G.trayMM(c)));
+  for (const b of document.querySelectorAll('[data-all-scoop]')) b.setAttribute('aria-pressed', String(scoops.size === 1 && scoops.has(b.dataset.allScoop)));
+  for (const b of document.querySelectorAll('[data-all-tray]')) b.setAttribute('aria-pressed', String(trays.size === 1 && trays.has(+b.dataset.allTray)));
+  $('floor-hint').textContent = scoops.size > 1 || trays.size > 1 ? 'Mixed right now; these set every compartment.' : 'Applies to every compartment.';
+  drawPalette();
+  for (const b of document.querySelectorAll('[data-outlines]')) b.setAttribute('aria-pressed', String((b.dataset.outlines === '1') === !!st.outlines));
+  const lm = st.lid ? 'lid' : st.covers ? 'covers' : 'off';
+  for (const b of document.querySelectorAll('[data-lidmode]')) b.setAttribute('aria-pressed', String(b.dataset.lidmode === lm));
+  for (const b of document.querySelectorAll('[data-lidview]')) b.setAttribute('aria-pressed', String(b.dataset.lidview === lidView));
+  $('lidview-row').hidden = lm === 'off'; $('lidtest-row').hidden = lm === 'off';
+  $('lidview-open').textContent = st.covers ? 'Lifted' : 'Beside';
+  $('lid-hint').textContent = LIDHINT[lm] + lidNote(lm);
+  const H = G.holderOf(layout()); $('meta-label').textContent = `${H.name}, ${H.label[0].toFixed(2)} × ${H.label[1]} × ${H.label[2]} mm`;
+  $('act-undo').disabled = !undo.length; $('act-redo').disabled = !redo.length;
+}
+const bodyHex = () => '#' + bodyMat.color.getHexString();
+// v24: what a stretched size is, and the tall-drawer warning
+function heightHint() {
+  const tall = G.isTall(st.size, st.height), how = G.shellChanges(st.size, st.height).join(', ');
+  return `New: made from the 240-2W drawer (${how}), not yet checked against a modelled part.` + (tall ? ' Tall drawers suit tall things (cards on edge, bottles, tools) and a few big compartments you can get a hand into.' : '');
+}
+function reachWarn() {
+  const flags = G.isTall(st.size, st.height) ? G.reachFlags(layout()) : [], n = flags.filter(Boolean).length;
+  $('reach-warn').hidden = !n; $('legend-deep').hidden = !n;
+  if (!n) return;
+  const g = G.reachableGrid(st.size, st.height);
+  $('reach-text').textContent = `${n} of ${st.comps.length} compartment${st.comps.length === 1 ? ' is' : 's are'} too narrow to reach into at ${st.height}: here a compartment needs ${fmt(G.reachMin(st.size, st.height))} mm across to get the last parts out by hand. Merge them, or start from the densest grid that works.`;
+  $('reach-fix').textContent = `Use ${g.nc} × ${g.nr}`;
+}
+const LIDHINT = {
+  off: 'One lid covers the whole drawer; covers close each compartment on its own. Both sit under the rim, so the drawer still goes in its case.',
+  lid: "A lid that drops inside the rim and rests on every divider, made for this layout. Its top sits 2.2 mm below the rim, so the drawer stoppers' tabs pass over it. A lip under it reaches 3.5 mm into each compartment, so parts can't creep from one compartment to the next. In a case the lid can lift at most about 2.5 mm and its lips stay in: the drawer ships and lives in its case with the lid on. Lift it out by its fingertip pull: a 20 mm opening over a cup with a 3 mm hook (dashed on the plan; the solid edge is the hook side). The test pieces are this layout's front-left corner at 0.5H and the matching lid corner.",
+  covers: 'A cover for each compartment (turn one off under the plan). Each sits on the dividers round its compartment, 2.2 mm below the rim so the drawer stoppers pass over it, and snaps over small beads the drawer gets on its walls: two to four per cover, on each side long enough for a 16 mm snap window. Lift it with a fingernail in the slot near the front: a 12 × 6 mm slot (9 × 6 in narrow compartments) over a shallow divot that reaches 1.5 mm under the top on both sides, so a nail, a coin or a small screwdriver catches either way. Over a label the cover stops just past its front edge, so the label stays open and nothing thin is left to break; in a compartment wider than its label, a leg carries the cover on to the back beside the holder (an L). The test pieces are one compartment at 0.5H and its cover.',
+};
+// what a compartment needs before a cover's pull fits, for messages
+function coverNeed(L, c) {
+  if (G.coverPull(L, c)) return `two sides at least ${fmt(G.coverMinSide())} mm long for its snaps`;
+  const [w, d] = G.pullRoomMin('cover'), hd = G.hasHolder(L, c) ? G.holderOf(L).D : 0, cw = c.x1 - c.x0, cd = c.y1 - c.y0 - hd;
+  const sized = (cw >= w - EPS && cd >= d - EPS) || (cw >= d - EPS && cd >= w - EPS);
+  return sized ? 'a gentler scoop or tray here' : `about ${fmt(w)} × ${fmt(d + hd)} mm${hd ? ' with its label' : ''}`;
+}
+// the part of the hint that depends on the layout: compartments too small for a cover, a lid with no room for its pull
+function lidNote(lm) {
+  const L = layout();
+  if (lm === 'lid' && !G.lidPull(L)) { const [w, d] = G.pullRoomMin('lid'); return ` No compartment here has room for the lid's pull: it needs one at least ${fmt(w)} × ${fmt(d)} mm. Merge two cells to make one.`; }
+  if (lm !== 'covers') return '';
+  const open = L.comps.filter((c) => !c.nocover && !G.isCovered({ ...L, covers: true }, c));
+  if (!open.length) return '';
+  const [w, d] = G.pullRoomMin('cover'), need = `a cover needs two sides at least ${fmt(G.coverMinSide())} mm long for its snaps, and about ${fmt(w)} × ${fmt(d)} mm for its nail slot`;
+  if (open.length === L.comps.length) return ` None of these compartments has room for a cover (${need}), so no covers are made.${G.lidPull(L) ? ' The lid suits this drawer: its pull fits.' : ''}`;
+  return ` ${open.length} compartment${open.length === 1 ? ' is' : 's are'} too small for a cover (${need}) and stay${open.length === 1 ? 's' : ''} open.`;
+}
+const FHINT = {
+  off: 'Off: the drawer prints in one color.',
+  one: 'Every floor in one color. Single-nozzle printers swap filament once at 1.4 mm (the files come with it set); multi-material printers swap only on the three floor layers.',
+  paint: 'Click compartments in the plan or the 3D view, then pick a floor color under the plan or on the 3D view, or press 0 to 4. Body plus three floor colors fits one AMS.',
+};
+const paletteKey = () => `${st.floor.mode}|${st.floor.slots}|${st.floor.colors.join()}|${bodyHex()}`;
+let colorEditBefore = null;
+function drawPalette() {
+  const f = st.floor, box = $('palette');
+  for (const b of document.querySelectorAll('[data-fmode]')) b.setAttribute('aria-pressed', String(b.dataset.fmode === f.mode));
+  $('fcolor-hint').textContent = FHINT[f.mode];
+  box.hidden = f.mode === 'off'; $('slot4-row').hidden = f.mode !== 'paint'; $('fills').hidden = f.mode !== 'paint';
+  $('slot4').checked = f.slots === 4;
+  if (box.dataset.key === paletteKey()) return;   // unchanged; also keeps an open color picker alive
+  box.dataset.key = paletteKey(); box.replaceChildren();
+  if (f.mode === 'off') return;
+  if (f.mode === 'paint') { const l = document.createElement('span'); l.className = 'swatch'; const chip = document.createElement('span'); chip.className = 'bodychip'; chip.style.background = bodyHex(); l.append(chip, 'Body'); box.append(l); }
+  const n = f.mode === 'one' ? 1 : f.slots;
+  for (let i = 0; i < n; i++) {
+    const l = document.createElement('label'); l.className = 'swatch';
+    const inp = document.createElement('input'); inp.type = 'color'; inp.value = f.colors[i];
+    inp.setAttribute('aria-label', f.mode === 'one' ? 'Floor color' : `Floor color ${i + 1}`);
+    inp.addEventListener('input', () => {
+      if (!colorEditBefore) colorEditBefore = JSON.stringify(st);
+      st.floor.colors[i] = inp.value.toLowerCase(); box.dataset.key = paletteKey(); drawPlan(); updateSel(); updateOverlays();
+    });
+    inp.addEventListener('change', () => {
+      if (colorEditBefore && colorEditBefore !== JSON.stringify(st)) { undo.push(JSON.parse(colorEditBefore)); if (undo.length > 100) undo.shift(); redo.length = 0; }
+      colorEditBefore = null; box.dataset.key = paletteKey(); changed();
+    });
+    l.append(inp, f.mode === 'one' ? 'Floor' : String(i + 1)); box.append(l);
+  }
+}
+for (const b of document.querySelectorAll('[data-fmode]')) b.onclick = () => setFloorMode(b.dataset.fmode);
+$('slot4').onchange = () => { $('slot4').blur(); commit((x) => { x.floor.slots = $('slot4').checked ? 4 : 3; }); };
+for (const b of document.querySelectorAll('[data-fill]')) b.onclick = () => fill(b.dataset.fill);
+// ---------------- layout code ----------------
+let code = '', share = '', codeFor = '';
+let db = null; (async () => { try { db = window.claude?.use ? await window.claude.use('db') : null; } catch { db = null; } })();
+async function refreshCode() {
+  const key = JSON.stringify(Mk.canonical(st)); if (key === codeFor) return; codeFor = key;
+  try { code = await Mk.codeOf(st); share = await Mk.shareOf(st); } catch { code = ''; share = ''; }
+  if (key !== codeFor) return;
+  $('open-code').textContent = code ? Mk.pretty(code) : 'Layout code';
+  $('code-big').textContent = code ? Mk.pretty(code) : '';
+  if (document.activeElement !== $('code-share')) $('code-share').value = share;
+}
+async function saveCode() {
+  if (!code || !share) return;
+  try { const m = JSON.parse(localStorage.getItem('mdg-codes') || '{}'); delete m[code]; m[code] = share; const k = Object.keys(m); while (k.length > 80) delete m[k.shift()]; localStorage.setItem('mdg-codes', JSON.stringify(m)); } catch {}
+  if (db) { try { await db.doc('layouts/' + code).set({ share, savedAt: new Date().toISOString(), size: st.size, height: st.height, label: st.label, compartments: st.comps.length }); } catch {} }
+}
+async function lookup(c) {
+  try { const m = JSON.parse(localStorage.getItem('mdg-codes') || '{}'); if (m[c]) return m[c]; } catch {}
+  if (db) { try { const d = await db.doc('layouts/' + c).get(); if (d.exists) return d.data().share; } catch {} }
+  return null;
+}
+$('open-code').onclick = async () => { await refreshCode(); $('code-mark').checked = st.codeMark; $('code-status').textContent = ''; $('code-open-in').value = ''; $('codedlg').showModal(); };
+$('code-mark').onchange = () => { commit((x) => { x.codeMark = $('code-mark').checked; }); };
+$('code-copy').onclick = async () => {
+  await saveCode(); const ta = $('code-share'); ta.focus(); ta.select();
+  let ok = false; try { await navigator.clipboard.writeText(share); ok = true; } catch { try { ok = document.execCommand('copy'); } catch {} }
+  $('code-status').className = 'status ok'; $('code-status').textContent = ok ? 'Copied, and the code is saved.' : 'Selected: press Ctrl+C to copy. The code is saved.';
+};
+$('code-open').onclick = async () => {
+  const v = $('code-open-in').value.trim(); const st0 = $('code-status'); st0.className = 'status err';
+  if (!v) { st0.textContent = 'Type a code or paste a share text.'; return; }
+  let text = v.startsWith('mdg1.') ? v : null;
+  if (!text) { const c = Mk.parseCode(v); if (!c) { st0.textContent = "That isn't a layout code (MD-XXX-XXX) or a share text."; return; } text = await lookup(c); if (!text) { st0.textContent = `${Mk.pretty(c)} isn't saved here. Ask for its share text instead.`; return; } }
+  try {
+    const raw = await Mk.fromShare(text); const next = normalize({ ...raw, nc: st.nc, nr: st.nr });
+    if (!next) throw new Error('bad');
+    next.outlines = raw.outlines; next.codeMark = st.codeMark;
+    commit((x) => { Object.assign(x, next); });
+    sel = null; drawPlan(); updateSel(); $('codedlg').close();
+  } catch { st0.textContent = "That share text didn't open. Check that it was copied whole."; }
+};
+
+// ---------------- parts list -> layout ----------------
+const dlg = $('inv'); let work = null;
+for (const [k, kit] of Object.entries(I.KITS)) { const o = document.createElement('option'); o.value = k; o.textContent = kit.name; $('inv-kit').append(o); }
+function invRender() {
+  const body = $('inv-body'); body.replaceChildren();
+  if (!work.items.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.className = 'empty'; td.textContent = 'No parts yet. Pick a kit, or type a few lines above.'; tr.append(td); body.append(tr); }
+  work.items.forEach((it, i) => {
+    const tr = document.createElement('tr');
+    const sel = (opts, val, on) => { const e = document.createElement('select'); for (const [v, t] of opts) { const o = document.createElement('option'); o.value = v; o.textContent = t; e.append(o); } e.value = val; e.onchange = () => on(e.value); return e; };
+    const num = (val, on, dis) => { const e = document.createElement('input'); e.type = 'number'; e.min = '0'; e.step = '1'; e.value = dis ? '' : val; e.disabled = !!dis; e.onchange = () => on(+e.value); return e; };
+    const T = I.TYPES[it.type];
+    const sizes = I.THREADS.filter((sz) => I.known({ ...it, size: sz, length: it.length || 10 }));
+    const td = (...kids) => { const c = document.createElement('td'); c.append(...kids); return c; };
+    const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'btn sm'; rm.textContent = '✕'; rm.setAttribute('aria-label', 'Remove ' + I.labelText(it));
+    rm.onclick = () => { work.items.splice(i, 1); invRender(); };
+    tr.append(
+      td(sel(I.TYPE_ORDER.map((k) => [k, I.TYPES[k].name]), it.type, (v) => { it.type = v; if (I.TYPES[v].screw && !it.length) it.length = 10; if (!I.known(it)) it.size = I.THREADS.find((sz) => I.known({ ...it, size: sz })) || 'M3'; invRender(); })),
+      td(sel(sizes.map((v) => [v, v]), it.size, (v) => { it.size = v; invRender(); })),
+      td(num(it.length, (v) => { it.length = Math.max(1, v); invSummary(); }, !T.screw)),
+      td(num(it.qty, (v) => { it.qty = Math.max(0, Math.round(v)); invSummary(); })),
+      td(rm));
+    body.append(tr);
+  });
+  $('inv-color').value = work.colorBy; $('inv-labels').checked = work.labels;
+  invSummary();
+}
+function invPlan(height = st.height) {
+  return I.layoutFor(work.items, { size: st.size, height, label: st.label, labels: work.labels, scoop: mode(st.comps.map((c) => c.scoop)) });
+}
+// v24: the tips lay the list out at the other heights rather than scale this one's fill: at 1.5H and 2H the layout
+// keeps compartments wide enough to reach into, so it is a different (and roomier) layout than the 1H one
+function invSummary() {
+  const sum = $('inv-sum'); const r = work.items.length ? invPlan() : { error: 'Add some parts to see how they fit.' };
+  sum.classList.toggle('warn', !!r.error || r.fullest > 1);
+  $('inv-apply').disabled = !!r.error;
+  const HS = Object.keys(S.heights), hi = HS.indexOf(st.height);
+  const fits = (h, cap) => { const x = invPlan(h); return !x.error && x.fullest <= cap; };
+  if (r.error) {
+    const below = HS.slice(0, hi), lower = work.items.length ? below.find((h) => fits(h, 0.9)) || below.reverse().find((h) => fits(h, 1)) : null;   // the lowest that holds them with room, else the tallest that holds them
+    sum.textContent = r.error + (lower && /to reach into/.test(r.error) ? ` A ${lower} drawer takes them.` : ''); return;
+  }
+  const pct = Math.round(r.fullest * 100);
+  let tip = '';
+  if (r.fullest > 1) {
+    const up = HS.slice(hi + 1).find((h) => fits(h, 1));
+    tip = up ? ` Too full for ${st.height}: try ${up}, or lower the quantities.` : ' Too full: lower the quantities or split the list across two drawers.';
+  } else {
+    const lower = HS.slice(0, hi).find((h) => fits(h, 0.9));   // the lowest that would do
+    if (lower) tip = ` Plenty of room: a ${lower} drawer would probably do.`;
+  }
+  sum.textContent = `${work.items.length} parts in ${r.rows} rows. Fullest compartment about ${pct}% full.${tip}`;
+}
+function invAdd(list) {
+  // the parts list lays out fasteners; bearings, pulleys and other kit parts (v18 parser) wait for the kit tools
+  const items = list.items.filter((it) => I.TYPE_ORDER.includes(it.type)), errors = list.errors, other = list.items.length - items.length;
+  for (const it of items) {
+    const same = work.items.find((x) => x.type === it.type && x.size === it.size && (x.length || 0) === (it.length || 0));
+    if (same) same.qty += it.qty; else work.items.push(it);
+  }
+  $('inv-err').textContent = [errors.length ? `Skipped ${errors.length}: ${errors[0]}${errors.length > 1 ? ' …' : ''}` : '',
+    other ? `Left out ${other} other part${other === 1 ? '' : 's'} (bearings, pulleys and the like): the parts list takes screws, nuts, washers and inserts for now.` : ''].filter(Boolean).join(' ');
+  invRender();
+}
+$('open-inv').onclick = () => { work = clone(st.inventory); $('inv-kit').value = ''; $('inv-err').textContent = ''; invRender(); dlg.showModal(); };
+$('inv-kit').onchange = () => { const k = I.KITS[$('inv-kit').value]; if (!k) return; work.items = clone(k.items); invRender(); };
+$('inv-add').onclick = () => { invAdd(I.parseList($('inv-text').value)); $('inv-text').value = ''; };
+$('inv-clear').onclick = () => { work.items = []; invRender(); };
+$('inv-color').onchange = () => { work.colorBy = $('inv-color').value; };
+$('inv-labels').onchange = () => { work.labels = $('inv-labels').checked; invSummary(); };
+$('inv-import').onclick = () => $('inv-file').click();
+$('inv-import').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('inv-file').click(); } };
+$('inv-file').onchange = async () => {
+  const f = $('inv-file').files[0]; if (!f) return; const text = await f.text(); $('inv-file').value = '';
+  let list = null;
+  try {
+    const j = JSON.parse(text);
+    const arr = Array.isArray(j) ? j : j.items || j.labels || j.rows || [];
+    list = I.fromPicker(arr.map((x) => (x && typeof x === 'object' && x.schema ? x : typeof x === 'object' && x ? (x.text || x.label || [x.line1, x.line2].filter(Boolean).join(' ')) : x)));
+  } catch { list = I.parseList(text.split(/\r?\n/).map((l) => l.split(',').filter((c) => c.trim()).join(' ')).join('\n')); }
+  invAdd(list);
+};
+$('inv-apply').onclick = () => {
+  const r = invPlan(); if (r.error) return;
+  const keys = new Set(r.comps.map((c) => (work.colorBy === 'size' ? c.item.size : I.TYPES[c.item.type].short)));
+  const slots = keys.size > 3 ? 4 : 3;
+  const colors = I.colorBy(r.comps, work.colorBy, slots);
+  commit((x) => {
+    x.comps = r.comps.map((c, i) => ({ ...c, tray: 0, color: colors[i], ...(c.item ? { item: cleanItem(c.item) } : {}) }));
+    x.inventory = clone(work);
+    x.nr = r.rows; x.nc = Math.max(...[...new Set(r.comps.map((c) => c.y0))].map((y) => r.comps.filter((c) => c.y0 === y).length));
+    if (work.colorBy !== 'none') { x.floor.mode = 'paint'; x.floor.slots = slots; }
+  });
+  sel = null; drawPlan(); updateSel(); dlg.close();
+  if (work.colorBy !== 'none') { camera.position.set(150, 560, 300); controls.target.set(0, 0, 0); controls.update(); }
+};
+$('cols-dec').onclick = () => setGrid(st.nc - 1, st.nr);
+$('cols-inc').onclick = () => setGrid(st.nc + 1, st.nr);
+$('rows-dec').onclick = () => setGrid(st.nc, st.nr - 1);
+$('rows-inc').onclick = () => setGrid(st.nc, st.nr + 1);
+$('preset-shipped').onclick = () => { if (!S.shipped) return; commit((x) => { x.nc = 5; x.nr = 4; x.comps = G.gridComps(S.shipped.cols, S.shipped.rows); }); sel = null; changed(); };
+for (const b of document.querySelectorAll('[data-length]')) b.onclick = () => setLength(+b.dataset.length);
+for (const b of document.querySelectorAll('[data-width]')) b.onclick = () => setSize(G.sizeKey(S.length, +b.dataset.width));
+$('reach-fix').onclick = () => { const g = G.reachableGrid(st.size, st.height); setGrid(g.nc, g.nr); };
+$('reset-grid').onclick = () => setGrid(st.nc, st.nr);
+for (const b of document.querySelectorAll('[data-height]')) b.onclick = () => { if (st.height !== b.dataset.height && commit((x) => { x.height = b.dataset.height; })) (st.lid && lidView === 'beside' ? frameLid : frameDrawer)(); };
+for (const b of document.querySelectorAll('[data-label]')) b.onclick = () => { if (st.label !== b.dataset.label) commit((x) => { x.label = b.dataset.label; }); };
+for (const b of document.querySelectorAll('[data-all-scoop]')) b.onclick = () => setAll('scoop', b.dataset.allScoop);
+for (const b of document.querySelectorAll('[data-outlines]')) b.onclick = () => commit((x) => { x.outlines = b.dataset.outlines === '1'; });
+for (const b of document.querySelectorAll('[data-lidmode]')) b.onclick = () => {
+  const m = b.dataset.lidmode;
+  if (m === 'lid' && !st.lid && lidView === 'beside') frameLid();
+  if (m === 'covers' && !st.covers) frameDrawer();
+  commit((x) => { x.lid = m === 'lid'; x.covers = m === 'covers'; });
+};
+for (const b of document.querySelectorAll('[data-sel-cover]')) b.onclick = () => setSel('nocover', b.dataset.selCover === '0');
+for (const b of document.querySelectorAll('[data-lidview]')) b.onclick = () => { if (lidView === b.dataset.lidview) return; lidView = b.dataset.lidview; syncControls(); (lidView === 'beside' && st.lid ? frameLid : frameDrawer)(); showLid(); };
+for (const b of document.querySelectorAll('[data-all-tray]')) b.onclick = () => setAll('tray', +b.dataset.allTray);
+for (const b of document.querySelectorAll('[data-sel-scoop]')) b.onclick = () => setSel('scoop', b.dataset.selScoop);
+for (const b of document.querySelectorAll('[data-sel-tray]')) b.onclick = () => setSel('tray', +b.dataset.selTray);
+// cells: picking one flattens the floor (no scoop or tray); Off returns the compartment to a loose pile
+function setCell(kind) {
+  if (!selected().length) return;
+  commit((x) => { for (const c of x.comps) if (inside(c, sel)) { if (kind) { c.cell = kind; c.scoop = 'off'; c.tray = 0; if (kind !== 'wells') delete c.bearing; if (kind !== 'washers') delete c.washer; if (!G.GRID_CELLS.includes(kind)) delete c.spacing; } else { delete c.cell; delete c.bearing; delete c.washer; delete c.spacing; } } });
+}
+// spacing for the selected wells and sockets: roomy (the default, nothing saved) or dense
+function setSpacing(v) {
+  commit((x) => { for (const c of x.comps) if (inside(c, sel) && G.GRID_CELLS.includes(G.cellKind(c))) { if (v === 'dense') c.spacing = 'dense'; else delete c.spacing; } });
+}
+for (const b of document.querySelectorAll('[data-sel-spacing]')) b.onclick = () => setSpacing(b.dataset.selSpacing);
+for (const b of document.querySelectorAll('[data-sel-cell]')) b.onclick = () => setCell(b.dataset.selCell);
+for (const code of G.WELL_BEARINGS) { const [d, D, B, Df] = G.bearingDims(code), o = document.createElement('option'); o.value = code; o.textContent = `${code}: ${d} × ${Df || D} × ${B}`; $('sel-bearing').append(o); }
+$('sel-bearing').onchange = () => { const v = $('sel-bearing').value; commit((x) => { for (const c of x.comps) if (inside(c, sel) && G.cellKind(c) === 'wells') c.bearing = v; }); };
+$('act-merge').onclick = doMerge; $('act-split').onclick = doSplit; $('act-label').onclick = doLabel;
+$('act-undo').onclick = () => back(undo, redo); $('act-redo').onclick = () => back(redo, undo);
+document.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  const inField = e.target.closest && e.target.closest('input, textarea, select');
+  if (inField && !((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y'))) return;
+  if (inField) e.target.blur();
+  if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); e.shiftKey ? back(redo, undo) : back(undo, redo); return; }
+  if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); back(redo, undo); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (k === 'm') doMerge(); else if (k === 's') doSplit(); else if (k === 'l') doLabel();
+  else if (k === 't') { const s = selected(); if (s.length) setSel('tray', nextTray(s)); }
+  else if (/^[0-4]$/.test(k) && st.floor.mode === 'paint' && +k <= st.floor.slots && selected().length) setSel('color', +k);
+  else if (k === 'escape') { sel = null; drawPlan(); updateSel(); }
+});
+
+// ---------------- 3D ----------------
+const canvas = $('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1, 1, 5000);
+camera.position.set(250, 330, 420);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 12, 0); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.49;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x404660, 1.6));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(-160, 380, 260); scene.add(key);
+const rim = new THREE.DirectionalLight(0xc8d2ff, 0.7); rim.position.set(300, 160, -300); scene.add(rim);
+let grid = null;
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function themeStage() {
+  if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+  grid = new THREE.GridHelper(1000, 100, new THREE.Color(css('--stage-grid-major')), new THREE.Color(css('--stage-grid')));
+  grid.position.y = -0.05; scene.add(grid);
+  edgeMat.color.set(css('--edge'));
+  selMat.color.set(css('--cad')); hoverMat.color.set(css('--cad')); selKey3 = ''; if (st) drawSel3d();
+}
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.62, metalness: 0.0, flatShading: true });
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32 });
+let mesh = null, edges = null;
+function setMesh(mf) {
+  const m = mf.getMesh(); const np = m.numProp, vp = m.vertProperties, tv = m.triVerts;
+  const pos = new Float32Array(tv.length * 3);
+  for (let i = 0; i < tv.length; i++) {
+    const o = tv[i] * np;
+    pos[3 * i] = vp[o] / G.U - S.W / 2; pos[3 * i + 1] = vp[o + 2] / G.U; pos[3 * i + 2] = -(vp[o + 1] / G.U - S.D / 2);
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.computeVertexNormals();
+  if (mesh) { scene.remove(mesh, edges); mesh.geometry.dispose(); edges.geometry.dispose(); }
+  mesh = new THREE.Mesh(geo, bodyMat);
+  edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 24), edgeMat);
+  scene.add(mesh, edges);
+  return tv.length / 3;
+}
+// any manifold in the drawer frame -> geometry in the scene (x centred, y up, front toward the viewer)
+function sceneGeo(mf) {
+  const m = mf.getMesh(); const np = m.numProp, vp = m.vertProperties, tv = m.triVerts;
+  const pos = new Float32Array(tv.length * 3);
+  for (let i = 0; i < tv.length; i++) { const o = tv[i] * np; pos[3 * i] = vp[o] / G.U - S.W / 2; pos[3 * i + 1] = vp[o + 2] / G.U; pos[3 * i + 2] = -(vp[o + 1] / G.U - S.D / 2); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.computeVertexNormals(); return geo;
+}
+// the lid, in the preview either seated or lying beside the drawer as it prints (top face down)
+let lidView = 'beside', lidMf = null, lidKey = '', lidGrams = 0, coverMfs = [], coversKey = '', coverGrams = 0;
+const lidGroup = new THREE.Group(); scene.add(lidGroup);
+function clearLid() { for (const m of [...lidGroup.children]) { lidGroup.remove(m); m.geometry.dispose(); } }
+function showLid() {
+  clearLid(); if (!st || !wasm) return;
+  const add = (mf, dx = 0, dy = 0) => {
+    const geo = sceneGeo(mf); const m = new THREE.Mesh(geo, bodyMat); const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 24), edgeMat);
+    m.position.set(dx, dy, 0); e.position.set(dx, dy, 0); lidGroup.add(m, e);
+  };
+  if (st.covers) { for (const k of coverMfs) add(k.m, 0, lidView === 'closed' ? 0 : 16); return; }
+  if (!st.lid || !lidMf) return;
+  if (lidView === 'closed') add(lidMf);
+  else { const p = G.lidForPrint(wasm, lidMf); add(p, S.W + 30); p.delete(); }
+}
+// frame the drawer and the lid beside it, or just the drawer when the lid is closed
+// v24: fit a box (scene coordinates) in the view, looking along a fixed direction, for any length and height and pane shape
+const DRAWER_DIR = new THREE.Vector3(250, 318, 420).normalize(), LID_DIR = new THREE.Vector3(170, 640, 710).normalize();
+function frameBox(b, dir, fill = 0.94) {
+  resize();
+  const t = new THREE.Vector3((b[0] + b[1]) / 2, (b[2] + b[3]) / 2, (b[4] + b[5]) / 2), corners = [];
+  for (const x of [b[0], b[1]]) for (const y of [b[2], b[3]]) for (const z of [b[4], b[5]]) corners.push(new THREE.Vector3(x, y, z));
+  let d = 600;
+  for (let i = 0; i < 6; i++) {
+    camera.position.copy(t).addScaledVector(dir, d); camera.lookAt(t); camera.updateMatrixWorld();
+    const e = Math.max(...corners.map((c) => { const v = c.clone().project(camera); return Math.max(Math.abs(v.x), Math.abs(v.y)); }));
+    d *= e / fill;
+  }
+  camera.position.copy(t).addScaledVector(dir, d); controls.target.copy(t); controls.update();
+}
+const drawerBox = () => [-S.W / 2 - 2, S.W / 2 + 2, 0, S.heights[st.height].rim, -S.D / 2 - 4, S.D / 2 + 4.3];
+function frameLid() { const b = drawerBox(); b[1] = S.W * 1.5 + 32; frameBox(b, LID_DIR); }
+function frameDrawer() { frameBox(drawerBox(), DRAWER_DIR); }
+// floor colours in the preview: flat tiles on the visible floor (the body geometry doesn't change with colour)
+const overlays = new THREE.Group(); scene.add(overlays);
+const floorMats = new Map();
+const inlayMat = new THREE.MeshStandardMaterial({ color: 0xff6a1a, roughness: 0.62, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+const floorMat = (hex) => {
+  if (!floorMats.has(hex)) floorMats.set(hex, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.6, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+  return floorMats.get(hex);
+};
+const labels3d = new THREE.Group(); scene.add(labels3d);
+const labelTex = new Map();
+function labelTexture(lines, lh) {
+  const key = lines.join('|') + lh;
+  if (labelTex.has(key)) return labelTex.get(key);
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = Math.round(512 * lh / 29.876);
+  const g = cv.getContext('2d'); g.fillStyle = '#f3f1ea'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#1d1e22'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const fam = '"Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif';
+  if (lh > 10) {
+    g.font = `700 ${Math.round(cv.height * 0.5)}px ${fam}`; g.fillText(lines[0], cv.width / 2, cv.height * 0.4, cv.width * 0.92);
+    g.font = `600 ${Math.round(cv.height * 0.26)}px ${fam}`; g.fillText(lines[1], cv.width / 2, cv.height * 0.79, cv.width * 0.9);
+  } else { g.font = `700 ${Math.round(cv.height * 0.56)}px ${fam}`; g.fillText(lines.join(' '), cv.width / 2, cv.height * 0.53, cv.width * 0.92); }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  labelTex.set(key, t); return t;
+}
+function updateLabels() {
+  for (const m of [...labels3d.children]) { labels3d.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  if (!st) return;
+  const L = layout(), H = G.holderOf(L), top = S.heights[st.height].top, [lw, lh] = H.label;
+  for (const c of st.comps) {
+    if (!c.item || !I.known(c.item) || !G.hasHolder(L, c)) continue;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), new THREE.MeshStandardMaterial({ map: labelTexture(I.labelLines(c.item), lh), roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -1 }));
+    m.rotation.x = -Math.PI / 2; m.position.set(c.x0 + 0.362 + lw / 2 - S.W / 2, top - 2.5 + H.label[2] + 0.01, -((c.y1 - lh / 2) - S.D / 2));
+    labels3d.add(m);
+  }
+}
+if (document.fonts?.ready) document.fonts.ready.then(() => { labelTex.clear(); if (st) updateLabels(); });
+// v27: washer rows take the floor colour up through their ribs. The preview shows that part of the drawer itself in the
+// floor colour, cut out once per build (colour edits reuse it).
+let ribCache = { key: '', geos: new Map() };
+function ribGeo(r) {
+  if (ribCache.key !== builtKey) { for (const g of ribCache.geos.values()) g.dispose(); ribCache = { key: builtKey, geos: new Map() }; }
+  const k = [r.comp, r.x0, r.x1, r.y0, r.y1, r.ribs].join('|');
+  let g = ribCache.geos.get(k);
+  if (!g) {
+    const U = G.U, z0 = G.C.FLOOR - G.SKIN, q = (v) => Math.round(v * U);
+    const b = wasm.Manifold.cube([q(r.x1) - q(r.x0), q(r.y1) - q(r.y0), q(r.ribs + 1) - q(z0)]).translate([q(r.x0), q(r.y0), q(z0)]);
+    const part = current.intersect(b); b.delete(); g = sceneGeo(part); part.delete(); ribCache.geos.set(k, g);
+  }
+  return g;
+}
+function updateOverlays() {
+  for (const m of [...overlays.children]) { overlays.remove(m); if (!m.userData.cached) m.geometry.dispose(); }
+  if (!st || st.floor.mode === 'off') return;
+  const L = layout();
+  for (const r of G.floorRects(L)) {
+    if (r.ribs) {
+      if (!current || !wasm) continue;
+      const m = new THREE.Mesh(ribGeo(r), floorMat(L.floor.colors[r.color - 1])); m.userData.cached = true; overlays.add(m);
+      continue;
+    }
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(r.x1 - r.x0, r.y1 - r.y0), floorMat(L.floor.colors[r.color - 1]));
+    m.rotation.x = -Math.PI / 2; m.position.set((r.x0 + r.x1) / 2 - S.W / 2, G.C.FLOOR + 0.005, -((r.y0 + r.y1) / 2 - S.D / 2));
+    overlays.add(m);
+  }
+  for (const o of outlinesNow()) {
+    if (!G.floorColorOf(L, st.comps[o.comp])) continue;
+    const toV = ([x, y]) => new THREE.Vector2(x - S.W / 2, y - S.D / 2);
+    const shape = new THREE.Shape(o.polys[0].map(toV));
+    for (const h of o.polys.slice(1)) shape.holes.push(new THREE.Path(h.map(toV)));
+    const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), inlayMat); m.material.color.copy(bodyMat.color);
+    m.rotation.x = -Math.PI / 2; m.position.y = G.C.FLOOR + 0.01; overlays.add(m);
+  }
+}
+// ---------------- 3D: pick compartments in the preview ----------------
+// A click (press and release without dragging) selects the compartment under it, the same selection the plan uses;
+// Shift, Ctrl or Cmd grows the selection box. Dragging still orbits. Selected compartments get a ring on their wall tops.
+const selGroup = new THREE.Group(); scene.add(selGroup);
+const selMat = new THREE.MeshBasicMaterial({ color: 0x2f6feb, transparent: true, opacity: 0.95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+const hoverMat = new THREE.MeshBasicMaterial({ color: 0x2f6feb, transparent: true, opacity: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5 });
+function ringMesh(c, mat, lift) {
+  const top = S.heights[st.height].top, o = WALL / 2, i = 1.2;
+  const V = (x, y) => new THREE.Vector2(x - S.W / 2, y - S.D / 2);
+  const shape = new THREE.Shape([V(c.x0 - o, c.y0 - o), V(c.x1 + o, c.y0 - o), V(c.x1 + o, c.y1 + o), V(c.x0 - o, c.y1 + o)]);
+  shape.holes.push(new THREE.Path([V(c.x0 + i, c.y0 + i), V(c.x0 + i, c.y1 - i), V(c.x1 - i, c.y1 - i), V(c.x1 - i, c.y0 + i)]));
+  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat); m.rotation.x = -Math.PI / 2; m.position.y = top + lift; m.renderOrder = 2; return m;
+}
+let selKey3 = '';
+function drawSel3d() {
+  if (!st) return;
+  const list = selected(), key = st.height + '|' + list.map((c) => [c.x0, c.x1, c.y0, c.y1].join()).join(';');
+  if (key === selKey3) return; selKey3 = key;
+  for (const m of [...selGroup.children]) { selGroup.remove(m); m.geometry.dispose(); }
+  for (const c of list) selGroup.add(ringMesh(c, selMat, 0.06));
+  setHover3(null);
+}
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function compAt3d(e) {
+  if (!mesh || !st) return null;
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObject(mesh, false)[0]; if (!hit) return null;
+  const x = hit.point.x + S.W / 2, y = S.D / 2 - hit.point.z;
+  if (x < -0.2 || x > S.W + 0.2 || y < -0.2 || y > S.D + 0.2) return null;   // the outer shell isn't a compartment
+  return compAt({ x, y });
+}
+let hover3 = null, hoverMesh = null, moveEvt = null, moveQueued = false;
+function setHover3(c) {
+  if (c === hover3 && (c || !hoverMesh)) return; hover3 = c;
+  if (hoverMesh) { scene.remove(hoverMesh); hoverMesh.geometry.dispose(); hoverMesh = null; }
+  if (c && !(sel && inside(c, sel))) { hoverMesh = ringMesh(c, hoverMat, 0.04); scene.add(hoverMesh); }
+  canvas.style.cursor = c ? 'pointer' : '';
+}
+let tap = null; const downs = new Set();
+canvas.addEventListener('pointerdown', (e) => {
+  downs.add(e.pointerId);
+  tap = downs.size === 1 && e.button === 0 ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() } : null;
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (tap && tap.id === e.pointerId && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 6) tap = null;
+  if (e.pointerType !== 'mouse' || e.buttons) { if (hover3) setHover3(null); return; }
+  moveEvt = e; if (moveQueued) return; moveQueued = true;
+  requestAnimationFrame(() => { moveQueued = false; if (moveEvt) setHover3(compAt3d(moveEvt)); });
+});
+canvas.addEventListener('pointerleave', () => { moveEvt = null; setHover3(null); });
+function endTap(e) {
+  downs.delete(e.pointerId);
+  const t = tap; if (!t || t.id !== e.pointerId) return; tap = null;
+  if (e.type !== 'pointerup' || Math.hypot(e.clientX - t.x, e.clientY - t.y) > 6 || performance.now() - t.t > 700) return;
+  const c = compAt3d(e), add = e.shiftKey || e.ctrlKey || e.metaKey;
+  $('sel-note').textContent = '';
+  if (!c) { if (!add && sel) { sel = null; drawPlan(); updateSel(); } return; }
+  sel = add && sel ? closure(bbox([sel, G.compBox(c)])) : closure(G.compBox(c));
+  drawPlan(); updateSel();
+}
+canvas.addEventListener('pointerup', endTap); canvas.addEventListener('pointercancel', endTap);
+
+function resize() {
+  const r = canvas.getBoundingClientRect(); if (!r.width || !r.height) return;
+  renderer.setSize(r.width, r.height, false); camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(canvas);
+(function loop() { controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+for (const c of document.querySelectorAll('.chip')) {
+  c.style.background = c.dataset.color;
+  c.onclick = () => { bodyMat.color.set(c.dataset.color); for (const d of document.querySelectorAll('.chip')) d.setAttribute('aria-pressed', String(d === c)); try { localStorage.setItem('mdg-color', c.dataset.color); } catch {} if (st) { drawPalette(); updateSel(); } };
+}
+const themeWatch = () => requestAnimationFrame(themeStage);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeWatch);
+new MutationObserver(themeWatch).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------------- engine ----------------
+let wasm = null, assets = null, current = null, pending = 0;
+async function boot() {
+  try {
+    const { default: Module } = await import('./lib/manifold.js');
+    wasm = await Module(); wasm.setup();
+    // assets ship as base64 STL inside JSON (the artifact host serves .json, not .stl)
+    const load = async (p) => {
+      const j = await (await fetch(p)).json();
+      const bin = atob(j.stl); const buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      return G.manifoldFromSTL(wasm, buf.buffer);
+    };
+    // v24: the two Fusion shells (240-2W at 0.5H and 1H); every other size is stretched from them (G.shellFor)
+    const [small, large, s05, s1] = await Promise.all([load(G.HOLDERS.small.asset), load(G.HOLDERS.large.asset), load(G.SHELL_BASES['0.5H']), load(G.SHELL_BASES['1H'])]);
+    assets = { stamps: { small, large }, shells: { '0.5H': s05, '1H': s1 } };
+    $('stage-msg').textContent = '';
+    rebuild();
+  } catch (err) {
+    console.error(err);
+    $('stage-msg').textContent = 'The geometry engine could not start in this view, so preview and export are off. The plan still works.';
+  }
+}
+let builtKey = '';
+const coverKey = () => (st.covers ? st.comps.map((c) => (c.nocover ? 0 : 1)).join('') : 0);
+const geomKey = () => JSON.stringify([st.size, st.height, st.label, st.comps.map(geomOf), st.outlines ? [st.comps.map((c) => c.item || 0), st.comps.map((c) => !!G.floorColorOf(layout(), c))] : 0, coverKey(), st.comps.some((c) => c.cell) ? !!st.lid : 0]);
+function rebuild() {
+  if (!assets) return;
+  cancelAnimationFrame(pending);
+  pending = requestAnimationFrame(() => {
+    const t0 = performance.now();
+    try {
+      const key = geomKey();
+      if (key !== builtKey || !current) {
+        const next = G.buildDrawer(wasm, layout(), assets, { outlines: outlinesNow() });
+        if (current) current.delete(); current = next; builtKey = key;
+        setMesh(current);
+        $('st-ms').textContent = (performance.now() - t0).toFixed(0) + ' ms';
+      }
+      if (st.lid) {
+        const lk = JSON.stringify([st.size, st.height, st.label, st.comps.map(geomOf)]);
+        if (lk !== lidKey || !lidMf) { if (lidMf) lidMf.delete(); lidMf = G.buildLid(wasm, layout()); lidKey = lk; lidGrams = G.grams(lidMf); }
+      }
+      if (st.covers) {
+        const ck = JSON.stringify([st.size, st.height, st.label, st.comps.map(geomOf), coverKey()]);
+        if (ck !== coversKey) {
+          for (const k of coverMfs) k.m.delete();
+          const L = layout(); coverMfs = []; coverGrams = 0;
+          L.comps.forEach((c, i) => { if (G.isCovered(L, c)) { const m = G.buildCover(wasm, L, i); coverGrams += G.grams(m); coverMfs.push({ comp: i, m }); } });
+          coversKey = ck;
+        }
+      }
+      showLid();
+      updateOverlays(); updateLabels(); selKey3 = ''; drawSel3d();
+      const L = layout();
+      const fg = G.floorRects(L).reduce((a, r) => a + (r.vol ?? (r.x1 - r.x0) * (r.y1 - r.y0) * G.SKIN), 0) / 1000 * G.C.PLA;
+      $('stage-msg').textContent = '';
+      $('st-comp').textContent = st.comps.length;
+      $('st-labels').textContent = st.comps.filter((c) => G.hasHolder(L, c)).length;
+      $('st-g').textContent = '≈ ' + Math.round(G.grams(current)) + ' g' + (fg ? `, floors ${Math.round(fg)} g` : '') + (st.lid && lidMf ? `, lid ${Math.round(lidGrams)} g` : '') + (st.covers && coverMfs.length ? `, covers ${Math.round(coverGrams)} g` : '');
+      $('act-export').disabled = !downloads;
+      if (!downloads && downloadsChecked) $('export-status').textContent = 'Downloads are not available in this view.';
+    } catch (err) {
+      console.error(err); $('stage-msg').textContent = 'This layout could not be built: ' + err.message;
+    }
+  });
+}
+function changed() {
+  setS(); setHover3(null);
+  syncControls(); drawPlan(); updateSel(); rebuild(); refreshCode();
+  try { localStorage.setItem('mdg-layout', JSON.stringify(st)); } catch {}
+}
+
+// ---------------- export ----------------
+let downloads = null, downloadsChecked = false;
+(async () => {
+  try { downloads = window.claude?.use ? await window.claude.use('downloads') : null; } catch { downloads = null; }
+  downloadsChecked = true;
+  if (current) $('act-export').disabled = !downloads;
+  if (!downloads) $('export-status').textContent = 'Downloads are not available in this view.';
+})();
+// 3MF packages: no folder entries (strict OPC readers expect files only)
+const pack = async (files) => { const z = new JSZip(); for (const [k, v] of Object.entries(files)) z.file(k, v, { createFolders: false }); return z.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }); };
+async function buildZip() {
+  const L = layout(), H = G.holderOf(L), body = bodyHex();
+  const base = `MODULITH ${st.size}-${st.height} Parts Drawer ${st.comps.length} compartments ${H.name} labels`;
+  const zip = new JSZip(); const listed = [];
+  await refreshCode(); await saveCode();
+  const opts = { outlines: outlinesNow(), bottomMark: st.codeMark && code ? [...Mk.textRects(Mk.pretty(code), { px: 0.9, cx: S.W / 2, cy: S.D - 26, mirror: true }), ...Mk.textRects('MODULITH', { px: 0.6, cx: S.W / 2, cy: S.D - 35, mirror: true })] : null };
+  const solid = G.buildDrawer(wasm, L, assets, opts);
+  const whole = X.placeOnBed([{ name: base, color: body, extruder: 1, mesh: X.meshData(solid) }]); solid.delete();
+  if (L.floor.mode === 'off') {
+    zip.file(`${base}.stl`, X.stl(whole[0].mesh, `${base} v2610`));
+    zip.file(`${base}.3mf`, await pack(X.generic3MF(whole, base)));
+  } else {
+    const { body: b, floors } = G.buildParts(wasm, L, assets, opts);
+    const parts = X.placeOnBed([{ name: 'Body', color: body, extruder: 1, mesh: X.meshData(b) },
+      ...floors.map((f) => ({ name: L.floor.mode === 'one' ? 'Floor color' : `Floor color ${f.color}`, color: L.floor.colors[f.color - 1], extruder: f.color + 1, mesh: X.meshData(f.part) }))]);
+    b.delete(); floors.forEach((f) => f.part.delete());
+    const MM = 'Multi-material';
+    zip.file(`${MM} - PrusaSlicer/${base}.3mf`, await pack(X.prusa3MF(parts, base)));
+    zip.file(`${MM} - Bambu Studio, OrcaSlicer (beta)/${base}.3mf`, await pack(X.bambu3MF(parts, base)));
+    for (const p of parts) zip.file(`${MM} - STL parts/${base} - ${p.name}.stl`, X.stl(p.mesh, `${base} ${p.name}`));
+    listed.push([`${MM} - PrusaSlicer/`, 'Open the 3MF: parts and filaments are already assigned (MMU3, XL and other multi-tool printers).'],
+      [`${MM} - Bambu Studio, OrcaSlicer (beta)/`, 'Same, for AMS printers. If the parts or filaments come in wrong, use the STL parts instead.'],
+      [`${MM} - STL parts/`, "Any slicer: load all of these at once, answer yes to loading them as one object with several parts, then set each part's filament."]);
+    if (L.floor.mode === 'one') {
+      const cc = { z: 1.4, color: body.toUpperCase() };
+      zip.file(`Single nozzle - PrusaSlicer/${base}.3mf`, await pack(X.prusa3MF(whole, base, cc)));
+      zip.file(`Single nozzle - Bambu Studio (beta)/${base}.3mf`, await pack(X.bambu3MF(whole, base, cc)));
+      zip.file(`Single nozzle - STL/${base}.stl`, X.stl(whole[0].mesh, `${base} v2610`));
+      listed.push(['Single nozzle - PrusaSlicer/ and Single nozzle - Bambu Studio (beta)/', 'One part with the filament change already set at 1.4 mm.'],
+        ['Single nozzle - STL/', 'Add a filament change at the first layer above 1.2 mm yourself.']);
+    }
+  }
+  if (st.comps.some((c) => c.item)) {
+    zip.file('labels.csv', I.labelsCSV(st.comps));
+    listed.push(['labels.csv', 'The label text for each compartment, front-left to back-right. Print it on 12 mm label tape or bring it into the Label Studio.']);
+  }
+  if (opts.bottomMark) listed.push(['Layout code', `${Mk.pretty(code)} is marked under the drawer. Type it into the generator to reopen this layout.`]);
+  if (st.lid) {
+    const lid = G.buildLid(wasm, L), lp = G.lidForPrint(wasm, lid); lid.delete();
+    const lidPart = X.placeOnBed([{ name: 'Lid', color: body, extruder: 1, mesh: X.meshData(lp) }]); lp.delete();
+    zip.file(`Lid/${base} - Lid.stl`, X.stl(lidPart[0].mesh, `${base} lid`));
+    zip.file(`Lid/${base} - Lid.3mf`, await pack(X.generic3MF(lidPart, `${base} lid`)));
+    listed.push(['Lid/', `The lid, already turned top face down for printing; no supports. About ${Math.round(lidGrams || 60)} g. It drops inside the rim and rests on the dividers, 2.2 mm below the rim so the drawer stoppers pass over it, and its lips reach 3.5 mm into each compartment. In the case it can lift at most about 2.5 mm, and its lips stay in, so it stays on in transit. Lift it out by its fingertip pull: a fingertip goes into the opening and hooks under the top.`]);
+  }
+  if (st.covers) {
+    const pr = G.coversForPrint(wasm, L);
+    if (pr.length) {
+      // the STL holds every cover in one file; in the 3MF each cover is its own object (as one object of 20 loose pieces
+      // PrusaSlicer warns of loose extrusions that none of them has on its own)
+      const each = X.placeOnBed(pr.map((p) => ({ name: `Cover, compartment ${p.comp + 1}`, color: body, extruder: 1, mesh: X.meshData(p.m) })));
+      const all = wasm.Manifold.union(pr.map((p) => p.m)); pr.forEach((p) => p.m.delete());
+      const part = X.placeOnBed([{ name: 'Covers', color: body, extruder: 1, mesh: X.meshData(all) }]); all.delete();
+      zip.file(`Covers/${base} - Covers x${pr.length}.stl`, X.stl(part[0].mesh, `${base} covers`));
+      zip.file(`Covers/${base} - Covers x${pr.length}.3mf`, await pack(X.generic3MF(each, `${base} covers`, { items: true })));
+      listed.push(['Covers/', `${pr.length} compartment covers, laid out top face down for printing; no supports. About ${Math.round(coverGrams || 0)} g. Each sits on the dividers round its compartment and snaps over the small beads on its walls (the drawer in this download has them). Lift one with a fingernail in the slot near its front; a coin or a small flat screwdriver works too.`]);
+    }
+  }
+  const how = G.shellChanges(st.size, st.height).join(', '), [fa, fb] = G.footprint(st.size);
+  const notes = S.heights[st.height].stretched ? ['NEW SIZE', `  The ${st.size}-${st.height} drawer is made from the 240-2W drawer (${how}): cut and rejoined or stretched`, '  only where its walls run straight. It has not been checked against a modelled part yet: print one and check',
+    '  that it slides in its case before you print a set.', `  It prints ${fmt(fa)} x ${fmt(fb)} mm.`] : [];
+  const ribs = Math.max(0, ...G.floorRects(L).map((r) => r.ribs || 0));
+  zip.file('README.txt', X.readme({ title: base, floor: L.floor, bodyColor: body, files: listed, notes, ribs }));
+  zip.file('layout.json', JSON.stringify({ generator: 'MODULITH Parts Drawer Generator (prototype)', stamp: 'v2610', code: Mk.pretty(code), share, ...L, outlines: st.outlines, lid: st.lid, covers: st.covers, inventory: st.inventory, labelSize: H.label.join(' x ') + ' mm',
+    units: 'mm; compartment x/y are the clear inside, measured from the cavity front-left corner' }, null, 2));
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  return { blob, filename: `${base.replace(/\s+/g, '-')}-${Mk.pretty(code)}.zip` };
+}
+async function buildLidTestZip() {
+    if (st.covers) return buildCoverTestZip();
+    // always 0.5H: the rim, band and lid fit are the same at every height, and it's the shorter print
+    const L = { ...layout(), height: '0.5H' }, tp = G.lidTestPieces(wasm, L, assets), body = bodyHex(); const zip = new JSZip();
+    const name = `MODULITH lid test ${st.size}-0.5H`;
+    const lp = G.lidForPrint(wasm, tp.lid);
+    for (const [n, m] of [['drawer corner', tp.drawer], ['lid corner', lp]]) zip.file(`${name} - ${n}.stl`, X.stl(X.placeOnBed([{ name: n, color: body, extruder: 1, mesh: X.meshData(m) }])[0].mesh, `${name} ${n}`));
+    for (const m of [tp.drawer, tp.lid, lp]) m.delete();
+    zip.file('README.txt', [`${name}`, 'Made with the MODULITH Parts Drawer Generator (prototype), Jerrari Design.', '',
+      'Two short prints to try the lid before printing a whole one:',
+      '  drawer corner  the front-left corner of this drawer (rim, front wall, dividers)',
+      '  lid corner     the matching corner of its lid, top face down, with the pull moved into it', '',
+      'CHECK', '  1. The lid corner drops into the rim with a little play and rests flat on the divider tops.',
+      '  2. The lips slide down into each compartment without catching.',
+      '  3. A fingertip in the pull hooks under the top and lifts the lid out.',
+      '  4. Put a few small washers in one compartment, hold the lid 2.5 mm up from seated (the most a case lets it',
+      '     lift) and shake: none should end up next door.',
+      '  5. In a case with its drawer stoppers fitted, the drawer slides in and out with the lid on without touching them.', '',
+      'The test pieces are always 0.5H: the rim and the lid fit are the same at every height.',
+      'The cut edges are flat cuts; they are not part of the design.'].join('\n') + '\n');
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    return { blob, filename: `${name.replace(/\s+/g, '-')}.zip` };
+}
+async function buildCoverTestZip() {
+  const L = { ...layout(), height: '0.5H' }, tp = G.coverTestPieces(wasm, L, assets), body = bodyHex(); const zip = new JSZip();
+  if (!tp) throw new Error('no compartment here has dividers on two sides');
+  const name = `MODULITH cover test ${st.size}-0.5H`;
+  const cp = G.lidForPrint(wasm, tp.cover);
+  for (const [n, m] of [['compartment', tp.drawer], ['cover', cp]]) zip.file(`${name} - ${n}.stl`, X.stl(X.placeOnBed([{ name: n, color: body, extruder: 1, mesh: X.meshData(m) }])[0].mesh, `${name} ${n}`));
+  for (const m of [tp.drawer, tp.cover, cp]) m.delete();
+  zip.file('README.txt', [name, 'Made with the MODULITH Parts Drawer Generator (prototype), Jerrari Design.', '',
+    'Two short prints to try a snap-in compartment cover:',
+    '  compartment  one compartment cut from this drawer, with its dividers and the small snap beads on them',
+    '  cover        its cover, top face down', '',
+    'CHECK', '  1. Press the cover on: it should click over the beads and sit flat on the divider tops.',
+    '  2. Put a fingernail in the slot, catch it under the top and lift: the cover should pop off easily, without',
+    '     breaking. Try a short nail too, then a coin and a small flat screwdriver. If a nail can\'t lift it, the snap is',
+    '     too tight for everyday use.',
+    '  3. Hold it upside down with a few washers inside: it should stay on.',
+    '  4. Click it on and off twenty times, then look at the skirt strips under the windows and the slot\'s edges.', '',
+    'The test pieces are always 0.5H, where the dividers are stiffest; in taller drawers the snap feels lighter, the taller the lighter.',
+    'The cut edges are flat cuts; they are not part of the design.'].join('\n') + '\n');
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  return { blob, filename: `${name.replace(/\s+/g, '-')}.zip` };
+}
+$('act-lidtest').onclick = async () => {
+  const status = $('lidtest-status');
+  if (!wasm || !assets || !downloads) { status.className = 'status err'; status.textContent = 'Downloads are not available in this view.'; return; }
+  status.className = 'status'; status.textContent = 'Cutting the test pieces…';
+  try {
+    const { blob, filename } = await buildLidTestZip();
+    await downloads.save({ filename, data: blob });
+    status.className = 'status ok'; status.textContent = `Saved ${filename}`;
+  } catch (err) {
+    const c = err && err.code; status.className = c === 'declined' ? 'status' : 'status err';
+    status.textContent = c === 'declined' ? 'Download cancelled.' : 'The test pieces could not be saved (' + (c || err.message) + ').';
+  }
+};
+$('act-export').onclick = async () => {
+  if (!current || !downloads) return;
+  const btn = $('act-export'); btn.disabled = true; const status = $('export-status'); status.className = 'status'; status.textContent = st.floor.mode === 'off' ? 'Packing STL and 3MF…' : 'Building the color parts…';
+  try {
+    const { blob, filename } = await buildZip();
+    await downloads.save({ filename, data: blob });
+    status.className = 'status ok'; status.textContent = `Saved ${filename}`;
+  } catch (err) {
+    const code = err && err.code;
+    status.className = code === 'declined' ? 'status' : 'status err';
+    status.textContent = code === 'declined' ? 'Download cancelled.' : code === 'rate_limited' ? 'A save prompt is already open. Try again in a moment.' : 'The file could not be saved here (' + (code || err.message) + ').';
+  } finally { btn.disabled = !downloads; }
+};
+window.__mdg = { buildZip, floorOverlays: () => overlays.children.length, state: () => st, layout, setSize, size: () => S, reachFlags: () => G.reachFlags(layout()), undoLen: () => undo.length, toClient: (x, y) => { const p = svg.createSVGPoint(); p.x = x; p.y = S.D - y; const m = p.matrixTransform(svg.getScreenCTM()); return [m.x, m.y]; }, mmPerPx, select: (r) => { sel = r ? closure(r) : null; drawPlan(); updateSel(); }, merge: doMerge, split: doSplit,
+  setSel, setAll, fill, setFloorMode, buildLidTestZip, setCell, setSpacing, cellPlan: (i) => G.cellPlan(layout(), st.comps[i]), lidPullComp: () => (st.lid ? G.lidPull(layout())?.comp ?? null : null), coverGrams: () => coverGrams, lidParts: () => lidGroup.children.length, lidGrams: () => lidGrams, sel3d: () => selGroup.children.length, toScreen3d: (x, y, z) => { const v = new THREE.Vector3(x - S.W / 2, z, S.D / 2 - y).project(camera); const r = canvas.getBoundingClientRect(); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height]; }, code: () => code, share: () => share, saveCode, lookup, labels3d: () => labels3d.children.length, overlays: () => overlays.children.map((m) => [m.position.x, m.position.y, m.position.z, m.visible, m.material.color.getHexString()]), ready: () => !!current, view: (p, t) => { camera.position.set(...p); controls.target.set(...t); controls.update(); } };
+
+// ---------------- start ----------------
+function start(data) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem('mdg-layout') || 'null'); } catch {}
+  st = normalize(data?.layout) || normalize(saved) || clone(EXAMPLE);
+  if (!G.HOLDERS[st.label]) st.label = 'large';
+  setS(); frameDrawer();
+  let color = '#ff6a1a'; try { color = localStorage.getItem('mdg-color') || color; } catch {}
+  const chip = [...document.querySelectorAll('.chip')].find((c) => c.dataset.color === color) || document.querySelector('.chip');
+  chip.click();
+  themeStage(); resize(); changed(); boot();
+}
+window.claude?.hot?.snapshot?.(() => ({ layout: st }));
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>

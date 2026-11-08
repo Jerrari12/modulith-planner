@@ -20,6 +20,7 @@ import { openSetup } from './ui/setup.js';
 import { standRecord } from './rules/stand.js';
 import { readLabelDefaults, paletteOfDefaults, urlFor, NEW_SET } from './label-palette.js';   // the label palette's defaults and suggestion set for new builds (2026-10-28)
 import { cleanLook, buildTooNew } from './rules/schema.js';   // a shared build's look, cleaned once at the boot (SHARE-LOOK.md)
+import { partsDrawerOn, PARTS_DRAWER_PARAM } from './parts-drawer/flag.js';   // the parts drawer prototype (M2, 2026-11-05): ?partsdrawer=1
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
@@ -261,6 +262,7 @@ export async function boot() {
      leaves the history (the stale notice's Reload: Back never returns to the version it set aside) */
   const go = (q, hash = '', { replace = false } = {}) => {
     const u = new URLSearchParams(q); if (QS.get('debug')) u.set('debug', QS.get('debug'));
+    if (partsDrawerOn()) u.set(PARTS_DRAWER_PARAM, '1');   // the prototype's flag rides the page's own reloads (a mount or length change, a build switch)
     const url = `${location.pathname}?${u}${hash}`;
     const sameDocument = url.split('#')[0] === location.pathname + location.search;
     if (replace) location.replace(url); else location.href = url;
@@ -305,8 +307,11 @@ export async function boot() {
     }
   }
   setMode(document.documentElement.dataset.mode, stage, { now: true });   // the viewer booted on `dark`; the workspace wants `night` (at once: nothing is painted yet)
+  // the parts drawer's modules (its editor, labels, rows and download, about 330 KB with gen.js and the packing table) load only
+  // with the flag, through js/parts-drawer/index.js; without it a visitor's page carries flag.js alone (2026-11-08)
+  const partsDrawer = partsDrawerOn() ? await import('./parts-drawer/index.js') : null;
   const ctx = {
-    setMode,
+    setMode, partsDrawer,
     memo: { labelsAdd },   // what a workspace wants back when it is remounted (the Assemble step, for one; a labels link not imported yet)
     store, kitId: KIT, get kitTitle() { return kitTitle; },
     /* the palette moves to the build's own key BEFORE the first colour write (and on the first build edit), so a kit

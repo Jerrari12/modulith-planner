@@ -19,6 +19,18 @@ export function newBuildId() {
   return Array.from(a, (b) => (b % 36).toString(36)).join("");
 }
 export const LABEL_MAX = 40;   // mirrors the #ut-label input's maxlength
+/* A UNIT'S NAME (2026-11-06; Joey: "it might still be helpful for them to keep track of what this drawer is for ... rather
+   than just a no-name unit"): one line of up to 40 characters, the unit's own, apart from the label on its faceplate.
+   unitName gives the name a surface shows: the typed name, else the faceplate label's first line, else nothing. */
+export const UNIT_NAME_MAX = 40;
+export function cleanUnitName(v) {
+  return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, UNIT_NAME_MAX) : "";
+}
+export function unitName(u) {
+  if (!u) return "";
+  const n = cleanUnitName(u.name); if (n) return n;
+  return typeof u.label === "string" ? u.label.split("\n")[0].trim().slice(0, UNIT_NAME_MAX) : "";
+}
 export function cleanLabelText(v) {
   return typeof v === "string" ? v.trim().slice(0, LABEL_MAX) : "";
 }
@@ -154,6 +166,57 @@ export function serializeBuild(build) {
   BUILD_FIELDS.forEach((k) => { o[k] = build[k]; });
   return JSON.parse(JSON.stringify(o));   // deep copy (placed array)
 }
+/* THE PARTS DRAWER'S FIELDS (M3, 2026-11-05; docs/parts-drawer/SPEC.md "Where it lives", DECISIONS 2026-11-05 M3): on a
+   decor unit, `variant: 'parts'` (the third variant, under the variant rule: absence is the standard drawer, a value kept on
+   a size without a parts drawer renders the standard drawer and survives) and `partsLayout`, its compartments. Both are
+   the record's own fields, carried by every link, file, history entry and Recent entry, whether or not the page shows
+   the parts drawer (`?partsdrawer=1`, js/parts-drawer/flag.js): an older or unflagged planner renders the standard
+   drawer and keeps the layout for the page that can edit it, the way a Gridfinity choice or a shelf's "both" lip rides
+   a size that cannot show it. cleanPartsLayout is the SHAPE check only, bounded (the generator's own tiling check
+   against the unit's size runs where the layout is read: js/parts-drawer/unit.js cleanLayout), so this file never
+   loads the generator. What a layout holds (SPEC "Layout data model (v2)", less what the planner does not edit yet):
+     { v: 2, label: 'large' | 'small', nc, nr, floor: { mode: 'off' | 'one' | 'paint', slots: 3 | 4 }, outlines,
+       comps: [{ x0, x1, y0, y1 (mm, the clear inside), holder, scoop: 'off' | 'std' | 'deep', tray (mm), color (0..4),
+                 item?: { type, size, length, qty } (the part in it), labelId? (its row in the build's label list) }] }
+   A layout that is not of that shape is dropped whole (the unit then opens on its default grid); an unknown key is
+   dropped; a value out of range is clamped where a clamp is harmless and the layout dropped where it is not. */
+const PARTS_LAYOUT_MAX_COMPS = 200;   // 5 columns per width unit x 8 rows is 160 at 4W (gen.js maxGrid)
+const PARTS_LAYOUT_MM = 1000;         // no collection is this deep or wide
+const PARTS_TEXT_MAX = 32;
+const PARTS_FLOOR_MODES = ["off", "one", "paint"], PARTS_SCOOPS = ["off", "std", "deep"], PARTS_LABELS = ["large", "small"];
+export const PARTS_FIT_CAPS = [1, 0.75, 0.5];
+export function cleanPartsLayout(raw) {
+  const plain = (v) => Object.prototype.toString.call(v) === "[object Object]";
+  if (!plain(raw) || !Array.isArray(raw.comps) || !raw.comps.length || raw.comps.length > PARTS_LAYOUT_MAX_COMPS) return null;
+  const mm = (v) => (typeof v === "number" && Number.isFinite(v) && v >= -PARTS_LAYOUT_MM && v <= PARTS_LAYOUT_MM ? Math.round(v * 1e4) / 1e4 : null);
+  const intIn = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
+  const text = (v) => (typeof v === "string" && v.length <= PARTS_TEXT_MAX ? v : null);
+  const out = { v: 2, comps: [] };
+  if (raw.label !== undefined) { if (!PARTS_LABELS.includes(raw.label)) return null; out.label = raw.label; }
+  if (raw.nc !== undefined) out.nc = intIn(raw.nc, 1, 40, 1);
+  if (raw.nr !== undefined) out.nr = intIn(raw.nr, 1, 40, 1);
+  if (raw.floor !== undefined) { if (!plain(raw.floor)) return null; out.floor = { mode: PARTS_FLOOR_MODES.includes(raw.floor.mode) ? raw.floor.mode : "off", slots: raw.floor.slots === 4 ? 4 : 3 }; }
+  if (raw.outlines !== undefined) out.outlines = raw.outlines === true;
+  // how the parts list sized it (DECISIONS 2026-11-07): the fill cap, bag rounding, the spare row; the list reopens with them
+  if (raw.fit !== undefined) { if (!plain(raw.fit)) return null; const cap = Number(raw.fit.cap); out.fit = { cap: PARTS_FIT_CAPS.includes(cap) ? cap : 0.75, round: raw.fit.round === true, spare: raw.fit.spare !== false }; }
+  for (const c of raw.comps) {
+    if (!plain(c)) return null;
+    const x0 = mm(c.x0), x1 = mm(c.x1), y0 = mm(c.y0), y1 = mm(c.y1);
+    if ([x0, x1, y0, y1].some((v) => v === null) || x1 <= x0 || y1 <= y0) return null;
+    const k = { x0, x1, y0, y1 };
+    if (c.holder !== undefined) k.holder = c.holder !== false;
+    if (c.scoop !== undefined) k.scoop = PARTS_SCOOPS.includes(c.scoop) ? c.scoop : "std";
+    if (c.tray !== undefined) k.tray = c.tray === true ? 3 : typeof c.tray === "number" && Number.isFinite(c.tray) ? Math.max(0, Math.min(12, Math.round(c.tray * 10) / 10)) : 0;
+    if (c.color !== undefined) k.color = intIn(c.color, 0, 4, 0);
+    if (plain(c.item)) {
+      const type = text(c.item.type), size = text(String(c.item.size ?? ""));
+      if (type && size) k.item = { type, size, length: typeof c.item.length === "number" && Number.isFinite(c.item.length) ? Math.max(0, Math.min(PARTS_LAYOUT_MM, c.item.length)) : 0, qty: intIn(c.item.qty, 0, 1e6, 0) };
+    }
+    if (typeof c.labelId === "string" && c.labelId.length <= 64) k.labelId = c.labelId;
+    out.comps.push(k);
+  }
+  return out;
+}
 export function sanitizeBuild(d, GEN2) {
   const build = d;
   const sizeToken = (w, h) => `${w}W-${h}H`;
@@ -283,6 +346,7 @@ export function sanitizeBuild(d, GEN2) {
     const unit = { id, x, y, w, hh, fill: u.fill,
                    shelves: int(u.shelves, 0, Math.max(0, h - 1), 0) };
     { const lt = cleanLabelText(u.label); if (lt) unit.label = lt; }
+    { const nm = cleanUnitName(u.name); if (nm) unit.name = nm; }   // the unit's own name (2026-11-06)
     // a label's icon or letter lives and dies with its words (cleanLabelBadge)
     if (unit.label) { const b = cleanLabelBadge(u.labelBadge); if (b) unit.labelBadge = b; }
     // closures: drawers only, whitelisted to released options ("none" is
@@ -303,6 +367,12 @@ export function sanitizeBuild(d, GEN2) {
        unchanged. KEPT on a size with no Gridfinity version (billed standard
        there), the way "both" is kept on a lip, so the choice survives. */
     if (u.fill === "decor" && u.variant === "gridfinity") unit.variant = "gridfinity";
+    // the parts drawer (M3): the third variant and its layout, the record's own fields; see cleanPartsLayout above
+    if (u.fill === "decor" && u.variant === "parts") {
+      unit.variant = "parts";
+      const lay = cleanPartsLayout(u.partsLayout);
+      if (lay) unit.partsLayout = lay;
+    }
     if (u.fill === "cabinet" && Array.isArray(u.interior) && u.interior.length) {
       // compartment coords are FULL 1H rows within the shell; any invalid
       // compartment discards the whole interior (falls back to simple mode)
