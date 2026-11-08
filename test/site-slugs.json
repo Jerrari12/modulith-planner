@@ -1,6 +1,6 @@
 {
  "_meta": {
-  "source": "MODULITH repo dist/search-index.json - a LOCAL site build of 2026-09-18 that adds the 60 Gridfinity Decor Drawer pages (not deployed yet); every other slug is the production catalog. PLUS the nine handle slugs appended at the end 2026-09-19: those pages do not exist on the site in ANY build yet - they are the site session's minted list (D:/Claude - Output/modulith-handles-as-parts-2026-09-19/handle-site-slugs.json), vendored here first because the site will not create the pages until this viewer's support manifest carries the slugs. RE-VENDOR from a real site build once it does. PLUS the 27 side-cover slugs appended 2026-10-29 (`<L>-side-cover-<h>h`, the site's own spelling in build-registry.js), vendored here first for the same reason as the handles: the site will not mint the part pages until this support manifest carries them.",
+  "source": "MODULITH repo dist/search-index.json - a LOCAL site build of 2026-09-18 that adds the 60 Gridfinity Decor Drawer pages (not deployed yet); every other slug is the production catalog. PLUS the nine handle slugs appended at the end 2026-09-19: those pages do not exist on the site in ANY build yet - they are the site session's minted list (D:/Claude - Output/modulith-handles-as-parts-2026-09-19/handle-site-slugs.json), vendored here first because the site will not create the pages until this viewer's support manifest carries the slugs. RE-VENDOR from a real site build once it does. PLUS the 27 side-cover slugs appended 2026-10-29 (`<L>-side-cover-<h>h`, the site's own spelling in build-registry.js), vendored here first for the same reason as the handles: the site will not mint the part pages until this support manifest carries them. PLUS the 13 Filament Sample Chip Drawer slugs appended 2026-11-07 (`<L>-classic-filament-sample-chip-drawer-1w-0-5h`, `<L>-decor-...` and the chip, `filament-sample-chip`; the site's own spelling in build-registry.js on its chip-drawers branch), vendored here first for the side covers' reason.",
   "release": "v2608",
   "extracted": "2026-09-19",
   "note": "Frozen by the site URL-permanence law. Re-vendor when the site catalog grows; part-preview.test.mjs sweeps every entry."
@@ -618,6 +618,19 @@
   "270-side-cover-1h",
   "270-side-cover-1-5h",
   "270-side-cover-2h",
-  "270-side-cover-3h"
+  "270-side-cover-3h",
+  "59-classic-filament-sample-chip-drawer-1w-0-5h",
+  "59-decor-filament-sample-chip-drawer-1w-0-5h",
+  "115-classic-filament-sample-chip-drawer-1w-0-5h",
+  "115-decor-filament-sample-chip-drawer-1w-0-5h",
+  "165-classic-filament-sample-chip-drawer-1w-0-5h",
+  "165-decor-filament-sample-chip-drawer-1w-0-5h",
+  "185-classic-filament-sample-chip-drawer-1w-0-5h",
+  "185-decor-filament-sample-chip-drawer-1w-0-5h",
+  "240-classic-filament-sample-chip-drawer-1w-0-5h",
+  "240-decor-filament-sample-chip-drawer-1w-0-5h",
+  "270-classic-filament-sample-chip-drawer-1w-0-5h",
+  "270-decor-filament-sample-chip-drawer-1w-0-5h",
+  "filament-sample-chip"
  ]
 }

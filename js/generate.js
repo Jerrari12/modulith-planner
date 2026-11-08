@@ -514,10 +514,12 @@ const LINKS_BY_LEN = {
      download. Fill all five when the Printables URLs exist (mirror the planner's
      LINK_OVERRIDES in the same commit). */
   gridfinity: {},
-  /* Filament Sample Chip Drawers (2026-11-07): `MODULITH <L> Filament Sample Chip
-     Drawers`, one page per collection carrying both styles and the chip. EMPTY
-     and NO fallback until the pages are live, the Gridfinity rule. */
-  chips: {},
+  /* Filament Sample Chip Drawers (2026-11-07): `MODULITH <L> Classic Filament
+     Sample Chip Drawers` and `MODULITH <L> Decor ...`, a page per style per
+     collection (Joey: "page per style per length"), each carrying the chip.
+     EMPTY and NO fallback until the pages are live, the Gridfinity rule. */
+  chipsClassic: {},
+  chipsDecor: {},
   classic: { // Thangs pages mirrored from the planner 2026-07-12 (240 new; 59 has none yet)
     59:  { p: 'https://www.printables.com/model/234780-gen2-59-classic-drawers-all', m: 'https://makerworld.com/en/models/2364890-gen2-59-classic-drawers-all' },
     115: { p: 'https://www.printables.com/model/1143243-gen2-115-classic-drawers-all', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20115%20Classic%20Drawers-1069181', m: 'https://makerworld.com/en/models/755424-gen2-115-classic-drawers-all' },
@@ -818,7 +820,8 @@ export function generateManifest(build, opts = {}) {
     shelfInsert: LINKS_BY_LEN.shelfInsert[L] || null,   // no fallback — see the table
     decor:   LINKS_BY_LEN.decor[L] || LINKS_BY_LEN.decor[185],
     gridfinity: LINKS_BY_LEN.gridfinity[L] || null,     // no fallback - see the table
-    chips:   LINKS_BY_LEN.chips[L] || null,             // no fallback - see the table
+    chipsClassic: LINKS_BY_LEN.chipsClassic[L] || null, // no fallback - see the table
+    chipsDecor:   LINKS_BY_LEN.chipsDecor[L] || null,   // no fallback - see the table
     classic: LINKS_BY_LEN.classic[L] || LINKS_BY_LEN.classic[185],
     covers:  LINKS_BY_LEN.covers[L] || LINKS_BY_LEN.covers[185],
     fr:      LINKS_BY_LEN.fr[L] || LINKS_BY_LEN.fr[185],
@@ -2264,11 +2267,11 @@ export function generateManifest(build, opts = {}) {
         ` (4 per cell) · tear-away front: leave it in and no back cover is needed.` +
         (links.gridfinity ? '' : ' Not published yet · the model is coming soon.'));
     } else if (chips) {
-      const holds = CHIPS.lanes * CHIPS.slotsPerLane[L];
-      add(drwNode, `${isClassic ? 'Classic' : 'Decor'} Filament Sample Chip Drawer ${L}-${u.w}W-${H}H`, 'Drawer', links.chips, 1, false, false, null,
+      const holds = CHIPS.lanes * CHIPS.slotsPerLane[L], page = isClassic ? links.chipsClassic : links.chipsDecor;
+      add(drwNode, `${isClassic ? 'Classic' : 'Decor'} Filament Sample Chip Drawer ${L}-${u.w}W-${H}H`, 'Drawer', page, 1, false, false, null,
         `Holds up to ${holds} filament sample chips on edge in two combed lanes · swaps in for a standard ${u.w}W-${u.hh / 2}H drawer` +
         (isClassic ? '.' : ' · closed front: it takes a faceplate and no back cover.') +
-        (links.chips ? '' : ' Not published yet · the model is coming soon.'));
+        (page ? '' : ' Not published yet · the model is coming soon.'));
     } else {
       add(drwNode, `${isClassic ? 'Classic' : 'Decor'} Drawer ${L}-${u.w}W-${H}H`, 'Drawer', isClassic ? links.classic : links.decor);
     }
@@ -3019,6 +3022,10 @@ function previewProbe(slug) {
   // recognized-but-unsupported families first (the site falls back to its poster)
   if (/^(quicklock-b-bi-directional-optional|magnet-insert-6x2mm)$/.test(s))
     return un("This hardware part doesn't have a 3D model in the part library yet.");
+  // the filament sample chip (2026-11-07): no build places one yet (the stage bills no chip row until "show chips"), so
+  // there is nothing for a probe to pick; the site shows its poster
+  if (s === 'filament-sample-chip')
+    return un('The chip has no 3D preview yet: no build places one.');
   // hardware (sets + singles) — the probe mounts are chosen so the REAL
   // generator bills exactly the expected rows: a wall single-unit emits the
   // QuickLock pair AND the stopper pair (bench covers carry the stopper
@@ -3073,6 +3080,16 @@ function previewProbe(slug) {
       return un('Gridfinity Decor Drawers come in the 115, 165, 185, 240 and 270 Collections, at 1H, 1.5H and 2H.');
     return { build: { mount: 'wall', length: L, gridH: hh / 2, placed: [{ ...unit(+m[2], hh, 'decor'), variant: 'gridfinity' }] },
              pick: { type: 'Drawer', prefix: 'GridfinityDecorDrawer_' } };
+  }
+  /* Filament Sample Chip Drawers (v2611; site slugs minted 2026-11-07, `<L>-<style>-filament-sample-chip-drawer-<w>w-<h>h`,
+     twelve of them, vendored into test/site-slugs.json before the site mints the pages, as the side covers were). The
+     Gridfinity arm's shape: a Classic or Decor unit wearing `variant: 'chips'`, picked by 'Drawer' plus the chip body's
+     node PREFIX, since off 1W-0.5H the generator keeps the variant and draws the standard drawer. */
+  if ((m = s.match(new RegExp(`^(\\d+)-(classic|decor)-filament-sample-chip-drawer-([1-4])w-${H}h$`)))) {
+    const L = +m[1], fill = m[2], w = +m[3], hh = H_FROM_SLUG[m[4]];
+    if (!chipSizeOk(L, { fill, w, hh })) return un('Filament Sample Chip Drawers are 1W-0.5H, in every collection.');
+    return { build: { mount: 'wall', length: L, gridH: hh / 2, placed: [{ ...unit(w, hh, fill), variant: 'chips' }] },
+             pick: { type: 'Drawer', prefix: `${fill === 'classic' ? 'Classic' : 'Decor'}ChipDrawer_` } };
   }
   if ((m = s.match(/^(\d+)-cover-(lower|upper)-([12])w$/)))
     return { build: one(+m[1], +m[3], 2), pick: { type: m[2] === 'lower' ? 'CoverL' : 'CoverU' } };

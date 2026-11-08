@@ -44,10 +44,12 @@ const glbExists = (L, node) => existsSync(join(root, 'parts', String(L), node + 
    of a model: their GLBs exist in the library, but the 59's cases stop at 2W in
    both tools, so there is no 59-3W case for the ring to stack on and the probe
    errors honestly. They are deliberately not copied into `parts/59/`,
-   exactly like the 59-3W/4W shelf inserts. */
+   exactly like the 59-3W/4W shelf inserts.
+   The filament sample chip (2026-11-07) joins them: its GLB exists, but no build
+   places a chip yet, so no probe can pick one. */
 const expectUnsupported = s =>
   /^59-case-extender-[34]w-1h$/.test(s) ||
-  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional)$/.test(s);
+  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip)$/.test(s);
 
 // resolve the whole catalog once — every test reads from this
 const resolved = new Map();
@@ -77,8 +79,10 @@ test('every production slug is accounted for — resolved or intentionally unsup
   // nine product pages; the GLBs have shipped in every collection pool since 2026-07-20
   // 2026-10-29: +27 side covers (582 → 609) - released 2026-10-10, GLBs in every collection pool since the stage
   // drew them (2026-10-17); the site mints their part pages once this manifest carries them
-  assert.equal(supported, 609, 'supported preview count');
-  assert.equal(unsupported, 4, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware)');
+  // 2026-11-07: +12 Filament Sample Chip Drawers (609 → 621), the chip unsupported (4 → 5) - not released; the GLBs are on
+  // gen2-parts branch chip-drawers, so the deploy that carries these pages publishes gen2-parts first
+  assert.equal(supported, 621, 'supported preview count');
+  assert.equal(unsupported, 5, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip)');
 });
 
 test('every resolved preview references GLBs that exist in its collection pool', () => {
@@ -282,7 +286,8 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
   // faceplates + 4 hardware + 24 covers + 20 foot rails + 24 under-table rails
   // + 22 case extenders + 22 shelf inserts + 4 shelf lips + 18 back covers + 3
   // wall brackets + 1 Deco handle + 1 BlockBar B + 27 side covers (face-down, the plateRot entry's release notes)
-  assert.equal(caps.filter(r => r.part.platePreview).length, 602, 'plate-capable slug count');
+  // + 12 chip drawers (floor-down as exported, the standard drawer's pose)
+  assert.equal(caps.filter(r => r.part.platePreview).length, 614, 'plate-capable slug count');
 
   // sweep EVERY plate-capable slug's plate boot (not just samples): the bare
   // print JOB (one body, or every member of a handed set), rotations matching

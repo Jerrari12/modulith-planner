@@ -976,9 +976,10 @@ const COLLECTION_RULES = [
   [/^GEN2 (\d+) Case Extender - /,      (m) => `GEN2 ${m[1]} Case Extenders`],
   [/^GEN2 (\d+) Case - /,               (m) => `GEN2 ${m[1]} Cases - All`],
   // ⚠ BEFORE the Classic and Decor rules, for the Gridfinity rule's reason: a
-  // chip drawer's name also ends in "Drawer". One MODULITH page per collection
-  // carries both styles and the chip (2026-11-07); its title is the key.
-  [/^GEN2 (\d+)-.+ (?:Classic|Decor) Filament Sample Chip Drawer$/, (m) => `MODULITH ${m[1]} Filament Sample Chip Drawers`],
+  // chip drawer's name also ends in "Drawer". One MODULITH page per style per
+  // collection, twelve in all, each carrying the chip too (Joey 2026-11-07:
+  // "page per style per length"); its title is the key.
+  [/^GEN2 (\d+)-.+ (Classic|Decor) Filament Sample Chip Drawer$/, (m) => `MODULITH ${m[1]} ${m[2]} Filament Sample Chip Drawers`],
   [/^GEN2 (\d+)-.+ Classic Drawer$/,    (m) => `GEN2 ${m[1]} Classic Drawers - All`],
   // ⚠ BEFORE the Decor rule: "GEN2 185-2W-1H Gridfinity Decor Drawer" also ends
   // in " Decor Drawer", and would link the standard Decor page. The key is the

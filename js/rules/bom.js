@@ -119,7 +119,7 @@ export function computeBom(build, GEN2) {
     const lips = new Map();      // w -> qty (shelf fills only, opt-in)
     const doors = new Map();     // size -> qty
     let decorCount = 0, hinges = 0, latches = 0;
-    let chipDrawers = 0, chipSlots = 0;   // the chip drawers and the chips they hold in all
+    let chipDrawers = 0, chipSlots = 0, classicChips = 0;   // the chip drawers, the chips they hold in all, how many are Classic
 
     build.placed.forEach((p) => {
       const h = p.hh / 2;
@@ -130,7 +130,10 @@ export function computeBom(build, GEN2) {
         const chips = isChips(p, len);
         const drawerLabel = isGridfinity(p, len) ? GEN2.gridfinity.label
           : chips ? `${p.fill === "classic" ? "Classic" : "Decor"} ${GEN2.chips.label}` : fillDef(p.fill).label;
-        if (chips) { chipDrawers++; chipSlots += GEN2.chips.lanes * GEN2.chips.slotsPerLane[len]; }
+        if (chips) {
+          chipDrawers++; chipSlots += GEN2.chips.lanes * GEN2.chips.slotsPerLane[len];
+          if (p.fill === "classic") classicChips++;
+        }
         count(drawers, size + "|" + drawerLabel);
         /* the aggregate row is keyed by LABEL, but `basis.choice` must be the
            stable fill id - keep a parallel map rather than parsing the label back */
@@ -212,12 +215,14 @@ export function computeBom(build, GEN2) {
           return row;
         });
       /* the chip itself (2026-11-07): ONE optional row however many chip drawers, the capacity in the note, since how many
-         to print is how many filaments you own. It ships in the chip drawer download, so the row links that page. */
+         to print is how many filaments you own. It ships in BOTH styles' downloads (a page per style per length, Joey
+         2026-11-07), so the row links a page this build already sends you to: the Classic one when any chip drawer is
+         Classic, else the Decor one. */
       if (chipDrawers) items.push({
         name: P.filamentChip(), qty: chipDrawers, optional: true,
         note: `Optional · print one per filament and put a label-maker strip on its flat face; ` +
           `${chipDrawers === 1 ? "this drawer holds" : "these drawers hold"} up to ${chipSlots}. Included in the chip drawer download.`,
-        linkAs: `MODULITH ${len} Filament Sample Chip Drawers`,
+        linkAs: `MODULITH ${len} ${classicChips ? "Classic" : "Decor"} Filament Sample Chip Drawers`,
         unreleased: GEN2.unreleased.includes("chipDrawer"),
         /* the drawer is whole without a single chip in it: nothing selected promises filled lanes */
         requirement: GEN2.req.enhancement("drawer.sample_chips"),

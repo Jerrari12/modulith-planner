@@ -5565,5 +5565,92 @@
     "type": "SideCover",
     "label": "Side Cover 270-3H",
     "platePreview": true
+  },
+  "59-classic-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "ClassicChipDrawer_59-1W-05H",
+    "collection": "59",
+    "type": "Drawer",
+    "label": "Classic Filament Sample Chip Drawer 59-1W-05H",
+    "platePreview": true
+  },
+  "59-decor-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "DecorChipDrawer_59-1W-05H",
+    "collection": "59",
+    "type": "Drawer",
+    "label": "Decor Filament Sample Chip Drawer 59-1W-05H",
+    "platePreview": true
+  },
+  "115-classic-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "ClassicChipDrawer_115-1W-05H",
+    "collection": "115",
+    "type": "Drawer",
+    "label": "Classic Filament Sample Chip Drawer 115-1W-05H",
+    "platePreview": true
+  },
+  "115-decor-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "DecorChipDrawer_115-1W-05H",
+    "collection": "115",
+    "type": "Drawer",
+    "label": "Decor Filament Sample Chip Drawer 115-1W-05H",
+    "platePreview": true
+  },
+  "165-classic-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "ClassicChipDrawer_165-1W-05H",
+    "collection": "165",
+    "type": "Drawer",
+    "label": "Classic Filament Sample Chip Drawer 165-1W-05H",
+    "platePreview": true
+  },
+  "165-decor-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "DecorChipDrawer_165-1W-05H",
+    "collection": "165",
+    "type": "Drawer",
+    "label": "Decor Filament Sample Chip Drawer 165-1W-05H",
+    "platePreview": true
+  },
+  "185-classic-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "ClassicChipDrawer_185-1W-05H",
+    "collection": "185",
+    "type": "Drawer",
+    "label": "Classic Filament Sample Chip Drawer 185-1W-05H",
+    "platePreview": true
+  },
+  "185-decor-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "DecorChipDrawer_185-1W-05H",
+    "collection": "185",
+    "type": "Drawer",
+    "label": "Decor Filament Sample Chip Drawer 185-1W-05H",
+    "platePreview": true
+  },
+  "240-classic-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "ClassicChipDrawer_240-1W-05H",
+    "collection": "240",
+    "type": "Drawer",
+    "label": "Classic Filament Sample Chip Drawer 240-1W-05H",
+    "platePreview": true
+  },
+  "240-decor-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "DecorChipDrawer_240-1W-05H",
+    "collection": "240",
+    "type": "Drawer",
+    "label": "Decor Filament Sample Chip Drawer 240-1W-05H",
+    "platePreview": true
+  },
+  "270-classic-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "ClassicChipDrawer_270-1W-05H",
+    "collection": "270",
+    "type": "Drawer",
+    "label": "Classic Filament Sample Chip Drawer 270-1W-05H",
+    "platePreview": true
+  },
+  "270-decor-filament-sample-chip-drawer-1w-0-5h": {
+    "node": "DecorChipDrawer_270-1W-05H",
+    "collection": "270",
+    "type": "Drawer",
+    "label": "Decor Filament Sample Chip Drawer 270-1W-05H",
+    "platePreview": true
+  },
+  "filament-sample-chip": {
+    "unsupported": "unsupported"
   }
 }

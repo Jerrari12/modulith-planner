@@ -24,6 +24,7 @@ const ctx = vm.createContext({ console });
 for (const f of ['js/vendor/requirement-scope.js', 'js/catalog/data.js']) vm.runInContext(readFileSync(join(root, f), 'utf8'), ctx, { filename: f });
 const GEN2 = vm.runInContext('GEN2', ctx);
 const partLinks = vm.runInContext('partLinks', ctx);
+const collectionKeyFor = vm.runInContext('collectionKeyFor', ctx);
 
 const LENGTHS = [59, 115, 165, 185, 240, 270];
 const HOLDS = { 59: 16, 115: 44, 165: 70, 185: 80, 240: 106, 270: 122 };   // the handoff's "chips per drawer"
@@ -100,12 +101,15 @@ test('the bill: each style its own row with the capacity, one optional chip row,
     assert.equal(chip.qty, 3, 'one per chip drawer: how many to print is in the note');
     assert.equal(chip.optional, true);
     assert.equal(chip.unreleased, true);
-    assert.equal(chip.linkAs, `MODULITH ${L} Filament Sample Chip Drawers`, 'the chip ships in the chip drawer download');
+    assert.equal(chip.linkAs, `MODULITH ${L} Classic Filament Sample Chip Drawers`,
+      'the chip ships in both styles\' downloads: with a Classic chip drawer in the build, the Classic page');
     assert.match(chip.note, new RegExp(`these drawers hold up to ${3 * HOLDS[L]}\\.`));
     assert.equal(chip.requirement.scope, 'enhancement', 'a chip drawer is whole with no chips in it');
   }
   const one = build(240, { placed: [drawer('u1', 0, 'decor', 1, 1, { variant: 'chips' })] });
-  assert.match(rows(one).find((x) => x.name === 'GEN2 Filament Sample Chip').note, /this drawer holds up to 106\./);
+  const oneChip = rows(one).find((x) => x.name === 'GEN2 Filament Sample Chip');
+  assert.match(oneChip.note, /this drawer holds up to 106\./);
+  assert.equal(oneChip.linkAs, 'MODULITH 240 Decor Filament Sample Chip Drawers', 'Decor chip drawers only: the Decor page, the one this build sends you to');
   const none = build(240, { placed: [drawer('u1', 0, 'decor', 1, 1)] });
   assert.ok(!rows(none).some((x) => /Chip/.test(x.name)), 'no chip drawer, no chip row');
 });
@@ -157,6 +161,10 @@ test('a chip variant on a size or fill with no chip drawer renders the standard 
 });
 
 test('the chip drawer links its own MODULITH page, never the standard Classic or Decor drawer page', () => {
+  // a page per style per length, twelve (Joey 2026-11-07): each style's rows key their own page
+  for (const L of LENGTHS) for (const style of ['Classic', 'Decor']) {
+    assert.equal(collectionKeyFor(`GEN2 ${L}-1W-0.5H ${style} Filament Sample Chip Drawer`), `MODULITH ${L} ${style} Filament Sample Chip Drawers`);
+  }
   for (const style of ['Classic', 'Decor']) {
     const links = partLinks(`GEN2 240-1W-0.5H ${style} Filament Sample Chip Drawer`);
     const std = partLinks(`GEN2 240-1W-0.5H ${style} Drawer`);

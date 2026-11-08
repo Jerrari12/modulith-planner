@@ -2453,6 +2453,58 @@
     "270-side-cover-3h": {
       "preview": true,
       "platePreview": true
+    },
+    "59-classic-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "59-decor-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "115-classic-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "115-decor-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "165-classic-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "165-decor-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "185-classic-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "185-decor-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "240-classic-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "240-decor-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "270-classic-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "270-decor-filament-sample-chip-drawer-1w-0-5h": {
+      "preview": true,
+      "platePreview": true
+    },
+    "filament-sample-chip": {
+      "preview": false,
+      "reason": "The chip has no 3D preview yet: no build places one."
     }
   }
 }
