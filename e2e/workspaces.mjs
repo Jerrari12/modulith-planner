@@ -1262,6 +1262,11 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   await btn(page, 'Parts drawer', '#ws-insp').click();
   await page.waitForFunction(() => { const g = window.__GEN2_VIEWER__.drawerGroupOf(3); return g && g.getObjectByName('parts-body'); }, null, { timeout: 90_000 });
   assert.equal((await S(page)).placed.find((p) => p.id === 3).variant, 'parts');
+  const bodyVerts = () => page.evaluate(() => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count);
+  // the plain shell's vertex count, from the engine itself (the drawer on the stage is OPEN here, so it wears the whole drawer,
+  // which always has more vertices than the shell); the ask starts the build, so wait for it
+  await page.waitForFunction(async () => { const E = await import('/js/parts-drawer/engine.js'); return !!E.shellGeometry('240-2W', '1H'); }, null, { timeout: 60_000 });
+  const shellVerts = await page.evaluate(async () => { const E = await import('/js/parts-drawer/engine.js'); return E.shellGeometry('240-2W', '1H').attributes.position.count; });
   const box = await page.evaluate(() => { const V = window.__GEN2_VIEWER__; const g = V.drawerGroupOf(3); const b = g.getObjectByName('parts-body'); b.geometry.computeBoundingBox(); const bb = b.geometry.boundingBox; return [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].map((v) => +v.toFixed(2)); });
   assert.deepEqual(box, [163, 50, 234.3], 'the 240-2W 1H shell: 163 wide, 50 to the rim, 234.3 deep');
   // Edit compartments: the plan, a drag across two compartments, Merge, Undo through the store
@@ -1314,8 +1319,17 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && u.partsLayout.comps.some((c) => c.item && c.item.type === 'shcs'); }, null, { timeout: 15_000 });
   assert.equal(await page.locator('#ws-plan text.labeltxt').count(), 2, 'the part\'s two lines on its label strip');
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count > n, shellVerts, { timeout: 60_000 });   // the whole drawer, built
   await btn(page, 'Done', '#ws-dock').click();
   await page.waitForFunction(() => !document.querySelector('#ws-lib .pd-head'), null, { timeout: 15_000 });
+  // Done closes the drawer and it wears the plain shell again; Open drawer (2026-11-07) builds its compartments outside the
+  // editor, Close drawer puts the shell back (counted against the shell seen at the variant swap: a whole drawer is never
+  // the shell's count, and the whole one may arrive from the worker a moment after the button - Terra 01a1b8e1)
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count === n, shellVerts, { timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count > n, shellVerts, { timeout: 60_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count === n, shellVerts, { timeout: 30_000 });
   await page.click('#ws-tabs button:has-text("Labels")');
   await page.waitForSelector('#ws-labels .pd-comp-labels', { timeout: 60_000 });
   assert.match(await text(page, '#ws-labels .pd-comp-labels .crow'), /Drawer \d · R\dC\d.*M3 × 10 SHCS.*not in the list/);

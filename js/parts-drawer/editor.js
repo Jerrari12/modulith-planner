@@ -285,7 +285,8 @@ export function partsDrawerTools(stage, ctx) {
     for (const g of [x.extras, x.sel]) { g.parent?.remove(g); g.traverse((o) => { if (o.geometry && !o.userData.keepGeo) o.geometry.dispose(); if (o.material && o.userData.ownMat) o.material.dispose(); }); }
     extrasOf.delete(id);
   }
-  /* what every parts drawer wears right now: the shell closed, the whole drawer while edited; called after every stage
+  /* what every parts drawer wears right now: the shell closed, the whole drawer while edited or open (Open drawer in the
+     Build Inspector, ctx.open: an open drawer showing the plain shell looked empty, Joey 2026-11-07); called after every stage
      rebuild and every layout change (cheap when nothing changed: the geometries are cached and setDrawerBody compares) */
   /* a geometry the worker has just finished: the bodies again (now cached), the overlays, and the Dock's grams - not the
      panels, whose inputs may be in use (an async re-render is a typing hazard) */
@@ -299,7 +300,8 @@ export function partsDrawerTools(stage, ctx) {
       const size = sizeOfUnit(L(), u), height = heightOfUnit(u);
       let geo = null;
       if (ready) {
-        try { const d = st.editing === u.id ? drawerGeometry(fullOf(u), onGeo) : null; geo = st.editing === u.id ? (d ? d.geometry : null) : shellGeometry(size, height, onGeo); }
+        const whole = st.editing === u.id || (ctx.open && ctx.open() === u.id);
+        try { const d = whole ? drawerGeometry(fullOf(u), onGeo) : null; geo = whole ? (d ? d.geometry : null) : shellGeometry(size, height, onGeo); }
         catch (e) { console.warn('[parts drawer] geometry', e); st.engineErr = String(e && e.message || e); }
       }
       if (geo) stage.setDrawerBody(u.id, geo);   // still building, or no engine: the drawer keeps what it wears (the GLB, or its last body)

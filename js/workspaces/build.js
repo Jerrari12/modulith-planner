@@ -108,7 +108,7 @@ export function mountBuild(stage, ctx) {
   /* THE PARTS DRAWER (M2, 2026-11-05, behind ?partsdrawer=1; js/parts-drawer/editor.js): the third Decor drawer variant, its
      generated body on the stage, and the compartment editor that takes over the Library, the Inspector, the toolbar and the
      Dock while a drawer is being edited. Null without the flag: every branch on `pd` below is then the planner as it was. */
-  const pd = partsDrawerOn() ? partsDrawerTools(stage, { onStop: editStopped, store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
+  const pd = partsDrawerOn() ? partsDrawerTools(stage, { onStop: editStopped, open: () => st.peeking, store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
   const editing = () => !!pd && pd.editing != null;
 
   /* ---------------- the record ↔ the stage ---------------- */
@@ -504,7 +504,7 @@ export function mountBuild(stage, ctx) {
   }
   /* a drawer type chosen is a drawer opened, so the choice is seen inside (Joey, 2026-11-06): before the option commits,
      since the rebuild that follows re-opens the drawer it finds in st.peeking */
-  function openDrawer(id) { const u = S().placed.find((p) => p.id === id); if (!u || u.fill === 'shelf' || st.peeking === id) return; stage.peekUnit(id); st.peeking = id; }
+  function openDrawer(id) { const u = S().placed.find((p) => p.id === id); if (!u || u.fill === 'shelf' || st.peeking === id) return; stage.peekUnit(id); st.peeking = id; if (pd) pd.sync(); }
   function editStopped(id) { if (st.peeking === id) st.peeking = null; }   // (hoisted: passed to partsDrawerTools above) edit mode closes the drawer it opened (editor.js stop): the button must not say Close drawer for a closed one (Sol 01a1b264)
   function gridOp(op) {
     edit((s, Rs) => {
@@ -515,7 +515,7 @@ export function mountBuild(stage, ctx) {
     }, 'grid', { gravity: false });
   }
   function select(id) { if (id == null) { stage.setSelected(null); st.selId = null; st.sel = null; S().selectedUnit = null; ctx.memo.buildSel = null; renderAll(); return; } if (!stage.selectUnit(id)) { st.selId = id; st.sel = { owner: id }; S().selectedUnit = id; renderAll(); } }
-  function togglePeek(id) { if (st.peeking === id) { stage.unpeek(); st.peeking = null; } else { st.peeking = stage.peekUnit(id) ? id : null; } renderInspector(); }
+  function togglePeek(id) { if (st.peeking === id) { stage.unpeek(); st.peeking = null; } else { st.peeking = stage.peekUnit(id) ? id : null; } if (pd) pd.sync(); renderInspector(); }   // pd.sync: an open parts drawer wears its compartments, a closed one the shell
 
   /* ---------------- the issues ---------------- */
   function issues() {
@@ -1078,7 +1078,7 @@ export function mountBuild(stage, ctx) {
       const before = st.selId;
       st.sel = sel; st.selId = sel ? (sel.owner ?? null) : null;
       S().selectedUnit = st.selId; ctx.memo.buildSel = st.selId;
-      if (st.peeking != null && st.peeking !== st.selId) { st.peeking = null; }
+      if (st.peeking != null && st.peeking !== st.selId) { st.peeking = null; if (pd) pd.sync(); }
       const was = st.collapsed; applyNarrow(); if (st.collapsed !== was) renderLib();
       renderInspector(); renderOverlays(); layout();
       // a selection shows as the inspector's handle (its name); a tap on it opens the sheet - never over the model by itself.
