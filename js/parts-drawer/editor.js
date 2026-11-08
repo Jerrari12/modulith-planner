@@ -199,12 +199,25 @@ export function partsDrawerTools(stage, ctx) {
   function openInventory() {
     const u = editedUnit(); if (!u) return;
     const lay = layoutOfUnit(u);
-    st.inv = { items: invKeep(), skipped: [], colorBy: 'none', labels: lay.comps.some((c) => c.holder !== false), ...FIT_DEFAULT, ...(lay.fit || {}), last: null, draft: null, focusLine: false };
+    st.inv = { items: invKeep(), skipped: [], colorBy: 'none', labels: lay.comps.some((c) => c.holder !== false), ...FIT_DEFAULT, ...(lay.fit || {}), last: null, draft: null, focusLine: false, dirty: false };   // dirty: changed since it opened (invChanged), what makes leaving ask
     st.sel = null; st.hover = null; st.hot = null; st.hotKey = ''; st.wdrag = null;
     pl.cancel();   // a wall or box drag in progress ends without committing: the drawer stays as it is until Lay out drawer (Sol 01a1b901)
     ctx.renderAll();
   }
   function closeInventory() { st.inv = null; }
+  /* leaving the list (Back, Esc, the Dock's Done) while a layout is proposed and not applied: the bright Done dropped it
+     without a word (Sol 01a1bc8e, 2026-11-08), so the list asks first, in a warnbox at its head (renderInvPanel); `leave`
+     is what to do once Lay out drawer or Drop the list has answered */
+  const invPending = () => { const w = st.inv; if (!w || !w.dirty || !w.items.length) return false; const l = invLast(); return !!(l && !l.r.error); };   // a list reopened from the drawer's parts and left alone proposes nothing new
+  function invLeave(then) {
+    const w = st.inv; if (!w) { then(); return; }
+    if (invPending()) { w.leave = then; ctx.renderAll(); say('The list’s layout is not applied yet: Lay out drawer keeps it, Drop the list leaves the drawer as it was.'); return; }
+    closeInventory(); then();
+  }
+  function leaveEdit() { if (st.inv) invLeave(() => stop()); else stop(); }
+  // Esc on the list, from the page or the typing line: with the ask showing it means Keep editing (the line's own handler went
+  // straight to invLeave and overwrote a pending Done with Back, Sol 01a1bc9f); otherwise it is Back
+  const invEsc = () => { if (!st.inv) return; if (st.inv.leave) { st.inv.leave = null; ctx.renderAll(); } else invLeave(() => ctx.renderAll()); };
   const invOpts = (work) => ({ fillCap: work.cap, order: 'list', roundTo: work.round ? 'bag' : null, spareRow: !!work.spare });
   function invPlan(work = st.inv, height = null) {
     const u = editedUnit(); if (!u) return { error: 'No drawer.' };
@@ -227,6 +240,7 @@ export function partsDrawerTools(stage, ctx) {
       const fullest = Math.max(0, ...r.comps.map((c) => invFill(c, work)?.fill ?? 0));   // counted, as the rows say it (sizing for the next bag makes r.fullest the sized one)
       text = `${n(work.items.length, 'part')} in ${n(r.rows, 'row')} · fullest compartment about ${Math.round(fullest * 100)}% full.${spare}${tip}`;
     }
+    if (work.skipped.length) text += ` ${n(work.skipped.length, 'line')} not laid out.`;   // the lines the list could not take, counted where Lay out drawer is pressed (Sol 01a1bc8e)
     return { r, text, warn };
   }
   /* one computation per render, keyed to the unit's layout record, size and height: an undo or a rebuild replaces the record,
@@ -240,7 +254,7 @@ export function partsDrawerTools(stage, ctx) {
   // the fill a proposed compartment would have with the COUNTED quantity (inventory.js fillOf), and that against the room chosen
   const invFill = (c, work = st.inv) => { const u = editedUnit(); if (!u || !c.item) return null; const f = I.fillOf(c, heightOfUnit(u), sizeOfUnit(L(), u), layoutOfUnit(u).label); return f == null ? null : { fill: f, load: f / work.cap }; };
   const invPreview = () => { const l = invLast(); return l ? { comps: l.r.error ? [] : l.r.comps, note: l.text, warn: l.warn } : null; };
-  const invChanged = () => { if (st.inv) st.inv.last = null; ctx.renderAll(); };
+  const invChanged = () => { if (st.inv) { st.inv.last = null; st.inv.dirty = true; } ctx.renderAll(); };
   function invAdd(list) {
     const work = st.inv; if (!work) return 0;
     const items = list.items.filter((it) => I.TYPE_ORDER.includes(it.type)), other = list.items.filter((it) => !I.TYPE_ORDER.includes(it.type));
@@ -267,7 +281,11 @@ export function partsDrawerTools(stage, ctx) {
   let pp = null; const ppAC = new AbortController();
   function openPartPicker() {
     if (!pp) pp = partPicker({
-      root, signal: ppAC.signal, buildId: () => S().buildId, frameQuery: () => (S().faceStyle === 'classicpro' ? '&type=classicpro' : ''), debug: !!new URLSearchParams(location.search).get('debug'),
+      root, signal: ppAC.signal, buildId: () => S().buildId, frameQuery: () => (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&dest=drawer', debug: !!new URLSearchParams(location.search).get('debug'),
+      // the modal's own words say where a batch goes (Sol 01a1bc8e: the Labels wording promised labels); `dest` rides on the
+      // frame's address and the hello for a Picker that words its button and marks its families by it (the Picker's change)
+      sub: 'Choose parts, then Add: each comes back as a line of this list and gets its own compartment. Screws, set screws, nuts, washers and inserts lay out; other families are listed as not laid out.',
+      hello: { dest: 'drawer' },
       onBatch: (items, { reply, close }) => {
         if (!st.inv) { reply({ gen2parts: 'refused', reason: 'The parts list is closed. Open it and press Add again.' }); return; }
         const list = I.fromPicker(items), took = invAdd(list);
@@ -284,12 +302,20 @@ export function partsDrawerTools(stage, ctx) {
     const num = (val, on, dis, label) => el('input.mono', { type: 'number', min: '0', step: '1', value: dis ? '' : String(val), disabled: !!dis, 'aria-label': label, onchange: (e) => on(+e.target.value) });
     lib.appendChild(el('div.pd-head', {}, [
       el('div.col', {}, [el('h2.h2', { text: 'Parts list' }), el('h3', { text: unitName(u) || `${u.w}W·${u.hh / 2}H parts drawer` }), el('div.readout', { text: 'Every part gets a compartment sized for its quantity · the plan shows the layout as you go' })]),
-      el('button.key.sm', { text: 'Back', title: 'Back to the compartment tools, dropping this list · Esc', onclick: () => { closeInventory(); ctx.renderAll(); } }),
+      el('button.key.sm', { text: 'Back', title: 'Back to the compartment tools · Esc (a layout still proposed asks first)', onclick: () => invLeave(() => ctx.renderAll()) }),
+    ]));
+    if (work.leave) lib.appendChild(el('div.warnbox.pd-inv-leave', {}, [
+      el('div', {}, [el('b', { text: 'This layout is not applied yet. ' }), 'Lay out drawer keeps it; Drop the list leaves the drawer as it was.']),
+      el('div.iact', {}, [
+        el('button.key.sm.strong', { text: 'Lay out drawer', onclick: () => { const then = work.leave; invApply(); if (!st.inv) then(); } }),
+        el('button.key.sm', { text: 'Drop the list', onclick: () => { const then = work.leave; closeInventory(); then(); } }),
+        el('button.key.sm', { text: 'Keep editing', onclick: () => { work.leave = null; ctx.renderAll(); } }),
+      ]),
     ]));
     // in: a typed line (Enter), a pasted list, the Part Picker, a file, a kit
     const line = el('input.mono', { type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'M3x10 SHCS 100', 'aria-label': 'A part: size, type and quantity, then Enter' });
     const addText = (t) => { if (!t.trim()) return 0; const took = invAdd(I.parseList(t)); line.value = ''; work.focusLine = true; invChanged(); return took; };
-    line.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addText(line.value); } else if (e.key === 'Escape') { e.preventDefault(); closeInventory(); ctx.renderAll(); } e.stopPropagation(); });   // Esc is Back, from the line too
+    line.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addText(line.value); } else if (e.key === 'Escape') { e.preventDefault(); invEsc(); } e.stopPropagation(); });   // Esc is Back, from the line too
     line.addEventListener('paste', (e) => { const t = (e.clipboardData || window.clipboardData)?.getData('text') || ''; if (/\n|;/.test(t)) { e.preventDefault(); addText(t); } });
     const fileIn = el('input', { type: 'file', accept: '.json,.csv,.txt', hidden: true, 'aria-label': 'A parts list file', onchange: async (e) => {
       const f = e.target.files[0]; if (!f) return; const t = await f.text(); e.target.value = '';
@@ -347,7 +373,7 @@ export function partsDrawerTools(stage, ctx) {
       el('div.pd-inv-sub', {}, ['Qty', num(d.qty, (v) => { d.qty = Math.max(0, Math.round(v)); rerender(); }, false, 'Quantity to add'), el('span.pd-inv-fill', { text: 'a part to add' })]),
     ]));
     list.appendChild(table);
-    if (work.skipped.length) list.appendChild(el('details.pd-inv-skipped', {}, [el('summary', { text: `${n(work.skipped.length, 'line')} not laid out` }), ...work.skipped.map((t) => el('div.src', { text: t }))]));
+    if (work.skipped.length) list.appendChild(el('details.pd-inv-skipped', { open: true }, [el('summary', { text: `${n(work.skipped.length, 'line')} not laid out` }), ...work.skipped.map((t) => el('div.src', { text: t }))]));
     lib.appendChild(list);
     // how much room
     const room = el('section.pd-inv');
@@ -361,7 +387,7 @@ export function partsDrawerTools(stage, ctx) {
     lib.appendChild(room);
     lib.appendChild(el('p.pd-inv-sum' + (warn ? '.warn' : ''), { text }));
     lib.appendChild(el('div.pd-btns', {}, [el('button.key.strong', { text: 'Lay out drawer', disabled: !!r.error, onclick: invApply }), el('button.key.sm', { text: 'Clear list', onclick: () => { work.items = []; work.skipped = []; invChanged(); } })]));
-    lib.appendChild(el('p.hint', { text: 'Lay out drawer keeps this layout; Back, Esc or Done drop it. Parts go front-left to back-right in the list’s order.' }));
+    lib.appendChild(el('p.hint', { text: 'Lay out drawer keeps this layout; Back, Esc or Done ask first while one is proposed. Parts go front-left to back-right in the list’s order.' }));
     if (work.focusLine) { work.focusLine = false; queueMicrotask(() => { if (line.isConnected) line.focus(); }); }
   }
   function renderInvInspector(insp) {
@@ -690,7 +716,7 @@ export function partsDrawerTools(stage, ctx) {
     const full = fullOf(u), lay = layoutOfUnit(u), size = full.size, Sz = G.SIZES[size], g = G.maxGrid(size);
     lib.appendChild(el('div.pd-head', {}, [
       el('div.col', {}, [el('h2.h2', { text: 'Editing compartments' }), el('h3', { text: unitName(u) || `${u.w}W·${u.hh / 2}H parts drawer` }), el('div.readout', { text: `${Sz.label} · cavity ${fmt(Sz.W)} × ${fmt(Sz.D)} mm · ${full.height}` })]),
-      el('button.key.sm', { text: 'Done', title: 'Back to the build · Esc', onclick: () => stop() }),
+      el('button.key.sm', { text: 'Done', title: 'Back to the build · Esc', onclick: () => leaveEdit() }),
     ]));
     if (st.engineErr) lib.appendChild(el('div.warnbox', {}, [el('b', { text: 'The geometry engine could not start. ' }), `The plan still works; the 3D drawer and the download are off. ${st.engineErr}`]));
     // the reach warning, in the planner's amber issue pattern (SPEC "UI: what changes")
@@ -707,6 +733,13 @@ export function partsDrawerTools(stage, ctx) {
         ]));
       }
     }
+    // the parts list first (Sol 01a1bc8e, 2026-11-08: at the bottom, under grid, labels and floor, Joey never found it and typed a part into one compartment's field instead)
+    const parts = el('section');
+    parts.appendChild(el('h2.h2', { text: 'Parts' }));
+    const withParts = lay.comps.filter((c) => c.item).length;
+    parts.appendChild(el('div.pd-btns', {}, [attachHint(el('button.key.sm', { text: 'From a parts list…', title: 'A kit, typed lines or a file: every part gets a compartment sized for its quantity', onclick: openInventory }), GUIDE.list, lib)]));
+    parts.appendChild(el('p.hint', { text: `Lay the whole drawer out from a list of parts, typed, picked, from a file or a kit: every part gets a compartment sized for its quantity, with its label.${withParts ? ` ${n(withParts, 'compartment')} with a part: the words go on the label holders, into labels.csv in the download, and into the Labels workspace.` : ' One compartment at a time: give it a part in This compartment.'}` }));
+    lib.appendChild(parts);
     const stepper = (label, value, dec, inc, canDec, canInc) => el('div.row', {}, [label, el('div.stepper', {}, [el('button.key', { text: '−', 'aria-label': `Fewer ${label.toLowerCase()}`, disabled: !canDec, onclick: dec }), el('b.mono', { text: String(value) }), el('button.key', { text: '+', 'aria-label': `More ${label.toLowerCase()}`, disabled: !canInc, onclick: inc })])]);
     const grid = el('section');
     grid.appendChild(el('h2.h2', { text: 'Grid' }));
@@ -743,12 +776,6 @@ export function partsDrawerTools(stage, ctx) {
     fl.appendChild(el('p.hint', { text: `Standard is the shipped 6 mm front scoop, Deep up to 12 mm. ${RAMP_NAME} adds 45° ramps on the sides and back, in mm, so small parts slide to the middle. Part outlines put each compartment's part on its floor at 1:1. ${scoops.size > 1 || trays.size > 1 ? 'Mixed right now; these set every compartment.' : ''}` }));
     lib.appendChild(fl);
 
-    const parts = el('section');
-    parts.appendChild(el('h2.h2', { text: 'Parts' }));
-    const withParts = lay.comps.filter((c) => c.item).length;
-    parts.appendChild(el('div.pd-btns', {}, [attachHint(el('button.key.sm', { text: 'From a parts list…', title: 'A kit, typed lines or a file: every part gets a compartment sized for its quantity', onclick: openInventory }), GUIDE.list, lib)]));
-    parts.appendChild(el('p.hint', { text: withParts ? `${n(withParts, 'compartment')} with a part · the words go on the label holders, into labels.csv in the download, and into the Labels workspace.` : 'Give a compartment a part in This compartment, or lay the whole drawer out from a list.' }));
-    lib.appendChild(parts);
 
     renderFloorColor(lib, lay, full);
 
@@ -908,7 +935,7 @@ export function partsDrawerTools(stage, ctx) {
       el('div.status.stack', { disabled: true, title: 'Every compartment tiles the drawer' }, [el('span.dot'), `${n(full.comps.length, 'compartment')} · ${n(full.comps.filter((c) => G.hasHolder(full, c)).length, 'label')}`]),
       el('div.group', { title: 'Solid PLA; sliced with infill it comes out lighter' }, [el('span.big', { text: grams == null ? '…' : `≈ ${Math.round(grams)}${fg ? ` + ${Math.round(fg)}` : ''}` }), el('span.unit-lbl', { text: 'g PLA' })]),
       el('div.group', { title: bed ? `Prints ${fmt(fa)} × ${fmt(fb)} mm: fits ${bed[2]} or bigger` : `Prints ${fmt(fa)} × ${fmt(fb)} mm: bigger than a 360 mm bed` }, [el('span.big', { text: `${Math.round(fa)} × ${Math.round(fb)}` }), el('span.unit-lbl', { text: 'mm print' })]),
-      el('button.cta', { title: 'Back to the build · Esc', onclick: () => stop() }, ['Done', icon('check', { size: 20 })]),
+      el('button.cta', { title: 'Back to the build · Esc', onclick: () => leaveEdit() }, ['Done', icon('check', { size: 20 })]),
     );
   }
 
@@ -936,7 +963,7 @@ export function partsDrawerTools(stage, ctx) {
     if (st.editing == null) return false;
     const k = e.key.toLowerCase();
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
-    if (k === 'escape') { if (pp && pp.isOpen()) { pp.close(); return true; } if (st.inv) { closeInventory(); ctx.renderAll(); return true; } if (pl.tipOpen()) { pl.closeTip(); return true; } if (st.picker) { st.picker = null; ctx.renderAll(); return true; } if (st.sel) { setSel(null); return true; } stop(); return true; }
+    if (k === 'escape') { if (pp && pp.isOpen()) { pp.close(); return true; } if (st.inv) { invEsc(); return true; } if (pl.tipOpen()) { pl.closeTip(); return true; } if (st.picker) { st.picker = null; ctx.renderAll(); return true; } if (st.sel) { setSel(null); return true; } stop(); return true; }
     if (st.inv) return true;   // the parts list dialog has the keys
     if (k === 'delete' || k === 'backspace') return true;   // not the unit under edit (build.js would remove it); compartments are merged, not deleted
     if (k === 'm') { doMerge(); return true; }

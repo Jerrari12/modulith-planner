@@ -1358,7 +1358,7 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
 
 /* THE PARTS LIST AS A PANEL (2026-11-07, DECISIONS of that day): the Library's own mode beside the plan, the plan showing the
    list's layout dashed as it changes, the room knobs, the spare row, the list's order, Lay out drawer keeping the fit on the
-   layout, Back / Esc dropping the draft. */
+   layout, Back / Esc / Done asking first while a layout is proposed (Sol 01a1bc8e, 2026-11-08), Drop the list dropping the draft. */
 const toPartsEditor = async (page) => {
   await page.evaluate(() => window.__GEN2_VIEWER__.selectUnit(3));
   await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 15_000 });
@@ -1417,7 +1417,19 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   await addLine(page, '30 M4x20 SHCS');
   assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 9);
   await page.keyboard.press('Escape'); await settle(page, 500);
-  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'Esc is Back');
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'Esc with a layout proposed asks first');
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 1, 'the ask: Lay out drawer / Drop the list / Keep editing');
+  await page.keyboard.press('Escape'); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 0, 'Esc again keeps editing');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 9, 'the list is still there');
+  // the same from the typing line, whose own Escape handler must mean the same (Sol 01a1bc9f)
+  await page.keyboard.press('Escape'); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 1);
+  await page.locator('#ws-lib .pd-inv-line input').click(); await page.keyboard.press('Escape'); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 0, 'Esc from the line with the ask showing keeps editing too');
+  await page.keyboard.press('Escape'); await settle(page, 300);
+  await btn(page, 'Drop the list', '#ws-lib .pd-inv-leave').click(); await settle(page, 500);
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'Drop the list is Back');
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.filter((c) => c.item).length), 8, 'the dropped draft changed nothing');
   // Done with the list open drops it too
   await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
@@ -1452,8 +1464,9 @@ test('Parts drawer: the Part Picker from the parts list brings its parts in as l
   assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) select').nth(1).inputValue(), 'M3');
   assert.equal(await page.evaluate(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length), labelsBefore, 'no label was added');
   assert.ok(await page.locator('#ws-plan .cell.preview').count() >= 1, 'the preview shows it');
-  // Esc closes the list, not the page's editor, and the next Picker opening is answered (the modal is reused)
+  // Esc asks first (a layout is proposed), Drop the list closes the list, not the page's editor
   await page.keyboard.press('Escape'); await settle(page, 400);
+  await btn(page, 'Drop the list', '#ws-lib .pd-inv-leave').click(); await settle(page, 400);
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/);
   assert.deepEqual(clean(errors), []);
   await ctx.close();

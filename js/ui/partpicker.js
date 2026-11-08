@@ -51,7 +51,9 @@ export function armWait(h, who) {
   }, 8000);
 }
 
-export function partPicker({ root, signal, buildId, frameQuery = () => '', onBatch, focusKey = () => null, restoreFocus = () => {}, debug = false }) {
+export function partPicker({ root, signal, buildId, frameQuery = () => '', onBatch, focusKey = () => null, restoreFocus = () => {}, debug = false,
+  sub = 'Choose parts, then Add labels: they land in this build’s list, ready to place.',   // the modal's one line under its title: the Labels workspace's by default; the parts drawer's list says where its parts go (2026-11-08)
+  hello: helloExtra = {} }) {   // extra fields on the hello (`dest`), for a Picker that reads them; an older one ignores them
   let picker = null;
   /* EDIT PART DETAILS OPENS THAT PART (LABELS-INTEGRATION.md, the parts channel's additions, `open/1`): only to a Picker
      whose ready offered the cap; one request at a time, the latest wins, and an answer counts only with its own req. An
@@ -76,12 +78,12 @@ export function partPicker({ root, signal, buildId, frameQuery = () => '', onBat
       const trap = (to) => el('span.trap', { tabindex: '0', 'aria-hidden': 'true', onfocus: () => { try { to().focus(); } catch { /* gone */ } } });
       const veil = el('div', { id: 'ws-partpicker', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Part Picker', hidden: true }, [
         trap(() => frame),
-        el('div.glass.frame', {}, [el('div.head', {}, [el('h2', { text: 'Part Picker' }), el('span.sub', { text: 'Choose parts, then Add labels: they land in this build’s list, ready to place.' }), link, closeBtn]), frame]),
+        el('div.glass.frame', {}, [el('div.head', {}, [el('h2', { text: 'Part Picker' }), el('span.sub', { text: sub }), link, closeBtn]), frame]),
         trap(() => closeBtn),
       ]);
       root.appendChild(veil);
       // the build rides on the hello (LABELS-INTEGRATION.md, the parts channel's additions): the Picker keys its "sent" marks by it
-      const hello = () => { try { frame.contentWindow.postMessage({ gen2parts: 'hello', v: 1, session, ...(picker && picker.buildId ? { buildId: picker.buildId } : {}) }, STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
+      const hello = () => { try { frame.contentWindow.postMessage({ gen2parts: 'hello', v: 1, session, ...helloExtra, ...(picker && picker.buildId ? { buildId: picker.buildId } : {}) }, STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
       frame.addEventListener('load', hello);
       const onMessage = (e) => {
         if (!picker || e.source !== frame.contentWindow || e.origin !== STUDIO_ORIGIN) return;
