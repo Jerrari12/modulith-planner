@@ -1356,6 +1356,109 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   await ctx.close();
 });
 
+/* THE PARTS LIST AS A PANEL (2026-11-07, DECISIONS of that day): the Library's own mode beside the plan, the plan showing the
+   list's layout dashed as it changes, the room knobs, the spare row, the list's order, Lay out drawer keeping the fit on the
+   layout, Back / Esc dropping the draft. */
+const toPartsEditor = async (page) => {
+  await page.evaluate(() => window.__GEN2_VIEWER__.selectUnit(3));
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 15_000 });
+  await btn(page, 'Parts drawer', '#ws-insp').click();
+  await page.waitForFunction(() => { const g = window.__GEN2_VIEWER__.drawerGroupOf(3); return g && g.getObjectByName('parts-body'); }, null, { timeout: 90_000 });
+  await btn(page, 'Edit compartments', '#ws-insp').click();
+  await page.waitForSelector('#ws-plan:not([hidden])', { timeout: 15_000 });
+  await page.locator('#ws-plan .pd-tip .x').click({ timeout: 15_000 }).catch(() => {});
+  await settle(page, 600);
+};
+const addLine = async (page, t) => { const inp = page.locator('#ws-lib .pd-inv-line input'); await inp.fill(t); await inp.press('Enter'); await settle(page, 400); };
+test('Parts drawer: the parts list panel previews its layout in the plan, keeps the list\'s order and its fit, and Back drops the draft', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
+  await toPartsEditor(page);
+  await btn(page, 'From a parts list', '#ws-lib').click();
+  await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'the Library is the list');
+  assert.match(await text(page, '#ws-plan .bhint'), /Add some parts/, 'the plan says the list is empty');
+  for (const t of ['200 M3x8 SHCS', '20 M3x65 SHCS', '20 M3x10 SHCS', '20 M3x12 SHCS', '20 M3x16 SHCS', '20 M3x20 SHCS', '50 M3 nut', '50 M3 washer', 'bearing 625 4']) await addLine(page, t);
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'A part: size, type and quantity, then Enter', 'the line keeps the keyboard after Enter');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8, 'eight rows; the bearing is not a drawer part');
+  assert.match(await text(page, '#ws-lib .pd-inv-skipped summary'), /1 line not laid out/);
+  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13, 'the preview: eight compartments and the spare row of five, dashed');
+  assert.equal(await page.locator('#ws-plan .cell:not(.preview)').count(), 0, 'nothing of the drawer\'s own layout under it');
+  assert.match(await text(page, '#ws-plan .bhint'), /8 parts in 5 rows .* A spare row of 5 at the back/, 'the plan\'s header carries the summary');
+  assert.match(await text(page, '#ws-lib .pd-inv-row .pd-inv-fill'), /\d+% full/, 'each row reads its compartment\'s fill');
+  // the plan's gestures are off: a press on a preview cell selects nothing
+  const cell = page.locator('#ws-plan .cell.preview').first(); const bb = await cell.boundingBox();
+  await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
+  assert.equal(await page.locator('#ws-plan .selring').count(), 0, 'no selection on a proposal');
+  // the knobs change the preview; the spare row goes when the room asked for leaves none
+  await btn(page, 'Plenty', '#ws-lib').click(); await settle(page, 400);
+  assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Plenty' }).count() === 1);
+  await btn(page, 'Comfortable', '#ws-lib').click(); await settle(page, 400);
+  // the order is the list's: the second row moved down puts the M3 x 10 second and the plan follows
+  await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('button[title="Move down"]').click(); await settle(page, 400);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('input[type="number"]').first().inputValue(), '10');
+  const labels = await page.locator('#ws-plan text.labeltxt').allTextContents();
+  assert.ok(labels.indexOf('M3 × 10') < labels.indexOf('M3 × 65'), `the plan follows the list: ${labels.join(', ')}`);
+  // an undo while the list is open changes the unit, not the list: the draft stays and the preview is still drawn
+  await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 600);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8, 'the list is still open with its rows');
+  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13);
+  // Lay out drawer: the layout with its parts, the counted quantities, the fit, and the list closed
+  await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
+  const lay = await page.evaluate(() => { const l = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout; return { fit: l.fit, comps: l.comps.length, parts: l.comps.filter((c) => c.item).length, nr: l.nr, qty8: l.comps.find((c) => c.item && c.item.length === 8).item.qty, spareHolders: l.comps.filter((c) => !c.item).every((c) => c.holder !== false) }; });
+  assert.deepEqual(lay, { fit: { cap: 0.75, round: false, spare: true }, comps: 13, parts: 8, nr: 5, qty8: 200, spareHolders: true });
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'back to the compartment tools');
+  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 0, 'the plan is the drawer\'s again');
+  assert.equal(await page.locator('#ws-plan .cell').count(), 13);
+  // reopened, the list is the drawer's parts in reading order with the fit it was laid out with; Esc drops it
+  await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('input[type="number"]').first().inputValue(), '10', 'the moved order came back');
+  assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Comfortable' }).count() === 1);
+  await addLine(page, '30 M4x20 SHCS');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 9);
+  await page.keyboard.press('Escape'); await settle(page, 500);
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'Esc is Back');
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.filter((c) => c.item).length), 8, 'the dropped draft changed nothing');
+  // Done with the list open drops it too
+  await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
+  await btn(page, 'Done', '#ws-dock').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .pd-head'), null, { timeout: 15_000 });
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.length), 13);
+  // the link carries the fit with the layout
+  const href = await page.evaluate(() => location.href);
+  await page.goto(href, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.fit), { cap: 0.75, round: false, spare: true }, 'the fit survives the link');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Parts drawer: the Part Picker from the parts list brings its parts in as lines, not as labels', { skip: haveStudio ? false : 'Label Studio checkout not beside this repo' }, async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1&studio=' + encodeURIComponent(studio) });
+  await toPartsEditor(page);
+  await btn(page, 'From a parts list', '#ws-lib').click();
+  await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
+  const labelsBefore = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length);
+  await btn(page, 'Part Picker', '#ws-lib').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && p.ready && !p.veil.hidden; }, null, { timeout: 60_000 });
+  const frame = page.frameLocator('#ws-partpicker iframe');
+  await frame.locator('.tile.has-img').first().waitFor({ timeout: 60_000 });
+  await frame.locator('button.tile').filter({ hasText: /^Nuts$/ }).first().click();
+  await frame.locator('#stage-panel button.tile[title="Hex nut"]').click();
+  await frame.locator('#stage-panel button.thr[aria-label="M3"]').click();
+  await frame.locator('#add-parts', { hasText: /^Add 1 label to the planner/ }).click();
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 1, 'one line from the Picker');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) select').first().inputValue(), 'nut');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) select').nth(1).inputValue(), 'M3');
+  assert.equal(await page.evaluate(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length), labelsBefore, 'no label was added');
+  assert.ok(await page.locator('#ws-plan .cell.preview').count() >= 1, 'the preview shows it');
+  // Esc closes the list, not the page's editor, and the next Picker opening is answered (the modal is reused)
+  await page.keyboard.press('Escape'); await settle(page, 400);
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* the Colors plan's step 3 (2026-10-18): the presets live in the Browse looks gallery; a look is applied from its details */
 test('Colors: a preset applied from the gallery recolours the model as one history entry, and Undo restores it', async () => {
   const { ctx, page, errors } = await open('colors');

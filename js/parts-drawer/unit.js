@@ -102,6 +102,7 @@ export function layoutForSize(layout, size0, size1) {
   }
   const next = defaultLayout(size1, keepOf(layout.comps));
   next.label = layout.label; next.floor = clone(layout.floor); next.outlines = !!layout.outlines;
+  if (layout.fit) next.fit = clone(layout.fit);   // the parts list's sizing (2026-11-07) is a preference: it survives the grid starting over
   return { layout: next, note: 'The compartments would get too small for their labels, so the grid started over.' };
 }
 /* the full layout the generator reads: the unit's size and height on the record's layout, and the floor colours as hexes */

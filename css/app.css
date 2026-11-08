@@ -1468,6 +1468,9 @@ html.ws-phone #ws-plan .bsvg { padding: 6px 8px; }
 #ws .pd-thumb .cell, #ws-plan .cell { fill: var(--plan-cell); cursor: pointer; }
 #ws-plan .cell.hov { fill: var(--plan-hov); }
 #ws-plan .cell.sel { fill: var(--plan-sel); }
+#ws-plan .cell.preview { fill: var(--plan-cell); stroke: var(--orange); stroke-width: 0.7; stroke-dasharray: 2.2 1.4; cursor: default; }   /* the parts list's proposal (2026-11-07) */
+#ws-plan svg.preview { cursor: default; }
+#ws-plan .bhint.warn { color: var(--warning); }
 #ws-plan .selring { fill: none; stroke: var(--orange); stroke-width: 0.9; pointer-events: none; }
 #ws .pd-thumb .ramp, #ws-plan .ramp { fill: var(--plan-ramp); pointer-events: none; }
 #ws .pd-thumb .holder, #ws-plan .holder { fill: var(--plan-wall); opacity: .7; pointer-events: none; }
@@ -1526,23 +1529,39 @@ html.ws-phone #ws-plan .bsvg { padding: 6px 8px; }
 #ws .pd-thumb .outline.inlay, #ws-plan .outline.inlay { fill: var(--ink-2); opacity: .55; }
 #ws .pd-thumb .labeltxt, #ws-plan .labeltxt { font-family: var(--font-display); font-weight: 800; fill: #1D1E20; pointer-events: none; }
 #ws .pd-thumb .labeltxt { display: none; }
+/* the parts list panel in the Library (2026-11-07; the modal it replaced is gone) */
+#ws-lib section.pd-inv { display: flex; flex-direction: column; gap: 8px; }
+#ws-lib .pd-inv .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+#ws-lib .pd-inv .pd-inv-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#ws-lib .pd-inv .pd-inv-top .h2 { margin: 0; }
+#ws-lib .pd-inv label.pd-check { font-size: 12px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
+#ws-lib .pd-inv select, #ws-lib .pd-inv input[type="number"], #ws-lib .pd-inv input[type="text"] { font: inherit; font-size: 12px; color: var(--ink); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px; padding: 5px 6px; min-width: 0; }
+#ws-lib .pd-inv input.mono { font-family: var(--font-mono); }
+#ws-lib .pd-inv .pd-inv-line { display: flex; gap: 6px; }
+#ws-lib .pd-inv .pd-inv-line input { flex: 1; height: 32px; padding: 0 8px; }
+#ws-lib .pd-inv .pd-inv-table { display: flex; flex-direction: column; gap: 4px; }
+#ws-lib .pd-inv .pd-inv-head, #ws-lib .pd-inv .pd-inv-row { display: grid; grid-template-columns: 22px minmax(0, 1.1fr) minmax(0, 0.9fr) 44px 24px; gap: 4px; align-items: center; }
+#ws-lib .pd-inv .pd-inv-row { padding: 3px 0 5px; border-bottom: 1px solid var(--hair); }
+#ws-lib .pd-inv .pd-inv-sub { grid-column: 2 / -1; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-2); }
+#ws-lib .pd-inv .pd-inv-row .pd-inv-sub input[type="number"] { width: 58px; flex: none; }
+#ws-lib .pd-inv select { padding: 4px 2px; font-size: 11px; }
+#ws-lib .pd-inv .pd-inv-head { font-size: 11px; color: var(--ink-2); padding: 0 2px; }
+#ws-lib .pd-inv .pd-inv-row input[type="number"] { width: 100%; box-sizing: border-box; padding: 4px 3px; font-size: 11px; }
+#ws-lib .pd-inv .pd-inv-row.over .pd-inv-fill { color: var(--warning); font-weight: 700; }
+#ws-lib .pd-inv .pd-inv-fill { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-lib .pd-inv .pd-inv-move { display: flex; flex-direction: column; gap: 0; }
+#ws-lib .pd-inv .pd-inv-move button { width: 22px; height: 14px; padding: 0; border: none; background: transparent; color: var(--ink-2); font-size: 8px; line-height: 14px; cursor: pointer; }
+#ws-lib .pd-inv .pd-inv-move button:disabled { opacity: .25; cursor: default; }
+#ws-lib .pd-inv .pd-inv-row .x { width: 24px; height: 24px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+#ws-lib .pd-inv .pd-inv-row.add { border-bottom: none; }
+#ws-lib .pd-inv .pd-inv-row.add .key.sm { padding: 0 6px; min-width: 24px; justify-content: center; }
+#ws-lib .pd-inv-skipped { font-size: 12px; color: var(--ink-2); }
+#ws-lib .pd-inv-skipped summary { cursor: pointer; }
+#ws-lib .pd-inv-skipped .src { padding: 2px 0 0 10px; }
+#ws-lib .pd-inv-sum { margin: 0; font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border-radius: 10px; background: var(--well); border-left: 3px solid var(--measure); }
+#ws-lib .pd-inv-sum.warn, #ws-insp .src.warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: var(--warning); }
+#ws-insp .src.warn { padding: 6px 8px; border-radius: 8px; }
 #ws-insp .pd-part input { width: 150px; height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); font-size: 12px; font-family: var(--font-mono); }
-#ws-modal .box.pd-inv { width: 640px; gap: 10px; }
-#ws-modal .pd-inv .ihead { display: flex; justify-content: space-between; align-items: center; }
-#ws-modal .pd-inv .ihead .x { width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-#ws-modal .pd-inv .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 13px; }
-#ws-modal .pd-inv label { font-size: 12px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; }
-#ws-modal .pd-inv label.pd-inv-text { flex-direction: column; align-items: stretch; }
-#ws-modal .pd-inv select, #ws-modal .pd-inv textarea, #ws-modal .pd-inv input[type="number"] { font: inherit; font-size: 12px; color: var(--ink); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px; padding: 5px 8px; }
-#ws-modal .pd-inv textarea { font-family: var(--font-mono); resize: vertical; }
-#ws-modal .pd-inv input[type="number"] { width: 70px; }
-#ws-modal .pd-inv .pd-inv-head, #ws-modal .pd-inv .pd-inv-row { display: grid; grid-template-columns: 1.4fr 1fr 80px 80px 44px; gap: 6px; align-items: center; }
-#ws-modal .pd-inv .pd-inv-head span { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
-#ws-modal .pd-inv .pd-inv-table { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-#ws-modal .pd-inv .pd-inv-sum { margin: 0; font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; border-radius: 10px; background: var(--well); border-left: 3px solid var(--measure); }
-#ws-modal .pd-inv .pd-inv-sum.warn { background: var(--warn-bg); color: var(--warn-fg); border-left-color: var(--warning); }
-#ws-modal .pd-inv .btns { display: flex; justify-content: flex-end; gap: 8px; }
-#ws-modal .pd-inv .btns .key { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 600; }
 #ws-labels .pd-comp-labels .crow { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; }
 #ws-labels .pd-comp-labels .crow .where { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); min-width: 110px; }
 #ws-labels .pd-comp-labels .crow .words { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

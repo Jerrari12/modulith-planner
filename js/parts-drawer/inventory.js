@@ -160,7 +160,7 @@ function twoLines(name) {
 }
 
 // natural order: type, then thread size, then length
-const sizeKey = (it) => D[it.size] ?? (parseFloat(String(it.size).replace(/^[^\d]*/, '')) || 0);
+export const sizeKey = (it) => D[it.size] ?? (parseFloat(String(it.size).replace(/^[^\d]*/, '')) || 0);
 export function sortItems(items) {
   const rank = (it) => (TYPE_ORDER.includes(it.type) ? TYPE_ORDER.indexOf(it.type) : TYPE_ORDER.length + ALL_TYPES.indexOf(it.type));
   return [...items].sort((a, b) => rank(a) - rank(b) || sizeKey(a) - sizeKey(b) || (a.length || 0) - (b.length || 0)
@@ -305,8 +305,14 @@ export function roomNeeded(it, { size = '240-2W', height = '0.5H', label = 'larg
   if (!best) return { vol: Infinity, long: 0, side: 0, depth: 0, cap: 1, discrete: true, tooTall: true };
   return { vol: best.area * usableH, long: best.long, side: best.side, depth: best.side + holdD, cap: 1, discrete: true };
 }
-export function layoutFor(itemsIn, { size = '240-2W', height = '0.5H', label = 'large', labels = true, scoop = 'std', fillCap = 1, order = 'type' } = {}) {
-  const items = (order === 'kit' ? kitOrder : sortItems)(itemsIn.filter((it) => known(it) && !TYPES[it.type].outside));
+// order: 'type' (type, size, length), 'kit' (kit families), 'list' (as given). roundTo: 'bag' sizes every pile for the counted
+// quantity rounded up to the next bag (bagUp), the compartments keeping the counted one. spareRow: an empty row of labelled
+// compartments at the back when the list still fits under the cap with the drawer one row shorter (DECISIONS 2026-11-07).
+const BAGS = [25, 50, 100, 200, 500];
+export const bagUp = (q) => { q = Math.max(0, Math.round(q || 0)); if (!q) return q; for (const b of BAGS) if (q <= b) return b; return Math.ceil(q / 500) * 500; };
+export function layoutFor(itemsIn, { size = '240-2W', height = '0.5H', label = 'large', labels = true, scoop = 'std', fillCap = 1, order = 'type', roundTo = null, spareRow = false } = {}) {
+  const items = (order === 'kit' ? kitOrder : order === 'list' ? (xs) => [...xs] : sortItems)(itemsIn.filter((it) => known(it) && !TYPES[it.type].outside));
+  const sized = (it) => (roundTo === 'bag' && it.qty > 0 ? { ...it, qty: bagUp(it.qty) } : it);
   const S = SIZES[size], top = S.heights[height].top, hold = HOLDERS[label];
   // v24: in a tall drawer every compartment stays wide enough to reach into (REACH in gen.js); the rows a drawer takes
   // follow its depth (the 59 takes one row of labelled compartments)
@@ -319,14 +325,16 @@ export function layoutFor(itemsIn, { size = '240-2W', height = '0.5H', label = '
   if (n > perRow * maxRows) return { error: reach ? `${n} parts won't fit a ${height} drawer: to reach into, a compartment there needs ${reach.toFixed(1)} mm across, so it holds ${perRow * maxRows}. Use a lower drawer or split the list.`
     : `${n} parts is more than one drawer holds with ${labels ? 'labels' : 'compartments this size'} (${perRow * maxRows}). Split the list across two drawers.` };
   const need = items.map((it) => {
-    const r = roomNeeded(it, { size, height, label: labels ? label : null, fillCap });
+    const r = roomNeeded(sized(it), { size, height, label: labels ? label : null, fillCap });
     // vol: what the compartment must hold, raised for the fill limit; along: room the long side needs front to back
     return { it, vol: r.vol / r.cap, raw: r.vol, long: r.long, side: r.side, depth: r.depth, discrete: r.discrete, tall: r.tooTall, along: r.long + (r.depth - r.side) };
   });
   const tall = need.find((x) => x.tall);
   if (tall) return { error: `${labelText(tall.it)} is too tall to lie in a ${height} drawer.` };
+  const solve = (depthAvail) => {
   let best = null;
-  for (let R = Math.ceil(n / perRow); R <= Math.min(maxRows, n); R++) {
+  const rowsMax = Math.min(maxRows, Math.floor((depthAvail + W) / (minD + W) + 1e-9));
+  for (let R = Math.ceil(n / perRow); R <= Math.min(rowsMax, n); R++) {
     // rows as even as the count allows, in order; 'spread' deals the widest parts out first, one row at a time, so big
     // parts don't all land in one row (each row then keeps kit order)
     const rows = []; let k = 0;
@@ -348,7 +356,7 @@ export function layoutFor(itemsIn, { size = '240-2W', height = '0.5H', label = '
       return Math.max(minD, ...row.map((x, i) => Math.max(x.depth, x.long > fw / row.length && !across(x, i) ? Math.min(x.along, 200) : 0)));
     });
     const rowVol = rows.map((row) => row.reduce((a, x) => a + x.vol, 0));
-    const freeD = S.D - (R - 1) * W;
+    const freeD = depthAvail - (R - 1) * W;
     if (rowMin.reduce((a, b) => a + b, 0) > freeD) continue;
     // share the depth: everyone gets its minimum, the rest goes in proportion to volume beyond it
     let depths = water(rowVol.map((v, i) => v / (freeW(rows[i].length) * usableH)), rowMin, freeD);
@@ -370,14 +378,28 @@ export function layoutFor(itemsIn, { size = '240-2W', height = '0.5H', label = '
     const score = worst - 0.02 * R;            // a little in favour of fewer, roomier rows
     if (!best || score > best.score) best = { score, worst, R, comps };
   }
-  if (!best && order === 'kit') return layoutFor(itemsIn, { size, height, label, labels, scoop, fillCap, order: 'spread' });
+  return best;
+  };
+  // the spare row: the list laid out with the drawer one labelled row shorter, kept only when that still fits under the cap
+  const spareD = minD + W;
+  let best = null, spare = 0;
+  if (spareRow && S.D - spareD >= minD) {
+    const b = solve(S.D - spareD);
+    if (b && Math.max(...b.comps.map((c) => c.load)) <= 1 + 1e-9) {
+      const k = perRow, y0 = S.D - spareD + W, wq = (S.W - (k - 1) * W) / k;
+      for (let i = 0; i < k; i++) b.comps.push({ x0: i * (wq + W), x1: i * (wq + W) + wq, y0, y1: S.D, item: null, fill: 0, load: 0, discrete: false });
+      best = b; spare = k;
+    }
+  }
+  if (!best) best = solve(S.D);
+  if (!best && order === 'kit') return layoutFor(itemsIn, { size, height, label, labels, scoop, fillCap, order: 'spread', roundTo, spareRow });
   if (!best) return { error: 'These parts are too long to lay out in rows here. Try a deeper drawer or fewer lengths.' };
   // snap to the 0.1 um grid so neighbours stay exactly one wall apart; the last compartment of each row takes the rounding
   const comps = snapRows(best.comps, S);
   return {
     // placed parts get a flat floor (no front scoop under them)
-    comps: comps.map((c) => comp(c.x0, c.x1, c.y0, c.y1, { holder: labels, scoop: c.discrete ? 'off' : scoop, item: c.item })),
-    rows: best.R, fullest: Math.max(...best.comps.map((c) => c.fill)), load: Math.max(...best.comps.map((c) => c.load)), roomy: best.worst,
+    comps: comps.map((c) => comp(c.x0, c.x1, c.y0, c.y1, { holder: labels, scoop: c.discrete ? 'off' : scoop, ...(c.item ? { item: c.item } : {}) })),
+    rows: best.R + (spare ? 1 : 0), spare, fullest: Math.max(...best.comps.map((c) => c.fill)), load: Math.max(...best.comps.map((c) => c.load)), roomy: best.worst,
   };
 }
 // water filling: lengths >= min, summing to total, the rest shared in proportion to want

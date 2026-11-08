@@ -23,7 +23,8 @@ const PAD = { l: 18, r: 8, t: 14, b: 22 };
 
 /* the plan of a full layout (unit.js fullLayout) drawn into an <svg>: `sel` the selection box (mm) or null, `hot` a wall
    highlight { orient, c, segs, J, drag?, from? } or null, `flags` the reach flags, `hover` a hovered compartment */
-export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps } = {}) {
+// preview: the compartments are a proposal (the parts list's layout, 2026-11-07): drawn dashed, no selection, no hover
+export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false } = {}) {
   const S = G.SIZES[full.size], L = { ...full, comps };
   svg.replaceChildren();
   svg.setAttribute('viewBox', `${-2 - PAD.l} ${-4 - PAD.t} ${S.W + 4 + PAD.l + PAD.r} ${S.D + 8.3 + PAD.t + PAD.b}`);   // the shell: 2 each side, 4.3 in front, 4 behind
@@ -36,7 +37,7 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   const outl = new Map(outlinesOf(L).map((o) => [o.comp, o.polys]));   // the parts on the floors (M3)
   comps.forEach((c, i) => {
     const w = c.x1 - c.x0, d = c.y1 - c.y0;
-    rect('cell' + (inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
+    rect('cell' + (preview ? ' preview' : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
     const s = G.scoopSize(L, c), t = G.traySize(L, c);
     const fk = G.floorColorOf(L, c);
     let ink = null;
@@ -124,7 +125,9 @@ export function planThumb(full, { width = 120, height = 93 } = {}) {
 export function plan(opts) {
   const host = el('div.glass', { id: 'ws-plan', role: 'group', 'aria-label': 'Compartment plan' });
   const howBtn = el('button.key.sm.howto', { text: 'How to', title: 'The gestures, shown', 'aria-expanded': 'false', onclick: () => (tip ? closeTip() : showTip()) });
-  const head = el('div.bhead', {}, [el('span.bttl', { text: 'Plan · mm' }), el('span.bhint', { text: 'Drag across compartments to select · drag a wall to move it (Shift: the whole line, Alt: no snap) · double-click: label holder' }), howBtn]);
+  const HINT = 'Drag across compartments to select · drag a wall to move it (Shift: the whole line, Alt: no snap) · double-click: label holders';
+  const hint = el('span.bhint', { text: HINT });
+  const head = el('div.bhead', {}, [el('span.bttl', { text: 'Plan · mm' }), hint, howBtn]);
   const svg = svgEl('svg', { class: 'bsvg', preserveAspectRatio: 'xMidYMid meet', role: 'img', 'aria-label': 'Top-down plan of the drawer layout, front edge at the bottom' });
   host.append(head, svg);
   /* the tip card (guide.js): the first time edit mode opens on this device, and from the How-to button after; the × (or
@@ -169,12 +172,19 @@ export function plan(opts) {
   const hitWall = (pt, e) => wallHit(comps(), full(), pt, { tol: Math.max(1.1, (e.pointerType === 'touch' ? 10 : 5) * mmPerPx()), shift: e.shiftKey });
   const snapTol = () => Math.max(0.8, 4 * mmPerPx());
   const hotOf = () => (wdrag ? { ...wdrag.ch, c: wdrag.c, drag: true, from: wdrag.ch.c } : hover);
+  /* the parts list's preview (2026-11-07): opts.preview() gives { comps, note, warn } while the list is open, and the plan draws
+     those compartments dashed with the note in its header instead of the gestures, which are off */
+  const preview = () => (opts.preview ? opts.preview() : null);
   function render() {
+    const pv = preview();
+    svg.classList.toggle('preview', !!pv);
+    hint.textContent = pv ? (pv.note || '') : HINT; hint.classList.toggle('warn', !!(pv && pv.warn));
+    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true }); placeTip(); return; }
     drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps() });
     placeTip();
   }
   svg.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || preview()) return;
     const pt = planPoint(e);
     const ch = hitWall(pt, e);
     if (ch) {
@@ -186,6 +196,7 @@ export function plan(opts) {
     opts.onSelect(closure(G.compBox(c))); render();
   });
   svg.addEventListener('pointermove', (e) => {
+    if (preview()) return;
     const pt = planPoint(e); lastPt = { pt, pointerType: e.pointerType };
     if (wdrag) { if (moveWallDrag(wdrag, pt, e.altKey, snapTol())) render(); return; }
     if (drag) { const c = compAt(pt); if (c) { opts.onSelect(closure(G.boxOf([drag, c]))); render(); } return; }
@@ -204,7 +215,7 @@ export function plan(opts) {
   }
   svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
   svg.addEventListener('pointerleave', () => { lastPt = null; if (!wdrag && (hover || hoverComp)) { hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; if (opts.onHover) opts.onHover(null); render(); } });
-  svg.addEventListener('dblclick', () => { if (opts.selected()) opts.onHolder(); });
+  svg.addEventListener('dblclick', () => { if (!preview() && opts.selected()) opts.onHolder(); });
   // Shift changes what a wall drag will move, so the highlight follows it
   const shiftWatch = (e) => {
     if (e.key !== 'Shift' || wdrag || drag || !lastPt || lastPt.pointerType === 'touch' || !host.isConnected || host.hidden) return;
@@ -216,7 +227,7 @@ export function plan(opts) {
   return {
     el: host, render,
     firstTip() { if (!howToSeen()) showTip(); }, closeTip, hideTip, tipOpen: () => !!tip,
-    cancel() { if (wdrag) { wdrag = null; render(); } drag = null; },
+    cancel() { if (wdrag) { wdrag = null; render(); } drag = null; hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; },
     destroy() { document.removeEventListener('keydown', shiftWatch); document.removeEventListener('keyup', shiftWatch); if (ro) ro.disconnect(); host.remove(); },
   };
 }

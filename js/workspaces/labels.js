@@ -26,6 +26,7 @@ import { readOwned } from '../state/owned.js';
 import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer (M3, 2026-11-05): compartment labels into this list
 import { compartmentLabels, addToList } from '../parts-drawer/labels.js';
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
+import { partPicker, armWait, STUDIO, STUDIO_ORIGIN, newSession } from '../ui/partpicker.js';   // the Part Picker modal and the Studio it points at (2026-11-07)
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog: a classic-script LEXICAL global, not a globalThis property
@@ -77,21 +78,6 @@ const HINTS = {
   several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several, video: `img/hints/labels-several.mp4` },
 };
 const LABEL_STUDIO_URL = 'https://labels.modulith.systems/';
-/* the Studio this page talks to. A page served from loopback may point at a local Studio with ?studio=http://127.0.0.1:PORT/
-   (kept for the tab); a page on any other origin ignores it, so a link cannot point a visitor at another Studio. */
-const STUDIO = (() => {
-  try {
-    const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(location.origin);
-    const ok = (u) => typeof u === 'string' && /^http:\/\/(localhost|127\.0\.0\.1):\d{2,5}\/$/.test(u);
-    const q = new URLSearchParams(location.search).get('studio');
-    if (local && ok(q)) sessionStorage.setItem('gen2-studio-url', q);
-    const s = sessionStorage.getItem('gen2-studio-url');
-    if (local && ok(s)) return s;
-  } catch { /* no storage */ }
-  return LABEL_STUDIO_URL;
-})();
-const STUDIO_ORIGIN = new URL(STUDIO).origin;
-const PICKER_MAX = 200;   // the Picker's own cap on one batch
 const n = (k, one, many = one + 's') => `${k} ${k === 1 ? one : many}`;
 const sigOf = (m) => { const s = JSON.stringify(m); let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16) + ':' + s.length; };
 const FACE_LABEL = Object.fromEntries((G?.faceplateStyles || []).map((f) => [f.id, f.label]));
@@ -105,7 +91,11 @@ export const loadLabelList = () => LLp || (LLp = new Promise((res, rej) => {
   s.src = new URL('../vendor/label-list.js', import.meta.url).href;
   s.onload = () => (globalThis.GEN2LabelList ? res(globalThis.GEN2LabelList) : rej(new Error('label-list.js did not register')));
   s.onerror = () => { LLp = null; rej(new Error('label-list.js failed to load')); };
-  document.head.appendChild(s);
+  // appended once the page has loaded: a script added before the load event holds that event until it arrives, and the
+  // boot mounts this workspace a few ms either side of it (2026-11-07: one module more in the graph moved the mount
+  // before load, and the e2e case that holds label-list.js back then waited on the page's load for ever)
+  let added = false; const add = () => { if (!added) { added = true; document.head.appendChild(s); } };
+  if (document.readyState === 'complete') add(); else { addEventListener('load', add, { once: true }); setTimeout(add, 2000); }   // or after 2 s, should something unrelated hold the page's load (Terra 01a1b910)
 }));
 /* the tab badge: labelled drawers over the drawers that can take a label (the brief: "labelled/slots") */
 export function labelsBadge(b) {
@@ -374,114 +364,23 @@ export function mountLabels(stage, ctx) {
     history.replaceState(history.state, '', location.href.replace(/[#&]labels-add=[^&]+/, (x) => (x.startsWith('#') ? '#' : '')).replace(/#&/, '#').replace(/#$/, ''));
     importLink(m[1]);
   }
-  /* THE PART PICKER MODAL (docs/redesign/LABELS-INTEGRATION.md, step A): the Studio's Part Picker in a frame over the
-     workspace, made once per page and hidden between openings so its choices persist. The planner speaks first: a hello
-     with a session the Picker binds to (it checks the origin against its own list); every message after carries the
-     session, and the planner reads only from its own frame's window at the Studio's origin. A batch lands in the build
-     that was open when the modal opened, as one history entry; the Picker is answered only after the store took it. */
-  let picker = null;
-  const PICKER_ALPHABET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const newSession = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return [...a].map((b) => PICKER_ALPHABET[b % 62]).join(''); };
-  /* THE HANDSHAKE'S PATIENCE (the stress test, 2026-10-15: a slow or unreachable Studio was blamed on the allowlist, and
-     nothing offered a retry). After 8 s it says what is likely and offers Try again, which reloads the frame (the load
-     sends the hello again) and waits again. */
-  function armWait(h, who) {
-    clearTimeout(h.wait);
-    h.wait = setTimeout(() => {
-      if (h.ready || h.bad) return;
-      h.link.replaceChildren(el('span', { text: `${who} hasn’t answered yet. It may be slow, or its site may be down. ` }),
-        el('button.key.sm', { onclick: () => { h.link.textContent = 'Connecting…'; try { h.frame.src = h.frame.src; } catch { /* the frame went away */ } armWait(h, who); } }, ['Try again']));
-    }, 8000);
-  }
-  /* EDIT PART DETAILS OPENS THAT PART (LABELS-INTEGRATION.md, the parts channel's additions, `open/1`): only to a Picker
-     whose ready offered the cap; one request at a time, the latest wins, and an answer counts only with its own req. An
-     older Picker just opens, as before. */
-  function sendOpen() {
-    const p = picker; if (!p || !p.ready || !p.pendingOpen) return;
-    const want = p.pendingOpen; p.pendingOpen = null;
-    if (!(p.caps || []).includes('open/1')) return;
-    let size = Infinity; try { size = JSON.stringify(want.item).length; } catch { /* not plain data */ }
-    if (size > 64 * 1024) return;   // bounded as an add item is
-    p.req = newSession();
-    try { p.frame.contentWindow.postMessage({ gen2parts: 'open', v: 1, session: p.session, req: p.req, id: want.id, item: want.item }, STUDIO_ORIGIN); } catch { /* the frame went away */ }
-  }
-  function openPicker({ open = null } = {}) {
-    if (picker && picker.buildId !== S().buildId) { picker.veil.remove(); picker = null; }   // another build: a new frame and session, so a batch still in flight for the old one is a stranger here (Sol 01a13844); the Picker keeps its list in its own storage
-    if (!picker) {
-      const session = newSession();
-      const frame = el('iframe', { src: STUDIO + 'parts/?embed=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : ''), title: 'Part Picker', referrerpolicy: 'strict-origin-when-cross-origin' });
-      const closeBtn = el('button.x', { title: 'Close', 'aria-label': 'Close the Part Picker', onclick: () => closePicker() }, [icon('x', { size: 18 })]);
-      const link = el('span.link', { role: 'status', text: 'Connecting…' });   // the handshake, in the planner's own words
-      // Tab stays in the dialog (the stress test, 2026-10-15): a sentinel on each side sends the keyboard round to the other end
-      const trap = (to) => el('span.trap', { tabindex: '0', 'aria-hidden': 'true', onfocus: () => { try { to().focus(); } catch { /* gone */ } } });
-      const veil = el('div', { id: 'ws-partpicker', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Part Picker', hidden: true }, [
-        trap(() => frame),
-        el('div.glass.frame', {}, [el('div.head', {}, [el('h2', { text: 'Part Picker' }), el('span.sub', { text: 'Choose parts, then Add labels: they land in this build’s list, ready to place.' }), link, closeBtn]), frame]),
-        trap(() => closeBtn),
-      ]);
-      root.appendChild(veil);
-      // the build rides on the hello (LABELS-INTEGRATION.md, the parts channel's additions): the Picker keys its "sent" marks by it
-      const hello = () => { try { frame.contentWindow.postMessage({ gen2parts: 'hello', v: 1, session, ...(picker && picker.buildId ? { buildId: picker.buildId } : {}) }, STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
-      frame.addEventListener('load', hello);
-      const onMessage = (e) => {
-        if (!picker || e.source !== frame.contentWindow || e.origin !== STUDIO_ORIGIN) return;
-        const d = e.data;
-        if (picker.log.length < 20) picker.log.push(d && d.gen2parts);
-        if (!d || typeof d !== 'object' || d.v !== 1 || d.session !== session) return;
-        if (d.gen2parts === 'ready') { picker.ready = true; picker.caps = Array.isArray(d.caps) ? d.caps.filter((c) => typeof c === 'string').slice(0, 16) : []; clearTimeout(picker.wait); picker.link.textContent = ''; sendOpen(); return; }
-        // Escape inside the frame never reaches this page's keys: the Picker asks, and the dialog closes as its own Escape does
-        if (d.gen2parts === 'close') { closePicker(); return; }
-        // the answer to an `open`: counted only with the latest req (a superseded one is dropped); a refusal's words show in
-        // the dialog's head, where the visitor is looking (this `refused` comes FROM the Picker and carries req, not batch)
-        if (d.gen2parts === 'opened' || (d.gen2parts === 'refused' && typeof d.req === 'string')) {
-          if (!picker.req || d.req !== picker.req) return;
-          picker.req = null;
-          if (d.gen2parts === 'refused' && typeof d.reason === 'string') picker.link.textContent = d.reason.slice(0, 300);
-          return;
-        }
-        if (d.gen2parts !== 'add') return;
-        // the batch id the Picker minted for this send rides back on the reply, so a late reply to a timed-out send is never
-        // credited to the next one (Astra, 2026-10-14: a wrong "added" is not cosmetic); an older Picker sends none and gets none
-        const batch = typeof d.batch === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(d.batch) ? d.batch : undefined;
-        const reply = (m) => { try { e.source.postMessage({ ...m, v: 1, session, ...(batch ? { batch } : {}) }, STUDIO_ORIGIN); } catch { /* the frame went away */ } };
-        if (picker.veil.hidden) { reply({ gen2parts: 'refused', reason: 'The Part Picker was closed before the labels arrived. Open it and press Add part labels again.' }); return; }
-        if (S().buildId !== picker.buildId) { reply({ gen2parts: 'refused', reason: 'The planner moved to another build while the Part Picker was open. Close it and open it again on that build.' }); return; }
-        if (!Array.isArray(d.items) || !d.items.length) { reply({ gen2parts: 'refused', reason: 'No part labels came through.' }); return; }
-        if (d.items.length > PICKER_MAX) { reply({ gen2parts: 'refused', reason: `The planner takes at most ${PICKER_MAX} part labels at once.` }); return; }
-        if (!L) { reply({ gen2parts: 'refused', reason: 'The planner’s label module has not loaded yet; try again in a moment.' }); return; }
-        const r = R.addPartItems(L, S(), d.items);
-        if (!labelCommit(r, 'labels-add')) { reply({ gen2parts: 'refused', reason: r.msg || 'The planner could not add them.' }); return; }
-        reply({ gen2parts: 'added', count: r.added.length + r.updated.length, skipped: r.skipped });
-        st.fresh = new Set([...r.added, ...r.updated]); st.pick = null; st.selId = null; stage.setSelected(null);
-        closePicker(); renderAll(); say(r.msg); if (phone) phone.open(panel);
-      };
-      addEventListener('message', onMessage, { signal });
-      picker = { veil, frame, closeBtn, link, session, buildId: null, ready: false, hello, ret: null, log: [], wait: 0 };
-      if (new URLSearchParams(location.search).get('debug')) window.__GEN2_PICKER__ = () => picker;   // the e2e suite reads the handshake
-    }
-    picker.buildId = S().buildId;   // the destination: a batch for another build is refused
-    picker.ret = document.activeElement; picker.retKey = focusKey();
-    picker.veil.hidden = false;
-    document.documentElement.classList.add('ws-partpicker-open');
-    // this opening's request: a part to open (Edit part details), or none. A new `open` replaces an outstanding one (sendOpen
-    // mints a new req); an opening without a part leaves it be, since its answer may still come and a refusal's words still
-    // matter (Sol 01a13ffb: clearing req on every opening dropped a refusal that arrived after a quick close and reopen)
-    picker.pendingOpen = open && typeof open.id === 'string' && open.id ? { id: open.id, item: open } : null;
-    if (picker.ready) { picker.link.textContent = ''; sendOpen(); }
-    else {
-      picker.hello();   // a frame that loaded before this page listened (or lost the first hello) hears it again
-      armWait(picker, 'The Part Picker');
-    }
-    setTimeout(() => { try { picker.closeBtn.focus(); } catch { /* jsdom */ } }, 0);
-  }
-  function closePicker() {
-    if (!picker || picker.veil.hidden) return;
-    picker.veil.hidden = true;
-    document.documentElement.classList.remove('ws-partpicker-open');
-    const r = picker.ret; picker.ret = null;
-    if (r && typeof r.focus === 'function' && document.contains(r)) { try { r.focus(); } catch { /* gone */ } }
-    else restoreFocus(picker.retKey, true);   // the add re-rendered the opener (the stress test, 2026-10-15: the keyboard stayed on the hidden frame)
-  }
+  /* THE PART PICKER MODAL: js/ui/partpicker.js since 2026-11-07 (shared with the parts drawer's list in Build), the
+     handshake and the refusals as they were here; what a batch becomes is this workspace's: labels in this build's list, one
+     history entry, the Picker answered only after the store took it. */
+  const pp = partPicker({
+    root, signal, buildId: () => S().buildId, frameQuery: () => (S().faceStyle === 'classicpro' ? '&type=classicpro' : ''), focusKey, restoreFocus,
+    debug: !!new URLSearchParams(location.search).get('debug'),
+    onBatch: (items, { reply, close }) => {
+      if (!L) { reply({ gen2parts: 'refused', reason: 'The planner’s label module has not loaded yet; try again in a moment.' }); return; }
+      const r = R.addPartItems(L, S(), items);
+      if (!labelCommit(r, 'labels-add')) { reply({ gen2parts: 'refused', reason: r.msg || 'The planner could not add them.' }); return; }
+      reply({ gen2parts: 'added', count: r.added.length + r.updated.length, skipped: r.skipped });
+      st.fresh = new Set([...r.added, ...r.updated]); st.pick = null; st.selId = null; stage.setSelected(null);
+      close(); renderAll(); say(r.msg); if (phone) phone.open(panel);
+    },
+  });
+  const openPicker = (o) => pp.open(o);
+  const closePicker = () => pp.close();
   // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it for this
   // app's exact address (its PLANNER_RETURNS, live since 2026-10-13; DECISIONS.md 2026-10-13)
   const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
@@ -1200,7 +1099,7 @@ export function mountLabels(stage, ctx) {
   addEventListener('hashchange', () => { if (L) importFromHash(); }, { signal });
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
-    if (e.key === 'Escape') { if (picker && !picker.veil.hidden) { closePicker(); return; } if (modalState) { modalState.onCancel(); return; } if (st.edit) { closeEdit(); return; } if (st.pick) { armPlacing(null); return; } if (tag === 'input') { e.target.blur(); return; } stage.setSelected(null); return; }
+    if (e.key === 'Escape') { if (pp.isOpen()) { closePicker(); return; } if (modalState) { modalState.onCancel(); return; } if (st.edit) { closeEdit(); return; } if (st.pick) { armPlacing(null); return; } if (tag === 'input') { e.target.blur(); return; } stage.setSelected(null); return; }
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }

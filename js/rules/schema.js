@@ -184,6 +184,7 @@ const PARTS_LAYOUT_MAX_COMPS = 200;   // 5 columns per width unit x 8 rows is 16
 const PARTS_LAYOUT_MM = 1000;         // no collection is this deep or wide
 const PARTS_TEXT_MAX = 32;
 const PARTS_FLOOR_MODES = ["off", "one", "paint"], PARTS_SCOOPS = ["off", "std", "deep"], PARTS_LABELS = ["large", "small"];
+export const PARTS_FIT_CAPS = [1, 0.75, 0.5];
 export function cleanPartsLayout(raw) {
   const plain = (v) => Object.prototype.toString.call(v) === "[object Object]";
   if (!plain(raw) || !Array.isArray(raw.comps) || !raw.comps.length || raw.comps.length > PARTS_LAYOUT_MAX_COMPS) return null;
@@ -196,6 +197,8 @@ export function cleanPartsLayout(raw) {
   if (raw.nr !== undefined) out.nr = intIn(raw.nr, 1, 40, 1);
   if (raw.floor !== undefined) { if (!plain(raw.floor)) return null; out.floor = { mode: PARTS_FLOOR_MODES.includes(raw.floor.mode) ? raw.floor.mode : "off", slots: raw.floor.slots === 4 ? 4 : 3 }; }
   if (raw.outlines !== undefined) out.outlines = raw.outlines === true;
+  // how the parts list sized it (DECISIONS 2026-11-07): the fill cap, bag rounding, the spare row; the list reopens with them
+  if (raw.fit !== undefined) { if (!plain(raw.fit)) return null; const cap = Number(raw.fit.cap); out.fit = { cap: PARTS_FIT_CAPS.includes(cap) ? cap : 0.75, round: raw.fit.round === true, spare: raw.fit.spare !== false }; }
   for (const c of raw.comps) {
     if (!plain(c)) return null;
     const x0 = mm(c.x0), x1 = mm(c.x1), y0 = mm(c.y0), y1 = mm(c.y1);
