@@ -37,8 +37,6 @@ import { refusalReason, standUp, openCells, armedSpots } from '../rules/stand.js
 import { settleToward, settleWord } from '../rules/settle.js';
 import { serializeBuild , unitName, cleanUnitName, UNIT_NAME_MAX } from '../rules/schema.js';
 import { generateManifest, isGridfinity } from '../generate.js';
-import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer prototype (M2, 2026-11-05): ?partsdrawer=1
-import { partsDrawerTools } from '../parts-drawer/editor.js';
 
 /* `const GEN2` at a classic script's top level is a global LEXICAL binding: visible to modules by name, absent from globalThis */
 // eslint-disable-next-line no-undef
@@ -107,8 +105,9 @@ export function mountBuild(stage, ctx) {
   const nameEl = top.querySelector('#ws-switch > .chip-btn > span');
   /* THE PARTS DRAWER (M2, 2026-11-05, behind ?partsdrawer=1; js/parts-drawer/editor.js): the third Decor drawer variant, its
      generated body on the stage, and the compartment editor that takes over the Library, the Inspector, the toolbar and the
-     Dock while a drawer is being edited. Null without the flag: every branch on `pd` below is then the planner as it was. */
-  const pd = partsDrawerOn() ? partsDrawerTools(stage, { onStop: editStopped, open: () => st.peeking, store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
+     Dock while a drawer is being edited. Null without the flag (ctx.partsDrawer, loaded by app.js only with it, 2026-11-08):
+     every branch on `pd` below is then the planner as it was. */
+  const pd = ctx.partsDrawer ? ctx.partsDrawer.partsDrawerTools(stage, { onStop: editStopped, open: () => st.peeking, store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
   const editing = () => !!pd && pd.editing != null;
 
   /* ---------------- the record ↔ the stage ---------------- */

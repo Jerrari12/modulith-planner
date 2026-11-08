@@ -23,8 +23,7 @@ import { labelPreviewUrl, previewNeeds, previewReady } from '../label-preview.js
 import { LABEL_MEANINGS, SUGGESTED_BODY_TEXT, CATALOG, spoolsOf, spoolFor, paletteOf, samePalette, paletteWarnings, warningText, rankSpools, urlFor,
   readLabelDefaults, writeLabelDefaults, paletteOfDefaults, setOf, suggestedPalette } from '../label-palette.js';
 import { readOwned } from '../state/owned.js';
-import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer (M3, 2026-11-05): compartment labels into this list
-import { compartmentLabels, addToList } from '../parts-drawer/labels.js';
+// the parts drawer (M3, 2026-11-05): compartment labels into this list, through ctx.partsDrawer (app.js loads it only with the flag, 2026-11-08)
 import { attachHint, hideHint, scene, appear, moveTo, blink } from '../ui/hint.js';
 import { partPicker, armWait, STUDIO, STUDIO_ORIGIN, newSession } from '../ui/partpicker.js';   // the Part Picker modal and the Studio it points at (2026-11-07)
 
@@ -173,7 +172,7 @@ export function mountLabels(stage, ctx) {
   function compCommit(rows) {
     store.flush();
     let added = 0;
-    store.commit((s) => { added = addToList(L, s, +s.length, rows); status(added ? `Added ${added} compartment label${added === 1 ? '' : 's'} to the list.` : 'Nothing to add.'); }, 'label');
+    store.commit((s) => { added = ctx.partsDrawer.addToList(L, s, +s.length, rows); status(added ? `Added ${added} compartment label${added === 1 ? '' : 's'} to the list.` : 'Nothing to add.'); }, 'label');
     store.flush();
     st.last = { desc: `Added ${added} compartment label${added === 1 ? '' : 's'}`, key: JSON.stringify(store.serialize()) };
     renderAll();
@@ -694,8 +693,8 @@ export function mountLabels(stage, ctx) {
     }))]));
     /* COMPARTMENT LABELS (M3, js/parts-drawer/labels.js): a parts drawer's compartments that carry a part, as the Studio's
        print set; a row in this list per compartment, never on a faceplate */
-    if (partsDrawerOn()) {
-      const crows = compartmentLabels(+s.length, s);
+    if (ctx.partsDrawer) {
+      const crows = ctx.partsDrawer.compartmentLabels(+s.length, s);
       if (crows.length) {
         const open = crows.filter((r) => !r.linked);
         scroll.appendChild(el('div.placed.pd-comp-labels', {}, [

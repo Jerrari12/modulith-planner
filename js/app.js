@@ -307,8 +307,11 @@ export async function boot() {
     }
   }
   setMode(document.documentElement.dataset.mode, stage, { now: true });   // the viewer booted on `dark`; the workspace wants `night` (at once: nothing is painted yet)
+  // the parts drawer's modules (its editor, labels, rows and download, about 330 KB with gen.js and the packing table) load only
+  // with the flag, through js/parts-drawer/index.js; without it a visitor's page carries flag.js alone (2026-11-08)
+  const partsDrawer = partsDrawerOn() ? await import('./parts-drawer/index.js') : null;
   const ctx = {
-    setMode,
+    setMode, partsDrawer,
     memo: { labelsAdd },   // what a workspace wants back when it is remounted (the Assemble step, for one; a labels link not imported yet)
     store, kitId: KIT, get kitTitle() { return kitTitle; },
     /* the palette moves to the build's own key BEFORE the first colour write (and on the first build edit), so a kit

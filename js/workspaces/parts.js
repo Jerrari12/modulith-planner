@@ -22,11 +22,8 @@ import { isPhone, phoneChrome } from '../ui/phone.js';
 import { partName, noteText } from '../ui/names.js';   // shown names: "Case 185 · 2W-1H", the rows keep their GEN2 keys
 import { assetUrl } from '../config.js';
 import { ZONE_LABEL, isPaid, disclosureFor, short, buyFilament } from './colors.js';   // the Colors tab's words for a zone, a filament and a paid link's disclosure, and its click event
-import { partsDrawerOn } from '../parts-drawer/flag.js';   // the parts drawer (M3, 2026-11-05): a row of its own with the download
+// the parts drawer (M3, 2026-11-05): a row of its own with the download, through ctx.partsDrawer (app.js loads it only with the flag, 2026-11-08)
 import { unitName } from '../rules/schema.js';
-import { withPartsDrawers } from '../parts-drawer/row.js';
-import { fullLayout } from '../parts-drawer/unit.js';
-import { saveBytes } from '../parts-drawer/download.js';   // the engine itself (three.js, the worker) loads at the click: this module is also read under node
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;
@@ -284,7 +281,7 @@ export function mountParts(stage, ctx) {
 
   /* ---------------- the list ---------------- */
   const sections = () => computeBom(build, G) || [];
-  const rows = () => withPartsDrawers(bomRows(sections(), LINKS).map((r) => releasedOverride(r, length)), build, G, length, partsDrawerOn());
+  const rows = () => { const base = bomRows(sections(), LINKS).map((r) => releasedOverride(r, length)); return ctx.partsDrawer ? ctx.partsDrawer.withPartsDrawers(base, build, G, length) : base; };
   const counts = () => {
     const rs = rows();
     const print = rs.filter((r) => !r.hardware);
@@ -464,7 +461,7 @@ export function mountParts(stage, ctx) {
     return el('button.key.sm', { text: zipping.has(id) ? 'Building…' : 'Download STL + 3MF', disabled: zipping.has(id), title: 'The drawer as the generator makes it for this layout: STL and 3MF, README and layout.json (.zip)', onclick: async () => {
       const u = (build.placed || []).find((p) => p.id === id); if (!u || zipping.has(id)) return;
       zipping.add(id); renderPanel();
-      try { const { zipFor } = await import('../parts-drawer/engine.js'); const { bytes, filename } = await zipFor(fullLayout(length, u), { bodyHex: stage.activeHex('Drawer'), name: unitName(u) }); saveBytes(bytes, filename); say(`Saved ${filename}`); }
+      try { const { zipFor } = await import('../parts-drawer/engine.js'); const { bytes, filename } = await zipFor(ctx.partsDrawer.fullLayout(length, u), { bodyHex: stage.activeHex('Drawer'), name: unitName(u) }); ctx.partsDrawer.saveBytes(bytes, filename); say(`Saved ${filename}`); }
       catch (e) { console.error(e); say(`The files could not be built (${e && e.message || e}).`); }
       zipping.delete(id); renderPanel();
     } });
@@ -546,7 +543,7 @@ export function mountParts(stage, ctx) {
     const h = u.hh / 2, size = `${u.w}W-${h}H`, out = [];
     const fill = (G.fills || []).find((f) => f.id === u.fill);
     if (u.fill === 'classic' || u.fill === 'decor') {
-      out.push([P.drawer(length, size, partsDrawerOn() && u.variant === 'parts' ? 'Decor Parts Drawer' : (fill?.label || u.fill)), 1]);
+      out.push([P.drawer(length, size, ctx.partsDrawer && u.variant === 'parts' ? 'Decor Parts Drawer' : (fill?.label || u.fill)), 1]);
       out.push([P.case(length, size), 1]);
       if (u.fill === 'decor') { const f = (G.faceplateStyles || []).find((s) => s.id === build.faceStyle); out.push([P.faceplate(length, size, f?.label || ''), 1]); }
       out.push(['QuickLock L + R', 2]);
