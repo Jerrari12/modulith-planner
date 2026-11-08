@@ -2505,6 +2505,10 @@
     "filament-sample-chip": {
       "preview": false,
       "reason": "The chip has no 3D preview yet: no build places one."
+    },
+    "filament-sample-chip-title-pieces": {
+      "preview": false,
+      "reason": "The title pieces have no 3D preview: they ship as ready-to-print 3MFs."
     }
   }
 }

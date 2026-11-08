@@ -225,6 +225,7 @@ export function partThumb(name, variant) {
     // the chip drawers and their universal chip (2026-11-07), named as generate.js imgFor names them
     if ((m = /^GEN2 (\d+)-(\dW-[\d.]+H) (Classic|Decor) Filament Sample Chip Drawer$/.exec(name))) return `${m[3]} Filament Sample Chip Drawer ${m[1]}-${d(m[2])}.png`;
     if (name === 'GEN2 Filament Sample Chip') return 'Filament Sample Chip.png';
+    if (name === 'GEN2 Filament Sample Chip Title Pieces') return 'Filament Sample Chip Title Pieces.png';
     if ((m = /^GEN2 (\d+) Case Extender - (\dW)-1H$/.exec(name))) return `Case Extender ${m[1]}-${m[2]}.png`;
     if ((m = /^GEN2 (\d+) Case - (\dW-[\d.]+H)$/.exec(name))) return `Case ${m[1]}-${d(m[2])}.png`;
     if ((m = /^GEN2 (\d+) Side Cover - ([\d.]+H)$/.exec(name))) return `SideCover_${m[1]}-${d(m[2])}.png`;

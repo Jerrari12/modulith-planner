@@ -3026,6 +3026,9 @@ function previewProbe(slug) {
   // there is nothing for a probe to pick; the site shows its poster
   if (s === 'filament-sample-chip')
     return un('The chip has no 3D preview yet: no build places one.');
+  // its title pieces (2026-11-08): a set shipped as 3MFs, with no GLB and no place on the stage
+  if (s === 'filament-sample-chip-title-pieces')
+    return un('The title pieces have no 3D preview: they ship as ready-to-print 3MFs.');
   // hardware (sets + singles) — the probe mounts are chosen so the REAL
   // generator bills exactly the expected rows: a wall single-unit emits the
   // QuickLock pair AND the stopper pair (bench covers carry the stopper

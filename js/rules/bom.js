@@ -218,14 +218,25 @@ export function computeBom(build, GEN2) {
          to print is how many filaments you own. It ships in BOTH styles' downloads (a page per style per length, Joey
          2026-11-07), so the row links a page this build already sends you to: the Classic one when any chip drawer is
          Classic, else the Decor one. */
+      const chipPage = `MODULITH ${len} ${classicChips ? "Classic" : "Decor"} Filament Sample Chip Drawers`;
       if (chipDrawers) items.push({
         name: P.filamentChip(), qty: chipDrawers, optional: true,
         note: `Optional · print one per filament and put a label-maker strip on its flat face; ` +
           `${chipDrawers === 1 ? "this drawer holds" : "these drawers hold"} up to ${chipSlots}. Included in the chip drawer download.`,
-        linkAs: `MODULITH ${len} ${classicChips ? "Classic" : "Decor"} Filament Sample Chip Drawers`,
+        linkAs: chipPage,
         unreleased: GEN2.unreleased.includes("chipDrawer"),
         /* the drawer is whole without a single chip in it: nothing selected promises filled lanes */
         requirement: GEN2.req.enhancement("drawer.sample_chips"),
+      });
+      /* the title pieces (2026-11-08): ONE optional row, a set, whatever the drawer count - the download carries them all as
+         two ready-to-print 3MFs and you print the materials you sort by. Same page and gate as the chip. */
+      if (chipDrawers) items.push({
+        name: P.filamentChipTitles(), qty: 1, optional: true,
+        note: `Optional · black material titles that stand in a lane between your chips: ready-to-print 3MFs for Bambu Studio ` +
+          `and PrusaSlicer with ${GEN2.chips.titles} titles (PLA to PEEK) and a blank. Print the ones you sort by. Included in the chip drawer download.`,
+        linkAs: chipPage,
+        unreleased: GEN2.unreleased.includes("chipDrawer"),
+        requirement: GEN2.req.enhancement("drawer.sample_chip_titles"),
       });
       sections.push({ title: "Drawers", items });
     }

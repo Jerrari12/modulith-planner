@@ -105,13 +105,36 @@ test('the bill: each style its own row with the capacity, one optional chip row,
       'the chip ships in both styles\' downloads: with a Classic chip drawer in the build, the Classic page');
     assert.match(chip.note, new RegExp(`these drawers hold up to ${3 * HOLDS[L]}\\.`));
     assert.equal(chip.requirement.scope, 'enhancement', 'a chip drawer is whole with no chips in it');
+    // the title pieces (2026-11-08): one optional set, on the chip's page and gate
+    const titles = r.find((x) => x.name === 'GEN2 Filament Sample Chip Title Pieces');
+    assert.ok(titles, `${L}: the title pieces row`);
+    assert.equal(titles.qty, 1, 'one set however many chip drawers: the 3MFs carry every title');
+    assert.equal(titles.optional, true);
+    assert.equal(titles.unreleased, true);
+    assert.equal(titles.linkAs, chip.linkAs, 'the same download as the chip');
+    assert.match(titles.note, /3MFs for Bambu Studio and PrusaSlicer with 35 titles \(PLA to PEEK\) and a blank/);
+    assert.equal(titles.requirement.scope, 'enhancement');
+    assert.ok(r.indexOf(titles) === r.indexOf(chip) + 1, 'listed right after the chip');
   }
   const one = build(240, { placed: [drawer('u1', 0, 'decor', 1, 1, { variant: 'chips' })] });
   const oneChip = rows(one).find((x) => x.name === 'GEN2 Filament Sample Chip');
   assert.match(oneChip.note, /this drawer holds up to 106\./);
   assert.equal(oneChip.linkAs, 'MODULITH 240 Decor Filament Sample Chip Drawers', 'Decor chip drawers only: the Decor page, the one this build sends you to');
+  assert.equal(rows(one).find((x) => x.name === 'GEN2 Filament Sample Chip Title Pieces').linkAs, 'MODULITH 240 Decor Filament Sample Chip Drawers');
   const none = build(240, { placed: [drawer('u1', 0, 'decor', 1, 1)] });
-  assert.ok(!rows(none).some((x) => /Chip/.test(x.name)), 'no chip drawer, no chip row');
+  assert.ok(!rows(none).some((x) => /Chip/.test(x.name)), 'no chip drawer, no chip row and no title pieces row');
+});
+
+test('the title piece count matches the shipped set: 35 titles and a blank', () => {
+  // the generator's list is the truth; where this machine has it (Joey's laptop), the count must match it. CI has no D:
+  // drive, so the number is also pinned here, and changing the set means changing both.
+  assert.equal(GEN2.chips.titles, 35);
+  const list = 'D:/Claude - Output/Filament Sample Chip Drawers/Title Pieces/titles.json';
+  if (existsSync(list)) {
+    const t = JSON.parse(readFileSync(list, 'utf8')).titles;
+    assert.equal(t.filter(Boolean).length, GEN2.chips.titles, 'named titles in the generator\'s list');
+    assert.equal(t.filter((x) => !x).length, 1, 'and one blank');
+  }
 });
 
 test('the stage\'s row matches: the part, its note, no links while unpublished', () => {
@@ -199,6 +222,7 @@ test('the parts list and the stage name the same render for each chip drawer and
     assert.equal(mrow(m, /ChipDrawer_/).img, `img/parts/${style} Filament Sample Chip Drawer ${L}-1W-05H.png`);
   }
   assert.equal(partThumb('GEN2 Filament Sample Chip'), 'img/parts/Filament Sample Chip.png');
+  assert.equal(partThumb('GEN2 Filament Sample Chip Title Pieces'), 'img/parts/Filament Sample Chip Title Pieces.png');
 });
 
 // the 256 px BOM thumbnails (2026-11-07, D:\Render Projects\Filament Sample Chip Drawers\chip_thumbs.py): each style by its own
@@ -207,4 +231,6 @@ test('every chip drawer and the chip have a thumbnail on the parts host', () => 
   for (const L of LENGTHS) for (const style of ['Classic', 'Decor'])
     assert.ok(existsSync(join(root, 'img', 'parts', `${style} Filament Sample Chip Drawer ${L}-1W-05H.png`)), `${style} ${L}: thumbnail missing`);
   assert.ok(existsSync(join(root, 'img', 'parts', 'Filament Sample Chip.png')), 'the chip: thumbnail missing');
+  // title_thumbs.py (2026-11-08, node0): PLA, PETG and TPU standing as in a lane, black with white titles
+  assert.ok(existsSync(join(root, 'img', 'parts', 'Filament Sample Chip Title Pieces.png')), 'the title pieces: thumbnail missing');
 });

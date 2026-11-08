@@ -576,6 +576,8 @@ const GEN2 = {
     sideCover:   (len, h)               => `GEN2 ${len} Side Cover - ${h}H`,
     // universal like the faceplates: one chip fits every chip drawer (2026-11-07)
     filamentChip: ()                    => "GEN2 Filament Sample Chip",
+    // and its title pieces (2026-11-08): one universal set, the 3MFs in every chip drawer download
+    filamentChipTitles: ()              => "GEN2 Filament Sample Chip Title Pieces",
     coverUpper:    (len, w)             => `GEN2 ${len} Cover Upper (CU) - ${w}W`,
     coverLower:    (len, w)             => `GEN2 ${len} Cover Lower (CL) - ${w}W`,
     footRailUpper: (len, w)             => `GEN2 ${len} Foot Rail Upper (FR-U) - ${w}W`,
@@ -619,6 +621,10 @@ const GEN2 = {
     lanes: 2,
     slotsPerLane: { 59: 8, 115: 22, 165: 35, 185: 40, 240: 53, 270: 61 },
     label: "Filament Sample Chip Drawer",
+    /* the title pieces (2026-11-08, Joey: "include the sample chips and also the sample chip title pieces"): black material
+       titles that stand in a lane between chips, shipped as two ready-to-print 3MFs (Bambu Studio, PrusaSlicer) of this
+       many named titles plus a blank. The set is D:\Claude - Output\Filament Sample Chip Drawers\Title Pieces\titles.json. */
+    titles: 35,
   },
 
   /* Gridfinity Decor drawers (v2609, 2026-09-18). A Decor drawer with a 42 mm
@@ -1514,6 +1520,7 @@ function partImage(name, variant) {
   const cd = name.match(/^GEN2 (\d+)-(.+) (Classic|Decor) Filament Sample Chip Drawer$/);
   if (cd) return "img/parts/" + cd[1] + "/" + cd[3] + " Filament Sample Chip Drawer " + cd[1] + "-" + cd[2].replace(/\./g, "") + ".png";
   if (name === "GEN2 Filament Sample Chip") return "img/parts/Filament Sample Chip.png";
+  if (name === "GEN2 Filament Sample Chip Title Pieces") return "img/parts/Filament Sample Chip Title Pieces.png";
   const file = name.replace(/^GEN2 /, "GEN2_").replace(/\./g, "") + RENDER_SUFFIX + ".png";
   return "img/parts/" + file;
 }

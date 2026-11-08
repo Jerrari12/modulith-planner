@@ -46,10 +46,11 @@ const glbExists = (L, node) => existsSync(join(root, 'parts', String(L), node + 
    errors honestly. They are deliberately not copied into `parts/59/`,
    exactly like the 59-3W/4W shelf inserts.
    The filament sample chip (2026-11-07) joins them: its GLB exists, but no build
-   places a chip yet, so no probe can pick one. */
+   places a chip yet, so no probe can pick one. And its title pieces (2026-11-08):
+   a set that ships as 3MFs, with no GLB at all. */
 const expectUnsupported = s =>
   /^59-case-extender-[34]w-1h$/.test(s) ||
-  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip)$/.test(s);
+  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip|filament-sample-chip-title-pieces)$/.test(s);
 
 // resolve the whole catalog once — every test reads from this
 const resolved = new Map();
@@ -81,8 +82,9 @@ test('every production slug is accounted for — resolved or intentionally unsup
   // drew them (2026-10-17); the site mints their part pages once this manifest carries them
   // 2026-11-07: +12 Filament Sample Chip Drawers (609 → 621), the chip unsupported (4 → 5) - not released; the GLBs are on
   // gen2-parts branch chip-drawers, so the deploy that carries these pages publishes gen2-parts first
+  // 2026-11-08: the chip's title pieces, unsupported (5 → 6): a 3MF set, no GLB
   assert.equal(supported, 621, 'supported preview count');
-  assert.equal(unsupported, 5, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip)');
+  assert.equal(unsupported, 6, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip + its title pieces)');
 });
 
 test('every resolved preview references GLBs that exist in its collection pool', () => {
