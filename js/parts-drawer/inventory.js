@@ -5,6 +5,7 @@
 // DIMENSIONS are typical ISO values (ISO 4762, 7380-1, 10642, 4026, 4032, DIN 985, ISO 7089) and common heat-set insert
 // sizes. They are used only to estimate how much room a quantity of parts takes; they are not a specification.
 import { C, SIZES, HOLDERS, comp, spans, snapMM, bearingDims, WASHERS as WASHER, LOCK_WASHERS as LOCKW, isTall, reachMin } from './gen.js';
+import { PACKING } from './packing.js';
 
 export const THREADS = ['M2', 'M2.5', 'M3', 'M4', 'M5', 'M6', 'M8', 'M10', 'M12'];
 const D = { M2: 2, 'M2.5': 2.5, M3: 3, M4: 4, M5: 5, M6: 6, M8: 8, M10: 10, M12: 12 };
@@ -129,8 +130,28 @@ function discreteDims(it) {
     default: return [otherDims(it.size)];
   }
 }
+// How densely a quantity of a part packs as a loose pile: metal volume / the pile's bulk volume. Since the packing bench
+// (DECISIONS 2026-11-07) it comes from PACKING, simulated settled piles by type, thread size, length and quantity,
+// interpolated in log length and log quantity and held flat past the ends of what was simulated; a part the table does
+// not carry keeps its type's old constant (TYPES pack). A captive screw is a socket head screw's shape.
+const PACK_AS = { captive: 'shcs' };
+const lerpAt = (xs, x) => {           // index and weight of x between neighbours of xs (ascending), clamped
+  if (xs.length < 2 || x <= xs[0]) return [0, 0];
+  if (x >= xs[xs.length - 1]) return [xs.length - 2, 1];
+  let i = 0; while (x > xs[i + 1]) i++;
+  return [i, (Math.log(x) - Math.log(xs[i])) / (Math.log(xs[i + 1]) - Math.log(xs[i]))];
+};
+export function packOf(it) {
+  const T = TYPES[it.type], row = PACKING.types[PACK_AS[it.type] || it.type]?.[it.size];
+  if (!row) return T.pack || 0.5;
+  const [qi, qw] = lerpAt(PACKING.qty, Math.max(1, it.qty || 0));
+  const atLen = (r) => r[qi] + (r[Math.min(qi + 1, r.length - 1)] - r[qi]) * qw;
+  if (row.len.length === 1) return atLen(row.pack[0]);
+  const [li, lw] = lerpAt(row.len, it.length > 0 ? it.length : row.len[0]);
+  return atLen(row.pack[li]) + (atLen(row.pack[li + 1]) - atLen(row.pack[li])) * lw;
+}
 // room a quantity takes as a loose pile, mm3
-export const pileVolume = (it) => partShape(it).vol * Math.max(1, it.qty || 0) / (TYPES[it.type].pack || 0.5);
+export const pileVolume = (it) => partShape(it).vol * Math.max(1, it.qty || 0) / packOf(it);
 
 export function labelLines(it) {
   const T = TYPES[it.type];
