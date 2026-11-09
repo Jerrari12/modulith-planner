@@ -81,8 +81,12 @@ test('the official kits: four 1H covers each, as the decision says, and as the b
     const kit = { build: kitBuild(f) };
     const { g } = holdsToTheBill(f, kit.build);
     /* decisions.md "Side covers" (Joey 2026-10-09): the five Tabletop Starter Kits carry 4 x 1H covers, two rows of 1H
-       cases with one cover at each end of each row */
-    assert.deepEqual(drawn(g.manifest), { 2: 4 }, `${f}: expected four 1H side covers`);
+       cases with one cover at each end of each row. A wall shelf kit (2026-11-08) adds a 3H pair for its 2W-3H shelf -
+       whether a 3H cover's clips meet a stacked shelf's windows is unmeasured (known-gaps.md) - and the 59's draws none:
+       its covers stop at 1H, so that kit switches them off rather than bill a 3H cover nobody can print. */
+    const shelf = kit.build.placed.some((u) => u.fill === 'shelf');
+    const want = !shelf ? { 2: 4 } : kit.build.length === 59 ? {} : { 2: 4, 6: 2 };
+    assert.deepEqual(drawn(g.manifest), want, `${f}: expected ${JSON.stringify(want)} side covers by height`);
   }
 });
 

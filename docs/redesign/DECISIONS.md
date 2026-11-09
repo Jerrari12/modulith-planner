@@ -7304,3 +7304,27 @@ Joey: "Build slice first" (after the consult above). The three things Sol named 
 - **Not changed, found on the way:** an undo of the switch to a parts drawer while the compartment editor is open leaves the editor open on a decor drawer, and a layout laid onto it is kept in the history entry but dropped by the sanitizer on every restore (schema.js keeps `partsLayout` only with `variant: 'parts'`). The e2e's panel case used to undo exactly that (its "undo while the list is open" step had only the variant switch to undo) and now makes a unit edit first. The editor should probably end when its unit stops being a parts drawer; a word for Joey.
 - **Checks:** the hwpics node test; the three parts-drawer e2e cases with the new assertions (pictures loaded, both-way highlight, the press focusing the quantity, the Inspector's fields and their undo); headless drives at 1600 × 1000 (`D:\Claude - Output\parts-drawer-generator\ui-tour-2026-11-08\inventory-slice\`) and the probe of the review's three cases; the flag-off page loads flag.js alone; the deploy's stamping and module-graph guard emulated on a copy, OK (hwpics.js is inside js/parts-drawer/, covered by the folder rule). Twice in local e2e runs a `net::ERR_CONNECTION_RESET` console error failed a case's "no errors" assertion and never recurred with failed-request logging on: a network reset on this machine, not the code (the same code passed the runs before and after).
 - **Review:** 🟣 SOL (gpt-6.1-sol, medium effort) (plus), thread `01a1bd82-99b0-7fd0-b49d-53ac4799e450`, route substantial: 4 returned, 3 confirmed, fixed (the stale 3D plane after a list change while lit; the focus not clearing the light on Tab, and the pointer clearing it while the row held the focus; the picture-load assertion now polls). Discarded 1 (after a Move the rank-keyed light goes to the row now under the stationary pointer, which is what "under the pointer" means; the stale plane it also mentioned is the confirmed finding). The swallowed Tab above was found while checking its third finding.
+
+## 2026-11-08 · Wall shelf kits, 2W-5H, in every depth (on a branch, not live)
+
+Joey: "can we add a 3rd variant of the wall mounted kits that includes a shelf, in each length?", with a link to his own
+build. Asked whether the shelf should move below the drawers to keep narrow cases on top, he kept it on top: "technically you
+are putting a 2w drawer under it so we are creating a combining structure below them that helps a bunch". On the 59, whose
+cases stop at 1H: "you would use 59-2W-1H case + two 59-2W-1H case extenders on top of that". The planner already bills every
+shelf above 1H that way, in every depth, so the 59 needs nothing special.
+
+- **Shape:** his build. A 2W-3H shelf with a front lip on top, a 1W-1H and a 1W-1H Decor drawer below it, and a 2W-1H Decor
+  drawer at the bottom. Six kits, `<L>-wall-2w5h`, titled "<L> Wall Kit 2W-5H with Shelf", tier `next`, 3 drawers in 4 units.
+  Each file is the length's 2W-2H wall kit with only id, title, tagline, length, grid height and units changed.
+- **Bill:** the shelf is a 2W-1H case with two 2W-1H case extenders, a 2W shelf insert and the shelf lip. One 2W bracket and
+  4 wood screws, 6 magnets.
+- **Sizes:** 176 × 290 × the wall kits' depths (89 to 300). Measured from the manifest and each part GLB's extents, less the
+  optional side covers and the wood screws, which sit in the wall. The same script reproduced all 34 existing rows first.
+- **Side covers:** the 115 to 270 kits draw four 1H covers and a 3H pair for the shelf. Whether a 3H cover's clips meet a
+  stacked shelf's windows is unmeasured (vault known-gaps.md, "Side covers"). The 59's covers stop at 1H, so its kit switches
+  side covers off: on, the bill counts a 3H cover nobody can print, and an official kit may carry no warning.
+- **Tests:** `hanging-kits.test.mjs` takes a third shape (rows top first, the shelf, and the bill's extenders, insert and
+  lip). `side-covers.test.mjs` takes the shelf kits' covers. Three mutants each fail: a shelf with no lip, the 59 with covers
+  on, and a 1W bottom drawer.
+- **Not live yet.** The site's kit pages and the six listings follow. The site's pages say "narrow cases on top" and "both
+  footprints", so they need their own wording for these kits.
