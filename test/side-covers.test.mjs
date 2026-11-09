@@ -81,9 +81,35 @@ test('the official kits: four 1H covers each, as the decision says, and as the b
     const kit = { build: kitBuild(f) };
     const { g } = holdsToTheBill(f, kit.build);
     /* decisions.md "Side covers" (Joey 2026-10-09): the five Tabletop Starter Kits carry 4 x 1H covers, two rows of 1H
-       cases with one cover at each end of each row */
-    assert.deepEqual(drawn(g.manifest), { 2: 4 }, `${f}: expected four 1H side covers`);
+       cases with one cover at each end of each row. A wall shelf kit (2026-11-08) adds a 3H pair for its 2W-3H shelf, a
+       case with two extenders (Joey, the same day: a 3H cover fits such a stack). The 59's covers stop at 1H, so its shelf
+       takes three 1H covers a side, one per level (Joey: "Three 1H covers per side"): ten 1H covers in all. */
+    const shelf = kit.build.placed.some((u) => u.fill === 'shelf');
+    const want = !shelf ? { 2: 4 } : kit.build.length === 59 ? { 2: 10 } : { 2: 4, 6: 2 };
+    assert.deepEqual(drawn(g.manifest), want, `${f}: expected ${JSON.stringify(want)} side covers by height`);
   }
+});
+
+/* Joey, 2026-11-08, for the 59 wall shelf kit: "Three 1H covers per side". A shelf taller than any cover made for its
+   length is a 1H case with extenders, and takes a 1H cover per level, the bill and the stage alike (as a cabinet does). */
+test('a stacked shelf with no cover made at its height takes one 1H cover per level; one that has one keeps the tall cover', () => {
+  const kit59 = kitBuild('59-wall-2w5h'), shelf59 = kit59.placed.find((u) => u.fill === 'shelf');
+  const { g } = holdsToTheBill('59 wall shelf kit', kit59);
+  assert.deepEqual(g.warnings, [], 'nothing left bare');
+  const covers = g.manifest.instances.filter((i) => i.owner === shelf59.id && /^SideCover_/.test(i.node));
+  assert.equal(covers.length, 6, 'three a side');
+  assert.ok(covers.every((i) => i.node === 'SideCover_59-1H'), 'all 1H');
+  for (const side of [/L\d$/, /R\d$/]) {
+    const ys = covers.filter((i) => side.test(i.id)).map((i) => i.pos[1]).sort((a, b) => a - b);
+    assert.equal(ys.length, 3);
+    assert.deepEqual([ys[1] - ys[0], ys[2] - ys[1]].map((v) => +v.toFixed(3)), [56, 56], 'one per level, a row (56 mm) apart');
+  }
+  const step = g.manifest.steps.find((s) => /the 6 side covers/.test(s.note || ''));
+  assert.ok(step, 'the step counts them: "the 6 side covers", not "both side covers"');
+  // a length that makes a 3H cover keeps one tall cover a side on the same shelf
+  const kit185 = kitBuild('185-wall-2w5h'), shelf185 = kit185.placed.find((u) => u.fill === 'shelf');
+  const g185 = holdsToTheBill('185 wall shelf kit', kit185).g;
+  assert.deepEqual(g185.manifest.instances.filter((i) => i.owner === shelf185.id && /^SideCover_/.test(i.node)).map((i) => i.node), ['SideCover_185-3H', 'SideCover_185-3H']);
 });
 
 test('edge cases the rule has to get right, on every mount', () => {
@@ -110,8 +136,9 @@ test('edge cases the rule has to get right, on every mount', () => {
   const count = (name) => Object.values(drawn(holdsToTheBill(name, cases[name]).g.manifest)).reduce((a, n) => a + n, 0);
   assert.equal(count('tabletop gap'), 4, 'two sections, four ends');
   assert.equal(count('tabletop inset upper'), 2, 'the inset 1W on top takes none');
-  assert.equal(count('tabletop shelves'), 1, 'the 3H shelf at the right end takes one; the 4H at the left end has no size to take');
-  assert.equal(count('59 wall tall shelf'), 0, 'a 2H 59 shelf has no cover to draw');
+  // since 2026-11-08 a stacked shelf with no cover made at its height takes a 1H cover per level (it once took none, bare)
+  assert.equal(count('tabletop shelves'), 5, 'the 3H shelf at the right end takes one 3H; the 4H at the left end, with no 4H made, four 1H');
+  assert.equal(count('59 wall tall shelf'), 4, 'a 2H 59 shelf, with no 2H made for the 59, takes two 1H on its outer side');
 });
 
 /* seeded random builds of every mount and length: towers of units side by side, a gap now and then on a tabletop, a

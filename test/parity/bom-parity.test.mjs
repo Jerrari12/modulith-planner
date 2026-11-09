@@ -41,9 +41,17 @@ test('the ported computeBom matches the planner on the official kits and on seed
     const a = AHEAD.find((x) => x.strip && x.name.test(it.name) && typeof it.note === 'string' && it.note.includes(x.strip));
     return a ? { ...it, note: it.note.replace(a.strip, '') } : it;
   }) }));
+  /* - 2026-11-08: a shelf taller than any side cover made for its length (the 59's above 1H) takes 1H covers per level here
+       (tools/port-ahead.mjs side-covers-stacked-shelf), where the old planner bills one at the shelf's height, a size nobody
+       can print. A build with such a shelf is compared without its side cover rows; the stage is held to this bill instead
+       (test/side-covers.test.mjs). */
+  const stackedShelf = (st) => st.sideCovers !== false && st.placed.some((p) => p.fill === 'shelf' && p.hh > 2 && p.hh % 2 === 0
+    && !(st.length === 59 ? [1, 2] : [1, 2, 3, 4, 6]).includes(p.hh));
+  const noSides = (sections) => sections.map((sec) => ({ ...sec, items: sec.items.filter((it) => !/^GEN2 \d+ Side Cover - /.test(it.name)) }));
   const compare = (label) => {
-    const theirs = app.computeBom();
-    const mine = asOld(computeBom(app.state, GEN2) || []);
+    const stacked = stackedShelf(app.state);
+    const theirs = stacked ? noSides(app.computeBom()) : app.computeBom();
+    const mine = (stacked ? noSides : (s) => s)(asOld(computeBom(app.state, GEN2) || []));
     compared++;
     const a = canon(theirs), b = canon(mine);
     if (a !== b) mismatches.push({ label, theirs: a.slice(0, 400), mine: b.slice(0, 400) });

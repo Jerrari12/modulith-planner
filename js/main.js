@@ -6308,6 +6308,9 @@ const OPTION_LABELS = {
   'faceplate.family:chevron': 'Chevron faceplate',
   'drawer.closure:magnet': 'magnetic-closure',
   'drawer.stoppers:on': 'drawer-stopper',
+  // the shelf lip row (generate.js: REQ.option('shelf.retention', 'shelf.lip')), unlabelled until 2026-11-08: it read "shelf.lip"
+  'shelf.lip': 'shelf lip',
+  'shelf.lip:on': 'shelf-lip',
 };
 // NB the viewBox is the artwork's ROTATED bounds, not 0 0 24 24: the wrench is
 // drawn upright then turned −45°, so inside a square box it only spans ~13.6 of

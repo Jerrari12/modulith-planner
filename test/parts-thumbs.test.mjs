@@ -21,7 +21,8 @@ const GEN2 = vm.runInContext('GEN2', ctx);
 
 /* the bought parts with no photograph (generate.js imgFor: no stand-in for a bought part), and the renders the host lacks */
 const NO_PHOTO = new Set(['M3×6mm socket head screw', 'M3×12mm socket head screw', 'M3 hex nut', 'Adhesive rubber feet']);
-const KNOWN_GAPS = new Set(['img/parts/Decor Drawer 270-4W-1H.png', 'img/parts/SideCover_59-2H.png', 'img/parts/SideCover_59-3H.png']);
+/* the 59's 2H and 3H side covers left this list 2026-11-08: no such cover is made, and a tall 59 shelf now bills a 1H per level */
+const KNOWN_GAPS = new Set(['img/parts/Decor Drawer 270-4W-1H.png']);
 
 /* the axes each name depends on, crossed only where it depends on them (the full product took 39 s): every unit kind and
    size on every mount and length; every faceplate style at every size; every style, handle and foot on every mount and length */

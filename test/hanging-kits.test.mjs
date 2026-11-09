@@ -1,6 +1,8 @@
 /* The hanging starter kits (2026-10-30, Joey: wall and under-table kits, "higher density on top"). What the goldens in
    official-builds.test.mjs cannot say: the shape he asked for, that the record is what the planner would settle it to, and
-   that the BOM bills what the site's kit pages tell a buyer. The pages themselves are the site's (its test/builds.test.js). */
+   that the BOM bills what the site's kit pages tell a buyer. The pages themselves are the site's (its test/builds.test.js).
+   The wall shelf kits (2W-5H, 2026-11-08) are Joey's own build: a 2W-3H shelf on top, two 1W drawers below it and a 2W
+   drawer at the bottom, which "creat[es] a combining structure below them". So their top row is NOT narrower. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -15,15 +17,18 @@ import { generateManifest, migrateOfficialBuild } from '../js/generate.js';
 const { GEN2, GEN2_TABLETOP } = loadCatalog();
 const index = JSON.parse(readFileSync(join(root, 'builds', 'index.json'), 'utf8'));
 const hanging = index.filter((k) => k.mount !== 'tabletop');
-const SCREWS = { wall: { '2w2h': 4, '3w2h': 6 }, 'under-table': { '2w2h': 6, '3w2h': 10 } };
-const MAGNETS = { '2w2h': 6, '3w2h': 10 };
+const SCREWS = { wall: { '2w2h': 4, '3w2h': 6, '2w5h': 4 }, 'under-table': { '2w2h': 6, '3w2h': 10 } };
+const MAGNETS = { '2w2h': 6, '3w2h': 10, '2w5h': 6 };
 const shapeOf = (id) => id.slice(-4);
+const WIDTH = { '2w2h': 176, '3w2h': 264, '2w5h': 176 };
+// each shape's rows, top first, as widths left to right
+const ROWS = { '2w2h': [[1, 1], [2]], '3w2h': [[1, 1, 1], [2, 1]], '2w5h': [[2], [1, 1], [2]] };
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const items = (rec) => { const d = clone(rec); sanitizeBuild(d, GEN2); return computeBom(d, GEN2).flatMap((s) => s.items); };
 const qty = (list, re) => list.filter((i) => re.test(i.name)).reduce((a, i) => a + i.qty, 0);
 
-test('the set: every depth, wall and under-table, both shapes', () => {
-  const want = [59, 115, 165, 185, 240, 270].flatMap((l) => ['wall', 'undertable'].flatMap((m) => ['2w2h', '3w2h'].map((s) => `${l}-${m}-${s}`)));
+test('the set: every depth, wall and under-table, both shapes, and a wall shelf kit in every depth', () => {
+  const want = [59, 115, 165, 185, 240, 270].flatMap((l) => ['wall', 'undertable'].flatMap((m) => ['2w2h', '3w2h'].map((s) => `${l}-${m}-${s}`)).concat(`${l}-wall-2w5h`));
   assert.deepEqual(hanging.map((k) => k.id).sort(), want.sort());
 });
 
@@ -36,16 +41,21 @@ for (const row of hanging) {
     assert.equal(kit.build.mount, row.mount);
     assert.equal(kit.build.length, row.length);
     assert.equal(kit.build.placed.length, row.units);
-    assert.equal(row.drawers, row.units, 'every unit in a starter kit is a drawer');
+    const shelves = kit.build.placed.filter((u) => u.fill === 'shelf');
+    assert.equal(row.drawers, row.units - shelves.length, 'every unit is a drawer, apart from a shelf kit\'s one shelf');
+    assert.ok(kit.build.placed.every((u) => u.fill === 'decor' || u.fill === 'shelf'));
     // the width without the optional side covers, as the tabletop kits state theirs: the site lists them outside the kit
-    assert.match(row.dims, new RegExp(`^${shapeOf(row.id) === '2w2h' ? 176 : 264} × \\d+ × \\d+ mm$`));
-    // narrow on top: the top row is all 1W, and what hangs below is the shape Joey approved
+    assert.match(row.dims, new RegExp(`^${WIDTH[shapeOf(row.id)]} × \\d+ × \\d+ mm$`));
+    // each shape's rows as Joey approved them: narrow on top for the drawer kits, the shelf on top for the shelf kits
     const rows = [...new Set(kit.build.placed.map((u) => u.y))].sort((a, b) => a - b);
-    assert.equal(rows.length, 2, 'two rows');
-    const [top, below] = rows;
     const widths = (y) => kit.build.placed.filter((u) => u.y === y).sort((a, b) => a.x - b.x).map((u) => u.w);
-    assert.deepEqual(widths(top), shapeOf(row.id) === '2w2h' ? [1, 1] : [1, 1, 1]);
-    assert.deepEqual(widths(below), shapeOf(row.id) === '2w2h' ? [2] : [2, 1]);
+    assert.deepEqual(rows.map(widths), ROWS[shapeOf(row.id)]);
+    if (shapeOf(row.id) === '2w5h') {
+      assert.equal(shelves.length, 1);
+      assert.deepEqual([shelves[0].y, shelves[0].w, shelves[0].hh, shelves[0].lip], [0, 2, 6, 'front'], 'a 2W-3H shelf with a front lip, on top');
+      // side covers on in every depth: the 59, whose covers stop at 1H, takes three 1H a side on its shelf (side-covers.test.mjs)
+      assert.notEqual(kit.build.sideCovers, false);
+    } else assert.equal(shelves.length, 0);
   });
 
   test(`${row.id}: the planner would leave the record where it is`, () => {
@@ -67,6 +77,15 @@ for (const row of hanging) {
     assert.equal(qty(list, /^Magnets/), MAGNETS[s]);
     assert.equal(qty(list, /foot|feet/i), 0, 'a hanging kit has no foot rails or feet');
     assert.equal(qty(list, row.mount === 'wall' ? /Wall Mount Kit/ : /Under Table Rails/), row.mount === 'under-table' && s === '3w2h' ? 2 : 1);
+    if (s === '2w5h') {
+      // the shelf is a 2W-1H case with two case extenders on it (the planner's rule for any shelf above 1H), its insert and lip
+      assert.equal(qty(list, new RegExp(`${row.length} Case Extender - 2W-1H$`)), 2);
+      assert.equal(qty(list, new RegExp(`${row.length} Case - 2W-1H$`)), 2, 'the shelf\'s case and the bottom drawer\'s');
+      assert.equal(qty(list, new RegExp(`${row.length} Case - 1W-1H$`)), 2);
+      assert.equal(qty(list, new RegExp(`${row.length} Shelf Insert - 2W$`)), 1);
+      assert.equal(qty(list, /Shelf Lip - 2W$/), 1);
+      assert.equal(qty(list, /Decor Drawer$/), 3);
+    }
   });
 }
 

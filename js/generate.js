@@ -410,8 +410,13 @@ const EXT_PACE = 1.4;
    the windows, a beat, then straight down to lock. 3.8 mm is geometric, the float-clip relief plus the lock clip's
    travel (measurements.md), not a guess; `out` is the handoff's suggested 30. */
 const SIDE = { x: 0.025, y: 0.4, z: 4.0, out: 30, lift: 3.8, hold: 450 };
-/* the 27 released sizes: the 59 in 0.5H and 1H, the other five collections in 0.5H/1H/1.5H/2H/3H (in half-rows) */
+/* the 27 released sizes: the 59 in 0.5H and 1H, the other five collections in 0.5H/1H/1.5H/2H/3H (in half-rows).
+   js/rules/bom.js keeps the same table in its side cover rows; test/side-covers.test.mjs holds the stage to that bill. */
 const sideCoverHH = L => (L === 59 ? [1, 2] : [1, 2, 3, 4, 6]);
+/* A shelf taller than any side cover made for its length is a 1H case with case extenders on it, so it takes one 1H
+   cover per level on each exposed side - as a cabinet of stacked 1H rings does (vault rules.md, "Side covers"). The 59's
+   covers stop at 1H, so its 3H shelf takes three a side (Joey, 2026-11-08, for the 59 wall shelf kit). The bill's rule. */
+const stackedSideCovers = (u, L) => u.fill === 'shelf' && u.hh > 2 && u.hh % 2 === 0 && !sideCoverHH(L).includes(u.hh) && sideCoverHH(L).includes(2);
 
 // Amazon affiliate buy links for purchased hardware (Joey's, 2026-07-12) —
 // rendered as extra chips after Printables/Thangs in the BOM checklist +
@@ -1364,9 +1369,10 @@ export function generateManifest(build, opts = {}) {
   const occupied = new Set();
   units.forEach(u => { for (let c = u.col; c < u.col + u.w; c++) occupied.add(c); });
   const sideOf = u => [-1, 1].filter(s => s < 0 ? !occupied.has(u.col - 1) : !occupied.has(u.col + u.w));
-  /* A size the bill names but nothing models: a shelf above 3H (above 1H on the 59). It is said, never drawn - a GLB
-     that does not exist would stop the whole page loading. */
-  const sideTooTall = build.sideCovers === false ? [] : units.filter(u => sideOf(u).length && !sideCoverHH(L).includes(u.hh));
+  /* A size the bill names but nothing models. A stacked shelf takes 1H covers per level instead (stackedSideCovers), so
+     what is left is a unit with no whole-H stack to cover. It is said, never drawn - a GLB that does not exist would stop
+     the whole page loading. */
+  const sideTooTall = build.sideCovers === false ? [] : units.filter(u => sideOf(u).length && !sideCoverHH(L).includes(u.hh) && !stackedSideCovers(u, L));
   if (sideTooTall.length)
     warnings.push(`Side covers stop at ${L === 59 ? '1H' : '3H'} · the ${[...new Set(sideTooTall.map(u => u.hh / 2 + 'H'))].join(' and ')} shelf ends are shown bare, although the parts list counts a cover for them.`);
   /* The order the steps PLAY in (hanging builds assemble top-down, see caseStepOrder), so the first cover a reader
@@ -1374,8 +1380,8 @@ export function generateManifest(build, opts = {}) {
   const shownOrder = !hangs ? units.map((_, i) => i)
     : isStaggered ? [...units.keys()].filter(i => units[i].topIdx === maxTop).concat([...units.keys()].filter(i => units[i].topIdx !== maxTop).reverse())
     : [...units.keys()].reverse();
-  const firstSide = shownOrder.find(i => sideOf(units[i]).length && sideCoverHH(L).includes(units[i].hh));
-  const sideWords = n => n > 1 ? 'both side covers' : 'the side cover';
+  const firstSide = shownOrder.find(i => sideOf(units[i]).length && (sideCoverHH(L).includes(units[i].hh) || stackedSideCovers(units[i], L)));
+  const sideWords = n => n > 2 ? `the ${n} side covers` : n > 1 ? 'both side covers' : 'the side cover';
   /* the fit in words: the release copy's sentence ("Hold the side cover against the outer wall just above its seat,
      press it in so the clips enter the slots, then slide it down to lock"), said in full once */
   const sideHow = n => `hold ${n > 1 ? 'each one' : 'it'} against the outer wall just above its seat, press it in so the clips enter the slots, then slide it down to lock`;
@@ -1666,15 +1672,18 @@ export function generateManifest(build, opts = {}) {
     /* `sideCovers: false` on the record draws none. No planner record can carry it (sanitizeBuild keeps BUILD_FIELDS
        only, pinned to the old planner); it is for a FIXED workload that must not move with this feature - the orbit
        benchmark's 80-unit build (orbit-bench.js benchBuild), whose 2026-09-14 series compares part for part. */
-    const scH = build.sideCovers !== false && sideCoverHH(L).includes(u.hh) ? H_LABEL[u.hh] : null;
+    const stacked = build.sideCovers !== false && stackedSideCovers(u, L);
+    const scH = build.sideCovers !== false && (sideCoverHH(L).includes(u.hh) || stacked) ? H_LABEL[stacked ? 2 : u.hh] : null;
     const scNode = `SideCover_${L}-${scH}H`;
     const scStaged = isWall && isTop;
-    const scIds = scH ? sideOf(u).map(side => {
-      const id = `sc${i}${side < 0 ? 'L' : 'R'}`;
-      inst.push({ id, node: scNode, pos: [side < 0 ? left + SIDE.x : right - SIDE.x, bottom + SIDE.y, SIDE.z], ...(side > 0 ? { yaw: 180 } : {}), owner: u.id, ...(scStaged ? stg : {}) });
+    // one cover per side, or one per level of a stacked shelf (the case, then each extender), bottom first
+    const scLevels = stacked ? [...Array(u.hh / 2).keys()] : [0];
+    const scIds = scH ? sideOf(u).flatMap(side => scLevels.map(level => {
+      const id = `sc${i}${side < 0 ? 'L' : 'R'}${stacked ? level : ''}`;
+      inst.push({ id, node: scNode, pos: [side < 0 ? left + SIDE.x : right - SIDE.x, bottom + SIDE.y + level * 2 * PITCH_HALF_Y, SIDE.z], ...(side > 0 ? { yaw: 180 } : {}), owner: u.id, ...(scStaged ? stg : {}) });
       add(scNode, `Side Cover ${L}-${scH}H`, 'SideCover', links.sideCover, 1, false, false, { requirement: REQ.enhancement('unit.side_finish') });
       return { id, side, x: side < 0 ? left + SIDE.x : right - SIDE.x };
-    }) : [];
+    })) : [];
     if (hangs) members.push(...scIds.map(s => s.id));
     /* Close on EACH cover from its own outer side, where no neighbour stands between the camera and it: the 3.8 mm
        slide is the whole lesson, and at a step's own framing it is a few pixels. Framed on the FRONT part of the
