@@ -1384,42 +1384,103 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   assert.match(await text(page, '#ws-plan .bhint'), /Add some parts/, 'the plan says the list is empty');
   for (const t of ['200 M3x8 SHCS', '20 M3x65 SHCS', '20 M3x10 SHCS', '20 M3x12 SHCS', '20 M3x16 SHCS', '20 M3x20 SHCS', '50 M3 nut', '50 M3 washer', 'bearing 625 4']) await addLine(page, t);
   assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'A part: size, type and quantity, then Enter', 'the line keeps the keyboard after Enter');
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8, 'eight rows; the bearing is not a drawer part');
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 8, 'eight cards; the bearing is not a drawer part');
   assert.match(await text(page, '#ws-lib .pd-inv-skipped summary'), /1 line not laid out/);
   assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13, 'the preview: eight compartments and the spare row of five, dashed');
   assert.equal(await page.locator('#ws-plan .cell:not(.preview)').count(), 0, 'nothing of the drawer\'s own layout under it');
   assert.match(await text(page, '#ws-plan .bhint'), /8 parts in 5 rows .* A spare row of 5 at the back/, 'the plan\'s header carries the summary');
-  assert.match(await text(page, '#ws-lib .pd-inv-row .pd-inv-fill'), /\d+% full/, 'each row reads its compartment\'s fill');
-  // every row carries the hardware library's picture, loaded (hwpics.js, 2026-11-08)
-  await page.waitForFunction(() => { const p = [...document.querySelectorAll('#ws-lib .pd-inv-row:not(.add) .pd-pic')]; return p.length === 8 && p.every((e) => e.tagName === 'IMG' && e.complete && e.naturalWidth > 0); }, null, { timeout: 15_000 }).catch(() => assert.fail('eight pictures, loaded'));
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) .pd-pic').first().getAttribute('src'), 'img/hw/shcs-m3.webp');
-  // a row and its proposed compartment light together, both ways; a press on the proposal puts the focus in the row's quantity
+  assert.match(await text(page, '#ws-lib .pd-card .pd-card-sub'), /% full/, 'each card reads its compartment\'s fill');
+  // the cards: the plain name, not the label's abbreviation, and the count in view (Sol 01a1be4f, 2026-11-08)
+  assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-card-name'), 'M3 × 8 socket head screw');
+  assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-qty-btn'), '200');
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add) select').count(), 0, 'no fields until a card is opened');
+  // every card carries the hardware library's picture, loaded (hwpics.js, 2026-11-08)
+  await page.waitForFunction(() => { const p = [...document.querySelectorAll('#ws-lib .pd-card:not(.add) > .pd-pic')]; return p.length === 8 && p.every((e) => e.tagName === 'IMG' && e.complete && e.naturalWidth > 0); }, null, { timeout: 15_000 }).catch(() => assert.fail('eight pictures, loaded'));
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add) > .pd-pic').first().getAttribute('src'), 'img/hw/shcs-m3.webp');
+  // a card and its proposed compartment light together, both ways; a press on the proposal opens the card on its quantity
   // (the plan's gestures stay off: no selection on a proposal)
-  await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).hover(); await settle(page, 300);
+  await page.locator('#ws-lib .pd-card:not(.add)').nth(1).hover(); await settle(page, 300);
   assert.equal(await page.locator('#ws-plan .cell.preview.hl').getAttribute('data-i'), '1', 'the second row lights the second compartment');
   await page.mouse.move(5, 5); await settle(page, 300);
   const cell = page.locator('#ws-plan .cell.preview').first(); const bb = await cell.boundingBox();
   await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
-  assert.equal(await page.locator('#ws-lib .pd-inv-row.hl').count(), 1, 'the first compartment under the pointer lights its row');
-  assert.equal(await page.locator('#ws-lib .pd-inv-row.hl input[type="number"]').first().inputValue(), '8');
+  assert.equal(await page.locator('#ws-lib .pd-card.hl').count(), 1, 'the first compartment under the pointer lights its card');
+  assert.match(await text(page, '#ws-lib .pd-card.hl .pd-card-name'), /M3 × 8/);
   await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
   assert.equal(await page.locator('#ws-plan .selring').count(), 0, 'no selection on a proposal');
-  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Quantity', 'the press puts the focus in the row\'s quantity');
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Quantity', 'the press opens the card on its quantity');
   assert.equal(await page.evaluate(() => document.activeElement.value), '200');
+  assert.equal(await page.locator('#ws-lib .pd-card.open').count(), 1, 'one card open');
+  assert.equal(await page.locator('#ws-lib .pd-card.open select').first().inputValue(), 'shcs');
+  assert.match(await text(page, '#ws-lib .pd-card.open select option:checked'), /Socket head screw/, 'the type control says the plain name');
+  assert.match(await text(page, '#ws-lib .pd-card.open .pd-card-edit-row'), /Printed label: M3 × 8 \/ SHCS/, 'the abbreviation, where the label is explained');
+  await page.locator('#ws-lib .pd-card.open .pd-card-head').click(); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-card.open').count(), 0, 'the head closes it again');
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.className + '/' + document.activeElement.getAttribute('aria-expanded')), 'pd-card-head/false', 'the keyboard stays on the head across the re-render (Sol 01a1be67)');
+  await page.evaluate(() => document.activeElement.blur());
   await page.mouse.move(5, 5); await settle(page, 300);
-  assert.equal(await page.locator('#ws-plan .cell.preview.hl, #ws-lib .pd-inv-row.hl').count(), 0, 'nothing lit once the pointer leaves');
-  // the knobs change the preview; the spare row goes when the room asked for leaves none
+  assert.equal(await page.locator('#ws-plan .cell.preview.hl, #ws-lib .pd-card.hl').count(), 0, 'nothing lit once the pointer leaves');
+  // the knobs change the preview, from the Layout options fold (closed by default, and it stays open across the re-renders)
+  assert.equal(await page.locator('#ws-lib .pd-inv-opts[open]').count(), 0, 'the options are folded');
+  await page.locator('#ws-lib .pd-inv-opts > summary').click(); await settle(page, 300);
   await btn(page, 'Plenty', '#ws-lib').click(); await settle(page, 400);
+  assert.equal(await page.locator('#ws-lib .pd-inv-opts[open]').count(), 1, 'the fold stays open after a change');
   assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Plenty' }).count() === 1);
   await btn(page, 'Comfortable', '#ws-lib').click(); await settle(page, 400);
-  // the order is the list's: the second row moved down puts the M3 x 10 second and the plan follows
-  await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('button[title="Move down"]').click(); await settle(page, 400);
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('input[type="number"]').first().inputValue(), '10');
+  // the order is the list's: the second card moved down puts the M3 x 10 second and the plan follows
+  await page.locator('#ws-lib .pd-card:not(.add)').nth(1).locator('button[title="Move down"]').click(); await settle(page, 400);
+  const names = async () => page.locator('#ws-lib .pd-card:not(.add) .pd-card-name').allTextContents();
+  assert.match((await names())[1], /M3 × 10/);
   const labels = await page.locator('#ws-plan text.labeltxt').allTextContents();
   assert.ok(labels.indexOf('M3 × 10') < labels.indexOf('M3 × 65'), `the plan follows the list: ${labels.join(', ')}`);
+  // a card dragged by its handle onto the plan (Sol 01a1be4f): over the spare row it goes last; the target shows while aiming and
+  // the plan's header says what the drop will do; the proposal stays still until the drop
+  const grip = async (i) => { const b = await page.locator('#ws-lib .pd-card:not(.add)').nth(i).locator('.pd-grip').boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+  const center = async (loc) => { const b = await loc.boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+  let [gx, gy] = await grip(2);   // M3 × 65
+  await page.mouse.move(gx, gy); await page.mouse.down(); await page.mouse.move(gx + 30, gy + 10, { steps: 4 });
+  assert.equal(await page.locator('body.pd-dragging .pd-ghost').count(), 1, 'the ghost follows');
+  assert.match(await text(page, '#ws-plan .bhint'), /Drop M3 × 65 socket head screw on another part/, 'the header explains the drop');
+  const spare = page.locator('#ws-plan .cell.preview').nth(12);   // the spare row's last cell
+  let [sx, sy] = await center(spare);
+  await page.mouse.move(sx, sy, { steps: 8 }); await settle(page, 200);
+  assert.match(await text(page, '#ws-plan .bhint'), /Move M3 × 65 socket head screw to the back/);
+  assert.equal(await page.locator('#ws-plan .cell.preview.drop').count(), 5, 'the whole spare row lights as the back');
+  assert.equal(await page.locator('#ws-plan text.labeltxt').allTextContents().then((l) => l.indexOf('M3 × 65')), labels.indexOf('M3 × 65'), 'nothing moved while aiming');
+  await page.mouse.up(); await settle(page, 500);
+  assert.match((await names())[7], /M3 × 65/, 'dropped on the spare row, the part is last');
+  assert.equal(await page.locator('.pd-ghost, body.pd-dragging').count(), 0, 'the ghost is gone');
+  assert.match(await text(page, '#ws-toast'), /M3 × 65 socket head screw is now part 8 of 8/, 'said for the ear too');
+  // Esc while dragging changes nothing
+  [gx, gy] = await grip(0);
+  await page.mouse.move(gx, gy); await page.mouse.down(); await page.mouse.move(gx + 30, gy + 10, { steps: 4 });
+  const c1 = page.locator('#ws-plan .cell.preview').nth(1); let [cx, cy] = await center(c1);
+  await page.mouse.move(cx, cy, { steps: 6 }); await settle(page, 200);
+  assert.match(await text(page, '#ws-plan .bhint'), /Move M3 × 8 socket head screw before M3 × 10 socket head screw/);
+  await page.keyboard.press('Escape'); await settle(page, 200); await page.mouse.up(); await settle(page, 300);
+  assert.match((await names())[0], /M3 × 8/, 'Esc dropped the drag, not the part');
+  assert.equal(await page.locator('.pd-ghost, #ws-plan .cell.preview.drop').count(), 0);
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 0, 'and it was not Back');
+  // dropped on another part, it goes before that part: the M3 × 65 back to third
+  [gx, gy] = await grip(7);
+  await page.mouse.move(gx, gy); await page.mouse.down(); await page.mouse.move(gx + 30, gy - 10, { steps: 4 });
+  const c2 = page.locator('#ws-plan .cell.preview').nth(2); [cx, cy] = await center(c2);
+  await page.mouse.move(cx, cy, { steps: 6 }); await settle(page, 200);
+  assert.equal(await page.locator('#ws-plan .cell.preview.drop').getAttribute('data-i'), '2', 'the target compartment lights');
+  assert.match(await text(page, '#ws-plan .bhint'), /Move M3 × 65 socket head screw before M3 × 12 socket head screw/);
+  await page.mouse.up(); await settle(page, 500);
+  assert.deepEqual((await names()).map((t) => t.replace(' socket head screw', '').replace(' hex nut', ' nut')), ['M3 × 8', 'M3 × 10', 'M3 × 65', 'M3 × 12', 'M3 × 16', 'M3 × 20', 'M3 nut', 'M3 washer'], 'before the M3 × 12, the rest shifted back');
+  // Move to front from the open card, then the arrow puts it back
+  await page.locator('#ws-lib .pd-card:not(.add)').nth(2).locator('.pd-card-head').click(); await settle(page, 300);
+  await btn(page, 'Move to front', '#ws-lib .pd-card.open').click(); await settle(page, 400);
+  assert.match((await names())[0], /M3 × 65/);
+  await page.locator('#ws-lib .pd-card:not(.add)').nth(0).locator('button[title="Move down"]').click(); await settle(page, 300);
+  await page.locator('#ws-lib .pd-card:not(.add)').nth(1).locator('button[title="Move down"]').click(); await settle(page, 300);
+  assert.match((await names())[2], /M3 × 65/, 'back in third place');
+  await page.locator('#ws-lib .pd-card.open .pd-card-head').click(); await settle(page, 200);
   // an undo while the list is open changes the unit, not the list: the draft stays and the preview is still drawn
   await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 600);
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8, 'the list is still open with its rows');
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 8, 'the list is still open with its cards');
   assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13);
   // Lay out drawer: the layout with its parts, the counted quantities, the fit, and the list closed
   await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
@@ -1444,17 +1505,17 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   { const x = page.locator('#ws-insp button[aria-label="Clear the selection"]'); if (await x.count()) { await x.click(); await settle(page, 300); } }
   // reopened, the list is the drawer's parts in reading order with the fit it was laid out with; Esc drops it
   await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8);
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('input[type="number"]').first().inputValue(), '10', 'the moved order came back');
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 8);
+  assert.match((await names())[1], /M3 × 10/, 'the moved order came back');
   assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Comfortable' }).count() === 1);
   await addLine(page, '30 M4x20 SHCS');
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 9);
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 9);
   await page.keyboard.press('Escape'); await settle(page, 500);
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'Esc with a layout proposed asks first');
   assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 1, 'the ask: Lay out drawer / Drop the list / Keep editing');
   await page.keyboard.press('Escape'); await settle(page, 300);
   assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 0, 'Esc again keeps editing');
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 9, 'the list is still there');
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 9, 'the list is still there');
   // the same from the typing line, whose own Escape handler must mean the same (Sol 01a1bc9f)
   await page.keyboard.press('Escape'); await settle(page, 300);
   assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 1);
@@ -1492,9 +1553,8 @@ test('Parts drawer: the Part Picker from the parts list brings its parts in as l
   await frame.locator('#stage-panel button.thr[aria-label="M3"]').click();
   await frame.locator('#add-parts', { hasText: /^Add 1 label to the planner/ }).click();
   await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 1, 'one line from the Picker');
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) select').first().inputValue(), 'nut');
-  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) select').nth(1).inputValue(), 'M3');
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 1, 'one card from the Picker');
+  assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-card-name'), 'M3 hex nut');
   assert.equal(await page.evaluate(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length), labelsBefore, 'no label was added');
   assert.ok(await page.locator('#ws-plan .cell.preview').count() >= 1, 'the preview shows it');
   // Esc asks first (a layout is proposed), Drop the list closes the list, not the page's editor

@@ -25,7 +25,8 @@ const PAD = { l: 18, r: 8, t: 14, b: 22 };
    highlight { orient, c, segs, J, drag?, from? } or null, `flags` the reach flags, `hover` a hovered compartment */
 // preview: the compartments are a proposal (the parts list's layout, 2026-11-07): drawn dashed, no selection, no hover; hl is the
 // one lit with its row in the list (2026-11-08)
-export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false, hl = null } = {}) {
+// drop / dropEnd: a card dragged from the parts list is over this compartment / behind the last row (its target, 2026-11-08)
+export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false, hl = null, drop = null, dropEnd = false } = {}) {
   const S = G.SIZES[full.size], L = { ...full, comps };
   svg.replaceChildren();
   svg.setAttribute('viewBox', `${-2 - PAD.l} ${-4 - PAD.t} ${S.W + 4 + PAD.l + PAD.r} ${S.D + 8.3 + PAD.t + PAD.b}`);   // the shell: 2 each side, 4.3 in front, 4 behind
@@ -38,7 +39,7 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   const outl = new Map(outlinesOf(L).map((o) => [o.comp, o.polys]));   // the parts on the floors (M3)
   comps.forEach((c, i) => {
     const w = c.x1 - c.x0, d = c.y1 - c.y0;
-    rect('cell' + (preview ? ' preview' + (hl === c ? ' hl' : '') : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
+    rect('cell' + (preview ? ' preview' + (hl === c ? ' hl' : '') + (drop === c || (dropEnd && !c.item) ? ' drop' : '') : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
     const s = G.scoopSize(L, c), t = G.traySize(L, c);
     const fk = G.floorColorOf(L, c);
     let ink = null;
@@ -90,6 +91,8 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
       svgEl('text', { class: 'dim small', x: c.x0 + w / 2, y: cyMid + fs * 0.6, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': fs, ...(ink ? { style: `fill:${ink};opacity:.75` } : {}) }, svg).textContent = '× ' + fmt(d);
     }
   });
+  // a dragged card over the back with no spare row to light: a band behind the last row says "last" (2026-11-08)
+  if (preview && dropEnd && !comps.some((c) => !c.item)) { const back = Math.max(0, ...comps.filter((c) => c.item).map((c) => c.y1)); rect('dropend', 0, S.W, Math.min(back, S.D - 6), S.D); }
   if (sel) for (const c of comps) if (inSel(c)) rect('selring', c.x0, c.x1, c.y0, c.y1);
   if (hot) {
     for (const [a, b] of hot.segs) {
@@ -181,7 +184,7 @@ export function plan(opts) {
     const pv = preview();
     svg.classList.toggle('preview', !!pv);
     hint.textContent = pv ? (pv.note || '') : HINT; hint.classList.toggle('warn', !!(pv && pv.warn));
-    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true, hl: pv.hl || null }); placeTip(); return; }
+    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true, hl: pv.hl || null, drop: pv.drop || null, dropEnd: !!pv.dropEnd }); placeTip(); return; }
     drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps() });
     placeTip();
   }
@@ -229,8 +232,21 @@ export function plan(opts) {
     if (k !== hoverKey) { hover = ch; hoverKey = k; render(); }
   };
   document.addEventListener('keydown', shiftWatch); document.addEventListener('keyup', shiftWatch);
+  /* the parts list's drag (2026-11-08): the drop target at a screen point while the proposal shows, by position alone (the
+     dragged card's handle holds the pointer): { comp } for a proposed compartment with a part (the drop goes before it),
+     { end: true } on the spare row or behind the last row, null off the cavity */
+  function dropTargetAt(clientX, clientY) {
+    const pv = preview(); if (!pv || !svg.isConnected || host.hidden || !svg.getScreenCTM()) return null;   // hidden (the 3D view): no drop surface (Sol 01a1be67)
+    const list = pv.comps || []; if (!list.length) return null;
+    const S = G.SIZES[full().size], pt = planPoint({ clientX, clientY });
+    if (pt.x < -2 || pt.x > S.W + 2 || pt.y < -4.3 || pt.y > S.D + 4) return null;
+    const back = Math.max(0, ...list.filter((c) => c.item).map((c) => c.y1));
+    if (pt.y >= back) return { end: true };
+    const c = compAt(pt, list); if (!c) return null;
+    return c.item ? { comp: c } : { end: true };
+  }
   return {
-    el: host, render,
+    el: host, render, dropTargetAt,
     firstTip() { if (!howToSeen()) showTip(); }, closeTip, hideTip, tipOpen: () => !!tip,
     cancel() { if (wdrag) { wdrag = null; render(); } drag = null; hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; },
     destroy() { document.removeEventListener('keydown', shiftWatch); document.removeEventListener('keyup', shiftWatch); if (ro) ro.disconnect(); host.remove(); },

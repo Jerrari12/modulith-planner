@@ -1474,6 +1474,8 @@ html.ws-phone #ws.sheet-open #ws-plan .bhead { padding: 6px 12px; }
 #ws-plan .cell.sel { fill: var(--plan-sel); }
 #ws-plan .cell.preview { fill: var(--plan-cell); stroke: var(--orange); stroke-width: 0.7; stroke-dasharray: 2.2 1.4; cursor: pointer; }   /* the parts list's proposal (2026-11-07); a press goes to its row */
 #ws-plan .cell.preview.hl { fill: var(--plan-hov); stroke-dasharray: none; stroke-width: 1.1; }   /* lit with its row in the list (2026-11-08) */
+#ws-plan .cell.preview.drop { fill: var(--plan-sel); stroke-dasharray: none; stroke-width: 1.5; }   /* a dragged card's target: the drop goes before this part, or last on the spare row (2026-11-08) */
+#ws-plan .dropend { fill: var(--plan-sel); stroke: var(--orange); stroke-width: 1.2; pointer-events: none; }
 #ws-plan svg.preview { cursor: default; }
 #ws-plan .bhint.warn { color: var(--warning); }
 #ws-plan .selring { fill: none; stroke: var(--orange); stroke-width: 0.9; pointer-events: none; }
@@ -1544,26 +1546,59 @@ html.ws-phone #ws.sheet-open #ws-plan .bhead { padding: 6px 12px; }
 #ws-lib .pd-inv input.mono { font-family: var(--font-mono); }
 #ws-lib .pd-inv .pd-inv-line { display: flex; gap: 6px; }
 #ws-lib .pd-inv .pd-inv-line input { flex: 1; height: 32px; padding: 0 8px; }
-#ws-lib .pd-inv .pd-inv-table { display: flex; flex-direction: column; gap: 4px; }
-#ws-lib .pd-inv .pd-inv-head, #ws-lib .pd-inv .pd-inv-row { display: grid; grid-template-columns: 22px 28px minmax(0, 1.1fr) minmax(0, 0.9fr) 44px 24px; gap: 4px; align-items: center; }   /* the second column is the picture (2026-11-08) */
-#ws-lib .pd-inv .pd-inv-row { padding: 3px 0 5px; border-bottom: 1px solid var(--hair); }
-#ws-lib .pd-inv .pd-inv-sub { grid-column: 3 / -1; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-2); }
-#ws-lib .pd-inv .pd-inv-row .pd-inv-sub input[type="number"] { width: 58px; flex: none; }
-#ws-lib .pd-inv select { padding: 4px 2px; font-size: 11px; }
-#ws-lib .pd-inv .pd-inv-head { font-size: 11px; color: var(--ink-2); padding: 0 2px; }
-#ws-lib .pd-inv .pd-inv-row input[type="number"] { width: 100%; box-sizing: border-box; padding: 4px 3px; font-size: 11px; }
-#ws-lib .pd-inv .pd-inv-row.over .pd-inv-fill { color: var(--warning); font-weight: 700; }
+#ws-lib .pd-inv .pd-inv-order { margin: -4px 0 0; }
+/* THE PARTS AS CARDS (2026-11-08, Sol 01a1be4f): a handle to drag, the picture large, the plain name and the count; the fields
+   only in the open card. The handle alone takes the touch gestures, so the panel still scrolls from anywhere else */
+#ws-lib .pd-inv .pd-cards { display: flex; flex-direction: column; gap: 6px; }
+#ws-lib .pd-inv .pd-card { display: grid; grid-template-columns: 14px 40px minmax(0, 1fr) 22px 20px; gap: 5px; align-items: center; padding: 6px 3px 6px 0; border: 1px solid var(--hair); border-radius: 12px; background: var(--well); }
+#ws-lib .pd-inv .pd-card.open { border-color: var(--input-border); }
+#ws-lib .pd-inv .pd-card.hl { box-shadow: inset 3px 0 0 var(--orange); }   /* its proposed compartment is under the pointer in the plan, or the card is */
+#ws-lib .pd-inv .pd-card.dragging { opacity: .45; }
+#ws-lib .pd-inv .pd-card > .pd-pic { width: 40px; height: 40px; border-radius: 8px; }
+#ws-lib .pd-inv .pd-grip { width: 14px; height: 44px; padding: 0; border: none; background: transparent; cursor: grab; touch-action: none; display: grid; grid-template-columns: 3px 3px; gap: 3px; align-content: center; justify-content: center; color: var(--ink-3); }
+#ws-lib .pd-inv .pd-grip span { width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+#ws-lib .pd-inv .pd-grip:hover { color: var(--ink); }
+body.pd-dragging #ws-lib .pd-inv .pd-grip { cursor: grabbing; }
+#ws-lib .pd-inv .pd-card-main { display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 0; }
+#ws-lib .pd-inv .pd-card-head { display: block; width: 100%; min-width: 0; padding: 1px 3px; border: none; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; border-radius: 6px; }
+#ws-lib .pd-inv .pd-card-head:hover { background: var(--input-bg); }
+#ws-lib .pd-inv .pd-card-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; font-weight: 600; line-height: 1.2; overflow: hidden; }   /* the whole name, on two lines when the panel is narrow */
+#ws-lib .pd-inv .pd-card-sub { display: flex; align-items: center; gap: 6px; min-width: 0; padding-left: 3px; }
+#ws-lib .pd-inv .pd-card-fill { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-lib .pd-inv .pd-card.over .pd-card-fill { color: var(--warning); font-weight: 700; }
+#ws-lib .pd-inv .pd-qty-btn { flex: none; font: inherit; font-family: var(--font-mono); font-size: 12px; font-weight: 700; min-width: 32px; height: 22px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); cursor: pointer; }
+#ws-lib .pd-inv .pd-card-edit { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr); gap: 4px; align-items: center; padding-right: 2px; }
+#ws-lib .pd-inv .pd-card-edit > select:first-child { grid-column: 1 / -1; }   /* the type's plain name takes a row of its own */
+#ws-lib .pd-inv .pd-card-edit select, #ws-lib .pd-inv .pd-card-edit input[type="number"] { width: 100%; box-sizing: border-box; height: 26px; padding: 2px 3px; font-size: 11px; }
+#ws-lib .pd-inv .pd-card-edit select { padding: 2px 1px; }
+#ws-lib .pd-inv .pd-card-qtyf { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-2); }
+#ws-lib .pd-inv .pd-card-qtyf input[type="number"] { width: 54px; }
+#ws-lib .pd-inv .pd-card-edit-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#ws-lib .pd-inv .pd-card-edit-row .grow { flex: 1; }
+#ws-lib .pd-inv .pd-card.add { grid-template-columns: 14px 40px minmax(0, 1fr); background: transparent; border-style: dashed; }
+#ws-lib .pd-inv .pd-card.add .pd-card-edit { grid-column: 3; }
 #ws-lib .pd-inv .pd-inv-fill { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#ws-lib .pd-inv .pd-inv-move { display: flex; flex-direction: column; gap: 0; }
-#ws-lib .pd-inv .pd-inv-move button { width: 22px; height: 14px; padding: 0; border: none; background: transparent; color: var(--ink-2); font-size: 8px; line-height: 14px; cursor: pointer; }
+#ws-lib .pd-inv .pd-inv-move { display: flex; flex-direction: column; gap: 2px; }
+#ws-lib .pd-inv .pd-inv-move button { width: 22px; height: 18px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink-2); font-size: 10px; line-height: 18px; cursor: pointer; }
+#ws-lib .pd-inv .pd-inv-move button:hover:not(:disabled) { background: var(--input-bg); color: var(--ink); }
 #ws-lib .pd-inv .pd-inv-move button:disabled { opacity: .25; cursor: default; }
-#ws-lib .pd-inv .pd-inv-row .x { width: 24px; height: 24px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-#ws-lib .pd-inv .pd-inv-row.add { border-bottom: none; }
-#ws-lib .pd-inv .pd-inv-row.add .key.sm { padding: 0 6px; min-width: 24px; justify-content: center; }
-/* the hardware library's render beside a part's fields (hwpics.js, 2026-11-08), in a list row (two lines tall) and in the Inspector */
+#ws-lib .pd-inv .pd-card .x { width: 24px; height: 24px; padding: 0; border: none; background: transparent; color: var(--ink-2); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+/* the folds: More ways to add (Import, the kits) and Layout options (the room, the spare row, the bag, the holders, the colours) */
+#ws-lib .pd-inv details.pd-inv-more { display: inline-block; }
+#ws-lib .pd-inv details.pd-inv-more > summary { font-size: 12px; color: var(--ink-2); cursor: pointer; padding: 6px 2px; }
+#ws-lib .pd-inv details.pd-inv-more[open] > summary { margin-bottom: 4px; }
+#ws-lib details.pd-inv-opts > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+#ws-lib details.pd-inv-opts > summary::-webkit-details-marker { display: none; }
+#ws-lib details.pd-inv-opts > summary .h2 { margin: 0; white-space: nowrap; }
+#ws-lib details.pd-inv-opts > summary .pd-inv-fill { min-width: 0; }
+#ws-lib details.pd-inv-opts > summary::after { content: '\25B8'; color: var(--ink-3); font-size: 12px; margin-left: auto; }
+#ws-lib details.pd-inv-opts[open] > summary::after { content: '\25BE'; }
+/* the ghost that follows a dragged card (on body: the panel clips) */
+.pd-ghost { position: fixed; left: 0; top: 0; z-index: 1000; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 10px; background: var(--input-bg); border: 1px solid var(--input-border); color: var(--ink); font-size: 12px; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,.35); white-space: nowrap; }
+.pd-ghost .pd-pic { width: 32px; height: 32px; object-fit: contain; border-radius: 6px; display: block; }
+body.pd-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+/* the hardware library's render beside a part's fields (hwpics.js, 2026-11-08), 28 px in the Inspector, 48 on a card */
 #ws-lib .pd-inv .pd-pic, #ws-insp .pd-part .pd-pic { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; background: var(--input-bg); display: block; }
-#ws-lib .pd-inv .pd-inv-row .pd-pic { grid-row: span 2; align-self: start; margin-top: 2px; }
-#ws-lib .pd-inv .pd-inv-row.hl { box-shadow: inset 3px 0 0 var(--orange); }   /* its proposed compartment is under the pointer in the plan, or the row is */
 /* the Inspector's Part: the typed line, then the list's own fields (type, size, length, how many) with the picture */
 #ws-insp .pd-part { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 #ws-insp .pd-part .pd-fields { display: grid; grid-template-columns: 28px minmax(0, 1fr) 54px 46px auto; gap: 4px; align-items: center; width: 100%; }
