@@ -1486,6 +1486,16 @@ html.ws-phone #ws.sheet-open #ws-plan .bhead { padding: 6px 12px; }
 #ws-plan .bincand.ok { fill: rgba(52, 199, 89, .22); stroke: #34C759; }
 #ws-plan .bincand.bad { fill: var(--warn-bg); fill-opacity: .55; stroke: var(--warning); stroke-dasharray: 2 1.2; }
 #ws-plan .binhandle { fill: var(--orange); opacity: .85; pointer-events: none; }
+/* the contents preview (2026-11-09, consult Sol 01a1c0ec): a part's glyph in its compartment, in the material's colour with the
+   theme's ink around it; the hole shows the floor. Illustrations, not to scale: the plan's header says so while it is on */
+#ws-plan .glyph { pointer-events: none; }
+#ws-plan .glyph .gpart { stroke: var(--ink-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+#ws-plan .glyph.over .gpart { stroke: var(--warning); fill: var(--warn-bg); }   /* at real size the part would not lie in its compartment */
+#ws-plan .glyph .ghole { fill: var(--plan-cell); stroke: var(--ink-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+#ws-plan .glyph .gline { stroke: var(--ink-3); stroke-width: 0.8; vector-effect: non-scaling-stroke; opacity: .8; }
+#ws-plan .pd-contents-note { display: none; font-size: 11px; color: var(--ink-3); white-space: nowrap; margin-left: auto; }
+#ws-plan .bhead.contents-on .pd-contents-note { display: inline; }
+.pd-contents[aria-pressed="true"] { color: var(--orange); }
 #ws-plan svg.preview { cursor: default; }
 #ws-plan .bhint.warn { color: var(--warning); }
 #ws-plan .selring { fill: none; stroke: var(--orange); stroke-width: 0.9; pointer-events: none; }

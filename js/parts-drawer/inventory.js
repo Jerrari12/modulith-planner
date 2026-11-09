@@ -133,6 +133,25 @@ export function partShape(it) {
   const [s, m] = T.table[it.size];
   return { vol: (s * s * Math.sqrt(3) / 2 - Math.PI * r * r) * m, long: s * 1.155, wide: s * 1.155 };
 }
+/* A PART'S FORM, for the contents preview (2026-11-09, Joey: "represent what is going where beyond just the label ... like a single
+   3d part centered on the cell"; consult Sol 01a1c0ec): the shape the 2D glyph and the 3D illustration are drawn from, in mm,
+   from the same tables as the estimator. An illustration's envelope, not a model of the part: no threads, no exact socket. Null
+   for a part the preview does not draw (the list takes only these eight types). */
+export function partForm(it) {
+  if (!it || !TYPE_ORDER.includes(it.type) || !known(it)) return null;
+  const T = TYPES[it.type], d = D[it.size];
+  if (T.screw) {
+    const head = it.type === 'shcs' ? 'socket' : it.type === 'bhcs' ? 'button' : it.type === 'fhcs' ? 'flat' : 'none';
+    const [dk, k] = T.head ? T.head[it.size] : [d, 0], len = +it.length || 10;
+    // L is the shank behind the head: a countersunk screw's nominal length includes its head (Sol 01a1c100), the others' does not
+    return { kind: 'screw', head, d, L: head === 'flat' ? Math.max(0.5, len - k) : len, dk, k };
+  }
+  if (it.type === 'nut' || it.type === 'nyloc') { const [s, m] = T.table[it.size]; return { kind: it.type, d, s, m }; }
+  if (it.type === 'washer') { const [od, t] = T.table[it.size]; return { kind: 'washer', d, od, t }; }
+  const [od, l0] = T.table[it.size]; return { kind: 'insert', d, od, L: it.length > 0 ? it.length : l0 };
+}
+// the material's colour in the preview: a cue, never a promise (stainless and zinc read alike); the theme draws the outline
+export const MAT_HEX = { steel: '#9ea3a8', 'black-oxide': '#3b3c40', zinc: '#c7cdd6', stainless: '#bcc1c6', brass: '#c9a24a', nylon: '#e9e4d6' };
 // the ways a v18 part can lie: [long, wide, high] each, its natural position first
 const BAG = /\b(kit|set|bag|assortment|pack)\b/;
 function otherDims(name) {

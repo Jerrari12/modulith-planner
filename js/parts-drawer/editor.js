@@ -55,6 +55,13 @@ export function partsDrawerTools(stage, ctx) {
   const L = () => +ctx.length();
   const unitById = (id) => S().placed.find((p) => p.id === id) || null;
   const st = { editing: null, view: '2d', sel: null, hover: null, hot: null, hotKey: '', wdrag: null, edges: true, picker: null, engineErr: null, booting: false, status: '', downloading: false, inv: null, dockEl: null };   // hot: the wall chain under the 3D pointer; wdrag: a 3D wall drag in progress
+  /* the contents preview (2026-11-09, Joey: "represent what is going where beyond just the label"; consult Sol 01a1c0ec): each
+     compartment's part, a glyph in the plan and a model in 3D, built from its real dimensions. REAL SIZE by default (Joey, on the
+     first build's enlarged parts: "you have the real geometry though right? like that m3 hex nut looks huge"); 'large' enlarges
+     each for recognition, said to be not to scale; 'off' hides them. A view preference, per viewer, never a print option: the
+     printed way to say what goes where without labels is Part outlines */
+  const CONTENTS_KEY = 'gen2.partsdrawer.contents', CONTENTS = ['actual', 'large', 'off'];
+  st.contents = (() => { try { const v = localStorage.getItem(CONTENTS_KEY); return CONTENTS.includes(v) ? v : v === '0' ? 'off' : 'actual'; } catch { return 'actual'; } })();
   let alive = true;
   const canvas = document.getElementById('stage');
 
@@ -221,7 +228,7 @@ export function partsDrawerTools(stage, ctx) {
     if (back) for (const { comp, bin } of back.sort((a, b) => a.comp.y0 - b.comp.y0 || a.comp.x0 - b.comp.x0)) { if (comp.item) { const it = { ...comp.item }; items.push(it); bins.set(it, bin); } }
     else for (const c of parts) items.push({ ...c.item });
     const { cap, round, spare } = { ...FIT_DEFAULT, ...(lay.fit || {}) };
-    st.inv = { items, bins, gkey: B.gridKey(g), skipped: [], colorBy: 'none', labels: lay.comps.some((c) => c.holder !== false), cap, round, spare, last: null, draft: null, focusLine: false, dirty: false,   // dirty: changed since it opened (invChanged), what makes leaving ask
+    st.inv = { items, bins, gkey: B.gridKey(g), skipped: [], colorBy: 'none', labels: lay.comps.some((c) => c.holder !== false), outlines: !!lay.outlines, cap, round, spare, last: null, draft: null, focusLine: false, dirty: false,   // dirty: changed since it opened (invChanged), what makes leaving ask
       note: !back && parts.length ? 'This drawer’s compartments are not on the bin grid, so the bins start fresh from the front-left. Lay out drawer would replace its walls.' : '' };
     if (!back) for (const it of items) invPlace(it, g);
     st.sel = null; st.hover = null; st.hot = null; st.hotKey = ''; st.wdrag = null;
@@ -300,7 +307,7 @@ export function partsDrawerTools(stage, ctx) {
     const occ = g ? B.occupancy(g, w.bins) : [];
     return { comps: l.r.comps, note: d ? d.text : l.text, warn: d ? !(d.cand && d.cand.ok) : l.warn, hl: w.hl ? l.r.comps.find((c) => c.src === w.hl) || null : null,
       cells: g ? (d ? g.cells : g.cells.filter((c, i) => !occ[i])) : [], cand: d && d.cand ? { ...d.cand.rect, ok: d.cand.ok } : null,
-      moving: d && d.kind !== 'card' ? l.r.comps.find((c) => c.src === d.item) || null : null, handles: true };
+      moving: d && d.kind !== 'card' ? l.r.comps.find((c) => c.src === d.item) || null : null, handles: true, outlines: !!w.outlines };
   };
   // a part's plain name for a card: "M3 × 12 socket head screw" (the label keeps the short form, inventory.js labelLines)
   const partName = (it) => { const T = I.TYPES[it.type] || { name: String(it.type || 'part') }, m = I.matWord(it); return `${it.size}${(T.screw || T.len) && it.length ? ' × ' + it.length : ''} ${m ? m + ' ' : ''}${T.name.toLowerCase()}`; };
@@ -338,7 +345,7 @@ export function partsDrawerTools(stage, ctx) {
     const colors = I.colorBy(r.comps, work.colorBy, slots);
     commitLayout((x) => {
       x.comps = r.comps.map((c, i) => { const item = c.item ? cleanItem(c.item) : null; return { ...G.comp(c.x0, c.x1, c.y0, c.y1, { holder: c.holder !== false, scoop: c.scoop || 'std', tray: 0, color: colors[i] }), ...(item ? { item } : {}) }; });
-      x.nr = r.g.nr; x.nc = r.g.nc;
+      x.nr = r.g.nr; x.nc = r.g.nc; x.outlines = !!work.outlines;   // Part outlines, chosen in the list (2026-11-09)
       x.fit = { cap: work.cap, round: !!work.round, spare: !!work.spare, grid: { nc: r.g.nc, nr: r.g.nr } };   // grid: the bins' grid, said with the layout (Sol 01a1c0ba)
       if (work.colorBy !== 'none') { x.floor.mode = 'paint'; x.floor.slots = slots; }
     });
@@ -602,6 +609,8 @@ export function partsDrawerTools(stage, ctx) {
     opts.appendChild(el('label.pd-check', {}, [el('input', { type: 'checkbox', checked: work.round ? true : null, onchange: (e) => { work.round = e.target.checked; invChanged(); } }), ' Size for the next bag (25, 50, 100, 200, 500)']));
     opts.appendChild(el('div.row', {}, ['Spare space', el('div.track.mini', { role: 'group', 'aria-label': 'Spare space' }, [[true, 'Few compartments'], [false, 'One per cell']].map(([v, t]) => el('button.seg.sm' + (!!work.spare === v ? '.on' : ''), { text: t, onclick: () => { if (!!work.spare !== v) { work.spare = v; invChanged(); } } })))]));
     opts.appendChild(el('label.pd-check', {}, [el('input', { type: 'checkbox', checked: work.labels ? true : null, onchange: (e) => { work.labels = e.target.checked; invChanged(); } }), ' Label holders']));
+    // Part outlines (2026-11-09, consult Sol 01a1c0ec): the printed way to say what goes where, labels or not; it changes the print
+    opts.appendChild(el('label.pd-check', { title: 'Each part cut into its compartment\u2019s floor at 1:1: printed, and you can lay a screw on it to check the length' }, [el('input', { type: 'checkbox', checked: work.outlines ? true : null, onchange: (e) => { work.outlines = e.target.checked; invChanged(); } }), ' Part outlines cut into the floors (printed)']));
     opts.appendChild(el('div.row', {}, ['Floor colours', sel([['none', 'Leave as they are'], ['size', 'By thread size'], ['type', 'By part type']], work.colorBy, (v) => { work.colorBy = v; }, { 'aria-label': 'Floor colours' })]));
     opts.appendChild(el('p.hint', { text: 'Exact fills each bin to the engine’s limit, Comfortable leaves room for a third more, Plenty for twice as many. The fill and the label say what you counted, bag or not. The cells no part uses become spare compartments.' }));
     lib.appendChild(opts);
@@ -613,7 +622,7 @@ export function partsDrawerTools(stage, ctx) {
   function renderInvInspector(insp) {
     const { text, warn } = invLast();
     insp.hidden = false;   // shown without a selection: the list's summary (the compartment panel hides itself without one)
-    insp.replaceChildren(el('div.head', {}, [el('h2.h2', { text: 'The list’s layout' })]), el('p.src' + (warn ? '.warn' : ''), { text }), el('p.hint', { text: 'The plan shows it dashed; the drawer keeps its own layout until Lay out drawer.' }));
+    insp.replaceChildren(el('div.head', {}, [el('h2.h2', { text: 'The list’s layout' })]), el('p.src' + (warn ? '.warn' : ''), { text }), el('p.hint', { text: 'The plan shows the draft, dashed; the 3D view shows the drawer as it is now, until Lay out drawer.' }));
   }
   function setFloorMode(m) { commitLayout((x) => { x.floor.mode = m; if (m === 'paint' && !x.comps.some((c) => c.color)) for (const c of x.comps) c.color = 1; }); }
   function nextTray(list) { const cur = Math.max(...list.map((c) => G.trayMM(c))), same = list.every((c) => G.trayMM(c) === cur); return same ? (G.TRAYS.find((v) => v > cur + EPS) ?? 0) : cur; }
@@ -664,6 +673,64 @@ export function partsDrawerTools(stage, ctx) {
   const bodyDark = () => { const h = String(stage.activeHex('Drawer') || '#888888'); const [r, g, b] = [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.4; };
   /* the overlays on the edited drawer: floor colours as tiles on the floors, the white label strips, the faint edges (while
      on), the hovered compartment's tint, and the selection boxes (on the selection layer alone, for the two-rim outline) */
+  /* THE CONTENTS PREVIEW IN 3D (consult Sol 01a1c0ec): a model built from the part's form (inventory.js partForm: its real head,
+     across-flats, thickness and length; simplified, no thread), lying along the longer side of its compartment's clear floor (clear
+     of the scoop and the label holder). At real size by default; 'large' enlarges it for recognition (most of the floor, never past
+     34 mm, never above most of the wall), and the toolbar's switch then says not to scale. Never printed; the
+     STL comes from the worker, which never sees it, and the 3D picking ray tests the drawer body alone, so a model takes no clicks.
+     Geometry is cached per form and the materials per colour: a rebuild of the extras makes groups and meshes only, and
+     clearExtras keeps both (keepGeo; no ownMat). No shadows. */
+  const contentsGeo = new Map(), contentsMat = new Map(), CONTENTS_GEO_MAX = 160;   // a cap: every length edited would add a form (Sol 01a1c100)
+  const cMat = (hex, metal = 0.6) => { const k = hex + metal; let m = contentsMat.get(k); if (!m) { m = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.42, metalness: metal }); contentsMat.set(k, m); } return m; };
+  function contentsParts(f) {   // { parts: [{ geo, mat: 'part'|'dark'|'nylon' }], long, wide, high }: lying along x, its lowest point at y = 0
+    const key = JSON.stringify(f); let out = contentsGeo.get(key); if (out) return out;
+    const cylX = (r0, r1, len, seg = 18) => { const g = new THREE.CylinderGeometry(r1, r0, len, seg); g.rotateZ(-Math.PI / 2); return g; };   // r0 at -x, r1 at +x
+    const flat = (outer, holeR, depth) => { const sh = new THREE.Shape(); outer(sh); if (holeR > 0) { const h = new THREE.Path(); h.absarc(0, 0, holeR, 0, Math.PI * 2, true); sh.holes.push(h); } const g = new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: 18 }); g.rotateX(-Math.PI / 2); return g; };
+    const hexOuter = (R) => (sh) => { for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i; i ? sh.lineTo(R * Math.cos(a), R * Math.sin(a)) : sh.moveTo(R, 0); } sh.closePath(); };
+    const circOuter = (R) => (sh) => { sh.absarc(0, 0, R, 0, Math.PI * 2, false); };
+    const parts = []; let long, wide, high;
+    if (f.kind === 'screw') {
+      const lift = Math.max(f.dk, f.d) / 2, x0 = -(f.k + f.L) / 2, xs = x0 + f.k;
+      const sh = cylX(f.d / 2, f.d / 2, f.L, 14); sh.translate(xs + f.L / 2, lift, 0); parts.push({ geo: sh, mat: 'part' });
+      if (f.head === 'socket') { const h = cylX(f.dk / 2, f.dk / 2, f.k, 22); h.translate(x0 + f.k / 2, lift, 0); parts.push({ geo: h, mat: 'part' }); const r = cylX(f.dk * 0.24, f.dk * 0.24, 0.3, 6); r.translate(x0 - 0.1, lift, 0); parts.push({ geo: r, mat: 'dark' }); }
+      else if (f.head === 'button') { const h = new THREE.SphereGeometry(f.dk / 2, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2); h.scale(1, f.k / (f.dk / 2), 1); h.rotateZ(Math.PI / 2); h.translate(xs, lift, 0); parts.push({ geo: h, mat: 'part' }); }
+      else if (f.head === 'flat') { const h = cylX(f.dk / 2, f.d / 2, f.k, 22); h.translate(x0 + f.k / 2, lift, 0); parts.push({ geo: h, mat: 'part' }); }
+      else { const r = cylX(f.d * 0.22, f.d * 0.22, 0.3, 6); r.translate(xs - 0.1, lift, 0); parts.push({ geo: r, mat: 'dark' }); }
+      long = f.k + f.L; wide = high = Math.max(f.dk, f.d);
+    } else if (f.kind === 'insert') {
+      const b = cylX(f.od / 2, f.od / 2, f.L, 18); b.translate(0, f.od / 2, 0); parts.push({ geo: b, mat: 'part' });
+      for (const x of [-f.L / 4, f.L / 4]) { const g = cylX(f.od / 2 + 0.06, f.od / 2 + 0.06, f.L * 0.08, 18); g.translate(x, f.od / 2, 0); parts.push({ geo: g, mat: 'dark' }); }   // two knurl bands
+      long = f.L; wide = high = f.od;
+    } else if (f.kind === 'washer') {
+      parts.push({ geo: flat(circOuter(f.od / 2), (f.d + 0.4) / 2, f.t), mat: 'part' }); long = wide = f.od; high = f.t;
+    } else {
+      const R = f.s / Math.sqrt(3), body = f.kind === 'nyloc' ? f.m * 0.72 : f.m;
+      parts.push({ geo: flat(hexOuter(R), f.d / 2, body), mat: 'part' });
+      if (f.kind === 'nyloc') { const ring = flat(circOuter(f.s * 0.42), f.d / 2, f.m - body); ring.translate(0, body, 0); parts.push({ geo: ring, mat: 'nylon' }); }
+      long = wide = 2 * R; high = f.m;
+    }
+    out = { parts, long, wide, high }; contentsGeo.set(key, out); return out;
+  }
+  // the model for one compartment, positioned in drawer mm (x, y as the plan's; the caller maps them into the frame), or null
+  function contentsModel(full, c, top, mode = 'actual') {
+    const f = c.item ? I.partForm(c.item) : null; if (!f) return null;
+    const H = G.holderOf(full), hd = G.hasHolder(full, c) ? Math.min(H.D, (c.y1 - c.y0) / 2) : 0;
+    const m = contentsParts(f), side = f.kind === 'screw' || f.kind === 'insert';
+    const fits = (q) => { const w = q.x1 - q.x0, d = q.y1 - q.y0, al = side && d > w; return (al ? d : w) >= m.long - 1e-6 && (al ? w : d) >= m.wide - 1e-6; };
+    // the clear floor first; at real size a part too big for it takes the whole compartment, and one too big for that is drawn in
+    // the warning colour, never shrunk (Sol 01a1c100)
+    const r0 = { x0: c.x0 + 1.5, x1: c.x1 - 1.5, y0: c.y0 + G.scoopSize(full, c) + 1, y1: c.y1 - hd - 1 }, whole = { x0: c.x0 + 0.5, x1: c.x1 - 0.5, y0: c.y0 + 0.5, y1: c.y1 - 0.5 };
+    const r = mode === 'large' || fits(r0) ? r0 : whole, over = mode !== 'large' && !fits(whole), rw = r.x1 - r.x0, rd = r.y1 - r.y0;
+    if (rw < 4 || rd < 4 || (mode === 'large' && (rw < 8 || rd < 8))) return null;
+    const along = side && rd > rw;
+    const k = mode !== 'large' ? 1 : Math.max(1, Math.min(0.7 * (along ? rd : rw) / m.long, 0.6 * (along ? rw : rd) / m.wide, 34 / m.long, Math.max(0.5, (top - G.C.FLOOR) * 0.8) / m.high));   // enlarged: never below real size
+    const hex = over ? '#e0a030' : I.MAT_HEX[I.matOf(c.item)] || I.MAT_HEX.steel, dark = I.matOf(c.item) === 'black-oxide';
+    const g = new THREE.Group(); g.name = 'parts-contents'; g.userData.contents = true;
+    for (const p of m.parts) { const mesh = new THREE.Mesh(p.geo, p.mat === 'part' ? cMat(hex, I.matOf(c.item) === 'nylon' ? 0 : 0.6) : p.mat === 'nylon' ? cMat(I.MAT_HEX.nylon, 0) : cMat(dark ? '#16171a' : '#2b2c30', 0.3)); mesh.userData.keepGeo = true; mesh.userData.contents = true; g.add(mesh); }
+    g.scale.setScalar(k); g.rotation.y = along ? Math.PI / 2 : 0;
+    g.position.set((r.x0 + r.x1) / 2, G.C.FLOOR + 0.3, (r.y0 + r.y1) / 2);   // 0.3 above the floor: clear of the floor colours and the outline inlays
+    return g;
+  }
   function update3d() {
     const u = editedUnit(); if (!u) return;
     const group = stage.drawerGroupOf(u.id); if (!group) return;
@@ -730,6 +797,11 @@ export function partsDrawerTools(stage, ctx) {
       const d = st.wdrag.c - st.wdrag.ch.c, mid = (st.wdrag.ch.J[0] + st.wdrag.ch.J[1]) / 2, v = st.wdrag.ch.orient === 'v';
       extras.add(dimSprite(`${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}`, v ? X(st.wdrag.c) : X(mid), top + 20, v ? Z(mid) : Z(st.wdrag.c), true));
     }
+    // the contents preview: one illustration of each laid-out compartment's part, lying in its clear floor (the drawer as it is,
+    // never the parts list's draft, which the plan alone shows)
+    // the cache over its cap: no mesh of this unit holds it now (clearExtras ran above; only the edited unit carries models), so all go
+    if (contentsGeo.size > CONTENTS_GEO_MAX) { for (const v of contentsGeo.values()) for (const p of v.parts) p.geo.dispose(); contentsGeo.clear(); }
+    if (st.contents !== 'off') for (const c of full.comps) { const g = contentsModel(full, c, top, st.contents); if (g) { g.position.x = X(g.position.x); g.position.z = Z(g.position.z); extras.add(g); } }
     // the hovered compartment (3D hover, the plan's hover too)
     if (st.hover && !inSel(st.hover)) {
       const c = st.hover, m = new THREE.Mesh(new THREE.PlaneGeometry(c.x1 - c.x0, c.y1 - c.y0), new THREE.MeshBasicMaterial({ color: 0xff6a1a, transparent: true, opacity: 0.2, depthWrite: false }));
@@ -900,6 +972,7 @@ export function partsDrawerTools(stage, ctx) {
     onHolder: doHolder,
     onHover: (c) => { if (c !== st.hover) { st.hover = c; update3d(); } },
     preview: invPreview,   // the parts list's layout, dashed, while the list is open (2026-11-07)
+    contents: () => (st.contents === 'off' ? false : st.contents),   // the contents preview's glyphs: 'actual' (1:1) or 'large' (2026-11-09)
     onPreviewHover: (c) => invHl(c && c.src ? c.src : null, 'plan'),   // a bin under the pointer lights its card (2026-11-08)
     onPreviewPress: binPress, onPreviewMove: binMove, onPreviewRelease: binEnd,   // a bin picked up, moved and let go (2026-11-09)
   });
@@ -914,6 +987,13 @@ export function partsDrawerTools(stage, ctx) {
   });
   editBar.el.hidden = true;
   root.appendChild(editBar.el);
+  // the contents preview's switch, on the toolbar the 2D and 3D views share; on, it says the illustrations are not to scale
+  const CONTENTS_WORDS = { actual: 'Contents: real size', large: 'Contents: enlarged', off: 'Contents: off' };
+  const contentsChip = el('button.chip.pd-contents', { type: 'button', title: 'Each compartment\u2019s part, in the plan and in 3D: real size, enlarged (not to scale), or off. Not printed. Click to change', onclick: () => setContents(CONTENTS[(CONTENTS.indexOf(st.contents) + 1) % CONTENTS.length]) });
+  editBar.el.appendChild(contentsChip);
+  function syncContents() { contentsChip.setAttribute('aria-pressed', st.contents !== 'off' ? 'true' : 'false'); contentsChip.textContent = CONTENTS_WORDS[st.contents]; }
+  function setContents(v) { st.contents = v; try { localStorage.setItem(CONTENTS_KEY, v); } catch {} syncContents(); pl.render(); update3d(); stage.invalidateFrame(); say(v === 'actual' ? 'Contents shown at real size, not printed.' : v === 'large' ? 'Contents enlarged to recognise them: not to scale, not printed.' : 'Contents hidden.'); }
+  syncContents();
 
   /* a phone on its side (the phone chrome below 1024 wide, under 520 high): the toolbar above and the sheets below leave no
      room for the plan, so the editor shows 3D and the toolbar's 2D is off; turning the phone upright brings the plan back */
@@ -1219,6 +1299,6 @@ export function partsDrawerTools(stage, ctx) {
     plan: pl, toolbar: editBar,
     render2d() { pl.render(); },
     setPanels() { editBar.sync(); },
-    destroy() { alive = false; if (pp) pp.close(); ppAC.abort(); window.removeEventListener('resize', onResize); if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); for (const t of labelTex.values()) t.dispose(); for (const t of dimTex.values()) t.dispose(); },
+    destroy() { alive = false; if (pp) pp.close(); ppAC.abort(); window.removeEventListener('resize', onResize); if (st.editing != null) stop({ quiet: true }); for (const u of S().placed) if (u.fill === 'decor') stage.setDrawerBody(u.id, null); pl.destroy(); editBar.el.remove(); for (const t of labelTex.values()) t.dispose(); for (const t of dimTex.values()) t.dispose(); for (const v of contentsGeo.values()) for (const p of v.parts) p.geo.dispose(); contentsGeo.clear(); for (const m of contentsMat.values()) m.dispose(); contentsMat.clear(); },   // the contents preview's caches go with the editor (Sol 01a1c100)
   };
 }

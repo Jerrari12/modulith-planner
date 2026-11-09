@@ -1515,11 +1515,16 @@ test('Parts drawer: the parts list lays its parts out as bins on a grid that sta
   assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 8, 'the list is still open with its cards');
   assert.equal(await page.locator('#ws-plan .cell.preview.bin').count(), 8);
   assert.deepEqual(await pdBinOf(page, 'M3 washer'), { c: 3, r: 3, w: washer.w, h: washer.h }, 'the bins too');
+  // Part outlines from the list's options (2026-11-09): the draft draws them, and Lay out drawer prints them
+  if (!(await page.locator('#ws-lib .pd-inv-opts[open]').count())) { await page.locator('#ws-lib .pd-inv-opts > summary').click(); await settle(page, 200); }
+  await page.locator('#ws-lib label', { hasText: 'Part outlines cut into the floors' }).click(); await settle(page, 400);
+  assert.ok(await page.locator('#ws-plan .outline').count() >= 8, 'the draft draws the outlines');
   // Lay out drawer: the bins and the spare compartments, the counted quantities, the fit with its grid, and the list closed
   const proposed = await page.locator('#ws-plan .cell.preview').count();
   await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
   const lay = await page.evaluate(() => { const l = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout; return { fit: l.fit, comps: l.comps.length, parts: l.comps.filter((c) => c.item).length, nr: l.nr, nc: l.nc, qty8: l.comps.find((c) => c.item && c.item.length === 8).item.qty, spareHolders: l.comps.filter((c) => !c.item).every((c) => c.holder !== false) }; });
   assert.deepEqual(lay, { fit: { cap: 0.75, round: false, spare: true, grid: { nc: 5, nr: 4 } }, comps: proposed, parts: 8, nr: 4, nc: 5, qty8: 200, spareHolders: true });
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.outlines), true, 'Part outlines laid out with the drawer');
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'back to the compartment tools');
   assert.equal(await page.locator('#ws-plan .cell.preview').count(), 0, 'the plan is the drawer\'s again');
   assert.equal(await page.locator('#ws-plan .cell').count(), proposed);
@@ -1597,6 +1602,25 @@ test('Parts drawer: a part’s material shows in its picture and name, changes f
   await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
   const mats = await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.filter((c) => c.item).map((c) => c.item.type + ':' + (c.item.mat || '')));
   assert.deepEqual(mats.sort(), ['insert:stainless', 'shcs:stainless'], 'the layout keeps each part’s material');
+  // the contents preview (2026-11-09, Sol 01a1c0ec; real size by default on Joey's word): a glyph a part in the plan at 1:1 and a
+  // model a part in 3D at scale 1; the toolbar's switch goes real size -> enlarged (said not to scale) -> off; not in the layout
+  const models = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.drawerGroupOf(3).traverse((o) => { if (o.name === 'parts-contents') out.push(+o.scale.x.toFixed(3)); }); return out; });
+  const glyphScale = () => page.locator('#ws-plan .glyph').evaluateAll((l) => l.map((g) => +(/scale\(([\d.]+)\)/.exec(g.getAttribute('transform')) || [0, 0])[1]));
+  assert.match(await text(page, 'button.pd-contents'), /^Contents: real size$/);
+  assert.deepEqual(await glyphScale(), [1, 1], 'a glyph a part, at 1:1');
+  assert.match(await text(page, '#ws-plan .pd-contents-note'), /Parts at real size/);
+  assert.deepEqual(await models(), [1, 1], 'a model a part, at real size');
+  await page.locator('button.pd-contents').click(); await settle(page, 400);
+  assert.match(await text(page, 'button.pd-contents'), /^Contents: enlarged$/);
+  assert.match(await text(page, '#ws-plan .pd-contents-note'), /not to scale/, 'enlarged, the header says not to scale');
+  assert.ok((await models()).every((k) => k > 1) && (await glyphScale()).every((k) => k > 1), 'enlarged in both views');
+  assert.ok((await models()).every((k) => k >= 1) && (await glyphScale()).every((k) => k >= 1), 'never below real size (Sol 01a1c100)');
+  await page.locator('button.pd-contents').click(); await settle(page, 400);
+  assert.equal(await page.locator('#ws-plan .glyph').count(), 0, 'off: no glyphs');
+  assert.deepEqual(await models(), [], 'off: no models');
+  assert.equal(await page.evaluate(() => 'contents' in window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout), false, 'not in the layout');
+  await page.locator('button.pd-contents').click(); await settle(page, 400);
+  assert.deepEqual(await glyphScale(), [1, 1], 'back to real size');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
