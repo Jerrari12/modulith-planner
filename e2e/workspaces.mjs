@@ -1610,6 +1610,8 @@ test('Parts drawer: a part’s material shows in its picture and name, changes f
   assert.deepEqual(await glyphScale(), [1, 1], 'a glyph a part, at 1:1');
   assert.match(await text(page, '#ws-plan .pd-contents-note'), /Parts at real size/);
   assert.deepEqual(await models(), [1, 1], 'a model a part, at real size');
+  // the library's own models (hwmodels.js, img/hw/3d): fetched, then every model is the detailed one
+  await page.waitForFunction(() => { const ms = []; window.__GEN2_VIEWER__.drawerGroupOf(3).traverse((o) => { if (o.isMesh && o.userData.contents) ms.push(o.userData.detailed); }); return ms.length > 0 && ms.every(Boolean); }, null, { timeout: 20_000 }).catch(() => assert.fail('the detailed models load'));
   await page.locator('button.pd-contents').click(); await settle(page, 400);
   assert.match(await text(page, 'button.pd-contents'), /^Contents: enlarged$/);
   assert.match(await text(page, '#ws-plan .pd-contents-note'), /not to scale/, 'enlarged, the header says not to scale');
