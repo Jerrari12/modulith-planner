@@ -20,14 +20,61 @@ const EPS = 1e-6, WALL = G.C.WALL;
 const fmt = (v) => v.toFixed(1);
 const svgEl = (tag, attrs = {}, parent = null) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) if (v != null) n.setAttribute(k, v); if (parent) parent.appendChild(n); return n; };
 const PAD = { l: 18, r: 8, t: 14, b: 22 };
+/* THE CONTENTS PREVIEW'S GLYPH (2026-11-09, consult Sol 01a1c0ec): a simple view of the part, drawn from its form
+   (inventory.js partForm, its real dimensions): a screw from the side, its head socket, button, countersunk or none, the shank
+   with a hint of thread; a nut, a nyloc (its nylon ring) and a washer from the face; an insert from the side, knurled. 'actual'
+   draws it at 1:1, the plan's own millimetres (the default: Joey wanted the real size); 'large' fills most of the clear floor
+   (never past 34 mm) for recognition, and the header then says not to scale. Laid along its longer side. Returns whether it drew. */
+function drawGlyph(svg, f, hex, r0, Y, mode = 'actual', c = null) {
+  const side = f.kind === 'screw' || f.kind === 'insert';
+  const long = f.kind === 'screw' ? f.k + f.L : f.kind === 'insert' ? f.L : f.kind === 'washer' ? f.od : (f.s * 2) / Math.sqrt(3);
+  const wide = f.kind === 'screw' ? Math.max(f.dk, f.d) : f.kind === 'insert' ? f.od : long;
+  const fits = (q) => { const w = q.x1 - q.x0, d = q.y1 - q.y0, al = side && d > w; return (al ? d : w) >= long - 1e-6 && (al ? w : d) >= wide - 1e-6; };
+  // the clear floor first; a part too big for it at real size takes the whole compartment, and one too big for that is drawn
+  // in the warning colour (it would not lie in it), never shrunk (Sol 01a1c100)
+  const whole = c ? { x0: c.x0 + 0.5, x1: c.x1 - 0.5, y0: c.y0 + 0.5, y1: c.y1 - 0.5 } : r0;
+  const r = mode === 'large' || fits(r0) ? r0 : whole, over = mode !== 'large' && !fits(whole);
+  const rw = r.x1 - r.x0, rd = r.y1 - r.y0; if (rw < 4 || rd < 4 || (mode === 'large' && (rw < 8 || rd < 8))) return false;
+  const along = side && rd > rw, RL = along ? rd : rw, RS = along ? rw : rd;
+  const k = mode === 'large' ? Math.max(1, Math.min(0.72 * RL / long, 0.62 * RS / wide, 34 / long)) : 1;   // enlarged: never below real size
+  const g = svgEl('g', { class: 'glyph' + (over ? ' over' : ''), 'aria-hidden': 'true', transform: `translate(${((r.x0 + r.x1) / 2).toFixed(2)} ${Y((r.y0 + r.y1) / 2).toFixed(2)}) rotate(${along ? 90 : 0}) scale(${k.toFixed(4)})` }, svg);
+  const part = { fill: hex, class: 'gpart' }, hole = { class: 'ghole' }, line = { class: 'gline' };
+  const hexPts = (R) => [0, 1, 2, 3, 4, 5].map((i) => `${(R * Math.cos(Math.PI / 3 * i)).toFixed(3)},${(R * Math.sin(Math.PI / 3 * i)).toFixed(3)}`).join(' ');
+  if (f.kind === 'screw') {
+    const x0 = -(f.k + f.L) / 2, xs = x0 + f.k;
+    svgEl('rect', { x: xs, y: -f.d / 2, width: f.L, height: f.d, ...part }, g);
+    for (let x = xs + f.d * 0.35; x < xs + f.L - f.d * 0.2; x += Math.max(0.35, f.d * 0.42)) svgEl('line', { x1: x, y1: -f.d / 2, x2: x + f.d * 0.22, y2: f.d / 2, ...line }, g);
+    if (f.head === 'socket') { svgEl('rect', { x: x0, y: -f.dk / 2, width: f.k, height: f.dk, rx: f.k * 0.14, ...part }, g); svgEl('rect', { x: x0, y: -f.dk * 0.2, width: f.k * 0.45, height: f.dk * 0.4, ...hole }, g); }
+    else if (f.head === 'button') svgEl('path', { d: `M${xs} ${-f.dk / 2} A${f.k} ${f.dk / 2} 0 0 0 ${xs} ${f.dk / 2} Z`, ...part }, g);
+    else if (f.head === 'flat') svgEl('path', { d: `M${x0} ${-f.dk / 2} L${xs} ${-f.d / 2} L${xs} ${f.d / 2} L${x0} ${f.dk / 2} Z`, ...part }, g);
+    else svgEl('rect', { x: xs, y: -f.d * 0.24, width: f.d * 0.42, height: f.d * 0.48, ...hole }, g);   // a set screw's socket, at its end
+  } else if (f.kind === 'insert') {
+    svgEl('rect', { x: -f.L / 2, y: -f.od / 2, width: f.L, height: f.od, rx: f.od * 0.08, ...part }, g);
+    const st = Math.max(0.5, f.od * 0.32);
+    for (let x = -f.L / 2 + st * 0.4; x < f.L / 2 - st * 0.4; x += st) { svgEl('line', { x1: x, y1: -f.od / 2, x2: x + st * 0.6, y2: 0, ...line }, g); svgEl('line', { x1: x + st * 0.6, y1: 0, x2: x, y2: f.od / 2, ...line }, g); }
+  } else if (f.kind === 'washer') {
+    svgEl('circle', { r: f.od / 2, ...part }, g); svgEl('circle', { r: (f.d + 0.4) / 2, ...hole }, g);
+  } else {
+    const R = f.s / Math.sqrt(3);
+    svgEl('polygon', { points: hexPts(R), ...part }, g);
+    if (f.kind === 'nyloc') svgEl('circle', { r: f.s * 0.4, fill: I.MAT_HEX.nylon, class: 'gpart' }, g);   // the nylon ring
+    svgEl('circle', { r: f.d / 2, ...hole }, g);
+  }
+  return true;
+}
+// a bin's resize corner, at its back-right: the same reach the editor's press uses (editor.js HANDLE)
+export const binCorner = (c, pt) => { const h = Math.min(7, (c.x1 - c.x0) / 3, (c.y1 - c.y0) / 3); return pt.x > c.x1 - h && pt.y > c.y1 - h; };
 
 /* the plan of a full layout (unit.js fullLayout) drawn into an <svg>: `sel` the selection box (mm) or null, `hot` a wall
    highlight { orient, c, segs, J, drag?, from? } or null, `flags` the reach flags, `hover` a hovered compartment */
 // preview: the compartments are a proposal (the parts list's layout, 2026-11-07): drawn dashed, no selection, no hover; hl is the
 // one lit with its row in the list (2026-11-08)
 // drop / dropEnd: a card dragged from the parts list is over this compartment / behind the last row (its target, 2026-11-08)
-export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false, hl = null, drop = null, dropEnd = false } = {}) {
-  const S = G.SIZES[full.size], L = { ...full, comps };
+// the bins (2026-11-09): cells, the grid cells drawn faintly to aim at; cand, a drag's candidate { x0, x1, y0, y1, ok }; moving, the
+// bin it came from (dimmed); handles, a bin's resize corner at the back-right
+// contents: each part drawn as a glyph in its compartment (the contents preview, 2026-11-09); outlines: the draft's part-outline choice
+export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false, hl = null, drop = null, dropEnd = false, cells = null, cand = null, moving = null, handles = false, contents = false, outlines = null } = {}) {
+  const S = G.SIZES[full.size], L = { ...full, comps, ...(outlines != null ? { outlines } : {}) };
   svg.replaceChildren();
   svg.setAttribute('viewBox', `${-2 - PAD.l} ${-4 - PAD.t} ${S.W + 4 + PAD.l + PAD.r} ${S.D + 8.3 + PAD.t + PAD.b}`);   // the shell: 2 each side, 4.3 in front, 4 behind
   const Y = (y) => S.D - y;   // drawer y (front = 0) -> svg y (front at bottom)
@@ -39,7 +86,7 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   const outl = new Map(outlinesOf(L).map((o) => [o.comp, o.polys]));   // the parts on the floors (M3)
   comps.forEach((c, i) => {
     const w = c.x1 - c.x0, d = c.y1 - c.y0;
-    rect('cell' + (preview ? ' preview' + (hl === c ? ' hl' : '') + (drop === c || (dropEnd && !c.item) ? ' drop' : '') : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
+    rect('cell' + (preview ? ' preview' + (c.item ? ' bin' : ' spare') + (hl === c ? ' hl' : '') + (moving === c ? ' moving' : '') + (drop === c || (dropEnd && !c.item) ? ' drop' : '') : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
     const s = G.scoopSize(L, c), t = G.traySize(L, c);
     const fk = G.floorColorOf(L, c);
     let ink = null;
@@ -82,7 +129,11 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
     // the clear size, between the scoop and the holder
     const fs = Math.max(3.2, Math.min(5.2, w / 7));
     const top = c.y1 - (c.holder && G.holderStatus(L, c).ok ? Math.min(HD, d / 2) : 0), bot = c.y0 + s;
-    const cyMid = Y((top + bot) / 2);
+    // the contents preview: the part's glyph in the clear floor, and the clear size moves under it (it stays there whenever the
+    // preview is on, so the plan does not jump between compartments with and without a part)
+    const form = contents && c.item ? I.partForm(c.item) : null;
+    const gl = form && drawGlyph(svg, form, I.MAT_HEX[I.matOf(c.item)] || I.MAT_HEX.steel, { x0: c.x0 + 1.5, x1: c.x1 - 1.5, y0: bot + 1 + (w >= 40 ? fs * 1.6 : fs * 2.8), y1: top - 1 }, Y, contents, c);
+    const cyMid = gl ? Y(bot + (w >= 40 ? fs * 0.8 : fs * 1.45)) : Y((top + bot) / 2);   // under the glyph, in the room kept for it
     const style = ink ? { style: `fill:${ink}` } : {};
     if (top - bot < (w >= 40 ? fs * 1.4 : fs * 2.6)) { /* no room */ }
     else if (w >= 40) svgEl('text', { class: 'dim', x: c.x0 + w / 2, y: cyMid, 'text-anchor': 'middle', 'dominant-baseline': 'middle', 'font-size': fs, ...style }, svg).textContent = `${fmt(w)} × ${fmt(d)}`;
@@ -93,6 +144,9 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   });
   // a dragged card over the back with no spare row to light: a band behind the last row says "last" (2026-11-08)
   if (preview && dropEnd && !comps.some((c) => !c.item)) { const back = Math.max(0, ...comps.filter((c) => c.item).map((c) => c.y1)); rect('dropend', 0, S.W, Math.min(back, S.D - 6), S.D); }
+  if (preview && cells) for (const k of cells) rect('bincell', k.x0, k.x1, k.y0, k.y1);
+  if (preview && handles) for (const c of comps) if (c.item) { const h = Math.min(4, (c.x1 - c.x0) / 4, (c.y1 - c.y0) / 4); svgEl('polygon', { class: 'binhandle', points: `${c.x1 - 0.6},${Y(c.y1 - 0.6)} ${c.x1 - 0.6},${Y(c.y1 - 0.6 - h)} ${c.x1 - 0.6 - h},${Y(c.y1 - 0.6)}` }, svg); }
+  if (preview && cand) rect('bincand' + (cand.ok ? ' ok' : ' bad'), cand.x0, cand.x1, cand.y0, cand.y1);
   if (sel) for (const c of comps) if (inSel(c)) rect('selring', c.x0, c.x1, c.y0, c.y1);
   if (hot) {
     for (const [a, b] of hot.segs) {
@@ -131,7 +185,9 @@ export function plan(opts) {
   const howBtn = el('button.key.sm.howto', { text: 'How to', title: 'The gestures, shown', 'aria-expanded': 'false', onclick: () => (tip ? closeTip() : showTip()) });
   const HINT = 'Drag across compartments to select · drag a wall to move it (Shift: the whole line, Alt: no snap) · double-click: label holders';
   const hint = el('span.bhint', { text: HINT });
-  const head = el('div.bhead', {}, [el('span.bttl', { text: 'Plan · mm' }), hint, howBtn]);
+  // what the contents preview's glyphs are, while it is on (2026-11-09; its switch is on the editor's toolbar): real size, or enlarged
+  const contentsNote = el('span.pd-contents-note', { text: '' });
+  const head = el('div.bhead', {}, [el('span.bttl', { text: 'Plan · mm' }), hint, contentsNote, howBtn]);
   const svg = svgEl('svg', { class: 'bsvg', preserveAspectRatio: 'xMidYMid meet', role: 'img', 'aria-label': 'Top-down plan of the drawer layout, front edge at the bottom' });
   host.append(head, svg);
   /* the tip card (guide.js): the first time edit mode opens on this device, and from the How-to button after; the × (or
@@ -179,19 +235,22 @@ export function plan(opts) {
   /* the parts list's preview (2026-11-07): opts.preview() gives { comps, note, warn } while the list is open, and the plan draws
      those compartments dashed with the note in its header instead of the gestures, which are off */
   const preview = () => (opts.preview ? opts.preview() : null);
-  let pvHover = null;   // the proposed compartment under the pointer (opts.onPreviewHover; a press is opts.onPreviewPick): its row lights in the list (2026-11-08)
+  let pvHover = null, pvDrag = null;   // pvDrag: a bin picked up in the proposal (opts.onPreviewPress/Move/Release, 2026-11-09)
   function render() {
     const pv = preview();
     svg.classList.toggle('preview', !!pv);
     hint.textContent = pv ? (pv.note || '') : HINT; hint.classList.toggle('warn', !!(pv && pv.warn));
-    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true, hl: pv.hl || null, drop: pv.drop || null, dropEnd: !!pv.dropEnd }); placeTip(); return; }
-    drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps() });
+    const contents = opts.contents ? opts.contents() : false;   // the contents preview: 'actual', 'large' or false (2026-11-09)
+    head.classList.toggle('contents-on', !!contents);
+    contentsNote.textContent = contents === 'large' ? 'Parts enlarged · not to scale · not printed' : 'Parts at real size · not printed';
+    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true, hl: pv.hl || null, drop: pv.drop || null, dropEnd: !!pv.dropEnd, cells: pv.cells || null, cand: pv.cand || null, moving: pv.moving || null, handles: !!pv.handles, contents, outlines: pv.outlines != null ? pv.outlines : null }); placeTip(); return; }
+    drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps(), contents });
     placeTip();
   }
   svg.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     const pv = preview();
-    if (pv) { e.preventDefault(); if (opts.onPreviewPick) opts.onPreviewPick(compAt(planPoint(e), pv.comps || [])); return; }   // the gestures are off: a proposed compartment pressed goes to its row (preventDefault: the mousedown that follows would take the focus back from it)
+    if (pv) { e.preventDefault(); const pt = planPoint(e), c = compAt(pt, pv.comps || []); if (opts.onPreviewPress && opts.onPreviewPress(c, pt, e)) { pvDrag = { id: e.pointerId }; try { svg.setPointerCapture(e.pointerId); } catch {} } return; }   // a bin pressed is picked up (or, without a drag, its card opens); preventDefault: the mousedown that follows would take the focus
     const pt = planPoint(e);
     const ch = hitWall(pt, e);
     if (ch) {
@@ -204,7 +263,14 @@ export function plan(opts) {
   });
   svg.addEventListener('pointermove', (e) => {
     const pv = preview();
-    if (pv) { const c = compAt(planPoint(e), pv.comps || []); if (c !== pvHover) { pvHover = c; svg.style.cursor = c ? 'pointer' : ''; if (opts.onPreviewHover) opts.onPreviewHover(c); } return; }
+    if (pv) {
+      const pt = planPoint(e);
+      if (pvDrag) { if (e.pointerId === pvDrag.id && opts.onPreviewMove) opts.onPreviewMove(pt, e); return; }
+      const c = compAt(pt, pv.comps || []), cur = c && c.item ? (binCorner(c, pt) ? 'nesw-resize' : 'grab') : '';
+      if (svg.style.cursor !== cur) svg.style.cursor = cur;
+      if (c !== pvHover) { pvHover = c; if (opts.onPreviewHover) opts.onPreviewHover(c); }
+      return;
+    }
     const pt = planPoint(e); lastPt = { pt, pointerType: e.pointerType };
     if (wdrag) { if (moveWallDrag(wdrag, pt, e.altKey, snapTol())) render(); return; }
     if (drag) { const c = compAt(pt); if (c) { opts.onSelect(closure(G.boxOf([drag, c]))); render(); } return; }
@@ -213,7 +279,8 @@ export function plan(opts) {
     const hc = ch ? null : compAt(pt);
     if (k !== hoverKey || hc !== hoverComp) { hover = ch; hoverKey = k; hoverComp = hc; svg.style.cursor = ch ? (ch.orient === 'v' ? 'ew-resize' : 'ns-resize') : hc ? 'pointer' : ''; if (opts.onHover) opts.onHover(hc); render(); }
   });
-  function endDrag() {
+  function endDrag(e) {
+    if (pvDrag) { if (!e || e.pointerId !== pvDrag.id) return; pvDrag = null; if (opts.onPreviewRelease) opts.onPreviewRelease(e.type === 'pointerup' ? planPoint(e) : null, e, e.type !== 'pointerup'); return; }   // another finger's release leaves the drag alone (Sol 01a1c0e0)
     if (wdrag) {
       const moved = dragMoved(wdrag), out = wdrag.comps, same = JSON.stringify(full().comps) === JSON.stringify(wdrag.start); wdrag = null;   // not onto a layout that changed under the button (an undo mid-drag)
       if (moved && same) opts.onWalls(out); else render();
@@ -222,6 +289,7 @@ export function plan(opts) {
     drag = null;
   }
   svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
+  svg.addEventListener('lostpointercapture', (e) => { if (pvDrag && e.pointerId === pvDrag.id) endDrag({ type: 'pointercancel', pointerId: e.pointerId }); });
   svg.addEventListener('pointerleave', () => { lastPt = null; if (pvHover) { pvHover = null; svg.style.cursor = ''; if (opts.onPreviewHover) opts.onPreviewHover(null); } if (!wdrag && (hover || hoverComp)) { hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; if (opts.onHover) opts.onHover(null); render(); } });
   svg.addEventListener('dblclick', () => { if (!preview() && opts.selected()) opts.onHolder(); });
   // Shift changes what a wall drag will move, so the highlight follows it
@@ -232,23 +300,16 @@ export function plan(opts) {
     if (k !== hoverKey) { hover = ch; hoverKey = k; render(); }
   };
   document.addEventListener('keydown', shiftWatch); document.addEventListener('keyup', shiftWatch);
-  /* the parts list's drag (2026-11-08): the drop target at a screen point while the proposal shows, by position alone (the
-     dragged card's handle holds the pointer): { comp } for a proposed compartment with a part (the drop goes before it),
-     { end: true } on the spare row or behind the last row, null off the cavity */
-  function dropTargetAt(clientX, clientY) {
-    const pv = preview(); if (!pv || !svg.isConnected || host.hidden || !svg.getScreenCTM()) return null;   // hidden (the 3D view): no drop surface (Sol 01a1be67)
-    const list = pv.comps || []; if (!list.length) return null;
-    const S = G.SIZES[full().size], pt = planPoint({ clientX, clientY });
-    if (pt.x < -2 || pt.x > S.W + 2 || pt.y < -4.3 || pt.y > S.D + 4) return null;
-    const back = Math.max(0, ...list.filter((c) => c.item).map((c) => c.y1));
-    if (pt.y >= back) return { end: true };
-    const c = compAt(pt, list); if (!c) return null;
-    return c.item ? { comp: c } : { end: true };
+  // the plan point (mm) under a screen point while the proposal shows, for a card dragged from the list (the handle holds the
+  // pointer); null while the plan is hidden (the 3D view: no drop surface, Sol 01a1be67)
+  function pointAt(clientX, clientY) {
+    if (!preview() || !svg.isConnected || host.hidden || !svg.getScreenCTM()) return null;
+    return planPoint({ clientX, clientY });
   }
   return {
-    el: host, render, dropTargetAt,
+    el: host, render, pointAt,
     firstTip() { if (!howToSeen()) showTip(); }, closeTip, hideTip, tipOpen: () => !!tip,
-    cancel() { if (wdrag) { wdrag = null; render(); } drag = null; hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; },
+    cancel() { if (wdrag) { wdrag = null; render(); } drag = null; pvDrag = null; hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; },
     destroy() { document.removeEventListener('keydown', shiftWatch); document.removeEventListener('keyup', shiftWatch); if (ro) ro.disconnect(); host.remove(); },
   };
 }

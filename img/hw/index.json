@@ -1,452 +1,938 @@
 {
- "source": "GEN2 Part Picker img/hw/v2 (hardware visual library), -sm thumbnails; tools: scratch hwmap2.py",
+ "source": "GEN2 Part Picker img/hw/v2 (hardware visual library), -sm thumbnails, per material from its finishes table; tools: scratch hwmap3.py",
+ "materials": {
+  "steel": "steel-plain",
+  "black-oxide": "black-oxide",
+  "zinc": "zinc-clear",
+  "stainless": "stainless",
+  "brass": "brass",
+  "nylon": "nylon-natural"
+ },
+ "default": {
+  "shcs": "steel",
+  "bhcs": "steel",
+  "fhcs": "steel",
+  "set": "steel",
+  "nut": "steel",
+  "nyloc": "steel",
+  "washer": "steel",
+  "insert": "brass"
+ },
  "picks": {
   "shcs": {
    "M2": {
     "file": "shcs-m2.webp",
     "asset": "socket-cap-iso4762-m2x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m2.webp",
+     "black-oxide": "shcs-m2--black-oxide.webp",
+     "zinc": "shcs-m2--zinc.webp",
+     "stainless": "shcs-m2--stainless.webp",
+     "brass": "shcs-m2--brass.webp",
+     "nylon": "shcs-m2--nylon.webp"
+    }
    },
    "M2.5": {
     "file": "shcs-m2-5.webp",
     "asset": "socket-cap-iso4762-m2-5x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m2-5.webp",
+     "black-oxide": "shcs-m2-5--black-oxide.webp",
+     "zinc": "shcs-m2-5--zinc.webp",
+     "stainless": "shcs-m2-5--stainless.webp",
+     "brass": "shcs-m2-5--brass.webp",
+     "nylon": "shcs-m2-5--nylon.webp"
+    }
    },
    "M3": {
     "file": "shcs-m3.webp",
     "asset": "socket-cap-iso4762-m3x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m3.webp",
+     "black-oxide": "shcs-m3--black-oxide.webp",
+     "zinc": "shcs-m3--zinc.webp",
+     "stainless": "shcs-m3--stainless.webp",
+     "brass": "shcs-m3--brass.webp",
+     "nylon": "shcs-m3--nylon.webp"
+    }
    },
    "M4": {
     "file": "shcs-m4.webp",
     "asset": "socket-cap-iso4762-m4x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m4.webp",
+     "black-oxide": "shcs-m4--black-oxide.webp",
+     "zinc": "shcs-m4--zinc.webp",
+     "stainless": "shcs-m4--stainless.webp",
+     "brass": "shcs-m4--brass.webp",
+     "nylon": "shcs-m4--nylon.webp"
+    }
    },
    "M5": {
     "file": "shcs-m5.webp",
     "asset": "screw-socket-cap-iso4762-m5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m5.webp",
+     "black-oxide": "shcs-m5--black-oxide.webp",
+     "zinc": "shcs-m5--zinc.webp",
+     "stainless": "shcs-m5--stainless.webp",
+     "brass": "shcs-m5--brass.webp",
+     "nylon": "shcs-m5--nylon.webp"
+    }
    },
    "M6": {
     "file": "shcs-m6.webp",
     "asset": "socket-cap-iso4762-m6x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m6.webp",
+     "black-oxide": "shcs-m6--black-oxide.webp",
+     "zinc": "shcs-m6--zinc.webp",
+     "stainless": "shcs-m6--stainless.webp",
+     "brass": "shcs-m6--brass.webp",
+     "nylon": "shcs-m6--nylon.webp"
+    }
    },
    "M8": {
     "file": "shcs-m8.webp",
     "asset": "socket-cap-iso4762-m8x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m8.webp",
+     "black-oxide": "shcs-m8--black-oxide.webp",
+     "zinc": "shcs-m8--zinc.webp",
+     "stainless": "shcs-m8--stainless.webp",
+     "brass": "shcs-m8--brass.webp",
+     "nylon": "shcs-m8--nylon.webp"
+    }
    },
    "M10": {
     "file": "shcs-m10.webp",
     "asset": "socket-cap-iso4762-m10x16",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m10.webp",
+     "black-oxide": "shcs-m10--black-oxide.webp",
+     "zinc": "shcs-m10--zinc.webp",
+     "stainless": "shcs-m10--stainless.webp",
+     "brass": "shcs-m10--brass.webp",
+     "nylon": "shcs-m10--nylon.webp"
+    }
    },
    "M12": {
     "file": "shcs-m12.webp",
     "asset": "socket-cap-iso4762-m12x20",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "shcs-m12.webp",
+     "black-oxide": "shcs-m12--black-oxide.webp",
+     "zinc": "shcs-m12--zinc.webp",
+     "stainless": "shcs-m12--stainless.webp",
+     "brass": "shcs-m12--brass.webp",
+     "nylon": "shcs-m12--nylon.webp"
+    }
    }
   },
   "bhcs": {
    "M2": {
     "file": "bhcs-m2.webp",
     "asset": "button-iso7380-1-m3x12",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "bhcs-m2.webp",
+     "black-oxide": "bhcs-m2--black-oxide.webp",
+     "zinc": "bhcs-m2--zinc.webp",
+     "stainless": "bhcs-m2--stainless.webp",
+     "brass": "bhcs-m2--brass.webp",
+     "nylon": "bhcs-m2--nylon.webp"
+    }
    },
    "M2.5": {
     "file": "bhcs-m2-5.webp",
     "asset": "button-iso7380-1-m3x12",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "bhcs-m2-5.webp",
+     "black-oxide": "bhcs-m2-5--black-oxide.webp",
+     "zinc": "bhcs-m2-5--zinc.webp",
+     "stainless": "bhcs-m2-5--stainless.webp",
+     "brass": "bhcs-m2-5--brass.webp",
+     "nylon": "bhcs-m2-5--nylon.webp"
+    }
    },
    "M3": {
     "file": "bhcs-m3.webp",
     "asset": "button-iso7380-1-m3x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "bhcs-m3.webp",
+     "black-oxide": "bhcs-m3--black-oxide.webp",
+     "zinc": "bhcs-m3--zinc.webp",
+     "stainless": "bhcs-m3--stainless.webp",
+     "brass": "bhcs-m3--brass.webp",
+     "nylon": "bhcs-m3--nylon.webp"
+    }
    },
    "M4": {
     "file": "bhcs-m4.webp",
     "asset": "button-iso7380-1-m4x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "bhcs-m4.webp",
+     "black-oxide": "bhcs-m4--black-oxide.webp",
+     "zinc": "bhcs-m4--zinc.webp",
+     "stainless": "bhcs-m4--stainless.webp",
+     "brass": "bhcs-m4--brass.webp",
+     "nylon": "bhcs-m4--nylon.webp"
+    }
    },
    "M5": {
     "file": "bhcs-m5.webp",
     "asset": "screw-button-iso7380-1-m5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "bhcs-m5.webp",
+     "black-oxide": "bhcs-m5--black-oxide.webp",
+     "zinc": "bhcs-m5--zinc.webp",
+     "stainless": "bhcs-m5--stainless.webp",
+     "brass": "bhcs-m5--brass.webp",
+     "nylon": "bhcs-m5--nylon.webp"
+    }
    },
    "M6": {
     "file": "bhcs-m6.webp",
     "asset": "button-iso7380-1-m6x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "bhcs-m6.webp",
+     "black-oxide": "bhcs-m6--black-oxide.webp",
+     "zinc": "bhcs-m6--zinc.webp",
+     "stainless": "bhcs-m6--stainless.webp",
+     "brass": "bhcs-m6--brass.webp",
+     "nylon": "bhcs-m6--nylon.webp"
+    }
    },
    "M8": {
     "file": "bhcs-m8.webp",
     "asset": "button-iso7380-1-m8x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "bhcs-m8.webp",
+     "black-oxide": "bhcs-m8--black-oxide.webp",
+     "zinc": "bhcs-m8--zinc.webp",
+     "stainless": "bhcs-m8--stainless.webp",
+     "brass": "bhcs-m8--brass.webp",
+     "nylon": "bhcs-m8--nylon.webp"
+    }
    },
    "M10": {
     "file": "bhcs-m10.webp",
     "asset": "button-iso7380-1-m10x16",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "bhcs-m10.webp",
+     "black-oxide": "bhcs-m10--black-oxide.webp",
+     "zinc": "bhcs-m10--zinc.webp",
+     "stainless": "bhcs-m10--stainless.webp",
+     "brass": "bhcs-m10--brass.webp",
+     "nylon": "bhcs-m10--nylon.webp"
+    }
    },
    "M12": {
     "file": "bhcs-m12.webp",
     "asset": "button-iso7380-1-m12x20",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "bhcs-m12.webp",
+     "black-oxide": "bhcs-m12--black-oxide.webp",
+     "zinc": "bhcs-m12--zinc.webp",
+     "stainless": "bhcs-m12--stainless.webp",
+     "brass": "bhcs-m12--brass.webp",
+     "nylon": "bhcs-m12--nylon.webp"
+    }
    }
   },
   "fhcs": {
    "M2": {
     "file": "fhcs-m2.webp",
     "asset": "countersunk-iso10642-m3x12",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "fhcs-m2.webp",
+     "black-oxide": "fhcs-m2--black-oxide.webp",
+     "zinc": "fhcs-m2--zinc.webp",
+     "stainless": "fhcs-m2--stainless.webp",
+     "brass": "fhcs-m2--brass.webp",
+     "nylon": "fhcs-m2--nylon.webp"
+    }
    },
    "M2.5": {
     "file": "fhcs-m2-5.webp",
     "asset": "countersunk-iso10642-m3x12",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "fhcs-m2-5.webp",
+     "black-oxide": "fhcs-m2-5--black-oxide.webp",
+     "zinc": "fhcs-m2-5--zinc.webp",
+     "stainless": "fhcs-m2-5--stainless.webp",
+     "brass": "fhcs-m2-5--brass.webp",
+     "nylon": "fhcs-m2-5--nylon.webp"
+    }
    },
    "M3": {
     "file": "fhcs-m3.webp",
     "asset": "countersunk-iso10642-m3x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "fhcs-m3.webp",
+     "black-oxide": "fhcs-m3--black-oxide.webp",
+     "zinc": "fhcs-m3--zinc.webp",
+     "stainless": "fhcs-m3--stainless.webp",
+     "brass": "fhcs-m3--brass.webp",
+     "nylon": "fhcs-m3--nylon.webp"
+    }
    },
    "M4": {
     "file": "fhcs-m4.webp",
     "asset": "countersunk-iso10642-m4x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "fhcs-m4.webp",
+     "black-oxide": "fhcs-m4--black-oxide.webp",
+     "zinc": "fhcs-m4--zinc.webp",
+     "stainless": "fhcs-m4--stainless.webp",
+     "brass": "fhcs-m4--brass.webp",
+     "nylon": "fhcs-m4--nylon.webp"
+    }
    },
    "M5": {
     "file": "fhcs-m5.webp",
     "asset": "screw-countersunk-hex-iso10642-m5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "fhcs-m5.webp",
+     "black-oxide": "fhcs-m5--black-oxide.webp",
+     "zinc": "fhcs-m5--zinc.webp",
+     "stainless": "fhcs-m5--stainless.webp",
+     "brass": "fhcs-m5--brass.webp",
+     "nylon": "fhcs-m5--nylon.webp"
+    }
    },
    "M6": {
     "file": "fhcs-m6.webp",
     "asset": "countersunk-iso10642-m6x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "fhcs-m6.webp",
+     "black-oxide": "fhcs-m6--black-oxide.webp",
+     "zinc": "fhcs-m6--zinc.webp",
+     "stainless": "fhcs-m6--stainless.webp",
+     "brass": "fhcs-m6--brass.webp",
+     "nylon": "fhcs-m6--nylon.webp"
+    }
    },
    "M8": {
     "file": "fhcs-m8.webp",
     "asset": "countersunk-iso10642-m8x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "fhcs-m8.webp",
+     "black-oxide": "fhcs-m8--black-oxide.webp",
+     "zinc": "fhcs-m8--zinc.webp",
+     "stainless": "fhcs-m8--stainless.webp",
+     "brass": "fhcs-m8--brass.webp",
+     "nylon": "fhcs-m8--nylon.webp"
+    }
    },
    "M10": {
     "file": "fhcs-m10.webp",
     "asset": "countersunk-iso10642-m10x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "fhcs-m10.webp",
+     "black-oxide": "fhcs-m10--black-oxide.webp",
+     "zinc": "fhcs-m10--zinc.webp",
+     "stainless": "fhcs-m10--stainless.webp",
+     "brass": "fhcs-m10--brass.webp",
+     "nylon": "fhcs-m10--nylon.webp"
+    }
    },
    "M12": {
     "file": "fhcs-m12.webp",
     "asset": "countersunk-iso10642-m12x20",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "fhcs-m12.webp",
+     "black-oxide": "fhcs-m12--black-oxide.webp",
+     "zinc": "fhcs-m12--zinc.webp",
+     "stainless": "fhcs-m12--stainless.webp",
+     "brass": "fhcs-m12--brass.webp",
+     "nylon": "fhcs-m12--nylon.webp"
+    }
    }
   },
   "set": {
    "M2": {
     "file": "set-m2.webp",
     "asset": "set-screw-iso4026-m2x10",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m2.webp",
+     "black-oxide": "set-m2--black-oxide.webp",
+     "zinc": "set-m2--zinc.webp",
+     "stainless": "set-m2--stainless.webp",
+     "brass": "set-m2--brass.webp",
+     "nylon": "set-m2--nylon.webp"
+    }
    },
    "M2.5": {
     "file": "set-m2-5.webp",
     "asset": "set-screw-iso4026-m2-5x10",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m2-5.webp",
+     "black-oxide": "set-m2-5--black-oxide.webp",
+     "zinc": "set-m2-5--zinc.webp",
+     "stainless": "set-m2-5--stainless.webp",
+     "brass": "set-m2-5--brass.webp",
+     "nylon": "set-m2-5--nylon.webp"
+    }
    },
    "M3": {
     "file": "set-m3.webp",
     "asset": "set-screw-iso4026-m3x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m3.webp",
+     "black-oxide": "set-m3--black-oxide.webp",
+     "zinc": "set-m3--zinc.webp",
+     "stainless": "set-m3--stainless.webp",
+     "brass": "set-m3--brass.webp",
+     "nylon": "set-m3--nylon.webp"
+    }
    },
    "M4": {
     "file": "set-m4.webp",
     "asset": "set-screw-iso4026-m4x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m4.webp",
+     "black-oxide": "set-m4--black-oxide.webp",
+     "zinc": "set-m4--zinc.webp",
+     "stainless": "set-m4--stainless.webp",
+     "brass": "set-m4--brass.webp",
+     "nylon": "set-m4--nylon.webp"
+    }
    },
    "M5": {
     "file": "set-m5.webp",
     "asset": "setscrew-flat-iso4026-m5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m5.webp",
+     "black-oxide": "set-m5--black-oxide.webp",
+     "zinc": "set-m5--zinc.webp",
+     "stainless": "set-m5--stainless.webp",
+     "brass": "set-m5--brass.webp",
+     "nylon": "set-m5--nylon.webp"
+    }
    },
    "M6": {
     "file": "set-m6.webp",
     "asset": "set-screw-iso4026-m6x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m6.webp",
+     "black-oxide": "set-m6--black-oxide.webp",
+     "zinc": "set-m6--zinc.webp",
+     "stainless": "set-m6--stainless.webp",
+     "brass": "set-m6--brass.webp",
+     "nylon": "set-m6--nylon.webp"
+    }
    },
    "M8": {
     "file": "set-m8.webp",
     "asset": "set-screw-iso4026-m8x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m8.webp",
+     "black-oxide": "set-m8--black-oxide.webp",
+     "zinc": "set-m8--zinc.webp",
+     "stainless": "set-m8--stainless.webp",
+     "brass": "set-m8--brass.webp",
+     "nylon": "set-m8--nylon.webp"
+    }
    },
    "M10": {
     "file": "set-m10.webp",
     "asset": "set-screw-iso4026-m10x12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m10.webp",
+     "black-oxide": "set-m10--black-oxide.webp",
+     "zinc": "set-m10--zinc.webp",
+     "stainless": "set-m10--stainless.webp",
+     "brass": "set-m10--brass.webp",
+     "nylon": "set-m10--nylon.webp"
+    }
    },
    "M12": {
     "file": "set-m12.webp",
     "asset": "set-screw-iso4026-m12x16",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "set-m12.webp",
+     "black-oxide": "set-m12--black-oxide.webp",
+     "zinc": "set-m12--zinc.webp",
+     "stainless": "set-m12--stainless.webp",
+     "brass": "set-m12--brass.webp",
+     "nylon": "set-m12--nylon.webp"
+    }
    }
   },
   "nut": {
    "M2": {
     "file": "nut-m2.webp",
     "asset": "nut-hex-iso4032-m2",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m2.webp",
+     "black-oxide": "nut-m2--black-oxide.webp",
+     "zinc": "nut-m2--zinc.webp",
+     "stainless": "nut-m2--stainless.webp",
+     "brass": "nut-m2--brass.webp",
+     "nylon": "nut-m2--nylon.webp"
+    }
    },
    "M2.5": {
     "file": "nut-m2-5.webp",
     "asset": "nut-hex-iso4032-m2-5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m2-5.webp",
+     "black-oxide": "nut-m2-5--black-oxide.webp",
+     "zinc": "nut-m2-5--zinc.webp",
+     "stainless": "nut-m2-5--stainless.webp",
+     "brass": "nut-m2-5--brass.webp",
+     "nylon": "nut-m2-5--nylon.webp"
+    }
    },
    "M3": {
     "file": "nut-m3.webp",
     "asset": "nut-hex-iso4032-m3",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m3.webp",
+     "black-oxide": "nut-m3--black-oxide.webp",
+     "zinc": "nut-m3--zinc.webp",
+     "stainless": "nut-m3--stainless.webp",
+     "brass": "nut-m3--brass.webp",
+     "nylon": "nut-m3--nylon.webp"
+    }
    },
    "M4": {
     "file": "nut-m4.webp",
     "asset": "nut-hex-iso4032-m4",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m4.webp",
+     "black-oxide": "nut-m4--black-oxide.webp",
+     "zinc": "nut-m4--zinc.webp",
+     "stainless": "nut-m4--stainless.webp",
+     "brass": "nut-m4--brass.webp",
+     "nylon": "nut-m4--nylon.webp"
+    }
    },
    "M5": {
     "file": "nut-m5.webp",
     "asset": "nut-hex-iso4032-m5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m5.webp",
+     "black-oxide": "nut-m5--black-oxide.webp",
+     "zinc": "nut-m5--zinc.webp",
+     "stainless": "nut-m5--stainless.webp",
+     "brass": "nut-m5--brass.webp",
+     "nylon": "nut-m5--nylon.webp"
+    }
    },
    "M6": {
     "file": "nut-m6.webp",
     "asset": "nut-hex-iso4032-m6",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m6.webp",
+     "black-oxide": "nut-m6--black-oxide.webp",
+     "zinc": "nut-m6--zinc.webp",
+     "stainless": "nut-m6--stainless.webp",
+     "brass": "nut-m6--brass.webp",
+     "nylon": "nut-m6--nylon.webp"
+    }
    },
    "M8": {
     "file": "nut-m8.webp",
     "asset": "nut-hex-iso4032-m8",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m8.webp",
+     "black-oxide": "nut-m8--black-oxide.webp",
+     "zinc": "nut-m8--zinc.webp",
+     "stainless": "nut-m8--stainless.webp",
+     "brass": "nut-m8--brass.webp",
+     "nylon": "nut-m8--nylon.webp"
+    }
    },
    "M10": {
     "file": "nut-m10.webp",
     "asset": "nut-hex-iso4032-m10",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m10.webp",
+     "black-oxide": "nut-m10--black-oxide.webp",
+     "zinc": "nut-m10--zinc.webp",
+     "stainless": "nut-m10--stainless.webp",
+     "brass": "nut-m10--brass.webp",
+     "nylon": "nut-m10--nylon.webp"
+    }
    },
    "M12": {
     "file": "nut-m12.webp",
     "asset": "nut-hex-iso4032-m12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nut-m12.webp",
+     "black-oxide": "nut-m12--black-oxide.webp",
+     "zinc": "nut-m12--zinc.webp",
+     "stainless": "nut-m12--stainless.webp",
+     "brass": "nut-m12--brass.webp",
+     "nylon": "nut-m12--nylon.webp"
+    }
    }
   },
   "nyloc": {
    "M2": {
     "file": "nyloc-m2.webp",
     "asset": "nut-nylon-insert-iso7040-m3",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "nyloc-m2.webp",
+     "black-oxide": "nyloc-m2--black-oxide.webp",
+     "zinc": "nyloc-m2--zinc.webp",
+     "stainless": "nyloc-m2--stainless.webp",
+     "brass": "nyloc-m2--brass.webp",
+     "nylon": "nyloc-m2--nylon.webp"
+    }
    },
    "M2.5": {
     "file": "nyloc-m2-5.webp",
     "asset": "nut-nylon-insert-iso7040-m3",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "nyloc-m2-5.webp",
+     "black-oxide": "nyloc-m2-5--black-oxide.webp",
+     "zinc": "nyloc-m2-5--zinc.webp",
+     "stainless": "nyloc-m2-5--stainless.webp",
+     "brass": "nyloc-m2-5--brass.webp",
+     "nylon": "nyloc-m2-5--nylon.webp"
+    }
    },
    "M3": {
     "file": "nyloc-m3.webp",
     "asset": "nut-nylon-insert-iso7040-m3",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nyloc-m3.webp",
+     "black-oxide": "nyloc-m3--black-oxide.webp",
+     "zinc": "nyloc-m3--zinc.webp",
+     "stainless": "nyloc-m3--stainless.webp",
+     "brass": "nyloc-m3--brass.webp",
+     "nylon": "nyloc-m3--nylon.webp"
+    }
    },
    "M4": {
     "file": "nyloc-m4.webp",
     "asset": "nut-nylon-insert-iso7040-m5",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "nyloc-m4.webp",
+     "black-oxide": "nyloc-m4--black-oxide.webp",
+     "zinc": "nyloc-m4--zinc.webp",
+     "stainless": "nyloc-m4--stainless.webp",
+     "brass": "nyloc-m4--brass.webp",
+     "nylon": "nyloc-m4--nylon.webp"
+    }
    },
    "M5": {
     "file": "nyloc-m5.webp",
     "asset": "nut-nylon-insert-iso7040-m5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "nyloc-m5.webp",
+     "black-oxide": "nyloc-m5--black-oxide.webp",
+     "zinc": "nyloc-m5--zinc.webp",
+     "stainless": "nyloc-m5--stainless.webp",
+     "brass": "nyloc-m5--brass.webp",
+     "nylon": "nyloc-m5--nylon.webp"
+    }
    },
    "M6": {
     "file": "nyloc-m6.webp",
     "asset": "nut-nylon-insert-iso7040-m5",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "nyloc-m6.webp",
+     "black-oxide": "nyloc-m6--black-oxide.webp",
+     "zinc": "nyloc-m6--zinc.webp",
+     "stainless": "nyloc-m6--stainless.webp",
+     "brass": "nyloc-m6--brass.webp",
+     "nylon": "nyloc-m6--nylon.webp"
+    }
    },
    "M8": {
     "file": "nyloc-m8.webp",
     "asset": "nut-nylon-insert-iso7040-m5",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "nyloc-m8.webp",
+     "black-oxide": "nyloc-m8--black-oxide.webp",
+     "zinc": "nyloc-m8--zinc.webp",
+     "stainless": "nyloc-m8--stainless.webp",
+     "brass": "nyloc-m8--brass.webp",
+     "nylon": "nyloc-m8--nylon.webp"
+    }
    },
    "M10": {
     "file": "nyloc-m10.webp",
     "asset": "nut-nylon-insert-iso7040-m5",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "nyloc-m10.webp",
+     "black-oxide": "nyloc-m10--black-oxide.webp",
+     "zinc": "nyloc-m10--zinc.webp",
+     "stainless": "nyloc-m10--stainless.webp",
+     "brass": "nyloc-m10--brass.webp",
+     "nylon": "nyloc-m10--nylon.webp"
+    }
    },
    "M12": {
     "file": "nyloc-m12.webp",
     "asset": "nut-nylon-insert-iso7040-m5",
-    "finish": "steel-plain",
-    "near": true
+    "near": true,
+    "mats": {
+     "steel": "nyloc-m12.webp",
+     "black-oxide": "nyloc-m12--black-oxide.webp",
+     "zinc": "nyloc-m12--zinc.webp",
+     "stainless": "nyloc-m12--stainless.webp",
+     "brass": "nyloc-m12--brass.webp",
+     "nylon": "nyloc-m12--nylon.webp"
+    }
    }
   },
   "washer": {
    "M2": {
     "file": "washer-m2.webp",
     "asset": "washer-plain-iso7089-m2",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m2.webp",
+     "black-oxide": "washer-m2--black-oxide.webp",
+     "zinc": "washer-m2--zinc.webp",
+     "stainless": "washer-m2--stainless.webp",
+     "brass": "washer-m2--brass.webp",
+     "nylon": "washer-m2--nylon.webp"
+    }
    },
    "M2.5": {
     "file": "washer-m2-5.webp",
     "asset": "washer-plain-iso7089-m2-5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m2-5.webp",
+     "black-oxide": "washer-m2-5--black-oxide.webp",
+     "zinc": "washer-m2-5--zinc.webp",
+     "stainless": "washer-m2-5--stainless.webp",
+     "brass": "washer-m2-5--brass.webp",
+     "nylon": "washer-m2-5--nylon.webp"
+    }
    },
    "M3": {
     "file": "washer-m3.webp",
     "asset": "washer-plain-iso7089-m3",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m3.webp",
+     "black-oxide": "washer-m3--black-oxide.webp",
+     "zinc": "washer-m3--zinc.webp",
+     "stainless": "washer-m3--stainless.webp",
+     "brass": "washer-m3--brass.webp",
+     "nylon": "washer-m3--nylon.webp"
+    }
    },
    "M4": {
     "file": "washer-m4.webp",
     "asset": "washer-plain-iso7089-m4",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m4.webp",
+     "black-oxide": "washer-m4--black-oxide.webp",
+     "zinc": "washer-m4--zinc.webp",
+     "stainless": "washer-m4--stainless.webp",
+     "brass": "washer-m4--brass.webp",
+     "nylon": "washer-m4--nylon.webp"
+    }
    },
    "M5": {
     "file": "washer-m5.webp",
     "asset": "washer-plain-iso7089-m5",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m5.webp",
+     "black-oxide": "washer-m5--black-oxide.webp",
+     "zinc": "washer-m5--zinc.webp",
+     "stainless": "washer-m5--stainless.webp",
+     "brass": "washer-m5--brass.webp",
+     "nylon": "washer-m5--nylon.webp"
+    }
    },
    "M6": {
     "file": "washer-m6.webp",
     "asset": "washer-plain-iso7089-m6",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m6.webp",
+     "black-oxide": "washer-m6--black-oxide.webp",
+     "zinc": "washer-m6--zinc.webp",
+     "stainless": "washer-m6--stainless.webp",
+     "brass": "washer-m6--brass.webp",
+     "nylon": "washer-m6--nylon.webp"
+    }
    },
    "M8": {
     "file": "washer-m8.webp",
     "asset": "washer-plain-iso7089-m8",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m8.webp",
+     "black-oxide": "washer-m8--black-oxide.webp",
+     "zinc": "washer-m8--zinc.webp",
+     "stainless": "washer-m8--stainless.webp",
+     "brass": "washer-m8--brass.webp",
+     "nylon": "washer-m8--nylon.webp"
+    }
    },
    "M10": {
     "file": "washer-m10.webp",
     "asset": "washer-plain-iso7089-m10",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m10.webp",
+     "black-oxide": "washer-m10--black-oxide.webp",
+     "zinc": "washer-m10--zinc.webp",
+     "stainless": "washer-m10--stainless.webp",
+     "brass": "washer-m10--brass.webp",
+     "nylon": "washer-m10--nylon.webp"
+    }
    },
    "M12": {
     "file": "washer-m12.webp",
     "asset": "washer-plain-iso7089-m12",
-    "finish": "steel-plain",
-    "near": false
+    "near": false,
+    "mats": {
+     "steel": "washer-m12.webp",
+     "black-oxide": "washer-m12--black-oxide.webp",
+     "zinc": "washer-m12--zinc.webp",
+     "stainless": "washer-m12--stainless.webp",
+     "brass": "washer-m12--brass.webp",
+     "nylon": "washer-m12--nylon.webp"
+    }
    }
   },
   "insert": {
    "M2": {
     "file": "insert-m2.webp",
     "asset": "insert-cnckitchen-m2-0-4-3",
-    "finish": "stainless",
-    "near": false
+    "near": false,
+    "mats": {
+     "brass": "insert-m2.webp",
+     "stainless": "insert-m2--stainless.webp"
+    }
    },
    "M2.5": {
     "file": "insert-m2-5.webp",
     "asset": "insert-cnckitchen-m2-5-0-45-4",
-    "finish": "stainless",
-    "near": false
+    "near": false,
+    "mats": {
+     "brass": "insert-m2-5.webp",
+     "stainless": "insert-m2-5--stainless.webp"
+    }
    },
    "M3": {
     "file": "insert-m3.webp",
     "asset": "insert-cnckitchen-m3-0-5-5-7",
-    "finish": "stainless",
-    "near": false
+    "near": false,
+    "mats": {
+     "brass": "insert-m3.webp",
+     "stainless": "insert-m3--stainless.webp"
+    }
    },
    "M4": {
     "file": "insert-m4.webp",
     "asset": "insert-cnckitchen-m4-0-7-8-1",
-    "finish": "stainless",
-    "near": false
+    "near": false,
+    "mats": {
+     "brass": "insert-m4.webp",
+     "stainless": "insert-m4--stainless.webp"
+    }
    },
    "M5": {
     "file": "insert-m5.webp",
     "asset": "insert-cnckitchen-m5x9-5",
-    "finish": "stainless",
-    "near": false
+    "near": false,
+    "mats": {
+     "brass": "insert-m5.webp",
+     "stainless": "insert-m5--stainless.webp"
+    }
    },
    "M6": {
     "file": "insert-m6.webp",
     "asset": "insert-cnckitchen-m6-1-12-7",
-    "finish": "stainless",
-    "near": false
+    "near": false,
+    "mats": {
+     "brass": "insert-m6.webp",
+     "stainless": "insert-m6--stainless.webp"
+    }
    },
    "M8": {
     "file": "insert-m8.webp",
     "asset": "insert-cnckitchen-m6-1-12-7",
-    "finish": "stainless",
-    "near": true
+    "near": true,
+    "mats": {
+     "brass": "insert-m8.webp",
+     "stainless": "insert-m8--stainless.webp"
+    }
    },
    "M10": {
     "file": "insert-m10.webp",
     "asset": "insert-cnckitchen-m6-1-12-7",
-    "finish": "stainless",
-    "near": true
+    "near": true,
+    "mats": {
+     "brass": "insert-m10.webp",
+     "stainless": "insert-m10--stainless.webp"
+    }
    },
    "M12": {
     "file": "insert-m12.webp",
     "asset": "insert-cnckitchen-m6-1-12-7",
-    "finish": "stainless",
-    "near": true
+    "near": true,
+    "mats": {
+     "brass": "insert-m12.webp",
+     "stainless": "insert-m12--stainless.webp"
+    }
    }
   }
  }

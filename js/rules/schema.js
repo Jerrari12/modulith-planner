@@ -185,6 +185,11 @@ const PARTS_LAYOUT_MM = 1000;         // no collection is this deep or wide
 const PARTS_TEXT_MAX = 32;
 const PARTS_FLOOR_MODES = ["off", "one", "paint"], PARTS_SCOOPS = ["off", "std", "deep"], PARTS_LABELS = ["large", "small"];
 export const PARTS_FIT_CAPS = [1, 0.75, 0.5];
+// a compartment's part may name its material (2026-11-09): the picture's, not the label's; the same keys as js/parts-drawer/inventory.js MATERIALS
+export const PARTS_MATS = ["steel", "black-oxide", "zinc", "stainless", "brass", "nylon"];
+// which part types offer one, and an insert only brass or stainless (inventory.js matsFor; Terra 01a1c0c6)
+const PARTS_MAT_TYPES = ["shcs", "bhcs", "fhcs", "set", "nut", "nyloc", "washer", "insert"];
+const partsMatOk = (type, m) => PARTS_MATS.includes(m) && PARTS_MAT_TYPES.includes(type) && (type !== "insert" || m === "brass" || m === "stainless");
 export function cleanPartsLayout(raw) {
   const plain = (v) => Object.prototype.toString.call(v) === "[object Object]";
   if (!plain(raw) || !Array.isArray(raw.comps) || !raw.comps.length || raw.comps.length > PARTS_LAYOUT_MAX_COMPS) return null;
@@ -198,7 +203,7 @@ export function cleanPartsLayout(raw) {
   if (raw.floor !== undefined) { if (!plain(raw.floor)) return null; out.floor = { mode: PARTS_FLOOR_MODES.includes(raw.floor.mode) ? raw.floor.mode : "off", slots: raw.floor.slots === 4 ? 4 : 3 }; }
   if (raw.outlines !== undefined) out.outlines = raw.outlines === true;
   // how the parts list sized it (DECISIONS 2026-11-07): the fill cap, bag rounding, the spare row; the list reopens with them
-  if (raw.fit !== undefined) { if (!plain(raw.fit)) return null; const cap = Number(raw.fit.cap); out.fit = { cap: PARTS_FIT_CAPS.includes(cap) ? cap : 0.75, round: raw.fit.round === true, spare: raw.fit.spare !== false }; }
+  if (raw.fit !== undefined) { if (!plain(raw.fit)) return null; const cap = Number(raw.fit.cap); out.fit = { cap: PARTS_FIT_CAPS.includes(cap) ? cap : 0.75, round: raw.fit.round === true, spare: raw.fit.spare !== false }; if (plain(raw.fit.grid)) { const gc = intIn(raw.fit.grid.nc, 1, 40, 0), gr = intIn(raw.fit.grid.nr, 1, 40, 0); if (gc && gr) out.fit.grid = { nc: gc, nr: gr }; } }   // grid: the parts list's bin grid (2026-11-09)
   for (const c of raw.comps) {
     if (!plain(c)) return null;
     const x0 = mm(c.x0), x1 = mm(c.x1), y0 = mm(c.y0), y1 = mm(c.y1);
@@ -211,6 +216,7 @@ export function cleanPartsLayout(raw) {
     if (plain(c.item)) {
       const type = text(c.item.type), size = text(String(c.item.size ?? ""));
       if (type && size) k.item = { type, size, length: typeof c.item.length === "number" && Number.isFinite(c.item.length) ? Math.max(0, Math.min(PARTS_LAYOUT_MM, c.item.length)) : 0, qty: intIn(c.item.qty, 0, 1e6, 0) };
+      if (k.item && partsMatOk(k.item.type, c.item.mat)) k.item.mat = c.item.mat;
     }
     if (typeof c.labelId === "string" && c.labelId.length <= 64) k.labelId = c.labelId;
     out.comps.push(k);

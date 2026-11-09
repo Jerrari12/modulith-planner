@@ -23,3 +23,21 @@ test('every list type and thread size has a picture, and the file is there and s
   assert.equal(picOf({ type: 'bearing', size: '625' }), null, 'a part the list does not take has no picture');
   assert.equal(picOf(null), null);
 });
+
+/* per material (2026-11-09, Joey: "i chose brass heated inserts but they are showing up like steel"): every material a type
+   offers has its file; the inserts default to brass (the library's brass insert is its unsuffixed render, which the first copy
+   missed); a material the type does not offer falls back to the default */
+import { MATERIALS, matsFor, defaultMat } from '../js/parts-drawer/inventory.js';
+test('every type, size and offered material has its picture; inserts default to brass', () => {
+  for (const type of TYPE_ORDER) for (const size of THREADS) for (const mat of matsFor(type)) {
+    const src = picOf({ type, size, mat });
+    assert.ok(existsSync(join(root, src)), `${type} ${size} ${mat}: ${src}`);
+    assert.ok(statSync(join(root, src)).size < 8000);
+    assert.equal(src.includes('--'), mat !== defaultMat(type), `${src}: the default material is the plain name`);
+  }
+  assert.deepEqual(matsFor('insert'), ['brass', 'stainless']);
+  assert.equal(picOf({ type: 'insert', size: 'M3' }), 'img/hw/insert-m3.webp');
+  assert.equal(picOf({ type: 'insert', size: 'M3', mat: 'zinc' }), 'img/hw/insert-m3.webp', 'not offered: the default');
+  assert.equal(picOf({ type: 'shcs', size: 'M3', mat: 'black-oxide' }), 'img/hw/shcs-m3--black-oxide.webp');
+  assert.deepEqual(Object.keys(MATERIALS), ['steel', 'black-oxide', 'zinc', 'stainless', 'brass', 'nylon']);
+});
