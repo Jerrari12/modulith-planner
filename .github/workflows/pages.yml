@@ -19,6 +19,8 @@ on:
     # patterns; change them together. workflow_dispatch ignores this filter, so a manual run always tests and deploys.
     # ⚠ AN EMPTY COMMIT RUNS NOTHING EITHER (2026-10-28): it changes no file, so no file escapes the filter, and 4f199b8,
     # pushed to re-run a red deploy, started no run at all. Re-run with workflow_dispatch, or a real change outside docs/.
+    # Runner-only reds so far (2026-11-08/09): three Colors cases on an unnamed console error, and the phone issue-card height
+    # check once (bea09b9); each passed locally and on the neighbouring commits. A note here is the real change that re-runs one.
     paths-ignore:
       - 'docs/**'
       - '*.md'
