@@ -53,7 +53,7 @@ export function toolbar(stage, { measure = false, explode = null, view = null, h
     if (measureBtn) { measureBtn.classList.toggle('on', on); measureBtn.setAttribute('aria-pressed', String(on)); }
     document.documentElement.classList.toggle('ws-measure', on);
     qualityLabel();
-    if (view) { const v = view.get(); b3.classList.toggle('on', v !== '2d'); b2.classList.toggle('on', v === '2d'); b3.setAttribute('aria-pressed', String(v !== '2d')); b2.setAttribute('aria-pressed', String(v === '2d')); }
+    if (view) { const v = view.get(); b3.classList.toggle('on', v !== '2d'); b2.classList.toggle('on', v === '2d'); b3.setAttribute('aria-pressed', String(v !== '2d')); b2.setAttribute('aria-pressed', String(v === '2d')); if (view.can2d) { const ok = view.can2d(); b2.disabled = !ok; b2.title = ok ? 'The 2D plan' : (view.why2d || 'No room for the plan on this screen'); } }   // can2d: a view that cannot show 2D here (the parts editor on a short phone screen, 2026-11-07)
     if (history) { undoBtn.disabled = !history.canUndo; redoBtn.disabled = !history.canRedo; }
     if (eraser) { const on2 = !!eraser.get(); eraseBtn.classList.toggle('on', on2); eraseBtn.setAttribute('aria-pressed', String(on2)); }
     if (camTitle) camBtn.classList.toggle('on', !!stage.camFree);

@@ -1,0 +1,26 @@
+MODULITH parts drawer generator: what to print next (2026-10-23, updated 2026-10-26)
+
+The generator is ahead of the printer: the lid, the v26 covers, the v20 cells, the stretched shells, the lift-out
+trays and the drill-bit rack are all designed and checked in software, and none of them has been printed in its
+current form. These prints settle them. Any order works; each folder's README has its checks.
+
+0. No print: the stopper measurement.
+   A drawer in its case with the stoppers fitted: measure from the drawer rim up to the underside of a stopper tab.
+   The generator assumes 1.72 mm (derived from the planner files, never measured). The lid, the covers and the trays
+   all sit relative to it.
+
+1. lid-print-files/test-pieces       34 g    the lid corner: fit, lips, and the fingertip pull the trays reuse.
+   (or shipped-5x4-small-labels      51 g    a whole lid for the released 5x4)
+
+2. tray-prototype/                   130 g   a 115-1W-1.5H drawer and its two lift-out trays: ledges, fit, the pull,
+                                             sliding. Also the first print of a stretched shell.
+
+3. cover-print-files/test-pieces     20 g    the v26 L cover and its compartment (0.5H wide), to see the new shape.
+                                     90 g    the whole set, for snap feel across bead sizes, heights and materials.
+
+4. cell-print-files/test-pieces      55 g    bearing wells and socket grids: fit and use. (Skip the washer rows: retired.)
+
+5. bit-rack-prototype/               45 g    the drill-bit rack test, 1 to 10 mm (added 2026-10-26): notch fit, tipping a
+                                             bit up to grab it, the size numbers.
+
+About 285 g for the whole round with the short options.

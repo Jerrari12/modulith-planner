@@ -49,7 +49,7 @@ const test = Object.assign((...args) => {
 }, { after: nodeTest.after });
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');   // e2e/ sits beside test/
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.wasm': 'application/wasm', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.mp4': 'video/mp4', '.md': 'text/markdown', '.webp': 'image/webp' };
 function serve(dir = root) {
   const server = createServer(async (req, res) => {
     try {
@@ -1246,6 +1246,259 @@ test('Build: a unit placed through the store reaches the stage; move, remove and
   await settle(page, 600);
   const status = await text(page, '#ws-dock .status');
   assert.ok(/issue|Fix/i.test(status) || /valid/i.test(status), 'the dock reports a status: ' + status);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE PARTS DRAWER (M2/M3, 2026-11-05, behind ?partsdrawer=1; docs/parts-drawer/SPEC.md, DECISIONS 2026-11-05): the third Decor
+   drawer variant and its compartment editor. The generator runs in a worker (js/parts-drawer/worker.js) with the local
+   parts pool answering the GLBs; headless Chrome draws it on SwiftShader, so the waits are long. */
+test('Parts drawer: the variant swaps the body, the editor merges and undoes, a part gives a label, the Parts list downloads, a link keeps it all', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
+  const lay = () => page.evaluate(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout ? { comps: u.partsLayout.comps.length, parts: u.partsLayout.comps.filter((c) => c.item).length, linked: u.partsLayout.comps.filter((c) => c.labelId).length } : null; });
+  // the kit's 2W drawer becomes a parts drawer: the Inspector's third option; the engine boots and the shell replaces the GLB
+  await page.evaluate(() => window.__GEN2_VIEWER__.selectUnit(3));
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 15_000 });
+  await btn(page, 'Parts drawer', '#ws-insp').click();
+  await page.waitForFunction(() => { const g = window.__GEN2_VIEWER__.drawerGroupOf(3); return g && g.getObjectByName('parts-body'); }, null, { timeout: 90_000 });
+  assert.equal((await S(page)).placed.find((p) => p.id === 3).variant, 'parts');
+  const bodyVerts = () => page.evaluate(() => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count);
+  // the plain shell's vertex count, from the engine itself (the drawer on the stage is OPEN here, so it wears the whole drawer,
+  // which always has more vertices than the shell); the ask starts the build, so wait for it
+  await page.waitForFunction(async () => { const E = await import('/js/parts-drawer/engine.js'); return !!E.shellGeometry('240-2W', '1H'); }, null, { timeout: 60_000 });
+  const shellVerts = await page.evaluate(async () => { const E = await import('/js/parts-drawer/engine.js'); return E.shellGeometry('240-2W', '1H').attributes.position.count; });
+  const box = await page.evaluate(() => { const V = window.__GEN2_VIEWER__; const g = V.drawerGroupOf(3); const b = g.getObjectByName('parts-body'); b.geometry.computeBoundingBox(); const bb = b.geometry.boundingBox; return [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].map((v) => +v.toFixed(2)); });
+  assert.deepEqual(box, [163, 50, 234.3], 'the 240-2W 1H shell: 163 wide, 50 to the rim, 234.3 deep');
+  // Edit compartments: the plan, a drag across two compartments, Merge, Undo through the store
+  await btn(page, 'Edit compartments', '#ws-insp').click();
+  await page.waitForSelector('#ws-plan:not([hidden]) rect.cell', { timeout: 30_000 });
+  await settle(page, 800);
+  // the first edit on a device gets the gestures as a tip card (guide.js); × dismisses it and the device remembers
+  assert.equal(await page.locator('#ws-plan .pd-tip .gclip').count(), 3, 'the three gesture clips, the first time');
+  await page.locator('#ws-plan .pd-tip .x').click();
+  assert.equal(await page.locator('#ws-plan .pd-tip').count(), 0, 'dismissed');
+  assert.equal(await page.evaluate(() => localStorage.getItem('gen2-pd-howto')), '1', 'remembered on this device');
+  const cell = (i) => page.evaluate((i) => { const b = document.querySelector(`#ws-plan rect.cell[data-i="${i}"]`).getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }, i);
+  const c6 = await cell(6), c7 = await cell(7);
+  await page.mouse.move(c6.x, c6.y); await page.mouse.down(); await page.mouse.move(c7.x, c7.y, { steps: 6 }); await page.mouse.up();
+  await page.waitForFunction(() => /2 compartments/.test(document.querySelector('#ws-insp .h2')?.textContent || ''), null, { timeout: 15_000 });
+  await btn(page, 'Merge', '#ws-insp').click();
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && u.partsLayout.comps.length === 19; }, null, { timeout: 15_000 });
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return !u.partsLayout || u.partsLayout.comps.length === 20; }, null, { timeout: 15_000 });
+  assert.ok(await page.evaluate(() => document.querySelector('#ws-lib .pd-head')), 'still editing after the undo');
+  // the wall drag in 3D (2026-11-06): the wall between the first two compartments, pressed on the wall-top plane and
+  // dragged 8 mm along its normal, moves the layout by 8 mm and leaves the camera where it was
+  await page.evaluate(() => { const t = [...document.querySelectorAll('#ws-tools')].find((x) => !x.hidden); [...t.querySelectorAll('button')].find((b) => b.textContent.trim() === '3D').click(); });
+  await settle(page, 2000);
+  const screenOf = (x, y) => page.evaluate(async ([x, y]) => {
+    const THREE = await import('three'); const G = await import('/js/parts-drawer/gen.js'); const F = await import('/js/parts-drawer/frame.js');
+    const V = window.__GEN2_VIEWER__, body = V.drawerGroupOf(3).getObjectByName('parts-body');
+    const { cx, cz } = F.frameOf('240-2W'), top = G.SIZES['240-2W'].heights['1H'].top;
+    const p = body.localToWorld(new THREE.Vector3(x - cx, top, cz - y)).project(V.camera);
+    const r = document.querySelector('canvas').getBoundingClientRect();
+    return { x: r.left + (p.x + 1) / 2 * r.width, y: r.top + (1 - p.y) / 2 * r.height };
+  }, [x, y]);
+  const camBefore = await page.evaluate(() => window.__GEN2_VIEWER__.camera.position.toArray().map((v) => +v.toFixed(2)));
+  const w0 = await screenOf(31.35, 28), w1 = await screenOf(39.35, 28);   // the first wall at x = 30.6 + 0.75, mid-depth of the front row
+  await page.mouse.move(w0.x, w0.y); await settle(page, 300);
+  assert.equal(await page.evaluate(() => document.querySelector('canvas').style.cursor), 'grab', 'the wall under the pointer');
+  await page.mouse.down(); await page.mouse.move(w1.x, w1.y, { steps: 8 }); await settle(page, 200); await page.mouse.up();
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && Math.abs(u.partsLayout.comps[0].x1 - 39) < 1e-6; }, null, { timeout: 15_000 });   // 39.0, not 38.6: a whole-millimetre width wins within 2 mm once no neighbour magnet does (walls.js, 2026-11-06)
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_VIEWER__.camera.position.toArray().map((v) => +v.toFixed(2))), camBefore, 'the drag did not orbit');
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return !u.partsLayout || Math.abs(u.partsLayout.comps[0].x1 - 30.6) < 1e-6; }, null, { timeout: 15_000 });
+  await page.evaluate(() => { const t = [...document.querySelectorAll('#ws-tools')].find((x) => !x.hidden); [...t.querySelectorAll('button')].find((b) => b.textContent.trim() === '2D').click(); });
+  await settle(page, 800);
+  // a part in one compartment (M3): its words on the strip in the plan, its row in the Labels workspace
+  await page.mouse.click(c6.x, c6.y);
+  await page.waitForSelector('#ws-insp .pd-part input', { timeout: 15_000 });
+  await page.fill('#ws-insp .pd-part input', 'M3x10 SHCS 100');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => { const u = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3); return u.partsLayout && u.partsLayout.comps.some((c) => c.item && c.item.type === 'shcs'); }, null, { timeout: 15_000 });
+  assert.equal(await page.locator('#ws-plan text.labeltxt').count(), 2, 'the part\'s two lines on its label strip');
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count > n, shellVerts, { timeout: 60_000 });   // the whole drawer, built
+  await btn(page, 'Done', '#ws-dock').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .pd-head'), null, { timeout: 15_000 });
+  // Done closes the drawer and it wears the plain shell again; Open drawer (2026-11-07) builds its compartments outside the
+  // editor, Close drawer puts the shell back (counted against the shell seen at the variant swap: a whole drawer is never
+  // the shell's count, and the whole one may arrive from the worker a moment after the button - Terra 01a1b8e1)
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count === n, shellVerts, { timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count > n, shellVerts, { timeout: 60_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
+  await page.waitForFunction((n) => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count === n, shellVerts, { timeout: 30_000 });
+  await page.click('#ws-tabs button:has-text("Labels")');
+  await page.waitForSelector('#ws-labels .pd-comp-labels', { timeout: 60_000 });
+  assert.match(await text(page, '#ws-labels .pd-comp-labels .crow'), /Drawer \d · R\dC\d.*M3 × 10 SHCS.*not in the list/);
+  await page.locator('#ws-labels .pd-comp-labels button').click();
+  await page.waitForFunction(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length === 1, null, { timeout: 15_000 });
+  assert.deepEqual(await lay(), { comps: 20, parts: 1, linked: 1 });
+  // the Parts list: its own row, and the download the worker builds
+  await page.click('#ws-tabs button:has-text("Parts")');
+  await page.waitForSelector('#ws-parts .prow', { timeout: 60_000 });
+  const row = page.locator('#ws-parts .prow', { hasText: 'Decor Parts Drawer' });
+  assert.equal(await row.count(), 1, 'one row for the parts drawer');
+  assert.match(await row.textContent(), /20 compartments/);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 90_000 }), btn(page, 'Download STL + 3MF', '#ws-parts').click()]);
+  assert.match(dl.suggestedFilename(), /^MODULITH-240-2W-1H-Parts-Drawer-20-compartments-Large-labels-MD-[A-Z0-9]{3}-[A-Z0-9]{3}\.zip$/);
+  assert.ok((await stat(await dl.path())).size > 100_000, 'a real zip');
+  // the link carries the layout, the part and its label link; without the flag the drawer renders standard and keeps them
+  const href = await page.evaluate(() => location.href);
+  await page.goto(href, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
+  assert.deepEqual(await lay(), { comps: 20, parts: 1, linked: 1 });
+  await page.goto(href.replace(/&partsdrawer=1/, ''), { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
+  assert.deepEqual(await lay(), { comps: 20, parts: 1, linked: 1 });
+  assert.equal(await page.locator('#ws-plan').count(), 0, 'no editor without the flag');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE PARTS LIST AS A PANEL (2026-11-07, DECISIONS of that day): the Library's own mode beside the plan, the plan showing the
+   list's layout dashed as it changes, the room knobs, the spare row, the list's order, Lay out drawer keeping the fit on the
+   layout, Back / Esc / Done asking first while a layout is proposed (Sol 01a1bc8e, 2026-11-08), Drop the list dropping the draft. */
+const toPartsEditor = async (page) => {
+  await page.evaluate(() => window.__GEN2_VIEWER__.selectUnit(3));
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 15_000 });
+  await btn(page, 'Parts drawer', '#ws-insp').click();
+  await page.waitForFunction(() => { const g = window.__GEN2_VIEWER__.drawerGroupOf(3); return g && g.getObjectByName('parts-body'); }, null, { timeout: 90_000 });
+  await btn(page, 'Edit compartments', '#ws-insp').click();
+  await page.waitForSelector('#ws-plan:not([hidden])', { timeout: 15_000 });
+  await page.locator('#ws-plan .pd-tip .x').click({ timeout: 15_000 }).catch(() => {});
+  await settle(page, 600);
+};
+const addLine = async (page, t) => { const inp = page.locator('#ws-lib .pd-inv-line input'); await inp.fill(t); await inp.press('Enter'); await settle(page, 400); };
+test('Parts drawer: the parts list panel previews its layout in the plan, keeps the list\'s order and its fit, and Back drops the draft', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
+  await toPartsEditor(page);
+  // a unit edit first (a deep scoop), so the undo below, while the list is open, reverts an edit and not the switch to a parts
+  // drawer (undone, the unit is a decor drawer again, and the sanitizer drops any layout laid onto it on every restore)
+  await btn(page, 'Deep', '#ws-lib').click(); await settle(page, 600);
+  await btn(page, 'From a parts list', '#ws-lib').click();
+  await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'the Library is the list');
+  assert.match(await text(page, '#ws-plan .bhint'), /Add some parts/, 'the plan says the list is empty');
+  for (const t of ['200 M3x8 SHCS', '20 M3x65 SHCS', '20 M3x10 SHCS', '20 M3x12 SHCS', '20 M3x16 SHCS', '20 M3x20 SHCS', '50 M3 nut', '50 M3 washer', 'bearing 625 4']) await addLine(page, t);
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'A part: size, type and quantity, then Enter', 'the line keeps the keyboard after Enter');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8, 'eight rows; the bearing is not a drawer part');
+  assert.match(await text(page, '#ws-lib .pd-inv-skipped summary'), /1 line not laid out/);
+  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13, 'the preview: eight compartments and the spare row of five, dashed');
+  assert.equal(await page.locator('#ws-plan .cell:not(.preview)').count(), 0, 'nothing of the drawer\'s own layout under it');
+  assert.match(await text(page, '#ws-plan .bhint'), /8 parts in 5 rows .* A spare row of 5 at the back/, 'the plan\'s header carries the summary');
+  assert.match(await text(page, '#ws-lib .pd-inv-row .pd-inv-fill'), /\d+% full/, 'each row reads its compartment\'s fill');
+  // every row carries the hardware library's picture, loaded (hwpics.js, 2026-11-08)
+  await page.waitForFunction(() => { const p = [...document.querySelectorAll('#ws-lib .pd-inv-row:not(.add) .pd-pic')]; return p.length === 8 && p.every((e) => e.tagName === 'IMG' && e.complete && e.naturalWidth > 0); }, null, { timeout: 15_000 }).catch(() => assert.fail('eight pictures, loaded'));
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) .pd-pic').first().getAttribute('src'), 'img/hw/shcs-m3.webp');
+  // a row and its proposed compartment light together, both ways; a press on the proposal puts the focus in the row's quantity
+  // (the plan's gestures stay off: no selection on a proposal)
+  await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).hover(); await settle(page, 300);
+  assert.equal(await page.locator('#ws-plan .cell.preview.hl').getAttribute('data-i'), '1', 'the second row lights the second compartment');
+  await page.mouse.move(5, 5); await settle(page, 300);
+  const cell = page.locator('#ws-plan .cell.preview').first(); const bb = await cell.boundingBox();
+  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row.hl').count(), 1, 'the first compartment under the pointer lights its row');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row.hl input[type="number"]').first().inputValue(), '8');
+  await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
+  assert.equal(await page.locator('#ws-plan .selring').count(), 0, 'no selection on a proposal');
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Quantity', 'the press puts the focus in the row\'s quantity');
+  assert.equal(await page.evaluate(() => document.activeElement.value), '200');
+  await page.mouse.move(5, 5); await settle(page, 300);
+  assert.equal(await page.locator('#ws-plan .cell.preview.hl, #ws-lib .pd-inv-row.hl').count(), 0, 'nothing lit once the pointer leaves');
+  // the knobs change the preview; the spare row goes when the room asked for leaves none
+  await btn(page, 'Plenty', '#ws-lib').click(); await settle(page, 400);
+  assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Plenty' }).count() === 1);
+  await btn(page, 'Comfortable', '#ws-lib').click(); await settle(page, 400);
+  // the order is the list's: the second row moved down puts the M3 x 10 second and the plan follows
+  await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('button[title="Move down"]').click(); await settle(page, 400);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('input[type="number"]').first().inputValue(), '10');
+  const labels = await page.locator('#ws-plan text.labeltxt').allTextContents();
+  assert.ok(labels.indexOf('M3 × 10') < labels.indexOf('M3 × 65'), `the plan follows the list: ${labels.join(', ')}`);
+  // an undo while the list is open changes the unit, not the list: the draft stays and the preview is still drawn
+  await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 600);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8, 'the list is still open with its rows');
+  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13);
+  // Lay out drawer: the layout with its parts, the counted quantities, the fit, and the list closed
+  await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
+  const lay = await page.evaluate(() => { const l = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout; return { fit: l.fit, comps: l.comps.length, parts: l.comps.filter((c) => c.item).length, nr: l.nr, qty8: l.comps.find((c) => c.item && c.item.length === 8).item.qty, spareHolders: l.comps.filter((c) => !c.item).every((c) => c.holder !== false) }; });
+  assert.deepEqual(lay, { fit: { cap: 0.75, round: false, spare: true }, comps: 13, parts: 8, nr: 5, qty8: 200, spareHolders: true });
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'back to the compartment tools');
+  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 0, 'the plan is the drawer\'s again');
+  assert.equal(await page.locator('#ws-plan .cell').count(), 13);
+  // a compartment's part in the Inspector: the typed line and the list's own fields with the picture (one editing surface,
+  // 2026-11-08); a change by a field is one history entry, and the typed line and the picture follow it
+  const c0 = page.locator('#ws-plan .cell').first(); const b0 = await c0.boundingBox();
+  await page.mouse.click(b0.x + b0.width / 2, b0.y + b0.height / 2); await settle(page, 500);
+  assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 200');
+  assert.deepEqual(await page.evaluate(() => { const f = document.querySelector('#ws-insp .pd-part .pd-fields'); return [f.querySelector('.pd-pic').getAttribute('src'), ...[...f.querySelectorAll('select')].map((s) => s.value), ...[...f.querySelectorAll('input')].map((i) => i.value)]; }), ['img/hw/shcs-m3.webp', 'shcs', 'M3', '8', '200']);
+  await page.fill('#ws-insp .pd-part .pd-qty input', '120'); await page.press('#ws-insp .pd-part .pd-qty input', 'Tab'); await settle(page, 500);
+  assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 120', 'the typed line follows the field');
+  await page.selectOption('#ws-insp .pd-part .pd-fields select >> nth=0', 'bhcs'); await settle(page, 500);
+  assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 BHCS 120');
+  assert.equal(await page.getAttribute('#ws-insp .pd-part .pd-pic', 'src'), 'img/hw/bhcs-m3.webp', 'the picture follows the type');
+  await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 400); await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 500);
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps[0].item), { type: 'shcs', size: 'M3', length: 8, qty: 200 }, 'two undos, one per field change');
+  { const x = page.locator('#ws-insp button[aria-label="Clear the selection"]'); if (await x.count()) { await x.click(); await settle(page, 300); } }
+  // reopened, the list is the drawer's parts in reading order with the fit it was laid out with; Esc drops it
+  await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 8);
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').nth(1).locator('input[type="number"]').first().inputValue(), '10', 'the moved order came back');
+  assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Comfortable' }).count() === 1);
+  await addLine(page, '30 M4x20 SHCS');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 9);
+  await page.keyboard.press('Escape'); await settle(page, 500);
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'Esc with a layout proposed asks first');
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 1, 'the ask: Lay out drawer / Drop the list / Keep editing');
+  await page.keyboard.press('Escape'); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 0, 'Esc again keeps editing');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 9, 'the list is still there');
+  // the same from the typing line, whose own Escape handler must mean the same (Sol 01a1bc9f)
+  await page.keyboard.press('Escape'); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 1);
+  await page.locator('#ws-lib .pd-inv-line input').click(); await page.keyboard.press('Escape'); await settle(page, 300);
+  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 0, 'Esc from the line with the ask showing keeps editing too');
+  await page.keyboard.press('Escape'); await settle(page, 300);
+  await btn(page, 'Drop the list', '#ws-lib .pd-inv-leave').click(); await settle(page, 500);
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'Drop the list is Back');
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.filter((c) => c.item).length), 8, 'the dropped draft changed nothing');
+  // Done with the list open drops it too
+  await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
+  await btn(page, 'Done', '#ws-dock').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-lib .pd-head'), null, { timeout: 15_000 });
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.length), 13);
+  // the link carries the fit with the layout
+  const href = await page.evaluate(() => location.href);
+  await page.goto(href, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.fit), { cap: 0.75, round: false, spare: true }, 'the fit survives the link');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+test('Parts drawer: the Part Picker from the parts list brings its parts in as lines, not as labels', { skip: haveStudio ? false : 'Label Studio checkout not beside this repo' }, async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1&studio=' + encodeURIComponent(studio) });
+  await toPartsEditor(page);
+  await btn(page, 'From a parts list', '#ws-lib').click();
+  await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
+  const labelsBefore = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length);
+  await btn(page, 'Part Picker', '#ws-lib').click();
+  await page.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && p.ready && !p.veil.hidden; }, null, { timeout: 60_000 });
+  const frame = page.frameLocator('#ws-partpicker iframe');
+  await frame.locator('.tile.has-img').first().waitFor({ timeout: 60_000 });
+  await frame.locator('button.tile').filter({ hasText: /^Nuts$/ }).first().click();
+  await frame.locator('#stage-panel button.tile[title="Hex nut"]').click();
+  await frame.locator('#stage-panel button.thr[aria-label="M3"]').click();
+  await frame.locator('#add-parts', { hasText: /^Add 1 label to the planner/ }).click();
+  await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add)').count(), 1, 'one line from the Picker');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) select').first().inputValue(), 'nut');
+  assert.equal(await page.locator('#ws-lib .pd-inv-row:not(.add) select').nth(1).inputValue(), 'M3');
+  assert.equal(await page.evaluate(() => (window.__GEN2_STORE__.state.labelList?.labels || []).length), labelsBefore, 'no label was added');
+  assert.ok(await page.locator('#ws-plan .cell.preview').count() >= 1, 'the preview shows it');
+  // Esc asks first (a layout is proposed), Drop the list closes the list, not the page's editor
+  await page.keyboard.press('Escape'); await settle(page, 400);
+  await btn(page, 'Drop the list', '#ws-lib .pd-inv-leave').click(); await settle(page, 400);
+  assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -8533,12 +8786,12 @@ test('Build: Peek inside pulls the drawer out to its stopper (collection − 13.
   const drawer = await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /DecorDrawer/.test(x.node)); return { id: d.id, owner: v.partInfo(d.id).owner, z0: v.instances.get(d.id).group.position.z, collection: parseInt(v.manifest.collection, 10) || 185 }; });
   await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
   await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
-  const peek = btn(page, 'Peek inside', '#ws-insp');
+  const peek = btn(page, 'Open drawer', '#ws-insp');
   await peek.click({ timeout: 30_000 });
   const stop = drawer.collection - 13.5;
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 })
     .catch(async () => assert.fail(`the drawer did not land at base + ${stop}: z ${await page.evaluate((id) => window.__GEN2_VIEWER__.instances.get(id).group.position.z, drawer.id)} from ${drawer.z0}`));
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 })
     .catch(() => assert.fail('Close it did not bring the drawer back'));
   assert.deepEqual(clean(errors), []);
@@ -8567,7 +8820,7 @@ test('Build: a peeked drawer stays open when its type changes to Gridfinity, and
   const zOf = (owner) => page.evaluate((owner) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d ? v.instances.get(d.id).group.position.z : null; }, owner);
   await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), drawer.id);
   await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
   // the type change rebuilds the stage with a new drawer instance for the same unit
   await btn(page, 'Gridfinity', '#ws-insp').click({ timeout: 30_000 });
@@ -8576,11 +8829,11 @@ test('Build: a peeked drawer stays open when its type changes to Gridfinity, and
   // and Close it brings it back by the stopper distance
   await settle(page, 1200);   // the re-peek's 380 ms slide, with margin
   const zOpen = await zOf(drawer.owner);
-  assert.equal(await btn(page, 'Close it', '#ws-insp').count(), 1, 'the button still says Close it');
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  assert.equal(await btn(page, 'Close drawer', '#ws-insp').count(), 1, 'the button still says Close it');
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([owner, z, stop]) => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => { const p = v.partInfo(x.id); return p && p.type === 'Drawer' && p.owner === owner; }); return d && Math.abs(v.instances.get(d.id).group.position.z - (z - stop)) < 1; }, [drawer.owner, zOpen, stop], { timeout: 30_000 })
     .catch(async () => assert.fail(`the new drawer was not open by the stopper distance: open z ${zOpen}, now ${await zOf(drawer.owner)} (expected ${zOpen - stop})`));
-  assert.equal(await btn(page, 'Peek inside', '#ws-insp').count(), 1, 'the button says Peek inside again');
+  assert.equal(await btn(page, 'Open drawer', '#ws-insp').count(), 1, 'the button says Peek inside again');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -9031,7 +9284,7 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   const cam = () => page.evaluate(() => JSON.stringify(window.__GEN2_VIEWER__.probe().camera));
   let cam0 = await cam();
   for (let i = 0; i < 40; i++) { await settle(page, 250); const c = await cam(); if (c === cam0) break; cam0 = c; }
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   const stop = drawer.collection - 13.5;
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop], { timeout: 30_000 }).catch(() => assert.fail('the drawer did not open'));
   await settle(page, 600);
@@ -9052,13 +9305,13 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   assert.deepEqual((await pills()).w, inside.w, 'still the inside width');
   assert.ok(await page.evaluate(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0 + stop]), 'still open');
   // Close it: the build’s pills come back as they were
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 }).catch(() => assert.fail('Close it did not bring the drawer back'));
   await settle(page, 400);
   const build1 = await pills();
   assert.ok(build1.w.shown && build1.w.mm === build0.w.mm && build1.l.mm === build0.l.mm && build1.h.mm === build0.h.mm, `the build’s pills are back: ${JSON.stringify(build1)} vs ${JSON.stringify(build0)}`);
   // the ruler during a peek: the build’s pills take over, the drawer stays open
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction((mm) => { const t = (document.getElementById('dim-w').textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return Number(t) !== mm; }, build0.w.mm, { timeout: 30_000 }).catch(() => assert.fail('the second peek did not show the inside sizes'));
   // the ruler reads the visitor's own setting during a peek (on), and a click is theirs: off hides every pill, the drawer
   // stays open; on again shows the build's
@@ -9071,15 +9324,15 @@ test('Build: Peek inside shows the drawer’s inside W / L / H in the pills, kee
   await page.locator('#ws-tools button.measure').click();
   await page.waitForFunction((mm) => { const t = (document.getElementById('dim-w').textContent || '').replace(/[^0-9.]+/g, ' ').trim().split(' ')[0]; return Number(t) === mm && !document.getElementById('dim-w').classList.contains('hidden'); }, build0.w.mm, { timeout: 30_000 }).catch(() => assert.fail('the ruler on did not show the build pills'));
   // with the ruler off, a peek and a close leave no pills at all (the stage's old exit turned the build's on)
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.locator('#ws-tools button.measure').click();
   await page.waitForFunction(() => document.getElementById('dim-w').classList.contains('hidden'), null, { timeout: 30_000 });
-  await btn(page, 'Peek inside', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(() => { const e = document.getElementById('dim-w'); return !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none'; }, null, { timeout: 30_000 }).catch(() => assert.fail('a peek with the ruler off showed no inside sizes (live 2026-10-21: the shell CSS hid them)'));
   await settle(page, 600);
   const c2 = await clearOf();
   assert.ok(c2.inside && c2.apart, `with the ruler off too: ${JSON.stringify(c2)}`);
-  await btn(page, 'Close it', '#ws-insp').click({ timeout: 30_000 });
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
   await page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [drawer.id, drawer.z0], { timeout: 30_000 });
   await settle(page, 400);
   assert.ok(await page.evaluate(() => ['dim-w', 'dim-l', 'dim-h'].every((id) => { const e = document.getElementById(id); return e.classList.contains('hidden') || getComputedStyle(e).display === 'none'; })), 'closed with the ruler off: no pills');

@@ -81,6 +81,12 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     // the top edge of the collapsed handles: the floating cards (Place / Cancel, the issue card...) and the toast sit on
     // it, not under it (the phone check, 2026-10-17: Place / Cancel and every toast were under the Library's handle)
     root.style.setProperty('--sheet-stack', `${b + off}px`);
+    // the top edge of whatever the sheets cover, open or collapsed: the plan (2D edit on a phone) ends there instead of running
+    // on under an open sheet, so a list's dashed preview stays in view, whole, while its sheet is up (Sol 01a1bc8e, 2026-11-08)
+    // measured, not openHeight(): that is a max-height, and a sheet with less in it is shorter (Sol 01a1bc9f); a box's height is
+    // its own, untouched by the slide's transform, and the max-height set just above is already laid out when it is read
+    const openOne = anyOpen ? [...sheets.values()].find((e) => e.open && !e.el.hidden) : null;
+    root.style.setProperty('--sheet-top', `${openOne ? (over ? innerHeight - ROW : b + Math.round(openOne.el.getBoundingClientRect().height)) : b + off}px`);
     // an open sheet covers the collapsed handles (and, over, the dock): its glass showed their words through it (the phone
     // tour, 2026-10-27: "Add units" under the unit's sheet, "Layout valid" under the Labels sheet), so they step out
     root.classList.toggle('sheet-open', anyOpen);

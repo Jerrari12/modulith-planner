@@ -1,0 +1,453 @@
+{
+ "source": "GEN2 Part Picker img/hw/v2 (hardware visual library), -sm thumbnails; tools: scratch hwmap2.py",
+ "picks": {
+  "shcs": {
+   "M2": {
+    "file": "shcs-m2.webp",
+    "asset": "socket-cap-iso4762-m2x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M2.5": {
+    "file": "shcs-m2-5.webp",
+    "asset": "socket-cap-iso4762-m2-5x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M3": {
+    "file": "shcs-m3.webp",
+    "asset": "socket-cap-iso4762-m3x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M4": {
+    "file": "shcs-m4.webp",
+    "asset": "socket-cap-iso4762-m4x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M5": {
+    "file": "shcs-m5.webp",
+    "asset": "screw-socket-cap-iso4762-m5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M6": {
+    "file": "shcs-m6.webp",
+    "asset": "socket-cap-iso4762-m6x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M8": {
+    "file": "shcs-m8.webp",
+    "asset": "socket-cap-iso4762-m8x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M10": {
+    "file": "shcs-m10.webp",
+    "asset": "socket-cap-iso4762-m10x16",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M12": {
+    "file": "shcs-m12.webp",
+    "asset": "socket-cap-iso4762-m12x20",
+    "finish": "steel-plain",
+    "near": false
+   }
+  },
+  "bhcs": {
+   "M2": {
+    "file": "bhcs-m2.webp",
+    "asset": "button-iso7380-1-m3x12",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M2.5": {
+    "file": "bhcs-m2-5.webp",
+    "asset": "button-iso7380-1-m3x12",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M3": {
+    "file": "bhcs-m3.webp",
+    "asset": "button-iso7380-1-m3x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M4": {
+    "file": "bhcs-m4.webp",
+    "asset": "button-iso7380-1-m4x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M5": {
+    "file": "bhcs-m5.webp",
+    "asset": "screw-button-iso7380-1-m5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M6": {
+    "file": "bhcs-m6.webp",
+    "asset": "button-iso7380-1-m6x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M8": {
+    "file": "bhcs-m8.webp",
+    "asset": "button-iso7380-1-m8x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M10": {
+    "file": "bhcs-m10.webp",
+    "asset": "button-iso7380-1-m10x16",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M12": {
+    "file": "bhcs-m12.webp",
+    "asset": "button-iso7380-1-m12x20",
+    "finish": "steel-plain",
+    "near": false
+   }
+  },
+  "fhcs": {
+   "M2": {
+    "file": "fhcs-m2.webp",
+    "asset": "countersunk-iso10642-m3x12",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M2.5": {
+    "file": "fhcs-m2-5.webp",
+    "asset": "countersunk-iso10642-m3x12",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M3": {
+    "file": "fhcs-m3.webp",
+    "asset": "countersunk-iso10642-m3x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M4": {
+    "file": "fhcs-m4.webp",
+    "asset": "countersunk-iso10642-m4x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M5": {
+    "file": "fhcs-m5.webp",
+    "asset": "screw-countersunk-hex-iso10642-m5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M6": {
+    "file": "fhcs-m6.webp",
+    "asset": "countersunk-iso10642-m6x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M8": {
+    "file": "fhcs-m8.webp",
+    "asset": "countersunk-iso10642-m8x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M10": {
+    "file": "fhcs-m10.webp",
+    "asset": "countersunk-iso10642-m10x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M12": {
+    "file": "fhcs-m12.webp",
+    "asset": "countersunk-iso10642-m12x20",
+    "finish": "steel-plain",
+    "near": false
+   }
+  },
+  "set": {
+   "M2": {
+    "file": "set-m2.webp",
+    "asset": "set-screw-iso4026-m2x10",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M2.5": {
+    "file": "set-m2-5.webp",
+    "asset": "set-screw-iso4026-m2-5x10",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M3": {
+    "file": "set-m3.webp",
+    "asset": "set-screw-iso4026-m3x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M4": {
+    "file": "set-m4.webp",
+    "asset": "set-screw-iso4026-m4x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M5": {
+    "file": "set-m5.webp",
+    "asset": "setscrew-flat-iso4026-m5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M6": {
+    "file": "set-m6.webp",
+    "asset": "set-screw-iso4026-m6x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M8": {
+    "file": "set-m8.webp",
+    "asset": "set-screw-iso4026-m8x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M10": {
+    "file": "set-m10.webp",
+    "asset": "set-screw-iso4026-m10x12",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M12": {
+    "file": "set-m12.webp",
+    "asset": "set-screw-iso4026-m12x16",
+    "finish": "steel-plain",
+    "near": false
+   }
+  },
+  "nut": {
+   "M2": {
+    "file": "nut-m2.webp",
+    "asset": "nut-hex-iso4032-m2",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M2.5": {
+    "file": "nut-m2-5.webp",
+    "asset": "nut-hex-iso4032-m2-5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M3": {
+    "file": "nut-m3.webp",
+    "asset": "nut-hex-iso4032-m3",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M4": {
+    "file": "nut-m4.webp",
+    "asset": "nut-hex-iso4032-m4",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M5": {
+    "file": "nut-m5.webp",
+    "asset": "nut-hex-iso4032-m5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M6": {
+    "file": "nut-m6.webp",
+    "asset": "nut-hex-iso4032-m6",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M8": {
+    "file": "nut-m8.webp",
+    "asset": "nut-hex-iso4032-m8",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M10": {
+    "file": "nut-m10.webp",
+    "asset": "nut-hex-iso4032-m10",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M12": {
+    "file": "nut-m12.webp",
+    "asset": "nut-hex-iso4032-m12",
+    "finish": "steel-plain",
+    "near": false
+   }
+  },
+  "nyloc": {
+   "M2": {
+    "file": "nyloc-m2.webp",
+    "asset": "nut-nylon-insert-iso7040-m3",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M2.5": {
+    "file": "nyloc-m2-5.webp",
+    "asset": "nut-nylon-insert-iso7040-m3",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M3": {
+    "file": "nyloc-m3.webp",
+    "asset": "nut-nylon-insert-iso7040-m3",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M4": {
+    "file": "nyloc-m4.webp",
+    "asset": "nut-nylon-insert-iso7040-m5",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M5": {
+    "file": "nyloc-m5.webp",
+    "asset": "nut-nylon-insert-iso7040-m5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M6": {
+    "file": "nyloc-m6.webp",
+    "asset": "nut-nylon-insert-iso7040-m5",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M8": {
+    "file": "nyloc-m8.webp",
+    "asset": "nut-nylon-insert-iso7040-m5",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M10": {
+    "file": "nyloc-m10.webp",
+    "asset": "nut-nylon-insert-iso7040-m5",
+    "finish": "steel-plain",
+    "near": true
+   },
+   "M12": {
+    "file": "nyloc-m12.webp",
+    "asset": "nut-nylon-insert-iso7040-m5",
+    "finish": "steel-plain",
+    "near": true
+   }
+  },
+  "washer": {
+   "M2": {
+    "file": "washer-m2.webp",
+    "asset": "washer-plain-iso7089-m2",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M2.5": {
+    "file": "washer-m2-5.webp",
+    "asset": "washer-plain-iso7089-m2-5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M3": {
+    "file": "washer-m3.webp",
+    "asset": "washer-plain-iso7089-m3",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M4": {
+    "file": "washer-m4.webp",
+    "asset": "washer-plain-iso7089-m4",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M5": {
+    "file": "washer-m5.webp",
+    "asset": "washer-plain-iso7089-m5",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M6": {
+    "file": "washer-m6.webp",
+    "asset": "washer-plain-iso7089-m6",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M8": {
+    "file": "washer-m8.webp",
+    "asset": "washer-plain-iso7089-m8",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M10": {
+    "file": "washer-m10.webp",
+    "asset": "washer-plain-iso7089-m10",
+    "finish": "steel-plain",
+    "near": false
+   },
+   "M12": {
+    "file": "washer-m12.webp",
+    "asset": "washer-plain-iso7089-m12",
+    "finish": "steel-plain",
+    "near": false
+   }
+  },
+  "insert": {
+   "M2": {
+    "file": "insert-m2.webp",
+    "asset": "insert-cnckitchen-m2-0-4-3",
+    "finish": "stainless",
+    "near": false
+   },
+   "M2.5": {
+    "file": "insert-m2-5.webp",
+    "asset": "insert-cnckitchen-m2-5-0-45-4",
+    "finish": "stainless",
+    "near": false
+   },
+   "M3": {
+    "file": "insert-m3.webp",
+    "asset": "insert-cnckitchen-m3-0-5-5-7",
+    "finish": "stainless",
+    "near": false
+   },
+   "M4": {
+    "file": "insert-m4.webp",
+    "asset": "insert-cnckitchen-m4-0-7-8-1",
+    "finish": "stainless",
+    "near": false
+   },
+   "M5": {
+    "file": "insert-m5.webp",
+    "asset": "insert-cnckitchen-m5x9-5",
+    "finish": "stainless",
+    "near": false
+   },
+   "M6": {
+    "file": "insert-m6.webp",
+    "asset": "insert-cnckitchen-m6-1-12-7",
+    "finish": "stainless",
+    "near": false
+   },
+   "M8": {
+    "file": "insert-m8.webp",
+    "asset": "insert-cnckitchen-m6-1-12-7",
+    "finish": "stainless",
+    "near": true
+   },
+   "M10": {
+    "file": "insert-m10.webp",
+    "asset": "insert-cnckitchen-m6-1-12-7",
+    "finish": "stainless",
+    "near": true
+   },
+   "M12": {
+    "file": "insert-m12.webp",
+    "asset": "insert-cnckitchen-m6-1-12-7",
+    "finish": "stainless",
+    "near": true
+   }
+  }
+ }
+}

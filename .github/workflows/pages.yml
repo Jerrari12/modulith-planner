@@ -126,6 +126,21 @@ jobs:
           # the hover hints on every workspace (2026-10-23): hint.js was labels.js's alone (its line below); the clips under
           # img/hints/ are plain assets, loaded by URL, and need no stamp
           sed -i "s|'../ui/hint.js'|'../ui/hint.js?v=$V'|" js/workspaces/build.js js/workspaces/colors.js js/workspaces/parts.js js/workspaces/assemble.js
+          # THE PARTS DRAWER (2026-11-08, behind ?partsdrawer=1; the first deploy after its merge failed the guard below with 60
+          # unstamped specifiers): its folder's modules import each other and the shared ui/rules helpers, so ONE rule stamps every
+          # relative module specifier inside js/parts-drawer/ (from, import() and export-from), the engine's worker URL is stamped
+          # by name, and the doors into the folder from outside are listed: app.js's flag.js and the dynamic index.js (the drawer's
+          # code loads only with the flag), parts.js's dynamic engine.js (the download at the click)
+          sed -i -E "s#(from|import)([[:space:]]*\(?[[:space:]]*)(['\"])(\.{1,2}/[^'\"]+\.js)\3#\1\2\3\4?v=$V\3#g" js/parts-drawer/*.js
+          sed -i "s|new URL('worker.js', import.meta.url)|new URL('worker.js?v=$V', import.meta.url)|" js/parts-drawer/engine.js
+          sed -i "s|'./parts-drawer/flag.js'|'./parts-drawer/flag.js?v=$V'|; s|'./parts-drawer/index.js'|'./parts-drawer/index.js?v=$V'|" js/app.js
+          sed -i "s|'../parts-drawer/engine.js'|'../parts-drawer/engine.js?v=$V'|" js/workspaces/parts.js
+          # the shared Part Picker modal (js/ui/partpicker.js, 2026-11-07: the Labels workspace's and the parts drawer's), and the
+          # parts drawer's reach into the schema and the label rules from the Parts workspace and js/rules/labels.js
+          sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|" js/ui/partpicker.js
+          sed -i "s|'../ui/partpicker.js'|'../ui/partpicker.js?v=$V'|" js/workspaces/labels.js
+          sed -i "s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/workspaces/parts.js
+          sed -i "s|'./schema.js'|'./schema.js?v=$V'|" js/rules/labels.js
           # the Labels workspace (phase 5) and its rules module
           sed -i "s|'../ui/icons.js'|'../ui/icons.js?v=$V'|; s|'../ui/dom.js'|'../ui/dom.js?v=$V'|; s|'../ui/topbar.js'|'../ui/topbar.js?v=$V'|; s|'../ui/toolbar.js'|'../ui/toolbar.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'../rules/labels.js'|'../rules/labels.js?v=$V'|; s|'../label-panel.js'|'../label-panel.js?v=$V'|; s|'../label-text.js'|'../label-text.js?v=$V'|; s|'../ui/hint.js'|'../ui/hint.js?v=$V'|" js/workspaces/labels.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|" js/ui/hint.js
