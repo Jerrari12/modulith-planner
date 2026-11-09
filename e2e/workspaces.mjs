@@ -1267,8 +1267,14 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   const bodyVerts = () => page.evaluate(() => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count);
   // the plain shell's vertex count, from the engine itself (the drawer on the stage is OPEN here, so it wears the whole drawer,
   // which always has more vertices than the shell); the ask starts the build, so wait for it
-  await page.waitForFunction(async () => { const E = await import('/js/parts-drawer/engine.js'); return !!E.shellGeometry('240-2W', '1H'); }, null, { timeout: 60_000 });
-  const shellVerts = await page.evaluate(async () => { const E = await import('/js/parts-drawer/engine.js'); return E.shellGeometry('240-2W', '1H').attributes.position.count; });
+  // polled here, not with waitForFunction: an async predicate's promise reads as truthy, so that wait could end before the
+  // build and the next read found null (the case failed that way at 2 s on 2026-11-08 and 2026-11-09)
+  let shellVerts = 0;
+  for (const t0 = Date.now(); !shellVerts && Date.now() - t0 < 60_000;) {
+    shellVerts = await page.evaluate(async () => { const E = await import('/js/parts-drawer/engine.js'); const g = E.shellGeometry('240-2W', '1H'); return g ? g.attributes.position.count : 0; });
+    if (!shellVerts) await settle(page, 250);
+  }
+  assert.ok(shellVerts > 0, 'the engine built the plain shell');
   const box = await page.evaluate(() => { const V = window.__GEN2_VIEWER__; const g = V.drawerGroupOf(3); const b = g.getObjectByName('parts-body'); b.geometry.computeBoundingBox(); const bb = b.geometry.boundingBox; return [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].map((v) => +v.toFixed(2)); });
   assert.deepEqual(box, [163, 50, 234.3], 'the 240-2W 1H shell: 163 wide, 50 to the rim, 234.3 deep');
   // Edit compartments: the plan, a drag across two compartments, Merge, Undo through the store
@@ -1372,7 +1378,32 @@ const toPartsEditor = async (page) => {
   await settle(page, 600);
 };
 const addLine = async (page, t) => { const inp = page.locator('#ws-lib .pd-inv-line input'); await inp.fill(t); await inp.press('Enter'); await settle(page, 400); };
-test('Parts drawer: the parts list panel previews its layout in the plan, keeps the list\'s order and its fit, and Back drops the draft', async () => {
+/* the bins on a grid (2026-11-09, Sol 01a1c0ba): a bin is found by lighting it from its card, and a cell is aimed at through the
+   plan's own transform (mm, the front at y = 0), so the case checks what a person sees */
+const PD_GRID = { W: 159, D: 226, nc: 5, nr: 4, wall: 1.5 };   // a cell is the shipped compartment (Joey: room for a finger)
+const pdPitch = () => [(PD_GRID.W + PD_GRID.wall) / PD_GRID.nc, (PD_GRID.D + PD_GRID.wall) / PD_GRID.nr];
+const pdCellsOf = (r) => { const [px, py] = pdPitch(), y1 = PD_GRID.D - r.y, y0 = y1 - r.h; return { c: Math.round(r.x / px), r: Math.round(y0 / py), w: Math.round((r.w + PD_GRID.wall) / px), h: Math.round((r.h + PD_GRID.wall) / py) }; };
+const pdRect = (loc) => loc.evaluate((e) => ({ x: +e.getAttribute('x'), y: +e.getAttribute('y'), w: +e.getAttribute('width'), h: +e.getAttribute('height') }));
+const pdCard = (page, name) => page.locator('#ws-lib .pd-card:not(.add)').filter({ has: page.locator('.pd-card-name', { hasText: new RegExp(`^${name}$`) }) });
+async function pdBinOf(page, name) {
+  await pdCard(page, name).hover(); await settle(page, 150);
+  const r = await pdRect(page.locator('#ws-plan .cell.preview.hl'));
+  await page.mouse.move(5, 5); await settle(page, 150);
+  return pdCellsOf(r);
+}
+// the screen point of a cell's middle, or of a spot inside a bin's back-right corner
+async function pdAt(page, c, r, where = 'mid') {
+  const [px, py] = pdPitch(), cw = px - PD_GRID.wall, cd = py - PD_GRID.wall;
+  const x = c * px + (where === 'corner' ? cw - 1.5 : cw / 2), y = r * py + (where === 'corner' ? cd - 1.5 : cd / 2);
+  return page.evaluate(([x, y, D]) => { const s = document.querySelector('#ws-plan svg'), p = s.createSVGPoint(); p.x = x; p.y = D - y; const m = p.matrixTransform(s.getScreenCTM()); return [m.x, m.y]; }, [x, y, PD_GRID.D]);
+}
+async function pdDrag(page, from, to, { release = true } = {}) {
+  await page.mouse.move(from[0], from[1]); await page.mouse.down();
+  await page.mouse.move(from[0] + 8, from[1] - 8, { steps: 3 });
+  await page.mouse.move(to[0], to[1], { steps: 8 }); await settle(page, 200);
+  if (release) { await page.mouse.up(); await settle(page, 500); }
+}
+test('Parts drawer: the parts list lays its parts out as bins on a grid that stay where they are put, picked up and moved by hand, and Back drops the draft', async () => {
   const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
   await toPartsEditor(page);
   // a unit edit first (a deep scoop), so the undo below, while the list is open, reverts an edit and not the switch to a parts
@@ -1381,38 +1412,43 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   await btn(page, 'From a parts list', '#ws-lib').click();
   await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'the Library is the list');
+  assert.match(await text(page, '#ws-lib .pd-head .readout'), /A grid of 5 × 4 cells, 30\.6 × 55\.4 mm/, 'the grid, said');
   assert.match(await text(page, '#ws-plan .bhint'), /Add some parts/, 'the plan says the list is empty');
   for (const t of ['200 M3x8 SHCS', '20 M3x65 SHCS', '20 M3x10 SHCS', '20 M3x12 SHCS', '20 M3x16 SHCS', '20 M3x20 SHCS', '50 M3 nut', '50 M3 washer', 'bearing 625 4']) await addLine(page, t);
   assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'A part: size, type and quantity, then Enter', 'the line keeps the keyboard after Enter');
   assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 8, 'eight cards; the bearing is not a drawer part');
   assert.match(await text(page, '#ws-lib .pd-inv-skipped summary'), /1 line not laid out/);
-  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13, 'the preview: eight compartments and the spare row of five, dashed');
+  assert.equal(await page.locator('#ws-plan .cell.preview.bin').count(), 8, 'a bin a part');
+  assert.ok(await page.locator('#ws-plan .cell.preview.spare').count() >= 1, 'the leftover cells as spare compartments');
   assert.equal(await page.locator('#ws-plan .cell:not(.preview)').count(), 0, 'nothing of the drawer\'s own layout under it');
-  assert.match(await text(page, '#ws-plan .bhint'), /8 parts in 5 rows .* A spare row of 5 at the back/, 'the plan\'s header carries the summary');
-  assert.match(await text(page, '#ws-lib .pd-card .pd-card-sub'), /% full/, 'each card reads its compartment\'s fill');
-  // the cards: the plain name, not the label's abbreviation, and the count in view (Sol 01a1be4f, 2026-11-08)
+  assert.match(await text(page, '#ws-plan .bhint'), /^8 parts · 8 bins · \d+ spare compartments? · fullest bin about \d+% full/, 'the plan\'s header carries the summary');
+  // the cards: the plain name, the count, the fill, the picture; no fields until a card is opened (Sol 01a1be4f)
   assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-card-name'), 'M3 × 8 socket head screw');
   assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-qty-btn'), '200');
+  assert.match(await text(page, '#ws-lib .pd-card .pd-card-fill'), /% full/);
   assert.equal(await page.locator('#ws-lib .pd-card:not(.add) select').count(), 0, 'no fields until a card is opened');
-  // every card carries the hardware library's picture, loaded (hwpics.js, 2026-11-08)
+  assert.equal(await page.locator('#ws-lib .pd-card:not(.add) button[title="Move up"]').count(), 0, 'no order arrows: the list is the inventory');
   await page.waitForFunction(() => { const p = [...document.querySelectorAll('#ws-lib .pd-card:not(.add) > .pd-pic')]; return p.length === 8 && p.every((e) => e.tagName === 'IMG' && e.complete && e.naturalWidth > 0); }, null, { timeout: 15_000 }).catch(() => assert.fail('eight pictures, loaded'));
-  assert.equal(await page.locator('#ws-lib .pd-card:not(.add) > .pd-pic').first().getAttribute('src'), 'img/hw/shcs-m3.webp');
-  // a card and its proposed compartment light together, both ways; a press on the proposal opens the card on its quantity
-  // (the plan's gestures stay off: no selection on a proposal)
-  await page.locator('#ws-lib .pd-card:not(.add)').nth(1).hover(); await settle(page, 300);
-  assert.equal(await page.locator('#ws-plan .cell.preview.hl').getAttribute('data-i'), '1', 'the second row lights the second compartment');
-  await page.mouse.move(5, 5); await settle(page, 300);
-  const cell = page.locator('#ws-plan .cell.preview').first(); const bb = await cell.boundingBox();
-  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
-  assert.equal(await page.locator('#ws-lib .pd-card.hl').count(), 1, 'the first compartment under the pointer lights its card');
-  assert.match(await text(page, '#ws-lib .pd-card.hl .pd-card-name'), /M3 × 8/);
-  await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); await settle(page, 300);
+  // the first part's bin is at the front-left; the bins fill from the front, so the back row is free
+  const b8 = await pdBinOf(page, 'M3 × 8 socket head screw');
+  assert.deepEqual([b8.c, b8.r], [0, 0], 'the first bin at the front-left');
+  const taken = new Set();
+  for (const r of await page.locator('#ws-plan .cell.preview.bin').evaluateAll((l) => l.map((e) => ({ x: +e.getAttribute('x'), y: +e.getAttribute('y'), w: +e.getAttribute('width'), h: +e.getAttribute('height') })))) { const b = pdCellsOf(r); for (let y = b.r; y < b.r + b.h; y++) for (let x = b.c; x < b.c + b.w; x++) taken.add(`${x},${y}`); }
+  assert.ok([0, 1, 2, 3, 4].every((x) => !taken.has(`${x},3`)), `the back row is free: ${[...taken].join(' ')}`);
+  // a card and its bin light together, both ways; a press on a bin without a drag opens its card on its quantity
+  await pdCard(page, 'M3 hex nut').hover(); await settle(page, 200);
+  assert.equal(await page.locator('#ws-plan .cell.preview.hl').count(), 1, 'a card lights its bin');
+  await page.mouse.move(5, 5); await settle(page, 200);
+  const p8 = await pdAt(page, b8.c, b8.r);
+  await page.mouse.move(p8[0], p8[1]); await settle(page, 300);
+  assert.match(await text(page, '#ws-lib .pd-card.hl .pd-card-name'), /^M3 × 8/, 'a bin under the pointer lights its card');
+  await page.mouse.click(p8[0], p8[1]); await settle(page, 300);
   assert.equal(await page.locator('#ws-plan .selring').count(), 0, 'no selection on a proposal');
   assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Quantity', 'the press opens the card on its quantity');
   assert.equal(await page.evaluate(() => document.activeElement.value), '200');
   assert.equal(await page.locator('#ws-lib .pd-card.open').count(), 1, 'one card open');
-  assert.equal(await page.locator('#ws-lib .pd-card.open select').first().inputValue(), 'shcs');
   assert.match(await text(page, '#ws-lib .pd-card.open select option:checked'), /Socket head screw/, 'the type control says the plain name');
+  assert.match(await text(page, '#ws-lib .pd-card.open .pd-card-place'), /front row, at the left/, 'the card says where its bin is');
   assert.match(await text(page, '#ws-lib .pd-card.open .pd-card-edit-row'), /Printed label: M3 × 8 \/ SHCS/, 'the abbreviation, where the label is explained');
   await page.locator('#ws-lib .pd-card.open .pd-card-head').click(); await settle(page, 300);
   assert.equal(await page.locator('#ws-lib .pd-card.open').count(), 0, 'the head closes it again');
@@ -1420,81 +1456,84 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   await page.evaluate(() => document.activeElement.blur());
   await page.mouse.move(5, 5); await settle(page, 300);
   assert.equal(await page.locator('#ws-plan .cell.preview.hl, #ws-lib .pd-card.hl').count(), 0, 'nothing lit once the pointer leaves');
-  // the knobs change the preview, from the Layout options fold (closed by default, and it stays open across the re-renders)
+  // the room changes the fills, never a bin (Sol 01a1c0ba); the options are folded, and the fold stays open across re-renders
   assert.equal(await page.locator('#ws-lib .pd-inv-opts[open]').count(), 0, 'the options are folded');
   await page.locator('#ws-lib .pd-inv-opts > summary').click(); await settle(page, 300);
+  const fill8 = await text(page, '#ws-lib .pd-card:not(.add) .pd-card-fill');
   await btn(page, 'Plenty', '#ws-lib').click(); await settle(page, 400);
   assert.equal(await page.locator('#ws-lib .pd-inv-opts[open]').count(), 1, 'the fold stays open after a change');
-  assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Plenty' }).count() === 1);
+  assert.deepEqual(await pdBinOf(page, 'M3 × 8 socket head screw'), b8, 'the room changed; the bin did not');
+  assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-card-fill'), `${fill8} · over the room chosen`, 'the counted fill is the same; Plenty asks more of the bin, and the card says so');
   await btn(page, 'Comfortable', '#ws-lib').click(); await settle(page, 400);
-  // the order is the list's: the second card moved down puts the M3 x 10 second and the plan follows
-  await page.locator('#ws-lib .pd-card:not(.add)').nth(1).locator('button[title="Move down"]').click(); await settle(page, 400);
-  const names = async () => page.locator('#ws-lib .pd-card:not(.add) .pd-card-name').allTextContents();
-  assert.match((await names())[1], /M3 × 10/);
-  const labels = await page.locator('#ws-plan text.labeltxt').allTextContents();
-  assert.ok(labels.indexOf('M3 × 10') < labels.indexOf('M3 × 65'), `the plan follows the list: ${labels.join(', ')}`);
-  // a card dragged by its handle onto the plan (Sol 01a1be4f): over the spare row it goes last; the target shows while aiming and
-  // the plan's header says what the drop will do; the proposal stays still until the drop
-  const grip = async (i) => { const b = await page.locator('#ws-lib .pd-card:not(.add)').nth(i).locator('.pd-grip').boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
-  const center = async (loc) => { const b = await loc.boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
-  let [gx, gy] = await grip(2);   // M3 × 65
-  await page.mouse.move(gx, gy); await page.mouse.down(); await page.mouse.move(gx + 30, gy + 10, { steps: 4 });
-  assert.equal(await page.locator('body.pd-dragging .pd-ghost').count(), 1, 'the ghost follows');
-  assert.match(await text(page, '#ws-plan .bhint'), /Drop M3 × 65 socket head screw on another part/, 'the header explains the drop');
-  const spare = page.locator('#ws-plan .cell.preview').nth(12);   // the spare row's last cell
-  let [sx, sy] = await center(spare);
-  await page.mouse.move(sx, sy, { steps: 8 }); await settle(page, 200);
-  assert.match(await text(page, '#ws-plan .bhint'), /Move M3 × 65 socket head screw to the back/);
-  assert.equal(await page.locator('#ws-plan .cell.preview.drop').count(), 5, 'the whole spare row lights as the back');
-  assert.equal(await page.locator('#ws-plan text.labeltxt').allTextContents().then((l) => l.indexOf('M3 × 65')), labels.indexOf('M3 × 65'), 'nothing moved while aiming');
+  // a bin picked up in the plan: to free cells it moves there, exactly, and the header says so while aiming
+  const nut = await pdBinOf(page, 'M3 hex nut');
+  await pdDrag(page, await pdAt(page, nut.c, nut.r), await pdAt(page, 0, 3), { release: false });
+  assert.match(await text(page, '#ws-plan .bhint'), /^Put M3 hex nut here: back row, at the left\./, 'the header says what letting go will do');
+  assert.equal(await page.locator('#ws-plan .bincand.ok').count(), 1, 'the candidate, green');
+  assert.equal(await page.locator('#ws-plan .cell.preview.moving').count(), 1, 'the bin it came from, dimmed');
   await page.mouse.up(); await settle(page, 500);
-  assert.match((await names())[7], /M3 × 65/, 'dropped on the spare row, the part is last');
-  assert.equal(await page.locator('.pd-ghost, body.pd-dragging').count(), 0, 'the ghost is gone');
-  assert.match(await text(page, '#ws-toast'), /M3 × 65 socket head screw is now part 8 of 8/, 'said for the ear too');
-  // Esc while dragging changes nothing
-  [gx, gy] = await grip(0);
-  await page.mouse.move(gx, gy); await page.mouse.down(); await page.mouse.move(gx + 30, gy + 10, { steps: 4 });
-  const c1 = page.locator('#ws-plan .cell.preview').nth(1); let [cx, cy] = await center(c1);
-  await page.mouse.move(cx, cy, { steps: 6 }); await settle(page, 200);
-  assert.match(await text(page, '#ws-plan .bhint'), /Move M3 × 8 socket head screw before M3 × 10 socket head screw/);
+  assert.deepEqual(await pdBinOf(page, 'M3 hex nut'), { c: 0, r: 3, w: nut.w, h: nut.h }, 'it landed where it was let go');
+  assert.match(await text(page, '#ws-toast'), /M3 hex nut: back row, at the left/, 'said for the ear too');
+  assert.deepEqual(await pdBinOf(page, 'M3 × 8 socket head screw'), b8, 'nothing else moved');
+  // onto another bin: refused, and nothing changes
+  const washer = await pdBinOf(page, 'M3 washer');
+  await pdDrag(page, await pdAt(page, washer.c, washer.r), await pdAt(page, b8.c, b8.r), { release: false });
+  assert.match(await text(page, '#ws-plan .bhint'), /M3 washer can’t go there: those cells are taken/);
+  assert.equal(await page.locator('#ws-plan .bincand.bad').count(), 1, 'the candidate, amber');
+  await page.mouse.up(); await settle(page, 400);
+  assert.deepEqual(await pdBinOf(page, 'M3 washer'), washer, 'refused: the washer stayed');
+  assert.match(await text(page, '#ws-toast'), /M3 washer can’t go there: those cells are taken/, 'the refusal is said on release (Sol 01a1c0e0)');
+  // Esc while aiming changes nothing, and is not Back
+  await pdDrag(page, await pdAt(page, washer.c, washer.r), await pdAt(page, 3, 3), { release: false });
   await page.keyboard.press('Escape'); await settle(page, 200); await page.mouse.up(); await settle(page, 300);
-  assert.match((await names())[0], /M3 × 8/, 'Esc dropped the drag, not the part');
-  assert.equal(await page.locator('.pd-ghost, #ws-plan .cell.preview.drop').count(), 0);
-  assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 0, 'and it was not Back');
-  // dropped on another part, it goes before that part: the M3 × 65 back to third
-  [gx, gy] = await grip(7);
-  await page.mouse.move(gx, gy); await page.mouse.down(); await page.mouse.move(gx + 30, gy - 10, { steps: 4 });
-  const c2 = page.locator('#ws-plan .cell.preview').nth(2); [cx, cy] = await center(c2);
-  await page.mouse.move(cx, cy, { steps: 6 }); await settle(page, 200);
-  assert.equal(await page.locator('#ws-plan .cell.preview.drop').getAttribute('data-i'), '2', 'the target compartment lights');
-  assert.match(await text(page, '#ws-plan .bhint'), /Move M3 × 65 socket head screw before M3 × 12 socket head screw/);
+  assert.deepEqual(await pdBinOf(page, 'M3 washer'), washer, 'Esc dropped the drag, not the bin');
+  assert.equal(await page.locator('#ws-plan .bincand, #ws-lib .pd-inv-leave').count(), 0, 'no candidate, and not Back');
+  // a bin's back-right corner resizes it, into free cells
+  await pdDrag(page, await pdAt(page, 0, 3, 'corner'), await pdAt(page, nut.w, 3), { release: false });
+  assert.match(await text(page, '#ws-plan .bhint'), new RegExp(`^M3 hex nut: ${nut.w + 1} × ${nut.h} cells, about \\d+% full`));
   await page.mouse.up(); await settle(page, 500);
-  assert.deepEqual((await names()).map((t) => t.replace(' socket head screw', '').replace(' hex nut', ' nut')), ['M3 × 8', 'M3 × 10', 'M3 × 65', 'M3 × 12', 'M3 × 16', 'M3 × 20', 'M3 nut', 'M3 washer'], 'before the M3 × 12, the rest shifted back');
-  // Move to front from the open card, then the arrow puts it back
-  await page.locator('#ws-lib .pd-card:not(.add)').nth(2).locator('.pd-card-head').click(); await settle(page, 300);
-  await btn(page, 'Move to front', '#ws-lib .pd-card.open').click(); await settle(page, 400);
-  assert.match((await names())[0], /M3 × 65/);
-  await page.locator('#ws-lib .pd-card:not(.add)').nth(0).locator('button[title="Move down"]').click(); await settle(page, 300);
-  await page.locator('#ws-lib .pd-card:not(.add)').nth(1).locator('button[title="Move down"]').click(); await settle(page, 300);
-  assert.match((await names())[2], /M3 × 65/, 'back in third place');
+  assert.deepEqual(await pdBinOf(page, 'M3 hex nut'), { c: 0, r: 3, w: nut.w + 1, h: nut.h }, 'one cell wider');
+  // a card dragged by its handle onto the plan puts its bin there
+  const g = await pdCard(page, 'M3 washer').locator('.pd-grip').boundingBox();
+  await pdDrag(page, [g.x + g.width / 2, g.y + g.height / 2], await pdAt(page, 4, 3), { release: false });
+  assert.equal(await page.locator('body.pd-dragging .pd-ghost').count(), 1, 'the ghost follows');
+  assert.match(await text(page, '#ws-plan .bhint'), /^Put M3 washer here: back row, at the right\./);
+  await page.mouse.up(); await settle(page, 500);
+  assert.equal(await page.locator('.pd-ghost, body.pd-dragging').count(), 0, 'the ghost is gone');
+  assert.deepEqual(await pdBinOf(page, 'M3 washer'), { c: 4, r: 3, w: washer.w, h: washer.h }, 'the card put its bin at the back right');
+  // the keyboard way: the open card's arrows move its bin a cell, and the focus stays on the arrow
+  await pdCard(page, 'M3 washer').locator('.pd-card-head').click(); await settle(page, 300);
+  await page.locator('#ws-lib .pd-card.open button[data-k="Move left one cell"]').click(); await settle(page, 400);
+  assert.deepEqual(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-k')), 'Move left one cell', 'the focus stays on the arrow');
+  assert.match(await text(page, '#ws-lib .pd-card.open .pd-card-place'), /back row, 4th from the left/);
+  assert.equal(await page.locator('#ws-lib .pd-card.open button[data-k="Move left one cell"]').isDisabled(), nut.w + 1 >= 3, 'the arrow is off only where the nut is in the way');
+  assert.equal(await page.locator('#ws-lib .pd-card.open button[data-k="Move one cell toward the back"]').isDisabled(), true, 'nothing behind the back row');
   await page.locator('#ws-lib .pd-card.open .pd-card-head').click(); await settle(page, 200);
-  // an undo while the list is open changes the unit, not the list: the draft stays and the preview is still drawn
+  await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.mouse.move(5, 5); await settle(page, 200);
+  // an undo while the list is open changes the unit, not the list: the draft and its bins stay
   await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 600);
   assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 8, 'the list is still open with its cards');
-  assert.equal(await page.locator('#ws-plan .cell.preview').count(), 13);
-  // Lay out drawer: the layout with its parts, the counted quantities, the fit, and the list closed
+  assert.equal(await page.locator('#ws-plan .cell.preview.bin').count(), 8);
+  assert.deepEqual(await pdBinOf(page, 'M3 washer'), { c: 3, r: 3, w: washer.w, h: washer.h }, 'the bins too');
+  // Part outlines from the list's options (2026-11-09): the draft draws them, and Lay out drawer prints them
+  if (!(await page.locator('#ws-lib .pd-inv-opts[open]').count())) { await page.locator('#ws-lib .pd-inv-opts > summary').click(); await settle(page, 200); }
+  await page.locator('#ws-lib label', { hasText: 'Part outlines cut into the floors' }).click(); await settle(page, 400);
+  assert.ok(await page.locator('#ws-plan .outline').count() >= 8, 'the draft draws the outlines');
+  // Lay out drawer: the bins and the spare compartments, the counted quantities, the fit with its grid, and the list closed
+  const proposed = await page.locator('#ws-plan .cell.preview').count();
   await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
-  const lay = await page.evaluate(() => { const l = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout; return { fit: l.fit, comps: l.comps.length, parts: l.comps.filter((c) => c.item).length, nr: l.nr, qty8: l.comps.find((c) => c.item && c.item.length === 8).item.qty, spareHolders: l.comps.filter((c) => !c.item).every((c) => c.holder !== false) }; });
-  assert.deepEqual(lay, { fit: { cap: 0.75, round: false, spare: true }, comps: 13, parts: 8, nr: 5, qty8: 200, spareHolders: true });
+  const lay = await page.evaluate(() => { const l = window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout; return { fit: l.fit, comps: l.comps.length, parts: l.comps.filter((c) => c.item).length, nr: l.nr, nc: l.nc, qty8: l.comps.find((c) => c.item && c.item.length === 8).item.qty, spareHolders: l.comps.filter((c) => !c.item).every((c) => c.holder !== false) }; });
+  assert.deepEqual(lay, { fit: { cap: 0.75, round: false, spare: true, grid: { nc: 5, nr: 4 } }, comps: proposed, parts: 8, nr: 4, nc: 5, qty8: 200, spareHolders: true });
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.outlines), true, 'Part outlines laid out with the drawer');
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Editing compartments/, 'back to the compartment tools');
   assert.equal(await page.locator('#ws-plan .cell.preview').count(), 0, 'the plan is the drawer\'s again');
-  assert.equal(await page.locator('#ws-plan .cell').count(), 13);
+  assert.equal(await page.locator('#ws-plan .cell').count(), proposed);
   // a compartment's part in the Inspector: the typed line and the list's own fields with the picture (one editing surface,
   // 2026-11-08); a change by a field is one history entry, and the typed line and the picture follow it
-  const c0 = page.locator('#ws-plan .cell').first(); const b0 = await c0.boundingBox();
-  await page.mouse.click(b0.x + b0.width / 2, b0.y + b0.height / 2); await settle(page, 500);
+  const c0 = page.locator('#ws-plan .cell').first(); const bc0 = await c0.boundingBox();
+  await page.mouse.click(bc0.x + bc0.width / 2, bc0.y + bc0.height / 2); await settle(page, 500);
   assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 200');
-  assert.deepEqual(await page.evaluate(() => { const f = document.querySelector('#ws-insp .pd-part .pd-fields'); return [f.querySelector('.pd-pic').getAttribute('src'), ...[...f.querySelectorAll('select')].map((s) => s.value), ...[...f.querySelectorAll('input')].map((i) => i.value)]; }), ['img/hw/shcs-m3.webp', 'shcs', 'M3', '8', '200']);
+  assert.deepEqual(await page.evaluate(() => { const f = document.querySelector('#ws-insp .pd-part .pd-fields'); return [f.querySelector('.pd-pic').getAttribute('src'), ...[...f.querySelectorAll('select')].map((s) => s.value), ...[...f.querySelectorAll('input')].map((i) => i.value)]; }), ['img/hw/shcs-m3.webp', 'shcs', 'M3', 'steel', '8', '200']);
   await page.fill('#ws-insp .pd-part .pd-qty input', '120'); await page.press('#ws-insp .pd-part .pd-qty input', 'Tab'); await settle(page, 500);
   assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 120', 'the typed line follows the field');
   await page.selectOption('#ws-insp .pd-part .pd-fields select >> nth=0', 'bhcs'); await settle(page, 500);
@@ -1503,13 +1542,17 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 400); await page.click('#ws-tools button[aria-label="Undo"]'); await settle(page, 500);
   assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps[0].item), { type: 'shcs', size: 'M3', length: 8, qty: 200 }, 'two undos, one per field change');
   { const x = page.locator('#ws-insp button[aria-label="Clear the selection"]'); if (await x.count()) { await x.click(); await settle(page, 300); } }
-  // reopened, the list is the drawer's parts in reading order with the fit it was laid out with; Esc drops it
+  // reopened, every bin is where it was laid out, with the fit; a new part gets the first free spot; Esc asks first
   await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
   assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 8);
-  assert.match((await names())[1], /M3 × 10/, 'the moved order came back');
+  assert.equal(await page.locator('#ws-lib .pd-inv-note').count(), 0, 'on the grid: no starting over');
+  assert.deepEqual(await pdBinOf(page, 'M3 hex nut'), { c: 0, r: 3, w: nut.w + 1, h: nut.h }, 'the bins came back where they were');
+  assert.deepEqual(await pdBinOf(page, 'M3 washer'), { c: 3, r: 3, w: washer.w, h: washer.h });
+  await page.locator('#ws-lib .pd-inv-opts > summary').click(); await settle(page, 300);
   assert.ok(await page.locator('#ws-lib .track button.seg.on', { hasText: 'Comfortable' }).count() === 1);
   await addLine(page, '30 M4x20 SHCS');
   assert.equal(await page.locator('#ws-lib .pd-card:not(.add)').count(), 9);
+  assert.equal(await page.locator('#ws-plan .cell.preview.bin').count(), 9, 'the new part got a bin');
   await page.keyboard.press('Escape'); await settle(page, 500);
   assert.match(await text(page, '#ws-lib .pd-head h2'), /Parts list/, 'Esc with a layout proposed asks first');
   assert.equal(await page.locator('#ws-lib .pd-inv-leave').count(), 1, 'the ask: Lay out drawer / Drop the list / Keep editing');
@@ -1529,11 +1572,55 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   await btn(page, 'From a parts list', '#ws-lib').click(); await settle(page, 600);
   await btn(page, 'Done', '#ws-dock').click();
   await page.waitForFunction(() => !document.querySelector('#ws-lib .pd-head'), null, { timeout: 15_000 });
-  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.length), 13);
-  // the link carries the fit with the layout
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.length), proposed);
+  // the link carries the fit, its grid with it
   const href = await page.evaluate(() => location.href);
   await page.goto(href, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
-  assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.fit), { cap: 0.75, round: false, spare: true }, 'the fit survives the link');
+  assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.fit), { cap: 0.75, round: false, spare: true, grid: { nc: 5, nr: 4 } }, 'the fit survives the link');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A PART'S MATERIAL (2026-11-09, Joey: "i chose brass heated inserts but they are showing up like steel"): an insert shows
+   brass by default, a typed material shows in the picture and the name, the open card changes it, and the laid-out drawer keeps it. */
+test('Parts drawer: a part’s material shows in its picture and name, changes from its card, and stays with the layout', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
+  await toPartsEditor(page);
+  await btn(page, 'From a parts list', '#ws-lib').click();
+  await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
+  for (const t of ['50 M3 insert', '20 M3x10 stainless SHCS']) await addLine(page, t);
+  const pics = () => page.locator('#ws-lib .pd-card:not(.add) > .pd-pic').evaluateAll((l) => l.map((e) => e.getAttribute('src')));
+  assert.deepEqual(await pics(), ['img/hw/insert-m3.webp', 'img/hw/shcs-m3--stainless.webp'], 'the insert in brass by default, the screw as typed');
+  assert.deepEqual(await page.locator('#ws-lib .pd-card:not(.add) .pd-card-name').allTextContents(), ['M3 heat-set insert', 'M3 × 10 stainless socket head screw']);
+  await page.locator('#ws-lib .pd-card:not(.add)').first().locator('.pd-card-head').click(); await settle(page, 300);
+  assert.deepEqual(await page.locator('#ws-lib .pd-card.open select.pd-mat option').allTextContents(), ['Brass', 'Stainless'], 'an insert offers brass and stainless');
+  assert.equal(await page.inputValue('#ws-lib .pd-card.open select.pd-mat'), 'brass');
+  await page.selectOption('#ws-lib .pd-card.open select.pd-mat', 'stainless'); await settle(page, 400);
+  assert.equal((await pics())[0], 'img/hw/insert-m3--stainless.webp');
+  assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-card-name'), 'M3 stainless heat-set insert');
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-lib .pd-card:not(.add) > .pd-pic')].every((e) => e.complete && e.naturalWidth > 0), null, { timeout: 15_000 }).catch(() => assert.fail('the pictures load'));
+  await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
+  const mats = await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.filter((c) => c.item).map((c) => c.item.type + ':' + (c.item.mat || '')));
+  assert.deepEqual(mats.sort(), ['insert:stainless', 'shcs:stainless'], 'the layout keeps each part’s material');
+  // the contents preview (2026-11-09, Sol 01a1c0ec; real size by default on Joey's word): a glyph a part in the plan at 1:1 and a
+  // model a part in 3D at scale 1; the toolbar's switch goes real size -> enlarged (said not to scale) -> off; not in the layout
+  const models = () => page.evaluate(() => { const out = []; window.__GEN2_VIEWER__.drawerGroupOf(3).traverse((o) => { if (o.name === 'parts-contents') out.push(+o.scale.x.toFixed(3)); }); return out; });
+  const glyphScale = () => page.locator('#ws-plan .glyph').evaluateAll((l) => l.map((g) => +(/scale\(([\d.]+)\)/.exec(g.getAttribute('transform')) || [0, 0])[1]));
+  assert.match(await text(page, 'button.pd-contents'), /^Contents: real size$/);
+  assert.deepEqual(await glyphScale(), [1, 1], 'a glyph a part, at 1:1');
+  assert.match(await text(page, '#ws-plan .pd-contents-note'), /Parts at real size/);
+  assert.deepEqual(await models(), [1, 1], 'a model a part, at real size');
+  await page.locator('button.pd-contents').click(); await settle(page, 400);
+  assert.match(await text(page, 'button.pd-contents'), /^Contents: enlarged$/);
+  assert.match(await text(page, '#ws-plan .pd-contents-note'), /not to scale/, 'enlarged, the header says not to scale');
+  assert.ok((await models()).every((k) => k > 1) && (await glyphScale()).every((k) => k > 1), 'enlarged in both views');
+  assert.ok((await models()).every((k) => k >= 1) && (await glyphScale()).every((k) => k >= 1), 'never below real size (Sol 01a1c100)');
+  await page.locator('button.pd-contents').click(); await settle(page, 400);
+  assert.equal(await page.locator('#ws-plan .glyph').count(), 0, 'off: no glyphs');
+  assert.deepEqual(await models(), [], 'off: no models');
+  assert.equal(await page.evaluate(() => 'contents' in window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout), false, 'not in the layout');
+  await page.locator('button.pd-contents').click(); await settle(page, 400);
+  assert.deepEqual(await glyphScale(), [1, 1], 'back to real size');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

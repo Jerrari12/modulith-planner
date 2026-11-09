@@ -36,7 +36,7 @@ export function partsSizeWhy(L, w, h) {
 export function cleanItem(it) {
   if (!it || !I.known(it)) return null;
   const T = I.TYPES[it.type];
-  return { type: it.type, size: it.size, length: T.screw || T.len ? +it.length || 0 : 0, qty: Math.max(0, Math.round(+it.qty || 0)) };
+  return { type: it.type, size: it.size, length: T.screw || T.len ? +it.length || 0 : 0, qty: Math.max(0, Math.round(+it.qty || 0)), ...(I.matsFor(it.type).includes(it.mat) ? { mat: it.mat } : {}) };   // mat: optional, the picture's material (2026-11-09)
 }
 /* floor colours: the mode and how many paint slots; the colours themselves are the build's palette regions
    (Drawer:FLOOR1..4, SPEC "Floor colours through the planner's filament picker, stored as palette regions") */
