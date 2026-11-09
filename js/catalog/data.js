@@ -599,13 +599,14 @@ const GEN2 = {
   // (sideCover left this list 2026-10-29 — the six MODULITH Side Covers pages
   // went live 2026-10-10, on Printables and Thangs; first edit made here, in the
   // merged planner, after the old planner became a forward page at cutover.)
-  // chipDrawer (2026-11-07): the Filament Sample Chip Drawers (v2611) and their
-  // chip, held until Joey's test print passes and the twelve MODULITH pages are
-  // live; then this entry goes and the pages join LINK_OVERRIDES.
-  unreleased: ["door", "hinge", "latch", "chipDrawer"],
+  // (chipDrawer left this list 2026-11-09 - the twelve MODULITH Filament Sample
+  // Chip Drawers pages went live that day on Printables and Thangs, after Joey's
+  // 59 test print; they are in LINK_OVERRIDES. The 185 and 240 pages are his
+  // repurposed GEN2 filament drawer pages, so their ids are older.)
+  unreleased: ["door", "hinge", "latch"],
 
   /* Filament Sample Chip Drawers (v2611, 2026-11-07). A 1W-0.5H drawer that
-     holds filament sample chips on edge in two combed lanes, in Classic (the
+     holds filament sample chips on edge in two slotted lanes, in Classic (the
      one-piece Classic drawer, grip moulded in) and Decor (the Decor Parts
      Drawer's closed front: a faceplate, no back cover). Same envelope as the
      standard 1W-0.5H drawer of the same collection, so it swaps in for one. A
@@ -859,6 +860,23 @@ const LINK_OVERRIDES = {
   "MODULITH 185 Gridfinity Decor Drawers": { p: "https://www.printables.com/model/1852597-modulith-185-gridfinity-decor-drawers", t: "https://than.gs/m/1609253" },
   "MODULITH 240 Gridfinity Decor Drawers": { p: "https://www.printables.com/model/1852867-modulith-240-gridfinity-decor-drawers", t: "https://than.gs/m/1609254" },
   "MODULITH 270 Gridfinity Decor Drawers": { p: "https://www.printables.com/model/1852873-modulith-270-gridfinity-decor-drawers", t: "https://than.gs/m/1609252" },
+
+  // ---- Filament Sample Chip Drawers (v2611) - a MODULITH page per style per
+  //      length, all live 2026-11-09 (Printables slugs from its API, Thangs
+  //      short links checked in a browser). The chip and title piece rows link
+  //      these too, through linkAs. 185/240 are the repurposed GEN2 pages. ----
+  "MODULITH 59 Classic Filament Sample Chip Drawers":  { p: "https://www.printables.com/model/1907113-modulith-59-classic-filament-sample-chip-drawers", t: "https://than.gs/m/1654495" },
+  "MODULITH 59 Decor Filament Sample Chip Drawers":    { p: "https://www.printables.com/model/1907114-modulith-59-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1654499" },
+  "MODULITH 115 Classic Filament Sample Chip Drawers": { p: "https://www.printables.com/model/1907116-modulith-115-classic-filament-sample-chip-drawers", t: "https://than.gs/m/1654501" },
+  "MODULITH 115 Decor Filament Sample Chip Drawers":   { p: "https://www.printables.com/model/1907118-modulith-115-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1654502" },
+  "MODULITH 165 Classic Filament Sample Chip Drawers": { p: "https://www.printables.com/model/1907120-modulith-165-classic-filament-sample-chip-drawers", t: "https://than.gs/m/1654504" },
+  "MODULITH 165 Decor Filament Sample Chip Drawers":   { p: "https://www.printables.com/model/1907121-modulith-165-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1654505" },
+  "MODULITH 185 Classic Filament Sample Chip Drawers": { p: "https://www.printables.com/model/270907-modulith-185-classic-filament-sample-chip-drawers", t: "https://than.gs/m/1269482" },
+  "MODULITH 185 Decor Filament Sample Chip Drawers":   { p: "https://www.printables.com/model/1189655-modulith-185-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1268614" },
+  "MODULITH 240 Classic Filament Sample Chip Drawers": { p: "https://www.printables.com/model/1347965-modulith-240-classic-filament-sample-chip-drawers", t: "https://than.gs/m/1378551" },
+  "MODULITH 240 Decor Filament Sample Chip Drawers":   { p: "https://www.printables.com/model/1347927-modulith-240-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1378535" },
+  "MODULITH 270 Classic Filament Sample Chip Drawers": { p: "https://www.printables.com/model/1907129-modulith-270-classic-filament-sample-chip-drawers", t: "https://than.gs/m/1654510" },
+  "MODULITH 270 Decor Filament Sample Chip Drawers":   { p: "https://www.printables.com/model/1907133-modulith-270-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1654511" },
 
   // ---- Covers — dedicated per-length pages (Thangs added 2026-07-12; CL/CU rows funnel here) ----
   "GEN2 59 Covers":  { p: "https://www.printables.com/model/1777881-gen2-59-cover", t: "https://than.gs/m/1574324", m: "https://makerworld.com/en/models/3094116-gen2-59-covers" },

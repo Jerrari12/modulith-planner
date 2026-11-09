@@ -209,7 +209,7 @@ export const isGridfinity = (L, u) => gridfinitySizeOk(L, u) && u.variant === 'g
 /* ---- Filament Sample Chip Drawers (v2611, 2026-11-07) -----------------------
    A per-unit VARIANT of the Classic AND the Decor drawer, the Gridfinity rule's
    shape: `u.variant === 'chips'`, its ABSENCE is the standard drawer. A 1W-0.5H
-   drawer holding filament sample chips on edge in two combed lanes, in every
+   drawer holding filament sample chips on edge in two slotted lanes, in every
    collection. The envelope is the standard 1W-0.5H drawer's (GLB overlay
    2026-11-07: Decor identical, Classic 59/115 0.05 mm longer at each end), so
    it lands on the standard drawer's pose. The Classic keeps its moulded grip;
@@ -522,9 +522,23 @@ const LINKS_BY_LEN = {
   /* Filament Sample Chip Drawers (2026-11-07): `MODULITH <L> Classic Filament
      Sample Chip Drawers` and `MODULITH <L> Decor ...`, a page per style per
      collection (Joey: "page per style per length"), each carrying the chip.
-     EMPTY and NO fallback until the pages are live, the Gridfinity rule. */
-  chipsClassic: {},
-  chipsDecor: {},
+     Live 2026-11-09, mirroring the planner's LINK_OVERRIDES; still NO fallback. */
+  chipsClassic: {
+    59:  { p: 'https://www.printables.com/model/1907113-modulith-59-classic-filament-sample-chip-drawers', t: 'https://than.gs/m/1654495' },
+    115: { p: 'https://www.printables.com/model/1907116-modulith-115-classic-filament-sample-chip-drawers', t: 'https://than.gs/m/1654501' },
+    165: { p: 'https://www.printables.com/model/1907120-modulith-165-classic-filament-sample-chip-drawers', t: 'https://than.gs/m/1654504' },
+    185: { p: 'https://www.printables.com/model/270907-modulith-185-classic-filament-sample-chip-drawers', t: 'https://than.gs/m/1269482' },
+    240: { p: 'https://www.printables.com/model/1347965-modulith-240-classic-filament-sample-chip-drawers', t: 'https://than.gs/m/1378551' },
+    270: { p: 'https://www.printables.com/model/1907129-modulith-270-classic-filament-sample-chip-drawers', t: 'https://than.gs/m/1654510' },
+  },
+  chipsDecor: {
+    59:  { p: 'https://www.printables.com/model/1907114-modulith-59-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1654499' },
+    115: { p: 'https://www.printables.com/model/1907118-modulith-115-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1654502' },
+    165: { p: 'https://www.printables.com/model/1907121-modulith-165-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1654505' },
+    185: { p: 'https://www.printables.com/model/1189655-modulith-185-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1268614' },
+    240: { p: 'https://www.printables.com/model/1347927-modulith-240-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1378535' },
+    270: { p: 'https://www.printables.com/model/1907133-modulith-270-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1654511' },
+  },
   classic: { // Thangs pages mirrored from the planner 2026-07-12 (240 new; 59 has none yet)
     59:  { p: 'https://www.printables.com/model/234780-gen2-59-classic-drawers-all', m: 'https://makerworld.com/en/models/2364890-gen2-59-classic-drawers-all' },
     115: { p: 'https://www.printables.com/model/1143243-gen2-115-classic-drawers-all', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20115%20Classic%20Drawers-1069181', m: 'https://makerworld.com/en/models/755424-gen2-115-classic-drawers-all' },
@@ -2278,7 +2292,7 @@ export function generateManifest(build, opts = {}) {
     } else if (chips) {
       const holds = CHIPS.lanes * CHIPS.slotsPerLane[L], page = isClassic ? links.chipsClassic : links.chipsDecor;
       add(drwNode, `${isClassic ? 'Classic' : 'Decor'} Filament Sample Chip Drawer ${L}-${u.w}W-${H}H`, 'Drawer', page, 1, false, false, null,
-        `Holds up to ${holds} filament sample chips on edge in two combed lanes · swaps in for a standard ${u.w}W-${u.hh / 2}H drawer` +
+        `Holds up to ${holds} filament sample chips on edge in two slotted lanes · swaps in for a standard ${u.w}W-${u.hh / 2}H drawer` +
         (isClassic ? '.' : ' · closed front: it takes a faceplate and no back cover.') +
         (page ? '' : ' Not published yet · the model is coming soon.'));
     } else {

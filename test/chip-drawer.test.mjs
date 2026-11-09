@@ -1,11 +1,11 @@
 /* FILAMENT SAMPLE CHIP DRAWERS (v2611, 2026-11-07)
  *
  * A per-unit VARIANT of the Classic AND the Decor drawer (`variant: 'chips'`; absence = the standard drawer), at
- * 1W-0.5H in every collection: chips stand on edge in two combed lanes. Only the body, its row and its links change:
+ * 1W-0.5H in every collection: chips stand on edge in two slotted lanes. Only the body, its row and its links change:
  * the envelope is the standard 1W-0.5H drawer's (the GLB overlay below), so it lands on EXACTLY that drawer's pose. The
  * Decor one has the Decor Parts Drawer's closed front, so it takes a faceplate but no back cover. Each chip drawer adds
- * one optional row for the chip itself, with the capacity in its note. Not released: every row says "coming soon"
- * until `chipDrawer` leaves GEN2.unreleased (Joey's test print, then the twelve MODULITH pages).
+ * one optional row for the chip itself, with the capacity in its note. Released 2026-11-09: `chipDrawer` left
+ * GEN2.unreleased when the twelve MODULITH pages went live, and every row links its own page (planner and stage alike).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -53,7 +53,7 @@ test('the catalog and the generator carry the same chip drawer table, and it is 
   assert.equal(JSON.stringify(GEN2.chips.slotsPerLane), JSON.stringify(CHIPS.slotsPerLane));
   assert.equal(GEN2.chips.lanes, CHIPS.lanes);
   for (const L of LENGTHS) assert.equal(GEN2.chips.lanes * GEN2.chips.slotsPerLane[L], HOLDS[L], `${L}: chips per drawer`);
-  assert.ok(GEN2.unreleased.includes('chipDrawer'), 'not released until Joey confirms the test print and the pages are live');
+  assert.ok(!GEN2.unreleased.includes('chipDrawer'), 'released 2026-11-09: the twelve MODULITH pages are live');
 });
 
 test('a chip unit gets the chip body, on exactly the standard drawer\'s pose, in both styles and every collection', () => {
@@ -81,7 +81,7 @@ test('the Decor chip drawer wears its faceplate and handle as the standard one d
   assert.equal(inst(cl, /Faceplate|BackCover/).length, 0, 'a Classic drawer is its own front');
 });
 
-test('the bill: each style its own row with the capacity, one optional chip row, all "coming soon"', () => {
+test('the bill: each style its own row with the capacity, one optional chip row, all released', () => {
   for (const L of LENGTHS) {
     const b = build(L, { placed: [drawer('u1', 0, 'classic', 1, 1, { variant: 'chips' }), drawer('u2', 1, 'decor', 1, 1, { variant: 'chips' }),
       drawer('u3', 2, 'decor', 1, 1, { variant: 'chips' })] });
@@ -91,16 +91,17 @@ test('the bill: each style its own row with the capacity, one optional chip row,
     const de = r.find((x) => x.name === `GEN2 ${L}-1W-0.5H Decor Filament Sample Chip Drawer`);
     assert.ok(cl && de, `${L}: both styles billed: ${r.map((x) => x.name).join(' | ')}`);
     assert.equal(cl.qty, 1); assert.equal(de.qty, 2);
-    assert.match(cl.note, new RegExp(`^Holds up to ${HOLDS[L]} filament sample chips on edge in two combed lanes`));
+    assert.match(cl.note, new RegExp(`^Holds up to ${HOLDS[L]} filament sample chips on edge in two slotted lanes`));
+    assert.doesNotMatch(cl.note + de.note, /comb/, 'the pages say slotted lanes since 2026-11-09 (Joey: "what are comb teeth?")');
     assert.doesNotMatch(cl.note, /faceplate/);
     assert.match(de.note, /closed front: it takes a faceplate and no back cover/);
-    assert.equal(cl.unreleased, true); assert.equal(de.unreleased, true);
+    assert.equal(cl.unreleased, false); assert.equal(de.unreleased, false);
     assert.ok(!r.some((x) => /^GEN2 \d+-1W-0\.5H (Classic|Decor) Drawer$/.test(x.name)), `${L}: no standard drawer row`);
     const chip = r.find((x) => x.name === 'GEN2 Filament Sample Chip');
     assert.ok(chip, `${L}: the chip row`);
     assert.equal(chip.qty, 3, 'one per chip drawer: how many to print is in the note');
     assert.equal(chip.optional, true);
-    assert.equal(chip.unreleased, true);
+    assert.equal(chip.unreleased, false);
     assert.equal(chip.linkAs, `MODULITH ${L} Classic Filament Sample Chip Drawers`,
       'the chip ships in both styles\' downloads: with a Classic chip drawer in the build, the Classic page');
     assert.match(chip.note, new RegExp(`these drawers hold up to ${3 * HOLDS[L]}\\.`));
@@ -110,7 +111,7 @@ test('the bill: each style its own row with the capacity, one optional chip row,
     assert.ok(titles, `${L}: the title pieces row`);
     assert.equal(titles.qty, 1, 'one set however many chip drawers: the 3MFs carry every title');
     assert.equal(titles.optional, true);
-    assert.equal(titles.unreleased, true);
+    assert.equal(titles.unreleased, false);
     assert.equal(titles.linkAs, chip.linkAs, 'the same download as the chip');
     assert.match(titles.note, /3MFs for Bambu Studio and PrusaSlicer with 35 titles \(PLA to PEEK\) and a blank/);
     assert.equal(titles.requirement.scope, 'enhancement');
@@ -137,14 +138,28 @@ test('the title piece count matches the shipped set: 35 titles and a blank', () 
   }
 });
 
-test('the stage\'s row matches: the part, its note, no links while unpublished', () => {
+test('the stage\'s row matches: the part, its note, and its own page\'s links', () => {
   const m = ok(build(240, { placed: [drawer('u1', 0, 'decor', 1, 1, { variant: 'chips' })] }), '240 decor chips');
   const r = mrow(m, /^DecorChipDrawer_/);
   assert.equal(r.label, 'Decor Filament Sample Chip Drawer 240-1W-05H');
   assert.equal(r.type, 'Drawer', 'a drawer like any other: focus, interior dims, glides, closure sync');
-  assert.match(r.note, /^Holds up to 106 filament sample chips/);
-  assert.match(r.note, /coming soon/);
-  assert.ok(!r.links, 'no links until the MODULITH pages exist - never the standard drawer page');
+  assert.match(r.note, /^Holds up to 106 filament sample chips on edge in two slotted lanes/);
+  assert.doesNotMatch(r.note, /coming soon/);
+  assert.equal(r.links.p, 'https://www.printables.com/model/1347927-modulith-240-decor-filament-sample-chip-drawers', 'the repurposed 240 Decor page');
+  assert.equal(r.links.t, 'https://than.gs/m/1378535');
+});
+
+test('the stage and the planner link the same twelve pages (generate.js mirrors LINK_OVERRIDES)', () => {
+  for (const L of LENGTHS) for (const fill of ['classic', 'decor']) {
+    const m = ok(build(L, { placed: [drawer('u1', 0, fill, 1, 1, { variant: 'chips' })] }), `${L} ${fill} chips`);
+    const r = mrow(m, new RegExp(`^${STYLE[fill]}ChipDrawer_`));
+    const pl = partLinks(`GEN2 ${L}-1W-0.5H ${STYLE[fill]} Filament Sample Chip Drawer`);
+    const by = Object.fromEntries(pl.stores.map((s) => [s.id, s]));
+    assert.ok(by.printables.exact && by.thangs.exact, `${L} ${fill}: the planner has both pages`);
+    assert.equal(r.links.p, by.printables.url, `${L} ${fill}: Printables`);
+    assert.equal(r.links.t, by.thangs.url, `${L} ${fill}: Thangs`);
+    assert.match(r.links.p, new RegExp(`-modulith-${L}-${fill}-filament-sample-chip-drawers$`), `${L} ${fill}: its own page`);
+  }
 });
 
 test('a Decor chip drawer takes no back cover, on the bill, on the stage and in the faceplate step', () => {
@@ -192,7 +207,10 @@ test('the chip drawer links its own MODULITH page, never the standard Classic or
     const links = partLinks(`GEN2 240-1W-0.5H ${style} Filament Sample Chip Drawer`);
     const std = partLinks(`GEN2 240-1W-0.5H ${style} Drawer`);
     assert.ok(std.stores.some((s) => s.exact), `${style}: the standard drawer has a page (the control)`);
-    assert.ok(links.stores.every((s) => !s.exact), `${style}: no page yet, so a search - not the ${style} drawer page`);
+    const chipP = links.stores.find((s) => s.id === 'printables'), stdP = std.stores.find((s) => s.id === 'printables');
+    assert.ok(chipP.exact, `${style}: its own page`);
+    assert.notEqual(chipP.url, stdP.url, `${style}: never the standard ${style} drawer page`);
+    assert.match(chipP.url, new RegExp(`-modulith-240-${style.toLowerCase()}-filament-sample-chip-drawers$`));
   }
 });
 

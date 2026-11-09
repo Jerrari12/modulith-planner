@@ -208,7 +208,7 @@ export function computeBom(build, GEN2) {
           if (fillLabel.endsWith(" " + GEN2.chips.label)) {
             // the same note as the viewer's row: the capacity, the swap, and (Decor) the closed front
             const holds = GEN2.chips.lanes * GEN2.chips.slotsPerLane[len];
-            row.note = `Holds up to ${holds} filament sample chips on edge in two combed lanes · swaps in for a standard ${size} drawer` +
+            row.note = `Holds up to ${holds} filament sample chips on edge in two slotted lanes · swaps in for a standard ${size} drawer` +
               (fill === "decor" ? " · closed front: it takes a faceplate and no back cover." : ".");
             row.unreleased = row.unreleased || GEN2.unreleased.includes("chipDrawer");
           }
