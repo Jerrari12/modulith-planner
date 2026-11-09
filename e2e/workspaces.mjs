@@ -179,7 +179,9 @@ async function open(ws, { query = '', phone = false, context = null, visitor = f
   if (process.env.E2E_THROTTLE) { const cdp = await ctx.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: +process.env.E2E_THROTTLE }); }
   const errors = [];
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 3).join(' | ').trim()));
-  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  // a console error names its source: "Failed to load resource" alone has failed two runner cases (42524856596, 42537183268) without
+  // saying which resource, and a case's "no errors" assertion is the one place the text can be read
+  page.on('console', (m) => { if (m.type() === 'error') { const loc = m.location(); errors.push('console: ' + m.text() + (loc && loc.url ? ` @ ${loc.url}` : '')); } });
   await page.goto(`${base}/index.html?ws=${ws}&debug=1${query}`, { waitUntil: 'load', timeout: 90_000 });
   await waitBoot(page);
   return { ctx, page, errors };
