@@ -3,5 +3,7 @@
 *.png -text
 *.jpg -text
 *.glb -text
+*.bin -text
+*.webp -text
 *.ico -text
 *.woff2 -text

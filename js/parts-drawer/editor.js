@@ -26,6 +26,7 @@ import * as Mk from './marks.js';
 import { frameOf } from './frame.js';
 import * as I from './inventory.js';
 import * as B from './bins.js';   // the parts list's bins on a grid (2026-11-09)
+import { modelUrl, parseModel, assemble } from './hwmodels.js';   // the contents preview's detailed models (2026-11-09)
 import { partsEngine, engineReady, shellGeometry, drawerGeometry, zipFor } from './engine.js';
 import { PARTS, sizeOfUnit, heightOfUnit, partsSizeOk, isPartsDrawer, partsSizeWhy, layoutOf, layoutForSize, fullLayout, FLOOR_KEYS, FLOOR_DEFAULT_HEX, keepOf, defaultLayout, cleanItem, outlinesOf, compLabelText } from './unit.js';
 import { plan, planThumb } from './plan.js';
@@ -680,8 +681,8 @@ export function partsDrawerTools(stage, ctx) {
      STL comes from the worker, which never sees it, and the 3D picking ray tests the drawer body alone, so a model takes no clicks.
      Geometry is cached per form and the materials per colour: a rebuild of the extras makes groups and meshes only, and
      clearExtras keeps both (keepGeo; no ownMat). No shadows. */
-  const contentsGeo = new Map(), contentsMat = new Map(), CONTENTS_GEO_MAX = 160;   // a cap: every length edited would add a form (Sol 01a1c100)
-  const cMat = (hex, metal = 0.6) => { const k = hex + metal; let m = contentsMat.get(k); if (!m) { m = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.42, metalness: metal }); contentsMat.set(k, m); } return m; };
+  const contentsGeo = new Map(), contentsMat = new Map(), CONTENTS_GEO_MAX = 160, CONTENTS_TRIS_MAX = 3e6;   // a cap: every length edited would add a form (Sol 01a1c100)
+  const cMat = (hex, metal = 0.6) => { const k = hex + metal; let m = contentsMat.get(k); if (!m) { m = new THREE.MeshStandardMaterial({ color: hex, roughness: metal === 0.4 ? 0.5 : 0.42, metalness: metal }); contentsMat.set(k, m); } return m; };
   function contentsParts(f) {   // { parts: [{ geo, mat: 'part'|'dark'|'nylon' }], long, wide, high }: lying along x, its lowest point at y = 0
     const key = JSON.stringify(f); let out = contentsGeo.get(key); if (out) return out;
     const cylX = (r0, r1, len, seg = 18) => { const g = new THREE.CylinderGeometry(r1, r0, len, seg); g.rotateZ(-Math.PI / 2); return g; };   // r0 at -x, r1 at +x
@@ -711,11 +712,47 @@ export function partsDrawerTools(stage, ctx) {
     }
     out = { parts, long, wide, high }; contentsGeo.set(key, out); return out;
   }
+  /* the DETAILED model (hwmodels.js: the hardware library's own CAD, real threads and knurls; Joey 2026-11-09: "these just feel
+     way too over simplified"): its file fetched once and kept, the drawer redrawn when it arrives; until then, or if it fails,
+     the simple model above stands in. Built per part and length, in the same frame as the simple one (lying along x, centred,
+     its lowest point at y = 0; a nut, nyloc or washer on its face), so the placement below serves both */
+  const hwFiles = new Map(), HW_RETRY_MS = 20000;
+  function hwModel(it) {
+    const url = modelUrl(it.type, it.size); let e = hwFiles.get(url);
+    // a failed fetch is tried again after a while, not never (Sol 01a1c1da: one dropped connection disabled the model for good)
+    if (!e || (e.state === 'failed' && Date.now() - e.at > HW_RETRY_MS)) {
+      e = { state: 'loading', model: null, at: Date.now() }; hwFiles.set(url, e);
+      // a stalled fetch ends after 15 s and counts as failed, so it is tried again too (Terra 01a1c1e0)
+      const ac = typeof AbortController === 'function' ? new AbortController() : null, timer = ac ? setTimeout(() => ac.abort(), 15000) : 0;
+      fetch(url, ac ? { signal: ac.signal } : undefined).finally(() => clearTimeout(timer)).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+        .then((b) => { e.model = parseModel(b); e.state = 'ready'; if (alive && st.editing != null && st.contents !== 'off') { update3d(); stage.invalidateFrame(); } })
+        .catch(() => { e.state = 'failed'; e.at = Date.now(); });
+    }
+    return e.state === 'ready' ? e.model : null;
+  }
+  function detailParts(it) {
+    const m = hwModel(it); if (!m) return null;
+    const key = `hw|${it.type}|${it.size}|${m.header.screw ? +it.length || 10 : 0}`; let out = contentsGeo.get(key); if (out) return out;
+    const mesh = assemble(m, it), flat = !!m.header.flat, parts = [];
+    let box = null;
+    for (const [mat, g0] of Object.entries(mesh)) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(g0.positions, 3)); g.setIndex(new THREE.BufferAttribute(g0.index, 1));
+      if (flat) g.rotateX(-Math.PI / 2); else g.rotateY(Math.PI / 2);   // a face down (its axis up), or lying along x
+      g.computeVertexNormals(); g.computeBoundingBox();
+      box = box ? box.union(g.boundingBox) : g.boundingBox.clone();
+      parts.push({ geo: g, mat: mat === 'nylon' ? 'nylon' : 'part' });
+    }
+    const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+    for (const p of parts) p.geo.translate(-cx, -box.min.y, -cz);   // centred, standing on y = 0
+    out = { parts, long: box.max.x - box.min.x, wide: box.max.z - box.min.z, high: box.max.y - box.min.y, detailed: true, tris: parts.reduce((a, p) => a + p.geo.index.count / 3, 0) };
+    contentsGeo.set(key, out); return out;
+  }
   // the model for one compartment, positioned in drawer mm (x, y as the plan's; the caller maps them into the frame), or null
   function contentsModel(full, c, top, mode = 'actual') {
     const f = c.item ? I.partForm(c.item) : null; if (!f) return null;
     const H = G.holderOf(full), hd = G.hasHolder(full, c) ? Math.min(H.D, (c.y1 - c.y0) / 2) : 0;
-    const m = contentsParts(f), side = f.kind === 'screw' || f.kind === 'insert';
+    const m = detailParts(c.item) || contentsParts(f), side = f.kind === 'screw' || f.kind === 'insert';
     const fits = (q) => { const w = q.x1 - q.x0, d = q.y1 - q.y0, al = side && d > w; return (al ? d : w) >= m.long - 1e-6 && (al ? w : d) >= m.wide - 1e-6; };
     // the clear floor first; at real size a part too big for it takes the whole compartment, and one too big for that is drawn in
     // the warning colour, never shrunk (Sol 01a1c100)
@@ -726,7 +763,8 @@ export function partsDrawerTools(stage, ctx) {
     const k = mode !== 'large' ? 1 : Math.max(1, Math.min(0.7 * (along ? rd : rw) / m.long, 0.6 * (along ? rw : rd) / m.wide, 34 / m.long, Math.max(0.5, (top - G.C.FLOOR) * 0.8) / m.high));   // enlarged: never below real size
     const hex = over ? '#e0a030' : I.MAT_HEX[I.matOf(c.item)] || I.MAT_HEX.steel, dark = I.matOf(c.item) === 'black-oxide';
     const g = new THREE.Group(); g.name = 'parts-contents'; g.userData.contents = true;
-    for (const p of m.parts) { const mesh = new THREE.Mesh(p.geo, p.mat === 'part' ? cMat(hex, I.matOf(c.item) === 'nylon' ? 0 : 0.6) : p.mat === 'nylon' ? cMat(I.MAT_HEX.nylon, 0) : cMat(dark ? '#16171a' : '#2b2c30', 0.3)); mesh.userData.keepGeo = true; mesh.userData.contents = true; g.add(mesh); }
+    const metal = I.matOf(c.item) === 'nylon' ? 0 : m.detailed ? 0.4 : 0.6;   // the detailed models' faces turned from the light went black at 0.75 against the dark floor
+    for (const p of m.parts) { const mesh = new THREE.Mesh(p.geo, p.mat === 'part' ? cMat(hex, metal) : p.mat === 'nylon' ? cMat(I.MAT_HEX.nylon, 0) : cMat(dark ? '#16171a' : '#2b2c30', 0.3)); mesh.userData.keepGeo = true; mesh.userData.contents = true; mesh.userData.detailed = !!m.detailed; g.add(mesh); }
     g.scale.setScalar(k); g.rotation.y = along ? Math.PI / 2 : 0;
     g.position.set((r.x0 + r.x1) / 2, G.C.FLOOR + 0.3, (r.y0 + r.y1) / 2);   // 0.3 above the floor: clear of the floor colours and the outline inlays
     return g;
@@ -800,7 +838,8 @@ export function partsDrawerTools(stage, ctx) {
     // the contents preview: one illustration of each laid-out compartment's part, lying in its clear floor (the drawer as it is,
     // never the parts list's draft, which the plan alone shows)
     // the cache over its cap: no mesh of this unit holds it now (clearExtras ran above; only the edited unit carries models), so all go
-    if (contentsGeo.size > CONTENTS_GEO_MAX) { for (const v of contentsGeo.values()) for (const p of v.parts) p.geo.dispose(); contentsGeo.clear(); }
+    // and over a triangle budget too: a long detailed screw is a big geometry, so a count of entries alone bounds nothing (Sol 01a1c1da)
+    if (contentsGeo.size > CONTENTS_GEO_MAX || [...contentsGeo.values()].reduce((a, v) => a + (v.tris || 0), 0) > CONTENTS_TRIS_MAX) { for (const v of contentsGeo.values()) for (const p of v.parts) p.geo.dispose(); contentsGeo.clear(); }
     if (st.contents !== 'off') for (const c of full.comps) { const g = contentsModel(full, c, top, st.contents); if (g) { g.position.x = X(g.position.x); g.position.z = Z(g.position.z); extras.add(g); } }
     // the hovered compartment (3D hover, the plan's hover too)
     if (st.hover && !inSel(st.hover)) {
