@@ -20,13 +20,17 @@ const EPS = 1e-6, WALL = G.C.WALL;
 const fmt = (v) => v.toFixed(1);
 const svgEl = (tag, attrs = {}, parent = null) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) if (v != null) n.setAttribute(k, v); if (parent) parent.appendChild(n); return n; };
 const PAD = { l: 18, r: 8, t: 14, b: 22 };
+// a bin's resize corner, at its back-right: the same reach the editor's press uses (editor.js HANDLE)
+export const binCorner = (c, pt) => { const h = Math.min(7, (c.x1 - c.x0) / 3, (c.y1 - c.y0) / 3); return pt.x > c.x1 - h && pt.y > c.y1 - h; };
 
 /* the plan of a full layout (unit.js fullLayout) drawn into an <svg>: `sel` the selection box (mm) or null, `hot` a wall
    highlight { orient, c, segs, J, drag?, from? } or null, `flags` the reach flags, `hover` a hovered compartment */
 // preview: the compartments are a proposal (the parts list's layout, 2026-11-07): drawn dashed, no selection, no hover; hl is the
 // one lit with its row in the list (2026-11-08)
 // drop / dropEnd: a card dragged from the parts list is over this compartment / behind the last row (its target, 2026-11-08)
-export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false, hl = null, drop = null, dropEnd = false } = {}) {
+// the bins (2026-11-09): cells, the grid cells drawn faintly to aim at; cand, a drag's candidate { x0, x1, y0, y1, ok }; moving, the
+// bin it came from (dimmed); handles, a bin's resize corner at the back-right
+export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover = null, comps = full.comps, preview = false, hl = null, drop = null, dropEnd = false, cells = null, cand = null, moving = null, handles = false } = {}) {
   const S = G.SIZES[full.size], L = { ...full, comps };
   svg.replaceChildren();
   svg.setAttribute('viewBox', `${-2 - PAD.l} ${-4 - PAD.t} ${S.W + 4 + PAD.l + PAD.r} ${S.D + 8.3 + PAD.t + PAD.b}`);   // the shell: 2 each side, 4.3 in front, 4 behind
@@ -39,7 +43,7 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   const outl = new Map(outlinesOf(L).map((o) => [o.comp, o.polys]));   // the parts on the floors (M3)
   comps.forEach((c, i) => {
     const w = c.x1 - c.x0, d = c.y1 - c.y0;
-    rect('cell' + (preview ? ' preview' + (hl === c ? ' hl' : '') + (drop === c || (dropEnd && !c.item) ? ' drop' : '') : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
+    rect('cell' + (preview ? ' preview' + (c.item ? ' bin' : ' spare') + (hl === c ? ' hl' : '') + (moving === c ? ' moving' : '') + (drop === c || (dropEnd && !c.item) ? ' drop' : '') : inSel(c) ? ' sel' : hover === c ? ' hov' : ''), c.x0, c.x1, c.y0, c.y1, { 'data-i': i });
     const s = G.scoopSize(L, c), t = G.traySize(L, c);
     const fk = G.floorColorOf(L, c);
     let ink = null;
@@ -93,6 +97,9 @@ export function drawPlan(svg, full, { sel = null, hot = null, flags = [], hover 
   });
   // a dragged card over the back with no spare row to light: a band behind the last row says "last" (2026-11-08)
   if (preview && dropEnd && !comps.some((c) => !c.item)) { const back = Math.max(0, ...comps.filter((c) => c.item).map((c) => c.y1)); rect('dropend', 0, S.W, Math.min(back, S.D - 6), S.D); }
+  if (preview && cells) for (const k of cells) rect('bincell', k.x0, k.x1, k.y0, k.y1);
+  if (preview && handles) for (const c of comps) if (c.item) { const h = Math.min(4, (c.x1 - c.x0) / 4, (c.y1 - c.y0) / 4); svgEl('polygon', { class: 'binhandle', points: `${c.x1 - 0.6},${Y(c.y1 - 0.6)} ${c.x1 - 0.6},${Y(c.y1 - 0.6 - h)} ${c.x1 - 0.6 - h},${Y(c.y1 - 0.6)}` }, svg); }
+  if (preview && cand) rect('bincand' + (cand.ok ? ' ok' : ' bad'), cand.x0, cand.x1, cand.y0, cand.y1);
   if (sel) for (const c of comps) if (inSel(c)) rect('selring', c.x0, c.x1, c.y0, c.y1);
   if (hot) {
     for (const [a, b] of hot.segs) {
@@ -179,19 +186,19 @@ export function plan(opts) {
   /* the parts list's preview (2026-11-07): opts.preview() gives { comps, note, warn } while the list is open, and the plan draws
      those compartments dashed with the note in its header instead of the gestures, which are off */
   const preview = () => (opts.preview ? opts.preview() : null);
-  let pvHover = null;   // the proposed compartment under the pointer (opts.onPreviewHover; a press is opts.onPreviewPick): its row lights in the list (2026-11-08)
+  let pvHover = null, pvDrag = null;   // pvDrag: a bin picked up in the proposal (opts.onPreviewPress/Move/Release, 2026-11-09)
   function render() {
     const pv = preview();
     svg.classList.toggle('preview', !!pv);
     hint.textContent = pv ? (pv.note || '') : HINT; hint.classList.toggle('warn', !!(pv && pv.warn));
-    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true, hl: pv.hl || null, drop: pv.drop || null, dropEnd: !!pv.dropEnd }); placeTip(); return; }
+    if (pv) { drawPlan(svg, full(), { comps: pv.comps || [], preview: true, hl: pv.hl || null, drop: pv.drop || null, dropEnd: !!pv.dropEnd, cells: pv.cells || null, cand: pv.cand || null, moving: pv.moving || null, handles: !!pv.handles }); placeTip(); return; }
     drawPlan(svg, full(), { sel: opts.selected(), hot: hotOf(), flags: opts.flags ? opts.flags() : [], hover: hoverComp, comps: comps() });
     placeTip();
   }
   svg.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     const pv = preview();
-    if (pv) { e.preventDefault(); if (opts.onPreviewPick) opts.onPreviewPick(compAt(planPoint(e), pv.comps || [])); return; }   // the gestures are off: a proposed compartment pressed goes to its row (preventDefault: the mousedown that follows would take the focus back from it)
+    if (pv) { e.preventDefault(); const pt = planPoint(e), c = compAt(pt, pv.comps || []); if (opts.onPreviewPress && opts.onPreviewPress(c, pt, e)) { pvDrag = { id: e.pointerId }; try { svg.setPointerCapture(e.pointerId); } catch {} } return; }   // a bin pressed is picked up (or, without a drag, its card opens); preventDefault: the mousedown that follows would take the focus
     const pt = planPoint(e);
     const ch = hitWall(pt, e);
     if (ch) {
@@ -204,7 +211,14 @@ export function plan(opts) {
   });
   svg.addEventListener('pointermove', (e) => {
     const pv = preview();
-    if (pv) { const c = compAt(planPoint(e), pv.comps || []); if (c !== pvHover) { pvHover = c; svg.style.cursor = c ? 'pointer' : ''; if (opts.onPreviewHover) opts.onPreviewHover(c); } return; }
+    if (pv) {
+      const pt = planPoint(e);
+      if (pvDrag) { if (e.pointerId === pvDrag.id && opts.onPreviewMove) opts.onPreviewMove(pt, e); return; }
+      const c = compAt(pt, pv.comps || []), cur = c && c.item ? (binCorner(c, pt) ? 'nesw-resize' : 'grab') : '';
+      if (svg.style.cursor !== cur) svg.style.cursor = cur;
+      if (c !== pvHover) { pvHover = c; if (opts.onPreviewHover) opts.onPreviewHover(c); }
+      return;
+    }
     const pt = planPoint(e); lastPt = { pt, pointerType: e.pointerType };
     if (wdrag) { if (moveWallDrag(wdrag, pt, e.altKey, snapTol())) render(); return; }
     if (drag) { const c = compAt(pt); if (c) { opts.onSelect(closure(G.boxOf([drag, c]))); render(); } return; }
@@ -213,7 +227,8 @@ export function plan(opts) {
     const hc = ch ? null : compAt(pt);
     if (k !== hoverKey || hc !== hoverComp) { hover = ch; hoverKey = k; hoverComp = hc; svg.style.cursor = ch ? (ch.orient === 'v' ? 'ew-resize' : 'ns-resize') : hc ? 'pointer' : ''; if (opts.onHover) opts.onHover(hc); render(); }
   });
-  function endDrag() {
+  function endDrag(e) {
+    if (pvDrag) { if (!e || e.pointerId !== pvDrag.id) return; pvDrag = null; if (opts.onPreviewRelease) opts.onPreviewRelease(e.type === 'pointerup' ? planPoint(e) : null, e, e.type !== 'pointerup'); return; }   // another finger's release leaves the drag alone (Sol 01a1c0e0)
     if (wdrag) {
       const moved = dragMoved(wdrag), out = wdrag.comps, same = JSON.stringify(full().comps) === JSON.stringify(wdrag.start); wdrag = null;   // not onto a layout that changed under the button (an undo mid-drag)
       if (moved && same) opts.onWalls(out); else render();
@@ -222,6 +237,7 @@ export function plan(opts) {
     drag = null;
   }
   svg.addEventListener('pointerup', endDrag); svg.addEventListener('pointercancel', endDrag);
+  svg.addEventListener('lostpointercapture', (e) => { if (pvDrag && e.pointerId === pvDrag.id) endDrag({ type: 'pointercancel', pointerId: e.pointerId }); });
   svg.addEventListener('pointerleave', () => { lastPt = null; if (pvHover) { pvHover = null; svg.style.cursor = ''; if (opts.onPreviewHover) opts.onPreviewHover(null); } if (!wdrag && (hover || hoverComp)) { hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; if (opts.onHover) opts.onHover(null); render(); } });
   svg.addEventListener('dblclick', () => { if (!preview() && opts.selected()) opts.onHolder(); });
   // Shift changes what a wall drag will move, so the highlight follows it
@@ -232,23 +248,16 @@ export function plan(opts) {
     if (k !== hoverKey) { hover = ch; hoverKey = k; render(); }
   };
   document.addEventListener('keydown', shiftWatch); document.addEventListener('keyup', shiftWatch);
-  /* the parts list's drag (2026-11-08): the drop target at a screen point while the proposal shows, by position alone (the
-     dragged card's handle holds the pointer): { comp } for a proposed compartment with a part (the drop goes before it),
-     { end: true } on the spare row or behind the last row, null off the cavity */
-  function dropTargetAt(clientX, clientY) {
-    const pv = preview(); if (!pv || !svg.isConnected || host.hidden || !svg.getScreenCTM()) return null;   // hidden (the 3D view): no drop surface (Sol 01a1be67)
-    const list = pv.comps || []; if (!list.length) return null;
-    const S = G.SIZES[full().size], pt = planPoint({ clientX, clientY });
-    if (pt.x < -2 || pt.x > S.W + 2 || pt.y < -4.3 || pt.y > S.D + 4) return null;
-    const back = Math.max(0, ...list.filter((c) => c.item).map((c) => c.y1));
-    if (pt.y >= back) return { end: true };
-    const c = compAt(pt, list); if (!c) return null;
-    return c.item ? { comp: c } : { end: true };
+  // the plan point (mm) under a screen point while the proposal shows, for a card dragged from the list (the handle holds the
+  // pointer); null while the plan is hidden (the 3D view: no drop surface, Sol 01a1be67)
+  function pointAt(clientX, clientY) {
+    if (!preview() || !svg.isConnected || host.hidden || !svg.getScreenCTM()) return null;
+    return planPoint({ clientX, clientY });
   }
   return {
-    el: host, render, dropTargetAt,
+    el: host, render, pointAt,
     firstTip() { if (!howToSeen()) showTip(); }, closeTip, hideTip, tipOpen: () => !!tip,
-    cancel() { if (wdrag) { wdrag = null; render(); } drag = null; hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; },
+    cancel() { if (wdrag) { wdrag = null; render(); } drag = null; pvDrag = null; hover = null; hoverKey = ''; hoverComp = null; svg.style.cursor = ''; },
     destroy() { document.removeEventListener('keydown', shiftWatch); document.removeEventListener('keyup', shiftWatch); if (ro) ro.disconnect(); host.remove(); },
   };
 }

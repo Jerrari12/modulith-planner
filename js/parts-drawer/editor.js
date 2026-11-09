@@ -25,6 +25,7 @@ import * as G from './gen.js';
 import * as Mk from './marks.js';
 import { frameOf } from './frame.js';
 import * as I from './inventory.js';
+import * as B from './bins.js';   // the parts list's bins on a grid (2026-11-09)
 import { partsEngine, engineReady, shellGeometry, drawerGeometry, zipFor } from './engine.js';
 import { PARTS, sizeOfUnit, heightOfUnit, partsSizeOk, isPartsDrawer, partsSizeWhy, layoutOf, layoutForSize, fullLayout, FLOOR_KEYS, FLOOR_DEFAULT_HEX, keepOf, defaultLayout, cleanItem, outlinesOf, compLabelText } from './unit.js';
 import { plan, planThumb } from './plan.js';
@@ -189,19 +190,40 @@ export function partsDrawerTools(stage, ctx) {
     const item = cleanItem(r); if (!item) { say('That part is not one the generator knows.'); return; }
     commitLayout((x) => { for (const c of x.comps) if (G.inBox(c, box)) c.item = item; });
   }
-  /* THE PARTS LIST (M3's dialog; a panel since 2026-11-07, DECISIONS of that day): the Library's own mode while it is open.
-     A kit, typed lines, a file or the Part Picker become items; the plan shows the list's layout as a dashed preview, redrawn
-     on every change, and Lay out drawer commits it (one history entry). The list reopens from the compartments' parts in
-     their reading order with the sizing it was laid out with (partsLayout.fit); the compartments keep the counted quantity.
-     The draft is keyed to the edited unit and recomputed from the unit as it is now on every render (an undo changes the
-     unit, not the list). Back, Esc and Done drop the draft. */
-  const invKeep = () => { const u = editedUnit(); return u ? layoutOfUnit(u).comps.filter((c) => c.item).map((c) => ({ ...c.item })) : []; };
-  const FIT_DEFAULT = { cap: 0.75, round: false, spare: true };
+  /* THE PARTS LIST (M3's dialog; a panel since 2026-11-07; BINS ON A GRID since 2026-11-09, Joey: "i want it to almost feel
+     like sorting gridfinity bins by hand", consult Sol 01a1c0ba, DECISIONS "The parts list as bins on a grid"): the Library's
+     own mode while it is open. A kit, typed lines, a file or the Part Picker become items; each item gets a BIN of whole grid
+     cells (bins.js), sized by the estimator and put in the first free spot from the front-left, and from then on it stays
+     where it is: a quantity, a type or the room changes its fill, never its place or size. The person moves a bin by picking
+     it up in the plan (or dragging its card onto the plan, or the open card's arrows), resizes it by its corner (or the open
+     card's buttons); a move goes only onto free cells, and nothing else moves. The plan shows the bins and the spare
+     compartments the leftover cells will make, dashed; Lay out drawer commits them (one history entry). The list reopens
+     from the compartments' parts, each in its bin, when the drawer's walls sit on the grid; one laid out another way starts
+     its bins fresh and says so (Lay out drawer would then replace its walls). The draft is keyed to the edited unit and
+     recomputed from the unit as it is now on every render (an undo changes the unit, not the list). Back, Esc and Done drop it. */
+  const FIT_DEFAULT = { cap: 0.75, round: false, spare: true };   // spare: the leftover cells as few compartments (false: one per cell)
   const FIT_CAPS = [[1, 'Exact'], [0.75, 'Comfortable'], [0.5, 'Plenty']];
+  const invGrid = () => { const u = editedUnit(); return u ? B.binGrid(sizeOfUnit(L(), u), heightOfUnit(u), layoutOfUnit(u).label) : null; };
+  const invOpts = (work = st.inv) => ({ fillCap: work.cap, roundTo: work.round ? 'bag' : null, labels: !!work.labels });
+  const laysOut = (it) => I.known(it) && !I.TYPES[it.type].outside;
+  // a new part's bin: the recommended size in the first free spot; none when the drawer has no room for it (it waits, unplaced)
+  function invPlace(it, g = invGrid(), work = st.inv) {
+    if (!g || !laysOut(it) || work.bins.has(it)) return false;
+    const s = B.binSize(it, g, invOpts(work)); if (!s.w) return false;
+    const p = B.firstFree(g, work.bins, s.w, s.h); if (!p) return false;
+    work.bins.set(it, p); return true;
+  }
   function openInventory() {
     const u = editedUnit(); if (!u) return;
-    const lay = layoutOfUnit(u);
-    st.inv = { items: invKeep(), skipped: [], colorBy: 'none', labels: lay.comps.some((c) => c.holder !== false), ...FIT_DEFAULT, ...(lay.fit || {}), last: null, draft: null, focusLine: false, dirty: false };   // dirty: changed since it opened (invChanged), what makes leaving ask
+    const lay = layoutOfUnit(u), g = invGrid();
+    const items = [], bins = new Map(), parts = lay.comps.filter((c) => c.item).sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+    const back = B.binsOf(g, lay.comps);
+    if (back) for (const { comp, bin } of back.sort((a, b) => a.comp.y0 - b.comp.y0 || a.comp.x0 - b.comp.x0)) { if (comp.item) { const it = { ...comp.item }; items.push(it); bins.set(it, bin); } }
+    else for (const c of parts) items.push({ ...c.item });
+    const { cap, round, spare } = { ...FIT_DEFAULT, ...(lay.fit || {}) };
+    st.inv = { items, bins, gkey: B.gridKey(g), skipped: [], colorBy: 'none', labels: lay.comps.some((c) => c.holder !== false), cap, round, spare, last: null, draft: null, focusLine: false, dirty: false,   // dirty: changed since it opened (invChanged), what makes leaving ask
+      note: !back && parts.length ? 'This drawer’s compartments are not on the bin grid, so the bins start fresh from the front-left. Lay out drawer would replace its walls.' : '' };
+    if (!back) for (const it of items) invPlace(it, g);
     st.sel = null; st.hover = null; st.hot = null; st.hotKey = ''; st.wdrag = null;
     pl.cancel();   // a wall or box drag in progress ends without committing: the drawer stays as it is until Lay out drawer (Sol 01a1b901)
     ctx.renderAll();
@@ -210,7 +232,7 @@ export function partsDrawerTools(stage, ctx) {
   /* leaving the list (Back, Esc, the Dock's Done) while a layout is proposed and not applied: the bright Done dropped it
      without a word (Sol 01a1bc8e, 2026-11-08), so the list asks first, in a warnbox at its head (renderInvPanel); `leave`
      is what to do once Lay out drawer or Drop the list has answered */
-  const invPending = () => { const w = st.inv; if (!w || !w.dirty || !w.items.length) return false; const l = invLast(); return !!(l && !l.r.error); };   // a list reopened from the drawer's parts and left alone proposes nothing new
+  const invPending = () => { const w = st.inv; return !!(w && w.dirty && w.items.length); };   // a list reopened and left alone proposes nothing new; a changed one asks, even while a part waits for a bin (its arrangement is work too, Sol 01a1c0e0)
   function invLeave(then) {
     const w = st.inv; if (!w) { then(); return; }
     if (invPending()) { w.leave = then; ctx.renderAll(); say('The list’s layout is not applied yet: Lay out drawer keeps it, Drop the list leaves the drawer as it was.'); return; }
@@ -220,28 +242,47 @@ export function partsDrawerTools(stage, ctx) {
   // Esc on the list, from the page or the typing line: with the ask showing it means Keep editing (the line's own handler went
   // straight to invLeave and overwrote a pending Done with Back, Sol 01a1bc9f); otherwise it is Back
   const invEsc = () => { if (!st.inv) return; if (st.inv.leave) { st.inv.leave = null; ctx.renderAll(); } else invLeave(() => ctx.renderAll()); };
-  const invOpts = (work) => ({ fillCap: work.cap, order: 'list', roundTo: work.round ? 'bag' : null, spareRow: !!work.spare });
-  function invPlan(work = st.inv, height = null) {
-    const u = editedUnit(); if (!u) return { error: 'No drawer.' };
-    const lay = layoutOfUnit(u);
-    return I.layoutFor(work.items, { size: sizeOfUnit(L(), u), height: height || heightOfUnit(u), label: lay.label, labels: work.labels, scoop: mode(lay.comps.map((c) => c.scoop)), ...invOpts(work) });
-  }
-  /* what the list says about its layout: the plan's note, the panel's summary and the Inspector's (one computation per render;
-     `load` is the fill against the cap, so "too full" means over the room chosen, not over the wall) */
-  function invSummary(work = st.inv) {
-    const u = editedUnit(); const HS = u ? Object.keys(G.SIZES[sizeOfUnit(L(), u)].heights) : [], hi = u ? HS.indexOf(heightOfUnit(u)) : 0;
-    const r = work.items.length ? invPlan(work) : { error: 'Add some parts to see how they fit.' };
-    const fits = (h, cap) => { const x = invPlan(work, h); return !x.error && x.load <= cap; };
-    let text = '', warn = !!r.error || r.load > 1;
-    if (r.error) { const below = HS.slice(0, hi), lower = work.items.length ? below.find((h) => fits(h, 0.9)) || below.reverse().find((h) => fits(h, 1)) : null; text = r.error + (lower && /to reach into/.test(r.error) ? ` A ${lower} drawer takes them.` : ''); }
-    else {
-      let tip = '';
-      if (r.load > 1) { const up = HS.slice(hi + 1).find((h) => fits(h, 1)); tip = up ? ` Too full for ${heightOfUnit(u)}: try ${up}, lower the quantities, or less room to grow.` : ' Too full: lower the quantities, choose less room to grow, or split the list across two drawers.'; }
-      else { const lower = HS.slice(0, hi).find((h) => fits(h, 0.9)); if (lower) tip = ` Plenty of room: a ${lower} drawer would probably do.`; }
-      const spare = work.spare ? (r.spare ? ` A spare row of ${r.spare} at the back.` : ' No room left for a spare row.') : '';
-      const fullest = Math.max(0, ...r.comps.map((c) => invFill(c, work)?.fill ?? 0));   // counted, as the rows say it (sizing for the next bag makes r.fullest the sized one)
-      text = `${n(work.items.length, 'part')} in ${n(r.rows, 'row')} · fullest compartment about ${Math.round(fullest * 100)}% full.${spare}${tip}`;
+  // would every part get its recommended bin in a drawer of this height (the tips: a lower drawer would do, a taller one would take them)
+  function packsAt(work, height, cap = 1) {
+    const u = editedUnit(); if (!u) return false;
+    const g = B.binGrid(sizeOfUnit(L(), u), height, layoutOfUnit(u).label), bins = new Map(), o = invOpts(work);
+    for (const it of work.items.filter(laysOut)) {
+      const s = B.binSize(it, g, o); if (!s.w) return false;
+      const p = B.firstFree(g, bins, s.w, s.h); if (!p) return false;
+      if (B.blockFit(B.needOf(it, g, o), g, s.w, s.h).load > cap + 1e-9) return false;
+      bins.set(it, p);
     }
+    return true;
+  }
+  /* the list's layout and what it says about it: the plan's note, the panel's summary and the Inspector's (one computation per
+     render). r: { g, comps (the bins' and the spare compartments, in reading order), fits (item -> its bin's foot, load, fill),
+     unplaced ([{ it, why }]), error (what stops Lay out drawer) } */
+  function invSummary(work = st.inv) {
+    const u = editedUnit(); if (!u) return { r: { error: 'No drawer.', comps: [], fits: new Map(), unplaced: [] }, text: 'No drawer.', warn: true };
+    const g = invGrid(), lay = layoutOfUnit(u), o = invOpts(work);
+    // the grid changed under the list (another height or size): the bins start again, and say so
+    if (work.gkey !== B.gridKey(g)) { work.bins = new Map(); for (const it of work.items) invPlace(it, g, work); work.gkey = B.gridKey(g); work.note = `The drawer changed, so the bins started again on its ${g.nc} × ${g.nr} grid.`; }
+    for (const it of [...work.bins.keys()]) if (!work.items.includes(it)) work.bins.delete(it);
+    const comps = B.binComps(g, work.bins, { labels: work.labels, scoop: mode(lay.comps.map((c) => c.scoop)), perCell: !work.spare });
+    const fits = new Map(), unplaced = [];
+    for (const [it, b] of work.bins) fits.set(it, B.blockFit(B.needOf(it, g, o), g, b.w, b.h));
+    for (const it of work.items.filter(laysOut)) if (!work.bins.has(it)) { const s = B.binSize(it, g, o); unplaced.push({ it, why: s.why || `no free spot takes its ${s.w} × ${s.h} bin` }); }
+    const HS = Object.keys(G.SIZES[sizeOfUnit(L(), u)].heights), hi = HS.indexOf(heightOfUnit(u)), spare = comps.filter((c) => !c.item).length;
+    const r = { g, comps, fits, unplaced, error: null };
+    if (!work.items.length) { r.error = 'Add some parts to see how they fit.'; return { r, text: `${r.error} The drawer is a grid of ${g.nc} × ${g.nr} cells; each part gets a bin of whole cells.`, warn: false }; }
+    const over = [...fits].find(([, f]) => f.load > 1 + 1e-9), short = [...fits].find(([, f]) => !f.foot);
+    const fullest = Math.max(0, ...[...fits.values()].map((f) => f.fill));
+    let text = `${n(work.items.length, 'part')} · ${n(work.bins.size, 'bin')} · ${n(spare, 'spare compartment')} · fullest bin about ${Math.round(fullest * 100)}% full.`, warn = false;
+    if (unplaced.length) {
+      r.error = `${n(unplaced.length, 'part')} without a bin: make room by moving or shrinking a bin, or remove ${unplaced.length > 1 ? 'them' : 'it'}.`;
+      const up = HS.slice(hi + 1).find((h) => packsAt(work, h));
+      const many = work.items.filter(laysOut).length > g.nc * g.nr;   // more parts than the drawer has bins: no moving makes room
+      text += ` ${r.error}${many ? ` This drawer has ${n(g.nc * g.nr, 'bin position')} for ${n(work.items.filter(laysOut).length, 'part')}: split the list across two drawers.` : up ? ` A ${up} drawer would take every part.` : ''}`; warn = true;
+    }
+    if (short) { text += ` ${partName(short[0])} is too long for its bin.`; warn = true; }
+    if (over) { text += ` ${partName(over[0])} is over the room chosen: make its bin bigger.`; warn = true; }
+    if (!warn) { const lower = HS.slice(0, hi).find((h) => packsAt(work, h, 0.9)); if (lower) text += ` Plenty of room: a ${lower} drawer would probably do.`; }
+    if (g.nc * g.nr <= 6) text += ` This ${heightOfUnit(u)} drawer has ${n(g.nc * g.nr, 'bin position')}, each wide enough to reach into.`;
     if (work.skipped.length) text += ` ${n(work.skipped.length, 'line')} not laid out.`;   // the lines the list could not take, counted where Lay out drawer is pressed (Sol 01a1bc8e)
     return { r, text, warn };
   }
@@ -253,50 +294,52 @@ export function partsDrawerTools(stage, ctx) {
     const k = invKey(); if (w.last && k && w.last.key.rec === k.rec && w.last.key.size === k.size && w.last.key.height === k.height) return w.last;
     w.last = { ...invSummary(w), key: k }; return w.last;
   };
-  // the fill a proposed compartment would have with the COUNTED quantity (inventory.js fillOf), and that against the room chosen
-  const invFill = (c, work = st.inv) => { const u = editedUnit(); if (!u || !c.item) return null; const f = I.fillOf(c, heightOfUnit(u), sizeOfUnit(L(), u), layoutOfUnit(u).label); return f == null ? null : { fill: f, load: f / work.cap }; };
+  // what the plan draws while the list is open: the proposal, its free cells (to aim at), the lit bin, and a drag's candidate
   const invPreview = () => {
-    const l = invLast(); if (!l) return null; const comps = l.r.error ? [] : l.r.comps, w = st.inv, dg = w.drag && w.drag.live ? w.drag : null;
-    return { comps, note: dg ? dg.text : l.text, warn: dg ? false : l.warn, hl: w.hl != null ? comps.filter((c) => c.item)[w.hl] || null : null, drop: dg && dg.target && dg.target.comp || null, dropEnd: !!(dg && dg.target && dg.target.end) };
+    const l = invLast(); if (!l) return null; const w = st.inv, d = w.drag && w.drag.live ? w.drag : null, g = l.r.g;
+    const occ = g ? B.occupancy(g, w.bins) : [];
+    return { comps: l.r.comps, note: d ? d.text : l.text, warn: d ? !(d.cand && d.cand.ok) : l.warn, hl: w.hl ? l.r.comps.find((c) => c.src === w.hl) || null : null,
+      cells: g ? (d ? g.cells : g.cells.filter((c, i) => !occ[i])) : [], cand: d && d.cand ? { ...d.cand.rect, ok: d.cand.ok } : null,
+      moving: d && d.kind !== 'card' ? l.r.comps.find((c) => c.src === d.item) || null : null, handles: true };
   };
-  // the items the engine lays out, in the list's order: a card's rank among them is its compartment's
-  const invKept = (work = st.inv) => work.items.filter((it) => I.known(it) && !I.TYPES[it.type].outside);
   // a part's plain name for a card: "M3 × 12 socket head screw" (the label keeps the short form, inventory.js labelLines)
   const partName = (it) => { const T = I.TYPES[it.type] || { name: String(it.type || 'part') }, m = I.matWord(it); return `${it.size}${(T.screw || T.len) && it.length ? ' × ' + it.length : ''} ${m ? m + ' ' : ''}${T.name.toLowerCase()}`; };
-  /* a row and its proposed compartment light together (Sol 01a1bd5c, 2026-11-08): the rank among the kept items is the key both
-     ways (the rows map onto the engine's compartments by rank, renderInvPanel). From the plan the row scrolls into view, and a
-     press on a proposed compartment puts the focus in its row's quantity. The classes are toggled in place: a re-render of the
-     panel would take the focus from the field being typed in */
-  const invRankOf = (c) => { const l = invLast(); return l && !l.r.error && c ? l.r.comps.filter((x) => x.item).indexOf(c) : -1; };
-  function invHl(rank, from = 'list') {
+  /* a card and its bin light together (Sol 01a1bd5c, 2026-11-08), keyed by the part itself: the bin's compartment carries it
+     (src). From the plan the card scrolls into view, and a press without a drag opens the card on its quantity. The classes are
+     toggled in place: a re-render of the panel would take the focus from the field being typed in */
+  function invHl(it, from = 'list') {
     const w = st.inv; if (!w) return;
-    const r = rank != null && rank >= 0 ? rank : null; if (w.hl === r && from === 'list') return;
-    w.hl = r;
-    (w.rowEls || []).forEach((e, i) => { if (!e) return; e.classList.toggle('hl', i === r); if (i === r && from === 'plan') e.scrollIntoView({ block: 'nearest' }); });
+    const x = it && w.bins.has(it) ? it : null; if (w.hl === x && from === 'list') return;
+    w.hl = x;
+    for (const [k, e] of w.cardEls || []) { e.classList.toggle('hl', k === x); if (k === x && from === 'plan') e.scrollIntoView({ block: 'nearest' }); }
     const pv = invPreview(); st.hover = pv ? pv.hl : null; update3d(); pl.render();
   }
-  function invPick(c) { const r = invRankOf(c); if (r < 0) return; const it = invKept()[r]; if (!it) return; st.inv.open = it; st.inv.focusQty = it; st.inv.hl = r; ctx.renderAll(); }   // the card opens on its quantity
-  // a change of the list: the proposal is recomputed, and a lit compartment follows the new proposal at the same rank (or goes,
-  // when that rank is gone: a row removed), so the 3D plane never keeps a compartment of a proposal that no longer exists (Sol 01a1bd82)
-  const invChanged = () => { if (st.inv) { st.inv.last = null; st.inv.dirty = true; if (st.inv.hl != null) { const pv = invPreview(); if (!pv || !pv.hl) st.inv.hl = null; st.hover = pv ? pv.hl : null; } } ctx.renderAll(); };
+  function invPick(it) { const w = st.inv; if (!w || !it || !w.items.includes(it)) return; w.open = it; w.focusQty = it; w.hl = w.bins.has(it) ? it : null; ctx.renderAll(); }   // the card opens on its quantity
+  // a change of the list: the proposal is recomputed; a lit bin whose part is gone goes dark, so the 3D plane never keeps a
+  // compartment of a proposal that no longer exists (Sol 01a1bd82)
+  const invChanged = () => { const w = st.inv; if (w) { w.last = null; w.dirty = true; if (w.hl && !w.bins.has(w.hl)) w.hl = null; const pv = invPreview(); st.hover = pv ? pv.hl : null; } ctx.renderAll(); };
   function invAdd(list) {
     const work = st.inv; if (!work) return 0;
-    const items = list.items.filter((it) => I.TYPE_ORDER.includes(it.type)), other = list.items.filter((it) => !I.TYPE_ORDER.includes(it.type));
-    for (const it of items) { const same = work.items.find((x) => x.type === it.type && x.size === it.size && (x.length || 0) === (it.length || 0) && I.matOf(x) === I.matOf(it)); if (same) same.qty += it.qty; else work.items.push({ ...it }); }   // brass and stainless inserts are two parts
+    const items = list.items.filter((it) => I.TYPE_ORDER.includes(it.type)), other = list.items.filter((it) => !I.TYPE_ORDER.includes(it.type)), g = invGrid();
+    for (const it of items) {
+      const same = work.items.find((x) => x.type === it.type && x.size === it.size && (x.length || 0) === (it.length || 0) && I.matOf(x) === I.matOf(it));   // brass and stainless inserts are two parts
+      if (same) same.qty += it.qty;   // the same part again: more of it, in the bin it has
+      else { const x = { ...it }; work.items.push(x); invPlace(x, g, work); }
+    }
     for (const it of other) work.skipped.push(`${I.labelText(it)}${it.qty ? ' × ' + it.qty : ''} · not a drawer part yet (the list takes screws, nuts, washers and inserts)`);
     for (const e of list.errors) work.skipped.push(e);
     return items.length;
   }
   function invApply() {
     const work = st.inv, u = editedUnit(); if (!work || !u) return;
-    const r = invPlan(); if (r.error) { say(r.error); return; }
+    const l = invLast(), r = l.r; if (r.error) { say(r.error); return; }
     const keys = new Set(r.comps.filter((c) => c.item).map((c) => (work.colorBy === 'size' ? c.item.size : I.TYPES[c.item.type].short)));
     const slots = keys.size > 3 ? 4 : 3;
     const colors = I.colorBy(r.comps, work.colorBy, slots);
     commitLayout((x) => {
       x.comps = r.comps.map((c, i) => { const item = c.item ? cleanItem(c.item) : null; return { ...G.comp(c.x0, c.x1, c.y0, c.y1, { holder: c.holder !== false, scoop: c.scoop || 'std', tray: 0, color: colors[i] }), ...(item ? { item } : {}) }; });
-      x.nr = r.rows; x.nc = Math.max(...[...new Set(r.comps.map((c) => c.y0))].map((y) => r.comps.filter((c) => c.y0 === y).length));
-      x.fit = { cap: work.cap, round: !!work.round, spare: !!work.spare };
+      x.nr = r.g.nr; x.nc = r.g.nc;
+      x.fit = { cap: work.cap, round: !!work.round, spare: !!work.spare, grid: { nc: r.g.nc, nr: r.g.nr } };   // grid: the bins' grid, said with the layout (Sol 01a1c0ba)
       if (work.colorBy !== 'none') { x.floor.mode = 'paint'; x.floor.slots = slots; }
     });
     st.sel = null; st.inv = null; st.hover = null; ctx.renderAll();
@@ -308,7 +351,7 @@ export function partsDrawerTools(stage, ctx) {
       root, signal: ppAC.signal, buildId: () => S().buildId, frameQuery: () => (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&dest=drawer', debug: !!new URLSearchParams(location.search).get('debug'),
       // the modal's own words say where a batch goes (Sol 01a1bc8e: the Labels wording promised labels); `dest` rides on the
       // frame's address and the hello for a Picker that words its button and marks its families by it (the Picker's change)
-      sub: 'Choose parts, then Add: each comes back as a line of this list and gets its own compartment. Screws, set screws, nuts, washers and inserts lay out; other families are listed as not laid out.',
+      sub: 'Choose parts, then Add: each comes back as a line of this list and gets its own bin in the drawer. Screws, set screws, nuts, washers and inserts lay out; other families are listed as not laid out.',
       hello: { dest: 'drawer' },
       onBatch: (items, { reply, close }) => {
         if (!st.inv) { reply({ gen2parts: 'refused', reason: 'The parts list is closed. Open it and press Add again.' }); return; }
@@ -319,7 +362,7 @@ export function partsDrawerTools(stage, ctx) {
     });
     pp.open();
   }
-  /* the part's fields, the same in a list row, the add row and the Inspector (one editing surface, Sol 01a1bd5c, 2026-11-08):
+  /* the part's fields, the same in a card, the add card and the Inspector (one editing surface, Sol 01a1bd5c, 2026-11-08):
      type, thread size, length (screws only). `on(patch)` gets what changed, with a length given to a screw that had none and
      the size corrected when the new type has no table for the old one. picEl: the hardware library's render beside them
      (hwpics.js), or an empty frame for a part the library does not draw */
@@ -337,75 +380,112 @@ export function partsDrawerTools(stage, ctx) {
       fieldNum(it.length, (v) => on({ length: Math.max(1, v) }), !I.TYPES[it.type].screw, labels[2]),
     ];
   }
-  /* A CARD DRAGGED ONTO THE PLAN (Sol 01a1be4f, 2026-11-08): the drag says WHERE in the order, never the geometry. It starts on
-     the card's handle (touch-action none there alone, so the panel still scrolls everywhere else), after 6 px of movement, with
-     the pointer captured: the plan gets no events of its own, the target is asked of it by position (plan.js dropTargetAt) and
-     the proposal stays still while aiming. A drop on another part puts the dragged one before it; behind the last row (or on
-     the spare row) puts it last; anywhere else, Esc, a lost capture or a cancel changes nothing. One drop is one change of
-     the list (one re-layout). The ghost takes no events and sits off the pointer so a finger does not hide the target. */
+  /* PICKING A BIN UP (Sol 01a1c0ba): one snapped candidate footprint for the whole gesture. Moving keeps the grab offset (the
+     cell under the pointer stays the cell that was grabbed; a card dragged from the list holds its bin by the middle); the
+     candidate is good only on free cells inside the drawer (its own count as free), and nothing else moves. Resizing (a bin's
+     back-right corner) keeps the front-left cell and goes into free cells only, never below the size its longest piece needs;
+     smaller than the room asks is allowed and warned. The plan shows the candidate, the bin it came from dimmed, and the grid;
+     its header says what letting go will do. Let go off the drawer, on taken cells, Esc, or a lost capture: nothing changes. */
+  function invAim(d, pt) {
+    const w = st.inv, l = invLast(), g = l && l.r.g; if (!w || !g) return { cand: null, text: '' };
+    const it = d.item, name = partName(it), cell = pt ? B.cellAt(g, pt) : null;
+    if (!cell) return { cand: null, text: `${name}: let go over the drawer to put it there. Off the drawer it stays ${w.bins.has(it) ? 'where it was' : 'in the list'}.` };
+    let b, why = '';
+    if (d.kind === 'resize') {
+      const o = w.bins.get(it); b = { c: o.c, r: o.r, w: Math.max(1, cell.c - o.c + 1), h: Math.max(1, cell.r - o.r + 1) };
+      if (!B.freeFor(g, w.bins, b, it)) why = 'it would run into another bin';
+      else if (!B.footMin(it, g, invOpts(w))(b.w, b.h)) why = 'its longest piece would not lie in it';
+    } else {
+      b = { c: cell.c - d.grab.dc, r: cell.r - d.grab.dr, w: d.size.w, h: d.size.h };
+      if (!B.inGrid(g, b)) why = 'it would hang off the drawer'; else if (!B.freeFor(g, w.bins, b, it)) why = 'those cells are taken';
+    }
+    const k = { c: Math.max(0, Math.min(g.nc - b.w, b.c)), r: Math.max(0, Math.min(g.nr - b.h, b.r)), w: Math.min(b.w, g.nc), h: Math.min(b.h, g.nr) };
+    const cand = { b, rect: B.rectOf(g, k), ok: !why };
+    if (why) return { cand, text: `${name} can’t go there: ${why}.` };
+    if (d.kind === 'resize') { const f = B.blockFit(B.needOf(it, g, invOpts(w)), g, b.w, b.h); return { cand, text: `${name}: ${b.w} × ${b.h} ${b.w * b.h === 1 ? 'cell' : 'cells'}, about ${Math.round(f.fill * 100)}% full${f.load > 1 + 1e-9 ? ', over the room chosen' : ''}.` }; }
+    return { cand, text: `Put ${name} here: ${B.whereOf(g, b)}.` };
+  }
+  const aimKey = (a) => (a.cand ? `${a.cand.b.c},${a.cand.b.r},${a.cand.b.w},${a.cand.b.h},${a.cand.ok}` : 'off');
+  function binSet(it, b, kind) {
+    const w = st.inv, g = invLast().r.g; w.bins.set(it, { c: b.c, r: b.r, w: b.w, h: b.h }); w.hl = it; invChanged();
+    say(kind === 'resize' ? `${partName(it)}: ${b.w} × ${b.h} ${b.w * b.h === 1 ? 'cell' : 'cells'}.` : `${partName(it)}: ${B.whereOf(g, b)}.`);
+  }
+  // the plan's press on a proposed compartment: a bin is picked up (or, without a drag, its card opens); a spare one does nothing
+  const HANDLE = (c) => Math.min(7, (c.x1 - c.x0) / 3, (c.y1 - c.y0) / 3);
+  function binPress(c, pt, e) {
+    const w = st.inv; if (!w || w.drag || !c || !c.src || !w.bins.has(c.src)) return false;
+    const g = invLast().r.g, b = w.bins.get(c.src), cell = B.cellAt(g, pt) || { c: b.c, r: b.r };
+    const corner = pt.x > c.x1 - HANDLE(c) && pt.y > c.y1 - HANDLE(c);
+    w.drag = { item: c.src, kind: corner ? 'resize' : 'move', size: { w: b.w, h: b.h }, grab: { dc: cell.c - b.c, dr: cell.r - b.r }, x: e.clientX, y: e.clientY, live: false, cand: null, text: '', key: '', cancel: () => binEnd(null, null, true) };
+    return true;
+  }
+  function binMove(pt, e) {
+    const w = st.inv, d = w && w.drag; if (!d || d.kind === 'card') return;
+    if (!d.live) { if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return; d.live = true; d.key = ''; }
+    const a = invAim(d, pt), k = aimKey(a); if (k !== d.key) { d.key = k; d.cand = a.cand; d.text = a.text; pl.render(); }
+  }
+  function binEnd(pt, e, cancelled) {
+    const w = st.inv, d = w && w.drag; if (!d || d.kind === 'card') return;
+    w.drag = null;
+    if (!d.live) { if (cancelled) pl.render(); else invPick(d.item); return; }
+    if (!cancelled) { const a = invAim(d, pt); if (a.cand && a.cand.ok) { binSet(d.item, a.cand.b, d.kind); return; } if (a.text) say(a.text); }   // a refused drop says why, for the ear too (Sol 01a1c0e0)
+    pl.render();
+  }
+  /* A CARD DRAGGED ONTO THE PLAN (2026-11-08, bins since 2026-11-09): the same aim as a bin picked up in the plan, its bin held by
+     the middle; an unplaced part gets its recommended bin where it is dropped. It starts on the card's handle (touch-action none
+     there alone, so the panel still scrolls everywhere else), after 6 px of movement, with the pointer captured (the plan is
+     asked for the point, plan.js pointAt), registered from the press so a second finger starts no second drag (Sol 01a1be67);
+     the release point decides. The ghost takes no events and sits off the pointer so a finger does not hide the target. */
   function invDrag(e, it, grip, card) {
     const work = st.inv; if (!work || work.drag || e.button !== 0) return;
-    const name = partName(it), id = e.pointerId;
+    const g = invLast().r.g, have = work.bins.get(it), rec = have ? null : B.binSize(it, g, invOpts(work));
+    if (!have && !rec.w) { say(`${partName(it)} has no bin in this drawer: ${rec.why}.`); return; }
+    const size = have ? { w: have.w, h: have.h } : rec, name = partName(it), id = e.pointerId;
     try { grip.setPointerCapture(id); } catch { return; }   // without the capture the moves would not reach the handle: no drag (Sol 01a1be67)
-    const s = { item: it, live: false, ghost: null, target: null, key: undefined, text: '', done: false, cancel: () => end(false) };
-    work.drag = s;   // from the press, so a second finger starts no second session and Esc or closing the list ends this one while it is still pending
-    const sentence = (t) => {
-      if (!t) return `Drop ${name} on another part to put it before that part, or behind the last row to put it last.`;
-      if (t.end) return `Move ${name} to the back.`;
-      const tgt = invKept()[invRankOf(t.comp)]; if (!tgt || tgt === it) return `${name} stays where it is.`;
-      return `Move ${name} before ${partName(tgt)}.`;
-    };
+    const s = { item: it, kind: 'card', size, grab: { dc: Math.floor((size.w - 1) / 2), dr: Math.floor((size.h - 1) / 2) }, live: false, ghost: null, cand: null, key: '', text: '', done: false, cancel: () => end(null) };
+    work.drag = s;
     const move = (ev) => {
       if (ev.pointerId !== id || s.done) return;
       if (!s.live) {
         if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 6) return;
-        s.live = true; s.text = sentence(null);
+        s.live = true;
         s.ghost = el('div.pd-ghost', {}, [picEl(it), el('span', { text: name })]); document.body.appendChild(s.ghost);
-        document.body.classList.add('pd-dragging'); card.classList.add('dragging'); pl.render();
+        document.body.classList.add('pd-dragging'); card.classList.add('dragging');
       }
       s.ghost.style.transform = `translate(${Math.round(ev.clientX + 16)}px, ${Math.round(ev.clientY - 44)}px)`;
-      const t = pl.dropTargetAt(ev.clientX, ev.clientY), key = t ? (t.end ? 'end' : invRankOf(t.comp)) : null;
-      if (key !== s.key) { s.key = key; s.target = t; s.text = sentence(t); pl.render(); }
+      const a = invAim(s, pl.pointAt(ev.clientX, ev.clientY)), k = aimKey(a);
+      if (k !== s.key || !s.text) { s.key = k; s.cand = a.cand; s.text = a.text; pl.render(); }
     };
-    const end = (commit) => {
+    const end = (ev) => {
       if (s.done) return; s.done = true;
       grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', s.cancel); grip.removeEventListener('lostpointercapture', s.cancel);
       try { if (grip.hasPointerCapture(id)) grip.releasePointerCapture(id); } catch {}
       if (work.drag === s) work.drag = null;
       if (!s.live) return;
       if (s.ghost) s.ghost.remove(); document.body.classList.remove('pd-dragging'); card.classList.remove('dragging');
-      if (!(commit && s.target && invDrop(it, s.target))) pl.render();   // nothing moved: the plan redraws without the target
+      const a = ev ? invAim(s, pl.pointAt(ev.clientX, ev.clientY)) : null;   // the release point decides (Sol 01a1be67)
+      if (a && a.cand && a.cand.ok) binSet(it, a.cand.b, 'move'); else { if (a && a.text) say(a.text); pl.render(); }
     };
-    // 3: the target is where the pointer is RELEASED, not where it last moved (Sol 01a1be67)
-    const up = (ev) => { if (ev.pointerId !== id) return; if (s.live) s.target = pl.dropTargetAt(ev.clientX, ev.clientY); end(true); };
+    const up = (ev) => { if (ev.pointerId === id) end(ev); };
     grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', s.cancel); grip.addEventListener('lostpointercapture', s.cancel);
   }
-  // the drop: the part before the target part, or last; true when the order changed (then the list re-lays out and says so)
-  function invDrop(it, t) {
-    const work = st.inv; if (!work) return false;
-    const items = work.items, from = items.indexOf(it); if (from < 0) return false;
-    if (t.end) { items.splice(from, 1); items.push(it); }
-    else { const tgt = invKept()[invRankOf(t.comp)]; if (!tgt || tgt === it) return false; items.splice(from, 1); items.splice(items.indexOf(tgt), 0, it); }
-    if (items.indexOf(it) === from) return false;
-    work.focusMove = it; invChanged(); say(`${partName(it)} is now part ${items.indexOf(it) + 1} of ${items.length}.`);
-    return true;
-  }
   function renderInvPanel(lib, u) {
-    const work = st.inv, { r, text, warn } = invLast();
+    const work = st.inv, { r, text, warn } = invLast(), g = r.g;
     const rerender = () => { lib.replaceChildren(); renderLib(lib); };
-    const sel = fieldSel, num = fieldNum;
+    const sel = fieldSel, num = fieldNum, cw = g.cells[0].x1 - g.cells[0].x0, cd = g.cells[0].y1 - g.cells[0].y0;
     lib.appendChild(el('div.pd-head', {}, [
-      el('div.col', {}, [el('h2.h2', { text: 'Parts list' }), el('h3', { text: unitName(u) || `${u.w}W·${u.hh / 2}H parts drawer` }), el('div.readout', { text: 'Every part gets a compartment sized for its quantity · the plan shows the layout as you go' })]),
+      el('div.col', {}, [el('h2.h2', { text: 'Parts list' }), el('h3', { text: unitName(u) || `${u.w}W·${u.hh / 2}H parts drawer` }), el('div.readout', { text: `A grid of ${g.nc} × ${g.nr} cells, ${fmt(cw)} × ${fmt(cd)} mm · every part gets a bin, and nothing moves unless you move it` })]),
       el('button.key.sm', { text: 'Back', title: 'Back to the compartment tools · Esc (a layout still proposed asks first)', onclick: () => invLeave(() => ctx.renderAll()) }),
     ]));
     if (work.leave) lib.appendChild(el('div.warnbox.pd-inv-leave', {}, [
       el('div', {}, [el('b', { text: 'This layout is not applied yet. ' }), 'Lay out drawer keeps it; Drop the list leaves the drawer as it was.']),
       el('div.iact', {}, [
-        el('button.key.sm.strong', { text: 'Lay out drawer', onclick: () => { const then = work.leave; invApply(); if (!st.inv) then(); } }),
+        el('button.key.sm.strong', { text: 'Lay out drawer', disabled: !!r.error, onclick: () => { const then = work.leave; invApply(); if (!st.inv) then(); } }),
         el('button.key.sm', { text: 'Drop the list', onclick: () => { const then = work.leave; closeInventory(); then(); } }),
         el('button.key.sm', { text: 'Keep editing', onclick: () => { work.leave = null; ctx.renderAll(); } }),
       ]),
     ]));
+    if (work.note) lib.appendChild(el('div.warnbox.pd-inv-note', {}, [el('div', { text: work.note }), el('div.iact', {}, [el('button.key.sm', { text: 'OK', onclick: () => { work.note = ''; rerender(); } })])]));
     // in: a typed line (Enter), a pasted list, the Part Picker, a file, a kit
     const line = el('input.mono', { type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'M3x10 SHCS 100', 'aria-label': 'A part: size, type and quantity, then Enter' });
     const addText = (t) => { if (!t.trim()) return 0; const took = invAdd(I.parseList(t)); line.value = ''; work.focusLine = true; invChanged(); return took; };
@@ -418,7 +498,7 @@ export function partsDrawerTools(stage, ctx) {
       catch { list = I.parseList(t.split(/\r?\n/).map((l) => l.split(',').filter((c) => c.trim()).join(' ')).join('\n')); }
       invAdd(list); invChanged();
     } });
-    const kitSel = sel([['', 'Start from a kit…'], ...Object.entries(I.KITS).map(([k, kit]) => [k, kit.name])], '', (v) => { const kit = I.KITS[v]; if (kit) { work.items = kit.items.map((x) => ({ ...x })); work.skipped = []; invChanged(); } }, { 'aria-label': 'Start from a kit' });
+    const kitSel = sel([['', 'Start from a kit…'], ...Object.entries(I.KITS).map(([k, kit]) => [k, kit.name])], '', (v) => { const kit = I.KITS[v]; if (kit) { work.items = []; work.bins = new Map(); work.skipped = []; work.open = null; invAdd({ items: kit.items.map((x) => ({ ...x })), errors: [] }); invChanged(); } }, { 'aria-label': 'Start from a kit' });
     lib.appendChild(el('section.pd-inv', {}, [
       el('div.pd-inv-line', {}, [line, el('button.key.sm', { text: 'Add', title: 'Add the line (Enter does too); several lines pasted come in together', onclick: () => addText(line.value) })]),
       el('div.pd-btns', {}, [
@@ -426,66 +506,73 @@ export function partsDrawerTools(stage, ctx) {
         el('details.pd-inv-more', { open: work.moreOpen ? true : null, ontoggle: (e) => { work.moreOpen = e.target.open; } }, [el('summary', { text: 'More ways to add' }), el('div.pd-btns', {}, [el('button.key.sm', { text: 'Import a list…', title: 'A text or CSV list, or a Part Picker items file', onclick: () => fileIn.click() }), fileIn, kitSel])]),
       ]),
     ]));
-    // THE PARTS AS CARDS (Sol 01a1be4f, 2026-11-08: Joey found the rows' abbreviations opaque and the panel overwhelming): a card
-    // shows what identifies the part, the picture large and its plain name, and how many; one card at a time opens for its
-    // fields. The layout follows the cards' order: a card is moved with its arrows, with Move to front / back when open, or
-    // dragged by its handle onto the plan (invDrag), where a drop on another part puts it before that part and a drop behind
-    // the last row puts it last; the engine keeps sizing every compartment for its count
+    // THE PARTS AS CARDS (Sol 01a1be4f, 2026-11-08), each with its bin (2026-11-09): the picture, the plain name, how many and how
+    // full its bin is; one card opens for its fields and its bin's place and size (the keyboard and the phone's way to move it)
     const list = el('section.pd-inv');
-    const withItems = r.error ? [] : r.comps.filter((c) => c.item);
-    list.appendChild(el('div.pd-inv-top', {}, [el('h2.h2', { text: n(work.items.length, 'part') }),
-      sel([['', 'Sort…'], ['type', 'By type, then size'], ['size', 'By size, then type'], ['qty', 'By quantity'], ['asis', 'Leave as they are']], '', (v) => {
-        if (v === 'type') work.items = I.sortItems(work.items);
-        else if (v === 'size') work.items = [...work.items].sort((a, b) => I.sizeKey(a) - I.sizeKey(b) || I.TYPE_ORDER.indexOf(a.type) - I.TYPE_ORDER.indexOf(b.type) || (a.length || 0) - (b.length || 0));
-        else if (v === 'qty') work.items = [...work.items].sort((a, b) => (b.qty || 0) - (a.qty || 0));
-        if (v && v !== 'asis') invChanged(); else rerender();
-      }, { 'aria-label': 'Sort the list' })]));
-    if (work.items.length > 1) list.appendChild(el('p.hint.pd-inv-order', { text: 'The first part goes front-left, the last back-right. Drag a part by its handle onto the drawer to move it; the compartments resize to fit.' }));
+    list.appendChild(el('div.pd-inv-top', {}, [el('h2.h2', { text: n(work.items.length, 'part') })]));
+    if (work.items.length) list.appendChild(el('p.hint.pd-inv-order', { text: 'Pick a bin up in the drawer, or drag a part by its handle, to put it where you want; drag a bin’s corner to resize it. Nothing else moves.' }));
+    if (r.unplaced.length) list.appendChild(el('p.pd-inv-sum.warn.pd-inv-unplaced', { text: `${n(r.unplaced.length, 'part')} without a bin: ${r.unplaced.map((x) => `${partName(x.it)} (${x.why})`).join('; ')}.` }));
     const cards = el('div.pd-cards');
     if (!work.items.length) cards.appendChild(el('p.hint', { text: 'No parts yet. Type a line above, pick one below, or open the Part Picker.' }));
-    const announce = (it) => say(`${partName(it)} is now part ${work.items.indexOf(it) + 1} of ${work.items.length}.`);
-    const moveTo = (it, j) => { const i = work.items.indexOf(it); if (i < 0 || j < 0 || j >= work.items.length || j === i) return; work.items.splice(i, 1); work.items.splice(j, 0, it); work.focusMove = it; invChanged(); announce(it); };
-    // a card's compartment: the engine keeps the known, in-drawer items in the list's order, so the cards map onto them by rank
-    const kept = invKept();
-    work.rowEls = [];   // by that rank, for the card <-> compartment highlight (invHl)
+    work.cardEls = new Map();   // part -> card, for the card <-> bin highlight (invHl)
     work.items.forEach((it, i) => {
-      const ki = kept.indexOf(it), c = ki >= 0 ? withItems[ki] || null : null, f = c ? invFill(c, work) : null, open = work.open === it;
-      const name = partName(it);
-      const fill = f ? (f.fill < 0.05 ? 'under 5% full' : `about ${Math.round(f.fill * 100)}% full`) + (f.load > 1 + 1e-9 ? ' · over the room chosen' : '') : (ki < 0 ? 'not laid out' : '');
-      const grip = el('button.pd-grip', { type: 'button', 'aria-label': `Drag ${name} onto the drawer to move it`, title: 'Drag onto the drawer to move this part' }, [el('span'), el('span'), el('span'), el('span'), el('span'), el('span')]);
+      const b = work.bins.get(it), f = r.fits.get(it), open = work.open === it, name = partName(it), un = r.unplaced.find((x) => x.it === it);
+      const fill = f ? (f.fill < 0.05 ? 'under 5% full' : `about ${Math.round(f.fill * 100)}% full`) + (!f.foot ? ' · too long for its bin' : f.load > 1 + 1e-9 ? ' · over the room chosen' : '') : un ? 'no bin yet' : 'not laid out';
+      const grip = el('button.pd-grip', { type: 'button', 'aria-label': `Drag ${name} onto the drawer`, title: 'Drag onto the drawer to put this part there' }, [el('span'), el('span'), el('span'), el('span'), el('span'), el('span')]);
       grip.addEventListener('pointerdown', (e) => invDrag(e, it, grip, card));
       const qtyBtn = el('button.pd-qty-btn', { type: 'button', text: String(it.qty || 0), 'aria-label': `${it.qty || 0} of ${name}; change the quantity`, title: 'How many: press to change', onclick: () => { work.open = it; work.focusQty = it; rerender(); } });
       const head = el('button.pd-card-head', { type: 'button', 'aria-expanded': open ? 'true' : 'false', 'aria-label': `${name}${open ? ', close its fields' : ', open its fields'}`, onclick: () => { work.open = open ? null : it; work.focusHead = it; rerender(); } }, [el('span.pd-card-name', { text: name })]);
-      const card = el('div.pd-card' + (f && f.load > 1 + 1e-9 ? '.over' : '') + (c && work.hl === ki ? '.hl' : '') + (open ? '.open' : ''), {}, [
-        grip, picEl(it), el('div.pd-card-main', {}, [head, el('div.pd-card-sub', {}, [qtyBtn, el('span.pd-card-fill', { text: fill, title: f ? 'How full its compartment would be with what you counted' : '' })])]),
-        el('div.pd-inv-move', {}, [el('button', { text: '▲', 'aria-label': `Move ${name} up, toward the front`, title: 'Move up', disabled: i === 0, onclick: () => moveTo(it, i - 1) }), el('button', { text: '▼', 'aria-label': `Move ${name} down, toward the back`, title: 'Move down', disabled: i === work.items.length - 1, onclick: () => moveTo(it, i + 1) })]),
-        el('button.x', { 'aria-label': 'Remove ' + name, title: 'Remove', onclick: () => { if (work.open === it) work.open = null; work.items.splice(i, 1); invChanged(); } }, [icon('x', { size: 14 })]),
+      const card = el('div.pd-card' + (f && (f.load > 1 + 1e-9 || !f.foot) ? '.over' : '') + (un ? '.unplaced' : '') + (b && work.hl === it ? '.hl' : '') + (open ? '.open' : ''), {}, [
+        grip, picEl(it), el('div.pd-card-main', {}, [head, el('div.pd-card-sub', {}, [qtyBtn, el('span.pd-card-fill', { text: fill, title: f ? 'How full its bin would be with what you counted' : '' })])]),
+        el('button.x', { 'aria-label': 'Remove ' + name, title: 'Remove', onclick: () => { if (work.open === it) work.open = null; work.items.splice(i, 1); work.bins.delete(it); invChanged(); } }, [icon('x', { size: 14 })]),
       ]);
-      if (open) card.appendChild(el('div.pd-card-edit', {}, [
-        ...partFields(it, (p) => { Object.assign(it, p); invChanged(); }),
-        el('label.pd-card-qtyf', {}, ['Qty', num(it.qty, (v) => { it.qty = Math.max(0, Math.round(v)); invChanged(); }, false, 'Quantity')]),
-        matField(it, (p) => { Object.assign(it, p); invChanged(); }),
-        el('div.pd-card-edit-row', {}, [
-          el('span.pd-inv-fill', { text: `Printed label: ${I.labelLines(it).filter(Boolean).join(' / ')}`, title: 'What the compartment’s label will say' }),
-          el('span.grow'),
-          el('button.key.sm', { text: 'Move to front', disabled: i === 0, onclick: () => moveTo(it, 0) }),
-          el('button.key.sm', { text: 'Move to back', disabled: i === work.items.length - 1, onclick: () => moveTo(it, work.items.length - 1) }),
-        ]),
-      ]));
-      // a card under the pointer, or holding the focus, lights its proposed compartment in the plan and in 3D; the plan lights the
-      // card back (invHl). The pointer leaving keeps the light while the card holds the focus, and the focus leaving (Tab) keeps it
-      // while the pointer is over the card (Sol 01a1bd82)
-      if (c) {
-        work.rowEls[ki] = card;
-        card.addEventListener('pointerenter', () => invHl(ki));
+      if (open) {
+        // the bin by keyboard or tap: the arrows move it a cell (up is toward the back, as the plan draws it), the size buttons grow
+        // or shrink it from its back-right corner; each goes only where the cells are free (Sol 01a1c0ba)
+        const opt = invOpts(work), foot = B.footMin(it, g, opt);
+        const tryBin = (nb) => B.freeFor(g, work.bins, nb, it);
+        const step = (k, label, nb, ok = true) => el('button.key.sm', { text: k, 'data-k': label, 'aria-label': `${label}: ${name}`, title: label, disabled: !(ok && nb && tryBin(nb)), onclick: () => { work.focusKey = { it, k: label }; binSet(it, nb, /Wider|Narrower|Deeper|Shallower|Recommended/.test(label) ? 'resize' : 'move'); } });
+        let place;
+        if (b) {
+          const rec = B.binSize(it, g, opt);
+          place = el('div.pd-card-place', {}, [
+            el('span.pd-inv-fill', { text: `Bin ${b.w} × ${b.h} ${b.w * b.h === 1 ? 'cell' : 'cells'} · ${B.whereOf(g, b)}` }),
+            el('div.pd-nudge', { role: 'group', 'aria-label': 'Move its bin' }, [
+              step('◀', 'Move left one cell', { ...b, c: b.c - 1 }), step('▲', 'Move one cell toward the back', { ...b, r: b.r + 1 }),
+              step('▼', 'Move one cell toward the front', { ...b, r: b.r - 1 }), step('▶', 'Move right one cell', { ...b, c: b.c + 1 }),
+            ]),
+            el('div.pd-nudge', { role: 'group', 'aria-label': 'Resize its bin' }, [
+              step('Narrower', 'Narrower', { ...b, w: b.w - 1 }, b.w > 1 && foot(b.w - 1, b.h)), step('Wider', 'Wider', { ...b, w: b.w + 1 }),
+              step('Shallower', 'Shallower', { ...b, h: b.h - 1 }, b.h > 1 && foot(b.w, b.h - 1)), step('Deeper', 'Deeper', { ...b, h: b.h + 1 }),
+              ...(rec.w && (rec.w !== b.w || rec.h !== b.h) ? [step('Recommended size', 'Recommended size', { ...b, w: rec.w, h: rec.h })] : []),
+            ]),
+          ]);
+        } else {
+          const s = B.binSize(it, g, opt), spot = s.w ? B.firstFree(g, work.bins, s.w, s.h) : null;
+          place = el('div.pd-card-place', {}, [el('span.pd-inv-fill.warn', { text: `No bin yet: ${un ? un.why : 'it does not lay out'}.` }), ...(spot ? [step('Find it a spot', 'Find it a spot', spot)] : [])]);
+        }
+        card.appendChild(el('div.pd-card-edit', {}, [
+          ...partFields(it, (p) => { Object.assign(it, p); invChanged(); }),
+          el('label.pd-card-qtyf', {}, ['Qty', num(it.qty, (v) => { it.qty = Math.max(0, Math.round(v)); invChanged(); }, false, 'Quantity')]),
+          matField(it, (p) => { Object.assign(it, p); invChanged(); }),
+          place,
+          el('div.pd-card-edit-row', {}, [el('span.pd-inv-fill', { text: `Printed label: ${I.labelLines(it).filter(Boolean).join(' / ')}`, title: 'What the compartment’s label will say' })]),
+        ]));
+      }
+      // a card under the pointer, or holding the focus, lights its bin in the plan and in 3D; the plan lights the card back
+      // (invHl). The pointer leaving keeps the light while the card holds the focus, and the focus leaving (Tab) keeps it while
+      // the pointer is over the card (Sol 01a1bd82)
+      if (b) {
+        work.cardEls.set(it, card);
+        card.addEventListener('pointerenter', () => invHl(it));
         card.addEventListener('pointerleave', () => { if (!card.contains(document.activeElement)) invHl(null); });
-        card.addEventListener('focusin', () => invHl(ki));
+        card.addEventListener('focusin', () => invHl(it));
         card.addEventListener('focusout', (e) => { if (!(e.relatedTarget && card.contains(e.relatedTarget)) && !card.matches(':hover')) invHl(null); });
       }
       cards.appendChild(card);
       if (work.focusHead === it) { work.focusHead = null; queueMicrotask(() => { if (head.isConnected) head.focus({ preventScroll: true }); }); }   // the re-render took the focus from the head (Sol 01a1be67)
-      if (work.focusQty === it) { work.focusQty = null; const q = card.querySelector('.pd-card-qtyf input'); if (q) queueMicrotask(() => { if (q.isConnected) { q.focus({ preventScroll: true }); q.select(); } }); }
-      if (work.focusMove === it) { work.focusMove = null; queueMicrotask(() => { if (card.isConnected) { const b = card.querySelector('.pd-inv-move button:not(:disabled)'); (b || card.querySelector('.pd-card-head')).focus({ preventScroll: true }); card.scrollIntoView({ block: 'nearest' }); } }); }
+      if (work.focusQty === it) { work.focusQty = null; const q = card.querySelector('.pd-card-qtyf input'); if (q) queueMicrotask(() => { if (q.isConnected) { q.focus({ preventScroll: true }); q.select(); } }); card.scrollIntoView({ block: 'nearest' }); }
+      if (work.focusKey && work.focusKey.it === it) { const k = work.focusKey.k; work.focusKey = null; queueMicrotask(() => { const x = card.querySelector(`[data-k="${k}"]`); const t = x && !x.disabled ? x : card.querySelector('.pd-card-head'); if (t && t.isConnected) t.focus({ preventScroll: true }); }); }
     });
     // add a part without typing: the same fields, plain names, then how many
     const d = work.draft || (work.draft = { type: 'shcs', size: 'M3', length: 10, qty: 50 });
@@ -504,16 +591,22 @@ export function partsDrawerTools(stage, ctx) {
     // the layout's levers, folded away (closed by default; a change re-renders the panel, so the fold remembers whether it was open)
     const opts = el('details.pd-inv.pd-inv-opts', { open: work.optsOpen ? true : null });
     opts.addEventListener('toggle', () => { work.optsOpen = opts.open; });
-    opts.appendChild(el('summary', {}, [el('h2.h2', { text: 'Layout options' }), el('span.pd-inv-fill', { text: `${FIT_CAPS.find(([v]) => v === work.cap)?.[1] || ''} room${work.spare ? ' · spare row' : ''}${work.round ? ' · next bag' : ''}${work.labels ? '' : ' · no label holders'}` })]));
+    opts.appendChild(el('summary', {}, [el('h2.h2', { text: 'Layout options' }), el('span.pd-inv-fill', { text: `${FIT_CAPS.find(([v]) => v === work.cap)?.[1] || ''} room · spare ${work.spare ? 'merged' : 'one per cell'}${work.round ? ' · next bag' : ''}${work.labels ? '' : ' · no label holders'}` })]));
     opts.appendChild(el('div.row', {}, ['Room to grow', el('div.track.mini.seg3', { role: 'group', 'aria-label': 'Room to grow' }, FIT_CAPS.map(([v, t]) => el('button.seg.sm' + (work.cap === v ? '.on' : ''), { text: t, onclick: () => { if (work.cap !== v) { work.cap = v; invChanged(); } } })))]));
+    // the room changes the fills and a new bin's size; the bins already placed keep theirs until asked (Sol 01a1c0ba)
+    opts.appendChild(el('div.row', {}, [el('span.pd-inv-fill', { text: 'Bins keep their size when the room changes.' }), el('button.key.sm', { text: 'Resize every bin to fit', title: 'Every bin to its recommended size, from where it is, where the cells are free', onclick: () => {
+      let done = 0, kept = 0;
+      for (const [it, b] of [...work.bins]) { const s = B.binSize(it, g, invOpts(work)); if (!s.w || (s.w === b.w && s.h === b.h)) continue; const nb = { ...b, w: s.w, h: s.h }; if (B.freeFor(g, work.bins, nb, it)) { work.bins.set(it, nb); done++; } else kept++; }
+      invChanged(); say(`${n(done, 'bin')} resized${kept ? `; ${n(kept, 'bin')} kept ${kept > 1 ? 'their size' : 'its size'}: no free cells beside ${kept > 1 ? 'them' : 'it'}` : ''}.`);
+    } })]));
     opts.appendChild(el('label.pd-check', {}, [el('input', { type: 'checkbox', checked: work.round ? true : null, onchange: (e) => { work.round = e.target.checked; invChanged(); } }), ' Size for the next bag (25, 50, 100, 200, 500)']));
-    opts.appendChild(el('label.pd-check', {}, [el('input', { type: 'checkbox', checked: work.spare ? true : null, onchange: (e) => { work.spare = e.target.checked; invChanged(); } }), ' A spare row at the back when it fits']));
+    opts.appendChild(el('div.row', {}, ['Spare space', el('div.track.mini', { role: 'group', 'aria-label': 'Spare space' }, [[true, 'Few compartments'], [false, 'One per cell']].map(([v, t]) => el('button.seg.sm' + (!!work.spare === v ? '.on' : ''), { text: t, onclick: () => { if (!!work.spare !== v) { work.spare = v; invChanged(); } } })))]));
     opts.appendChild(el('label.pd-check', {}, [el('input', { type: 'checkbox', checked: work.labels ? true : null, onchange: (e) => { work.labels = e.target.checked; invChanged(); } }), ' Label holders']));
     opts.appendChild(el('div.row', {}, ['Floor colours', sel([['none', 'Leave as they are'], ['size', 'By thread size'], ['type', 'By part type']], work.colorBy, (v) => { work.colorBy = v; }, { 'aria-label': 'Floor colours' })]));
-    opts.appendChild(el('p.hint', { text: 'Exact fills each compartment to the engine’s limit, Comfortable leaves room for a third more, Plenty for twice as many. The fill and the label say what you counted, bag or not.' }));
+    opts.appendChild(el('p.hint', { text: 'Exact fills each bin to the engine’s limit, Comfortable leaves room for a third more, Plenty for twice as many. The fill and the label say what you counted, bag or not. The cells no part uses become spare compartments.' }));
     lib.appendChild(opts);
     lib.appendChild(el('p.pd-inv-sum' + (warn ? '.warn' : ''), { text }));
-    lib.appendChild(el('div.pd-btns', {}, [el('button.key.strong', { text: 'Lay out drawer', disabled: !!r.error, onclick: invApply }), el('button.key.sm', { text: 'Clear list', onclick: () => { work.items = []; work.skipped = []; work.open = null; invChanged(); } })]));
+    lib.appendChild(el('div.pd-btns', {}, [el('button.key.strong', { text: 'Lay out drawer', disabled: !!r.error, title: r.error || 'Make these bins the drawer’s compartments (one undo step)', onclick: invApply }), el('button.key.sm', { text: 'Clear list', onclick: () => { work.items = []; work.bins = new Map(); work.skipped = []; work.open = null; invChanged(); } })]));
     lib.appendChild(el('p.hint', { text: 'Lay out drawer keeps this layout; Back, Esc or Done ask first while one is proposed.' }));
     if (work.focusLine) { work.focusLine = false; queueMicrotask(() => { if (line.isConnected) line.focus(); }); }
   }
@@ -807,8 +900,8 @@ export function partsDrawerTools(stage, ctx) {
     onHolder: doHolder,
     onHover: (c) => { if (c !== st.hover) { st.hover = c; update3d(); } },
     preview: invPreview,   // the parts list's layout, dashed, while the list is open (2026-11-07)
-    onPreviewHover: (c) => invHl(c ? invRankOf(c) : null, 'plan'),   // a proposed compartment under the pointer lights its row, a press focuses it (2026-11-08)
-    onPreviewPick: invPick,
+    onPreviewHover: (c) => invHl(c && c.src ? c.src : null, 'plan'),   // a bin under the pointer lights its card (2026-11-08)
+    onPreviewPress: binPress, onPreviewMove: binMove, onPreviewRelease: binEnd,   // a bin picked up, moved and let go (2026-11-09)
   });
   pl.el.hidden = true;
   root.appendChild(pl.el);

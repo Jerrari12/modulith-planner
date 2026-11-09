@@ -203,7 +203,7 @@ export function cleanPartsLayout(raw) {
   if (raw.floor !== undefined) { if (!plain(raw.floor)) return null; out.floor = { mode: PARTS_FLOOR_MODES.includes(raw.floor.mode) ? raw.floor.mode : "off", slots: raw.floor.slots === 4 ? 4 : 3 }; }
   if (raw.outlines !== undefined) out.outlines = raw.outlines === true;
   // how the parts list sized it (DECISIONS 2026-11-07): the fill cap, bag rounding, the spare row; the list reopens with them
-  if (raw.fit !== undefined) { if (!plain(raw.fit)) return null; const cap = Number(raw.fit.cap); out.fit = { cap: PARTS_FIT_CAPS.includes(cap) ? cap : 0.75, round: raw.fit.round === true, spare: raw.fit.spare !== false }; }
+  if (raw.fit !== undefined) { if (!plain(raw.fit)) return null; const cap = Number(raw.fit.cap); out.fit = { cap: PARTS_FIT_CAPS.includes(cap) ? cap : 0.75, round: raw.fit.round === true, spare: raw.fit.spare !== false }; if (plain(raw.fit.grid)) { const gc = intIn(raw.fit.grid.nc, 1, 40, 0), gr = intIn(raw.fit.grid.nr, 1, 40, 0); if (gc && gr) out.fit.grid = { nc: gc, nr: gr }; } }   // grid: the parts list's bin grid (2026-11-09)
   for (const c of raw.comps) {
     if (!plain(c)) return null;
     const x0 = mm(c.x0), x1 = mm(c.x1), y0 = mm(c.y0), y1 = mm(c.y1);

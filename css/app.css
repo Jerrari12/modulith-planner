@@ -1476,6 +1476,16 @@ html.ws-phone #ws.sheet-open #ws-plan .bhead { padding: 6px 12px; }
 #ws-plan .cell.preview.hl { fill: var(--plan-hov); stroke-dasharray: none; stroke-width: 1.1; }   /* lit with its row in the list (2026-11-08) */
 #ws-plan .cell.preview.drop { fill: var(--plan-sel); stroke-dasharray: none; stroke-width: 1.5; }   /* a dragged card's target: the drop goes before this part, or last on the spare row (2026-11-08) */
 #ws-plan .dropend { fill: var(--plan-sel); stroke: var(--orange); stroke-width: 1.2; pointer-events: none; }
+/* the bins on a grid (2026-11-09): a bin solid-edged, the spare compartments dashed and quieter, the free cells faint to aim
+   at, the bin being moved dimmed, the candidate green where it may go and amber where it may not, a bin's resize corner */
+#ws-plan .cell.preview.bin { stroke-dasharray: none; stroke-width: 0.9; cursor: grab; }
+#ws-plan .cell.preview.spare { stroke-opacity: .55; cursor: default; }
+#ws-plan .cell.preview.moving { opacity: .35; }
+#ws-plan .bincell { fill: none; stroke: var(--ink-3); stroke-width: .3; stroke-dasharray: .8 1.2; opacity: .55; pointer-events: none; }
+#ws-plan .bincand { pointer-events: none; stroke-width: 1.4; }
+#ws-plan .bincand.ok { fill: rgba(52, 199, 89, .22); stroke: #34C759; }
+#ws-plan .bincand.bad { fill: var(--warn-bg); fill-opacity: .55; stroke: var(--warning); stroke-dasharray: 2 1.2; }
+#ws-plan .binhandle { fill: var(--orange); opacity: .85; pointer-events: none; }
 #ws-plan svg.preview { cursor: default; }
 #ws-plan .bhint.warn { color: var(--warning); }
 #ws-plan .selring { fill: none; stroke: var(--orange); stroke-width: 0.9; pointer-events: none; }
@@ -1550,7 +1560,7 @@ html.ws-phone #ws.sheet-open #ws-plan .bhead { padding: 6px 12px; }
 /* THE PARTS AS CARDS (2026-11-08, Sol 01a1be4f): a handle to drag, the picture large, the plain name and the count; the fields
    only in the open card. The handle alone takes the touch gestures, so the panel still scrolls from anywhere else */
 #ws-lib .pd-inv .pd-cards { display: flex; flex-direction: column; gap: 6px; }
-#ws-lib .pd-inv .pd-card { display: grid; grid-template-columns: 14px 40px minmax(0, 1fr) 22px 20px; gap: 5px; align-items: center; padding: 6px 3px 6px 0; border: 1px solid var(--hair); border-radius: 12px; background: var(--well); }
+#ws-lib .pd-inv .pd-card { display: grid; grid-template-columns: 14px 40px minmax(0, 1fr) 20px; gap: 5px; align-items: center; padding: 6px 3px 6px 0; border: 1px solid var(--hair); border-radius: 12px; background: var(--well); }
 #ws-lib .pd-inv .pd-card.open { border-color: var(--input-border); }
 #ws-lib .pd-inv .pd-card.hl { box-shadow: inset 3px 0 0 var(--orange); }   /* its proposed compartment is under the pointer in the plan, or the card is */
 #ws-lib .pd-inv .pd-card.dragging { opacity: .45; }
@@ -1565,7 +1575,13 @@ body.pd-dragging #ws-lib .pd-inv .pd-grip { cursor: grabbing; }
 #ws-lib .pd-inv .pd-card-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; font-weight: 600; line-height: 1.2; overflow: hidden; }   /* the whole name, on two lines when the panel is narrow */
 #ws-lib .pd-inv .pd-card-sub { display: flex; align-items: center; gap: 6px; min-width: 0; padding-left: 3px; }
 #ws-lib .pd-inv .pd-card-fill { font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#ws-lib .pd-inv .pd-card.over .pd-card-fill { color: var(--warning); font-weight: 700; }
+#ws-lib .pd-inv .pd-card.over .pd-card-fill, #ws-lib .pd-inv .pd-card.unplaced .pd-card-fill { color: var(--warning); font-weight: 700; }
+#ws-lib .pd-inv .pd-card.unplaced { border-color: var(--warning); border-style: dashed; }
+#ws-lib .pd-inv .pd-card-place { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; padding-top: 2px; }
+#ws-lib .pd-inv .pd-card-place .warn { color: var(--warning); white-space: normal; }
+#ws-lib .pd-inv .pd-nudge { display: flex; flex-wrap: wrap; gap: 4px; }
+#ws-lib .pd-inv .pd-nudge .key.sm { min-width: 30px; justify-content: center; padding: 0 7px; }
+#ws-lib .pd-inv .pd-inv-unplaced { font-family: inherit; }
 #ws-lib .pd-inv .pd-qty-btn { flex: none; font: inherit; font-family: var(--font-mono); font-size: 12px; font-weight: 700; min-width: 32px; height: 22px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); cursor: pointer; }
 #ws-lib .pd-inv .pd-card-edit { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr); gap: 4px; align-items: center; padding-right: 2px; }
 #ws-lib .pd-inv .pd-card-edit > select:first-child { grid-column: 1 / -1; }   /* the type's plain name takes a row of its own */

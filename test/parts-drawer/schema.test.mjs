@@ -59,3 +59,11 @@ test('a part’s material is kept when known and dropped otherwise', () => {
   assert.equal('mat' in o2.comps[0].item, false, 'an insert keeps only brass or stainless');
   assert.equal('mat' in o2.comps[1].item, false, 'a type with no materials keeps none');
 });
+
+/* the parts list's bin grid rides with the fit (2026-11-09): kept when whole numbers, dropped otherwise, never invented */
+test('the fit keeps its bin grid when it has one', () => {
+  const lay = layout(); lay.fit = { cap: 0.75, round: false, spare: true, grid: { nc: 5, nr: 4 } };
+  assert.deepEqual(cleanPartsLayout(lay).fit, { cap: 0.75, round: false, spare: true, grid: { nc: 5, nr: 4 } });
+  lay.fit.grid = { nc: 'x', nr: 4 }; assert.equal('grid' in cleanPartsLayout(lay).fit, false, 'a broken grid is dropped');
+  delete lay.fit.grid; assert.equal('grid' in cleanPartsLayout(lay).fit, false, 'none, none added');
+});
