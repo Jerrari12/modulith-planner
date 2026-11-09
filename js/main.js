@@ -6,7 +6,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { generateManifest, migrateOfficialBuild, resolvePartPreview, REQUIREMENT as REQ,
-  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, handlePoseKey, gridfinitySizeOk } from './generate.js';
+  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, handlePoseKey, gridfinitySizeOk, CHIPS } from './generate.js';
+import { chipFillGroups, chipFillLayout, buildChipFill, titleTexture } from './chip-fill.js';   // the chips in a chip drawer (2026-11-09); stamped in pages.yml
 import { resolveEntry } from './entry.js';
 import { tabTitle, buildName } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
 import { createPlannerRelay } from './relay-auth.js';
@@ -4882,6 +4883,84 @@ function attachLabelTexts() {
 function placeLabelTexts(list) {
   for (const inst of list) { const u = labelUnitFor(inst); placeLabelText(inst, labelTextFor(inst), u?.labelBadge, labelUploadFor(build, u), labelLookFor(inst)); }
 }
+/* ---- the chips in a chip drawer (2026-11-09, Joey: "add some chips that show when the drawer is open, chips for each color
+   used in the build and material label chip to organize the different materials used") ---------------------------------
+   Every Filament Sample Chip Drawer holds a chip in each filament the build is printed in, behind a title piece per
+   material; js/chip-fill.js lays them out on the release's comb. They are children of the drawer body's own (template)
+   child, as the label text is of a label's, so every peek, pull and glide carries them. Their materials are their own:
+   the stage's per-part painting (materialFor, on every step, fade and highlight) walks every mesh in an instance and would
+   paint them the drawer's colour, so each chip mesh pins its material (pinChipMaterial). Rebuilt on every palette change,
+   which is where a colour or a filament name moves. The planner's static kits and the ?part= previews show none. */
+const CHIP_DRAWER_NODE = /^(Classic|Decor)ChipDrawer_(\d+)-1W-05H$/;
+const CHIPS_OFF = new URLSearchParams(location.search).get('chips') === 'off';   // ?chips=off: the empty drawers, for comparison
+const chipTitleTex = new Map();   // one canvas per material word, shared by every drawer
+let chipTpl = null, chipTplLoading = null, chipFillTok = 0;
+const chipTitleTexture = (word) => chipTitleTex.get(word) || chipTitleTex.set(word, titleTexture(THREE, word)).get(word);
+function pinChipMaterial(o) {
+  const mat = o.material;
+  Object.defineProperty(o, 'material', { get: () => mat, set: () => {}, configurable: true });
+}
+/* the chip's geometry and its transform inside FilamentChip.lib.glb, loaded once (every collection's folder has the file) */
+function loadChipTemplate() {
+  if (chipTpl) return Promise.resolve(chipTpl);
+  return chipTplLoading || (chipTplLoading = loader.loadAsync(`${PARTS_BASE}FilamentChip.lib.glb`).then((gltf) => {
+    gltf.scene.updateMatrixWorld(true);
+    let mesh = null;
+    gltf.scene.traverse((o) => { if (!mesh && o.isMesh) mesh = o; });
+    if (!mesh) throw new Error('FilamentChip.lib.glb has no mesh');
+    return (chipTpl = { geometry: mesh.geometry, matrix: mesh.matrixWorld.clone() });
+  }).finally(() => { chipTplLoading = null; }));
+}
+/* the build's filaments, exactly as Colors counts them ("5 filaments used"): filamentsInBuild walks every placed part's
+   regions through the unit's own picks, the label stripes and a look being shown; a region with no filament picked (the
+   instruction colours) is its colour alone, once. Each carries the catalogue's material (materialOfFilament). */
+function buildFilaments() {
+  const fc = filamentsInBuild(previewLook || null);
+  const out = fc.filaments.map((f) => ({ hex: f.hex, name: f.name === f.hex ? null : f.name, material: f.material || null, keys: f.keys }));
+  /* a region with nothing picked is its colour alone - but a colour and a MATERIAL: a bare TPU foot in a picked PLA part's
+     colour is still a TPU chip behind a TPU title (Sol 01a1c166). Colors' count merges them by colour alone. */
+  const id = (e) => `${e.hex.toLowerCase()}|${chipMaterialOf(e) || 'PLA'}`;
+  const worn = new Set(out.map(id));
+  for (const u of fc.unpicked) {
+    const e = { hex: u.hex, name: null, material: null, keys: [u.key] };
+    if (worn.has(id(e))) continue;
+    worn.add(id(e));
+    out.push(e);
+  }
+  return out;
+}
+/* the feet are TPU whatever the palette says (tpuFeet), so a bare foot colour is TPU too; anything else unnamed is PLA */
+function chipMaterialOf(e) { return e.material || (e.keys.some((k) => k.split(':')[0] === 'Foot') ? 'TPU' : null); }
+function clearChipFill(inst) {
+  const body = inst.group.children[0];
+  if (!body) return;
+  for (const o of [...body.children]) {
+    if (!o.userData.chipFill) continue;
+    body.remove(o);
+    o.traverse((m) => { if (m.isMesh) { if (m.isInstancedMesh) m.dispose(); if (m.geometry !== chipTpl?.geometry) m.geometry.dispose(); m.material.dispose(); } });
+  }
+}
+function attachChipFills() {
+  const tok = ++chipFillTok;
+  if (IS_PART || !build || CHIPS_OFF) return;
+  const list = [...instances.values()].filter((i) => CHIP_DRAWER_NODE.test(i.cfg.node));
+  if (!list.length) return;
+  loadChipTemplate().then(() => {
+    if (tok !== chipFillTok) return;   // a later mount or repaint took over
+    const groups = chipFillGroups(buildFilaments(), chipMaterialOf);
+    for (const inst of list) {
+      const [, style, L] = inst.cfg.node.match(CHIP_DRAWER_NODE);
+      const body = inst.group.children[0];
+      if (!body) continue;
+      clearChipFill(inst);
+      const front = new THREE.Box3().setFromObject(templates[inst.cfg.node]).max.z;
+      const layout = chipFillLayout(groups, CHIPS.slotsPerLane[L]);
+      body.add(buildChipFill(THREE, { chip: chipTpl, style, front, pitch: CHIPS.pitch[L], layout, textFor: chipTitleTexture,
+        pinMaterial: pinChipMaterial }));
+    }
+    ao.rev++; markShadowDirty(); invalidateFrame();
+  }).catch((e) => console.warn(`[chip fill] ${(e && e.message) || e} - chip drawers left empty`));
+}
 /* One label's meshes: its text + badge from its words, its badge (absent = predicted) and the build's style - label-spec.js
    checks both - or, for a PART label (`look`, label-look.js), the Label Studio's part-label ink; plus a stripe's body pieces.
    Returns labelGeometry's result (its `fits` is the generator's own verdict), the part label's ({ part: true, fits: true }),
@@ -8230,6 +8309,7 @@ function applyPalette() {
   // planned (translucent) clones take their source's colour AND finish, after both moved
   for (const e of Object.values(plannedMats)) { e.mat.color.copy(e.src.color); copyFinish(e.mat, e.src); }
   for (const e of Object.values(plannedHighlightMats)) { e.mat.color.copy(e.src.color); copyFinish(e.mat, e.src); }
+  attachChipFills();   // a chip drawer's chips are the build's filaments: a colour or a name just moved
   renderChecklist();
   updateColorToggle();
   renderPresets(); // keep the active preset / My-palette chip highlight in step
@@ -11492,6 +11572,7 @@ async function mountManifest(m) {
   if (plateActive()) ensurePlateUVs();   // plate GLBs ship position+normal only
   buildInstances();
   attachLabelTexts();
+  attachChipFills();
   buildGhosts();
   setIncomplete(!!m.incomplete);
   computeBounds();

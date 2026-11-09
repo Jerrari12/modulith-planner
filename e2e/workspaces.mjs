@@ -8957,6 +8957,66 @@ test('Build: the drawer type offers Chip on a 1W-0.5H drawer, greyed with the re
   await ctx.close();
 });
 
+/* THE CHIPS IN A CHIP DRAWER (Joey 2026-11-09: "add some chips that show when the drawer is open, chips for each color used in
+   the build and material label chip to organize the different materials used"; then "maybe spread them out a little, move petg
+   and tpu to the right side?"). js/chip-fill.js lays them out (test/chip-fill.test.mjs); this checks the stage: as many chips
+   as Colors counts filaments, a title piece per material with PLA on the left and the rest on the right, riding the drawer
+   out, kept their own colours through a selection's highlight, and rebuilt from a new palette. */
+test('Colors: a chip drawer holds a chip in each of the build\'s filaments, behind a title piece per material, and they ride it out', async () => {
+  const rec = { mount: 'tabletop', length: 240, printer: 'xl', faceStyle: 'essential', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 3, gridH: 2, sideCovers: true, plateParts: {}, nextId: 4, labelStyle: null, buildId: 'e2echipfill1',
+    placed: [{ id: 1, x: 0, y: 3, w: 1, hh: 1, fill: 'decor', shelves: 0, variant: 'chips' }, { id: 2, x: 1, y: 3, w: 1, hh: 1, fill: 'classic', shelves: 0 },
+      { id: 3, x: 2, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }] };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('colors', { query: `#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__?.manifest?.instances?.some((x) => /^DecorChipDrawer_/.test(x.node)), null, { timeout: 90_000 });
+  // the drawer's fill: its chips' count, colours and lanes, its titles' words and lanes, and where it is in the world
+  const fill = () => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, T = v.THREE;
+    const d = v.manifest.instances.find((x) => /^DecorChipDrawer_/.test(x.node)), inst = v.instances.get(d.id), body = inst.group.children[0];
+    const f = body && body.children.find((o) => o.userData.chipFill);
+    if (!f) return null;
+    const chips = f.children.find((o) => o.name === 'ChipFillChips'), m = new T.Matrix4(), p = new T.Vector3(), c = new T.Color();
+    const list = [];
+    for (let i = 0; i < chips.count; i++) { chips.getMatrixAt(i, m); p.setFromMatrixPosition(m); chips.getColorAt(i, c); list.push({ x: p.x, hex: c.getHexString() }); }
+    const titles = f.children.filter((o) => /^ChipFillTitle /.test(o.name)).map((o) => ({ word: o.name.slice(14), x: o.position.x }));
+    return { id: d.id, owner: v.partInfo(d.id).owner, chips: list, titles, mat: chips.material.uuid, emissive: chips.material.emissive.getHex(),
+      z: f.getWorldPosition(new T.Vector3()).z, count: v.filamentsInBuild().count };
+  });
+  await page.waitForFunction(() => { const v = window.__GEN2_VIEWER__; const d = v.manifest.instances.find((x) => /^DecorChipDrawer_/.test(x.node));
+    return d && v.instances.get(d.id)?.group.children[0]?.children.some((o) => o.userData.chipFill); }, null, { timeout: 60_000 })
+    .catch(() => assert.fail('the chip drawer never got its chips'));
+  const a = await fill();
+  assert.ok(a.count >= 3, `the first preset prints in several filaments (${a.count})`);
+  assert.equal(a.chips.length, a.count, 'a chip for every filament Colors counts');
+  assert.equal(new Set(a.chips.map((c) => c.hex)).size, a.chips.length, 'each its own colour');
+  const words = a.titles.map((t) => t.word);
+  assert.ok(words.includes('PLA') && words.includes('TPU'), `PLA for the shell and TPU for the feet: ${words}`);
+  assert.equal(new Set(words).size, words.length, 'one title per material while everything fits');
+  assert.ok(a.titles.find((t) => t.word === 'PLA').x < 0, 'PLA in the left lane');
+  assert.ok(a.titles.filter((t) => t.word !== 'PLA').every((t) => t.x > 0), 'the other materials in the right lane');
+  // the drawer opens (Build's Peek inside / the Colors card's Open the drawer): the chips go with it
+  assert.ok(await page.evaluate((o) => window.__GEN2_VIEWER__.peekUnit(o), a.owner), 'the drawer opened');
+  await page.waitForFunction(([z]) => { const v = window.__GEN2_VIEWER__, T = v.THREE; const d = v.manifest.instances.find((x) => /^DecorChipDrawer_/.test(x.node));
+    const f = v.instances.get(d.id).group.children[0].children.find((o) => o.userData.chipFill); return f && f.getWorldPosition(new T.Vector3()).z > z + 50; },
+  [a.z], { timeout: 30_000 }).catch(() => assert.fail('the chips stayed behind when the drawer opened'));
+  // a selection paints the drawer's meshes with the highlight: the chips keep their own material
+  await page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), a.id);
+  await page.waitForTimeout(500);
+  const b = await fill();
+  assert.equal(b.mat, a.mat, 'the chips keep their own material'); assert.equal(b.emissive, 0, 'and take no highlight');
+  // another palette: the chips are rebuilt from it
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__; v.setSelected(null); v.applyPreset(v.PRESETS[1]); });
+  await page.waitForFunction((before) => { const v = window.__GEN2_VIEWER__, T = v.THREE; const d = v.manifest.instances.find((x) => /^DecorChipDrawer_/.test(x.node));
+    const f = v.instances.get(d.id).group.children[0].children.find((o) => o.userData.chipFill); const im = f && f.children.find((o) => o.name === 'ChipFillChips');
+    if (!im) return false; const c = new T.Color(); const now = []; for (let i = 0; i < im.count; i++) { im.getColorAt(i, c); now.push(c.getHexString()); }
+    return now.join() !== before; }, a.chips.map((c) => c.hex).join(), { timeout: 30_000 }).catch(() => assert.fail('a new palette left the old chips'));
+  const c2 = await fill();
+  assert.equal(c2.chips.length, c2.count, 'the new palette\'s filaments, one chip each');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE FEET ARE TPU (Joey, 2026-10-21: "when selecting the feet, i feel like we should only list TPU filaments as an option ...
    default for feet should always be TPU black"; "maybe we need to make PETG and PLA and TPU, like colored tags in the menu").
    The stage keeps a palette's feet TPU (main.js tpuFeet): the boot preset, a whole palette or a saved one that names PLA
