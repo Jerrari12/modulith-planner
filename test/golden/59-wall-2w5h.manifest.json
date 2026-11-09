@@ -29,7 +29,8 @@
   "Rail": "#2f7fd6",
   "ShelfInsert": "#7ad1c0",
   "ShelfLip": "#f26d5b",
-  "CaseExtender": "#7d8496"
+  "CaseExtender": "#7d8496",
+  "SideCover": "#c2185b"
  },
  "parts": [
   {
@@ -202,6 +203,21 @@
     "selectedCount": 3
    },
    "required": true
+  },
+  {
+   "node": "SideCover_59-1H",
+   "label": "Side Cover 59-1H",
+   "type": "SideCover",
+   "qty": 10,
+   "links": {
+    "p": "https://www.printables.com/model/1872093-modulith-59-side-covers",
+    "t": "https://than.gs/m/1619983"
+   },
+   "img": "img/parts/SideCover_59-1H.png",
+   "requirement": {
+    "scope": "enhancement",
+    "obligationId": "unit.side_finish"
+   }
   },
   {
    "node": "59-1W-1H_Case",
@@ -487,6 +503,27 @@
    "owner": 4
   },
   {
+   "id": "sc0L",
+   "node": "SideCover_59-1H",
+   "pos": [
+    -87.975,
+    56.4,
+    4
+   ],
+   "owner": 4
+  },
+  {
+   "id": "sc0R",
+   "node": "SideCover_59-1H",
+   "pos": [
+    87.975,
+    56.4,
+    4
+   ],
+   "yaw": 180,
+   "owner": 4
+  },
+  {
    "id": "case1",
    "node": "59-1W-1H_Case",
    "pos": [
@@ -530,6 +567,16 @@
     -44,
     152,
     -23
+   ],
+   "owner": 2
+  },
+  {
+   "id": "sc1L",
+   "node": "SideCover_59-1H",
+   "pos": [
+    -87.975,
+    112.4,
+    4
    ],
    "owner": 2
   },
@@ -578,6 +625,17 @@
     152,
     -23
    ],
+   "owner": 3
+  },
+  {
+   "id": "sc2R",
+   "node": "SideCover_59-1H",
+   "pos": [
+    87.975,
+    112.4,
+    4
+   ],
+   "yaw": 180,
    "owner": 3
   },
   {
@@ -691,6 +749,75 @@
     174.45,
     21.5
    ],
+   "owner": 1,
+   "stage": "w3"
+  },
+  {
+   "id": "sc3L0",
+   "node": "SideCover_59-1H",
+   "pos": [
+    -87.975,
+    168.4,
+    4
+   ],
+   "owner": 1,
+   "stage": "w3"
+  },
+  {
+   "id": "sc3L1",
+   "node": "SideCover_59-1H",
+   "pos": [
+    -87.975,
+    224.4,
+    4
+   ],
+   "owner": 1,
+   "stage": "w3"
+  },
+  {
+   "id": "sc3L2",
+   "node": "SideCover_59-1H",
+   "pos": [
+    -87.975,
+    280.4,
+    4
+   ],
+   "owner": 1,
+   "stage": "w3"
+  },
+  {
+   "id": "sc3R0",
+   "node": "SideCover_59-1H",
+   "pos": [
+    87.975,
+    168.4,
+    4
+   ],
+   "yaw": 180,
+   "owner": 1,
+   "stage": "w3"
+  },
+  {
+   "id": "sc3R1",
+   "node": "SideCover_59-1H",
+   "pos": [
+    87.975,
+    224.4,
+    4
+   ],
+   "yaw": 180,
+   "owner": 1,
+   "stage": "w3"
+  },
+  {
+   "id": "sc3R2",
+   "node": "SideCover_59-1H",
+   "pos": [
+    87.975,
+    280.4,
+    4
+   ],
+   "yaw": 180,
    "owner": 1,
    "stage": "w3"
   },
@@ -899,7 +1026,7 @@
  "steps": [
   {
    "title": "The Steady Hardware Haven",
-   "note": "Your custom build · 4 units, 3 drawers, 2 columns wide. Drag to orbit, tap any part to identify it. 39 prints · quantities on the right. and 6× 10×2 mm disc magnets for the optional magnet closures (hardware store items).",
+   "note": "Your custom build · 4 units, 3 drawers, 2 columns wide. Drag to orbit, tap any part to identify it. 49 prints · quantities on the right. and 6× 10×2 mm disc magnets for the optional magnet closures (hardware store items).",
    "camera": {
     "t": 30,
     "p": 58,
@@ -979,7 +1106,7 @@
   },
   {
    "title": "Cover the top case · 2W-1H",
-   "note": "On the bench, before it goes near the wall: QuickLocks in, shelf insert and lip down into the case, slide the Cover Lower on, then cap it with the Cover Upper · the cover can only slide on now, not once the case is on the wall. Its built-in drawer stoppers drop through the slots in the case floor and snap it home.",
+   "note": "On the bench, before it goes near the wall: QuickLocks in, shelf insert and lip down into the case, the 6 side covers on (optional), slide the Cover Lower on, then cap it with the Cover Upper · the cover can only slide on now, not once the case is on the wall. Its built-in drawer stoppers drop through the slots in the case floor and snap it home. A side cover goes on like this: hold it against the outer wall just above its seat, press it in so the clips enter the slots, then slide it down to lock.",
    "camera": {
     "t": 30,
     "p": 58,
@@ -1228,6 +1355,276 @@
      }
     },
     {
+     "camera": {
+      "t": -55,
+      "p": 66,
+      "fitR": 88.12599290220793,
+      "target": [
+       -102.975,
+       268.2,
+       216.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc3L0",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        -30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc3L0",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": -55,
+      "p": 66,
+      "fitR": 88.12599290220793,
+      "target": [
+       -102.975,
+       268.2,
+       216.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc3L1",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        -30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc3L1",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": -55,
+      "p": 66,
+      "fitR": 88.12599290220793,
+      "target": [
+       -102.975,
+       268.2,
+       216.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc3L2",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        -30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc3L2",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 55,
+      "p": 66,
+      "fitR": 88.12599290220793,
+      "target": [
+       102.975,
+       268.2,
+       216.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc3R0",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc3R0",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 55,
+      "p": 66,
+      "fitR": 88.12599290220793,
+      "target": [
+       102.975,
+       268.2,
+       216.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc3R1",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc3R1",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 55,
+      "p": 66,
+      "fitR": 88.12599290220793,
+      "target": [
+       102.975,
+       268.2,
+       216.75
+      ]
+     }
+    },
+    {
+     "enter": [
+      {
+       "id": "sc3R2",
+       "at": [
+        0,
+        3.8,
+        0
+       ],
+       "from": [
+        30,
+        0,
+        0
+       ]
+      }
+     ]
+    },
+    {
+     "move": [
+      {
+       "id": "sc3R2",
+       "by": [
+        0,
+        -3.8,
+        0
+       ],
+       "hold": 450,
+       "ease": "detent"
+      }
+     ]
+    },
+    {
+     "camera": {
+      "t": 30,
+      "p": 58,
+      "r": 430,
+      "target": [
+       0,
+       269.5,
+       200
+      ]
+     }
+    },
+    {
      "enter": [
       {
        "id": "cl0",
@@ -1398,6 +1795,54 @@
        ]
       },
       {
+       "id": "sc3L0",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "sc3L1",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "sc3L2",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "sc3R0",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "sc3R1",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
+       "id": "sc3R2",
+       "by": [
+        0,
+        0,
+        -200
+       ]
+      },
+      {
        "id": "cl0",
        "by": [
         0,
@@ -1506,6 +1951,54 @@
        ]
       },
       {
+       "id": "sc3L0",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "sc3L1",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "sc3L2",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "sc3R0",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "sc3R1",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
+       "id": "sc3R2",
+       "by": [
+        0,
+        -16,
+        0
+       ]
+      },
+      {
        "id": "cl0",
        "by": [
         0,
@@ -1551,7 +2044,7 @@
   },
   {
    "title": "Hang case · 1W-1H",
-   "note": "Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home. Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional).",
+   "note": "Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home. Fit the side cover before it goes up (optional) · under the row above there is no room to lift it on. Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional).",
    "camera": {
     "t": 30,
     "p": 116,
@@ -1605,6 +2098,14 @@
         0,
         225
        ]
+      },
+      {
+       "id": "sc2R",
+       "from": [
+        0,
+        0,
+        225
+       ]
       }
      ],
      "dip": [
@@ -1652,7 +2153,7 @@
   },
   {
    "title": "Hang case · 1W-1H",
-   "note": "Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home. Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional).",
+   "note": "Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home. Fit the side cover before it goes up (optional) · under the row above there is no room to lift it on. Then drop the drawer stoppers into its floor slots · they stop the drawer BELOW from being pulled all the way out (optional).",
    "camera": {
     "t": 30,
     "p": 116,
@@ -1706,6 +2207,14 @@
         0,
         225
        ]
+      },
+      {
+       "id": "sc1L",
+       "from": [
+        0,
+        0,
+        225
+       ]
       }
      ],
      "dip": [
@@ -1753,7 +2262,7 @@
   },
   {
    "title": "Hang case · 2W-1H",
-   "note": "Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home. Magnet closure: snap the clip into the back-wall slot (magnet pressed in back-to-front, clip lowered) · unreachable after assembly, so now is the time.",
+   "note": "Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home. Magnet closure: snap the clip into the back-wall slot (magnet pressed in back-to-front, clip lowered) · unreachable after assembly, so now is the time. Fit both side covers before it goes up (optional) · under the row above there is no room to lift it on.",
    "camera": {
     "t": 30,
     "p": 116,
@@ -1802,6 +2311,22 @@
       },
       {
        "id": "mg0",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "sc0L",
+       "from": [
+        0,
+        0,
+        225
+       ]
+      },
+      {
+       "id": "sc0R",
        "from": [
         0,
         0,

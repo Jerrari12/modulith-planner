@@ -53,8 +53,8 @@ for (const row of hanging) {
     if (shapeOf(row.id) === '2w5h') {
       assert.equal(shelves.length, 1);
       assert.deepEqual([shelves[0].y, shelves[0].w, shelves[0].hh, shelves[0].lip], [0, 2, 6, 'front'], 'a 2W-3H shelf with a front lip, on top');
-      // the 59 has no 3H side cover (its covers stop at 1H), so its shelf kit draws none rather than bill one that does not exist
-      assert.equal(kit.build.sideCovers === false, row.length === 59);
+      // side covers on in every depth: the 59, whose covers stop at 1H, takes three 1H a side on its shelf (side-covers.test.mjs)
+      assert.notEqual(kit.build.sideCovers, false);
     } else assert.equal(shelves.length, 0);
   });
 

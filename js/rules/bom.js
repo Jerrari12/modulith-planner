@@ -292,11 +292,16 @@ export function computeBom(build, GEN2) {
       const runStarts = new Set(columnRuns().map((r) => r.start));
       const runEnds = new Set(columnRuns().map((r) => r.start + r.len));
       const sideCovers = new Map(); // height -> qty
+      // a shelf taller than any side cover made for its length is a 1H case with extenders, so it takes 1H covers per level
+      // as a cabinet does (2026-11-08: the 59's covers stop at 1H, and its wall shelf kit's 3H shelf takes three a side).
+      // The made sizes in half-rows, generate.js's sideCoverHH; test/side-covers.test.mjs holds the stage to this bill.
+      const sideCoverHH = (L) => (L === 59 ? [1, 2] : [1, 2, 3, 4, 6]);
+      const stackedCovers = (p) => p.fill === "shelf" && p.hh > 2 && p.hh % 2 === 0 && !sideCoverHH(len).includes(p.hh) && sideCoverHH(len).includes(2);
       // switched off in Build style (build.sideCovers === false, 2026-10-20): no rows, as the stage places none
       if (build.sideCovers !== false) build.placed.forEach((p) => {
         const exposedSides = (runStarts.has(p.x) ? 1 : 0) + (runEnds.has(p.x + p.w) ? 1 : 0);
         if (!exposedSides) return;
-        if (p.fill === "cabinet") count(sideCovers, 1, exposedSides * (p.hh / 2));
+        if (p.fill === "cabinet" || stackedCovers(p)) count(sideCovers, 1, exposedSides * (p.hh / 2));
         else count(sideCovers, p.hh / 2, exposedSides);
       });
       [...sideCovers.entries()].sort().forEach(([h, qty]) => items.push({

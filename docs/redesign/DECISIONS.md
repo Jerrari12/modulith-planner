@@ -7328,3 +7328,24 @@ shelf above 1H that way, in every depth, so the 59 needs nothing special.
   on, and a 1W bottom drawer.
 - **Not live yet.** The site's kit pages and the six listings follow. The site's pages say "narrow cases on top" and "both
   footprints", so they need their own wording for these kits.
+
+## 2026-11-08 · The 59 shelf kit gets side covers: a stacked shelf takes a 1H cover per level
+
+Asked where the 59 kit's side covers were (the first commit switched them off, since the 59's covers stop at 1H), Joey picked
+"Three 1H covers per side" over leaving the shelf bare or making a 59 3H cover. The same day he confirmed that a 3H cover fits
+a shelf made of a 1H case with two extenders, which the vault had as never measured.
+
+- **The rule:** a shelf taller than any side cover made for its length is a 1H case with extenders, so it takes one 1H cover
+  per level on each exposed side, as a cabinet already did (vault rules.md, "Side covers"). It reaches only shelves with no
+  cover at their height: on the 59 every shelf above 1H, and elsewhere a shelf above 3H (a 4H once billed a 4H cover nobody
+  can print and showed bare with a warning; it now takes four 1H). A length that makes the shelf's height keeps one tall cover.
+- **Where:** the bill (`js/rules/bom.js`, registered in `tools/port-ahead.mjs` as `side-covers-stacked-shelf`) and the stage
+  (`js/generate.js`: one `SideCover_<L>-1H` per level, a row apart). Both keep the same size table. A step with more than two
+  covers says "the 6 side covers", not "both". The parity gate compares such builds without their side cover rows, because the
+  old planner bills one at the shelf's height.
+- **The 59 kit:** side covers on, ten 1H covers (four on the drawers, six on the shelf). Golden manifest and shots refreshed.
+- **Labels:** the shelf lip row's requirement ids `shelf.lip` and `shelf.lip:on` had no words in `OPTION_LABELS`, so any
+  build with a lip read "shelf.lip"; they read "shelf lip" now (the site's map gets the same).
+- **Tests:** `side-covers.test.mjs` pins the 59 kit's six shelf covers at three levels and the 185's one 3H a side; two older
+  edge cases take the new counts (a 4H tabletop shelf four 1H, a 2H 59 shelf two). Three mutants each fail: the bill without
+  the rule, the stage with one cover a side, and the old "both side covers" wording.
