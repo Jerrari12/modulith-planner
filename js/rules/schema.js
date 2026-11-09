@@ -185,6 +185,11 @@ const PARTS_LAYOUT_MM = 1000;         // no collection is this deep or wide
 const PARTS_TEXT_MAX = 32;
 const PARTS_FLOOR_MODES = ["off", "one", "paint"], PARTS_SCOOPS = ["off", "std", "deep"], PARTS_LABELS = ["large", "small"];
 export const PARTS_FIT_CAPS = [1, 0.75, 0.5];
+// a compartment's part may name its material (2026-11-09): the picture's, not the label's; the same keys as js/parts-drawer/inventory.js MATERIALS
+export const PARTS_MATS = ["steel", "black-oxide", "zinc", "stainless", "brass", "nylon"];
+// which part types offer one, and an insert only brass or stainless (inventory.js matsFor; Terra 01a1c0c6)
+const PARTS_MAT_TYPES = ["shcs", "bhcs", "fhcs", "set", "nut", "nyloc", "washer", "insert"];
+const partsMatOk = (type, m) => PARTS_MATS.includes(m) && PARTS_MAT_TYPES.includes(type) && (type !== "insert" || m === "brass" || m === "stainless");
 export function cleanPartsLayout(raw) {
   const plain = (v) => Object.prototype.toString.call(v) === "[object Object]";
   if (!plain(raw) || !Array.isArray(raw.comps) || !raw.comps.length || raw.comps.length > PARTS_LAYOUT_MAX_COMPS) return null;
@@ -211,6 +216,7 @@ export function cleanPartsLayout(raw) {
     if (plain(c.item)) {
       const type = text(c.item.type), size = text(String(c.item.size ?? ""));
       if (type && size) k.item = { type, size, length: typeof c.item.length === "number" && Number.isFinite(c.item.length) ? Math.max(0, Math.min(PARTS_LAYOUT_MM, c.item.length)) : 0, qty: intIn(c.item.qty, 0, 1e6, 0) };
+      if (k.item && partsMatOk(k.item.type, c.item.mat)) k.item.mat = c.item.mat;
     }
     if (typeof c.labelId === "string" && c.labelId.length <= 64) k.labelId = c.labelId;
     out.comps.push(k);

@@ -185,6 +185,7 @@ export function partsDrawerTools(stage, ctx) {
     if (!v) { commitLayout((x) => { for (const c of x.comps) if (G.inBox(c, box)) { delete c.item; delete c.labelId; } }); return; }
     const r = I.parseLine(v);
     if (!r || r.error) { say(r && r.error ? r.error[0].toUpperCase() + r.error.slice(1) + '.' : 'That part was not understood.'); return; }
+    const was = s[0].item; if (!r.mat && was && was.mat && I.matsFor(r.type).includes(was.mat)) r.mat = was.mat;   // a line that names no material keeps the one chosen (2026-11-09)
     const item = cleanItem(r); if (!item) { say('That part is not one the generator knows.'); return; }
     commitLayout((x) => { for (const c of x.comps) if (G.inBox(c, box)) c.item = item; });
   }
@@ -261,7 +262,7 @@ export function partsDrawerTools(stage, ctx) {
   // the items the engine lays out, in the list's order: a card's rank among them is its compartment's
   const invKept = (work = st.inv) => work.items.filter((it) => I.known(it) && !I.TYPES[it.type].outside);
   // a part's plain name for a card: "M3 × 12 socket head screw" (the label keeps the short form, inventory.js labelLines)
-  const partName = (it) => { const T = I.TYPES[it.type] || { name: String(it.type || 'part') }; return `${it.size}${(T.screw || T.len) && it.length ? ' × ' + it.length : ''} ${T.name.toLowerCase()}`; };
+  const partName = (it) => { const T = I.TYPES[it.type] || { name: String(it.type || 'part') }, m = I.matWord(it); return `${it.size}${(T.screw || T.len) && it.length ? ' × ' + it.length : ''} ${m ? m + ' ' : ''}${T.name.toLowerCase()}`; };
   /* a row and its proposed compartment light together (Sol 01a1bd5c, 2026-11-08): the rank among the kept items is the key both
      ways (the rows map onto the engine's compartments by rank, renderInvPanel). From the plan the row scrolls into view, and a
      press on a proposed compartment puts the focus in its row's quantity. The classes are toggled in place: a re-render of the
@@ -281,7 +282,7 @@ export function partsDrawerTools(stage, ctx) {
   function invAdd(list) {
     const work = st.inv; if (!work) return 0;
     const items = list.items.filter((it) => I.TYPE_ORDER.includes(it.type)), other = list.items.filter((it) => !I.TYPE_ORDER.includes(it.type));
-    for (const it of items) { const same = work.items.find((x) => x.type === it.type && x.size === it.size && (x.length || 0) === (it.length || 0)); if (same) same.qty += it.qty; else work.items.push({ ...it }); }
+    for (const it of items) { const same = work.items.find((x) => x.type === it.type && x.size === it.size && (x.length || 0) === (it.length || 0) && I.matOf(x) === I.matOf(it)); if (same) same.qty += it.qty; else work.items.push({ ...it }); }   // brass and stainless inserts are two parts
     for (const it of other) work.skipped.push(`${I.labelText(it)}${it.qty ? ' × ' + it.qty : ''} · not a drawer part yet (the list takes screws, nuts, washers and inserts)`);
     for (const e of list.errors) work.skipped.push(e);
     return items.length;
@@ -326,8 +327,10 @@ export function partsDrawerTools(stage, ctx) {
   const fieldNum = (val, on, dis, label) => el('input.mono', { type: 'number', min: '0', step: '1', value: dis ? '' : String(val), disabled: !!dis, 'aria-label': label, onchange: (e) => on(+e.target.value) });
   const sizesFor = (it) => I.THREADS.filter((sz) => I.known({ ...it, size: sz, length: it.length || 10 }));
   const picEl = (it) => { const src = picOf(it); return src ? el('img.pd-pic', { src, alt: '', width: 28, height: 28, loading: 'lazy', draggable: 'false', title: PIC_NOTE }) : el('span.pd-pic', { title: 'No picture of this part yet' }); };
+  // the material, for the picture and the name (2026-11-09): the type's own choices, its default shown when none was chosen
+  const matField = (it, on, label = 'Material') => fieldSel(I.matsFor(it.type).map((k) => [k, I.MATERIALS[k]]), I.matOf(it) || '', (v) => on({ mat: v }), { 'aria-label': label, class: 'pd-mat' });
   function partFields(it, on, labels = ['Part type', 'Thread size', 'Length, mm']) {
-    const retype = (v) => { const next = { ...it, type: v }; if (I.TYPES[v].screw && !next.length) next.length = 10; if (!I.known(next)) next.size = I.THREADS.find((sz) => I.known({ ...next, size: sz })) || 'M3'; on({ type: v, length: next.length, size: next.size }); };
+    const retype = (v) => { const next = { ...it, type: v }; if (I.TYPES[v].screw && !next.length) next.length = 10; if (!I.known(next)) next.size = I.THREADS.find((sz) => I.known({ ...next, size: sz })) || 'M3'; on({ type: v, length: next.length, size: next.size, ...(it.mat && !I.matsFor(v).includes(it.mat) ? { mat: undefined } : {}) }); };   // a material the new type does not offer goes (Terra 01a1c0c6)
     return [
       fieldSel(I.TYPE_ORDER.map((k) => [k, I.TYPES[k].name]), it.type, retype, { 'aria-label': labels[0] }),   // the plain name: SHCS meant nothing to Joey (2026-11-08); the label keeps the short form
       fieldSel(sizesFor(it).map((v) => [v, v]), it.size, (v) => on({ size: v }), { 'aria-label': labels[1] }),
@@ -461,6 +464,7 @@ export function partsDrawerTools(stage, ctx) {
       if (open) card.appendChild(el('div.pd-card-edit', {}, [
         ...partFields(it, (p) => { Object.assign(it, p); invChanged(); }),
         el('label.pd-card-qtyf', {}, ['Qty', num(it.qty, (v) => { it.qty = Math.max(0, Math.round(v)); invChanged(); }, false, 'Quantity')]),
+        matField(it, (p) => { Object.assign(it, p); invChanged(); }),
         el('div.pd-card-edit-row', {}, [
           el('span.pd-inv-fill', { text: `Printed label: ${I.labelLines(it).filter(Boolean).join(' / ')}`, title: 'What the compartment’s label will say' }),
           el('span.grow'),
@@ -490,6 +494,7 @@ export function partsDrawerTools(stage, ctx) {
       el('div.pd-card-edit', {}, [
         ...partFields(d, (p) => { Object.assign(d, p); rerender(); }, ['Part type to add', 'Thread size to add', 'Length to add, mm']),
         el('label.pd-card-qtyf', {}, ['Qty', num(d.qty, (v) => { d.qty = Math.max(0, Math.round(v)); rerender(); }, false, 'Quantity to add')]),
+        matField(d, (p) => { Object.assign(d, p); rerender(); }, 'Material to add'),
         el('div.pd-card-edit-row', {}, [el('span.pd-inv-fill', { text: 'A part to add, with how many you have' }), el('span.grow'), el('button.key.sm.strong', { text: 'Add', 'aria-label': 'Add this part', title: 'Add this part to the list', onclick: () => { if (I.known(d)) { invAdd({ items: [{ ...d }], errors: [] }); invChanged(); } } })]),
       ]),
     ]));
@@ -1019,7 +1024,7 @@ export function partsDrawerTools(stage, ctx) {
       const have = !!(c.item && I.known(c.item)), cur = have ? c.item : { type: 'shcs', size: 'M3', length: 10, qty: 0 };
       const setItem = (patch) => { const item = cleanItem({ ...cur, ...patch }); if (!item) { say('That part is not one the generator knows.'); renderInspector(); return; } commitLayout((x) => { for (const k of x.comps) if (G.inBox(k, box)) k.item = item; }); };
       const fields = el('div.pd-fields', {}, [picEl(cur), ...partFields(cur, setItem, ['The part type', 'Its thread size', 'Its length, mm']),
-        el('span.pd-qty', {}, ['×', fieldNum(cur.qty || 0, (v) => setItem({ qty: Math.max(0, Math.round(v)) }), false, 'How many')])]);
+        el('span.pd-qty', {}, ['×', fieldNum(cur.qty || 0, (v) => setItem({ qty: Math.max(0, Math.round(v)) }), false, 'How many')]), matField(cur, setItem, 'Its material')]);
       insp.appendChild(el('div.row', {}, ['Part', el('div.pd-part', {}, [partIn, fields])]));
       if (have) {
         const f = I.fillOf(c, full.height, full.size, lay.label);

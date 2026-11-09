@@ -1267,8 +1267,14 @@ test('Parts drawer: the variant swaps the body, the editor merges and undoes, a 
   const bodyVerts = () => page.evaluate(() => window.__GEN2_VIEWER__.drawerGroupOf(3).getObjectByName('parts-body').geometry.attributes.position.count);
   // the plain shell's vertex count, from the engine itself (the drawer on the stage is OPEN here, so it wears the whole drawer,
   // which always has more vertices than the shell); the ask starts the build, so wait for it
-  await page.waitForFunction(async () => { const E = await import('/js/parts-drawer/engine.js'); return !!E.shellGeometry('240-2W', '1H'); }, null, { timeout: 60_000 });
-  const shellVerts = await page.evaluate(async () => { const E = await import('/js/parts-drawer/engine.js'); return E.shellGeometry('240-2W', '1H').attributes.position.count; });
+  // polled here, not with waitForFunction: an async predicate's promise reads as truthy, so that wait could end before the
+  // build and the next read found null (the case failed that way at 2 s on 2026-11-08 and 2026-11-09)
+  let shellVerts = 0;
+  for (const t0 = Date.now(); !shellVerts && Date.now() - t0 < 60_000;) {
+    shellVerts = await page.evaluate(async () => { const E = await import('/js/parts-drawer/engine.js'); const g = E.shellGeometry('240-2W', '1H'); return g ? g.attributes.position.count : 0; });
+    if (!shellVerts) await settle(page, 250);
+  }
+  assert.ok(shellVerts > 0, 'the engine built the plain shell');
   const box = await page.evaluate(() => { const V = window.__GEN2_VIEWER__; const g = V.drawerGroupOf(3); const b = g.getObjectByName('parts-body'); b.geometry.computeBoundingBox(); const bb = b.geometry.boundingBox; return [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z].map((v) => +v.toFixed(2)); });
   assert.deepEqual(box, [163, 50, 234.3], 'the 240-2W 1H shell: 163 wide, 50 to the rim, 234.3 deep');
   // Edit compartments: the plan, a drag across two compartments, Merge, Undo through the store
@@ -1494,7 +1500,7 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   const c0 = page.locator('#ws-plan .cell').first(); const b0 = await c0.boundingBox();
   await page.mouse.click(b0.x + b0.width / 2, b0.y + b0.height / 2); await settle(page, 500);
   assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 200');
-  assert.deepEqual(await page.evaluate(() => { const f = document.querySelector('#ws-insp .pd-part .pd-fields'); return [f.querySelector('.pd-pic').getAttribute('src'), ...[...f.querySelectorAll('select')].map((s) => s.value), ...[...f.querySelectorAll('input')].map((i) => i.value)]; }), ['img/hw/shcs-m3.webp', 'shcs', 'M3', '8', '200']);
+  assert.deepEqual(await page.evaluate(() => { const f = document.querySelector('#ws-insp .pd-part .pd-fields'); return [f.querySelector('.pd-pic').getAttribute('src'), ...[...f.querySelectorAll('select')].map((s) => s.value), ...[...f.querySelectorAll('input')].map((i) => i.value)]; }), ['img/hw/shcs-m3.webp', 'shcs', 'M3', 'steel', '8', '200']);
   await page.fill('#ws-insp .pd-part .pd-qty input', '120'); await page.press('#ws-insp .pd-part .pd-qty input', 'Tab'); await settle(page, 500);
   assert.equal(await page.inputValue('#ws-insp .pd-part input[type="text"]'), 'M3x8 SHCS 120', 'the typed line follows the field');
   await page.selectOption('#ws-insp .pd-part .pd-fields select >> nth=0', 'bhcs'); await settle(page, 500);
@@ -1534,6 +1540,31 @@ test('Parts drawer: the parts list panel previews its layout in the plan, keeps 
   const href = await page.evaluate(() => location.href);
   await page.goto(href, { waitUntil: 'load', timeout: 90_000 }); await waitBoot(page);
   assert.deepEqual(await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.fit), { cap: 0.75, round: false, spare: true }, 'the fit survives the link');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* A PART'S MATERIAL (2026-11-09, Joey: "i chose brass heated inserts but they are showing up like steel"): an insert shows
+   brass by default, a typed material shows in the picture and the name, the open card changes it, and the laid-out drawer keeps it. */
+test('Parts drawer: a part’s material shows in its picture and name, changes from its card, and stays with the layout', async () => {
+  const { ctx, page, errors } = await open('build', { query: '&build=240-tabletop-2w2h&new=1&partsdrawer=1' });
+  await toPartsEditor(page);
+  await btn(page, 'From a parts list', '#ws-lib').click();
+  await page.waitForSelector('#ws-lib .pd-inv-line input', { timeout: 15_000 });
+  for (const t of ['50 M3 insert', '20 M3x10 stainless SHCS']) await addLine(page, t);
+  const pics = () => page.locator('#ws-lib .pd-card:not(.add) > .pd-pic').evaluateAll((l) => l.map((e) => e.getAttribute('src')));
+  assert.deepEqual(await pics(), ['img/hw/insert-m3.webp', 'img/hw/shcs-m3--stainless.webp'], 'the insert in brass by default, the screw as typed');
+  assert.deepEqual(await page.locator('#ws-lib .pd-card:not(.add) .pd-card-name').allTextContents(), ['M3 heat-set insert', 'M3 × 10 stainless socket head screw']);
+  await page.locator('#ws-lib .pd-card:not(.add)').first().locator('.pd-card-head').click(); await settle(page, 300);
+  assert.deepEqual(await page.locator('#ws-lib .pd-card.open select.pd-mat option').allTextContents(), ['Brass', 'Stainless'], 'an insert offers brass and stainless');
+  assert.equal(await page.inputValue('#ws-lib .pd-card.open select.pd-mat'), 'brass');
+  await page.selectOption('#ws-lib .pd-card.open select.pd-mat', 'stainless'); await settle(page, 400);
+  assert.equal((await pics())[0], 'img/hw/insert-m3--stainless.webp');
+  assert.equal(await text(page, '#ws-lib .pd-card:not(.add) .pd-card-name'), 'M3 stainless heat-set insert');
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-lib .pd-card:not(.add) > .pd-pic')].every((e) => e.complete && e.naturalWidth > 0), null, { timeout: 15_000 }).catch(() => assert.fail('the pictures load'));
+  await btn(page, 'Lay out drawer', '#ws-lib').click(); await settle(page, 800);
+  const mats = await page.evaluate(() => window.__GEN2_STORE__.state.placed.find((p) => p.id === 3).partsLayout.comps.filter((c) => c.item).map((c) => c.item.type + ':' + (c.item.mat || '')));
+  assert.deepEqual(mats.sort(), ['insert:stainless', 'shcs:stainless'], 'the layout keeps each part’s material');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

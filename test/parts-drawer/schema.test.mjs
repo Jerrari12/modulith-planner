@@ -46,3 +46,16 @@ test('the fields survive sanitize and serialize on any page; the layout keeps wh
   const junk = record('nope'); sanitizeBuild(junk, GEN2);
   assert.equal(junk.placed[0].variant, 'parts'); assert.equal(junk.placed[0].partsLayout, undefined);
 });
+
+/* a compartment's part may carry its material (2026-11-09): a known one survives sanitize, anything else is dropped */
+test('a part’s material is kept when known and dropped otherwise', () => {
+  const lay = layout(); lay.comps[0].item.mat = 'brass'; lay.comps[1].item = { type: 'nut', size: 'M3', length: 0, qty: 5, mat: 'gold' };
+  const out = cleanPartsLayout(lay);
+  assert.equal(out.comps[0].item.mat, 'brass');
+  assert.equal('mat' in out.comps[1].item, false, 'an unknown material is dropped, the part kept');
+  assert.equal('mat' in cleanPartsLayout(layout()).comps[0].item, false, 'no material, none added');
+  const ins = layout(); ins.comps[0].item = { type: 'insert', size: 'M3', length: 0, qty: 5, mat: 'nylon' }; ins.comps[1].item = { type: 'bearing', size: '625', length: 0, qty: 2, mat: 'steel' };
+  const o2 = cleanPartsLayout(ins);
+  assert.equal('mat' in o2.comps[0].item, false, 'an insert keeps only brass or stainless');
+  assert.equal('mat' in o2.comps[1].item, false, 'a type with no materials keeps none');
+});

@@ -31,3 +31,25 @@ for (const [key, kit] of Object.entries(I.KITS)) for (const height of ['0.5H', '
 
 assert.deepEqual(issues, []);
 });
+
+/* a part's material from a typed line and from the Part Picker's printed attributes (2026-11-09) */
+import { parseLine as pl2, fromPicker as fp2, matFromWords, MATERIALS as M2 } from '../../js/parts-drawer/inventory.js';
+import { PARTS_MATS } from '../../js/rules/schema.js';
+test('the material is read from a typed line and from the Picker, and the schema keeps the same keys', () => {
+  assert.equal(pl2('M3x10 stainless SHCS 50').mat, 'stainless');
+  assert.equal(pl2('50 M3 brass insert').mat, 'brass');
+  assert.equal(pl2('M3x8 black oxide BHCS 100').mat, 'black-oxide');
+  assert.equal(pl2('M4 nut zinc 20').mat, 'zinc');
+  assert.equal(pl2('M5 A2 nyloc 10').mat, 'stainless');
+  assert.equal(pl2('M5 nylon lock nut 10').mat, undefined, 'the nylon of a lock nut is its ring');
+  assert.equal(pl2('50 M3 insert').mat, undefined, 'no word, no material: the type default shows');
+  assert.equal(matFromWords('insert', 'zinc'), null, 'an insert offers brass and stainless only');
+  const pick = (base, finish) => fp2([{ schema: 'part-picker-label-item/1', family: 'screw', head: 'socket-cap', fields: ['M3 × 10'], qty: 20,
+    attributes: [base && { path: 'material.base', text: base }, finish && { path: 'material.finish', text: finish }].filter(Boolean) }]).items[0];
+  assert.equal(pick('STEEL', 'BLK OX').mat, 'black-oxide', 'a finish outranks plain steel');
+  assert.equal(pick('BRASS', 'NICKEL').mat, 'brass', 'a brass base outranks its plating');
+  assert.equal(pick('A2').mat, 'stainless');
+  assert.equal(pick().mat, undefined);
+  assert.equal(fp2([{ schema: 'part-picker-label-item/1', family: 'insert', head: 'heat-set', fields: ['M3'], qty: 50, attributes: [{ path: 'material.base', text: 'BRASS' }] }]).items[0].mat, 'brass');
+  assert.deepEqual(PARTS_MATS, Object.keys(M2), 'js/rules/schema.js keeps the same material keys');
+});

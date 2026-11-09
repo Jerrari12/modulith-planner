@@ -1569,6 +1569,7 @@ body.pd-dragging #ws-lib .pd-inv .pd-grip { cursor: grabbing; }
 #ws-lib .pd-inv .pd-qty-btn { flex: none; font: inherit; font-family: var(--font-mono); font-size: 12px; font-weight: 700; min-width: 32px; height: 22px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--ink); cursor: pointer; }
 #ws-lib .pd-inv .pd-card-edit { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr); gap: 4px; align-items: center; padding-right: 2px; }
 #ws-lib .pd-inv .pd-card-edit > select:first-child { grid-column: 1 / -1; }   /* the type's plain name takes a row of its own */
+#ws-lib .pd-inv .pd-card-edit > select.pd-mat { grid-column: 1 / -1; }   /* the material (2026-11-09), under the size, length and count */
 #ws-lib .pd-inv .pd-card-edit select, #ws-lib .pd-inv .pd-card-edit input[type="number"] { width: 100%; box-sizing: border-box; height: 26px; padding: 2px 3px; font-size: 11px; }
 #ws-lib .pd-inv .pd-card-edit select { padding: 2px 1px; }
 #ws-lib .pd-inv .pd-card-qtyf { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-2); }
@@ -1605,6 +1606,7 @@ body.pd-dragging { cursor: grabbing; user-select: none; -webkit-user-select: non
 #ws-insp .pd-part .pd-fields select, #ws-insp .pd-part .pd-fields input { width: 100%; height: 26px; box-sizing: border-box; padding: 2px 3px; font: inherit; font-size: 11px; color: var(--ink); background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 6px; }
 #ws-insp .pd-part .pd-qty { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-2); }
 #ws-insp .pd-part .pd-qty input { width: 52px; }
+#ws-insp .pd-part .pd-fields .pd-mat { grid-column: 2 / -1; }
 #ws-lib .pd-inv-skipped { font-size: 12px; color: var(--ink-2); }
 #ws-lib .pd-inv-skipped summary { cursor: pointer; }
 #ws-lib .pd-inv-skipped .src { padding: 2px 0 0 10px; }

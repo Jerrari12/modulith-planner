@@ -55,6 +55,34 @@ export const TYPES = {
   tube:        { name: 'Tube', short: 'TUBE', free: true, outside: true, len: true },
 };
 export const TYPE_ORDER = ['shcs', 'bhcs', 'fhcs', 'set', 'nut', 'nyloc', 'washer', 'insert'];
+/* A PART'S MATERIAL (2026-11-09, Joey: "i chose brass heated inserts but they are showing up like steel"): optional on an item,
+   `mat`. It is what the picture shows (hwpics.js) and the card's name says; the sizing, the fill and the printed label ignore
+   it. Plain steel is the default for the screws, nuts and washers, brass for the heat-set inserts (what nearly every one is).
+   js/rules/schema.js keeps the same keys (PARTS_MATS); a test holds the two lists together. */
+export const MATERIALS = { steel: 'Steel', 'black-oxide': 'Black oxide', zinc: 'Zinc plated', stainless: 'Stainless', brass: 'Brass', nylon: 'Nylon' };
+const MAT_WORD = { steel: 'steel', 'black-oxide': 'black oxide', zinc: 'zinc-plated', stainless: 'stainless', brass: 'brass', nylon: 'nylon' };
+export const matsFor = (type) => (type === 'insert' ? ['brass', 'stainless'] : TYPE_ORDER.includes(type) ? Object.keys(MATERIALS) : []);
+export const defaultMat = (type) => (type === 'insert' ? 'brass' : 'steel');
+// the material a part shows: its own when it is one its type offers, else its type's default (null: a type with no materials)
+export const matOf = (it) => (!it || !matsFor(it.type).length ? null : matsFor(it.type).includes(it.mat) ? it.mat : defaultMat(it.type));
+// the word a card's name carries: only a material someone chose ("M3 brass heat-set insert"), never the default
+export const matWord = (it) => (it && matsFor(it.type).includes(it.mat) ? MAT_WORD[it.mat] : '');
+/* the material in words: a typed line ("M3x10 stainless SHCS 50") or the Part Picker's printed attributes (material.base:
+   BRASS, SS, A2, A4, STEEL, NYLON; material.finish: BLK OX, ZINC, ZN FLAKE, HDG). A brass, stainless or nylon base outranks a
+   finish (nickel-plated brass is brass); a black-oxide or zinc finish outranks plain steel. The nylon of a nyloc is its insert,
+   not its body. Null when nothing names one. */
+export function matFromWords(type, base, finish = '') {
+  const b = String(base || '').toLowerCase(), f = String(finish || '').toLowerCase();
+  const offer = matsFor(type); if (!offer.length) return null;
+  const pick = (m) => (offer.includes(m) ? m : null);
+  if (/\bbrass\b/.test(b)) return pick('brass');
+  if (/\b(stainless|inox|ss|a2|a4)(?:-\d+)?\b/.test(b)) return pick('stainless');
+  if (type !== 'nyloc' && /\bnylon\b/.test(b) && !/nylon[\s-]*(?:insert|lock)|lock[\s-]*nut/.test(b)) return pick('nylon');   // a "nylon lock nut" is steel with a nylon ring
+  if (/\b(black[\s-]?oxide|blk ox)\b/.test(f || b)) return pick('black-oxide');
+  if (/\b(zinc|zn flake|hdg|galvani[sz]ed)\b/.test(f || b)) return pick('zinc');
+  if (/\bsteel\b/.test(b)) return pick('steel');
+  return null;
+}
 // every type, in the order a kit lists them
 export const ALL_TYPES = [...TYPE_ORDER.slice(0, 3), 'wafer', 'captive', 'selftap', 'set', 'nut', 'nyloc', 'knurled', 'washer', 'lockwasher', 'spacer',
   'insert', 'tnut_roll', 'tnut_spring', 'tnut_hammer', 'bearing', 'pulley', 'idler', 'shaft', 'magnet', 'other', 'tube'];
@@ -197,6 +225,7 @@ export function parseLine(line) {
   if (!raw) return null;
   const v = vendorItem(raw); if (v) return v;
   const r = parseFastener(raw);
+  if (r && !r.error && TYPE_ORDER.includes(r.type)) { const m = matFromWords(r.type, raw); if (m) r.mat = m; }   // "M3 brass insert 50" (2026-11-09)
   if (r && r.error && /^no (metric size|part type)/.test(r.error)) {
     const q = raw.match(/(?:^|\s)(\d+)\s*(?:pcs?)?\s*$/);
     if (q && !/^\d+$/.test(raw.slice(0, q.index).trim())) return { type: 'other', size: cleanName(raw.slice(0, q.index)), length: 0, qty: +q[1] };
@@ -295,7 +324,13 @@ export function fromPicker(list) {
     if (x && x.schema === 'part-picker-label-item/1') {
       const words = [...(x.fields || []), x.head || '', x.family || ''].join(' ');
       const r = parseLine(words + ' ' + (x.qty || x.quantity || ''));
-      if (r && !r.error) items.push(r); else errors.push(r ? r.error : 'empty item');
+      if (r && !r.error) {
+        // the Picker's material (its printed attributes, 2026-11-09): a brass insert chosen there arrives brass
+        const at = (p) => ((x.attributes || []).find((a) => a && a.path === p) || {}).text || '';
+        const m = TYPE_ORDER.includes(r.type) ? matFromWords(r.type, at('material.base'), at('material.finish')) : null;
+        if (m) r.mat = m; else delete r.mat;
+        items.push(r);
+      } else errors.push(r ? r.error : 'empty item');
     } else if (typeof x === 'string') { const r = parseLine(x); if (r && !r.error) items.push(r); else if (r) errors.push(r.error); }
   }
   return { items, errors };
