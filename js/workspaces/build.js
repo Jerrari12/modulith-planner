@@ -185,11 +185,20 @@ export function mountBuild(stage, ctx) {
     s.gridW = Math.max(1, Math.max(...s.placed.map((p) => p.x + p.w)));
   }
   let settledNote = '';   // what the last edit's settle moved, for a caller that speaks after it (removeUnit)
+  /* A DRAWER ADDED BY ANY EDIT TAKES THE BUILD'S CLOSURE when every drawer already shares one (2026-11-10, a user's
+     report via Joey: Closures was set to Magnets on a 3-drawer build, the nine drawers added after it had none, and the
+     Parts list billed 6 magnet clips for 12 drawers). The Closures buttons light Magnets when every drawer has it, so
+     to the person that is the build's choice, and a new drawer keeps it. A mixed build is a per-drawer choice, so a new
+     drawer there stays on None, the catalog's default. Here in edit(), not in placeAt alone, so a drawer the structure
+     fixer, Fill all or a settle adds follows too; duplicate already copies its source's closure. */
+  const sharedClosure = (s, Rs) => { const ds = s.placed.filter(Rs.isDrawerUnit); return ds.length && ds.every((p) => p.closure === ds[0].closure) ? ds[0].closure : undefined; };
   function edit(fn, why = 'edit', { gravity = true } = {}) {
     let dropped = new Map(); settledNote = '';
     const r = store.commit((s, Rs) => {
+      const firstNew = s.nextId, closure = sharedClosure(s, Rs);
       const out = fn(s, Rs);
       if (gravity) dropped = settle(s, Rs);
+      if (closure) for (const p of s.placed) if (p.id >= firstNew && Rs.isDrawerUnit(p) && !p.closure) p.closure = closure;
       hug(s); return out;
     }, why);
     if (dropped.size) {
@@ -691,7 +700,7 @@ export function mountBuild(stage, ctx) {
     cl.appendChild(el('h2.h2', { text: 'Closures' }));
     cl.appendChild(el('div.track.seg3', { role: 'group' }, [
       el('button.seg' + (closureOn === 'none' ? '.on' : ''), { text: 'None', onclick: async () => { await stage.setAllClosure('none'); await adopt(); } }),
-      el('button.seg' + (closureOn === 'magnet' ? '.on' : ''), { text: 'Magnets', title: '6 × 10×2 mm disc magnets per drawer · hardware store', onclick: async () => { await stage.setAllClosure('magnet'); await adopt(); } }),
+      el('button.seg' + (closureOn === 'magnet' ? '.on' : ''), { text: 'Magnets', title: 'Every drawer, and each one you add while all have them · 2 disc magnets per drawer (10×2 or 6×2 mm) · hardware store', onclick: async () => { await stage.setAllClosure('magnet'); await adopt(); } }),
       el('button.seg', { text: 'Push-Click', disabled: true, title: 'Soon · not for wall builds' }),
     ]));
     lib.appendChild(cl);

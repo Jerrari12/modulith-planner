@@ -6868,6 +6868,40 @@ test('the label editor: a label longer than 40 characters is not cut by an Enter
   await ctx.close();
 });
 
+/* A DRAWER ADDED TO AN ALL-MAGNET BUILD GETS MAGNETS TOO (2026-11-10, a user's report via Joey: Closures set to Magnets
+   on three drawers, nine drawers added after it, and the Parts list billed 6 magnet clips for 12 drawers). Every drawer
+   sharing a closure is the build's choice, so a new one keeps it; a mixed build keeps a new drawer on None; a shelf
+   never takes one. The Parts list bills the pair per magnet drawer */
+test('Build: a drawer added after Closures · Magnets gets magnets too, a mixed build keeps None, and the Parts list bills 2 clips per drawer', async () => {
+  const { ctx, page, errors } = await open('build');
+  await startBuild(page, [{ id: 1, x: 0, w: 1, closure: 'magnet' }, { id: 2, x: 1, w: 2, closure: 'magnet' }]);
+  const y = await page.evaluate(() => window.__GEN2_STORE__.state.gridH * 2 - 2);
+  const place = async (x, fill, n) => {
+    await page.evaluate(([x, yy, fill]) => window.__GEN2_BUILD__.placeAt(x, yy, { w: 1, h: 1, hh: 2 }, fill), [x, y, fill]);
+    await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n, n, { timeout: 30_000 }).catch(() => assert.fail(`no ${fill} placed at ${x},${y} within 30 s`));
+    const s = await S(page); return s.placed.find((p) => p.id === s.nextId - 1);
+  };
+  const right = () => page.evaluate(() => Math.max(...window.__GEN2_STORE__.state.placed.map((p) => p.x + p.w)));
+  const added = await place(await right(), 'decor', 3);
+  assert.equal(added.closure, 'magnet', 'a drawer added to an all-magnet build has magnets');
+  const shelf = await place(await right(), 'shelf', 4);
+  assert.equal(shelf.closure, undefined, 'a shelf takes no closure');
+  // the Parts list: three magnet drawers, two clips each
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('parts'));
+  await page.waitForSelector('#ws-parts .prow', { timeout: 30_000 });
+  const clips = () => page.evaluate(() => { const row = [...document.querySelectorAll('#ws-parts .prow')].find((x) => /Magnet Clip/.test(x.querySelector('.name').textContent)); return row ? parseInt(row.querySelector('.qty').textContent.replace('×', ''), 10) : 0; });
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-parts .prow .name')].some((n) => /Magnet Clip/.test(n.textContent)), null, { timeout: 30_000 }).catch(() => assert.fail('no Magnet Clip row in the Parts list'));
+  assert.equal(await clips(), 6, 'three magnet drawers bill six clips');
+  // a mixed build: one drawer back on None, and the next drawer stays on None
+  await page.evaluate(() => window.__GEN2_CTX__().switchTo('build'));
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { delete s.placed.find((p) => p.id === 1).closure; }, 'edit'));
+  const plain = await place(await right(), 'decor', 5);
+  assert.equal(plain.closure, undefined, 'in a mixed build a new drawer stays on None');
+  assert.deepEqual((await S(page)).placed.filter((p) => p.closure === 'magnet').map((p) => p.id).sort((a, b) => a - b), [2, added.id], 'and no other drawer changed');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* BUILDING LEFT OF THE STARTER (Joey, 2026-10-15: "I'd like to be able to build to the left of the starting drawer too,
    this was a limitation to our old grid"). A fresh Tabletop build's starter sits at x 0. Spots are now offered past
    either edge. Taking one on the left moves the build right and widens the grid, in one undo step */
