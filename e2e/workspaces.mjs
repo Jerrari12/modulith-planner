@@ -6879,6 +6879,9 @@ test('Build: a drawer added after Closures · Magnets gets magnets too, a mixed 
   const place = async (x, fill, n) => {
     await page.evaluate(([x, yy, fill]) => window.__GEN2_BUILD__.placeAt(x, yy, { w: 1, h: 1, hh: 2 }, fill), [x, y, fill]);
     await page.waitForFunction((n) => window.__GEN2_STORE__.state.placed.length === n, n, { timeout: 30_000 }).catch(() => assert.fail(`no ${fill} placed at ${x},${y} within 30 s`));
+    // and the stage has rebuilt with it before the next step: the first runner pass switched to Parts mid-rebuild and
+    // the switch threw "reading 'visible'" (run 42903118677, shard 6; not reproduced here at 6x throttle, soft)
+    await page.waitForFunction((n) => window.__GEN2_VIEWER__.build.placed.length === n && !window.__GEN2_VIEWER__.regenBusy, n, { timeout: 120_000 }).catch(() => assert.fail(`the stage did not rebuild with ${n} units within 120 s`));
     const s = await S(page); return s.placed.find((p) => p.id === s.nextId - 1);
   };
   const right = () => page.evaluate(() => Math.max(...window.__GEN2_STORE__.state.placed.map((p) => p.x + p.w)));
