@@ -216,11 +216,17 @@ export function mountAssemble(stage, ctx) {
     out.push({ page: 'done', mark: '■', name: 'Done', title: 'End of instructions' });
     return out;
   };
+  /* the step a page is, as the list numbers it: 1..n on the step pages, 0 on the overview. The phone's sheet title counts the
+     same way; it numbered PAGES (the overview "Step 1 of 12", every step one too high, 12 for 11 steps: the UX plugins trial,
+     2026-11-17) */
+  const stepCount = () => steps.length - 1;
+  const stepAt = (cur) => (cur >= pageOf.first && cur <= pageOf.finished ? cur - 1 : 0);
+  const stepTitle = () => { const n = stepCount(), k = stepAt(stage.cur); return done ? `Done · ${n} steps` : k ? `Step ${k} of ${n}` : `Overview · ${n} steps`; };
   function renderList() {
     const cur = stage.cur;
     list.replaceChildren();
-    const n = steps.length - 1;
-    const shown = cur >= pageOf.first && cur <= pageOf.finished ? cur - 1 : 0;
+    const n = stepCount();
+    const shown = stepAt(cur);
     list.appendChild(el('div.head', {}, [el('h2', { text: 'Assembly' }), el('span.count', { text: `${shown} / ${n}` })]));
     /* a row before the current one is PLAYED, not built: the mark stays its number, muted. "Mark as built" and
        project progress are the Parts workspace's, kept apart from playback position (Astra). */
@@ -279,7 +285,7 @@ export function mountAssemble(stage, ctx) {
   }
 
   /* ---------------- stage ---------------- */
-  const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'assemble', soon }, { panels: [{ el: list, title: () => `Step ${Math.max(0, stage.cur)} of ${stage.pageCount - 2}`, open: false }], dock: () => player.offsetHeight }) : null;
+  const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'assemble', soon }, { panels: [{ el: list, title: stepTitle, open: false }], dock: () => player.offsetHeight }) : null;
   const BAR = 0.07;   // the scene's bars, a fraction of the height: the same figure as css/app.css's html.cinema (7vh)
   const safeArea = () => {
     if (inScene) { const bar = Math.round(innerHeight * BAR); stage.setSafeArea({ left: 8, right: 8, top: bar + 8, bottom: bar + 8 }); return; }   // the shots are fitted between the bars; the strip sits inside the lower one

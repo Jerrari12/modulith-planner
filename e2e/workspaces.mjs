@@ -10146,6 +10146,128 @@ test('the baked top layers: Fast fetches no map and holds none; the switch and t
   await ctx.close();
 });
 
+/* A GREYED SIZE SAYS WHY WHEN PRESSED (the UX plugins trial, 2026-11-17). Its reason was a hover title only, so on a phone a
+   tap on a size the printer greys out did nothing, while the line under the sizes said "Greyed sizes say why on hover" */
+test('a greyed size says why when tapped on a phone, and the line under the sizes says so in touch words', async () => {
+  const { ctx, page, errors } = await open('build', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.printer = 'mini'; }, 'setup'));   // Prusa Mini, 180 x 180
+  await page.waitForFunction(() => document.querySelector('#ws-lib button.size.dis'), null, { timeout: 30_000 });
+  await page.evaluate(() => { const s = document.querySelector('#ws-lib'); if (!s.classList.contains('open')) s.querySelector(':scope > .sheet-handle').click(); });
+  await settle(page, 800);
+  const tile = page.locator('#ws-lib button.size.dis').last();
+  const { cap, why } = await tile.evaluate((b) => ({ cap: b.querySelector('.cap').textContent, why: b.title }));
+  assert.match(why, /won.t fit your 180×180mm bed/, `the control: the Prusa Mini greys this size out (${cap}: ${why})`);
+  await tile.scrollIntoViewIfNeeded();
+  // a finger on the tile: locator.tap() waits for an aria-disabled control to be enabled, which a finger does not
+  const bb = await tile.boundingBox();
+  await page.touchscreen.tap(bb.x + bb.width / 2, bb.y + bb.height / 2);
+  await page.waitForFunction((c) => { const t = document.querySelector('#ws-toast'); return !!t && t.classList.contains('show') && t.textContent.startsWith(c + ':'); }, cap, { timeout: 15_000 });
+  const said = await page.locator('#ws-toast').textContent();
+  assert.ok(said.includes(why.replace(/\.$/, '')), `the toast says the tile's own reason (${said})`);
+  assert.equal(await page.locator('#ws-lib .armed').count(), 0, 'a greyed size does not start placing');
+  assert.match(await page.locator('#ws-lib p.hint').textContent(), /Tap a greyed size to see why/, 'the line under the sizes, in touch words');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE DOCK ON A NARROWER PHONE ON ITS SIDE (the UX plugins trial, 2026-11-17). The column was 44 % of the width, so at 667 px the
+   dock was 277 px and every workspace's main button ran past the screen's edge ("Get parts list" by 25 px, "Start assembly" by
+   42); even at 780 "Start assembly" ran 9 px past the dock's padding. The column now holds at least 316 px (app.css --side,
+   phone.js sideWidth) and the dock there carries the status and the button only. One page, both widths, every dock */
+test('the phone on its side at 640 and 780 px: the dock’s main button fits inside the dock and the screen in every workspace', async () => {
+  const { ctx, page, errors } = await open('build', { phone: true, viewport: { width: 640, height: 360 } });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__ && window.__GEN2_VIEWER__.manifest && document.querySelector('#ws-dock'), null, { timeout: 60_000 });
+  for (const viewport of [{ width: 640, height: 360 }, { width: 780, height: 260 }]) {
+    await page.setViewportSize(viewport);
+    for (const ws of ['build', 'parts', 'labels', 'colors']) {
+      if (await page.evaluate(() => document.documentElement.dataset.ws) !== ws) {
+        await page.locator('#ws-tabbar .tab').filter({ hasText: new RegExp(ws, 'i') }).first().click();
+        await page.waitForFunction((w) => document.documentElement.dataset.ws === w && document.querySelector('#ws-dock'), ws, { timeout: 60_000 });
+      }
+      await settle(page, 900);
+      await page.evaluate(() => document.fonts.ready);
+      // Colors and Parts open with their sheet up, which covers the dock on its side: down, as a visitor would put it
+      await page.evaluate(async () => { const s = [...document.querySelectorAll('#ws .sheet')].find((x) => x.getClientRects().length && x.classList.contains('open')); if (s) { s.querySelector(':scope > .sheet-handle').click(); await new Promise((r) => setTimeout(r, 800)); } });
+      const m = await page.evaluate(() => {
+        const d = document.querySelector('#ws-dock'); const r = d.getBoundingClientRect(); const pr = parseFloat(getComputedStyle(d).paddingRight);
+        const kids = [...d.children].filter((c) => c.getClientRects().length && getComputedStyle(c).display !== 'none');
+        const cta = d.querySelector('.cta');
+        return { vw: innerWidth, dockR: Math.round(r.right), inner: r.right - pr, right: Math.max(...kids.map((c) => c.getBoundingClientRect().right)),
+          kids: kids.map((c) => `${String(c.className).split(' ')[0]} ${Math.round(c.getBoundingClientRect().left)}-${Math.round(c.getBoundingClientRect().right)}`), ctaClipped: cta ? cta.scrollWidth > cta.clientWidth + 1 : null };
+      });
+      const j = `${viewport.width}x${viewport.height} ${ws}: ${JSON.stringify(m)}`;
+      assert.ok(m.dockR <= m.vw, `the dock inside the screen (${j})`);
+      assert.ok(m.right <= m.inner + 0.5, `the dock's controls inside its padding (${j})`);
+      if (m.ctaClipped !== null) assert.equal(m.ctaClipped, false, `the main button's words whole (${j})`);
+    }
+  }
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* PARTS' "DOWNLOAD LABELS" AND THE SETUP SHEET'S NAME (the UX plugins trial, 2026-11-17). Download labels was a stub that said it
+   "comes with the Labels workspace (phase 5)" after Labels had shipped: it now opens the Label plate there, where the print file
+   downloads, or Labels itself while the build has none. And the setup sheet's Name field showed a kit's raw "GEN2 185 Tabletop
+   Kit 2W-2H" where the switcher drops the GEN2 (the 2026-10-16 rule); an untouched field leaves the name as it was, an edited
+   one renames */
+test('Parts’ Download labels opens Labels, the Label plate once the build has labels; the setup sheet names the build without GEN2', async () => {
+  const { ctx, page, errors } = await open('parts');
+  await ctx.route('https://labels.modulith.systems/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Label Studio stub</title>' }));
+  const download = () => page.locator('#ws-parts button:text-is("Download labels")');
+  await download().waitFor({ timeout: 30_000 });
+  assert.match(await download().getAttribute('title'), /No labels yet/, 'no labels: the button says where it goes');
+  await download().click();
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'labels' && document.querySelector('#ws-labels .head'), null, { timeout: 30_000 });
+  await settle(page, 800);
+  assert.equal(await page.evaluate(() => document.getElementById('ws').classList.contains('view-plate')), false, 'a build with no labels opens Labels On build');
+  assert.doesNotMatch(await page.evaluate(() => document.querySelector('#ws-toast')?.textContent || ''), /phase 5/, 'no stub toast');
+  await page.evaluate(() => window.__GEN2_STORE__.commit((s) => { s.labelList = { format: 'modulith-labels', version: 1, labels: [{ text: 'Screws M3', id: 'e2edllab1' }] }; }, 'edit'));
+  await page.locator('#ws-tabs .tab').filter({ hasText: 'Parts' }).click();
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'parts' && document.querySelector('#ws-parts .row4'), null, { timeout: 30_000 });
+  assert.match(await download().getAttribute('title'), /Label plate/, 'with labels: the button names the Label plate');
+  await download().click();
+  await page.waitForFunction(() => document.documentElement.dataset.ws === 'labels' && document.getElementById('ws').classList.contains('view-plate'), null, { timeout: 30_000 });
+  // the setup sheet: the name as the switcher shows it
+  const shown = (await page.locator('#ws-switch .chip-btn').first().innerText()).trim();
+  await page.locator('.chip.mount').first().click();
+  const field = page.locator('#ws-setup input.name');
+  await field.waitFor({ timeout: 15_000 });
+  const v = await field.inputValue();
+  assert.ok(!/GEN2/.test(v) && v === shown, `the Name field reads as the switcher does (field "${v}", switcher "${shown}")`);
+  await page.locator('#ws-setup button:text-is("Apply")').click();
+  await page.waitForFunction(() => !document.querySelector('#ws-setup input.name'), null, { timeout: 15_000 });
+  assert.equal((await page.locator('#ws-switch .chip-btn').first().innerText()).trim(), shown, 'Apply on an untouched name leaves it');
+  await page.locator('.chip.mount').first().click();
+  await field.waitFor({ timeout: 15_000 });
+  await field.fill('Garage bench');
+  await page.locator('#ws-setup button:text-is("Apply")').click();
+  await page.waitForFunction(() => (document.querySelector('#ws-switch .chip-btn')?.innerText || '').includes('Garage bench'), null, { timeout: 15_000 });
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE ASSEMBLE STEP COUNT ON A PHONE (the UX plugins trial, 2026-11-17). The sheet's title numbered pages, not steps: the overview
+   read "Step 1 of 12" beside a list counting "0 / 11", every step one too high; and its accessible name, set once, still said
+   "Step 0 of 12" (WCAG 2.5.3) */
+test('Assemble on a phone: the sheet counts steps as the list does, and its accessible name follows its title', async () => {
+  const { ctx, page, errors } = await open('assemble', { phone: true, viewport: { width: 360, height: 675 } });
+  await page.waitForFunction(() => document.querySelector('#ws-steps .sheet-handle .ttl') && document.querySelector('#ws-steps .count'), null, { timeout: 60_000 });
+  await settle(page, 1200);
+  const read = () => page.evaluate(() => { const h = document.querySelector('#ws-steps .sheet-handle'); return { ttl: h.querySelector('.ttl').textContent, label: h.getAttribute('aria-label'), count: document.querySelector('#ws-steps .count').textContent }; });
+  const a = await read(); const n = Number(a.count.split(' / ')[1]);
+  assert.ok(n > 1 && a.count === `0 / ${n}`, `the control: the list counts the steps (${JSON.stringify(a)})`);
+  assert.equal(a.ttl, `Overview · ${n} steps`, `the overview is not a step (${JSON.stringify(a)})`);
+  assert.equal(a.label, `${a.ttl} · open or close`, 'the handle is named for what it shows');
+  await page.locator('#ws-player button').filter({ hasText: 'Next' }).first().tap();
+  await page.waitForFunction(() => document.querySelector('#ws-steps .count').textContent.startsWith('1 /'), null, { timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelector('#ws-steps .sheet-handle .ttl').textContent.startsWith('Step 1 of'), null, { timeout: 15_000 });
+  const b = await read();
+  assert.equal(b.ttl, `Step 1 of ${n}`, `the first step is step 1 of ${n} (${JSON.stringify(b)})`);
+  assert.equal(b.label, `Step 1 of ${n} · open or close`, `its name follows (${JSON.stringify(b)})`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* the shards (see the top of the file): this process's share of the cases above, in file order */
 registerShare(nodeTest, CASES, SHARD, { weightsFile: join(root, 'e2e', 'shard-weights.json'), pinsFile: join(root, 'e2e', 'shard-map.json'), reportFile: process.env.E2E_SHARD_REPORT, rebalance: process.env.E2E_REBALANCE === '1' });
 if (process.env.E2E_REBALANCE === '1') { await browser.close(); process.exit(0); }   // tools/e2e-rebalance.mjs: no case registered, so no hook will close anything

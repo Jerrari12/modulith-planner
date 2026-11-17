@@ -1123,6 +1123,8 @@ export function mountLabels(stage, ctx) {
     const back = ctx.memo?.labelsSel; if (back != null && unit(back)) { st.selId = back; stage.selectUnit(back); }
     importOpened();   // the link this page opened with (after the labels this browser kept for the build, when there are any)
     importFromHash();
+    // Parts' "Download labels" asks for the Label plate, where the print file downloads; a build with no labels stays On build
+    if (ctx.memo && ctx.memo.labelsView === 'plate') { ctx.memo.labelsView = null; if (R.labelsOf(S()).length) setView('plate'); }
     renderAll();
     if (R.labelsOf(S()).length) loadLabelFont().then(() => renderAll()).catch(() => {});   // the icon art for the previews
   }).catch((e) => { status(`The label tools did not load (${e.message}). Reload the page to try again.`, true); renderAll(); });

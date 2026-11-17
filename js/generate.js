@@ -2517,13 +2517,18 @@ export function generateManifest(build, opts = {}) {
   const seed = units.length * 31 + totalW * 7 + maxTop * 3;
   const funName = `The ${ADJ[seed % ADJ.length]} ${NOUN[(seed >> 3) % NOUN.length]}`;
 
+  // what to buy besides the prints, as one sentence. The old concatenation read "… on the right. and 6× …" with magnets but no
+  // handle screws, and ended "..": with neither; "on the right" pointed at the old viewer's parts panel, which the planner
+  // hides (its quantities are the Parts tab's); "tap" was said on a desktop too (the UX plugins trial, 2026-11-17)
+  const extras = [];
+  if (handleTotal) extras.push(`${handleTotal * 2}× M3 screws for the handles`);
+  if (magnetTotal) extras.push(`${magnetTotal} disc magnets (10×2 mm or 6×2 mm) for the optional magnet closures`);
   const preSteps = [
     {
       title: funName,
-      note: `Your custom build · ${units.length} unit${units.length > 1 ? 's' : ''}, ${drawerCount} drawer${drawerCount === 1 ? '' : 's'}, ${totalW} column${totalW > 1 ? 's' : ''} wide. Drag to orbit, tap any part to identify it. ` +
-        `${printTotal} prints · quantities on the right.` +
-        (handleTotal ? ` You'll also need ${handleTotal * 2}× M3 screws for the handles` : '') +
-        (magnetTotal ? ` and ${magnetTotal}× 10×2 mm disc magnets for the optional magnet closures (hardware store items).` : '.') +
+      note: `Your custom build · ${units.length} unit${units.length > 1 ? 's' : ''}, ${drawerCount} drawer${drawerCount === 1 ? '' : 's'}, ${totalW} column${totalW > 1 ? 's' : ''} wide. Drag to orbit, click or tap any part to identify it. ` +
+        `${printTotal} prints · the Parts list has the quantities.` +
+        (extras.length ? ` You'll also need ${extras.join(' and ')} (hardware store items).` : '') +
         (warnings.length ? ' ⚠ ' + warnings.join(' ⚠ ') : ''),
       // the exploded preview spreads parts past the assembled bounds, so it
       // keeps a fixed (looser) r rather than fitting the bounding sphere.

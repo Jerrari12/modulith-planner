@@ -9,6 +9,7 @@ import { standUp, slotWords } from '../rules/stand.js';
 import { settleToward } from '../rules/settle.js';
 import { serializeBuild } from '../rules/schema.js';
 import { generateManifest } from '../generate.js';
+import { buildName } from './names.js';
 
 // eslint-disable-next-line no-undef
 const G = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog: a classic-script LEXICAL global, not a globalThis property
@@ -53,7 +54,10 @@ export function starterUnit(record) {
 export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
   const store = ctx.store;
   const s0 = store.state;
-  const draft = { name: ctx.builds ? ctx.builds.name : '', mount: s0.mount || 'tabletop', length: Number(s0.length) || 185, printer: s0.printer || 'any', customBed: { x: s0.customBed?.x || '', y: s0.customBed?.y || '' }, spaceW: s0.spaceW || '', spaceH: s0.spaceH || '' };
+  // the name as the switcher shows it (names.js buildName: a kit's "GEN2 185 Tabletop …" loses the GEN2, the 2026-10-16
+  // no-GEN2 rule; the UX plugins trial found the raw name here, 2026-11-17); Apply renames only when the field was edited
+  const shownName = ctx.builds ? buildName(ctx.builds.name) : '';
+  const draft = { name: shownName, mount: s0.mount || 'tabletop', length: Number(s0.length) || 185, printer: s0.printer || 'any', customBed: { x: s0.customBed?.x || '', y: s0.customBed?.y || '' }, spaceW: s0.spaceW || '', spaceH: s0.spaceH || '' };
   const STEPS = ['mount', 'length', 'printer'];
   let cur = STEPS.includes(step) ? step : 'mount';
   let refusal = '';   // why the last Apply was refused (the generator's words), shown in the foot until the next one
@@ -215,7 +219,8 @@ export function openSetup(stage, ctx, { step = 'mount', fresh = false } = {}) {
     store.commit((s, R) => { applyDraft(s, R); }, 'setup');
     store.flush();
     if (mountChange && slots) { try { sessionStorage.setItem('gen2-setup-note', `${mountDef(draft.mount)?.label || draft.mount}: ${slotWords(draft.mount, slots)} to fill · they show red in Build, where Fill all adds 1W cases.`); } catch { /* no storage: no note */ } }
-    if (ctx.builds && draft.name.trim()) await ctx.builds.rename(draft.name);
+    // an untouched field passes the stored name back, as before: the shown one drops a kit's GEN2, and writing it would rename
+    if (ctx.builds && draft.name.trim()) await ctx.builds.rename(draft.name.trim() === shownName.trim() ? ctx.builds.name : draft.name);
     await ctx.builds?.settled?.();   // the save lands first (the stale-tab guard reads it at the reload)
     // refused, because another tab saved this build: the stale notice is up, so the sheet just goes, without its focus
     // return, the remount or "Setup applied." (the guard's review, 2026-10-22)

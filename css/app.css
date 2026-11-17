@@ -1264,7 +1264,10 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
    and the 2D board in the stage between. The sheet manager reads the same query (phone.js SIDE_MQ) for the heights and
    the stage's safe area. At 780 x 260 the model's free region is 360 x 190 px */
 @media (max-width: 1023px) and (orientation: landscape) and (max-height: 500px) {
-  #ws { --rail: calc(64px + env(safe-area-inset-left, 0px)); --side: min(340px, 44vw); --row: 62px; }
+  /* the column no narrower than its dock needs (316: the dock's 300 holds Colors' four-swatch status beside Showcase, 294 px): at
+     44vw a 667 px phone's dock was 277 and every workspace's main button ran past the screen's edge (the UX plugins trial,
+     2026-11-17: "Get parts list" 25 px past at 667 x 375) */
+  #ws { --rail: calc(64px + env(safe-area-inset-left, 0px)); --side: clamp(316px, 44vw, 340px); --row: 62px; }
   #ws-tabbar { top: 0; bottom: 0; right: auto; width: var(--rail); height: auto; flex-direction: column; padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)) calc(4px + env(safe-area-inset-left, 0px)); border-width: 0 1px 0 0; }
   #ws-tabbar .tab { gap: 2px; }
   #ws-tabbar .tab .badge { top: 2px; right: 2px; }
@@ -1274,6 +1277,10 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
   #ws-tools, html[data-ws] #ws-tools, html.ws-parts-wide[data-ws="parts"] #ws-tools { top: 8px; left: calc(var(--top-r, 420px) + 8px); right: 8px; }
   #ws .sheet { left: auto; right: 0; width: var(--side); border-radius: 18px 0 0 0; }
   #ws-dock, #ws-player { left: auto; right: 8px; width: calc(var(--side) - 16px); box-sizing: border-box; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  /* the dock here holds the status and the main button only: the units count did not fit beside "Start assembly" even at 780
+     (9 px past the dock's padding on Parts), and the status may shorten, never the button (the UX plugins trial, 2026-11-17) */
+  #ws-dock .group { display: none; }
+  #ws-dock .status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   #ws-player { max-height: calc(100vh - var(--row) - 8px - 50px); overflow-y: auto; padding-bottom: 0; }   /* the steps handle (44 px) keeps its slot over it */
   /* and its controls (the pips, Back / Next) stay on the card's floor while the step's words scroll over them */
   #ws-player .row2 { position: sticky; bottom: 0; padding: 6px 0 10px; background: linear-gradient(var(--glass-bg), var(--glass-bg)), linear-gradient(var(--glass-bg), var(--glass-bg)), var(--glass-bg); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); z-index: 1; }   /* as a sheet's handle over its scrolling list */

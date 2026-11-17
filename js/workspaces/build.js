@@ -641,7 +641,9 @@ export function mountBuild(stage, ctx) {
       const why = sizeWhy(w, h); const id = `${w}x${h}`; const dis = !!why, on = st.armed && st.addSize === id;
       const tile = el('button.size.key' + (dis ? '.dis' : on ? '.on' : ''), {
         title: why || `${w * 88} × ${h * 56} mm · click it, then an amber spot on the model to place one there`, 'aria-disabled': dis ? 'true' : null, 'aria-pressed': String(on),
-        onclick: dis ? null : () => { setPalette(st.unit, id); st.armed = true; st.eraser = false; renderAll(); if (phone) phone.collapse(lib); },
+        // a greyed size says why when pressed too: its title is a hover tooltip, which a phone never shows (the UX
+        // plugins trial, 2026-11-17: on a phone with a printer chosen, a tap on a greyed size did nothing)
+        onclick: dis ? () => say(`${w}W·${h}H: ${why.replace(/\.$/, '')}.`) : () => { setPalette(st.unit, id); st.armed = true; st.eraser = false; renderAll(); if (phone) phone.collapse(lib); },
       }, [el('div.holder', {}, [sizeGlyph(kindOf(st.unit), w, h, colors)]), el('span.cap', { text: `${w}W·${h}H` })]);
       sizes.appendChild(dis ? tile : attachHint(tile, HINTS.place, lib));   // a greyed size says why in its title instead
     }
@@ -653,7 +655,7 @@ export function mountBuild(stage, ctx) {
         el('span', { text: st.view === '2d' ? 'Click a + on the board to place it.' : 'Click an amber spot on the model to place it.' }),
         el('button.key.sm', { text: 'Stop placing', onclick: () => { st.armed = false; renderAll(); } }),
       ]));
-    } else sz.appendChild(el('p.hint', { text: 'Pick a size to start placing. Greyed sizes say why on hover.' }));
+    } else sz.appendChild(el('p.hint', { text: isPhone() ? 'Pick a size to start placing. Tap a greyed size to see why.' : 'Pick a size to start placing. Greyed sizes say why on hover or click.' }));
     lib.appendChild(sz);
   }
   function renderStyle() {

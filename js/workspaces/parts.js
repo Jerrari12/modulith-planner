@@ -276,6 +276,8 @@ export function mountParts(stage, ctx) {
   function readProgress() { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}').rows || {}; } catch { return {}; } }
   function saveProgress() { try { localStorage.setItem(PROGRESS_KEY, JSON.stringify({ tracking: st.tracking, rows: st.progress })); } catch { /* private mode */ } }
   try { const v = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); st.tracking = !!v.tracking; } catch {}
+  // the build's labels, read from the store each time (the record, not this page's copy at mount)
+  const labelCount = () => { const b = ctx.store && ctx.store.state; return b && b.labelList && Array.isArray(b.labelList.labels) ? b.labelList.labels.length : 0; };
 
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -392,8 +394,12 @@ export function mountParts(stage, ctx) {
         el('button.key', { text: 'Copy as text', onclick: copyText }),
         el('button.key', { text: 'Download CSV', onclick: downloadCsv }),
         el('button.key', { text: 'Print', onclick: () => window.print() }),
-        el('button.key', { text: 'Save build image', onclick: soon('Save build image', 'the Done scene (5b)') }),
-        el('button.key', { text: 'Download labels', onclick: soon('Download labels', 'the Labels workspace (phase 5)') }),
+        el('button.key', { text: 'Save build image', onclick: () => say('Saving a build image is not ready yet.') }),
+        // the label print file lives on the Labels workspace's Label plate (labels.js setView('plate')): this opens it there,
+        // or Labels itself while the build has none. It was a "comes with the Labels workspace (phase 5)" stub after Labels
+        // had shipped (the UX plugins trial, 2026-11-17)
+        el('button.key', { text: 'Download labels', title: labelCount() ? 'Opens the Label plate in Labels: this build’s labels laid out, with the print file to download' : 'No labels yet · opens Labels, where you make them',
+          onclick: () => { if (ctx.memo) ctx.memo.labelsView = 'plate'; ctx.switchTo('labels'); } }),
       ]),
     );
     panel.appendChild(head);

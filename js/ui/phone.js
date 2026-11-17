@@ -12,12 +12,13 @@ export const PHONE_MAX = 1023;
 export const isPhone = () => innerWidth <= PHONE_MAX;
 const TABBAR = 64, DOCK = 56, HANDLE = 44;
 /* THE PHONE ON ITS SIDE (Joey 2026-10-27; app.css, the same query): the tabs a rail down the left, the bar and the tools
-   one row (ROW: its bottom and 8 px), the sheets, the dock and the Assemble player a column on the right, at most SIDE_MAX
-   or 44 % of the width (app.css --side). The sheets stack over the dock as in portrait; the stage keeps what is between */
+   one row (ROW: its bottom and 8 px), the sheets, the dock and the Assemble player a column on the right, 44 % of the width
+   held between SIDE_MIN and SIDE_MAX (app.css --side, the same clamp). The sheets stack over the dock as in portrait; the
+   stage keeps what is between */
 export const SIDE_MQ = '(max-width: 1023px) and (orientation: landscape) and (max-height: 500px)';
 export const isSideways = () => matchMedia(SIDE_MQ).matches;
-const ROW = 62, SIDE_MAX = 340;
-const sideWidth = () => Math.min(SIDE_MAX, innerWidth * 0.44);
+const ROW = 62, SIDE_MIN = 316, SIDE_MAX = 340;
+const sideWidth = () => Math.min(SIDE_MAX, Math.max(SIDE_MIN, innerWidth * 0.44));
 /* the sheets' one-time nudge (phoneChrome below): played or no longer needed, per browser; a storage that throws (a
    private window) reads as played, so it never repeats on every load */
 export const NUDGE_KEY = 'gen2-sheet-nudged', NUDGE_DELAY = 1100;
@@ -50,7 +51,11 @@ export function phoneChrome(root, ctx, { panels = [], dock = DOCK } = {}) {
     const x = entry.close ? el('button.hx', { title: 'Close', 'aria-label': `Close ${typeof entry.title === 'function' ? entry.title() : entry.title}`, onclick: (e) => { e.stopPropagation(); entry.close(); } }, [icon('x', { size: 16 })]) : null;
     // spec.badge: a workspace's own small control on the handle, after the title and before the × (the Polymaker offer's pill, colors.js)
     const badge = entry.badge ? entry.badge() : null;
-    handle.replaceChildren(...[el('span.grab'), el('span.ttl', { text: typeof entry.title === 'function' ? entry.title() : entry.title }), badge, x, el('span.chev', {}, [icon(entry.open ? 'caret-down' : 'caret-up', { size: 16 })])].filter(Boolean));
+    const ttl = typeof entry.title === 'function' ? entry.title() : entry.title;
+    handle.replaceChildren(...[el('span.grab'), el('span.ttl', { text: ttl }), badge, x, el('span.chev', {}, [icon(entry.open ? 'caret-down' : 'caret-up', { size: 16 })])].filter(Boolean));
+    // the name follows the title it shows: set once at creation, it went stale ("Step 0 of 12" on a handle reading "Step 1 of
+    // 12", WCAG 2.5.3: the UX plugins trial, 2026-11-17)
+    handle.setAttribute('aria-label', `${ttl} · open or close`);
     const p = peek ? peek() : null;
     const peekEl = panel.querySelector(':scope > .sheet-peek');
     if (p && !entry.open) { if (peekEl) peekEl.replaceChildren(typeof p === 'string' ? el('span', { text: p }) : p); else panel.insertBefore(el('div.sheet-peek', {}, [typeof p === 'string' ? el('span', { text: p }) : p]), handle.nextSibling); }
