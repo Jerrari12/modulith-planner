@@ -539,8 +539,8 @@ const LINKS_BY_LEN = {
     240: { p: 'https://www.printables.com/model/1347927-modulith-240-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1378535' },
     270: { p: 'https://www.printables.com/model/1907133-modulith-270-decor-filament-sample-chip-drawers', t: 'https://than.gs/m/1654511' },
   },
-  classic: { // Thangs pages mirrored from the planner 2026-07-12 (240 new; 59 has none yet)
-    59:  { p: 'https://www.printables.com/model/234780-gen2-59-classic-drawers-all', m: 'https://makerworld.com/en/models/2364890-gen2-59-classic-drawers-all' },
+  classic: { // Thangs pages mirrored from the planner 2026-07-12 (240 new); the 59 page since 2026-11-18
+    59:  { p: 'https://www.printables.com/model/234780-gen2-59-classic-drawers-all', t: 'https://than.gs/m/1661209', m: 'https://makerworld.com/en/models/2364890-gen2-59-classic-drawers-all' },
     115: { p: 'https://www.printables.com/model/1143243-gen2-115-classic-drawers-all', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20115%20Classic%20Drawers-1069181', m: 'https://makerworld.com/en/models/755424-gen2-115-classic-drawers-all' },
     165: { p: 'https://www.printables.com/model/625776-gen2-165-classic-drawers-all', t: 'https://thangs.com/designer/Jerrari/3d-model/GEN2%20165%20Classic%20Drawers-1044262', m: 'https://makerworld.com/en/models/922620-gen2-165-classic-drawers-all' },
     // no MakerWorld url — the 185 classic-drawers page was withdrawn 2026-07-25

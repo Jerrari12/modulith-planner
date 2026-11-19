@@ -836,7 +836,8 @@ const LINK_OVERRIDES = {
   "GEN2 270 Shelf Inserts": { p: "https://www.printables.com/model/1828411-gen2-270-shelf-inserts", t: "https://than.gs/m/1595953" },
 
   // ---- Classic drawers — per-length "…Classic Drawers - All" collection ----
-  "GEN2 59 Classic Drawers - All":  { p: "https://www.printables.com/model/234780-gen2-59-classic-drawers-all", m: "https://makerworld.com/en/models/2364890-gen2-59-classic-drawers-all" },
+  // 59: Thangs had only single-drawer pages until 2026-11-18, when "MODULITH 59 Classic Drawers - All" (1661209) went up.
+  "GEN2 59 Classic Drawers - All":  { p: "https://www.printables.com/model/234780-gen2-59-classic-drawers-all", t: "https://than.gs/m/1661209", m: "https://makerworld.com/en/models/2364890-gen2-59-classic-drawers-all" },
   "GEN2 115 Classic Drawers - All": { p: "https://www.printables.com/model/1143243-gen2-115-classic-drawers-all", t: "https://thangs.com/designer/Jerrari/3d-model/GEN2%20115%20Classic%20Drawers-1069181", m: "https://makerworld.com/en/models/755424-gen2-115-classic-drawers-all" },
   "GEN2 165 Classic Drawers - All": { p: "https://www.printables.com/model/625776-gen2-165-classic-drawers-all", t: "https://thangs.com/designer/Jerrari/3d-model/GEN2%20165%20Classic%20Drawers-1044262", m: "https://makerworld.com/en/models/922620-gen2-165-classic-drawers-all" },
   // no MakerWorld url — the 185 classic-drawers page was withdrawn 2026-07-25

@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDORED = join(root, 'js', 'catalog', 'data.js');
-const PINNED_SHA256 = '69ff6fe1a8b7ceaf7757147ae8f29329b0798c76f99d1f416652fa64fe4319b2';
-const SOURCE = 'this repo, 2026-11-09: the chip drawers released (chipDrawer out of GEN2.unreleased, their twelve pages in LINK_OVERRIDES)';
+const PINNED_SHA256 = '21f8b7cef56ccd0d6ff07c6c0cfea7c81162bba93bb80337b563fc693b8d6756';
+const SOURCE = 'this repo, 2026-11-18: the 59 Classic Drawers link Thangs 1661209';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 test(`the vendored catalog matches its pin (${SOURCE})`, () => {
