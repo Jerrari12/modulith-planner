@@ -140,11 +140,34 @@ const GEN2 = {
       img: "img/parts/Faceplate-Chevron.jpg",
       blurb: "The 45 degree chevron runs continuously across drawers · side by side and stacked, the pattern never breaks. Every face strip can take its own filament color in the slicer. Bolt-on handle. Included with the GEN2 Club." },
   ],
+  /* Cabinet door styles. Essential and Chevron are the doors that exist as
+     models (Fusion "MODULITH Essential Decor Doors" / "MODULITH Chevron Decor
+     Doors", 1W-1H..4W-6H, left- and right-hinged, 2026-11-16..18). EdgeLabel
+     and Classic Pro are kept because door-style ids are build state (saved
+     builds and share links carry them), but no door model exists for either
+     yet. ⚠ ids are ADDITIVE ONLY. */
   doorStyles: [
     { id: "essential",  label: "Essential" },
+    { id: "chevron",    label: "Chevron" },
     { id: "edgelabel",  label: "EdgeLabel" },
     { id: "classicpro", label: "Classic Pro" },
   ],
+  /* Cabinet door hardware (2026-11-19). A door is hinged on the left unless
+     its unit says `hinge: "right"`; the hinge and latch sets are handed (each
+     part differs from its mirror image), so the parts list names the hand.
+     A 1H door takes ONE knob on a centre hole - a bolt-on handle's 44 mm hole
+     pair would put the handle into the units above and below (Joey
+     2026-11-18); 2H and taller doors take a handle on two holes. The screw
+     goes in from behind through the door's counterbore, so its length depends
+     on how thick the door is there: 3.5 mm on Essential, 5.0 mm on Chevron. */
+  doorHardware: {
+    knobSeries: ["deco", "blockbar"],           // the knobs that exist (Deco, BlockBar); others fall back to [0]
+    /* M3 length (mm) by door style; a style with no door model has none. The
+       screw is spent 3.5 / 5.0 mm in the door, so M3x8 / M3x10 leave 4.5 / 5.0 mm
+       in the knob or handle: knob pilots are 5.95 mm deep, handle pilots 5.0
+       (Crystal B Wide) to 7.9 mm (measured on the STLs 2026-11-19). */
+    screwLength: { essential: 8, chevron: 10 },
+  },
   // Handle series for Decor drawers whose faceplate has no built-in handle.
   // ORDER MATTERS: [0] is the default for new builds AND the sanitize
   // fallback (Deco per Joey 2026-07-19). Families pick their exact variant on
@@ -572,7 +595,7 @@ const GEN2 = {
     // a universal part read as length-specific and confused people.)
     faceplate:   (len, size, style)     => `GEN2 ${style} Decor Faceplate - ${size}`,
     backCover:   (len, size)            => `GEN2 Decor Faceplate Back Cover - ${size}`,
-    door:        (len, size, style)     => `GEN2 ${len} ${style} Door - ${size}`,
+    door:        (len, size, style, hand) => `GEN2 ${len} ${style} Door - ${size}${hand === "right" ? " - Right-Hinged" : ""}`,
     sideCover:   (len, h)               => `GEN2 ${len} Side Cover - ${h}H`,
     // universal like the faceplates: one chip fits every chip drawer (2026-11-07)
     filamentChip: ()                    => "GEN2 Filament Sample Chip",
@@ -583,8 +606,10 @@ const GEN2 = {
     footRailUpper: (len, w)             => `GEN2 ${len} Foot Rail Upper (FR-U) - ${w}W`,
     footRailLower: (len, w)             => `GEN2 ${len} Foot Rail Lower (FR-L) - ${w}W`,
     foot:          ()                   => "GEN2 Foot (TPU)",
-    hinge:       ()                     => "GEN2 Cabinet Hinge (1H)",
-    latch:       ()                     => "GEN2 Door Latch (1H)",
+    // handed (2026-11-19): a left-hinged door's hinge is marked L, its latch clips R; a right-hinged door's the reverse
+    hinge:       (hand)                 => `GEN2 Cabinet Hinge (1H) - ${hand === "right" ? "Right" : "Left"}-Hinged Door`,
+    latch:       (hand)                 => `GEN2 Door Latch (1H) - ${hand === "right" ? "Right" : "Left"}-Hinged Door`,
+    knob:        (series)               => `GEN2 ${series} Knob`,
     quickLockL:  ()                     => "GEN2 QuickLock - Left",
     quickLockR:  ()                     => "GEN2 QuickLock - Right",
   },
@@ -603,7 +628,7 @@ const GEN2 = {
   // Chip Drawers pages went live that day on Printables and Thangs, after Joey's
   // 59 test print; they are in LINK_OVERRIDES. The 185 and 240 pages are his
   // repurposed GEN2 filament drawer pages, so their ids are older.)
-  unreleased: ["door", "hinge", "latch"],
+  unreleased: ["door", "hinge", "latch", "knob"],
 
   /* Filament Sample Chip Drawers (v2611, 2026-11-07). A 1W-0.5H drawer that
      holds filament sample chips on edge in two slotted lanes, in Classic (the

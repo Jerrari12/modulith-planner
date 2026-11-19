@@ -862,6 +862,14 @@ export function mountBuild(stage, ctx) {
       insp.appendChild(el('div.row', {}, ['Lip', el('div.track.mini', { role: 'group', style: `grid-template-columns: repeat(${stops.length}, minmax(0, 1fr))` }, stops.map(([id, label]) =>
         el('button.seg.sm' + (curLip === id ? '.on' : ''), { text: label, onclick: () => setUnitOption(unit.id, (p) => { if (id === 'none') delete p.lip; else p.lip = id; }) })))]));
     }
+    if (unit.fill === 'cabinet') {
+      // the door's hinge side (2026-11-19): absence is left-hinged, so only "right" is ever written
+      const hand = unit.hinge === 'right' ? 'right' : 'left';
+      insp.appendChild(el('div.row', {}, ['Hinge', el('div.track.mini', { role: 'group', 'aria-label': 'Door hinge side', style: 'grid-template-columns: repeat(2, minmax(0, 1fr))' }, [
+        el('button.seg.sm' + (hand === 'left' ? '.on' : ''), { text: 'Left', title: 'The door swings open to the left', onclick: () => setUnitOption(unit.id, (p) => { delete p.hinge; }) }),
+        el('button.seg.sm' + (hand === 'right' ? '.on' : ''), { text: 'Right', title: 'The door swings open to the right · mirrored door and hardware', onclick: () => setUnitOption(unit.id, (p) => { p.hinge = 'right'; }) }),
+      ])]));
+    }
     // the alternative to dragging (Astra): one column at a time, past the build's edge too, within the mount's cap
     insp.appendChild(el('div.row', {}, ['Move', el('div.track.mini', { role: 'group', 'aria-label': 'Move this unit', style: 'grid-template-columns: repeat(2, minmax(0, 1fr))' }, [
       el('button.seg.sm', { text: '◀ Left', title: 'One column left · ←', onclick: () => { select(unit.id); nudge('left'); } }),

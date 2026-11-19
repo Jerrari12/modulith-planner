@@ -368,6 +368,11 @@ export function sanitizeBuild(d, GEN2) {
        viewer both clamp it to one lip, and the choice then survives a later
        switch to a 240/270. */
     if (u.fill === "shelf" && (u.lip === "front" || u.lip === "both")) unit.lip = u.lip;
+    /* cabinet hinge side (2026-11-19): cabinets only, "right" the one value;
+       the field's ABSENCE is a left-hinged door (the side every door was
+       modelled on first), so nothing is written for the default and old share
+       links decode unchanged. ⚠ Never write hinge:"left". */
+    if (u.fill === "cabinet" && u.hinge === "right") unit.hinge = "right";
     /* drawer body: decor only, "gridfinity" the one value; ABSENCE is the
        standard drawer, so nothing is written for it and old links decode
        unchanged. KEPT on a size with no Gridfinity version (billed standard

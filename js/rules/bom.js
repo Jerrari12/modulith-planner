@@ -117,8 +117,10 @@ export function computeBom(build, GEN2) {
     const extenders = new Map(); // w -> qty
     const inserts = new Map();   // w -> qty
     const lips = new Map();      // w -> qty (shelf fills only, opt-in)
-    const doors = new Map();     // size -> qty
-    let decorCount = 0, hinges = 0, latches = 0;
+    const doors = new Map();     // "size|hand" -> qty
+    const hinges = new Map(), latches = new Map();   // hand -> qty (the sets are handed)
+    let doorKnobs = 0, doorHandles = 0;               // 1H doors take a knob, 2H+ a handle
+    let decorCount = 0;
     let chipDrawers = 0, chipSlots = 0, classicChips = 0;   // the chip drawers, the chips they hold in all, how many are Classic
 
     build.placed.forEach((p) => {
@@ -180,9 +182,11 @@ export function computeBom(build, GEN2) {
         // shell (both modes): one door at full W×H + hinges/latches by height.
         // size === sizeToken(p.w, h); the shell size is guaranteed available because
         // selectable() gates placement and the interior editor never resizes the shell.
-        count(doors, size);
-        hinges += h >= 2 ? 2 : 1;
-        latches += h >= 2 ? 2 : 1;
+        const hand = p.hinge === "right" ? "right" : "left";
+        count(doors, size + "|" + hand);
+        count(hinges, hand, h >= 2 ? 2 : 1);
+        count(latches, hand, h >= 2 ? 2 : 1);
+        if (h === 1) doorKnobs++; else doorHandles++;
       }
     });
 
@@ -294,20 +298,52 @@ export function computeBom(build, GEN2) {
         requirement: GEN2.req.option("shelf.retention", "shelf.lip"),
         basis: GEN2.req.basis("shelf.lip", "on", "unit", qty),
       }));
-      [...doors.entries()].sort().forEach(([size, qty]) => items.push(Object.assign({
-        name: P.door(len, size, doorStyle), qty,
-        note: "Door matches the total width and height of the case + extenders.",
-        unreleased: GEN2.unreleased.includes("door"),
-      }, fillReasons("cabinet"))));
-      if (hinges) items.push(Object.assign({
-        name: P.hinge(), qty: hinges,
-        note: "Hinges are 1H · 1H cabinets take 1 hinge, taller cabinets take 2.",
-        unreleased: GEN2.unreleased.includes("hinge"),
+      [...doors.entries()].sort().forEach(([key, qty]) => {
+        const [size, hand] = key.split("|");
+        items.push(Object.assign({
+          name: P.door(len, size, doorStyle, hand), qty,
+          note: "Door matches the total width and height of the case + extenders." +
+            (hand === "right" ? " Right-hinged: the mirror image of the left-hinged door." : ""),
+          unreleased: GEN2.unreleased.includes("door"),
+        }, fillReasons("cabinet")));
+      });
+      ["left", "right"].forEach((hand) => {
+        if (hinges.get(hand)) items.push(Object.assign({
+          name: P.hinge(hand), qty: hinges.get(hand),
+          note: "Hinges are 1H · 1H cabinets take 1 hinge, taller cabinets take 2. Handed: hinge body, claws and 4 pegs.",
+          unreleased: GEN2.unreleased.includes("hinge"),
+        }, fillReasons("cabinet")));
+        if (latches.get(hand)) items.push(Object.assign({
+          name: P.latch(hand), qty: latches.get(hand),
+          note: "Latches are 1H · 1H cabinets take 1 latch, taller cabinets take 2. Handed: a side clip and a door clip.",
+          unreleased: GEN2.unreleased.includes("latch"),
+        }, fillReasons("cabinet")));
+      });
+      /* the door's grip (2026-11-19): a knob on a 1H door's single centre hole,
+         a handle on a taller door's two holes; the chosen handle series names
+         both (a series with no knob falls back to the first that has one). */
+      const hs = GEN2.handleStyles.find((s) => s.id === build.handleStyle) || GEN2.handleStyles[0];
+      const DH = GEN2.doorHardware;
+      const knobId = DH.knobSeries.includes(hs.id) ? hs.id : DH.knobSeries[0];
+      const knobLabel = (GEN2.handleStyles.find((s) => s.id === knobId) || hs).label;
+      // no length is recorded for a door style with no model (EdgeLabel, Classic Pro): the row says so rather than guess
+      const screwMm = DH.screwLength[build.doorStyle];
+      if (doorKnobs) items.push(Object.assign({
+        name: P.knob(knobLabel), qty: doorKnobs,
+        note: "1H doors take a knob on one centre hole · a handle there would reach into the units above and below.",
+        unreleased: GEN2.unreleased.includes("knob"),
       }, fillReasons("cabinet")));
-      if (latches) items.push(Object.assign({
-        name: P.latch(), qty: latches,
-        note: "Latches are 1H · 1H cabinets take 1 latch, taller cabinets take 2.",
-        unreleased: GEN2.unreleased.includes("latch"),
+      if (doorHandles) items.push(Object.assign({
+        name: `GEN2 Decor Handles - ${hs.label} Series`, qty: doorHandles,
+        note: "2H and taller doors take a bolt-on handle on two holes 44 mm apart · the same handles as the Decor drawers.",
+      }, fillReasons("cabinet")));
+      if (doorKnobs || doorHandles) items.push(Object.assign({
+        name: screwMm ? `M3×${screwMm}mm button head screw` : "M3 button head screw", qty: doorKnobs + 2 * doorHandles,
+        note: screwMm
+          ? `Fastens the door's knob or handle from behind · ${screwMm} mm for the ${doorStyle} door (1 per knob, 2 per handle).` +
+            (doorHandles && screwMm >= 10 ? " With a Crystal B Wide handle it reaches the bottom of the handle's pilot." : "")
+          : `Fastens the door's knob or handle from behind (1 per knob, 2 per handle) · no screw length is recorded for the ${doorStyle} door yet.`,
+        hardware: true,
       }, fillReasons("cabinet")));
       sections.push({ title: "Shelves & Cabinets", items });
     }
