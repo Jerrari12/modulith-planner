@@ -328,6 +328,7 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .mid { flex: 1; min-width: 0; }
 #ws-parts .name { font-size: 13px; font-weight: 600; }
 #ws-parts .note { font-size: 11px; color: var(--ink-2); }
+#ws-parts .note.tryfree a { color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 #ws-parts .prow .badge { font-size: 9px; letter-spacing: .06em; padding: 2px 5px; border-radius: 4px; flex: none; }
 #ws-parts .prow .badge.club { background: transparent; color: var(--club); border: 1px solid var(--club); }
 #ws-parts .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }

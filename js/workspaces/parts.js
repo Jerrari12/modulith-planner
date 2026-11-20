@@ -436,6 +436,7 @@ export function mountParts(stage, ctx) {
     const mid = el('div.mid', {}, [el('div.name', { text: rowName(r) })]);
     if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: noteText(r.note) }));
+    const free = tryFreeEl(r); if (free) mid.appendChild(free);
     row.appendChild(mid);
     const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
     if (badge) row.appendChild(el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }));
@@ -461,6 +462,14 @@ export function mountParts(stage, ctx) {
      buyEvent), else the part's page on the chosen download site. A paid host carries rel=sponsored (the analytics read it) and
      a plain label, "Amazon ↗": the "· paid link" mark of 2026-10-21 went on 2026-10-24 (Joey: "paid" read as a brand paying to
      be listed); the foot's one disclosure line, right under the hardware rows (renderPanel), discloses it */
+  /* a free size of a paid series (data.js TRY_FREE, Joey 2026-11-20): one plainly labelled line under the name, linking the
+     free listing on the chosen download site. The row keeps its CLUB badge and its link to the paid series page */
+  function tryFreeEl(r) {
+    const f = r.links?.tryFree; if (!f) return null;
+    const s = f.find((x) => x.id === st.site) || f.find((x) => SHOWN.has(x.id));
+    if (!s) return null;
+    return el('div.note.tryfree', {}, ['This size is free to try: ', el('a', { href: s.url, target: '_blank', rel: 'noopener', text: `${s.name} on ${s.label} ↗` })]);
+  }
   function storeLink(r, link) {
     return el('a.link', { href: link.url, target: '_blank', rel: isPaid(link.url) ? 'noopener sponsored' : 'noopener', text: `${r.hardware ? 'Amazon' : (link.exact ? link.label : link.label + ' search')} ↗`, onclick: r.hardware ? () => stage.track(stage.buyEvent(link)) : null });
   }
@@ -487,6 +496,7 @@ export function mountParts(stage, ctx) {
     const mid = el('div.mid', {}, [el('div.name', {}, [rowName(r), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
     if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: noteText(r.note) }));
+    const free = tryFreeEl(r); if (free) mid.appendChild(free);
     const counter = (field, label) => {
       const v = p[field] || 0;
       return el('div.counter.big', { title: label }, [
@@ -529,14 +539,15 @@ export function mountParts(stage, ctx) {
       const regions = printLook(r);   // the filament it prints in, as the list shows it (a list without it is the same confusion on paper)
       if (regions) txt += `    Print in:   ${printText(regions)}\n`;
       if (r.links) { txt += `    Printables: ${r.links.printables}\n    Thangs:     ${r.links.thangs}\n`; }
+      if (r.links?.tryFree) txt += `    Free to try (${r.links.tryFree[0].name}): ${r.links.tryFree.map((s) => `${s.label} ${s.url}`).join(' · ')}\n`;
     }
     try { await navigator.clipboard.writeText(txt); say('Parts list copied.'); } catch { say('Could not reach the clipboard.'); }
   }
   function downloadCsv() {
     const esc = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
     const m = meta();
-    const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Print in', 'Printables', 'Thangs'].map(esc).join(',')];
-    for (const r of rows()) { const regions = printLook(r); lines.push([r.section, r.qty, rowName(r) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), regions ? printText(regions) : '', r.links?.printables || '', r.links?.thangs || ''].map(esc).join(',')); }
+    const lines = [['MODULITH build', `${length} mm`, m.mount, m.date].map(esc).join(','), ['Reopen', m.link].map(esc).join(','), '', ['Section', 'Qty', 'Part', 'Print in', 'Printables', 'Thangs', 'Free to try'].map(esc).join(',')];
+    for (const r of rows()) { const regions = printLook(r); lines.push([r.section, r.qty, rowName(r) + (r.optional ? ' (optional)' : '') + (r.unreleased ? ' (coming soon)' : ''), regions ? printText(regions) : '', r.links?.printables || '', r.links?.thangs || '', (r.links?.tryFree || []).map((s) => s.url).join(' ')].map(esc).join(',')); }
     lines.push('', ['Filament', 'Estimated weight', '1 kg spools', 'Recommended'].map(esc).join(','));
     for (const l of filamentNow(rows()).lines) lines.push([lineName(l), lineWeight(l), l.spools, l.recommended].map(esc).join(','));
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });

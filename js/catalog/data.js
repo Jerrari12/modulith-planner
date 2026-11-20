@@ -946,6 +946,16 @@ const LINK_OVERRIDES = {
   "GEN2 Under Table Starter Kit - 270": { p: "https://www.printables.com/model/312837-gen2-under-table-starter-kit-270" },
 };
 
+/* A free size of a paid series, to try before buying (Joey, 2026-11-20: "something for the 1W-1H to try for free
+   linking to the intro model pages"). Keyed by the EXACT BOM row name. The row keeps its CLUB badge and its link to
+   the paid series page; this adds a second, plainly labelled link to the free listing. The EdgeLabel Intro Edition
+   is the 1W-1H with its accent, back cover, label and clip: Printables 1231302 (CC BY-NC-ND) and Thangs 1292349
+   (vault marketplace-index.md). Both ids come from that index, not from a fetch: Printables answers automated
+   checks with a bot challenge, so these links are checked by hand. */
+const TRY_FREE = {
+  "GEN2 EdgeLabel Decor Faceplate - 1W-1H": { label: "Intro Edition", p: "https://www.printables.com/model/1231302", t: "https://than.gs/m/1292349" },
+};
+
 /* Amazon affiliate links for the hardware-store items (Joey's, 2026-07-12).
    Keyed by the EXACT BOM row name; each entry renders as a labeled buy button
    in the row's link cell (renderBom adds the affiliate disclosure line).
@@ -1053,8 +1063,12 @@ function partLinks(name) {
     return { id: s.id, label: s.label, url: url || s.search(q), exact: !!url };
   });
   const byId = Object.fromEntries(stores.map((s) => [s.id, s]));
+  // a free size of a paid series (TRY_FREE): present only on those rows, so every other row's shape is unchanged
+  const free = TRY_FREE[name];
+  const tryFree = free ? STORES.filter((s) => free[s.key]).map((s) => ({ id: s.id, label: s.label, url: free[s.key], name: free.label })) : null;
   return {
     stores,
+    ...(tryFree && tryFree.length ? { tryFree } : {}),
     // legacy shape (kept so nothing silently breaks)
     printables: byId.printables.url,
     thangs: byId.thangs.url,
