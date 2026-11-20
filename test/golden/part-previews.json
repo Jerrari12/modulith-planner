@@ -5655,5 +5655,311 @@
   },
   "filament-sample-chip-title-pieces": {
     "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-1h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-1h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-1h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-1h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-2h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-2h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-2h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-2h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-3h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-3h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-3h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-3h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-4h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-4h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-4h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-4h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-5h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-5h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-5h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-5h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-6h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-1w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-6h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-2w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-6h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-3w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-6h": {
+    "unsupported": "unsupported"
+  },
+  "essential-cabinet-door-4w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-1h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-1h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-1h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-1h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-1h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-2h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-2h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-2h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-2h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-2h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-3h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-3h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-3h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-3h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-3h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-4h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-4h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-4h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-4h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-4h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-5h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-5h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-5h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-5h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-5h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-6h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-1w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-6h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-2w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-6h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-3w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-6h": {
+    "unsupported": "unsupported"
+  },
+  "chevron-cabinet-door-4w-6h-right-hinged": {
+    "unsupported": "unsupported"
+  },
+  "cabinet-hinge-left-hinged-door": {
+    "unsupported": "unsupported"
+  },
+  "cabinet-hinge-right-hinged-door": {
+    "unsupported": "unsupported"
+  },
+  "door-latch-left-hinged-door": {
+    "unsupported": "unsupported"
+  },
+  "door-latch-right-hinged-door": {
+    "unsupported": "unsupported"
+  },
+  "deco-knob": {
+    "unsupported": "unsupported"
+  },
+  "blockbar-knob": {
+    "unsupported": "unsupported"
   }
 }

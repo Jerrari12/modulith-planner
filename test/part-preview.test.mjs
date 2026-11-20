@@ -47,10 +47,15 @@ const glbExists = (L, node) => existsSync(join(root, 'parts', String(L), node + 
    exactly like the 59-3W/4W shelf inserts.
    The filament sample chip (2026-11-07) joins them: its GLB exists, but no build
    places a chip yet, so no probe can pick one. And its title pieces (2026-11-08):
-   a set that ships as 3MFs, with no GLB at all. */
+   a set that ships as 3MFs, with no GLB at all.
+   The cabinet doors and their hardware (2026-11-20, coming soon): 96 doors, the
+   handed hinges and latches, the two knobs. Their GLBs are in the pools and a
+   cabinet build draws them, but no probe picks one out of a cabinet yet. */
 const expectUnsupported = s =>
   /^59-case-extender-[34]w-1h$/.test(s) ||
-  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip|filament-sample-chip-title-pieces)$/.test(s);
+  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip|filament-sample-chip-title-pieces)$/.test(s) ||
+  /^(essential|chevron)-cabinet-door-[1-4]w-[1-6]h(-right-hinged)?$/.test(s) ||
+  /^((cabinet-hinge|door-latch)-(left|right)-hinged-door|deco-knob|blockbar-knob)$/.test(s);
 
 // resolve the whole catalog once — every test reads from this
 const resolved = new Map();
@@ -83,8 +88,9 @@ test('every production slug is accounted for — resolved or intentionally unsup
   // 2026-11-07: +12 Filament Sample Chip Drawers (609 → 621), the chip unsupported (4 → 5) - not released; the GLBs are on
   // gen2-parts branch chip-drawers, so the deploy that carries these pages publishes gen2-parts first
   // 2026-11-08: the chip's title pieces, unsupported (5 → 6): a 3MF set, no GLB
+  // 2026-11-20: the 102 coming-soon cabinet parts, unsupported (6 → 108): 96 doors, 2 hinges, 2 latches, 2 knobs
   assert.equal(supported, 621, 'supported preview count');
-  assert.equal(unsupported, 6, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip + its title pieces)');
+  assert.equal(unsupported, 108, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip + its title pieces + 102 cabinet parts)');
 });
 
 test('every resolved preview references GLBs that exist in its collection pool', () => {

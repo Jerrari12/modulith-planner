@@ -1580,6 +1580,18 @@ function partImage(name, variant) {
   if (cd) return "img/parts/" + cd[1] + "/" + cd[3] + " Filament Sample Chip Drawer " + cd[1] + "-" + cd[2].replace(/\./g, "") + ".png";
   if (name === "GEN2 Filament Sample Chip") return "img/parts/Filament Sample Chip.png";
   if (name === "GEN2 Filament Sample Chip Title Pieces") return "img/parts/Filament Sample Chip Title Pieces.png";
+  // Cabinet doors and door hardware (2026-11-20): universal, so one FLAT render
+  // set, the files js/workspaces/parts.js partThumb names. A door by style, size
+  // and hand; a latch row is the SET of both clips, and a left-hinged door's
+  // clips are the R ones (partNames above); the knobs by series.
+  const door = name.match(/^GEN2 (Essential|Chevron) Door - (\dW-\dH)( - Right-Hinged)?$/);
+  if (door) return "img/parts/Door_" + door[1] + "_" + door[2] + (door[3] ? "_RH" : "") + ".png";
+  const hinge = name.match(/^GEN2 Cabinet Hinge \(1H\) - (Left|Right)-Hinged Door$/);
+  if (hinge) return "img/parts/CabinetHinge_" + (hinge[1] === "Left" ? "L" : "R") + ".png";
+  const latch = name.match(/^GEN2 Door Latch \(1H\) - (Left|Right)-Hinged Door$/);
+  if (latch) return "img/parts/CabinetLatch_Set_" + (latch[1] === "Left" ? "R" : "L") + ".png";
+  const knob = name.match(/^GEN2 (Deco|BlockBar) Knob$/);
+  if (knob) return "img/parts/Knob_" + knob[1] + ".png";
   const file = name.replace(/^GEN2 /, "GEN2_").replace(/\./g, "") + RENDER_SUFFIX + ".png";
   return "img/parts/" + file;
 }

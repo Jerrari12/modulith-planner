@@ -3335,6 +3335,13 @@ function previewProbe(slug) {
   // its title pieces (2026-11-08): a set shipped as 3MFs, with no GLB and no place on the stage
   if (s === 'filament-sample-chip-title-pieces')
     return un('The title pieces have no 3D preview: they ship as ready-to-print 3MFs.');
+  /* the cabinet doors and their hardware (site slugs minted 2026-11-20, coming soon): the 96 doors
+     `<style>-cabinet-door-<w>w-<h>h[-right-hinged]`, the handed hinges and latches, the two knobs. Their GLBs are in the
+     pools and a cabinet build draws them, but no probe picks one out of a cabinet yet, so the site shows the render */
+  if (/^(essential|chevron)-cabinet-door-[1-4]w-[1-6]h(-right-hinged)?$/.test(s))
+    return un('A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build.');
+  if (/^(cabinet-hinge|door-latch)-(left|right)-hinged-door$/.test(s) || /^(deco|blockbar)-knob$/.test(s))
+    return un('The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build.');
   // hardware (sets + singles) — the probe mounts are chosen so the REAL
   // generator bills exactly the expected rows: a wall single-unit emits the
   // QuickLock pair AND the stopper pair (bench covers carry the stopper
