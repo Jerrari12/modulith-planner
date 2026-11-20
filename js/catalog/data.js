@@ -145,12 +145,15 @@ const GEN2 = {
      Doors", 1W-1H..4W-6H, left- and right-hinged, 2026-11-16..18). EdgeLabel
      and Classic Pro are kept because door-style ids are build state (saved
      builds and share links carry them), but no door model exists for either
-     yet. ⚠ ids are ADDITIVE ONLY. */
+     yet. ⚠ ids are ADDITIVE ONLY.
+     `club` as on faceplateStyles: Chevron, EdgeLabel and Classic Pro doors are
+     PREMIUM, listed like the premium faceplates - in the Club and for sale on
+     their own (Joey 2026-11-20); the Essential door is free. */
   doorStyles: [
     { id: "essential",  label: "Essential" },
-    { id: "chevron",    label: "Chevron" },
-    { id: "edgelabel",  label: "EdgeLabel" },
-    { id: "classicpro", label: "Classic Pro" },
+    { id: "chevron",    label: "Chevron",     club: true },
+    { id: "edgelabel",  label: "EdgeLabel",   club: true },
+    { id: "classicpro", label: "Classic Pro", club: true },
   ],
   /* Cabinet door hardware (2026-11-19). A door is hinged on the left unless
      its unit says `hinge: "right"`; the hinge and latch sets are handed (each

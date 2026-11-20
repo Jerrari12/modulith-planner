@@ -99,3 +99,13 @@ test('a door style with no model gets no screw length', () => {
 test('Chevron is a door style, and the old ids are still accepted', () => {
   assert.deepEqual([...GEN2.doorStyles.map((s) => s.id)], ['essential', 'chevron', 'edgelabel', 'classicpro']);
 });
+
+test('the premium door styles are club, as the premium faceplates; the Essential door and the hardware are free', () => {
+  // Joey 2026-11-20: Chevron, EdgeLabel and Classic Pro doors are listed like the premium faceplates - Club and for sale
+  assert.deepEqual([...GEN2.doorStyles.filter((s) => s.club).map((s) => s.id)], ['chevron', 'edgelabel', 'classicpro']);   // copied out of the vm realm
+  const chev = rows(base({ doorStyle: 'chevron', placed: [cab(1, 0, 2, 3)] }));
+  assert.equal(find(chev, /Chevron Door/)[0].club, true, 'the Chevron door row carries CLUB');
+  assert.ok(!find(chev, /Cabinet Hinge|Door Latch|Knob|Handle/).some((r) => r.club), 'the hinges, latches and grips stay free');
+  const ess = rows(base({ placed: [cab(1, 0, 2, 3)] }));
+  assert.ok(!find(ess, /Essential Door/)[0].club, 'the Essential door is free');
+});

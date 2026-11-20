@@ -108,7 +108,8 @@ export function computeBom(build, GEN2) {
        Never hand it to a basis: a basis choice is a stable id, and this
        one is display text that may be reworded. Use build.faceStyle. */
     const faceStyle = faceDef.label;
-    const doorStyle = GEN2.doorStyles.find((s) => s.id === build.doorStyle).label;
+    const doorDef = GEN2.doorStyles.find((s) => s.id === build.doorStyle);
+    const doorStyle = doorDef.label;   // a LABEL, like faceStyle: it feeds part names
     const sections = [];
 
     const count = (map, key, n = 1) => map.set(key, (map.get(key) || 0) + n);
@@ -301,7 +302,7 @@ export function computeBom(build, GEN2) {
       [...doors.entries()].sort().forEach(([key, qty]) => {
         const [size, hand] = key.split("|");
         items.push(Object.assign({
-          name: P.door(len, size, doorStyle, hand), qty,
+          name: P.door(len, size, doorStyle, hand), qty, club: doorDef.club,   // premium door styles, as the faceplates
           note: "Door matches the total width and height of the case + extenders." +
             (hand === "right" ? " Right-hinged: the mirror image of the left-hinged door." : ""),
           unreleased: GEN2.unreleased.includes("door"),
