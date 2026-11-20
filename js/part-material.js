@@ -98,7 +98,8 @@ export function partMaterialSpec(key, ctx = {}) {
      magnet is nickel plated, so it is drawn part metal: the palette's silver tints its reflections instead of reading
      as a pale plastic. Chosen by eye on the dark stage at Very High, 2026-11-19, from three: metalness 0.9 mirrored
      the dark studio and drew the disc near black; 0.75 at roughness 0.22 kept a dark face inside a chrome rim; 0.55
-     at 0.32 with the environment at 1.6 reads as grey plated metal with a lit edge. Bought, so colorLocked keeps the
+     at 0.32 with the environment at 1.6 reads as grey plated metal with a lit edge (that shot only: the other tiers and
+     the light stage were not looked at, and Fast has no environment to reflect). Bought, so colorLocked keeps the
      silver and no filament profile reaches it. */
   if (baseType(key) === 'Magnet') return { kind: 'physical', roughness: 0.32, metalness: 0.55, clearcoat: 0, clearcoatRoughness: 0, envMapIntensity: 1.6 };
 
