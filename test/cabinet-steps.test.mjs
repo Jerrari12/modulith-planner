@@ -1,7 +1,7 @@
 /* CABINET DOOR STEPS (Joey 2026-11-19): the hardware goes on in its own steps, each framed on the part going on - the
- * hinges (whole: each prints as one part, body and claws together), the latch clip on the case, the handle or knob onto
- * the door with its M3 screws and the door onto the hinges, then the door held 80 % open for the latch clip on the door
- * and the back of the handle. They come after the covers, when every case is home, so no shot chases a staged part.
+ * hinges (whole: each prints as one part, body and claws together) and the latch clips on the case, each brought in
+ * clear of the wall and then out against it; the door's own latch clips while it is loose, then the door onto the
+ * hinges; the handle or knob last, on the hung door swung open. They come after the covers, when every case is home.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,29 +18,30 @@ test('the door hardware gets four steps of its own, after the covers', () => {
   const t = titles(m);
   const k = t.indexOf('Cabinet hinges');
   assert.ok(k > t.indexOf('Upper cover'), 'after the covers');
-  assert.deepEqual(t.slice(k, k + 4), ['Cabinet hinges', 'Latch clips on the case', 'Handle, then the door', 'Latch clips on the door']);
+  assert.deepEqual(t.slice(k, k + 4), ['Cabinet hinges', 'Latch clips on the case', 'Latch clips, then the door', 'Handle']);
   // nothing of the door is shown in the case's own step any more
   const caseStep = m.steps.find((s) => s.title.startsWith('Bench: bottom case'));
   const shownThere = caseStep.phases.flatMap((p) => (Array.isArray(p.enter) ? p.enter : []).map((e) => e.id));
   assert.ok(!shownThere.some((id) => /^(door|cb[hcp]|cl[sd]|cm[sd]|dg|dsc)/.test(id)), 'the case step installs no door hardware');
 });
 
-test('each step frames its own part; the hinge goes on whole; the door holds 80 % open for its clip and closes again', () => {
+test('each step frames its own part; the hinge goes on whole; the grip goes on last, on the door held 80 % open', () => {
   const m = generateManifest(build({ placed: [cab()] })).manifest;
   const step = (title) => m.steps.find((s) => s.title === title);
   const hinges = step('Cabinet hinges');
   const firstEnter = hinges.phases.find((p) => Array.isArray(p.enter)).enter.map((e) => e.id);
   assert.deepEqual(firstEnter.sort(), ['cbc0a', 'cbh0a'], 'body and claws arrive together');
   assert.ok(hinges.phases.some((p) => p.camera), 'the camera moves to the second hinge');
-  const grip = step('Handle, then the door');
+  const grip = step('Handle');
   const screws = grip.phases.flatMap((p) => (Array.isArray(p.enter) ? p.enter : [])).filter((e) => e.id.startsWith('dsc'));
   assert.equal(screws.length, 2, 'two M3 screws for a handle');
   assert.ok(screws.every((e) => e.spin), 'they thread in');
-  const clip = step('Latch clips on the door');
-  const swings = clip.phases.filter((p) => p.swing).map((p) => p.swing[0].to);
-  assert.deepEqual(swings, [0.8, 0], 'open to 80 %, then shut');
+  const swings = grip.phases.filter((p) => p.swing).map((p) => p.swing[0].to);
+  assert.deepEqual(swings, [0.8, 0], 'open to 80 % for the grip, then shut');
+  const iGrip = grip.phases.findIndex((p) => (p.enter || []).some((e) => e.id === 'dg0'));
+  assert.ok(iGrip > grip.phases.findIndex((p) => p.swing), 'the grip goes on with the door already open');
   const one = generateManifest(build({ gridW: 2, gridH: 1, placed: [cab({ w: 1, hh: 2, hinge: 'right' })] })).manifest;
-  const knobStep = one.steps.find((s) => s.title === 'Knob, then the door');
+  const knobStep = one.steps.find((s) => s.title === 'Knob');
   assert.ok(knobStep, 'a 1H door takes a knob');
   assert.equal(knobStep.phases.flatMap((p) => (Array.isArray(p.enter) ? p.enter : [])).filter((e) => e.id.startsWith('dsc')).length, 1, 'on one screw');
 });
@@ -78,9 +79,11 @@ test('each latch clip takes its 10x2 magnet before it goes in, from where its po
     const firstMove = caseStep.phases.findIndex((p) => (p.move || []).some((mv) => mv.id === 'cls0a'));
     assert.ok(firstMove > mag.n, 'and only then does the clip go in');
     assert.match(caseStep.note, /10×2 mm magnet/); assert.match(caseStep.note, /attract/); assert.match(caseStep.note, /mark/);
-    const doorStep = step('Latch clips on the door');
+    const doorStep = step('Latch clips, then the door');
     const dflat = doorStep.phases.flatMap((p, n) => (p.enter || []).map((e) => ({ ...e, n })));
     assert.ok(dflat.find((e) => e.id === 'cmd0a').n > dflat.find((e) => e.id === 'cld0a').n);
+    const hung = doorStep.phases.findIndex((p) => p.appear);
+    assert.ok(dflat.find((e) => e.id === 'cld0a').n < hung, 'the door takes its clips while it is loose, before it is hung');
     assert.match(doorStep.note, /magnet/); assert.match(doorStep.note, /mark/);
     const row = m.parts.find((p) => p.node === 'Magnet_10x2mm');
     assert.equal(row.qty, 4); assert.ok(row.purchased);
@@ -98,7 +101,7 @@ test('the door is hung on claws turned 80 % open; with two hinges the top one fi
     assert.ok(push > iOpen, 'then the door is pressed onto them');
     assert.ok(st.phases.slice(iOpen + 1, push).some((p) => p.camera), 'framed close on the claws first');
     // every door part nets to home by the end of the step, and the door is shut again
-    for (const id of ['door0', 'dg0']) {
+    for (const id of ['door0', 'cld0a', 'cmd0a']) {
       const net = [0, 1, 2].map((j) => st.phases.flatMap((p) => [...(p.enter || []).filter((e) => e.id === id).map((e) => (e.at || [0, 0, 0]).map((v, j) => v + (e.via ? e.via.at(-1)[j] : 0))),
         ...(p.move || []).filter((mv) => mv.id === id).map((mv) => mv.by)]).reduce((a, v) => a + v[j], 0));
       assert.ok(net.every((v) => Math.abs(v) < 1e-9), `${id} ends home (${net})`);
@@ -138,7 +141,7 @@ test('the door slides onto the claws along its own width (the fingers), and a cr
   for (const hinge of ['left', 'right']) {
     const s = hinge === 'right' ? -1 : 1;
     const m = generateManifest(build({ placed: [cab({ hinge })] })).manifest;
-    const st = m.steps.find((x) => x.title === 'Handle, then the door');
+    const st = m.steps.find((x) => /then the door$/.test(x.title));
     const a = -s * 100 * 0.8 * Math.PI / 180, nO = [Math.sin(a), 0, Math.cos(a)], wO = [Math.cos(a), 0, -Math.sin(a)];
     const push = st.phases.find((p) => (p.move || []).some((mv) => mv.id === 'door0' && mv.ease === 'detent')).move.find((mv) => mv.id === 'door0').by;
     const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
@@ -147,5 +150,21 @@ test('the door slides onto the claws along its own width (the fingers), and a cr
     const tilt = st.phases.find((p) => p.swing && p.swing[0].tilt).swing[0].tilt;
     assert.ok(Math.abs(dot(tilt.axis, nO) - 1) < 1e-9, `${hinge}: the tip turns about the door's normal`);
     assert.equal(Math.sign(tilt.deg), s, `${hinge}: its bottom farther from the hinge`);
+  }
+});
+
+test('the hinges and the case latch clips come in clear of the wall, then out against it, then down', () => {
+  for (const hinge of ['left', 'right']) {
+    const s = hinge === 'right' ? -1 : 1;
+    const m = generateManifest(build({ placed: [cab({ hinge })] })).manifest;
+    for (const [title, id, inward] of [['Cabinet hinges', 'cbh0a', s], ['Latch clips on the case', 'cls0a', -s]]) {
+      const st = m.steps.find((x) => x.title === title);
+      const enter = st.phases.flatMap((p) => p.enter || []).find((e) => e.id === id);
+      assert.equal(Math.sign(enter.at[0]), inward, `${hinge} ${id}: held toward the case's middle`);
+      const moves = st.phases.map((p) => (p.move || []).find((mv) => mv.id === id)).filter(Boolean).map((mv) => mv.by);
+      const iBack = moves.findIndex((b) => b[2] < 0), iOut = moves.findIndex((b) => b[0] !== 0), iDown = moves.findIndex((b) => b[1] < 0);
+      assert.ok(iBack >= 0 && iBack < iOut && iOut < iDown, `${hinge} ${id}: back, then out against the wall, then down`);
+      assert.ok(Math.abs(moves[iOut][0] + enter.at[0]) < 1e-9, `${hinge} ${id}: out by exactly what it was held in`);
+    }
   }
 });

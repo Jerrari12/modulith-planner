@@ -5498,11 +5498,18 @@ async function playStep(i) {
       // compensating the translation (p → R(p−c)+c). Positive θ reads CLOCKWISE
       // from behind the plate — where the person holding the driver is.
       const child = e.spin ? inst.group.children[0] : null;
+      /* a part a held swing has posed (a handle screw threading into a door swung open, 2026-11-19): the spin goes on
+         top of that pose - child = P * S, P the rig's pose of the child, S the turn about the part's own centre - and
+         lands back on P, so the screw ends turned with the door */
+      let rigPart = null;
+      if (child) for (const rig of swingRigs.values()) { rigPart = rig.parts.find(q => q.id === e.id && q.P) || null; if (rigPart) break; }
+      const S = rigPart ? new THREE.Matrix4() : null, SP = rigPart ? new THREE.Matrix4() : null;
       let pivot = null;
       if (child) {
         child.rotation.set(0, 0, 0); child.position.set(0, 0, 0);
         inst.group.updateMatrixWorld(true);
         pivot = inst.group.worldToLocal(new THREE.Box3().setFromObject(child).getCenter(new THREE.Vector3()));
+        if (rigPart) rigPart.P.decompose(child.position, child.quaternion, child.scale);   // no frame shows it unturned
       }
       jobs.push(tween({
         duration: (DUR.enter + DUR.via * (e.via?.length || 0)) * pace, delay: ph.sync ? 0 : n * DUR.stagger * pace,
@@ -5510,10 +5517,14 @@ async function playStep(i) {
           if (child) {
             // land on a whole number of turns so the resting pose is identity
             const th = k >= 1 ? 0 : e.spin * Math.PI * 2 * k;
-            child.rotation.z = th;
-            child.position.set(
-              pivot.x - (pivot.x * Math.cos(th) - pivot.y * Math.sin(th)),
-              pivot.y - (pivot.x * Math.sin(th) + pivot.y * Math.cos(th)), 0);
+            const px = pivot.x - (pivot.x * Math.cos(th) - pivot.y * Math.sin(th)), py = pivot.y - (pivot.x * Math.sin(th) + pivot.y * Math.cos(th));
+            if (rigPart) {
+              S.makeRotationZ(th).setPosition(px, py, 0);
+              SP.copy(rigPart.P).multiply(S).decompose(child.position, child.quaternion, child.scale);
+            } else {
+              child.rotation.z = th;
+              child.position.set(px, py, 0);
+            }
           }
           if (!total) { inst.group.position.copy(pts[pts.length - 1]); return; }
           const d = k * total;
@@ -5648,6 +5659,7 @@ async function playStep(i) {
         for (const p of rig.parts) {
           M.copy(p.Gi).multiply(tilt && tf && tilt.ids.has(p.id) ? Wt : W).multiply(p.G).multiply(p.C0);
           M.decompose(p.child.position, p.child.quaternion, p.child.scale);
+          (p.P || (p.P = new THREE.Matrix4())).copy(M);   // kept for a verb that poses the child on top (spin)
         }
         rig.f = f; rig.tf = tf;
       };
