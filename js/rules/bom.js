@@ -310,7 +310,7 @@ export function computeBom(build, GEN2) {
       ["left", "right"].forEach((hand) => {
         if (hinges.get(hand)) items.push(Object.assign({
           name: P.hinge(hand), qty: hinges.get(hand),
-          note: "Hinges are 1H · 1H cabinets take 1 hinge, taller cabinets take 2. Handed: hinge body, claws and 4 pegs.",
+          note: "Hinges are 1H · 1H cabinets take 1 hinge, taller cabinets take 2. Handed: hinge body, claws and 4 pegs · prints in one piece; a short length of filament through it as the pin makes it stronger and smoother (optional).",
           unreleased: GEN2.unreleased.includes("hinge"),
         }, fillReasons("cabinet")));
         if (latches.get(hand)) items.push(Object.assign({
@@ -319,6 +319,14 @@ export function computeBom(build, GEN2) {
           unreleased: GEN2.unreleased.includes("latch"),
         }, fillReasons("cabinet")));
       });
+      /* each latch is a magnetic catch: a 10×2 mm round magnet in the side clip and one in the door
+         clip (Joey's cabinet assembly video, 2026-04-06). Same buy row as the drawer magnet clips. */
+      const latchCount = (latches.get("left") || 0) + (latches.get("right") || 0);
+      if (latchCount) items.push(Object.assign({
+        name: "Magnets 10×2mm or 6×2mm", qty: 2 * latchCount,
+        note: "The door latches take the 10×2 mm magnets · one in the side clip, one in the door clip. Check the pair attracts before seating it.",
+        hardware: true,
+      }, fillReasons("cabinet")));
       /* the door's grip (2026-11-19): a knob on a 1H door's single centre hole,
          a handle on a taller door's two holes; the chosen handle series names
          both (a series with no knob falls back to the first that has one). */

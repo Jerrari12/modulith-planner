@@ -57,6 +57,13 @@ test('a left- and a right-hinged cabinet bill their own doors and handed hinge a
   for (const r of [...doors, ...find(rs, /Cabinet Hinge|Door Latch/)]) assert.ok(r.unreleased, `${r.name} is still unreleased`);
 });
 
+test('each latch takes two 10×2 mm magnets, one per clip', () => {
+  const rs = rows(base({ placed: [cab(1, 0, 1, 1), cab(2, 1, 2, 3, { hinge: 'right' })] }));
+  const mags = rs.filter((r) => r.name === 'Magnets 10×2mm or 6×2mm');
+  assert.equal(mags.reduce((n, r) => n + r.qty, 0), 2 * (1 + 2), 'a 1H cabinet has 1 latch, a 3H has 2');
+  assert.match(mags[0].note, /10×2 mm/);
+});
+
 test('a 1H door takes one knob and one screw; a taller door takes a handle and two', () => {
   const rs = rows(base({ placed: [cab(1, 0, 1, 1), cab(2, 1, 2, 1), cab(3, 3, 2, 2)] }));
   const knob = find(rs, /Knob$/);
