@@ -5584,6 +5584,40 @@ async function playStep(i) {
         onUpdate: k => inst.group.position.lerpVectors(fromV, to, ease ? ease(k) : k)
       }));
     });
+    /* swing (2026-11-19, the first-look cabinet): turn parts about a VERTICAL axis through a world point - a door on
+       its hinge - open by `deg` and back shut within the one phase, so the step's after-state never sees it. The axis
+       is given in the `anchor` instance's own frame (`pivot: [x, z]`, the door's), so it follows the anchor wherever a
+       stage has put it. Like `spin` and `dip` it drives each part's INNER CHILD - child = G^-1 * W(theta) * G, with G
+       the part's rest transform and W the world turn - so a part with its own pose (the handle stands upright) turns
+       about the same world axis, and applyState's child-zeroing heals an interrupted swing. */
+    (ph.swing || []).forEach(sw => {
+      const anchor = instances.get(sw.anchor);
+      if (!anchor) return;
+      anchor.group.updateMatrixWorld(true);
+      const pivotW = anchor.group.localToWorld(new THREE.Vector3(sw.pivot[0], 0, sw.pivot[1]));
+      const parts = (sw.ids || []).map(id => instances.get(id)).filter(Boolean).map(inst => {
+        const child = inst.group.children[0];
+        child.position.set(0, 0, 0); child.rotation.set(0, 0, 0);
+        child.updateMatrix(); inst.group.updateMatrixWorld(true);
+        // C0 keeps the child's own rest scale in the product, so the turn never rewrites it (closed = C0 exactly)
+        return { child, C0: child.matrix.clone(), G: inst.group.matrixWorld.clone(), Gi: inst.group.matrixWorld.clone().invert() };
+      });
+      const T = new THREE.Matrix4(), R = new THREE.Matrix4(), Ti = new THREE.Matrix4(), M = new THREE.Matrix4();
+      const open = THREE.MathUtils.degToRad(sw.deg || -100);
+      const sm = x => x * x * (3 - 2 * x);
+      jobs.push(tween({
+        duration: sw.duration || 2600, delay: sw.hold || 0,
+        onUpdate: k => {
+          // out over the first 40 %, held open to 60 %, back shut by the end; exactly closed at k >= 1
+          const f = k >= 1 ? 0 : k < 0.4 ? sm(k / 0.4) : k < 0.6 ? 1 : sm(1 - (k - 0.6) / 0.4);
+          T.makeTranslation(pivotW.x, pivotW.y, pivotW.z); R.makeRotationY(open * f); Ti.makeTranslation(-pivotW.x, -pivotW.y, -pivotW.z);
+          for (const p of parts) {
+            M.copy(p.Gi).multiply(T).multiply(R).multiply(Ti).multiply(p.G).multiply(p.C0);
+            M.decompose(p.child.position, p.child.quaternion, p.child.scale);
+          }
+        }
+      }));
+    });
     // fade: materialize instances at their final position ("…and repeat for
     // the rest") — one demonstrated install + a fade keeps big kits one step
     (ph.fade || []).forEach((f, n) => {

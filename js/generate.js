@@ -410,13 +410,29 @@ const EXT_PACE = 1.4;
    the windows, a beat, then straight down to lock. 3.8 mm is geometric, the float-clip relief plus the lock clip's
    travel (measurements.md), not a guess; `out` is the handoff's suggested 30. */
 const SIDE = { x: 0.025, y: 0.4, z: 4.0, out: 30, lift: 3.8, hold: 450 };
+/* ---- CABINET, FIRST LOOK (2026-11-19): the 240 2W-4H Essential cabinet, left-hinged -------------------------------
+   Placed from the parts themselves (session notes, MODULITH measurements.md "cabinet door hardware"): the hinge body's
+   four pegs and the latch side clip's four go OUTWARD through the case side wall's front sockets (3.0 x 10 mm, 11 mm
+   apart along the depth, rows 28 mm apart), the plates on the wall's inner face (X = -/+82 at the front of a 2W); the
+   hinge's pin axis lands at X -84, Z 124.7 (4.7 mm in front of the case face), the claws sit between the case front
+   and the door, and the door's hinge slots meet the claws' holes - which puts the door's bottom 3.85 mm up and its top
+   0.15 mm under the 4H stack's top. CAB holds each part's GLB position relative to the 1H case's instance position
+   for the BOTTOM ring; the top ring's hinge and latch add three rings. CAB.pivot is the hinge axis in DOOR-local x, z.
+   Only this one size exists as models so far; every other cabinet keeps the "not in 3D yet" refusal. */
+const CAB = {
+  hingeBody: [-83.751, 6.849, 115.349], claws: [-77.750, 13.349, 124.449],
+  sideClip: [82.024, 9.849, 110.999], doorClip: [73.700, 9.849, 117.274],
+  door: [1.425, 3.850, 124.700], handle: [67.425, 115.35, 139.2],
+  pivot: [-85.425, 0], open: -100,
+};
+const isCabSlice = (u, L) => u.fill === 'cabinet' && +L === 240 && u.w === 2 && u.hh === 8 && !(Array.isArray(u.interior) && u.interior.length);
 /* the 27 released sizes: the 59 in 0.5H and 1H, the other five collections in 0.5H/1H/1.5H/2H/3H (in half-rows).
    js/rules/bom.js keeps the same table in its side cover rows; test/side-covers.test.mjs holds the stage to that bill. */
 const sideCoverHH = L => (L === 59 ? [1, 2] : [1, 2, 3, 4, 6]);
 /* A shelf taller than any side cover made for its length is a 1H case with case extenders on it, so it takes one 1H
    cover per level on each exposed side - as a cabinet of stacked 1H rings does (vault rules.md, "Side covers"). The 59's
    covers stop at 1H, so its 3H shelf takes three a side (Joey, 2026-11-08, for the 59 wall shelf kit). The bill's rule. */
-const stackedSideCovers = (u, L) => u.fill === 'shelf' && u.hh > 2 && u.hh % 2 === 0 && !sideCoverHH(L).includes(u.hh) && sideCoverHH(L).includes(2);
+const stackedSideCovers = (u, L) => (u.fill === 'shelf' || isCabSlice(u, L)) && u.hh > 2 && u.hh % 2 === 0 && !sideCoverHH(L).includes(u.hh) && sideCoverHH(L).includes(2);
 
 // Amazon affiliate buy links for purchased hardware (Joey's, 2026-07-12) —
 // rendered as extra chips after Printables/Thangs in the BOM checklist +
@@ -1078,7 +1094,7 @@ export function generateManifest(build, opts = {}) {
        simple cabinet as (1 + shelves) CASES plus the remaining extenders, and an
        advanced one per mixed-width compartment. Do not reach for `ringsOf` here
        when the doors land — read the planner's cabinet branch. */
-    if (u.fill === 'cabinet') errors.push('Cabinet units need the door, hinge and latch models, which are not in the 3D library yet · the case extenders they stack are.');
+    if (u.fill === 'cabinet' && !(isCabSlice(u, L) && build.mount === 'tabletop')) errors.push('Cabinet units need the door, hinge and latch models, which are not in the 3D library yet · the case extenders they stack are. (First look: only the 240 2W-4H cabinet has them, on a tabletop build.)');
   }
   // support check: tabletop stacks bottom-up (each column rests on a unit top);
   // hanging mounts go top-down (each column hangs off a unit above). Mount flips it.
@@ -1484,7 +1500,7 @@ export function generateManifest(build, opts = {}) {
        (1 + shelves) CASES plus the remaining extenders, and an advanced one a
        case/extender/insert stack per mixed-width compartment — so this must not
        silently become the cabinet rule the day the door models land. */
-    const isShelfUnit = u.fill === 'shelf';
+    const isShelfUnit = u.fill === 'shelf' || isCabSlice(u, L);   // the first-look cabinet stacks the same way
     const rings = isShelfUnit ? u.hh / 2 : 1;     // 1H rings; extenders = rings − 1
     const H = isShelfUnit ? '1' : H_LABEL[u.hh];
     const caseNode = `${L}-${u.w}W-${H}H_Case`;
@@ -1630,7 +1646,7 @@ export function generateManifest(build, opts = {}) {
        store links (main.js renders no link block when `links` is absent) and
        say so in their note — the viewer's honest equivalent of the planner's
        "coming soon" gate. Wire LINKS/LINKS_BY_LEN the day the pages go live. */
-    const isShelf = u.fill === 'shelf';
+    const isShelf = u.fill === 'shelf' || isCabSlice(u, L);   // a cabinet's bottom insert sits where a shelf's does
     /* 'front' | 'both'; the field's ABSENCE is "no lip". A rear-only shelf is
        deliberately not expressible - Joey's rule is front first, always
        (2026-08-28), so the control is a 3-state cycle and a shelf can never
@@ -1699,6 +1715,39 @@ export function generateManifest(build, opts = {}) {
       return { id, side, x: side < 0 ? left + SIDE.x : right - SIDE.x };
     })) : [];
     if (hangs) members.push(...scIds.map(s => s.id));
+    /* ---- cabinet door + hardware (first look) ---- */
+    const cab = isCabSlice(u, L) ? (() => {
+      const at = (o, ring = 0) => [cx + o[0], bottom + o[1] + ring * PITCH_HALF_Y * 2, o[2]];
+      const top = rings - 1;
+      const ids = { body: [`cbh${i}a`, `cbh${i}b`], side: [`cls${i}a`, `cls${i}b`], claws: [`cbc${i}a`, `cbc${i}b`], dclip: [`cld${i}a`, `cld${i}b`], door: `door${i}`, handle: `dh${i}` };
+      [0, top].forEach((ring, k) => {
+        inst.push({ id: ids.body[k], node: 'CabinetHinge_Body_L', pos: at(CAB.hingeBody, ring), owner: u.id, ...stg });
+        inst.push({ id: ids.side[k], node: 'CabinetLatch_Side_R', pos: at(CAB.sideClip, ring), owner: u.id, ...stg });
+        inst.push({ id: ids.claws[k], node: 'CabinetHinge_Claws_L', pos: at(CAB.claws, ring), owner: u.id, rides: ids.door, ...stg });
+        inst.push({ id: ids.dclip[k], node: 'CabinetLatch_Door_R', pos: at(CAB.doorClip, ring), owner: u.id, rides: ids.door, ...stg });
+      });
+      inst.push({ id: ids.door, node: 'Door_Essential_2W-4H', pos: at(CAB.door), owner: u.id, ...stg });
+      inst.push({ id: ids.handle, node: 'Handle_Deco', pos: at(CAB.handle), rot: [0, 0, 90], owner: u.id, rides: ids.door, ...stg });
+      add('Door_Essential_2W-4H', 'Essential Door 2W-4H', 'Faceplate', null, 1, false, false, { requirement: REQ.core('unit.fill') }, 'First look · not published yet.');
+      add('CabinetHinge_Body_L', 'Cabinet Hinge (left) - body', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') }, 'Prints in one piece with its claws.');
+      add('CabinetHinge_Claws_L', 'Cabinet Hinge (left) - claws', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') });
+      add('CabinetLatch_Side_R', 'Door Latch (R) - side clip', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
+      add('CabinetLatch_Door_R', 'Door Latch (R) - door clip', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
+      add('Handle_Deco', 'Deco Handle', 'Handle', null, 1, false, false, { requirement: REQ.core('drawer.grip') });
+      members.push(...ids.body, ...ids.side, ...ids.claws, ...ids.dclip, ids.door, ids.handle);
+      const riders = [ids.door, ...ids.claws, ...ids.dclip, ids.handle];
+      const phases = [
+        // hinges and latch side clips: in through the open front, then pushed DOWN to lock on the mini dovetails
+        { enter: [...ids.body, ...ids.side].map(id => ({ id, at: [0, SIDE.lift, 0], from: [0, 0, 60] })) },
+        { move: [...ids.body, ...ids.side].map(id => ({ id, by: [0, -SIDE.lift, 0], hold: SIDE.hold, ease: 'detent' })) },
+        // the door, handle bolted on and door clips fitted, pops onto the hinge claws
+        { sync: true, enter: riders.map(id => ({ id, from: [0, 0, 70] })) },
+        // and swings open and shut on the hinge axis
+        { swing: [{ anchor: ids.door, pivot: CAB.pivot, deg: CAB.open, ids: riders }] },
+      ];
+      const note = ' Hinges and the R latch clips press into the front mini-dovetail slots from inside and push down to lock; the door (Deco handle on two M3×8 screws, a 10×2 mm magnet in each door clip) pops onto the hinge claws. First look: one size, left-hinged.';
+      return { ids, phases, note };
+    })() : null;
     /* Close on EACH cover from its own outer side, where no neighbour stands between the camera and it: the 3.8 mm
        slide is the whole lesson, and at a step's own framing it is a few pixels. Framed on the FRONT part of the
        cover, where its top edge passes the case's: the whole cover at 1.15 of its own sphere measured ~6 px of slide
@@ -2068,6 +2117,7 @@ export function generateManifest(build, opts = {}) {
           + lipText(lipIds.length) + extText;
         if (firstShelfDemo === null) firstShelfDemo = i;
       }
+      if (cab) { step.phases.push(...cab.phases); step.note = (step.note ? step.note : '') + cab.note; }
     }
     if (hangs) steps.push(step);
     else if (!isBase) {
