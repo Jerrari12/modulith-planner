@@ -401,13 +401,17 @@ test('the 59 and the 3W-3H exclusion are DRAWER caps, not shelf caps', () => {
   }
 });
 
-test('cabinets are still refused - and no longer blame the extenders', () => {
+test('a plain cabinet builds in 3D (2026-11-19); one with a custom interior is still refused', () => {
   const g = generateManifest(build(185, { placed: [{ ...shelf(1), fill: 'cabinet' }] }));
-  assert.ok((g.errors || []).length, 'cabinets need door/hinge/latch models');
-  const why = g.errors.join(' ');
-  assert.match(why, /door/i, 'the reason names what is actually missing');
-  assert.doesNotMatch(why, /extenders? (models )?(are |is )?not/i,
-    'the extenders shipped 2026-08-29 - the old reason is now false');
+  assert.deepEqual(g.errors || [], [], 'the door, hinge and latch models exist now');
+  const nodes = g.manifest.instances.map((i) => i.node);
+  assert.ok(nodes.includes('Door_Essential_1W-1H'), 'the door');
+  assert.ok(nodes.includes('CabinetHinge_Body_L') && nodes.includes('CabinetHinge_Claws_L'), 'a left-hinged hinge');
+  assert.ok(nodes.includes('Knob_Deco'), 'a 1H door takes a knob');
+  const r = generateManifest(build(185, { placed: [{ ...shelf(1), fill: 'cabinet', interior: [{ x: 0, y: 0, w: 1, h: 1 }] }] }));
+  assert.ok((r.errors || []).length, 'a custom interior is not in 3D yet');
+  assert.match(r.errors.join(' '), /interior/i, 'and says why');
+  assert.doesNotMatch(r.errors.join(' '), /extenders? (models )?(are |is )?not/i, 'never blames the extenders');
 });
 
 test('an extender slides on from behind exactly as a case does, never drops (Joey 2026-09-21)', () => {

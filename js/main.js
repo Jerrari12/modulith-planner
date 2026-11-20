@@ -5236,6 +5236,7 @@ function buildAfterState() {
 }
 function applyState(i) { // instant snap to "after step i" (i = -1 for nothing)
   killTweens();
+  openDoor = null;   // the child reset below closes any door the planner had swung open
   const st = i < 0 ? { visible: new Set(), settled: new Set() } : afterState[i];
   for (const inst of instances.values()) {
     inst.group.visible = st.visible.has(inst.cfg.id) && !inst.styleHidden; // styleHidden: bolt-on handles while an EdgeLabel plate is active
@@ -9968,6 +9969,8 @@ async function drawThumb(s, { plain = false } = {}) {
   if (!gen.manifest) throw new Error((gen.errors || []).join(' · ') || 'no preview');
   const m = gen.manifest;
   for (const part of m.parts) { if (!typeByNode[part.node]) typeByNode[part.node] = part.type; if (!partInfoByNode[part.node]) partInfoByNode[part.node] = part; }
+  // a model with no parts-list row of its own names its type on the instance (a cabinet hinge's claws: the hinge prints as one part, billed on its body)
+  for (const inst of m.instances) if (inst.type && !typeByNode[inst.node]) typeByNode[inst.node] = inst.type;
   const keep = m.instances.filter(c => THUMB_TYPES.has(typeByNode[c.node]));
   if (handle && !typeByNode[handle.node]) typeByNode[handle.node] = 'Handle';   // a variant the build has never worn (applyHandleStyle does the same)
   const nodes = [...new Set(keep.map(c => c.node).concat(handle ? [handle.node] : []))];
@@ -10458,16 +10461,55 @@ function selectUnit(unitId) {
   setSelected(list[0].cfg.id);
   return true;
 }
+/* ---- a cabinet door, swung open on demand (Build's Open door, 2026-11-19) ----
+   The generator gives a door instance `hinge: { pivot: [x, z] in the door's frame, deg }`; every instance that
+   `rides` the door (its claws, door clips and grip) turns with it. Same inner-child method as the `swing` phase:
+   child = G^-1 * W(theta) * G * C0, so applyState's child reset closes it again on any step change. */
+let openDoor = null;   // the rig of the door last swung { door, parts, pivotW, deg, f, token } - kept while it closes, so a reversal starts where it is
+function doorRig(door) {
+  door.group.updateMatrixWorld(true);
+  const pivotW = door.group.localToWorld(new THREE.Vector3(door.cfg.hinge.pivot[0], 0, door.cfg.hinge.pivot[1]));
+  const riders = [door, ...[...instances.values()].filter(i => i.cfg.rides === door.cfg.id && i.group.visible)];
+  const parts = riders.map(inst => {
+    const child = inst.group.children[0];
+    child.position.set(0, 0, 0); child.rotation.set(0, 0, 0); child.updateMatrix(); inst.group.updateMatrixWorld(true);
+    return { child, C0: child.matrix.clone(), G: inst.group.matrixWorld.clone(), Gi: inst.group.matrixWorld.clone().invert() };
+  });
+  return { door, parts, pivotW, deg: door.cfg.hinge.deg, f: 0, token: 0 };
+}
+function poseDoor(rig, f) {
+  const T = new THREE.Matrix4().makeTranslation(rig.pivotW.x, rig.pivotW.y, rig.pivotW.z);
+  const R = new THREE.Matrix4().makeRotationY(THREE.MathUtils.degToRad(rig.deg) * f);
+  const Ti = new THREE.Matrix4().makeTranslation(-rig.pivotW.x, -rig.pivotW.y, -rig.pivotW.z);
+  const M = new THREE.Matrix4();
+  for (const p of rig.parts) { M.copy(p.Gi).multiply(T).multiply(R).multiply(Ti).multiply(p.G).multiply(p.C0); M.decompose(p.child.position, p.child.quaternion, p.child.scale); }
+  rig.f = f; markShadowDirty(); invalidateFrame();
+}
+function swingDoor(rig, to) {
+  // only the newest swing of a rig moves it: an older tween still running (a close reversed into an open) goes quiet
+  const from = rig.f, tok = ++rig.token, sm = x => x * x * (3 - 2 * x);
+  return tween({ duration: 650 * Math.max(0.2, Math.abs(to - from)), onUpdate: k => { if (rig.token === tok) poseDoor(rig, from + (to - from) * sm(Math.min(1, k))); } });
+}
 function peekUnit(unitId, { pills = true } = {}) {   // pills: false - the drawer opens without its inside sizes (the Colors card)
   const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
-  if (!d) return false;
+  if (!d) {
+    const door = unitInstances(unitId).find(i => i.cfg.hinge && i.group.visible);
+    if (!door) return false;
+    // one thing open at a time: a drawer another unit had out goes back in
+    if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; if (dFocus.peek) exitDrawerFocus(); }
+    if (openDoor && openDoor.door !== door) { swingDoor(openDoor, 0); openDoor = null; }
+    if (!openDoor) openDoor = doorRig(door);
+    swingDoor(openDoor, 1);
+    return true;
+  }
+  if (openDoor) { swingDoor(openDoor, 0); openDoor = null; }   // and a door another unit had open swings shut
   if (openCarrier && openCarrier !== d) slideDrawer(openCarrier, false);
   openCarrier = d; slideDrawer(d, true, drawerStop());   // "Open the drawer": out to the stopper
   enterDrawerFocus(d, { swing: false, peek: true, pills: pills ? 'fit' : 'none' });   // its inside W / L / H on the open drawer, the camera left alone
   invalidateFrame();
   return true;
 }
-function unpeek() { if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; } if (dFocus.peek) exitDrawerFocus(); invalidateFrame(); }
+function unpeek() { if (openDoor) swingDoor(openDoor, 0); if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; } if (dFocus.peek) exitDrawerFocus(); invalidateFrame(); }
 /* The Done room's drawer moment (js/scenes/done.js, 2026-10-23): a unit's drawer slides out a FRACTION of its travel and
    back again - no focus, no dims, no selection (the room shows no callouts). unitHasDrawer says whether a unit has one. */
 function unitHasDrawer(unitId) { return unitInstances(unitId).some(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible); }
@@ -11597,7 +11639,9 @@ async function mountManifest(m) {
      activeHex threw on their missing types (the e2e case measures both). No node changed type across a sweep of 72,480
      generated manifests (DECISIONS 2026-10-21), so maps that only grow answer for both builds, and a node in both takes
      the new build's row. drawThumb already adds its previews' parts to the same maps. */
+  openDoor = null;   // a remount brings new instances; Build re-opens what it was peeking at through peekUnit
   Object.assign(typeByNode, Object.fromEntries(m.parts.map(p => [p.node, p.type])));
+  for (const inst of m.instances) if (inst.type && !typeByNode[inst.node]) typeByNode[inst.node] = inst.type;   // a model billed on another part's row (a hinge's claws)
   Object.assign(partInfoByNode, Object.fromEntries(m.parts.map(p => [p.node, p])));
   syncBedFinish();   // before any material is built: the plate decides which program they get
   dropStaleAxisMaterials();   // and a faceplate or handle FAMILY change decides which way their layers run

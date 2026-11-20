@@ -876,7 +876,7 @@ export function mountBuild(stage, ctx) {
       el('button.seg.sm', { text: 'Right ▶', title: 'One column right · →', onclick: () => { select(unit.id); nudge('right'); } }),
     ])]));
     insp.appendChild(el('div.actions', {}, [
-      el('button.key' + (st.peeking === unit.id ? '.on' : ''), { text: st.peeking === unit.id ? 'Close drawer' : 'Open drawer', title: unit.fill === 'shelf' ? 'A shelf has nothing to open' : 'Slide the drawer open on the model', disabled: unit.fill === 'shelf', onclick: () => togglePeek(unit.id) }),
+      el('button.key' + (st.peeking === unit.id ? '.on' : ''), { text: unit.fill === 'cabinet' ? (st.peeking === unit.id ? 'Close door' : 'Open door') : (st.peeking === unit.id ? 'Close drawer' : 'Open drawer'), title: unit.fill === 'shelf' ? 'A shelf has nothing to open' : unit.fill === 'cabinet' ? 'Swing the door open on the model' : 'Slide the drawer open on the model', disabled: unit.fill === 'shelf', onclick: () => togglePeek(unit.id) }),
       el('button.key', { text: 'Duplicate', title: 'A copy on the nearest valid spot', onclick: () => duplicateUnit(unit.id) }),
       el('button.key.danger', { text: 'Remove', title: 'Remove this unit · Delete', onclick: () => removeUnit(unit.id) }),
     ]));
@@ -994,7 +994,7 @@ export function mountBuild(stage, ctx) {
     select(u.id);
     menu.replaceChildren(
       el('div.label', { text: `Unit · ${u.w}W·${u.hh / 2}H ${G.fills.find((f) => f.id === u.fill)?.label || u.fill}` }),
-      el('button.item', { role: 'menuitem', text: st.peeking === u.id ? 'Close drawer' : 'Open drawer', disabled: u.fill === 'shelf', onclick: () => { closeMenu(); togglePeek(u.id); } }),
+      el('button.item', { role: 'menuitem', text: u.fill === 'cabinet' ? (st.peeking === u.id ? 'Close door' : 'Open door') : (st.peeking === u.id ? 'Close drawer' : 'Open drawer'), disabled: u.fill === 'shelf', onclick: () => { closeMenu(); togglePeek(u.id); } }),
       el('button.item', { role: 'menuitem', text: 'Duplicate', onclick: () => { closeMenu(); duplicateUnit(u.id); } }),
       el('button.item.danger', { role: 'menuitem', text: 'Remove', onclick: () => { closeMenu(); removeUnit(u.id); } }),
     );

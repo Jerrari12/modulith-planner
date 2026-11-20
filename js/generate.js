@@ -410,29 +410,37 @@ const EXT_PACE = 1.4;
    the windows, a beat, then straight down to lock. 3.8 mm is geometric, the float-clip relief plus the lock clip's
    travel (measurements.md), not a guess; `out` is the handoff's suggested 30. */
 const SIDE = { x: 0.025, y: 0.4, z: 4.0, out: 30, lift: 3.8, hold: 450 };
-/* ---- CABINET, FIRST LOOK (2026-11-19): the 240 2W-4H Essential cabinet, left-hinged -------------------------------
-   Placed from the parts themselves (session notes, MODULITH measurements.md "cabinet door hardware"): the hinge body's
-   four pegs and the latch side clip's four go OUTWARD through the case side wall's front sockets (3.0 x 10 mm, 11 mm
-   apart along the depth, rows 28 mm apart), the plates on the wall's inner face (X = -/+82 at the front of a 2W); the
-   hinge's pin axis lands at X -84, Z 124.7 (4.7 mm in front of the case face), the claws sit between the case front
-   and the door, and the door's hinge slots meet the claws' holes - which puts the door's bottom 3.85 mm up and its top
-   0.15 mm under the 4H stack's top. CAB holds each part's GLB position relative to the 1H case's instance position
-   for the BOTTOM ring; the top ring's hinge and latch add three rings. CAB.pivot is the hinge axis in DOOR-local x, z.
-   Only this one size exists as models so far; every other cabinet keeps the "not in 3D yet" refusal. */
-const CAB = {
-  hingeBody: [-83.751, 6.849, 115.349], claws: [-77.750, 13.349, 124.449],
-  sideClip: [82.024, 9.849, 110.999], doorClip: [73.700, 9.849, 117.274],
-  door: [1.425, 3.850, 124.700], handle: [67.425, 115.35, 139.2],
-  pivot: [-85.425, 0], open: -100,
+/* ---- CABINETS (2026-11-19) ---------------------------------------------------------------------------------------
+   Placed from the parts themselves (MODULITH measurements.md, "cabinet door hardware"; Joey confirmed the mount): the
+   hinge body's four pegs and the latch side clip's four go OUTWARD through the side walls' front sockets (3.0 x 10 mm,
+   3-6 and 14-17 mm back from the case face, 10-20 and 38-48 mm up a ring - the same in the 115, 185 and 240 cases), the
+   plates on the wall's inner face, which is 6 mm in for the front 17 mm. The pin axis is 4 mm in from the hinge-side
+   outer wall and 4.7 mm in front of the case face; the claws sit between the case face and the door, whose back is
+   2.2 mm in front of it; the door's hinge slots meet the claws' holes, so its bottom is 3.85 mm up the stack and its
+   top 0.15 mm under the stack's top. Offsets below are for a LEFT-hinged door: x from the outer wall named, y from the
+   ring's bottom, z from the case face (+ toward the viewer); a right-hinged door is the mirror in x, with the mirrored
+   hardware (its letters swapped). Each part is a canonical GLB (gen2-parts branch cabinet-parts); `c` is where that
+   GLB's own origin lands. A 1H door takes a knob on its centre hole (a handle's hole pair would reach into the units
+   above and below, Joey 2026-11-18); taller doors take the build's handle upright on two holes 44 mm apart. */
+const CABINET = {
+  hingeBody: { wall: 'hinge', x: 4.249, y: 6.849, z: -4.651 },
+  claws: { wall: 'hinge', x: 10.25, y: 13.349, z: 4.449 },
+  sideClip: { wall: 'latch', x: -5.976, y: 9.849, z: -9.001 },
+  doorClip: { wall: 'latch', x: -14.30, y: 9.849, z: -2.726 },
+  hingeEdge: 6.425, doorY: 3.85, doorBack: 2.2, pivot: { x: 4.0, z: 4.7 }, handleIn: 21.5, open: 100,
+  // per door style: thickness, and how far its face reaches past the hinge edge (Chevron's strip lip)
+  styles: { essential: { label: 'Essential', t: 5.0, lip: 0 }, chevron: { label: 'Chevron', t: 6.5, lip: 1.148 } },
+  knobs: { deco: { node: 'Knob_Deco', label: 'Deco Knob', h: 31, d: 24 }, blockbar: { node: 'Knob_BlockBar', label: 'BlockBar Knob', h: 22, d: 9 } },
 };
-const isCabSlice = (u, L) => u.fill === 'cabinet' && +L === 240 && u.w === 2 && u.hh === 8 && !(Array.isArray(u.interior) && u.interior.length);
+/* the cabinets the stage can draw: a whole-height shell without the advanced interior */
+const isCabinet3D = (u, build) => u.fill === 'cabinet' && !(Array.isArray(u.interior) && u.interior.length);
 /* the 27 released sizes: the 59 in 0.5H and 1H, the other five collections in 0.5H/1H/1.5H/2H/3H (in half-rows).
    js/rules/bom.js keeps the same table in its side cover rows; test/side-covers.test.mjs holds the stage to that bill. */
 const sideCoverHH = L => (L === 59 ? [1, 2] : [1, 2, 3, 4, 6]);
 /* A shelf taller than any side cover made for its length is a 1H case with case extenders on it, so it takes one 1H
    cover per level on each exposed side - as a cabinet of stacked 1H rings does (vault rules.md, "Side covers"). The 59's
    covers stop at 1H, so its 3H shelf takes three a side (Joey, 2026-11-08, for the 59 wall shelf kit). The bill's rule. */
-const stackedSideCovers = (u, L) => (u.fill === 'shelf' || isCabSlice(u, L)) && u.hh > 2 && u.hh % 2 === 0 && !sideCoverHH(L).includes(u.hh) && sideCoverHH(L).includes(2);
+const stackedSideCovers = (u, L) => (u.fill === 'shelf' || u.fill === 'cabinet') && u.hh > 2 && u.hh % 2 === 0 && !sideCoverHH(L).includes(u.hh) && sideCoverHH(L).includes(2);
 
 // Amazon affiliate buy links for purchased hardware (Joey's, 2026-07-12) —
 // rendered as extra chips after Printables/Thangs in the BOM checklist +
@@ -1094,7 +1102,7 @@ export function generateManifest(build, opts = {}) {
        simple cabinet as (1 + shelves) CASES plus the remaining extenders, and an
        advanced one per mixed-width compartment. Do not reach for `ringsOf` here
        when the doors land — read the planner's cabinet branch. */
-    if (u.fill === 'cabinet' && !(isCabSlice(u, L) && build.mount === 'tabletop')) errors.push('Cabinet units need the door, hinge and latch models, which are not in the 3D library yet · the case extenders they stack are. (First look: only the 240 2W-4H cabinet has them, on a tabletop build.)');
+    if (u.fill === 'cabinet' && !isCabinet3D(u, build)) errors.push('Cabinets with a custom interior are not in 3D yet · a plain cabinet is.');
   }
   // support check: tabletop stacks bottom-up (each column rests on a unit top);
   // hanging mounts go top-down (each column hangs off a unit above). Mount flips it.
@@ -1500,7 +1508,7 @@ export function generateManifest(build, opts = {}) {
        (1 + shelves) CASES plus the remaining extenders, and an advanced one a
        case/extender/insert stack per mixed-width compartment — so this must not
        silently become the cabinet rule the day the door models land. */
-    const isShelfUnit = u.fill === 'shelf' || isCabSlice(u, L);   // the first-look cabinet stacks the same way
+    const isShelfUnit = u.fill === 'shelf' || isCabinet3D(u, build);   // a cabinet's shell stacks the same way
     const rings = isShelfUnit ? u.hh / 2 : 1;     // 1H rings; extenders = rings − 1
     const H = isShelfUnit ? '1' : H_LABEL[u.hh];
     const caseNode = `${L}-${u.w}W-${H}H_Case`;
@@ -1646,7 +1654,7 @@ export function generateManifest(build, opts = {}) {
        store links (main.js renders no link block when `links` is absent) and
        say so in their note — the viewer's honest equivalent of the planner's
        "coming soon" gate. Wire LINKS/LINKS_BY_LEN the day the pages go live. */
-    const isShelf = u.fill === 'shelf' || isCabSlice(u, L);   // a cabinet's bottom insert sits where a shelf's does
+    const isShelf = u.fill === 'shelf' || isCabinet3D(u, build);   // a cabinet's bottom insert sits where a shelf's does
     /* 'front' | 'both'; the field's ABSENCE is "no lip". A rear-only shelf is
        deliberately not expressible - Joey's rule is front first, always
        (2026-08-28), so the control is a 3-state cycle and a shelf can never
@@ -1715,38 +1723,69 @@ export function generateManifest(build, opts = {}) {
       return { id, side, x: side < 0 ? left + SIDE.x : right - SIDE.x };
     })) : [];
     if (hangs) members.push(...scIds.map(s => s.id));
-    /* ---- cabinet door + hardware (first look) ---- */
-    const cab = isCabSlice(u, L) ? (() => {
-      const at = (o, ring = 0) => [cx + o[0], bottom + o[1] + ring * PITCH_HALF_Y * 2, o[2]];
-      const top = rings - 1;
-      const ids = { body: [`cbh${i}a`, `cbh${i}b`], side: [`cls${i}a`, `cls${i}b`], claws: [`cbc${i}a`, `cbc${i}b`], dclip: [`cld${i}a`, `cld${i}b`], door: `door${i}`, handle: `dh${i}` };
-      [0, top].forEach((ring, k) => {
-        inst.push({ id: ids.body[k], node: 'CabinetHinge_Body_L', pos: at(CAB.hingeBody, ring), owner: u.id, ...stg });
-        inst.push({ id: ids.side[k], node: 'CabinetLatch_Side_R', pos: at(CAB.sideClip, ring), owner: u.id, ...stg });
-        inst.push({ id: ids.claws[k], node: 'CabinetHinge_Claws_L', pos: at(CAB.claws, ring), owner: u.id, rides: ids.door, ...stg });
-        inst.push({ id: ids.dclip[k], node: 'CabinetLatch_Door_R', pos: at(CAB.doorClip, ring), owner: u.id, rides: ids.door, ...stg });
+    /* ---- cabinet door + hardware ---- */
+    const cab = isCabinet3D(u, build) ? (() => {
+      const hand = u.hinge === 'right' ? 'right' : 'left';
+      const s = hand === 'right' ? -1 : 1;                        // +1: the hinge on the left (-X) wall
+      const hw = u.w * PITCH_X / 2, front = depth / 2, h = u.hh / 2;
+      const ds = CABINET.styles[build.doorStyle] || CABINET.styles.essential;
+      if (!CABINET.styles[build.doorStyle]) warnings.push(`${build.doorStyle} doors aren't modeled yet · showing the Essential door.`);
+      const wallX = (o) => s * (o.wall === 'hinge' ? -hw + o.x : hw + o.x);
+      const at = (o, ring) => [cx + wallX(o), bottom + o.y + ring * PITCH_HALF_Y * 2, front + o.z];
+      const rings3 = h >= 2 ? [0, rings - 1] : [0];
+      const tag = (k) => String.fromCharCode(97 + k);
+      const ids = { body: rings3.map((r, k) => `cbh${i}${tag(k)}`), side: rings3.map((r, k) => `cls${i}${tag(k)}`),
+                    claws: rings3.map((r, k) => `cbc${i}${tag(k)}`), dclip: rings3.map((r, k) => `cld${i}${tag(k)}`),
+                    door: `door${i}`, grip: `dg${i}` };
+      const R = hand === 'right';
+      const nodes = { body: `CabinetHinge_Body_${R ? 'R' : 'L'}`, claws: `CabinetHinge_Claws_${R ? 'R' : 'L'}`,
+                      side: `CabinetLatch_Side_${R ? 'L' : 'R'}`, dclip: `CabinetLatch_Door_${R ? 'L' : 'R'}`,
+                      door: `Door_${ds.label}_${u.w}W-${h}H${R ? '_RH' : ''}` };
+      rings3.forEach((ring, k) => {
+        inst.push({ id: ids.body[k], node: nodes.body, pos: at(CABINET.hingeBody, ring), owner: u.id, ...stg });
+        inst.push({ id: ids.side[k], node: nodes.side, pos: at(CABINET.sideClip, ring), owner: u.id, ...stg });
+        inst.push({ id: ids.claws[k], node: nodes.claws, pos: at(CABINET.claws, ring), owner: u.id, rides: ids.door, type: 'QuickLock', ...stg });   // no row of its own: billed on the body
+        inst.push({ id: ids.dclip[k], node: nodes.dclip, pos: at(CABINET.doorClip, ring), owner: u.id, rides: ids.door, ...stg });
       });
-      inst.push({ id: ids.door, node: 'Door_Essential_2W-4H', pos: at(CAB.door), owner: u.id, ...stg });
-      inst.push({ id: ids.handle, node: 'Handle_Deco', pos: at(CAB.handle), rot: [0, 0, 90], owner: u.id, rides: ids.door, ...stg });
-      add('Door_Essential_2W-4H', 'Essential Door 2W-4H', 'Faceplate', null, 1, false, false, { requirement: REQ.core('unit.fill') }, 'First look · not published yet.');
-      add('CabinetHinge_Body_L', 'Cabinet Hinge (left) - body', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') }, 'Prints in one piece with its claws.');
-      add('CabinetHinge_Claws_L', 'Cabinet Hinge (left) - claws', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') });
-      add('CabinetLatch_Side_R', 'Door Latch (R) - side clip', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
-      add('CabinetLatch_Door_R', 'Door Latch (R) - door clip', 'QuickLock', null, 2, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
-      add('Handle_Deco', 'Deco Handle', 'Handle', null, 1, false, false, { requirement: REQ.core('drawer.grip') });
-      members.push(...ids.body, ...ids.side, ...ids.claws, ...ids.dclip, ids.door, ids.handle);
-      const riders = [ids.door, ...ids.claws, ...ids.dclip, ids.handle];
-      const phases = [
-        // hinges and latch side clips: in through the open front, then pushed DOWN to lock on the mini dovetails
-        { enter: [...ids.body, ...ids.side].map(id => ({ id, at: [0, SIDE.lift, 0], from: [0, 0, 60] })) },
-        { move: [...ids.body, ...ids.side].map(id => ({ id, by: [0, -SIDE.lift, 0], hold: SIDE.hold, ease: 'detent' })) },
-        // the door, handle bolted on and door clips fitted, pops onto the hinge claws
-        { sync: true, enter: riders.map(id => ({ id, from: [0, 0, 70] })) },
-        // and swings open and shut on the hinge axis
-        { swing: [{ anchor: ids.door, pivot: CAB.pivot, deg: CAB.open, ids: riders }] },
+      // the door: its hinge edge CABINET.hingeEdge in from the hinge-side wall; a Chevron face's lip reaches past it
+      const dw = u.w * PITCH_X - 10, edge = -hw + CABINET.hingeEdge;
+      const doorCx = s * (edge - ds.lip + (dw + ds.lip) / 2), doorBack = front + CABINET.doorBack;
+      const doorPos = [cx + doorCx, bottom + CABINET.doorY, doorBack + ds.t / 2];
+      const pivot = [cx + s * (-hw + CABINET.pivot.x) - doorPos[0], front + CABINET.pivot.z - doorPos[2]];
+      // `hinge` lets the stage swing this door on demand (Build's Open door): the axis in the door's frame and the open angle
+      inst.push({ id: ids.door, node: nodes.door, pos: doorPos, owner: u.id, hinge: { pivot, deg: -s * CABINET.open }, ...stg });
+      // the grip: a knob on a 1H door's centre hole, the build's handle upright on a taller door's two holes
+      const holeX = cx + s * (edge + dw - CABINET.handleIn), midY = bottom + CABINET.doorY + (h * PITCH_HALF_Y * 2 - 1) / 2;
+      const knob = CABINET.knobs[build.handleStyle] || CABINET.knobs.deco;
+      const grip = h === 1
+        ? { id: ids.grip, node: knob.node, pos: [holeX, midY - knob.h / 2, doorBack + ds.t + knob.d / 2], owner: u.id, rides: ids.door, ...stg }
+        : { id: ids.grip, node: handleStyle.node, pos: [holeX + handleStyle.h / 2, midY, doorBack + ds.t + handleStyle.d / 2], rot: [0, 0, 90], owner: u.id, rides: ids.door, ...stg };
+      inst.push(grip);
+      const n = rings3.length, side = R ? 'right' : 'left', mark = R ? 'L' : 'R';
+      add(nodes.door, `${ds.label} Door ${u.w}W-${h}H${R ? ' (right-hinged)' : ''}`, 'Faceplate', null, 1, false, false, { requirement: REQ.core('unit.fill') }, 'Not published yet.');
+      // the hinge PRINTS AS ONE PART (Joey 2026-11-19): body and claws are two models only so the claws can turn with the
+      // door - one row, on the body's node
+      add(nodes.body, `Cabinet Hinge (${side}-hinged door)`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Prints as one part, body and claws together.');
+      add(nodes.side, `Door Latch (${mark}) - side clip`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
+      add(nodes.dclip, `Door Latch (${mark}) - door clip`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
+      if (h === 1) add(knob.node, knob.label, 'Handle', null, 1, false, false, { requirement: REQ.core('drawer.grip') }, 'Not published yet.');
+      else add(handleStyle.node, handleStyle.label, 'Handle', handleStyle.links, 1, false, false, { requirement: REQ.core('drawer.grip') });
+      members.push(...ids.body, ...ids.side, ...ids.claws, ...ids.dclip, ids.door, ids.grip);
+      const riders = [ids.door, ...ids.claws, ...ids.dclip, ids.grip];   // everything that turns with the door
+      const withDoor = [ids.door, ...ids.dclip, ids.grip];                 // what arrives with it (the claws are already on)
+      const swing = { swing: [{ anchor: ids.door, pivot, deg: -s * CABINET.open, ids: riders }] };
+      const phasesAt = (off = [0, 0, 0]) => [
+        // the hinges (one printed part each: body and claws together) and the latch side clips: in through the open
+        // front, then pushed DOWN to lock on the mini dovetails (Joey: attach the hinges to the case, then the door to them)
+        { sync: true, enter: [...ids.body, ...ids.claws, ...ids.side].map(id => ({ id, at: [off[0], off[1] + SIDE.lift, off[2]], from: [0, 0, 60] })) },
+        { move: [...ids.body, ...ids.claws, ...ids.side].map(id => ({ id, by: [0, -SIDE.lift, 0], hold: SIDE.hold, ease: 'detent' })) },
+        // the door, its grip and door clips fitted, pops onto the hinges' claws
+        { sync: true, enter: withDoor.map(id => ({ id, at: off, from: [0, 0, 70] })) },
+        // and swings open and shut on the hinge axis (found from the door wherever it stands)
+        swing,
       ];
-      const note = ' Hinges and the R latch clips press into the front mini-dovetail slots from inside and push down to lock; the door (Deco handle on two M3×8 screws, a 10×2 mm magnet in each door clip) pops onto the hinge claws. First look: one size, left-hinged.';
-      return { ids, phases, note };
+      const note = ` The hinges (each prints as one part) and the ${mark} latch clips press into the front mini-dovetail slots from inside and push down to lock; then the ${ds.label} door (${h === 1 ? `${knob.label} on one M3 screw` : `${handleStyle.label} on two M3 screws`}, a 10×2 mm magnet in each door clip) pops onto the hinge claws, ${side}-hinged.`;
+      return { ids, phasesAt, swing, note };
     })() : null;
     /* Close on EACH cover from its own outer side, where no neighbour stands between the camera and it: the 3.8 mm
        slide is the whole lesson, and at a step's own framing it is a few pixels. Framed on the FRONT part of the
@@ -1901,7 +1940,8 @@ export function generateManifest(build, opts = {}) {
           + (mcId ? ', magnet clip into the back slot' : '') + '. The cover slides on across the whole row next.'
           + (shId ? ' ' + (firstShelfDemo === null ? shelfText : 'Fit this case\'s shelf insert the same way.') + lipText(lipIds.length) : '')
           + extText
-          + (scIds.length ? sideText(scIds.length, i === firstSide) : ''),
+          + (scIds.length ? sideText(scIds.length, i === firstSide) : '')
+          + (cab ? cab.note : ''),
         camera: benchCam,
         phases: [
           { enter: [{ id: `case${i}`, from: [0, 45, 0] }] },
@@ -1911,6 +1951,7 @@ export function generateManifest(build, opts = {}) {
           ...shelfFit({ restore: benchCam }),
           // the side covers before anything caps the case (the release rule: after the case, before what stacks on top)
           ...sideFit({ restore: benchCam }),
+          ...(cab ? cab.phasesAt() : []),
         ],
       });
       if (shId && firstShelfDemo === null) firstShelfDemo = i;
@@ -1971,6 +2012,7 @@ export function generateManifest(build, opts = {}) {
       if (shId) bench.push(...shelfFit({ restore: benchCam }));
       // the side covers before the Cover Lower caps the case (after the case, before what stacks on top)
       bench.push(...sideFit({ restore: benchCam }));
+      if (cab) bench.push(...cab.phasesAt());   // the door before the cover: the hinges press in through the open front
       bench.push({ enter: clLocal.map(id => ({ id, from: [0, 0, -WALL.coverSlide] })), dip: dipItems([`ql${i}L`, `ql${i}R`], WALL.coverSlide) });
       bench.push({ pop: popItems([`ql${i}L`, `ql${i}R`]) });
       if (stopIds.length) bench.push({ enter: stopIds.map(id => ({ id, from: [0, 35, 0] })) });
@@ -1989,7 +2031,8 @@ export function generateManifest(build, opts = {}) {
         + (isDrawer ? ', drop the drawer stoppers into it,' : ',') + ' then cap it with the Cover Upper · the cover can only slide on now, not once the case is on the wall.'
         + (mcId && firstClipDemo === null ? ' ' + clipText : '')
         + (shId && firstShelfDemo === null ? ' ' + shelfWhy : '')
-        + (scIds.length && i === firstSide ? ` A side cover goes on like this: ${sideHow(1)}.` : '');
+        + (scIds.length && i === firstSide ? ` A side cover goes on like this: ${sideHow(1)}.` : '')
+        + (cab ? cab.note : '');
 
       if (i === ghostTopIdx) {
         // the first top case shown is split into two steps (there's a lot going
@@ -2047,6 +2090,7 @@ export function generateManifest(build, opts = {}) {
           ...shelfFit({ at: [0, 0, F], zBase: F }),
           // the side covers too, out front: they ride the same cancelling move via `members`
           ...sideFit({ at: [0, 0, F] }),
+          ...(cab ? cab.phasesAt([0, 0, F]) : []),
           { camera: camUp(cx, bottom + caseH / 2, totalW, gridBottom) }, // back below before the slide
           { move: members.map(id => ({ id, by: [0, 0, -F] })), dip: dipItems([`ql${i}L`, `ql${i}R`], F) },
           { pop: popItems([`ql${i}L`, `ql${i}R`]) },
@@ -2063,10 +2107,12 @@ export function generateManifest(build, opts = {}) {
         step.phases = [
           { sync: true, enter: members.map(id => ({ id, from: [0, 0, UT.fwd] })), dip: dipItems([`ql${i}L`, `ql${i}R`], UT.fwd) },
           { pop: popItems([`ql${i}L`, `ql${i}R`]) },
+          ...(cab ? [cab.swing] : []),
         ];
-        step.note = isTop
+        step.note = (isTop
           ? 'QuickLocks in, then slide the case straight back · its top rails ride into the rail channels until it stops.'
-          : 'Slide the case straight back under the row above · its top rails engage the case above and the QuickLocks click home.';
+          : 'Slide the case straight back under the row above · its top rails engage the case above and the QuickLocks click home.')
+          + (cab ? ' Fit its hinges, latch clips and door before the slide.' : '');
         if (scIds.length) step.note += preFittedSide(scIds.length, i === firstSide, !isTop);
       }
       if (isTop && isDrawer) step.note += ' (No drawer stoppers needed up here · the rail has them built in.)';
@@ -2081,8 +2127,10 @@ export function generateManifest(build, opts = {}) {
       step.phases = [
         { sync: true, enter: members.map(id => ({ id, from: [0, 0, wallFwd] })), dip: dipItems([`ql${i}L`, `ql${i}R`], wallFwd) },
         { pop: popItems([`ql${i}L`, `ql${i}R`]) },
+        ...(cab ? [cab.swing] : []),
       ];
-      step.note = 'Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home.';
+      step.note = 'Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home.'
+        + (cab ? ' Fit its hinges, latch clips and door on the bench first, the same way as the case above.' : '');
       if (mcId && firstClipDemo === null) { firstClipDemo = i; step.note += ' ' + clipText; }
       if (shId) step.note += ' ' + preFittedShelf(lipIds.length);
       if (scIds.length) step.note += preFittedSide(scIds.length, i === firstSide, true);
@@ -2117,7 +2165,7 @@ export function generateManifest(build, opts = {}) {
           + lipText(lipIds.length) + extText;
         if (firstShelfDemo === null) firstShelfDemo = i;
       }
-      if (cab) { step.phases.push(...cab.phases); step.note = (step.note ? step.note : '') + cab.note; }
+      if (cab) { step.phases.push(...cab.phasesAt()); step.note = (step.note ? step.note : '') + cab.note; }
     }
     if (hangs) steps.push(step);
     else if (!isBase) {
