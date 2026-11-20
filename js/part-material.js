@@ -95,10 +95,12 @@ export function partMaterialSpec(key, ctx = {}) {
   if (key === 'FootAdhesive') return { kind: 'standard', roughness: 0.72, metalness: 0 };
 
   /* Bought disc magnets (Joey, 2026-11-19: "can we make the magnet look metal, looks kind of white"). A neodymium
-     magnet is nickel plated, so it is drawn as a metal: the palette's silver then tints its reflections instead of
-     reading as a pale plastic. Not a full mirror - 0.9 and 0.3 keep a soft highlight where the stage has no
-     environment. Bought, so colorLocked keeps the silver and no filament profile reaches it. */
-  if (baseType(key) === 'Magnet') return { kind: 'physical', roughness: 0.3, metalness: 0.9, clearcoat: 0, clearcoatRoughness: 0, envMapIntensity: 1 };
+     magnet is nickel plated, so it is drawn part metal: the palette's silver tints its reflections instead of reading
+     as a pale plastic. Chosen by eye on the dark stage at Very High, 2026-11-19, from three: metalness 0.9 mirrored
+     the dark studio and drew the disc near black; 0.75 at roughness 0.22 kept a dark face inside a chrome rim; 0.55
+     at 0.32 with the environment at 1.6 reads as grey plated metal with a lit edge. Bought, so colorLocked keeps the
+     silver and no filament profile reaches it. */
+  if (baseType(key) === 'Magnet') return { kind: 'physical', roughness: 0.32, metalness: 0.55, clearcoat: 0, clearcoatRoughness: 0, envMapIntensity: 1.6 };
 
   /* ⚠ THE ORDINARY PRINTED PART — every case, drawer, shelf and handle in the
      viewer. 0.55 / 0.05 is a plausible plastic and nothing more: no layer lines,
