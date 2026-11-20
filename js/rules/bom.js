@@ -310,12 +310,12 @@ export function computeBom(build, GEN2) {
       ["left", "right"].forEach((hand) => {
         if (hinges.get(hand)) items.push(Object.assign({
           name: P.hinge(hand), qty: hinges.get(hand),
-          note: "Hinges are 1H · 1H cabinets take 1 hinge, taller cabinets take 2. Handed: hinge body, claws and 4 pegs · prints in one piece; a short length of filament through it as the pin makes it stronger and smoother (optional).",
+          note: "Hinges are 1H · 1H cabinets take 1 hinge, taller cabinets take 2. Handed: hinge body, claws and 4 pegs · prints in one piece. Optional pin: push 1.75 mm filament (PETG slides best) down the barrel, twisting it as it goes, and cut it flush · stronger, smoother, quieter.",
           unreleased: GEN2.unreleased.includes("hinge"),
         }, fillReasons("cabinet")));
         if (latches.get(hand)) items.push(Object.assign({
           name: P.latch(hand), qty: latches.get(hand),
-          note: "Latches are 1H · 1H cabinets take 1 latch, taller cabinets take 2. Handed: a side clip and a door clip.",
+          note: "Latches are 1H · 1H cabinets take 1 latch, taller cabinets take 2. Handed: a side clip and a door clip, each holding a 10×2 mm magnet · the pair must attract.",
           unreleased: GEN2.unreleased.includes("latch"),
         }, fillReasons("cabinet")));
       });
@@ -324,7 +324,7 @@ export function computeBom(build, GEN2) {
       const latchCount = (latches.get("left") || 0) + (latches.get("right") || 0);
       if (latchCount) items.push(Object.assign({
         name: "Magnets 10×2mm or 6×2mm", qty: 2 * latchCount,
-        note: "The door latches take the 10×2 mm magnets · one in the side clip, one in the door clip. Check the pair attracts before seating it.",
+        note: "The door latches take the 10×2 mm magnets (a 6×2 mm would sit loose in the latch clips' 10.2 mm pockets; the drawer magnet clips take either) · one in the side clip, one in the door clip. Check the pair attracts before seating it: snap them together, mark the faces that touch, and fit each with its mark showing through the clip's small hole.",
         hardware: true,
       }, fillReasons("cabinet")));
       /* the door's grip (2026-11-19): a knob on a 1H door's single centre hole,

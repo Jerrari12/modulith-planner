@@ -43,8 +43,8 @@ test('a left- and a right-hinged cabinet bill their own doors and handed hinge a
   const rs = rows(base({ placed: [cab(1, 0, 2, 3), cab(2, 2, 2, 3, { hinge: 'right' })] }));
   const doors = find(rs, /Door - 2W-3H/);
   assert.deepEqual(doors.map((r) => [r.name, r.qty]).sort((a, b) => a[0].localeCompare(b[0])), [
-    ['GEN2 240 Essential Door - 2W-3H', 1],
-    ['GEN2 240 Essential Door - 2W-3H - Right-Hinged', 1],
+    ['GEN2 Essential Door - 2W-3H', 1],
+    ['GEN2 Essential Door - 2W-3H - Right-Hinged', 1],
   ]);
   assert.deepEqual(find(rs, /Cabinet Hinge/).map((r) => [r.name, r.qty]).sort((a, b) => a[0].localeCompare(b[0])), [
     ['GEN2 Cabinet Hinge (1H) - Left-Hinged Door', 2],

@@ -28,12 +28,13 @@ const KNOWN_GAPS = new Set(['img/parts/Decor Drawer 270-4W-1H.png']);
    size on every mount and length; every faceplate style at every size; every style, handle and foot on every mount and length */
 function allRows() {
   const out = new Map();
-  const bill = (mount, length, w, h, kind, { faceStyle = 'edgelabel', handleStyle = 'deco', feet = 'tpu' } = {}) => {
+  const bill = (mount, length, w, h, kind, { faceStyle = 'edgelabel', handleStyle = 'deco', feet = 'tpu', doorStyle = 'essential', hinge = 'left' } = {}) => {
     // 'chips-classic' / 'chips-decor' (2026-11-07): the chip drawer variant on either fill, which also bills the chip's own row
     const chips = kind.startsWith('chips-');
     const unit = { id: 1, x: 0, y: 2, w, hh: h * 2, fill: kind === 'gridfinity' ? 'decor' : chips ? kind.slice(6) : kind, closure: 'magnet',
-      ...(kind === 'gridfinity' ? { variant: 'gridfinity' } : chips ? { variant: 'chips' } : {}), ...(kind === 'shelf' ? { lip: 'both' } : {}) };
-    const b = { mount, length, fill: unit.fill, faceStyle, handleStyle, feet, backCover: true, sideCovers: true, gridH: 8, gridW: 5, nextId: 50,
+      ...(kind === 'gridfinity' ? { variant: 'gridfinity' } : chips ? { variant: 'chips' } : {}), ...(kind === 'shelf' ? { lip: 'both' } : {}),
+      ...(kind === 'cabinet' ? { hinge } : {}) };
+    const b = { mount, length, fill: unit.fill, faceStyle, handleStyle, doorStyle, feet, backCover: true, sideCovers: true, gridH: 14, gridW: 5, nextId: 50,
       placed: [unit, { id: 2, x: w, y: 2, w: 1, hh: 2, fill: 'decor' }] };   // a second bottom case: the foot rails
     sanitizeBuild(b, GEN2);
     for (const r of bomRows(computeBom(b, GEN2) || [], null)) out.set(`${r.name}|${r.variant || ''}`, r);
@@ -46,6 +47,10 @@ function allRows() {
     for (const faceStyle of GEN2.faceplateStyles.map((s) => s.id)) for (const handleStyle of GEN2.handleStyles.map((s) => s.id)) for (const feet of ['tpu', 'adhesive']) bill(mount, len.id, 2, 1, 'decor', { faceStyle, handleStyle, feet });
   }
   for (const faceStyle of GEN2.faceplateStyles.map((s) => s.id)) for (const w of W) for (const h of H) bill('tabletop', 185, w, h, 'decor', { faceStyle });
+  /* cabinets (2026-11-20): the two modelled door styles, both hands, every size; a 1H door takes a knob (every knob series),
+     a taller one the handle. The door and its hardware are universal, so one length shows them all */
+  for (const doorStyle of ['essential', 'chevron']) for (const hinge of ['left', 'right']) for (const w of W) for (const h of [1, 2, 3, 4, 5, 6])
+    for (const handleStyle of h === 1 ? GEN2.doorHardware.knobSeries : ['deco']) bill('tabletop', 185, w, h, 'cabinet', { doorStyle, hinge, handleStyle });
   return [...out.values()];
 }
 
@@ -70,4 +75,11 @@ test('the names map as the host spells its files', () => {
   assert.equal(partThumb('GEN2 Decor Handles - BlockBar Series'), 'img/parts/Handle_BlockBar_A.png');
   assert.equal(partThumb('M3 hex nut'), null);
   assert.equal(partThumb('GEN2 Essential Decor Faceplate - 1W-1H'), null, 'never the Essential photograph');
+  // the cabinets (2026-11-20): the door by style, size and hand; a latch row is the set; a left-hinged door's hinge is marked L
+  assert.equal(partThumb('GEN2 Chevron Door - 2W-4H - Right-Hinged'), 'img/parts/Door_Chevron_2W-4H_RH.png');
+  assert.equal(partThumb('GEN2 Essential Door - 1W-1H'), 'img/parts/Door_Essential_1W-1H.png');
+  assert.equal(partThumb('GEN2 Cabinet Hinge (1H) - Left-Hinged Door'), 'img/parts/CabinetHinge_L.png');
+  assert.equal(partThumb('GEN2 Door Latch (1H) - Left-Hinged Door'), 'img/parts/CabinetLatch_Set_R.png', 'a left-hinged door takes the R clips');
+  assert.equal(partThumb('GEN2 BlockBar Knob'), 'img/parts/Knob_BlockBar.png');
+  assert.equal(partThumb('M3×10mm button head screw'), 'img/parts/ButtonHeadScrew_M3-6.png');
 });

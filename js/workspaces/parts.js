@@ -217,7 +217,10 @@ const remaining = (r, p) => Math.max(0, r.qty - (p?.had || 0) - (p?.made || 0));
    Essential faceplate (below), and a few render
    batches have gaps (the img onerror empties the frame). BlockBar and Crystal show their A style, the series' own
    render in the generator. */
-const HW_THUMB = { 'M3×6mm button head screw': 'ButtonHeadScrew_M3-6.png', 'Magnets 10×2mm or 6×2mm': 'Magnets.png', 'Countersunk wood screws (#6/#8)': 'WoodScrew_No6-19mm.png' };
+/* the cabinet doors' M3 x 8 / x 10 (and a style with no recorded length) are the same button head screw: one render (2026-11-20) */
+const HW_THUMB = { 'M3×6mm button head screw': 'ButtonHeadScrew_M3-6.png', 'M3×8mm button head screw': 'ButtonHeadScrew_M3-6.png',
+  'M3×10mm button head screw': 'ButtonHeadScrew_M3-6.png', 'M3 button head screw': 'ButtonHeadScrew_M3-6.png',
+  'Magnets 10×2mm or 6×2mm': 'Magnets.png', 'Countersunk wood screws (#6/#8)': 'WoodScrew_No6-19mm.png' };
 export function partThumb(name, variant) {
   const d = (s) => s.replace(/\./g, '');
   const file = (() => {
@@ -244,6 +247,12 @@ export function partThumb(name, variant) {
     if ((m = /^GEN2 (\d+) Foot Rail (Upper|Lower) \((FR-[UL])\) - (\dW)$/.exec(name))) return `${m[3]}_${m[1]}-${m[4]}.png`;
     if ((m = /^GEN2 (\d+) Shelf Insert - (\dW)$/.exec(name))) return `ShelfInsert_${m[1]}-${m[2]}.png`;
     if ((m = /^GEN2 Shelf Lip - (\dW)$/.exec(name))) return `ShelfLip_${m[1]}.png`;
+    /* cabinet doors and door hardware (2026-11-20), named as generate.js imgFor names them. A latch row is a SET, the side
+       clip and the door clip; a left-hinged door's hinge is marked L and its latch clips R (data.js partNames) */
+    if ((m = /^GEN2 (Essential|Chevron) Door - (\dW-\dH)( - Right-Hinged)?$/.exec(name))) return `Door_${m[1]}_${m[2]}${m[3] ? '_RH' : ''}.png`;
+    if ((m = /^GEN2 Cabinet Hinge \(1H\) - (Left|Right)-Hinged Door$/.exec(name))) return `CabinetHinge_${m[1] === 'Left' ? 'L' : 'R'}.png`;
+    if ((m = /^GEN2 Door Latch \(1H\) - (Left|Right)-Hinged Door$/.exec(name))) return `CabinetLatch_Set_${m[1] === 'Left' ? 'R' : 'L'}.png`;
+    if ((m = /^GEN2 (Deco|BlockBar) Knob$/.exec(name))) return `Knob_${m[1]}.png`;
     const w = /^(\dW) section$/.exec(variant || '');
     if ((m = /^GEN2 Under Table Rails - (\d+)$/.exec(name)) && w) return `Rails ${m[1]}-${w[1]}.png`;
     if (/^GEN2 Wall Mount Kit - Lite - \d+$/.test(name) && w) return `WallMount_Lite_${w[1]}.png`;

@@ -595,7 +595,8 @@ const GEN2 = {
     // a universal part read as length-specific and confused people.)
     faceplate:   (len, size, style)     => `GEN2 ${style} Decor Faceplate - ${size}`,
     backCover:   (len, size)            => `GEN2 Decor Faceplate Back Cover - ${size}`,
-    door:        (len, size, style, hand) => `GEN2 ${len} ${style} Door - ${size}${hand === "right" ? " - Right-Hinged" : ""}`,
+    // universal like the faceplates (2026-11-20): one door GLB serves every collection, so no length in the name
+    door:        (len, size, style, hand) => `GEN2 ${style} Door - ${size}${hand === "right" ? " - Right-Hinged" : ""}`,
     sideCover:   (len, h)               => `GEN2 ${len} Side Cover - ${h}H`,
     // universal like the faceplates: one chip fits every chip drawer (2026-11-07)
     filamentChip: ()                    => "GEN2 Filament Sample Chip",

@@ -3122,6 +3122,11 @@ function imgFor(node, type) {
   // side covers (v2609): the 27 BOM thumbnails of the release (D:\Render Projects\Side Covers\BOM Thumbnails, the
   // planner's iso look, each in its collection's colour), copied to the parts host NAMED BY NODE
   if (/^SideCover_\d+-\d+H$/.test(node)) return `img/parts/${node}.png`;
+  // cabinet doors and door hardware (2026-11-20): universal like the faceplates, so one set serves every collection, in the
+  // 185 plastic by the BOM-thumbnail recipe (D:\Render Projects\Cabinet Doors\cabinet_thumbs.py), named by node. The hinge
+  // prints as one part, so its render is the whole hinge, on the body's node (the row's); the claws have no row
+  if (/^Door_(Essential|Chevron)_\dW-\dH(_RH)?$/.test(node) || /^CabinetLatch_(Side|Door)_[LR]$/.test(node) || /^Knob_(Deco|BlockBar)$/.test(node)) return `img/parts/${node}.png`;
+  if ((m = node.match(/^CabinetHinge_Body_([LR])$/))) return `img/parts/CabinetHinge_${m[1]}.png`;
   // mirror parts: the R render is the L one flipped horizontally (2026-07-10)
   if (node === 'QuickLock-R') return 'img/parts/QuickLock-R.png';
   if (node.startsWith('QuickLock')) return 'img/parts/QuickLock.png';
