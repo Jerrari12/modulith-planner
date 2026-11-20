@@ -54,6 +54,14 @@ test('the bought adhesive foot stays matte at 0.72', () => {
     { kind: 'standard', roughness: 0.72, metalness: 0 });
 });
 
+test('a bought magnet is drawn as a metal, not a pale plastic (Joey 2026-11-19)', () => {
+  for (const key of ['Magnet', 'Magnet:BODY']) {
+    const m = partMaterialSpec(key);
+    assert.equal(m.kind, 'physical', key); assert.ok(m.metalness >= 0.8, key); assert.ok(m.roughness <= 0.4, key); assert.equal(m.clearcoat, 0, key);
+  }
+  assert.equal(partMaterialSpec('MagnetClip').metalness, 0.05, 'the printed magnet clip stays plastic');
+});
+
 test('the holographic plate transfers a polished finish, and only where it touched', () => {
   const contact = partMaterialSpec('Faceplate', { holographicPlate: true, plateContact: true });
   assert.deepEqual(contact, {

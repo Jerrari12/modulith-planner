@@ -94,6 +94,12 @@ export function partMaterialSpec(key, ctx = {}) {
      reasoned about). */
   if (key === 'FootAdhesive') return { kind: 'standard', roughness: 0.72, metalness: 0 };
 
+  /* Bought disc magnets (Joey, 2026-11-19: "can we make the magnet look metal, looks kind of white"). A neodymium
+     magnet is nickel plated, so it is drawn as a metal: the palette's silver then tints its reflections instead of
+     reading as a pale plastic. Not a full mirror - 0.9 and 0.3 keep a soft highlight where the stage has no
+     environment. Bought, so colorLocked keeps the silver and no filament profile reaches it. */
+  if (baseType(key) === 'Magnet') return { kind: 'physical', roughness: 0.3, metalness: 0.9, clearcoat: 0, clearcoatRoughness: 0, envMapIntensity: 1 };
+
   /* ⚠ THE ORDINARY PRINTED PART — every case, drawer, shelf and handle in the
      viewer. 0.55 / 0.05 is a plausible plastic and nothing more: no layer lines,
      no anisotropy, no dependence on how the part was printed or which filament

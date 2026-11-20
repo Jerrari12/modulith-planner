@@ -415,8 +415,15 @@ const SIDE = { x: 0.025, y: 0.4, z: 4.0, out: 30, lift: 3.8, hold: 450 };
    hinge body's four pegs and the latch side clip's four go OUTWARD through the side walls' front sockets (3.0 x 10 mm,
    3-6 and 14-17 mm back from the case face, 10-20 and 38-48 mm up a ring - the same in the 115, 185 and 240 cases), the
    plates on the wall's inner face, which is 6 mm in for the front 17 mm. The pin axis is 4 mm in from the hinge-side
-   outer wall and 4.7 mm in front of the case face; the claws sit between the case face and the door, whose back is
-   2.2 mm in front of it; the door's hinge slots meet the claws' holes, so its bottom is 3.85 mm up the stack and its
+   outer wall and 4.7 mm in front of the case face. THE DOOR'S SEAT (corrected 2026-11-19, Joey: the claws' C-clips end
+   "flush with the back-side of the door" and their fingers "flex in slightly and snap into position"): each pair of
+   prongs slides into a matching pocket in the door's back (2.15 deep, the prongs 2.0 thick) around a thin rib, so the
+   door's back sits 0.2 mm in front of the case face, flush with the prongs' backs, and its hinge edge 9.525 mm in from
+   the outer wall. Measured on the GLBs (1W-1H, voxel interference at 0.2 mm): zero door-claw interference from 3.0 mm
+   (the prong tips reach the pocket ends) to beyond 3.7 mm out from the first placement, and the door clip, which moves
+   with the door, runs into the side clip past 3.3 mm - so 3.1, where the two latch clips meet face to face with their
+   magnet pockets aligned in height and depth. The first placement (back 2.2, edge 6.425) assumed the claws' holes sat
+   at the slots' centres; that left the prongs 2 mm behind the door. Its bottom is 3.85 mm up the stack and its
    top 0.15 mm under the stack's top. Offsets below are for a LEFT-hinged door: x from the outer wall named, y from the
    ring's bottom, z from the case face (+ toward the viewer); a right-hinged door is the mirror in x, with the mirrored
    hardware (its letters swapped). Each part is a canonical GLB (gen2-parts branch cabinet-parts); `c` is where that
@@ -426,11 +433,23 @@ const CABINET = {
   hingeBody: { wall: 'hinge', x: 4.249, y: 6.849, z: -4.651 },
   claws: { wall: 'hinge', x: 10.25, y: 13.349, z: 4.449 },
   sideClip: { wall: 'latch', x: -5.976, y: 9.849, z: -9.001 },
-  doorClip: { wall: 'latch', x: -14.30, y: 9.849, z: -2.726 },
-  hingeEdge: 6.425, doorY: 3.85, doorBack: 2.2, pivot: { x: 4.0, z: 4.7 }, handleIn: 21.5, open: 100,
+  doorClip: { wall: 'latch', x: -11.20, y: 9.849, z: -4.726 },   // rides the door: moved with it by (+3.1, -2.0)
+  hingeEdge: 9.525, doorY: 3.85, doorBack: 0.2, pivot: { x: 4.0, z: 4.7 }, handleIn: 21.5, open: 100,
   // per door style: thickness, and how far its face reaches past the hinge edge (Chevron's strip lip)
-  styles: { essential: { label: 'Essential', t: 5.0, lip: 0 }, chevron: { label: 'Chevron', t: 6.5, lip: 1.148 } },
+  // t thickness, lip = how far the face reaches past the hinge edge, cb = the screw head's seat (counterbore floor) behind the face, screw = M3 length
+  styles: { essential: { label: 'Essential', t: 5.0, lip: 0, cb: 3.5, screw: 8 }, chevron: { label: 'Chevron', t: 6.5, lip: 1.148, cb: 5.0, screw: 10 } },
   knobs: { deco: { node: 'Knob_Deco', label: 'Deco Knob', h: 31, d: 24 }, blockbar: { node: 'Knob_BlockBar', label: 'BlockBar Knob', h: 22, d: 9 } },
+  /* each latch clip holds a 10x2 mm magnet (Joey 2026-11-19), drawn with Magnet_10x2mm (a disc on Z, 0..10 up) turned
+     onto X: its centre in the clip's own GLB frame for a LEFT-hinged door (the R clips; x mirrors), and where it comes
+     in from. Measured on the canonical GLBs by section and ray, 2026-11-19: the side clip's pocket (10.2 dia, 2.12
+     deep) opens on its wall face, so the wall traps the magnet; the door clip's slot (10.2 wide, 2.2 thick) runs out
+     to its door face, so the door traps it. Each has a 4 mm hole through the wall that faces the other clip. */
+  magnet: { side: { x: -1.12, y: 12, z: 3.1 }, door: { x: 0.5, y: 12, z: -1.17 } },
+  /* the optional hinge pin (Joey 2026-11-19): 1.75 mm filament, PETG slides best, pushed down the barrel's 1.93 mm hole
+     and cut flush - it strengthens the hinge, smooths it and stops it squeaking. The hole runs up the pivot axis from a
+     1 mm floor to the body's open top (body GLB, rays 2026-11-19), so the pin (HingePin_Filament175) is 47 mm long and
+     starts `y` above the body's bottom. */
+  pin: { y: 1.0, len: 47 },
 };
 /* the cabinets the stage can draw: a whole-height shell without the advanced interior */
 const isCabinet3D = (u, build) => u.fill === 'cabinet' && !(Array.isArray(u.interior) && u.interior.length);
@@ -692,6 +711,9 @@ const EXTENDER_COLOR = { CaseExtender: '#7d8496' };
    dark stage loses some, 3.2:1 and 2.2:1 (the pink: 9.9:1 and 6.7:1). One colour for the whole part: the FACE zone
    follows the body in the identification palette, as every zone does. */
 const SIDE_COVER_COLOR = { SideCover: '#c2185b' };
+/* a cabinet's optional hinge pin rides in conditionally too: a length of filament, drawn near-black like the PETG Joey
+   shows in it (2026-11-19) */
+const CABINET_COLORS = { HingePin: '#1d1f24' };
 
 // ---- official-kit build migrations -----------------------------------------
 // Official kits (builds/<id>.json) commit a planner build to the repo forever —
@@ -1496,6 +1518,8 @@ export function generateManifest(build, opts = {}) {
     };
   }
 
+  const cabinets = [];   // each cabinet's door + hardware, installed in their own steps after the covers
+  const cabBuy = { magnets: 0, knobScrews: 0 };   // what the doors add to the shopping sentence (handles count themselves)
   units.forEach((u, i) => {
     /* A SHELF is ASSEMBLED from 1H rings, never printed as one tall case: a
        case at the bottom (its floor carries the slots the insert's integrated
@@ -1736,6 +1760,8 @@ export function generateManifest(build, opts = {}) {
       const tag = (k) => String.fromCharCode(97 + k);
       const ids = { body: rings3.map((r, k) => `cbh${i}${tag(k)}`), side: rings3.map((r, k) => `cls${i}${tag(k)}`),
                     claws: rings3.map((r, k) => `cbc${i}${tag(k)}`), dclip: rings3.map((r, k) => `cld${i}${tag(k)}`),
+                    smag: rings3.map((r, k) => `cms${i}${tag(k)}`), dmag: rings3.map((r, k) => `cmd${i}${tag(k)}`),
+                    pin: rings3.map((r, k) => `cbp${i}${tag(k)}`),
                     door: `door${i}`, grip: `dg${i}` };
       const R = hand === 'right';
       const nodes = { body: `CabinetHinge_Body_${R ? 'R' : 'L'}`, claws: `CabinetHinge_Claws_${R ? 'R' : 'L'}`,
@@ -1746,6 +1772,13 @@ export function generateManifest(build, opts = {}) {
         inst.push({ id: ids.side[k], node: nodes.side, pos: at(CABINET.sideClip, ring), owner: u.id, ...stg });
         inst.push({ id: ids.claws[k], node: nodes.claws, pos: at(CABINET.claws, ring), owner: u.id, rides: ids.door, type: 'QuickLock', ...stg });   // no row of its own: billed on the body
         inst.push({ id: ids.dclip[k], node: nodes.dclip, pos: at(CABINET.doorClip, ring), owner: u.id, rides: ids.door, ...stg });
+        // the magnets: the disc's centre at the clip's pocket (the GLB's origin is its bottom edge, 5 below the centre)
+        const mag = (m, clip) => [clip[0] + s * m.x, clip[1] + m.y - 5, clip[2] + m.z];
+        inst.push({ id: ids.smag[k], node: 'Magnet_10x2mm', pos: mag(CABINET.magnet.side, at(CABINET.sideClip, ring)), rot: [0, 90, 0], owner: u.id, ...stg });
+        inst.push({ id: ids.dmag[k], node: 'Magnet_10x2mm', pos: mag(CABINET.magnet.door, at(CABINET.doorClip, ring)), rot: [0, 90, 0], owner: u.id, rides: ids.door, ...stg });
+        // the pin stands on the hinge axis; it turns about its own axis, so it need not ride the door
+        const body = at(CABINET.hingeBody, ring);
+        inst.push({ id: ids.pin[k], node: 'HingePin_Filament175', pos: [cx + s * (-hw + CABINET.pivot.x), body[1] + CABINET.pin.y, front + CABINET.pivot.z], owner: u.id, type: 'HingePin', ...stg });
       });
       // the door: its hinge edge CABINET.hingeEdge in from the hinge-side wall; a Chevron face's lip reaches past it
       const dw = u.w * PITCH_X - 10, edge = -hw + CABINET.hingeEdge;
@@ -1761,32 +1794,161 @@ export function generateManifest(build, opts = {}) {
         ? { id: ids.grip, node: knob.node, pos: [holeX, midY - knob.h / 2, doorBack + ds.t + knob.d / 2], owner: u.id, rides: ids.door, ...stg }
         : { id: ids.grip, node: handleStyle.node, pos: [holeX + handleStyle.h / 2, midY, doorBack + ds.t + handleStyle.d / 2], rot: [0, 0, 90], owner: u.id, rides: ids.door, ...stg };
       inst.push(grip);
-      const n = rings3.length, side = R ? 'right' : 'left', mark = R ? 'L' : 'R';
+      /* the grip's M3 screws, driven in from behind: the head on the counterbore floor (ds.cb behind the face), the
+         shank toward the front (the screw GLB carries it along depth, head at -Z, 1.65 head + 6 mm shank; the build's
+         M3 x 8 / x 10 are drawn with the library's M3 x 6) - one for a knob, two 44 mm apart for a handle */
+      const floorZ = doorBack + ds.t - ds.cb;
+      const screwYs = h === 1 ? [midY] : [midY - 22, midY + 22];
+      const screws = screwYs.map((y, n) => {
+        const id = `dsc${i}_${n}`;
+        inst.push({ id, node: SCREW_M3.node, pos: [holeX, y - SCREW_M3.h / 2, floorZ + 2.18], owner: u.id, rides: ids.door, type: 'Screw', ...stg });   // billed by the planner as M3 x 8 / x 10
+        return id;
+      });
+      const n = rings3.length, side = R ? 'right' : 'left', mark = R ? 'L' : 'R', otherSide = R ? 'left' : 'right';
       add(nodes.door, `${ds.label} Door ${u.w}W-${h}H${R ? ' (right-hinged)' : ''}`, 'Faceplate', null, 1, false, false, { requirement: REQ.core('unit.fill') }, 'Not published yet.');
       // the hinge PRINTS AS ONE PART (Joey 2026-11-19): body and claws are two models only so the claws can turn with the
       // door - one row, on the body's node
-      add(nodes.body, `Cabinet Hinge (${side}-hinged door)`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Prints as one part, body and claws together.');
+      add(nodes.body, `Cabinet Hinge (${side}-hinged door)`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Prints as one part, body and claws together. Optional: a 47 mm length of 1.75 mm filament (PETG slides best) down its barrel, cut flush.');
       add(nodes.side, `Door Latch (${mark}) - side clip`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
       add(nodes.dclip, `Door Latch (${mark}) - door clip`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
+      add('Magnet_10x2mm', 'Magnet 10×2 mm', 'Magnet', { buy: BUY.magnets }, 2 * n, true, false, { requirement: REQ.core('unit.fill') }, 'Two per door latch, one in each clip · each pair must attract.');
+      cabBuy.magnets += 2 * n; if (h === 1) cabBuy.knobScrews += 1;
       if (h === 1) add(knob.node, knob.label, 'Handle', null, 1, false, false, { requirement: REQ.core('drawer.grip') }, 'Not published yet.');
       else add(handleStyle.node, handleStyle.label, 'Handle', handleStyle.links, 1, false, false, { requirement: REQ.core('drawer.grip') });
-      members.push(...ids.body, ...ids.side, ...ids.claws, ...ids.dclip, ids.door, ids.grip);
-      const riders = [ids.door, ...ids.claws, ...ids.dclip, ids.grip];   // everything that turns with the door
-      const withDoor = [ids.door, ...ids.dclip, ids.grip];                 // what arrives with it (the claws are already on)
-      const swing = { swing: [{ anchor: ids.door, pivot, deg: -s * CABINET.open, ids: riders }] };
-      const phasesAt = (off = [0, 0, 0]) => [
-        // the hinges (one printed part each: body and claws together) and the latch side clips: in through the open
-        // front, then pushed DOWN to lock on the mini dovetails (Joey: attach the hinges to the case, then the door to them)
-        { sync: true, enter: [...ids.body, ...ids.claws, ...ids.side].map(id => ({ id, at: [off[0], off[1] + SIDE.lift, off[2]], from: [0, 0, 60] })) },
-        { move: [...ids.body, ...ids.claws, ...ids.side].map(id => ({ id, by: [0, -SIDE.lift, 0], hold: SIDE.hold, ease: 'detent' })) },
-        // the door, its grip and door clips fitted, pops onto the hinges' claws
-        { sync: true, enter: withDoor.map(id => ({ id, at: off, from: [0, 0, 70] })) },
-        // and swings open and shut on the hinge axis (found from the door wherever it stands)
-        swing,
+
+      /* ---- the steps (built after the covers, when every case is home) ---- */
+      const riders = [ids.door, ...ids.claws, ...ids.dclip, ...ids.dmag, ids.grip, ...screws];   // everything that turns with the door
+      const deg = -s * CABINET.open, OPEN = 0.8;               // the door is hung and its clips fitted 80 % open (Joey 2026-11-19)
+      const pivotW = [cx + s * (-hw + CABINET.pivot.x), front + CABINET.pivot.z];
+      const turn = ([x, y, z], f) => {                                                 // a point carried round the hinge axis
+        const a = deg * f * Math.PI / 180, dx = x - pivotW[0], dz = z - pivotW[1];
+        return [pivotW[0] + dx * Math.cos(a) + dz * Math.sin(a), y, pivotW[1] - dx * Math.sin(a) + dz * Math.cos(a)];
+      };
+      const norm = (a) => ((a + 540) % 360) - 180;
+      const plus = (p, q, k = 1) => p.map((v, j) => v + k * q[j]);
+      const doorH = h * PITCH_HALF_Y * 2 - 1, doorMid = [doorPos[0], doorPos[1] + doorH / 2, doorPos[2]];
+      const hingeAt = (k) => { const q = at(CABINET.hingeBody, rings3[k]); return [q[0], q[1] + 24, q[2]]; };
+      const sideAt = (k) => { const q = at(CABINET.sideClip, rings3[k]); return [q[0], q[1] + 21, q[2]]; };
+      const clipAt = (k) => { const q = at(CABINET.doorClip, rings3[k]); return [q[0], q[1] + 21, q[2]]; };
+      const clawsAt = (k) => { const q = at(CABINET.claws, rings3[k]); return [q[0], q[1] + 18, q[2]]; };   // the claws are 36 tall
+      // the open door's normals: its front faces nO, its width runs along wO (a world turn of +Z and +X by the open angle)
+      const aO = deg * OPEN * Math.PI / 180;
+      const nO = [Math.sin(aO), 0, Math.cos(aO)], wO = [Math.cos(aO), 0, -Math.sin(aO)];
+      // a wall's inner face is seen through the open front, from the front and across the case - never through the wall
+      const camHinge = (k) => ({ t: s * 46, p: 72, fitR: 42, target: hingeAt(k) });
+      const camSide = (k) => ({ t: -s * 46, p: 72, fitR: 40, target: sideAt(k) });
+      // a latch clip takes its magnet held out in front of its slot, seen from the wall side its pocket opens on
+      const ZS = 40;
+      const camSideMag = (k) => ({ t: s * 62, p: 74, fitR: 24, target: plus(sideAt(k), [0, SIDE.lift - 9, ZS]) });
+      // the door's back in the open pose: from the side it faces, turned 25 degrees toward the front
+      const tBack = norm(deg * OPEN + 180 - s * 25);
+      const camClip = (k) => ({ t: tBack, p: 70, fitR: 42, target: turn(clipAt(k), OPEN) });
+      const CO = 26;                                            // a door clip is held this far off the open door's back for its magnet
+      const camClipMag = (k) => ({ t: tBack, p: 72, fitR: 26, target: plus(turn(plus(clipAt(k), [0, -9, 0]), OPEN), nO, -CO) });
+      const camGripBack = { t: tBack, p: 74, fitR: h === 1 ? 34 : 58, target: turn([holeX, midY, doorBack], OPEN) };
+      const camDoor = { t: -s * 28, p: 72, fitR: Math.hypot(dw, doorH) / 2 * 1.15, target: doorMid };
+      // the claws' fingers going into the door's hinge slots: close, from behind the open door, on the hinge edge
+      const camClaws = (k, r = 30) => ({ t: tBack, p: 76, fitR: r, target: turn(clawsAt(k), OPEN) });
+      const hingeSpan = rings3.length > 1 ? clawsAt(1)[1] - clawsAt(0)[1] : 0;
+      const camHang = { t: tBack, p: 74, fitR: Math.max(62, hingeSpan / 2 + 36), target: turn(rings3.length > 1 ? [clawsAt(0)[0], (clawsAt(0)[1] + clawsAt(1)[1]) / 2, clawsAt(0)[2]] : clawsAt(0), OPEN) };
+      // the door assembles floating DZ in front of its seat, the rest of the build faded away (the faceplate cinematic)
+      const DZ = 90, gripTarget = [holeX, midY, doorBack + ds.t + DZ];
+      const camGripFront = { t: -s * 16, p: 82, fitR: h === 1 ? 34 : 58, target: gripTarget };
+      const camGripBehind = { t: norm(180 + s * 37), p: 76, fitR: h === 1 ? 30 : 48, target: [holeX, midY, doorBack + DZ] };
+      /* then it is hung OPEN, and it SLIDES on (Joey 2026-11-19: "whichever angle the c-clips are pointed to, the door
+         needs to slide straight onto" them, and they end flush with its back). The claws' fingers run along the door's
+         width, from the knuckle into its hinge-edge slots (CabinetHinge_Claws sections, 2026-11-19: fingers x -1.3 to
+         10.2 at the back face), so the door stands HA further from the hinge along its own width, s * wO, and slides
+         straight back toward it. HA clears the fingers' 11.5 mm. */
+      const HA = 26, hangAt = wO.map(v => v * s * HA);
+      const doorSet = [ids.door, ids.grip, ...screws];
+      /* two hinges (Joey): set both claws to the same angle, hook the door on the TOP one first - it hangs a little
+         crooked - then push its bottom onto the lower one and it squares up. The crooked hang is in the door's own
+         plane: a turn about its front normal nO through the top claws, its bottom TIP mm further along the slide (a
+         right-hand turn about nO carries a point below the axis along +wO, so the sign is s). */
+      const TIP = 6, tipDeg = hingeSpan ? s * Math.asin(TIP / hingeSpan) * 180 / Math.PI : 0;
+      const tip = (to) => ({ swing: [{ anchor: ids.door, pivot, deg, ids: riders, tilt: { at: turn(clawsAt(1), OPEN), axis: nO, deg: tipDeg, ids: doorSet, to } }] });
+      // the pin goes down each hinge's barrel while the hinge is held out in front of the case, seen from above and the front
+      const ZH = 45, PIN_UP = 16;
+      const camPin = (k) => ({ t: s * 30, p: 58, fitR: 40, target: plus(hingeAt(k), [0, SIDE.lift + 6, ZH]) });
+      const ring2 = n > 1;
+      const pl = ring2 ? 's' : '';
+      const gripWords = h === 1 ? `the ${knob.label.toLowerCase()} (one M3 x ${ds.screw} screw)` : `the ${handleStyle.label.toLowerCase()} (two M3 x ${ds.screw} screws)`;
+      // polarity, said once where the first magnet goes in and referred to after
+      const polarity = `Polarity matters: the two magnets of a latch must attract, or they push the door open. Let each pair snap together and mark the two faces that touch, then fit each magnet with its mark showing through the small hole in its pocket - the holes face each other across the latch, so the marked faces meet.`;
+      const steps = () => [
+        {
+          title: ring2 ? 'Cabinet hinges' : 'Cabinet hinge',
+          note: `The hinges go on the case first. Each prints as one part, body and claws together. Optional, but it makes the hinge stronger, smoother and quieter: push a length of 1.75 mm filament (PETG slides best) down the hole in its barrel, twisting it back and forth and swinging the hinge a little as you work it in, then cut it flush with the top. From inside the case, push the hinge's four pegs into the mini-dovetail slots at the front of the ${side} wall, then push it down to lock${ring2 ? ' · one near the bottom, one near the top' : ''}.`,
+          camera: camPin(0),
+          phases: rings3.flatMap((r, k) => {
+            const hinge = [ids.body[k], ids.claws[k], ids.pin[k]];
+            return [
+              ...(k ? [{ camera: camPin(k) }] : []),
+              { sync: true, enter: [ids.body[k], ids.claws[k]].map(id => ({ id, at: [0, SIDE.lift, ZH], from: [0, 0, 50] })) },
+              // the filament: in from above, most of the way, then worked down the rest (it is cut flush at the top)
+              { enter: [{ id: ids.pin[k], at: [0, SIDE.lift + PIN_UP, ZH], from: [0, 40, 0] }], pace: 1.3 },
+              { move: [{ id: ids.pin[k], by: [0, -PIN_UP, 0], ease: 'detent' }] },
+              { camera: camHinge(k), move: hinge.map(id => ({ id, by: [0, 0, -ZH] })) },
+              { move: hinge.map(id => ({ id, by: [0, -SIDE.lift, 0], hold: SIDE.hold, ease: 'detent' })) },
+            ];
+          }),
+        },
+        {
+          title: ring2 ? 'Latch clips on the case' : 'Latch clip on the case',
+          note: `Press a 10×2 mm magnet into the round pocket on the back of ${ring2 ? 'each' : 'the'} latch clip marked ${mark} - the face that meets the wall, which traps it. ${polarity} Then the clip${pl} go${ring2 ? '' : 'es'} on the ${otherSide} wall like the hinges: pegs into the front slots from inside, then push down to lock.`,
+          camera: camSideMag(0),
+          phases: rings3.flatMap((r, k) => [
+            ...(k ? [{ camera: camSideMag(k) }] : []),
+            { enter: [{ id: ids.side[k], at: [0, SIDE.lift, ZS], from: [0, 0, 50] }] },
+            // the magnet presses in along its own axis from the wall side, where the pocket opens
+            { enter: [{ id: ids.smag[k], at: [0, SIDE.lift, ZS], from: [s * 16, 0, 0] }] },
+            { camera: camSide(k), move: [ids.side[k], ids.smag[k]].map(id => ({ id, by: [0, 0, -ZS] })) },
+            { move: [ids.side[k], ids.smag[k]].map(id => ({ id, by: [0, -SIDE.lift, 0], hold: SIDE.hold, ease: 'detent' })) },
+          ]),
+        },
+        {
+          title: h === 1 ? 'Knob, then the door' : 'Handle, then the door',
+          note: `Bolt ${gripWords} onto the door: hold it on the front and drive the screw${h === 1 ? '' : 's'} in from behind, until the head${h === 1 ? '' : 's'} sit${h === 1 ? 's' : ''} in the counterbore. Then turn the hinge claws about 80 % open${ring2 ? ', both to the same angle,' : ''} and slide the door straight onto them, the way their fingers point: they go into the slots in its back from the hinge edge and end flush with it${ring2 ? '. Hook it on the top hinge first, where it hangs a little crooked, then push its bottom onto the lower hinge and it squares up' : ''}. Swing it shut to check.`,
+          camera: camGripFront,
+          phases: [
+            { vanish: true, room: 0, camera: camGripFront },
+            { enter: [{ id: ids.door, at: [0, 0, DZ], from: [0, 30, 0] }] },
+            { enter: [{ id: ids.grip, at: [0, 0, DZ + 15], from: [0, 0, 30], via: [[0, 0, -15]] }] },
+            { camera: camGripBehind },
+            { enter: screws.map(id => ({ id, at: [0, 0, DZ], from: [0, 0, -30], spin: 3 })), sync: true },
+            // back in the room: the claws turn about 80 % open, and the door out front turns with them on its own hinge edge
+            { appear: true, room: 1, camera: camHang, swing: [{ anchor: ids.door, pivot, deg, ids: riders, to: OPEN }] },
+            // it comes round to stand off the claws (tipped, with two hinges)
+            { move: doorSet.map(id => ({ id, by: plus(hangAt, [0, 0, DZ], -1) })), ...(ring2 ? tip(1) : {}) },
+            { camera: camClaws(ring2 ? 1 : 0) },
+            { move: doorSet.map(id => ({ id, by: hangAt.map(v => -v), ease: 'detent' })) },
+            ...(ring2 ? [{ camera: camClaws(0) }, { ...tip(0), pace: 1.4 }] : []),
+            { camera: camDoor, swing: [{ anchor: ids.door, pivot, deg, ids: riders, to: 0 }] },
+          ],
+        },
+        {
+          title: ring2 ? 'Latch clips on the door' : 'Latch clip on the door',
+          note: `Swing the door open again for the latch clip${pl} marked ${mark}, at the closing edge of its back. First slide a 10×2 mm magnet into ${ring2 ? 'each' : 'the'} clip's slot from the face that meets the door, which traps it - its mark showing through the small hole, toward the case magnet. Press the clip${pl} on. The screw head${h === 1 ? '' : 's'} of the ${h === 1 ? 'knob' : 'handle'} sit${h === 1 ? 's' : ''} flush in the back. Close the door: the magnets pull it shut.`,
+          camera: camDoor,
+          phases: [
+            { camera: camClipMag(0), swing: [{ anchor: ids.door, pivot, deg, ids: riders, to: OPEN }] },
+            ...rings3.flatMap((r, k) => [
+              ...(k ? [{ camera: camClipMag(k) }] : []),
+              // held off the open door's back; the magnet slides into the slot from the door side, then both press on
+              { enter: [{ id: ids.dclip[k], at: nO.map(v => -v * CO), from: nO.map(v => -v * 24) }] },
+              { enter: [{ id: ids.dmag[k], at: nO.map(v => -v * CO), from: nO.map(v => v * 16) }] },
+              { camera: camClip(k), move: [ids.dclip[k], ids.dmag[k]].map(id => ({ id, by: nO.map(v => v * CO) })) },
+            ]),
+            { camera: camGripBack, pace: 1.6 },
+            { camera: camDoor, swing: [{ anchor: ids.door, pivot, deg, ids: riders, to: 0 }] },
+          ],
+        },
       ];
-      const note = ` The hinges (each prints as one part) and the ${mark} latch clips press into the front mini-dovetail slots from inside and push down to lock; then the ${ds.label} door (${h === 1 ? `${knob.label} on one M3 screw` : `${handleStyle.label} on two M3 screws`}, a 10×2 mm magnet in each door clip) pops onto the hinge claws, ${side}-hinged.`;
-      return { ids, phasesAt, swing, note };
+      const all = [...ids.body, ...ids.claws, ...ids.pin, ...ids.side, ...ids.smag, ids.door, ids.grip, ...screws, ...ids.dclip, ...ids.dmag];
+      return { ids, steps, all };
     })() : null;
+    if (cab) cabinets.push(cab);
     /* Close on EACH cover from its own outer side, where no neighbour stands between the camera and it: the 3.8 mm
        slide is the whole lesson, and at a step's own framing it is a few pixels. Framed on the FRONT part of the
        cover, where its top edge passes the case's: the whole cover at 1.15 of its own sphere measured ~6 px of slide
@@ -1940,8 +2102,7 @@ export function generateManifest(build, opts = {}) {
           + (mcId ? ', magnet clip into the back slot' : '') + '. The cover slides on across the whole row next.'
           + (shId ? ' ' + (firstShelfDemo === null ? shelfText : 'Fit this case\'s shelf insert the same way.') + lipText(lipIds.length) : '')
           + extText
-          + (scIds.length ? sideText(scIds.length, i === firstSide) : '')
-          + (cab ? cab.note : ''),
+          + (scIds.length ? sideText(scIds.length, i === firstSide) : ''),
         camera: benchCam,
         phases: [
           { enter: [{ id: `case${i}`, from: [0, 45, 0] }] },
@@ -1951,7 +2112,6 @@ export function generateManifest(build, opts = {}) {
           ...shelfFit({ restore: benchCam }),
           // the side covers before anything caps the case (the release rule: after the case, before what stacks on top)
           ...sideFit({ restore: benchCam }),
-          ...(cab ? cab.phasesAt() : []),
         ],
       });
       if (shId && firstShelfDemo === null) firstShelfDemo = i;
@@ -2012,7 +2172,6 @@ export function generateManifest(build, opts = {}) {
       if (shId) bench.push(...shelfFit({ restore: benchCam }));
       // the side covers before the Cover Lower caps the case (after the case, before what stacks on top)
       bench.push(...sideFit({ restore: benchCam }));
-      if (cab) bench.push(...cab.phasesAt());   // the door before the cover: the hinges press in through the open front
       bench.push({ enter: clLocal.map(id => ({ id, from: [0, 0, -WALL.coverSlide] })), dip: dipItems([`ql${i}L`, `ql${i}R`], WALL.coverSlide) });
       bench.push({ pop: popItems([`ql${i}L`, `ql${i}R`]) });
       if (stopIds.length) bench.push({ enter: stopIds.map(id => ({ id, from: [0, 35, 0] })) });
@@ -2031,8 +2190,7 @@ export function generateManifest(build, opts = {}) {
         + (isDrawer ? ', drop the drawer stoppers into it,' : ',') + ' then cap it with the Cover Upper · the cover can only slide on now, not once the case is on the wall.'
         + (mcId && firstClipDemo === null ? ' ' + clipText : '')
         + (shId && firstShelfDemo === null ? ' ' + shelfWhy : '')
-        + (scIds.length && i === firstSide ? ` A side cover goes on like this: ${sideHow(1)}.` : '')
-        + (cab ? cab.note : '');
+        + (scIds.length && i === firstSide ? ` A side cover goes on like this: ${sideHow(1)}.` : '');
 
       if (i === ghostTopIdx) {
         // the first top case shown is split into two steps (there's a lot going
@@ -2090,7 +2248,6 @@ export function generateManifest(build, opts = {}) {
           ...shelfFit({ at: [0, 0, F], zBase: F }),
           // the side covers too, out front: they ride the same cancelling move via `members`
           ...sideFit({ at: [0, 0, F] }),
-          ...(cab ? cab.phasesAt([0, 0, F]) : []),
           { camera: camUp(cx, bottom + caseH / 2, totalW, gridBottom) }, // back below before the slide
           { move: members.map(id => ({ id, by: [0, 0, -F] })), dip: dipItems([`ql${i}L`, `ql${i}R`], F) },
           { pop: popItems([`ql${i}L`, `ql${i}R`]) },
@@ -2107,12 +2264,10 @@ export function generateManifest(build, opts = {}) {
         step.phases = [
           { sync: true, enter: members.map(id => ({ id, from: [0, 0, UT.fwd] })), dip: dipItems([`ql${i}L`, `ql${i}R`], UT.fwd) },
           { pop: popItems([`ql${i}L`, `ql${i}R`]) },
-          ...(cab ? [cab.swing] : []),
         ];
         step.note = (isTop
           ? 'QuickLocks in, then slide the case straight back · its top rails ride into the rail channels until it stops.'
-          : 'Slide the case straight back under the row above · its top rails engage the case above and the QuickLocks click home.')
-          + (cab ? ' Fit its hinges, latch clips and door before the slide.' : '');
+          : 'Slide the case straight back under the row above · its top rails engage the case above and the QuickLocks click home.');
         if (scIds.length) step.note += preFittedSide(scIds.length, i === firstSide, !isTop);
       }
       if (isTop && isDrawer) step.note += ' (No drawer stoppers needed up here · the rail has them built in.)';
@@ -2127,10 +2282,8 @@ export function generateManifest(build, opts = {}) {
       step.phases = [
         { sync: true, enter: members.map(id => ({ id, from: [0, 0, wallFwd] })), dip: dipItems([`ql${i}L`, `ql${i}R`], wallFwd) },
         { pop: popItems([`ql${i}L`, `ql${i}R`]) },
-        ...(cab ? [cab.swing] : []),
       ];
-      step.note = 'Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home.'
-        + (cab ? ' Fit its hinges, latch clips and door on the bench first, the same way as the case above.' : '');
+      step.note = 'Slide the case straight back toward the wall from just in front · its top rails engage the case above and the QuickLocks click home.';
       if (mcId && firstClipDemo === null) { firstClipDemo = i; step.note += ' ' + clipText; }
       if (shId) step.note += ' ' + preFittedShelf(lipIds.length);
       if (scIds.length) step.note += preFittedSide(scIds.length, i === firstSide, true);
@@ -2165,7 +2318,6 @@ export function generateManifest(build, opts = {}) {
           + lipText(lipIds.length) + extText;
         if (firstShelfDemo === null) firstShelfDemo = i;
       }
-      if (cab) { step.phases.push(...cab.phasesAt()); step.note = (step.note ? step.note : '') + cab.note; }
     }
     if (hangs) steps.push(step);
     else if (!isBase) {
@@ -2620,7 +2772,9 @@ export function generateManifest(build, opts = {}) {
   // hides (its quantities are the Parts tab's); "tap" was said on a desktop too (the UX plugins trial, 2026-11-17)
   const extras = [];
   if (handleTotal) extras.push(`${handleTotal * 2}× M3 screws for the handles`);
-  if (magnetTotal) extras.push(`${magnetTotal} disc magnets (10×2 mm or 6×2 mm) for the optional magnet closures`);
+  if (cabBuy.knobScrews) extras.push(`${cabBuy.knobScrews}× M3 screw${cabBuy.knobScrews > 1 ? 's' : ''} for the knob${cabBuy.knobScrews > 1 ? 's' : ''}`);
+  if (magnetTotal - cabBuy.magnets) extras.push(`${magnetTotal - cabBuy.magnets} disc magnets (10×2 mm or 6×2 mm) for the optional magnet closures`);
+  if (cabBuy.magnets) extras.push(`${cabBuy.magnets} disc magnets (10×2 mm) for the door latches`);
   const preSteps = [
     {
       title: funName,
@@ -2748,6 +2902,17 @@ export function generateManifest(build, opts = {}) {
       phases: [{ enter: cuIds.map(id => ({ id, from: [0, 0, slideBack] })) }],
     });
   }
+  /* the cabinets' doors (2026-11-19): every case is home by now, so each shot frames a part where it finally sits -
+     the first cabinet shown part by part, any others in one beat */
+  if (cabinets.length) {
+    postSteps.push(...cabinets[0].steps());
+    if (cabinets.length > 1) postSteps.push({
+      title: 'The other cabinets',
+      note: 'Fit the hinges, latch clips, handle and door on every other cabinet the same way.',
+      camera: cam(0, H_MM, totalW, gridBottom, FIT),
+      phases: [{ fade: cabinets.slice(1).flatMap(c => c.all).map(id => ({ id })) }],
+    });
+  }
   if (firstDrawerDemo !== null) {
     const later = drawerPhases._laterDrawers || [];
     delete drawerPhases._laterDrawers;
@@ -2844,13 +3009,15 @@ export function generateManifest(build, opts = {}) {
     colors: {
       ...COLORS,
       ...(adhesiveFeet ? { FootAdhesive: '#4a4d56' } : {}),
-      ...(units.some(u => u.fill === 'shelf') ? { ShelfInsert: SHELF_COLORS.ShelfInsert } : {}),
+      // a cabinet is a shelf unit under its door: its bottom insert and its extenders are the shelf's parts
+      ...(units.some(u => u.fill === 'shelf' || u.fill === 'cabinet') ? { ShelfInsert: SHELF_COLORS.ShelfInsert } : {}),
       ...(units.some(u => u.fill === 'shelf' && (u.lip === 'front' || u.lip === 'both')) ? { ShelfLip: SHELF_COLORS.ShelfLip } : {}),
       // only a shelf ABOVE 1H stacks extenders, so a board of 1H shelves still
       // emits no extender colour
-      ...(units.some(u => u.fill === 'shelf' && u.hh > 2) ? EXTENDER_COLOR : {}),
+      ...(units.some(u => (u.fill === 'shelf' || u.fill === 'cabinet') && u.hh > 2) ? EXTENDER_COLOR : {}),
       // only when a cover is drawn: a build whose exposed ends are all too tall for one emits no colour for it
       ...(inst.some(i => i.node.startsWith('SideCover_')) ? SIDE_COVER_COLOR : {}),
+      ...(cabinets.length ? CABINET_COLORS : {}),
     },
     parts: [...bom.values()],
     instances: inst,

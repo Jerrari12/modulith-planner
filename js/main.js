@@ -5391,6 +5391,7 @@ async function playStep(i) {
   applyState(i - 1);
   tweenCamera(step.camera);
   const vanished = new Set(); // ids hidden by a `vanish` phase, restored by `appear`
+  const swingRigs = new Map(); // a door held open by `swing ... to` until a later phase of this step swings it back
   for (const ph of step.phases || []) {
     if (my !== animToken) return;
     const jobs = [];
@@ -5594,29 +5595,75 @@ async function playStep(i) {
     (ph.swing || []).forEach(sw => {
       const anchor = instances.get(sw.anchor);
       if (!anchor) return;
-      anchor.group.updateMatrixWorld(true);
-      const pivotW = anchor.group.localToWorld(new THREE.Vector3(sw.pivot[0], 0, sw.pivot[1]));
-      const parts = (sw.ids || []).map(id => instances.get(id)).filter(Boolean).map(inst => {
-        const child = inst.group.children[0];
-        child.position.set(0, 0, 0); child.rotation.set(0, 0, 0);
-        child.updateMatrix(); inst.group.updateMatrixWorld(true);
-        // C0 keeps the child's own rest scale in the product, so the turn never rewrites it (closed = C0 exactly)
-        return { child, C0: child.matrix.clone(), G: inst.group.matrixWorld.clone(), Gi: inst.group.matrixWorld.clone().invert() };
-      });
-      const T = new THREE.Matrix4(), R = new THREE.Matrix4(), Ti = new THREE.Matrix4(), M = new THREE.Matrix4();
-      const open = THREE.MathUtils.degToRad(sw.deg || -100);
+      /* `to` holds the door at that fraction of `deg` for the rest of the step (the rig is kept per anchor, so a later
+         phase's `to: 0` swings it back from where it is); without `to` it opens and shuts within the phase.
+         The rig is taken at REST - each part's group as it stands home, the axis from the anchor's home - and a group
+         that an enter or move has put somewhere else keeps that offset in world space on top of the turn: a door
+         assembled out front turns about its own hinge edge there, and a rider that enters while the door is held open
+         (a latch clip) appears carried round with it, its approach offset in world space.
+         `tilt: { at, axis, deg, ids, to }` (the door hooked onto its top hinge first, 2026-11-19) adds a second turn,
+         about a world axis through a world point (both in the stage's frame, like `pos`), applied after the swing to
+         the listed parts only - the claws stay on the hinge while the door tips. `to` is its fraction, held like the
+         swing's until a later phase takes it back to 0. */
+      const held = sw.to != null || !!sw.tilt;
+      let rig = held ? swingRigs.get(sw.anchor) : null;
+      if (!rig) {
+        const restWorld = inst => {
+          const g = inst.group, was = g.position.clone();
+          g.position.copy(basePos(inst, inst.staged)); g.updateMatrixWorld(true);
+          const W = g.matrixWorld.clone();
+          g.position.copy(was); g.updateMatrixWorld(true);
+          return W;
+        };
+        const pivotW = new THREE.Vector3(sw.pivot[0], 0, sw.pivot[1]).applyMatrix4(restWorld(anchor));
+        const parts = (sw.ids || []).map(id => instances.get(id)).filter(Boolean).map(inst => {
+          const child = inst.group.children[0];
+          child.position.set(0, 0, 0); child.rotation.set(0, 0, 0); child.updateMatrix();
+          const G = restWorld(inst);
+          // C0 keeps the child's own rest scale in the product, so the turn never rewrites it (closed = C0 exactly)
+          return { id: inst.cfg.id, child, C0: child.matrix.clone(), G, Gi: G.clone().invert() };
+        });
+        rig = { pivotW, parts, open: THREE.MathUtils.degToRad(sw.deg || -100), f: 0, tilt: null, tf: 0 };
+        if (held) swingRigs.set(sw.anchor, rig);
+      }
+      if (sw.tilt) {
+        const frame = anchor.group.parent;
+        frame.updateMatrixWorld(true);
+        rig.tilt = {
+          at: frame.localToWorld(new THREE.Vector3(...sw.tilt.at)),
+          axis: new THREE.Vector3(...sw.tilt.axis).transformDirection(frame.matrixWorld),
+          rad: THREE.MathUtils.degToRad(sw.tilt.deg || 0), ids: new Set(sw.tilt.ids || []),
+        };
+      }
+      const T = new THREE.Matrix4(), R = new THREE.Matrix4(), Ti = new THREE.Matrix4(), W = new THREE.Matrix4(), Wt = new THREE.Matrix4(), M = new THREE.Matrix4();
       const sm = x => x * x * (3 - 2 * x);
+      const pose = (f, tf) => {
+        const { pivotW, tilt } = rig;
+        T.makeTranslation(pivotW.x, pivotW.y, pivotW.z); R.makeRotationY(rig.open * f); Ti.makeTranslation(-pivotW.x, -pivotW.y, -pivotW.z);
+        W.copy(T).multiply(R).multiply(Ti);
+        if (tilt && tf) {
+          T.makeTranslation(tilt.at.x, tilt.at.y, tilt.at.z); R.makeRotationAxis(tilt.axis, tilt.rad * tf); Ti.makeTranslation(-tilt.at.x, -tilt.at.y, -tilt.at.z);
+          Wt.copy(T).multiply(R).multiply(Ti).multiply(W);
+        }
+        for (const p of rig.parts) {
+          M.copy(p.Gi).multiply(tilt && tf && tilt.ids.has(p.id) ? Wt : W).multiply(p.G).multiply(p.C0);
+          M.decompose(p.child.position, p.child.quaternion, p.child.scale);
+        }
+        rig.f = f; rig.tf = tf;
+      };
+      if (held) {
+        const f0 = rig.f, f1 = sw.to ?? rig.f, t0 = rig.tf, t1 = sw.tilt ? (sw.tilt.to ?? 1) : rig.tf;
+        const span = Math.max(Math.abs(f1 - f0), Math.abs(t1 - t0) * 0.6);
+        jobs.push(tween({
+          duration: sw.duration || 1300 * Math.max(0.3, span) * (ph.pace || 1), delay: sw.hold || 0,
+          onUpdate: k => { const e = k >= 1 ? 1 : sm(k); pose(f0 + (f1 - f0) * e, t0 + (t1 - t0) * e); },
+        }));
+        return;
+      }
       jobs.push(tween({
         duration: sw.duration || 2600, delay: sw.hold || 0,
-        onUpdate: k => {
-          // out over the first 40 %, held open to 60 %, back shut by the end; exactly closed at k >= 1
-          const f = k >= 1 ? 0 : k < 0.4 ? sm(k / 0.4) : k < 0.6 ? 1 : sm(1 - (k - 0.6) / 0.4);
-          T.makeTranslation(pivotW.x, pivotW.y, pivotW.z); R.makeRotationY(open * f); Ti.makeTranslation(-pivotW.x, -pivotW.y, -pivotW.z);
-          for (const p of parts) {
-            M.copy(p.Gi).multiply(T).multiply(R).multiply(Ti).multiply(p.G).multiply(p.C0);
-            M.decompose(p.child.position, p.child.quaternion, p.child.scale);
-          }
-        }
+        // out over the first 40 %, held open to 60 %, back shut by the end; exactly closed at k >= 1
+        onUpdate: k => pose(k >= 1 ? 0 : k < 0.4 ? sm(k / 0.4) : k < 0.6 ? 1 : sm(1 - (k - 0.6) / 0.4), 0),
       }));
     });
     // fade: materialize instances at their final position ("…and repeat for
