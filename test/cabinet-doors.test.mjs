@@ -54,7 +54,8 @@ test('a left- and a right-hinged cabinet bill their own doors and handed hinge a
     ['GEN2 Door Latch (1H) - Left-Hinged Door', 2],
     ['GEN2 Door Latch (1H) - Right-Hinged Door', 2],
   ]);
-  for (const r of [...doors, ...find(rs, /Cabinet Hinge|Door Latch/)]) assert.ok(r.unreleased, `${r.name} is still unreleased`);
+  // released 2026-11-21: the Essential door and its hinge and latch are on Printables and Thangs
+  for (const r of [...doors, ...find(rs, /Cabinet Hinge|Door Latch/)]) assert.ok(!r.unreleased, `${r.name} is released`);
 });
 
 test('each latch takes two 10×2 mm magnets, one per clip', () => {
@@ -70,7 +71,7 @@ test('a 1H door takes one knob and one screw; a taller door takes a handle and t
   assert.equal(knob.length, 1);
   assert.equal(knob[0].name, 'GEN2 Deco Knob');
   assert.equal(knob[0].qty, 2, 'two 1H cabinets');
-  assert.ok(knob[0].unreleased, 'the knobs are not published yet');
+  assert.ok(!knob[0].unreleased, 'the knobs are released with the Essential doors (2026-11-21)');
   const handle = rs.filter((r) => r.name === 'GEN2 Decor Handles - Deco Series');
   assert.equal(handle.reduce((n, r) => n + r.qty, 0), 1, 'one 2H cabinet');
   const screw = find(rs, /^M3×8mm button head screw$/);
@@ -86,6 +87,34 @@ test('the screw length follows the door style, and a series with no knob falls b
   assert.equal(find(crystal, /Knob$/)[0].name, 'GEN2 Deco Knob');
   const bb = rows(base({ handleStyle: 'blockbar', placed: [cab(1, 0, 1, 1)] }));
   assert.equal(find(bb, /Knob$/)[0].name, 'GEN2 BlockBar Knob');
+});
+
+test('the premium door styles stay coming soon after the Essential release; their hardware does not', () => {
+  // 2026-11-21: the Essential door, hinges, latches and knobs went live; Chevron, EdgeLabel and Classic Pro have no files
+  for (const style of ['chevron', 'edgelabel', 'classicpro']) {
+    const rs = rows(base({ doorStyle: style, placed: [cab(1, 0, 2, 3)] }));
+    const door = find(rs, / Door - 2W-3H$/);
+    assert.equal(door.length, 1, `${style}: one door row`);
+    assert.ok(door[0].unreleased, `${style}: the door row is still coming soon`);
+    assert.ok(find(rs, /Cabinet Hinge|Door Latch/).every((r) => !r.unreleased), `${style}: the hinges and latches are released`);
+  }
+  assert.ok(!find(rows(base({ placed: [cab(1, 0, 2, 3)] })), / Door - 2W-3H$/)[0].unreleased, 'the Essential door is released');
+});
+
+test('every Essential door, hinge, latch and knob name links the one listing page', () => {
+  const names = [
+    ...['1W-1H', '4W-6H'].flatMap((s) => [GEN2.partNames.door(240, s, 'Essential', 'left'), GEN2.partNames.door(240, s, 'Essential', 'right')]),
+    GEN2.partNames.hinge('left'), GEN2.partNames.hinge('right'), GEN2.partNames.latch('left'), GEN2.partNames.latch('right'),
+    GEN2.partNames.knob('Deco'), GEN2.partNames.knob('BlockBar'),
+  ];
+  const pl = vm.runInContext('partLinks', ctx);
+  for (const n of names) {
+    const l = pl(n);
+    assert.equal(l.printables, 'https://www.printables.com/model/1672641-modulith-essential-cabinet-doors', n);
+    assert.ok(l.exactP, `${n}: an exact Printables link`);
+  }
+  const chev = pl(GEN2.partNames.door(240, '2W-3H', 'Chevron', 'left'));
+  assert.ok(!chev.exactP, 'a Chevron door does not link the Essential page');
 });
 
 test('a door style with no model gets no screw length', () => {

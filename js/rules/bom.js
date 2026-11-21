@@ -305,7 +305,7 @@ export function computeBom(build, GEN2) {
           name: P.door(len, size, doorStyle, hand), qty, club: doorDef.club,   // premium door styles, as the faceplates
           note: "Door matches the total width and height of the case + extenders." +
             (hand === "right" ? " Right-hinged: the mirror image of the left-hinged door." : ""),
-          unreleased: GEN2.unreleased.includes("door"),
+          unreleased: GEN2.unreleased.includes("door") || GEN2.unreleased.includes("door:" + build.doorStyle),   // a premium style with no files yet (2026-11-21)
         }, fillReasons("cabinet")));
       });
       ["left", "right"].forEach((hand) => {
