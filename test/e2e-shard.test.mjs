@@ -77,13 +77,19 @@ test('a new case goes to the least-loaded shard, and an unusable map entry count
   assert.equal(assign(['constructor'], 2, {}, {}).length, 1, 'a name that is on Object.prototype is not a pin');
 });
 
-test('the committed map is usable: every entry a shard of the workflow\'s eight, and the partition it gives covers every case once', () => {
+test('the committed map is usable: every entry a shard of the workflow\'s matrix, and the partition it gives covers every case once', () => {
   const pins = JSON.parse(readFileSync(new URL('../e2e/shard-map.json', import.meta.url), 'utf8'));
+  /* the shard count is the deploy workflow's matrix length, read from the file, so the map and the matrix cannot drift */
+  const yml = readFileSync(new URL('../.github/workflows/pages.yml', import.meta.url), 'utf8');
+  const matrix = /^\s+shard: \[([\d, ]+)\]\s*$/m.exec(yml);
+  assert.ok(matrix, 'the e2e matrix line is found in pages.yml');
+  const n = matrix[1].split(',').length;
+  assert.deepEqual(matrix[1].split(',').map(Number), Array.from({ length: n }, (_, i) => i + 1), 'the matrix is 1..n');
   const names = Object.keys(pins);
   assert.ok(names.length >= 100, `${names.length} cases mapped`);
-  for (const x of names) assert.ok(Number.isInteger(pins[x]) && pins[x] >= 1 && pins[x] <= 8, `${x}: shard ${pins[x]}`);
-  const counts = new Array(9).fill(0);
-  for (const s of assign(names, 8, {}, pins)) counts[s]++;
+  for (const x of names) assert.ok(Number.isInteger(pins[x]) && pins[x] >= 1 && pins[x] <= n, `${x}: shard ${pins[x]}`);
+  const counts = new Array(n + 1).fill(0);
+  for (const s of assign(names, n, {}, pins)) counts[s]++;
   assert.ok(counts.slice(1).every((c) => c > 0), `no empty shard: ${counts.slice(1)}`);
 });
 

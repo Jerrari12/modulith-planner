@@ -425,10 +425,18 @@ jobs:
     # slowest shard 20.8 min (run 40616559063: 15.2 / 12.8 / 20.8 / 16.2 / 16.0 / 5.7). Modelled on that day's three green
     # runs with each shard's measured machine speed: the runner's own weights alone 15.8-16.8 min, eight shards 11.9-12.6.
     # The repository is public, so the two extra runners cost nothing.
+    # TWELVE (2026-11-21, Joey: "why does it take so long for the planner to implement?"): 176 cases, and the last three
+    # green runs (44810625864, 44864217277, 44953679584) waited 27-34 min on their slowest shard. The weights were a month
+    # old and 19 new cases sat at the median, so the pinned shards had drifted to 450-752 weight-seconds each; the runners
+    # measured 1.43-3.27x those weights, so a run waits on its slowest machine. Re-weighted from those three runs and
+    # re-mapped into twelve shards of 367 each: modelled 21 min (one minute of setup plus 367 s x 3.27, the slowest
+    # machine seen), against 31 min (p90 40) for the old map and 29 for a fresh eight. The model gives 29.6 / 35.5 / 26.3
+    # min for the three measured runs, which took 31.7 / 34.4 / 26.7 in cases. Fifteen jobs run at once, under the free
+    # plan's twenty.
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     name: e2e (shard ${{ matrix.shard }})
     concurrency:
       group: e2e-${{ github.ref }}-${{ matrix.shard }}

@@ -8,11 +8,12 @@
    - each case is identified by its POSITION in the file (a name may repeat; a position cannot), and lands in exactly one
      shard - assign() returns one shard per position, and test/e2e-shard.test.mjs proves the partition for many lists;
    - the split balances measured time: the longest case first, each onto the least-loaded shard (ties to the lower shard
-     number), weighted by e2e/shard-weights.json (seconds per case name; only the proportions matter). Since 2026-10-27
-     they are the RUNNER's own: each case's median over the shard notices (tools/tap-durations.mjs) of three green main
-     runs, 40611504137, 40614184548 and 40616559063, each shard's seconds divided by its machine's speed (the median ratio
-     against the previous weights), so six machines of 0.95-1.98x share one scale; a case that skips on the runner weighs
-     0.5.
+     number), weighted by e2e/shard-weights.json (seconds per case name; only the proportions matter). They are the
+     RUNNER's own: each case's median over the shard notices (tools/tap-durations.mjs) of three green main runs, each
+     shard's seconds divided by its machine's speed (the median ratio against the previous weights), so every machine
+     shares one scale; a case that skips on the runner weighs 0.5. First on 2026-10-27 (runs 40611504137, 40614184548,
+     40616559063; machines 0.95-1.98x); refreshed 2026-11-21 from runs 44810625864, 44864217277 and 44953679584
+     (machines 1.43-3.27x the October weights, all 176 cases, 153 timed and 23 skipping on the runner).
      A case missing from the weights - a new one - counts as the median, so a stale file only unbalances, it never drops
      or doubles a case;
    - a case keeps its shard (e2e/shard-map.json, 2026-11-01). Without the map, one added case moved 58 others on 2026-10-31
