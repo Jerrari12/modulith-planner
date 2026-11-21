@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { cleanPartItem, stripeColour, cleanStripe, stripePositionOf, assignedLabelOf, wornLabelOf, labelLookOf, labelLooksKey, labelLookNeeds,
   stripeZone, isStripeZone, stripeHexOfKey, stripeMeaningOfKey, STRIPE_POSITIONS, STRIPE_COLOURS, stripeFor } from '../js/label-look.js';
 import { spoolFor, SUGGESTED_V1 } from '../js/label-palette.js';
+import { paletteKeyOf } from '../js/generate.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STUDIO = process.env.GEN2_LABELSTUDIO_ROOT
@@ -142,9 +143,14 @@ function declAt(src, needle) {
 test('activeHex / activeLabel (main.js, executed): a stripe wears its own colour, never a filament; other keys are unchanged', () => {
   /* the label palette's two (2026-10-28) come after the original eight: a meaning's stripe ('Label:STRIPE@sky-blue') wears
      the build's spool for it, whatever the Colors palette or a shown look says; a stripe of any other colour, its own */
-  const make = (name, labelPalette = null) => new Function('stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest', 'previewLook',
-    'stripeMeaningOfKey', 'spoolFor', 'labelPalette',
-    `${declAt(mainSrc, `const ${name} =`)} return ${name};`);
+  /* paletteKeyOf (generate.js, 2026-11-21): a cabinet door's material key reads the faceplate's colour. Bound first, so the
+     positional contexts below are unchanged. */
+  const make = (name, labelPalette = null) => {
+    const f = new Function('paletteKeyOf', 'stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest', 'previewLook',
+      'stripeMeaningOfKey', 'spoolFor', 'labelPalette',
+      `${declAt(mainSrc, `const ${name} =`)} return ${name};`);
+    return (...a) => f(paletteKeyOf, ...a);
+  };
   const ctx = [stripeHexOfKey, true, { Label: { hex: '#123456', name: 'Some PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' }, 'Label:STRIPE@sky-blue': { hex: '#000000', name: 'Black' } },
     () => false, 'light', { Case: '#dfe3ec' }, { colors: { Label: '#eef0f4' } }, null, stripeMeaningOfKey, spoolFor, null];
   const activeHex = make('activeHex')(...ctx), activeLabel = make('activeLabel')(...ctx);
@@ -165,6 +171,13 @@ test('activeHex / activeLabel (main.js, executed): a stripe wears its own colour
   assert.equal(activeHex('Label'), '#123456', 'the control: the body still follows the palette');
   assert.equal(activeHex('Label:TEXT'), '#123456', 'a zone with no pick still follows its body');
   assert.equal(activeLabel('Label'), 'Some PLA');
+  /* a cabinet door's MATERIAL keys ('Door', 'Door:FACE') wear the faceplate's pick, and a zone's own pick where it has one */
+  const door = [ctx[0], true, { Faceplate: { hex: '#abcdef', name: 'Face PLA' }, 'Faceplate:GRIP': { hex: '#fedcba', name: 'Grip PLA' } }, ...ctx.slice(3)];
+  assert.equal(make('activeHex')(...door)('Door'), '#abcdef');
+  assert.equal(make('activeLabel')(...door)('Door'), 'Face PLA');
+  assert.equal(make('activeHex')(...door)('Door:FACE'), '#abcdef', 'an unpicked zone follows the faceplate body');
+  assert.equal(make('activeHex')(...door)('Door:GRIP'), '#fedcba', 'a picked zone wears its pick');
+  assert.equal(make('activeLabel')(...door)('Door:GRIP'), 'Grip PLA');
 });
 
 test('renderZoneChips (main.js) offers no chip for a stripe zone', () => {

@@ -6,7 +6,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { generateManifest, migrateOfficialBuild, resolvePartPreview, REQUIREMENT as REQ,
-  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, handlePoseKey, gridfinitySizeOk, CHIPS } from './generate.js';
+  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, handlePoseKey, doorPoseKey, materialTypeOf, paletteKeyOf,
+  gridfinitySizeOk, CHIPS } from './generate.js';
 import { chipFillGroups, chipFillLayout, buildChipFill, titleTexture } from './chip-fill.js';   // the chips in a chip drawer (2026-11-09); stamped in pages.yml
 import { resolveEntry } from './entry.js';
 import { tabTitle, buildName } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
@@ -3607,7 +3608,7 @@ function seeIntoDetailAllowed() {
   return partMeshCount() <= SEE_INTO_DETAIL_LIMIT;
 }
 let seeIntoDriven = new Set();         // the supported keys wearing a translucent filament RIGHT NOW
-const seeIntoDrivenKey = key => !!seeInto && seeIntoComponentKeys().includes(key) && !!translucentFamilyFor(key)
+const seeIntoDrivenKey = key => !!seeInto && seeIntoComponentKeys().includes(paletteKeyOf(key)) && !!translucentFamilyFor(key)   // a door's material rides its faceplate key
   && !seeIntoSimplified;               // simplified: the filament's colour stays, the extra passes do not run
 /* Translucency is STRUCTURAL - it patches the shader and changes the program cache key - so it cannot be moved by
    applyPalette's in-place repaint the way colour and roughness are. When a pick crosses the line in either
@@ -3643,7 +3644,7 @@ function syncSeeIntoComponents() {
    a little stronger on Chevron strips". Every other part keeps the lab's strength (1). ⚠ An artistic value, set by eye
    against the 2026-10-26 comparison shots, not a measurement. */
 const CHEVRON_FACE_LATTICE_GAIN = 2;
-const latticeGainFor = (key) => (key === 'Faceplate:FACE' && currentFaceplateStyle()?.key === 'chevron' ? CHEVRON_FACE_LATTICE_GAIN : 1);
+const latticeGainFor = (key) => (paletteKeyOf(key) === 'Faceplate:FACE' && currentFaceplateStyle()?.key === 'chevron' ? CHEVRON_FACE_LATTICE_GAIN : 1);
 function seeIntoPatched(key, m) {
   if (!seeInto) return m;
   if (key === 'BackCover' && SEE_INTO_COVERS) seeInto.patch(m, buildAxisForKey(key));   // the reference piece: preset look, switch only
@@ -3866,7 +3867,7 @@ const PLATE_PROFILES = PLATE_FINISHES.map(key =>
   ({ key, label: PLATE_LABELS[key], holo: key === 'holographic' ? HOLO_OPACITY : 0 }));
 const partPlates = () => (build && build.plateParts && typeof build.plateParts === 'object' && !Array.isArray(build.plateParts)) ? build.plateParts : {};
 /** the finish a part TYPE stores for itself, or null when it follows the build */
-const ownPlateOf = (type) => { const f = Object.hasOwn(partPlates(), type) ? partPlates()[type] : null; return PLATE_FINISHES.includes(f) ? f : null; };
+const ownPlateOf = (type) => { type = paletteKeyOf(type); const f = Object.hasOwn(partPlates(), type) ? partPlates()[type] : null; return PLATE_FINISHES.includes(f) ? f : null; };   // a door's material follows the Faceplate's (materialTypeOf)
 /** the finish a material key (a type, or type:ZONE) is printed with */
 const plateFinishFor = (key) => ownPlateOf(String(key).split(':')[0]) || plateFinishOf(build);
 const plateProfileFor = (key) => PLATE_PROFILES.find(p => p.key === plateFinishFor(key));
@@ -4052,9 +4053,13 @@ const faceStyleNow = () =>
    (applyHandleStyle) and every regenerate re-emits - so a swap, a relayed style, a planner layout and
    Reset all answer from the one place that describes what is on screen. */
 const handlePoseNow = () => handlePoseKey(manifest?.parts?.find((p) => p.type === 'Handle')?.node);
+/* ⚠ AND THE DOOR'S STYLE (2026-11-21): the 'Door' material is the cabinet doors' own (generate.js materialTypeOf), and its
+   pose is filed by door style. Read from the build's door rows, the way the handle's is: a build has one door style
+   (build.doorStyle), so every door row names it. */
+const doorPoseNow = () => doorPoseKey(manifest?.parts?.find((p) => doorPoseKey(p.node))?.node);
 
 function buildAxisForKey(key) {
-  return buildAxisForType(key.split(':')[0], faceStyleNow(), handlePoseNow());
+  return buildAxisForType(key.split(':')[0], faceStyleNow(), handlePoseNow(), doorPoseNow());
 }
 
 /* One author for "the faceplate materials are no longer valid", because there are two reasons and
@@ -4064,6 +4069,7 @@ function dropFaceplateMaterials(types = ['Faceplate']) {
   purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
   purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   const drop = new Set(types);   // the see-into rebuild also names 'Accent', a part of its own that a pick can make translucent
+  if (drop.has('Faceplate')) drop.add('Door');   // the doors' material is coloured, finished and made translucent as a faceplate's (materialTypeOf)
   for (const k of Object.keys(materials)) if (drop.has(k.split(':')[0])) delete materials[k];
   for (const k of Object.keys(highlightMats)) if (drop.has(k.split(':')[0])) delete highlightMats[k];
   for (const k of [...layerHandles.keys()]) if (drop.has(k.split(':')[0])) layerHandles.delete(k);
@@ -4356,7 +4362,8 @@ const bedFinishDebug = {
       out.finished++;
       const type = typeByNode[inst.cfg.node];
       out.byType[type] = (out.byType[type] || 0) + 1;
-      const stamped = o.geometry.userData.bedAxis, want = buildAxisForKey(zoneKey(type, o.userData.zone || ''));
+      // against the MATERIAL's key: a door draws the 'Door' material, whatever its row's type (materialTypeOf)
+      const stamped = o.geometry.userData.bedAxis, want = buildAxisForKey(zoneKey(materialTypeOf(type, inst.cfg.node), o.userData.zone || ''));
       if (!o.geometry.attributes.aBfMm) out.noAttribute.push(inst.cfg.node);
       else if (!stamped || !want || stamped.some((v, i) => v !== want[i])) out.axisMismatch.push(inst.cfg.node);
     });
@@ -4708,17 +4715,18 @@ async function loadTemplates() {
 // type key (so BOM chip / header swatch / presets all drive it). Material-free
 // parts get an unnamed default → no zone.
 function adoptTemplate(sceneRoot, type, node) {
+  const mt = materialTypeOf(type, node);   // a cabinet door draws its own material (generate.js materialTypeOf)
   sceneRoot.traverse(o => {
     if (!o.isMesh) return;
     const zone = (o.material?.name && o.material.name !== 'BODY') ? o.material.name : '';
     if (zone) o.userData.zone = zone;
-    o.material = baseMatFor(type, zone);
+    o.material = baseMatFor(mt, zone);
   });
   /* ⚠ A PART WHOSE BED FACES CANNOT BE STAMPED STAYS PLAIN, IT DOES NOT FAIL THE LOAD. This runs
      inside loadTemplates' per-node try, whose catch reports a MISSING GLB - a throw here would tell
      the user a file is absent that is not. Without the attribute the finish's contact weight reads
      0, so the part simply wears no finish. */
-  try { stampBedFaces(sceneRoot, type, node); }
+  try { stampBedFaces(sceneRoot, mt, node); }   // the MATERIAL type, so the stamp and the material ask the same pose
   catch (e) { console.warn(`[bed finish] ${node}: ${(e && e.message) || e} - left plain`); }
   /* the same rule for the cover edges: a template that cannot be stamped draws square edges, it does not fail the load
      (the shader reads a missing aSeam as a half-width of 0 and draws no edge) */
@@ -4754,11 +4762,14 @@ function stampSeams(root) {
    ⚠ THE AXIS IS THE NODE'S OWN. A faceplate node names its family and cannot change how it printed,
    so it is read from the name rather than from the build's current style - which it agrees with
    whenever the node is on screen, because the generator emits the family build.faceStyle names and
-   a static-kit swap loads the new family's nodes before it shows them. */
+   a static-kit swap loads the new family's nodes before it shows them.
+   ⚠ `type` IS THE MATERIAL TYPE (materialTypeOf): a cabinet door is stamped as a 'Door', with its own face-down pose,
+   because that is the material it draws - stamped as a 'Faceplate' it would take the faceplate FAMILY's axis, and under
+   Classic, Classic Pro and EdgeLabel its back would wear the finish (2026-11-21). */
 const faceFamilyOfNode = node => (node && FACEPLATE_STYLES.find(s => node.startsWith(s.node('')))?.key) || null;
 function stampBedFaces(root, type, node) {
   const axis = type
-    ? buildAxisForType(type, faceFamilyOfNode(node) || faceStyleNow(), handlePoseKey(node) || handlePoseNow())
+    ? buildAxisForType(type, faceFamilyOfNode(node) || faceStyleNow(), handlePoseKey(node) || handlePoseNow(), doorPoseKey(node) || doorPoseNow())
     : null;
   if (!axis) return;
   root.updateMatrixWorld(true);   // the template is not in the scene: its world IS the part frame
@@ -7001,6 +7012,8 @@ let lookQueue = Promise.resolve();   // lookCard runs one card at a time
    never shown (Astra's check: the model, the cards and the inspector agree, after Undo and a build switch too). */
 let sceneRev = 0, lookRev = -1;
 const lookMats = new Map();   // key|hex|label|alt -> a clone of the live material in the look's colour and finish
+/* `key` is the MATERIAL's key (materialFor's mkey: 'Door' for a cabinet door), so the clone carries the axis of the material
+   it was made from; the colour is the override's own. */
 function overrideMatFor(key, ov, zone, alt) {
   const type = key.split(':')[0];
   const base = (alt && !zone) ? altMatFor(type) : baseMatFor(type, zone);
@@ -7014,11 +7027,14 @@ function overrideMatFor(key, ov, zone, alt) {
 }
 function materialFor(inst, highlighted, zone = '') {
   const type = typeByNode[inst.cfg.node];
-  const key = zoneKey(type, zone);
-  if (!inst.cfg.planned && !colorLocked(key)) { const ov = overrideFor(unitOf(inst), key); if (ov) return overrideMatFor(key, ov, zone, inst.alt); }
-  const solid = (inst.alt && !zone) ? altMatFor(type) : baseMatFor(type, zone); // zoned types aren't tiled — alt is a body-only concept
+  const key = zoneKey(type, zone);   // the PALETTE's key: locks and a unit's own colours are filed by the row's type
+  /* the MATERIAL's key: the row's type, but 'Door' for a cabinet door (generate.js materialTypeOf), whose print pose is its
+     own. Every registry below is keyed by it, so a door never takes a faceplate's clone or a faceplate a door's. */
+  const mt = materialTypeOf(type, inst.cfg.node), mkey = zoneKey(mt, zone);
+  if (!inst.cfg.planned && !colorLocked(key)) { const ov = overrideFor(unitOf(inst), key); if (ov) return overrideMatFor(mkey, ov, zone, inst.alt); }
+  const solid = (inst.alt && !zone) ? altMatFor(mt) : baseMatFor(mt, zone); // zoned types aren't tiled — alt is a body-only concept
   const planned = !!inst.cfg.planned;
-  const pKey = key + (inst.alt && !zone ? '|alt' : '');
+  const pKey = mkey + (inst.alt && !zone ? '|alt' : '');
   const base = planned ? plannedMatFor(solid, pKey) : solid;
   if (!highlighted) return base;
   if (planned) {
@@ -7030,13 +7046,13 @@ function materialFor(inst, highlighted, zone = '') {
     return plannedHighlightMats[pKey].mat;
   }
   const cache = (inst.alt && !zone) ? altHighlightMats : highlightMats;
-  if (!cache[key]) {
+  if (!cache[mkey]) {
     const m = cloneMaterial(base);
     m.emissive = new THREE.Color(0xff8a40);
     m.emissiveIntensity = 0.4;
-    cache[key] = m;
+    cache[mkey] = m;
   }
-  return cache[key];
+  return cache[mkey];
 }
 // selecting a seated drawer (or anything riding it — faceplate, handle, clip)
 // slides it open like a real drawer; deselecting slides it shut
@@ -8302,7 +8318,7 @@ const snapshotUserPalette = () => { userPalette = structuredClone(customColors);
 // isn't printed, so it can't take a filament color: no picker, and any stored/
 // preset tint for the type is ignored — it always renders its manifest color.
 const colorLocked = type => {
-  const rows = manifest.parts.filter(p => p.type === type.split(':')[0]); // zone keys lock with their base type
+  const rows = manifest.parts.filter(p => p.type === paletteKeyOf(type).split(':')[0]); // zone keys lock with their base type; a door's material with the Faceplate rows
   return rows.length > 0 && rows.every(p => p.purchased);
 };
 // key = a part TYPE ('Faceplate') or a zone of one ('Faceplate:GRIP'). A zone
@@ -8321,6 +8337,7 @@ const DARK_STAGE_PALETTE = { Case: '#dfe3ec' };
    every store change (setLabelPalette), so no record swap (update, setLabels, the kit boot) can leave it stale. */
 let labelPalette = null;
 const activeHex = key => {
+  key = paletteKeyOf(key);   // a cabinet door's material ('Door', 'Door:FACE') is coloured as the faceplate's (generate.js materialTypeOf)
   // a label stripe in one of the six meanings prints in the build's spool for it, in every colour mode: it is the label's
   // own colour, which this build prints in a known spool (label-look.js stripePieceZone)
   const meaning = stripeMeaningOfKey(key);
@@ -8357,6 +8374,7 @@ const activeHex = key => {
  * the decision of 2026-09-07, and it is enforced here rather than anywhere else.
  */
 const activeLabel = key => {
+  key = paletteKeyOf(key);   // as activeHex: a door's material wears the faceplate's filament
   const meaning = stripeMeaningOfKey(key);
   if (meaning) return spoolFor(labelPalette, meaning).name;   // a meaning's stripe wears its spool (activeHex)
   if (stripeHexOfKey(key)) return null;   // any other stripe wears its label's colour, not a filament (activeHex)
@@ -10068,8 +10086,8 @@ async function drawThumb(s, { plain = false } = {}) {
     g.position.set(pos[0], pos[1], pos[2]);
     const rot = c.rot || [0, c.yaw || 0, 0];
     g.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]));
-    const t = typeByNode[node];
-    g.traverse(o => { if (o.isMesh) { const z = o.userData.zone || ''; const ov = unitId != null ? overrideFor(unitId, zoneKey(t, z)) : null; o.material = ov ? overrideMatFor(zoneKey(t, z), ov, z, false) : baseMatFor(t, z); o.castShadow = false; o.receiveShadow = false; } });
+    const t = typeByNode[node], mt = materialTypeOf(t, node);   // the palette's type, and the material's (a door's own, materialFor)
+    g.traverse(o => { if (o.isMesh) { const z = o.userData.zone || ''; const ov = unitId != null ? overrideFor(unitId, zoneKey(t, z)) : null; o.material = ov ? overrideMatFor(zoneKey(mt, z), ov, z, false) : baseMatFor(mt, z); o.castShadow = false; o.receiveShadow = false; } });
     group.add(g);
   }
   thumbScene.add(group); group.updateWorldMatrix(true, true);
@@ -10202,14 +10220,16 @@ function lookSnapshot() {
     if (g.children[0]) { g.children[0].position.set(0, 0, 0); g.children[0].rotation.set(0, 0, 0); }   // no lift, no open drawer
     lookScene.add(g);
     const t = typeByNode[inst.cfg.node], uid = inst.cfg.planned ? null : unitOf(inst);
-    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; lookItems.push({ mesh: o, type: t, zone: o.userData.zone || '', uid, alt: !!inst.alt }); } });
+    const mt = materialTypeOf(t, inst.cfg.node);   // the material's type: a cabinet door's own (materialFor)
+    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; lookItems.push({ mesh: o, type: t, mt, zone: o.userData.zone || '', uid, alt: !!inst.alt }); } });
     g.updateWorldMatrix(true, true); lookBox.expandByObject(g);
   }
   lookRev = sceneRev;
 }
 function lookMaterialFor(look, it) {
-  const key = zoneKey(it.type, it.zone);
-  if (colorLocked(key) || stripeHexOfKey(key) || stripeMeaningOfKey(key)) return (it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone);   // a stripe is no look's: the live material (its spool, or its own colour)
+  const key = zoneKey(it.type, it.zone);   // the palette's key, which a look is filed by
+  const mt = it.mt || it.type, mkey = zoneKey(mt, it.zone);   // the material's: a door's own pose (materialFor)
+  if (colorLocked(key) || stripeHexOfKey(key) || stripeMeaningOfKey(key)) return (it.alt && !it.zone) ? altMatFor(mt) : baseMatFor(mt, it.zone);   // a stripe is no look's: the live material (its spool, or its own colour)
   const colors = look.colors || {}, over = look.over || {};
   const o = it.uid != null ? over[it.uid] : null;
   const f = (o ? (o[key] || (it.zone && !colors[key] && o[it.type]) || null) : null)
@@ -10217,13 +10237,13 @@ function lookMaterialFor(look, it) {
   const picked = !!(f && f.hex);   // a filament pick, named or not (altLerp's test is the pick, not its name)
   const hex = picked ? f.hex : identificationHex(key), label = picked ? (f.name || null) : null;
   const alt = !picked && it.alt && !it.zone;   // the identification palette lightens alternate tiles; a filament never does
-  const k = key + '|' + hex + '|' + (label || '') + (picked ? '' : '|id') + (alt ? '|alt' : '');
+  const k = mkey + '|' + hex + '|' + (label || '') + (picked ? '' : '|id') + (alt ? '|alt' : '');
   let m = lookMats.get(k);
   if (!m) {
-    m = cloneMaterial((it.alt && !it.zone) ? altMatFor(it.type) : baseMatFor(it.type, it.zone));
+    m = cloneMaterial((it.alt && !it.zone) ? altMatFor(mt) : baseMatFor(mt, it.zone));
     m.color.set(hex);
     if (alt) m.color.lerp(new THREE.Color('#ffffff'), ALT_LIGHTEN);
-    applyFinish(m, silkFinish(key, partMaterialSpec(key, { holographicPlate: plateActive(), plateContact: plateContactKey(key), label }), label));
+    applyFinish(m, silkFinish(mkey, partMaterialSpec(mkey, { holographicPlate: plateActive(), plateContact: plateContactKey(mkey), label }), label));
     lookMats.set(k, m);
   }
   return m;

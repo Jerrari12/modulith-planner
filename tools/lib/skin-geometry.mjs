@@ -79,7 +79,8 @@ async function decoder() {
   return decoderReady;
 }
 
-/** Every triangle of every mesh under the scene, positions in mm in the part frame (node transforms applied). */
+/** Every triangle of every mesh under the scene, positions in mm in the part frame (node transforms applied), and each
+    triangle's ZONE: its primitive's material name, as the viewer reads it ('BODY', 'FACE', 'GRIP'; null with no material). */
 export async function readGlbTriangles(file) {
   const { json, bin } = parseGlb(readFileSync(file));
   const dec = await decoder();
@@ -119,7 +120,7 @@ export async function readGlbTriangles(file) {
     void Arr;
     return out;
   };
-  const pos = [], idx = [];
+  const pos = [], idx = [], zones = [];
   let vbase = 0;
   const walk = (ni, parent) => {
     const node = json.nodes[ni];
@@ -134,12 +135,15 @@ export async function readGlbTriangles(file) {
           const x = p[3 * i], y = p[3 * i + 1], z = p[3 * i + 2];
           pos.push(m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]);
         }
+        const before = idx.length;
         if (prim.indices != null) {
           const ix = readAccessor(prim.indices);
           for (let i = 0; i < ix.length; i++) idx.push(vbase + ix[i]);
         } else {
           for (let i = 0; i < count; i++) idx.push(vbase + i);
         }
+        const zone = prim.material != null ? (json.materials?.[prim.material]?.name ?? null) : null;
+        for (let t = before; t < idx.length; t += 3) zones.push(zone);
         vbase += count;
       }
     }
@@ -147,7 +151,7 @@ export async function readGlbTriangles(file) {
   };
   const I = mat4FromTRS();
   for (const ni of json.scenes[json.scene || 0].nodes) walk(ni, I);
-  return { positions: Float64Array.from(pos), indices: Uint32Array.from(idx) };
+  return { positions: Float64Array.from(pos), indices: Uint32Array.from(idx), zones };
 }
 
 /* ---- STL -> triangles ---- */

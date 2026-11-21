@@ -3556,6 +3556,17 @@ const PLATE_POSE = {
      +90 about Z lays that face on the plate and the part grows face first, clips last: authored +X. The first pose
      here that turns about Z - buildAxisFromEuler's Z terms, which no shipped entry exercised before. */
   sideCover: [0, 0, 90],
+  /* Cabinet doors (Joey, 2026-11-20: "The essential and Chevron doors will print face down only"; knowledge pack
+     family-print-settings.md, rows `Essential Cabinet Door` and `Chevron Cabinet Door`), so the face takes the plate's
+     finish. A door GLB is authored as hung, its face toward +Z (the FACE zone is the part's top along Z on all 528 door
+     files, measured 2026-11-21), so the Essential faceplate's swing lays that face on the plate and the door grows
+     face first, back last: authored -Z, [0, 0, -1]. KEYED BY DOOR STYLE (doorPoseKey), like the handles: a door style
+     with no words of its own stays plain. 'Door' is the MATERIAL type main.js gives a door (materialTypeOf); its BOM
+     row stays a 'Faceplate', so the door's colour and its parts-list row follow the faceplates while its print pose is
+     its own, whichever family the faceplates are. No site slug poses a door, so like the accent this reaches only the
+     renderer's build axis. */
+  'door:essential': [90, 0, 0],
+  'door:chevron': [90, 0, 0],
 };
 /* Every hardware entry, reachable by the TYPE it poses. Built once from the same table
    platePoseFor reads, so the two cannot name different entries for one type. */
@@ -3572,6 +3583,41 @@ export function handlePoseKey(node) {
 }
 
 /**
+ * What a cabinet door's pose is filed under, from its node: 'essential' for `Door_Essential_2W-2H`, 'chevron' for
+ * `Door_Chevron_1W-3H_RH`. Null for anything that is not a door. By style, as the handles are: a door style's print
+ * pose is confirmed one style at a time.
+ */
+export function doorPoseKey(node) {
+  const m = /^Door_([A-Za-z]+)_\d+W-\d+H(?:_RH)?$/.exec(node || '');
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * THE MATERIAL TYPE OF A PART, which is its BOM type except for a cabinet door.
+ *
+ * The door was added as a 'Faceplate' row (2026-11-19) so that it is listed, billed and coloured as one: one filament
+ * pick paints the faceplates and the doors, and the Colors workspace shows no region of its own for it. But the
+ * renderer's materials are shared per type, and a faceplate's print pose is its FAMILY's - Classic, Classic Pro and
+ * EdgeLabel print back-down - so a door drawing the faceplate material under those families wore the plate's finish on
+ * its back and left its face plain (Joey 2026-11-21: "we don't seem to have a build plate texture on the essential
+ * door face yet?"). A door prints face-down whatever the faceplates are, so it draws a material of its own, 'Door',
+ * whose build axis is the door's (PLATE_POSE 'door:<style>').
+ *
+ * ⚠ ONLY THE MATERIAL. typeByNode, the parts list, the palette, the per-unit colours, the per-part plate finishes and
+ * the Colors regions all keep the row's 'Faceplate'; paletteKeyOf maps a material key back to the palette's key, and
+ * every colour or finish read of a material key goes through it.
+ */
+export function materialTypeOf(type, node) {
+  return type === 'Faceplate' && doorPoseKey(node) ? 'Door' : type;
+}
+
+/** The palette key a material key is coloured by: 'Door' -> 'Faceplate', 'Door:FACE' -> 'Faceplate:FACE', else itself. */
+export function paletteKeyOf(key) {
+  const s = String(key);
+  return s === 'Door' || s.startsWith('Door:') ? 'Faceplate' + s.slice(4) : s;
+}
+
+/**
  * The plate pose for a part TYPE — an [x,y,z] Euler triple in degrees, a per-node map of them for
  * a chiral pair, or null when this type has no confirmed pose.
  *
@@ -3580,11 +3626,12 @@ export function handlePoseKey(node) {
  * this switch would drift the day a family is added, and the symptom would be layer lines running
  * the wrong way on one screen and the right way on the other.
  */
-export function plateRotForType(type, faceStyle, handleStyle) {
+export function plateRotForType(type, faceStyle, handleStyle, doorStyle) {
   if (HW_BY_TYPE[type]) return HW_BY_TYPE[type].plateRot;
   const k = type === 'Case' ? 'case'
     : type === 'Drawer' ? 'drawer'
     : type === 'Faceplate' ? 'faceplate:' + faceStyle
+    : type === 'Door' ? 'door:' + doorStyle
     : type === 'Handle' ? 'handle:' + handleStyle
     : type === 'CoverU' ? 'coverUpper'
     : type === 'CoverL' ? 'coverLower'
@@ -3653,10 +3700,11 @@ export function buildAxisFromEuler(rot) {
  *
  * The FAMILY arguments matter to one type each: `faceStyle` to a Faceplate (Classic, ClassicPro and
  * EdgeLabel print back-down, Essential and Chevron face-down), `handleStyle` to a Handle (handlePoseKey:
- * only 'deco' and 'blockbar_b' have a confirmed pose).
+ * only 'deco' and 'blockbar_b' have a confirmed pose), `doorStyle` to a Door (doorPoseKey: 'essential' and
+ * 'chevron', both face-down). 'Door' is a material type, not a BOM type - see materialTypeOf.
  */
-export function buildAxisForType(type, faceStyle, handleStyle) {
-  const rot = plateRotForType(type, faceStyle, handleStyle);
+export function buildAxisForType(type, faceStyle, handleStyle, doorStyle) {
+  const rot = plateRotForType(type, faceStyle, handleStyle, doorStyle);
   if (rot == null) return null;
   const poses = Array.isArray(rot) ? [rot] : Object.values(rot);
   if (!poses.length) return null;

@@ -178,7 +178,9 @@ test('main.js paints every finish through silkFinish and applyFinish, and patche
   assert.equal(count(main, 'applyFinish(m, spec);'), 1, 'newPartMaterial no longer sets the finish through applyFinish');
   assert.match(main, /const repaint = \(type, mat\) => \{\s*mat\.color\.set\(activeHex\(type\)\);\s*applyFinish\(mat, finishFor\(type\)\);/);
   assert.match(main, /const finishFor = key => silkFinish\(key, partMaterialSpec\(/);
-  assert.equal(count(main, 'applyFinish(m, silkFinish(key, partMaterialSpec('), 2, 'a unit pick or a look card skips the silk finish');
+  /* mkey: the look card's MATERIAL key, which is a cabinet door's own (main.js materialFor) */
+  assert.equal(count(main, 'applyFinish(m, silkFinish(key, partMaterialSpec(') + count(main, 'applyFinish(m, silkFinish(mkey, partMaterialSpec('), 2,
+    'a unit pick or a look card skips the silk finish');
   /* no path writes the scalars by hand any more (a stale anisotropy would survive it) - the planned clones copy their source */
   assert.equal(count(main, '.roughness = spec.roughness'), 1, 'a finish is written outside applyFinish');
   assert.equal(count(main, 'copyFinish(e.mat, e.src);'), 2, 'a planned clone keeps a stale finish');

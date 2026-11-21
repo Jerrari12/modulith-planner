@@ -11,6 +11,8 @@
  *   4. the per-part geometry the contact test reads
  *   5. the premise the in-shader tangents rest on, over every GLB the viewer ships
  *   6. the one print pose this feature added, the EdgeLabel accent's
+ *   7. the handles' poses, keyed by handle style
+ *   8. the cabinet doors' own pose, whatever family the faceplates are (2026-11-21)
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +35,8 @@ register('data:text/javascript,' + encodeURIComponent(
 const THREE = await import(THREE_URL);
 const { applyLayerDetail, LAYER_DETAIL_DEFAULTS } = await import(url('js', 'vendor', 'layer-detail.js'));
 const BF = await import(url('js', 'bed-finish.js'));
-const { generateManifest, buildAxisForType, handlePoseKey } = await import(url('js', 'generate.js'));
+const { generateManifest, buildAxisForType, handlePoseKey, doorPoseKey, materialTypeOf, paletteKeyOf } = await import(url('js', 'generate.js'));
+const { readGlbTriangles } = await import(url('tools', 'lib', 'skin-geometry.mjs'));
 
 /* ── 1. what a saved build means ─────────────────────────────────────────────────────────── */
 
@@ -558,6 +561,146 @@ test('main.js reads the handle\'s pose key from the node name for every handle s
     assert.ok(at >= 0, `main.js has no function ${name}`);
     return main.slice(at, main.indexOf('\n}', at));
   };
-  assert.match(fnBody('buildAxisForKey'), /buildAxisForType\([^;]*handlePoseNow\(\)\)/);
+  assert.match(fnBody('buildAxisForKey'), /buildAxisForType\([^;]*handlePoseNow\(\)/);
   assert.match(fnBody('stampBedFaces'), /buildAxisForType\([^;]*handlePoseKey\(node\)/);
+});
+
+/* ── 8. the cabinet doors' own pose ─────────────────────────────────────────────────────── */
+
+/* Joey 2026-11-20: "The essential and Chevron doors will print face down only". A door is billed as a 'Faceplate' row,
+   and until 2026-11-21 it drew the faceplate material, whose axis is the faceplate FAMILY's: under Classic, Classic Pro
+   and EdgeLabel (back-down, +Z) the door's back wore the finish and its face was plain (Joey 2026-11-21: "we don't seem
+   to have a build plate texture on the essential door face yet?"). It now draws a material of its own, 'Door'
+   (generate.js materialTypeOf), whose axis is the door's. */
+const FAMILIES = ['essential', 'chevron', 'classic', 'classicpro', 'edgelabel'];
+
+test('a cabinet door prints face-down: axis -Z for both door styles, whatever the faceplate family', () => {
+  for (const door of ['essential', 'chevron']) {
+    for (const fam of [...FAMILIES, null]) assert.deepEqual(buildAxisForType('Door', fam, null, door), [0, 0, -1], `${door} door under ${fam}`);
+  }
+  /* keyed by door style: a style with no confirmed pose stays plain */
+  for (const door of ['classic', 'edgelabel', null, undefined]) assert.equal(buildAxisForType('Door', 'essential', null, door), null, `a ${door} door has no confirmed pose`);
+  /* and the faceplates keep their family's axis - which is why a door cannot share their material */
+  assert.deepEqual(buildAxisForType('Faceplate', 'edgelabel'), [0, 0, 1]);
+  assert.deepEqual(buildAxisForType('Faceplate', 'essential'), [0, 0, -1]);
+});
+
+test('doorPoseKey reads the style off every door node the pools ship, and off nothing else', () => {
+  assert.equal(doorPoseKey('Door_Essential_2W-2H'), 'essential');
+  assert.equal(doorPoseKey('Door_Chevron_1W-3H_RH'), 'chevron');
+  for (const n of ['Faceplate_Essential_1W-1H', 'Handle_Deco', 'Knob_Deco', 'CabinetHinge_Body_L', 'CabinetLatch_Door_R', 'Door_Essential', '', null, undefined]) {
+    assert.equal(doorPoseKey(n), null, `${n} is not a door`);
+  }
+  const names = new Set();
+  for (const coll of readdirSync(join(root, 'parts'))) {
+    if (!/^\d+$/.test(coll)) continue;
+    for (const f of readdirSync(join(root, 'parts', coll))) if (/^Door_.*\.lib\.glb$/.test(f)) names.add(f.slice(0, -'.lib.glb'.length));
+  }
+  assert.ok(names.size >= 96, `only ${names.size} door nodes in the pools - the sweep is broken`);
+  for (const n of names) assert.ok(['essential', 'chevron'].includes(doorPoseKey(n)), `${n} reads as ${doorPoseKey(n)}`);
+});
+
+test('a door row stays a Faceplate row with no colour of its own; only its MATERIAL is the door\'s, and it maps back to the faceplate palette', () => {
+  const base = { mount: 'tabletop', length: 240, handleStyle: 'deco', wallStagger: false, backCover: false, feet: 'tpu',
+    removedStoppers: [], gridW: 3, gridH: 4, nextId: 9 };
+  for (const doorStyle of ['essential', 'chevron']) {
+    for (const faceStyle of FAMILIES) {
+      const gen = generateManifest({ ...base, faceStyle, doorStyle, placed: [
+        { id: 'u1', x: 0, y: 0, w: 2, hh: 8, fill: 'cabinet' }, { id: 'u2', x: 2, y: 0, w: 1, hh: 8, fill: 'cabinet', hinge: 'right' }] });
+      assert.ok(gen.manifest, (gen.errors || []).join('; '));
+      const doors = gen.manifest.parts.filter((p) => doorPoseKey(p.node));
+      assert.equal(doors.length, 2, `${doorStyle} doors under ${faceStyle}: ${doors.map((p) => p.node)}`);
+      for (const p of doors) {
+        assert.equal(p.type, 'Faceplate', 'the door is listed, billed and coloured as a faceplate');
+        assert.equal(doorPoseKey(p.node), doorStyle);
+        assert.equal(materialTypeOf(p.type, p.node), 'Door');
+        assert.deepEqual(buildAxisForType(materialTypeOf(p.type, p.node), faceStyle, null, doorPoseKey(p.node)), [0, 0, -1],
+          `the ${p.node} material grows face first under ${faceStyle} faceplates`);
+      }
+      for (const p of gen.manifest.parts) if (!doorPoseKey(p.node)) assert.equal(materialTypeOf(p.type, p.node), p.type, `${p.node} draws its own type`);
+      assert.equal('Door' in gen.manifest.colors, false, 'the palette has no door key: the door follows the faceplate');
+    }
+  }
+  for (const z of ['', ':FACE', ':GRIP']) {
+    assert.equal(paletteKeyOf('Door' + z), 'Faceplate' + z);
+    assert.equal(paletteKeyOf('Faceplate' + z), 'Faceplate' + z);
+  }
+  for (const k of ['Case', 'Handle', 'QuickLock', 'Label:STRIPE@sky-blue', 'Doorstop']) assert.equal(paletteKeyOf(k), k);
+  assert.equal(materialTypeOf('QuickLock', 'Door_Essential_1W-1H'), 'QuickLock', 'only a Faceplate row becomes a door material');
+});
+
+/* The real triangles, through bed-finish.js's own rule: a face takes the finish when its geometric normal points down the
+   build axis and it lies within CONTACT_BAND_MM of the part's lowest plane along it. Areas in mm², by zone. */
+async function doorContact(node, axis) {
+  const g = await readGlbTriangles(join(root, 'parts', '185', node + '.lib.glb'));
+  const { mm } = BF.bedFaceAttributes([Float32Array.from(g.positions)], axis);
+  const P = mm[0], I = g.indices;
+  const h = (v) => P[3 * v] * axis[0] + P[3 * v + 1] * axis[1] + P[3 * v + 2] * axis[2];   // height above the bed plane
+  const out = { contact: {}, band: {}, plain: [], xy: 0 };
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (let v = 0; v < P.length / 3; v++) { x0 = Math.min(x0, P[3 * v]); x1 = Math.max(x1, P[3 * v]); y0 = Math.min(y0, P[3 * v + 1]); y1 = Math.max(y1, P[3 * v + 1]); }
+  out.xy = (x1 - x0) * (y1 - y0);
+  for (let t = 0; t < I.length / 3; t++) {
+    const [a, b, c] = [I[3 * t], I[3 * t + 1], I[3 * t + 2]];
+    const u = [0, 1, 2].map((k) => P[3 * b + k] - P[3 * a + k]), w = [0, 1, 2].map((k) => P[3 * c + k] - P[3 * a + k]);
+    const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]], len = Math.hypot(...n);
+    if (!len || (n[0] * axis[0] + n[1] * axis[1] + n[2] * axis[2]) / len > -0.999) continue;   // not facing down the axis
+    const hs = [h(a), h(b), h(c)], zone = g.zones[t];
+    if (Math.max(...hs) <= BF.CONTACT_BAND_MM[0]) out.contact[zone] = (out.contact[zone] || 0) + len / 2;
+    else if (Math.min(...hs) < BF.CONTACT_BAND_MM[1]) out.band[zone] = (out.band[zone] || 0) + len / 2;
+    else out.plain.push({ zone, h: Math.min(...hs), area: len / 2 });
+  }
+  return out;
+}
+
+test('on the real door GLBs the face is what touches the plate, and the Chevron door\'s recessed backer stays plain', async () => {
+  for (const node of ['Door_Essential_2W-2H', 'Door_Essential_1W-1H_RH', 'Door_Chevron_2W-2H', 'Door_Chevron_1W-1H_RH']) {
+    const axis = buildAxisForType('Door', 'edgelabel', null, doorPoseKey(node));
+    const c = await doorContact(node, axis);
+    assert.deepEqual(Object.keys(c.contact), ['FACE'], `${node}: only the FACE zone lies on the plate (${JSON.stringify(c.contact)})`);
+    assert.deepEqual(c.band, {}, `${node}: nothing sits half in the contact band`);
+    /* MEASURED 2026-11-21: 99 % of an Essential door's outline is face on the plate, 91 % of a Chevron door's (its strip
+       tops; the rest is the gaps between them) */
+    assert.ok(c.contact.FACE > 0.85 * c.xy, `${node}: ${c.contact.FACE.toFixed(0)} mm² of face on the plate, of a ${c.xy.toFixed(0)} mm² outline`);
+    if (/Chevron/.test(node)) {
+      const backer = c.plain.filter((f) => f.zone === 'BODY' && Math.abs(f.h - 2) < 0.05).reduce((s, f) => s + f.area, 0);
+      assert.ok(backer > 50, `${node}: the backer between the strips is 2 mm up and plain (${backer.toFixed(0)} mm²)`);
+    }
+    /* the axis the door wore before, under EdgeLabel faceplates: its BACK on the plate, its face plain. So this test tells
+       the two apart. */
+    const was = await doorContact(node, buildAxisForType('Faceplate', 'edgelabel'));
+    assert.equal(was.contact.FACE, undefined, `${node}: on the faceplate's back-down axis the face is not on the plate`);
+    assert.ok(was.contact.BODY > 0, `${node}: on the faceplate's back-down axis the back is`);
+  }
+});
+
+test('main.js gives the door its own material at every place a part takes one, and asks the colour of the faceplate key', () => {
+  const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');
+  const fnBody = (name) => {
+    const at = main.search(new RegExp(`(function ${name}\\(|const ${name} = )`));
+    assert.ok(at >= 0, `main.js has no ${name}`);
+    return main.slice(at, main.indexOf('\n}', at));
+  };
+  /* the geometry is stamped, and the material built, from ONE answer: the material type */
+  assert.match(fnBody('adoptTemplate'), /const mt = materialTypeOf\(type, node\)/);
+  assert.match(fnBody('adoptTemplate'), /baseMatFor\(mt, zone\)/);
+  assert.match(fnBody('adoptTemplate'), /stampBedFaces\(sceneRoot, mt, node\)/);
+  assert.match(fnBody('stampBedFaces'), /buildAxisForType\([^;]*doorPoseKey\(node\) \|\| doorPoseNow\(\)/);
+  assert.match(fnBody('buildAxisForKey'), /buildAxisForType\([^;]*doorPoseNow\(\)\)/);
+  /* materialFor: the palette's key for locks and a unit's colours, the material's key for every registry */
+  const mf = fnBody('materialFor');
+  assert.match(mf, /const mt = materialTypeOf\(type, inst\.cfg\.node\), mkey = zoneKey\(mt, zone\)/);
+  assert.match(mf, /overrideFor\(unitOf\(inst\), key\)/);
+  assert.match(mf, /overrideMatFor\(mkey,/);
+  assert.match(mf, /baseMatFor\(mt, zone\)/);
+  assert.doesNotMatch(mf, /cache\[key\]/, 'a highlight cached by the palette key would hand a door a faceplate clone');
+  /* the colour and finish reads of a material key go through the palette's key */
+  for (const name of ['activeHex', 'activeLabel']) assert.match(fnBody(name), /key = paletteKeyOf\(key\)/, name);
+  assert.match(main, /const colorLocked = type => \{\n[^\n]*paletteKeyOf\(type\)/);
+  assert.match(main, /const ownPlateOf = \(type\) => \{ type = paletteKeyOf\(type\);/);
+  /* the debug check compares the stamp with the material it draws */
+  assert.match(main, /want = buildAxisForKey\(zoneKey\(materialTypeOf\(type, inst\.cfg\.node\)/);
+  /* every other place that hands a part a material from its type: the product preview and the look cards */
+  assert.match(main, /const t = typeByNode\[node\], mt = materialTypeOf\(t, node\)/);
+  assert.match(main, /lookItems\.push\(\{ mesh: o, type: t, mt,/);
 });

@@ -7747,6 +7747,76 @@ test('Colors: a part\'s own build plate finish - faceplates Holographic while th
   await ctx.close();
 });
 
+/* A CABINET DOOR'S OWN PRINT POSE (2026-11-21). The door is billed as a Faceplate row, and until then it drew the faceplate
+   material, whose build axis is the faceplate FAMILY's: under EdgeLabel (back-down, +Z) the door's back wore the build plate's
+   finish and its face was plain (Joey: "we don't seem to have a build plate texture on the essential door face yet?"). The
+   Essential and Chevron doors print face down (Joey 2026-11-20), so a door draws a material of its own (generate.js
+   materialTypeOf) whose axis is -Z whatever the family. Read off the live meshes: the door's geometry stamp and its material
+   agree on -Z under an EdgeLabel build and again after a switch to Essential, the faceplates keep their family's axis, the
+   finish check finds no mismatch, and the door keeps the faceplate's colour and its Faceplate row. */
+test('Build: a cabinet door prints face down whatever the faceplates are - its face takes the plate finish under EdgeLabel and Essential, in the faceplate colour', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'edgelabel', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 3, gridH: 2, sideCovers: false, plateParts: {}, nextId: 3, labelStyle: null, buildId: 'e2edoorpose1',
+    placed: [{ id: 1, x: 0, y: 0, w: 2, hh: 4, fill: 'cabinet', shelves: 0 }, { id: 2, x: 2, y: 0, w: 1, hh: 4, fill: 'decor', shelves: 0 }] };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('build', { query: `#build=${b64}` });
+  // mounted: the family's faceplates on the stage, the door's template stamped, and no regenerate in flight
+  const mounted = (family) => page.waitForFunction((family) => {
+    const v = window.__GEN2_VIEWER__;
+    if (v.regenBusy) return false;
+    const all = [...v.instances.values()];
+    const plate = all.find((i) => i.cfg.node.startsWith(`Faceplate_${family}_`)), door = all.find((i) => /^Door_/.test(i.cfg.node));
+    let stamped = false;
+    door?.group.traverse((o) => { if (o.isMesh && o.geometry.userData.bedAxis) stamped = true; });
+    return !!plate && stamped;
+  }, family, { timeout: 90_000 });
+  const read = () => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, out = { doors: [], plates: [], check: v.bedFinish.check() };
+    for (const inst of v.instances.values()) {
+      const door = /^Door_/.test(inst.cfg.node), plate = /^Faceplate_/.test(inst.cfg.node);
+      if (!door && !plate) continue;
+      inst.group.traverse((o) => {
+        if (!o.isMesh) return;
+        (door ? out.doors : out.plates).push({ node: inst.cfg.node, zone: o.userData.zone || '', stamp: o.geometry.userData.bedAxis || null,
+          mat: o.material.userData.buildAxis ?? null, finish: o.material.userData.bedFinish || null, hex: o.material.color.getHexString() });
+      });
+    }
+    out.rows = v.manifest.parts.filter((p) => /^Door_/.test(p.node)).map((p) => `${p.node}:${p.type}`);
+    out.face = new v.THREE.Color(v.activeHex('Faceplate')).getHexString();
+    out.faceZone = new v.THREE.Color(v.activeHex('Faceplate:FACE')).getHexString();
+    return out;
+  });
+  const DOWN = [0, 0, -1];
+  const expectDoor = (s, family) => {
+    assert.deepEqual(s.rows, ['Door_Essential_2W-2H:Faceplate'], 'one door, still a Faceplate row in the parts list');
+    assert.deepEqual(s.doors.map((d) => d.zone).sort(), ['', 'FACE'], `the door's two zones are on the stage: ${JSON.stringify(s.doors)}`);
+    for (const d of s.doors) {
+      assert.deepEqual(d.stamp, DOWN, `under ${family} the door's ${d.zone || 'body'} is stamped face down: ${JSON.stringify(d)}`);
+      assert.equal(d.mat, JSON.stringify(DOWN), `and its material tests the same axis: ${JSON.stringify(d)}`);
+      assert.equal(d.finish, 'profile', 'and carries the plate finish');
+      assert.equal(d.hex, d.zone ? s.faceZone : s.face, `the door's ${d.zone || 'body'} wears the faceplate's colour`);
+    }
+    assert.deepEqual(s.check.axisMismatch, [], `no part is stamped along one axis and shaded along another: ${JSON.stringify(s.check)}`);
+    assert.deepEqual(s.check.noAttribute, []);
+  };
+
+  await mounted('EdgeLabel');
+  const a = await read();
+  expectDoor(a, 'EdgeLabel');
+  assert.ok(a.plates.length > 0 && a.plates.every((p) => p.stamp && p.stamp.join() === '0,0,1' && p.mat === '[0,0,1]'),
+    `the EdgeLabel faceplates keep their back-down axis: ${JSON.stringify(a.plates)}`);
+
+  // the faceplates to Essential, in place (the Faceplate family control's own call): the door's axis does not move
+  await page.evaluate(async () => { const v = window.__GEN2_VIEWER__; await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === 'essential')); window.__GEN2_STORE__.load(v.build, 'adopt'); });
+  await mounted('Essential');
+  const b = await read();
+  expectDoor(b, 'Essential');
+  assert.ok(b.plates.length > 0 && b.plates.every((p) => p.stamp && p.stamp.join() === '0,0,-1' && p.mat === '[0,0,-1]'),
+    `the Essential faceplates print face down too: ${JSON.stringify(b.plates)}`);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
   await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
