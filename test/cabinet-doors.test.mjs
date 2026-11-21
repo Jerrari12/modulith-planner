@@ -112,6 +112,8 @@ test('every Essential door, hinge, latch and knob name links the one listing pag
     const l = pl(n);
     assert.equal(l.printables, 'https://www.printables.com/model/1672641-modulith-essential-cabinet-doors', n);
     assert.ok(l.exactP, `${n}: an exact Printables link`);
+    assert.equal(l.thangs, 'https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Essential%20Cabinet%20Doors-1537267', n);
+    assert.ok(l.exactT, `${n}: an exact Thangs link`);
   }
   const chev = pl(GEN2.partNames.door(240, '2W-3H', 'Chevron', 'left'));
   assert.ok(!chev.exactP, 'a Chevron door does not link the Essential page');

@@ -964,8 +964,8 @@ const LINK_OVERRIDES = {
 
   // ---- The Essential cabinet doors (2026-11-21): ONE page per store holds all 48 doors (left- and right-hinged), the
   //      handed hinges and latches and both knobs. Every one of those names resolves here through COLLECTION_RULES.
-  //      Printables went live 2026-11-21 (Joey's link); the Thangs url is added when its page is up.
-  "MODULITH Essential Cabinet Doors": { p: "https://www.printables.com/model/1672641-modulith-essential-cabinet-doors" },
+  //      Both went live 2026-11-21: Printables 1672641 (Joey's link) and Thangs 1537267 (the converted Cabinet Preview page).
+  "MODULITH Essential Cabinet Doors": { p: "https://www.printables.com/model/1672641-modulith-essential-cabinet-doors", t: "https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Essential%20Cabinet%20Doors-1537267" },
   // ---- Decor handle series (parts-list handle row links the chosen style) ----
   "GEN2 Decor Handles - BlockBar Series": { p: "https://www.printables.com/model/965604-gen2-decor-handles-blockbar-series", t: "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Decor%20-%20Handles%20-%20BlockBar-1116949" },
   "GEN2 Decor Handles - Deco Series":     { p: "https://www.printables.com/model/1044972-gen2-decor-handles-deco-series", t: "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Decor%20Handles%20-%20Deco%20Series-1159960" },
