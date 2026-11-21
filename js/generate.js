@@ -1847,6 +1847,10 @@ export function generateManifest(build, opts = {}) {
       // the door's back in the open pose: from the side it faces, turned 25 degrees toward the front
       const tBack = norm(deg * OPEN + 180 - s * 25);
       const CO = 26;                                            // a door clip is held this far off the door's back for its magnet
+      /* and it goes on like the other hardware (Joey 2026-11-20): its two pegs into the door's slots, then slid DOWN to lock.
+         The slots are 10 mm tall and the pegs 5.7 (Door_Chevron_1W-1H and CabinetLatch_Door_R raws, sections 2026-11-20);
+         seated, the pegs sit 0.15 mm off the slots' bottoms, so they go in 4.0 higher, 0.15 under the tops. */
+      const CLIP_SLIDE = 4.0;
       const camGripBack = { t: tBack, p: 74, fitR: h === 1 ? 34 : 58, target: turn([holeX, midY, doorBack], OPEN) };
       // the grip goes on last, the door hung and swung open: its front, seen from the side it faces, turned toward the front
       const camGripFrontOpen = { t: norm(deg * OPEN + s * 25), p: 80, fitR: h === 1 ? 34 : 58, target: turn([holeX, midY, doorBack + ds.t], OPEN) };
@@ -1917,17 +1921,19 @@ export function generateManifest(build, opts = {}) {
         },
         {
           title: ring2 ? 'Latch clips, then the door' : 'Latch clip, then the door',
-          note: `While the door is loose, fit the latch clip${pl} marked ${mark} to its back at the closing edge: slide a 10×2 mm magnet into ${ring2 ? 'each' : 'the'} clip's slot from the face that meets the door, which traps it - its mark showing through the small hole, toward the case magnet - then press the clip on. Then turn the hinge claws about 80 % open${ring2 ? ', both to the same angle,' : ''} and slide the door straight onto them, the way their fingers point: they go into the slots in its back from the hinge edge and end flush with it${ring2 ? '. Hook it on the top hinge first, where it hangs a little crooked, then push its bottom onto the lower hinge and it squares up' : ''}. Swing it shut to check: the magnets pull it closed.`,
+          note: `While the door is loose, fit the latch clip${pl} marked ${mark} to its back at the closing edge: slide a 10×2 mm magnet into ${ring2 ? 'each' : 'the'} clip's slot from the face that meets the door, which traps it - its mark showing through the small hole, toward the case magnet - then put the clip's two pegs into the slots in the door and slide it down to lock. Then turn the hinges' C-clips to face outward and slide the door straight onto them, the way their fingers point: they go into the slots in its back from the hinge edge and end flush with it${ring2 ? '. Hook it on the top hinge first, where it hangs a little crooked, then push its bottom onto the lower hinge and it squares up' : ''}. Swing it shut to check: the magnets pull it closed.`,
           camera: camDoorBench,
           phases: [
             { vanish: true, room: 0, camera: camDoorBench },
             { enter: [{ id: ids.door, at: [0, 0, DZ], from: [0, 30, 0] }] },
             ...rings3.flatMap((r, k) => [
               { camera: camClipBench(k) },
-              // held off the door's back; the magnet slides into the slot from the door side, then both press on
-              { enter: [{ id: ids.dclip[k], at: [0, 0, DZ - CO], from: [0, 0, -24] }] },
-              { enter: [{ id: ids.dmag[k], at: [0, 0, DZ - CO], from: [0, 0, 16] }] },
+              // held off the door's back, high by the slide; the magnet slides into the slot from the door side, then both go
+              // on, the pegs into the slots, and slide down to lock
+              { enter: [{ id: ids.dclip[k], at: [0, CLIP_SLIDE, DZ - CO], from: [0, 0, -24] }] },
+              { enter: [{ id: ids.dmag[k], at: [0, CLIP_SLIDE, DZ - CO], from: [0, 0, 16] }] },
               { move: [ids.dclip[k], ids.dmag[k]].map(id => ({ id, by: [0, 0, CO] })) },
+              { move: [ids.dclip[k], ids.dmag[k]].map(id => ({ id, by: [0, -CLIP_SLIDE, 0], hold: SIDE.hold, ease: 'detent' })) },
             ]),
             // back in the room: the claws turn about 80 % open, and the door out front turns with them on its own hinge edge
             { appear: true, room: 1, camera: camHang, swing: [{ anchor: ids.door, pivot, deg, ids: riders, to: OPEN }] },

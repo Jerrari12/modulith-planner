@@ -90,6 +90,26 @@ test('each latch clip takes its 10x2 magnet before it goes in, from where its po
   }
 });
 
+test('the door clip goes on like the other hardware: pegs into the slots high, then slid down 4 mm to lock (Joey 2026-11-20)', () => {
+  for (const hinge of ['left', 'right']) {
+    const m = generateManifest(build({ placed: [cab({ hinge })] })).manifest;
+    const st = m.steps.find((x) => x.title === 'Latch clips, then the door');
+    for (const id of ['cld0a', 'cmd0a']) {
+      const enter = st.phases.flatMap((p) => p.enter || []).find((e) => e.id === id);
+      assert.equal(enter.at[1], 4, `${id} comes in 4 mm high`);
+      const moves = st.phases.map((p, n) => ({ n, mv: (p.move || []).find((mv) => mv.id === id) })).filter((x) => x.mv);
+      const press = moves.find((x) => x.mv.by[2] > 0), slide = moves.find((x) => x.mv.by[1] === -4);
+      assert.ok(press && slide && slide.n === press.n + 1, `${id}: pressed on, then slid down next`);
+      assert.equal(slide.mv.ease, 'detent', 'it clicks home');
+      assert.ok(slide.n < st.phases.findIndex((p) => p.appear), 'while the door is still loose');
+    }
+    // the note says what the reader does, in the reader's terms: no animation angle (Joey: "that 80% was just a note for you")
+    assert.match(st.note, /pegs into the slots in the door and slide it down to lock/);
+    assert.match(st.note, /C-clips to face outward/);
+    assert.doesNotMatch(st.note, /%|press the clip on/);
+  }
+});
+
 test('the door is hung on claws turned 80 % open; with two hinges the top one first, then the bottom', () => {
   for (const [b, two] of [[build({ placed: [cab()] }), true], [build({ gridW: 2, gridH: 1, placed: [cab({ w: 1, hh: 2 })] }), false]]) {
     const m = generateManifest(b).manifest;
