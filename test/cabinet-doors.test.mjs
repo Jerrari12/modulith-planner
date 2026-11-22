@@ -89,9 +89,10 @@ test('the screw length follows the door style, and a series with no knob falls b
   assert.equal(find(bb, /Knob$/)[0].name, 'GEN2 BlockBar Knob');
 });
 
-test('the premium door styles stay coming soon after the Essential release; their hardware does not', () => {
-  // 2026-11-21: the Essential door, hinges, latches and knobs went live; Chevron, EdgeLabel and Classic Pro have no files
-  for (const style of ['chevron', 'edgelabel', 'classicpro']) {
+test('the premium door styles with no files stay coming soon; their hardware does not', () => {
+  // 2026-11-21: the Essential door, hinges, latches and knobs went live. EdgeLabel and Classic Pro have no files; the
+  // Chevron door is released with its own pages (the next test)
+  for (const style of ['edgelabel', 'classicpro']) {
     const rs = rows(base({ doorStyle: style, placed: [cab(1, 0, 2, 3)] }));
     const door = find(rs, / Door - 2W-3H$/);
     assert.equal(door.length, 1, `${style}: one door row`);
@@ -99,6 +100,15 @@ test('the premium door styles stay coming soon after the Essential release; thei
     assert.ok(find(rs, /Cabinet Hinge|Door Latch/).every((r) => !r.unreleased), `${style}: the hinges and latches are released`);
   }
   assert.ok(!find(rows(base({ placed: [cab(1, 0, 2, 3)] })), / Door - 2W-3H$/)[0].unreleased, 'the Essential door is released');
+});
+
+test('the Chevron door is released, in both hands, with its hardware', () => {
+  // the MODULITH Chevron Cabinet Doors pages (Printables 1925578, Thangs 1664247)
+  assert.ok(!GEN2.unreleased.includes('door:chevron'), 'the Chevron door is out of the unreleased list');
+  const rs = rows(base({ doorStyle: 'chevron', placed: [cab(1, 0, 2, 3), cab(2, 2, 1, 1, { hinge: 'right' })] }));
+  const doors = find(rs, /^GEN2 Chevron Door - /);
+  assert.deepEqual(doors.map((r) => r.name).sort(), ['GEN2 Chevron Door - 1W-1H - Right-Hinged', 'GEN2 Chevron Door - 2W-3H']);
+  for (const r of [...doors, ...find(rs, /Cabinet Hinge|Door Latch|Knob$/)]) assert.ok(!r.unreleased, `${r.name} is released`);
 });
 
 test('every Essential door, hinge, latch and knob name links the one listing page', () => {
@@ -116,7 +126,19 @@ test('every Essential door, hinge, latch and knob name links the one listing pag
     assert.ok(l.exactT, `${n}: an exact Thangs link`);
   }
   const chev = pl(GEN2.partNames.door(240, '2W-3H', 'Chevron', 'left'));
-  assert.ok(!chev.exactP, 'a Chevron door does not link the Essential page');
+  assert.notEqual(chev.printables, 'https://www.printables.com/model/1672641-modulith-essential-cabinet-doors', 'a Chevron door does not link the Essential page');
+});
+
+test('every Chevron door, in both hands, links its own paid listing page', () => {
+  const pl = vm.runInContext('partLinks', ctx);
+  const sizes = ['1W-1H', '2W-3H', '4W-6H'];
+  for (const n of sizes.flatMap((s) => [GEN2.partNames.door(240, s, 'Chevron', 'left'), GEN2.partNames.door(240, s, 'Chevron', 'right')])) {
+    const l = pl(n);
+    assert.equal(l.printables, 'https://www.printables.com/model/1925578-modulith-chevron-cabinet-doors', n);
+    assert.ok(l.exactP, `${n}: an exact Printables link`);
+    assert.equal(l.thangs, 'https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Chevron%20Cabinet%20Doors-1664247', n);
+    assert.ok(l.exactT, `${n}: an exact Thangs link`);
+  }
 });
 
 test('a door style with no model gets no screw length', () => {

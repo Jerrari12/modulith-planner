@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDORED = join(root, 'js', 'catalog', 'data.js');
-const PINNED_SHA256 = 'dd0cda428e1f7a07e0a0e7a1e059eb8ab9ae9cde891e4990501b9389061341c2';
-const SOURCE = 'this repo, 2026-11-21: the Essential cabinet doors, hinges, latches and knobs released (Printables and Thangs), the Cabinet fill off SOON; the premium door styles stay coming soon';
+const PINNED_SHA256 = '4802461dd2ea296a40f0c16b37e0ee1968957f74cf811bcf665a6d9bc9ea1e11';
+const SOURCE = 'this repo, 2026-11-22: the Chevron cabinet doors released with their own pages (Printables 1925578, Thangs 1664247); EdgeLabel and Classic Pro stay coming soon';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 test(`the vendored catalog matches its pin (${SOURCE})`, () => {

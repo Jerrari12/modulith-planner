@@ -636,7 +636,10 @@ const GEN2 = {
   // Thangs with the handed hinges and latches and both knobs, one page each, all in LINK_OVERRIDES under
   // "MODULITH Essential Cabinet Doors". The PREMIUM door styles have no files yet, so a door row stays "coming soon"
   // per style: js/rules/bom.js reads "door:<style id>".)
-  unreleased: ["door:chevron", "door:edgelabel", "door:classicpro"],
+  // ("door:chevron" left this list with the MODULITH Chevron Cabinet Doors pages: Printables 1925578 and Thangs 1664247,
+  // paid and in the Club, all 48 doors on one page per store, in LINK_OVERRIDES under that title. Prepared 2026-11-22 on
+  // Joey's "Yes, when we publish"; it ships when those pages go public. EdgeLabel and Classic Pro have no files yet.)
+  unreleased: ["door:edgelabel", "door:classicpro"],
 
   /* Filament Sample Chip Drawers (v2611, 2026-11-07). A 1W-0.5H drawer that
      holds filament sample chips on edge in two slotted lanes, in Classic (the
@@ -966,6 +969,9 @@ const LINK_OVERRIDES = {
   //      handed hinges and latches and both knobs. Every one of those names resolves here through COLLECTION_RULES.
   //      Both went live 2026-11-21: Printables 1672641 (Joey's link) and Thangs 1537267 (the converted Cabinet Preview page).
   "MODULITH Essential Cabinet Doors": { p: "https://www.printables.com/model/1672641-modulith-essential-cabinet-doors", t: "https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Essential%20Cabinet%20Doors-1537267" },
+  // ---- The Chevron cabinet doors: ONE paid page per store holds all 48 doors, left- and right-hinged (the hinges, latches,
+  //      knobs and handles stay on the free pages). Every Chevron door name resolves here through COLLECTION_RULES.
+  "MODULITH Chevron Cabinet Doors": { p: "https://www.printables.com/model/1925578-modulith-chevron-cabinet-doors", t: "https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Chevron%20Cabinet%20Doors-1664247" },
   // ---- Decor handle series (parts-list handle row links the chosen style) ----
   "GEN2 Decor Handles - BlockBar Series": { p: "https://www.printables.com/model/965604-gen2-decor-handles-blockbar-series", t: "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Decor%20-%20Handles%20-%20BlockBar-1116949" },
   "GEN2 Decor Handles - Deco Series":     { p: "https://www.printables.com/model/1044972-gen2-decor-handles-deco-series", t: "https://thangs.com/designer/Jerrari/3d-model/GEN2%20Decor%20Handles%20-%20Deco%20Series-1159960" },
@@ -1059,8 +1065,10 @@ const COLLECTION_RULES = [
   [/^GEN2 (\d+)-.+ Gridfinity Decor Drawer$/, (m) => `MODULITH ${m[1]} Gridfinity Decor Drawers`],
   [/^GEN2 (\d+)-.+ Decor Drawer$/,      (m) => `GEN2 ${m[1]} Decor Drawers - All`],
   // The Essential cabinet doors (2026-11-21): ONE page per store carries all 48 doors, the handed hinges and latches
-  // and both knobs, so every one of those names resolves to it. The Chevron doors are not matched: no files yet.
+  // and both knobs, so every one of those names resolves to it.
   [/^GEN2 Essential Door - \dW-\dH( - Right-Hinged)?$/, () => "MODULITH Essential Cabinet Doors"],
+  // The Chevron cabinet doors: their own paid page per store carries all 48. Their hardware is the Essential page's (above).
+  [/^GEN2 Chevron Door - \dW-\dH( - Right-Hinged)?$/, () => "MODULITH Chevron Cabinet Doors"],
   [/^GEN2 (Cabinet Hinge|Door Latch) \(1H\) - (Left|Right)-Hinged Door$/, () => "MODULITH Essential Cabinet Doors"],
   [/^GEN2 (Deco|BlockBar) Knob$/,       () => "MODULITH Essential Cabinet Doors"],
   // NB anchored so "GEN2 Decor Faceplate Back Cover - …" (no style token)
