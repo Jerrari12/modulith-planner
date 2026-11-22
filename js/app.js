@@ -21,6 +21,8 @@ import { standRecord } from './rules/stand.js';
 import { readLabelDefaults, paletteOfDefaults, urlFor, NEW_SET } from './label-palette.js';   // the label palette's defaults and suggestion set for new builds (2026-10-28)
 import { cleanLook, buildTooNew } from './rules/schema.js';   // a shared build's look, cleaned once at the boot (SHARE-LOOK.md)
 import { partsDrawerOn, PARTS_DRAWER_PARAM } from './parts-drawer/flag.js';   // the parts drawer prototype (M2, 2026-11-05): ?partsdrawer=1
+import { keepDropped, droppedNote } from './state/dropped-copies.js';
+import { generateManifest } from './generate.js';   // the stage redrawn on the cleaned record when the load left units off   // a load that left units off the board: told, counted, the record kept (2026-11-21)
 import { copyOf as labelCopyOf, remember as rememberLabels, held as heldLabels, drop as dropLabels, markRestored as markRestoredLabels, safeStorage } from './state/label-copies.js';
 
 // eslint-disable-next-line no-undef
@@ -255,7 +257,7 @@ export async function boot() {
     btn.focus();
   }
   /* the mounted workspace's toast (every workspace makes one as #ws-toast) */
-  const toast = (m) => { const t = document.getElementById('ws-toast'); if (!t) return; t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2600); };
+  const toast = (m, ms = 2600) => { const t = document.getElementById('ws-toast'); if (!t) return; t.textContent = m; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms); };
   /* reload the page on another record. A URL that differs from the current one only in its hash is a hash change, not a
      navigation (the e2e suite caught Duplicate staying on the old build, 2026-10-13), so that case reloads explicitly - the
      old viewer's own rule for a mount or length change. A harness keeps its ?debug hooks across it. `replace`: this page
@@ -281,7 +283,27 @@ export async function boot() {
     stage.build.labelPalette = paletteOfDefaults(d, NEW_SET);
     if (d) for (const [key, sp] of [['Label', d.body], ['Label:TEXT', d.text]]) if (sp) stage.setColor(key, { name: sp.name, hex: sp.hex, url: urlFor(sp.name) });
   }
-  if (stage.build) store.load(stage.build);
+  /* UNITS THE LOAD LEFT OFF (2026-11-21, js/state/dropped-copies.js). sanitizeBuild keeps only the units it accepts and
+     returns how many it dropped; that count was thrown away here, so a saved build could open with units missing and say
+     nothing, and the next settled change saved the emptier board over the Recent entry and the slot. Now the record as it
+     arrived is kept aside first, the visitor is told once the workspace is up, and the event is counted. */
+  let lostUnits = null;
+  if (stage.build) {
+    const loaded = store.load(stage.build);
+    if (loaded.ok && loaded.dropped > 0) {
+      lostUnits = { n: loaded.dropped, kept: keepDropped(copies, stage.build, loaded.dropped), redrawn: false };
+      try { stage.track?.('error:load-dropped'); } catch { /* never let counting throw */ }
+      /* the stage booted on the record as it arrived and still draws the units the store left off; the workspaces only
+         redraw on a store change, so it showed parts that vanished at the first edit. Redrawn here on the cleaned record,
+         once, the way the Build workspace does after an edit. A result the stage cannot show (every unit dropped: the
+         generator refuses an empty board, as it does when a visitor deletes the last unit) keeps the scene, the planner's
+         rule for an unshowable layout, and the notice then says the 3D view is the build as saved (Terra 01a2013c) */
+      try {
+        const rec = store.serialize(), gen = generateManifest(rec, { voids: true });
+        if (gen.manifest) { const r = await stage.update(rec, gen); if (r && r.ok) { stage.skipToEnd(); lostUnits.redrawn = true; } }
+      } catch (e) { console.warn('[boot] redraw after a lossy load failed', e); }
+    }
+  }
   stage.setLabelPalette?.(store.state.labelPalette);
   if (QS.get('debug')) { window.__GEN2_STORE__ = store; window.__GEN2_CTX__ = () => ctx; }   // for the shot tool and end-to-end checks, like the stage's own hook
   let kitTitle = stage.manifest?.title || null;
@@ -453,6 +475,8 @@ export async function boot() {
       if (!LINKED) saveBuild(snap);
     }
     if (note) setTimeout(() => toast(note), 600);
+    // units the load left off: said after any note above, and held long enough to read two sentences
+    if (lostUnits) setTimeout(() => toast(droppedNote(lostUnits.n, lostUnits.kept, lostUnits.redrawn), 12000), note ? 3400 : 600);
   }
   /* the stale-tab guard's early warning: another tab's write of this build (its hint), the visitor coming back to this tab
      (the Studio's flow: Add to planner build opened a second tab), and a page restored from the back/forward cache */
