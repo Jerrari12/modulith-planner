@@ -120,6 +120,10 @@ jobs:
           sed -i "s|css/viewer.css|css/viewer.css?v=$V|; s|js/boot.js|js/boot.js?v=$V|" index.html
           sed -i "s|'./app.js'|'./app.js?v=$V'|" js/boot.js
           sed -i "s|'./main.js'|'./main.js?v=$V'|; s|'./workspaces/build.js'|'./workspaces/build.js?v=$V'|; s|'./workspaces/assemble.js'|'./workspaces/assemble.js?v=$V'|; s|'./workspaces/parts.js'|'./workspaces/parts.js?v=$V'|; s|'./state/store.js'|'./state/store.js?v=$V'|; s|'./workspaces/colors.js'|'./workspaces/colors.js?v=$V'|; s|'./ui/phone.js'|'./ui/phone.js?v=$V'|; s|'./workspaces/labels.js'|'./workspaces/labels.js?v=$V'|; s|'./state/builds.js'|'./state/builds.js?v=$V'|; s|'./ui/setup.js'|'./ui/setup.js?v=$V'|; s|'./state/label-copies.js'|'./state/label-copies.js?v=$V'|; s|'./rules/stand.js'|'./rules/stand.js?v=$V'|" js/app.js
+          # a load that left units off the board (2026-11-21): app.js imports the kept-copy module and the generator, and the module
+          # imports the build-id rule (the first deploy of 68d25fa failed the guard below on these three)
+          sed -i "s|'./state/dropped-copies.js'|'./state/dropped-copies.js?v=$V'|; s|'./generate.js'|'./generate.js?v=$V'|" js/app.js
+          sed -i "s|'../rules/schema.js'|'../rules/schema.js?v=$V'|" js/state/dropped-copies.js
           sed -i "s|'./dom.js'|'./dom.js?v=$V'|; s|'./icons.js'|'./icons.js?v=$V'|; s|'../rules/layout.js'|'../rules/layout.js?v=$V'|; s|'../rules/stand.js'|'../rules/stand.js?v=$V'|; s|'../rules/schema.js'|'../rules/schema.js?v=$V'|; s|'../generate.js'|'../generate.js?v=$V'|; s|'./names.js'|'./names.js?v=$V'|" js/ui/setup.js
           sed -i "s|'./layout.js'|'./layout.js?v=$V'|" js/rules/stand.js   # the hand-written structure helpers (2026-10-20)
           sed -i "s|'../rules/settle.js'|'../rules/settle.js?v=$V'|" js/workspaces/build.js js/ui/setup.js   # the settle rule (2026-10-25)
