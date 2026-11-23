@@ -3341,11 +3341,24 @@ function previewProbe(slug) {
   // its title pieces (2026-11-08): a set shipped as 3MFs, with no GLB and no place on the stage
   if (s === 'filament-sample-chip-title-pieces')
     return un('The title pieces have no 3D preview: they ship as ready-to-print 3MFs.');
-  /* the cabinet doors and their hardware (site slugs minted 2026-11-20, coming soon): the 96 doors
-     `<style>-cabinet-door-<w>w-<h>h[-right-hinged]`, the handed hinges and latches, the two knobs. Their GLBs are in the
-     pools and a cabinet build draws them, but no probe picks one out of a cabinet yet, so the site shows the render */
-  if (/^(essential|chevron)-cabinet-door-[1-4]w-[1-6]h(-right-hinged)?$/.test(s))
-    return un('A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build.');
+  /* The cabinet doors (site slugs minted 2026-11-20, `<style>-cabinet-door-<w>w-<h>h[-right-hinged]`, 96 of them; Joey
+     2026-11-23: "we will need to get the 3d and print views available on the catalog pages for the essential and chevron
+     doors"). A door is universal, like a faceplate, so the probe is one wall cabinet of the door's size and hand on the
+     calibrated 185. A cabinet bills its door as a 'Faceplate' row (the door's colour and parts-list row are the
+     faceplates') and no other faceplate, and the pick demands the door's exact node back, as the handles' does: a door
+     style the generator had not modelled would draw the Essential door with a warning, and the exact node fails closed
+     there rather than show an Essential door on another style's page. The print view is the door's own face-down pose
+     (PLATE_POSE 'door:<style>'), reached through materialTypeOf in platePoseFor. A style listed in GEN2.unreleased
+     ('door:chevron' until its release) previews all the same: that list gates only the parts list's links. */
+  if ((m = s.match(/^(essential|chevron)-cabinet-door-([1-4])w-([1-6])h(-right-hinged)?$/))) {
+    const style = m[1], w = +m[2], h = +m[3], right = !!m[4];
+    return { build: { mount: 'wall', length: 185, gridH: h, doorStyle: style,
+                      placed: [{ ...unit(w, h * 2, 'cabinet'), ...(right ? { hinge: 'right' } : {}) }] },
+             pick: { type: 'Faceplate', node: `Door_${CABINET.styles[style].label}_${w}W-${h}H${right ? '_RH' : ''}` } };
+  }
+  /* the door hardware (site slugs minted 2026-11-20, coming soon): the handed hinges and latches, the two knobs. Their
+     GLBs are in the pools and a cabinet build draws them, but no probe picks one out of a cabinet yet, so the site shows
+     the render */
   if (/^(cabinet-hinge|door-latch)-(left|right)-hinged-door$/.test(s) || /^(deco|blockbar)-knob$/.test(s))
     return un('The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build.');
   // hardware (sets + singles) — the probe mounts are chosen so the REAL
@@ -3737,7 +3750,10 @@ function platePoseFor(probe) {
   // a confirmed print pose, so the seven other handle pages ship turntable-only and fail closed on
   // ?plate= - and without this argument even Deco would, which is what it did until handles
   // had product pages to reach it.
-  return plateRotForType(probe.pick.type, probe.build.faceStyle, handlePoseKey(probe.build.handleVariant) || probe.build.handleStyle);
+  // and a cabinet door, billed as a 'Faceplate' row, prints in its own pose, not the faceplate family's: its material
+  // type is 'Door' (materialTypeOf, from the picked node), filed by the build's door style
+  return plateRotForType(materialTypeOf(probe.pick.type, probe.pick.node), probe.build.faceStyle,
+    handlePoseKey(probe.build.handleVariant) || probe.build.handleStyle, probe.build.doorStyle);
 }
 
 export function resolvePartPreview(slug, opts = {}) {

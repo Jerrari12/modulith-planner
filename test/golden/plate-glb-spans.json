@@ -1339,6 +1339,486 @@
   106,
   179.3
  ],
+ "185/Door_Chevron_1W-1H": [
+  79.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_1W-1H_RH": [
+  79.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_1W-2H": [
+  79.2,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_1W-2H_RH": [
+  79.2,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_1W-3H": [
+  79.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_1W-3H_RH": [
+  79.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_1W-4H": [
+  79.1,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_1W-4H_RH": [
+  79.1,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_1W-5H": [
+  79.2,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_1W-5H_RH": [
+  79.2,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_1W-6H": [
+  79.1,
+  335,
+  6.5
+ ],
+ "185/Door_Chevron_1W-6H_RH": [
+  79.1,
+  335,
+  6.5
+ ],
+ "185/Door_Chevron_2W-1H": [
+  167.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_2W-1H_RH": [
+  167.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_2W-2H": [
+  167.1,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_2W-2H_RH": [
+  167.1,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_2W-3H": [
+  167.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_2W-3H_RH": [
+  167.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_2W-4H": [
+  167.2,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_2W-4H_RH": [
+  167.2,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_2W-5H": [
+  167.1,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_2W-5H_RH": [
+  167.1,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_2W-6H": [
+  167.1,
+  335,
+  6.5
+ ],
+ "185/Door_Chevron_2W-6H_RH": [
+  167.1,
+  335,
+  6.5
+ ],
+ "185/Door_Chevron_3W-1H": [
+  255.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_3W-1H_RH": [
+  255.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_3W-2H": [
+  255.1,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_3W-2H_RH": [
+  255.1,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_3W-3H": [
+  255.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_3W-3H_RH": [
+  255.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_3W-4H": [
+  255.1,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_3W-4H_RH": [
+  255.1,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_3W-5H": [
+  255.2,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_3W-5H_RH": [
+  255.2,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_3W-6H": [
+  255.2,
+  335,
+  6.5
+ ],
+ "185/Door_Chevron_3W-6H_RH": [
+  255.2,
+  335,
+  6.5
+ ],
+ "185/Door_Chevron_4W-1H": [
+  343.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_4W-1H_RH": [
+  343.1,
+  55,
+  6.5
+ ],
+ "185/Door_Chevron_4W-2H": [
+  343.1,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_4W-2H_RH": [
+  343.1,
+  111,
+  6.5
+ ],
+ "185/Door_Chevron_4W-3H": [
+  343.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_4W-3H_RH": [
+  343.1,
+  167,
+  6.5
+ ],
+ "185/Door_Chevron_4W-4H": [
+  343.1,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_4W-4H_RH": [
+  343.1,
+  223,
+  6.5
+ ],
+ "185/Door_Chevron_4W-5H": [
+  343.1,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_4W-5H_RH": [
+  343.1,
+  279,
+  6.5
+ ],
+ "185/Door_Chevron_4W-6H": [
+  343.1,
+  335,
+  6.5
+ ],
+ "185/Door_Chevron_4W-6H_RH": [
+  343.1,
+  335,
+  6.5
+ ],
+ "185/Door_Essential_1W-1H": [
+  78,
+  55,
+  5
+ ],
+ "185/Door_Essential_1W-1H_RH": [
+  78,
+  55,
+  5
+ ],
+ "185/Door_Essential_1W-2H": [
+  78,
+  111,
+  5
+ ],
+ "185/Door_Essential_1W-2H_RH": [
+  78,
+  111,
+  5
+ ],
+ "185/Door_Essential_1W-3H": [
+  78,
+  167,
+  5
+ ],
+ "185/Door_Essential_1W-3H_RH": [
+  78,
+  167,
+  5
+ ],
+ "185/Door_Essential_1W-4H": [
+  78,
+  223,
+  5
+ ],
+ "185/Door_Essential_1W-4H_RH": [
+  78,
+  223,
+  5
+ ],
+ "185/Door_Essential_1W-5H": [
+  78,
+  279,
+  5
+ ],
+ "185/Door_Essential_1W-5H_RH": [
+  78,
+  279,
+  5
+ ],
+ "185/Door_Essential_1W-6H": [
+  78,
+  335,
+  5
+ ],
+ "185/Door_Essential_1W-6H_RH": [
+  78,
+  335,
+  5
+ ],
+ "185/Door_Essential_2W-1H": [
+  166,
+  55,
+  5
+ ],
+ "185/Door_Essential_2W-1H_RH": [
+  166,
+  55,
+  5
+ ],
+ "185/Door_Essential_2W-2H": [
+  166,
+  111,
+  5
+ ],
+ "185/Door_Essential_2W-2H_RH": [
+  166,
+  111,
+  5
+ ],
+ "185/Door_Essential_2W-3H": [
+  166,
+  167,
+  5
+ ],
+ "185/Door_Essential_2W-3H_RH": [
+  166,
+  167,
+  5
+ ],
+ "185/Door_Essential_2W-4H": [
+  166,
+  223,
+  5
+ ],
+ "185/Door_Essential_2W-4H_RH": [
+  166,
+  223,
+  5
+ ],
+ "185/Door_Essential_2W-5H": [
+  166,
+  279,
+  5
+ ],
+ "185/Door_Essential_2W-5H_RH": [
+  166,
+  279,
+  5
+ ],
+ "185/Door_Essential_2W-6H": [
+  166,
+  335,
+  5
+ ],
+ "185/Door_Essential_2W-6H_RH": [
+  166,
+  335,
+  5
+ ],
+ "185/Door_Essential_3W-1H": [
+  254,
+  55,
+  5
+ ],
+ "185/Door_Essential_3W-1H_RH": [
+  254,
+  55,
+  5
+ ],
+ "185/Door_Essential_3W-2H": [
+  254,
+  111,
+  5
+ ],
+ "185/Door_Essential_3W-2H_RH": [
+  254,
+  111,
+  5
+ ],
+ "185/Door_Essential_3W-3H": [
+  254,
+  167,
+  5
+ ],
+ "185/Door_Essential_3W-3H_RH": [
+  254,
+  167,
+  5
+ ],
+ "185/Door_Essential_3W-4H": [
+  254,
+  223,
+  5
+ ],
+ "185/Door_Essential_3W-4H_RH": [
+  254,
+  223,
+  5
+ ],
+ "185/Door_Essential_3W-5H": [
+  254,
+  279,
+  5
+ ],
+ "185/Door_Essential_3W-5H_RH": [
+  254,
+  279,
+  5
+ ],
+ "185/Door_Essential_3W-6H": [
+  254,
+  335,
+  5
+ ],
+ "185/Door_Essential_3W-6H_RH": [
+  254,
+  335,
+  5
+ ],
+ "185/Door_Essential_4W-1H": [
+  342,
+  55,
+  5
+ ],
+ "185/Door_Essential_4W-1H_RH": [
+  342,
+  55,
+  5
+ ],
+ "185/Door_Essential_4W-2H": [
+  342,
+  111,
+  5
+ ],
+ "185/Door_Essential_4W-2H_RH": [
+  342,
+  111,
+  5
+ ],
+ "185/Door_Essential_4W-3H": [
+  342,
+  167,
+  5
+ ],
+ "185/Door_Essential_4W-3H_RH": [
+  342,
+  167,
+  5
+ ],
+ "185/Door_Essential_4W-4H": [
+  342,
+  223,
+  5
+ ],
+ "185/Door_Essential_4W-4H_RH": [
+  342,
+  223,
+  5
+ ],
+ "185/Door_Essential_4W-5H": [
+  342,
+  279,
+  5
+ ],
+ "185/Door_Essential_4W-5H_RH": [
+  342,
+  279,
+  5
+ ],
+ "185/Door_Essential_4W-6H": [
+  342,
+  335,
+  5
+ ],
+ "185/Door_Essential_4W-6H_RH": [
+  342,
+  335,
+  5
+ ],
  "185/Drawer_Stoppers_L": [
   19.6,
   4.5,
