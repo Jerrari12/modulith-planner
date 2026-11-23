@@ -5657,292 +5657,676 @@
     "unsupported": "unsupported"
   },
   "essential-cabinet-door-1w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-1H",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-1H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-1H",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-1H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-1H",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-1H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-1H",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-1H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-2H",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-2H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-2H",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-2H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-2H",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-2H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-2H",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-2H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-3H",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-3H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-3H",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-3H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-3H",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-3H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-3H",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-3H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-4H",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-4H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-4H",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-4H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-4H",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-4H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-4H",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-4H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-5H",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-5H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-5H",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-5H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-5H",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-5H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-5H",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-5H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-6H",
+    "platePreview": true
   },
   "essential-cabinet-door-1w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_1W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 1W-6H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-6H",
+    "platePreview": true
   },
   "essential-cabinet-door-2w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_2W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 2W-6H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-6H",
+    "platePreview": true
   },
   "essential-cabinet-door-3w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_3W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 3W-6H (right-hinged)",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-6H",
+    "platePreview": true
   },
   "essential-cabinet-door-4w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Essential_4W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Essential Door 4W-6H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-1H",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-1H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-1H",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-1H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-1H",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-1H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-1h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-1H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-1H",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-1h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-1H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-1H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-2H",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-2H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-2H",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-2H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-2H",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-2H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-2h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-2H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-2H",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-2h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-2H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-2H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-3H",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-3H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-3H",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-3H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-3H",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-3H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-3h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-3H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-3H",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-3h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-3H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-3H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-4H",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-4H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-4H",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-4H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-4H",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-4H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-4h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-4H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-4H",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-4h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-4H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-4H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-5H",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-5H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-5H",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-5H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-5H",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-5H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-5h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-5H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-5H",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-5h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-5H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-5H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-6H",
+    "platePreview": true
   },
   "chevron-cabinet-door-1w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_1W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 1W-6H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-6H",
+    "platePreview": true
   },
   "chevron-cabinet-door-2w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_2W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 2W-6H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-6H",
+    "platePreview": true
   },
   "chevron-cabinet-door-3w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_3W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 3W-6H (right-hinged)",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-6h": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-6H",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-6H",
+    "platePreview": true
   },
   "chevron-cabinet-door-4w-6h-right-hinged": {
-    "unsupported": "unsupported"
+    "node": "Door_Chevron_4W-6H_RH",
+    "collection": "185",
+    "type": "Faceplate",
+    "label": "Chevron Door 4W-6H (right-hinged)",
+    "platePreview": true
   },
   "cabinet-hinge-left-hinged-door": {
     "unsupported": "unsupported"

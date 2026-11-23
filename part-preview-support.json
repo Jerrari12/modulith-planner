@@ -2511,388 +2511,388 @@
       "reason": "The title pieces have no 3D preview: they ship as ready-to-print 3MFs."
     },
     "essential-cabinet-door-1w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-1w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-2w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-3w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "essential-cabinet-door-4w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-1h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-1h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-2h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-2h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-3h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-3h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-4h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-4h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-5h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-5h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-1w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-2w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-3w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-6h": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "chevron-cabinet-door-4w-6h-right-hinged": {
-      "preview": false,
-      "reason": "A cabinet door has no 3D preview yet: no probe picks one out of a cabinet build."
+      "preview": true,
+      "platePreview": true
     },
     "cabinet-hinge-left-hinged-door": {
       "preview": false,

@@ -48,13 +48,13 @@ const glbExists = (L, node) => existsSync(join(root, 'parts', String(L), node + 
    The filament sample chip (2026-11-07) joins them: its GLB exists, but no build
    places a chip yet, so no probe can pick one. And its title pieces (2026-11-08):
    a set that ships as 3MFs, with no GLB at all.
-   The cabinet doors and their hardware (2026-11-20, coming soon): 96 doors, the
-   handed hinges and latches, the two knobs. Their GLBs are in the pools and a
-   cabinet build draws them, but no probe picks one out of a cabinet yet. */
+   The cabinet door hardware (2026-11-20, coming soon): the handed hinges and
+   latches, the two knobs. Their GLBs are in the pools and a cabinet build draws
+   them, but no probe picks one out of a cabinet yet. The 96 doors left this list
+   on 2026-11-23: a one-cabinet probe picks each door out by its exact node. */
 const expectUnsupported = s =>
   /^59-case-extender-[34]w-1h$/.test(s) ||
   /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip|filament-sample-chip-title-pieces)$/.test(s) ||
-  /^(essential|chevron)-cabinet-door-[1-4]w-[1-6]h(-right-hinged)?$/.test(s) ||
   /^((cabinet-hinge|door-latch)-(left|right)-hinged-door|deco-knob|blockbar-knob)$/.test(s);
 
 // resolve the whole catalog once — every test reads from this
@@ -89,8 +89,27 @@ test('every production slug is accounted for — resolved or intentionally unsup
   // gen2-parts branch chip-drawers, so the deploy that carries these pages publishes gen2-parts first
   // 2026-11-08: the chip's title pieces, unsupported (5 → 6): a 3MF set, no GLB
   // 2026-11-20: the 102 coming-soon cabinet parts, unsupported (6 → 108): 96 doors, 2 hinges, 2 latches, 2 knobs
-  assert.equal(supported, 621, 'supported preview count');
-  assert.equal(unsupported, 108, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip + its title pieces + 102 cabinet parts)');
+  // 2026-11-23: +96 cabinet doors (621 → 717; 108 → 12), 48 Essential and 48 Chevron, both hands, picked out of a
+  // one-cabinet probe; the 6 hardware parts stay unsupported
+  assert.equal(supported, 717, 'supported preview count');
+  assert.equal(unsupported, 12, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip + its title pieces + 6 cabinet hardware parts)');
+});
+
+/* The cabinet doors (2026-11-23): each of the 96 pages previews its own door - the style, the size and the hand its slug
+   names - alone, with none of the cabinet's hardware. The probe demands the node back; this reads it from the slug. */
+test('a cabinet door page previews that door: its style, size and hand, and nothing else', () => {
+  const doors = [...resolved].filter(([s]) => /-cabinet-door-/.test(s));
+  assert.equal(doors.length, 96, 'the site lists 96 cabinet doors');
+  const bad = [];
+  for (const [s, r] of doors) {
+    const m = /^(essential|chevron)-cabinet-door-([1-4])w-([1-6])h(-right-hinged)?$/.exec(s);
+    const want = `Door_${m[1] === 'essential' ? 'Essential' : 'Chevron'}_${m[2]}W-${m[3]}H${m[4] ? '_RH' : ''}`;
+    if (r.fail) { bad.push(`${s}: ${r.fail.message}`); continue; }
+    if (r.part.node !== want) bad.push(`${s}: ${r.part.node}, not ${want}`);
+    if (r.manifest.instances.length !== 1 || r.manifest.parts.length !== 1) bad.push(`${s}: more than the door`);
+    if (!r.part.platePreview) bad.push(`${s}: no print view`);
+  }
+  assert.deepEqual(bad, []);
 });
 
 test('every resolved preview references GLBs that exist in its collection pool', () => {
@@ -259,6 +278,12 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
   // makes contact with the wall, that back side prints face down on the bed
   // for all wall mount brackets" - the back-cover swing, wall face to sheet.
   assert.deepEqual(rot('wall-mount-bracket-2w'), [-90, 0, 0], 'wall bracket prints wall-face down');
+  // Joey's 2026-11-20 confirmation: "The essential and Chevron doors will print face down only". A door is billed as a
+  // 'Faceplate' row, so its pose must come from the door's own material type ('Door', PLATE_POSE 'door:<style>'), not
+  // from a faceplate family: the probe names no faceplate family, so read as a faceplate it would have no pose at all
+  for (const s of ['essential-cabinet-door-1w-1h', 'essential-cabinet-door-4w-6h-right-hinged',
+                   'chevron-cabinet-door-2w-3h', 'chevron-cabinet-door-3w-5h-right-hinged'])
+    assert.deepEqual(rot(s), [90, 0, 0], `${s} prints face down`);
   // the plate shows the BARE print body — dressed extras have no confirmed
   // individual print pose or plate arrangement yet
   const p = resolvePartPreview('edgelabel-faceplate-2w-1h', { plate: true });
@@ -295,7 +320,8 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
   // + 22 case extenders + 22 shelf inserts + 4 shelf lips + 18 back covers + 3
   // wall brackets + 1 Deco handle + 1 BlockBar B + 27 side covers (face-down, the plateRot entry's release notes)
   // + 12 chip drawers (floor-down as exported, the standard drawer's pose)
-  assert.equal(caps.filter(r => r.part.platePreview).length, 614, 'plate-capable slug count');
+  // + 96 cabinet doors (face down, the door's own pose; 2026-11-23)
+  assert.equal(caps.filter(r => r.part.platePreview).length, 710, 'plate-capable slug count');
 
   // sweep EVERY plate-capable slug's plate boot (not just samples): the bare
   // print JOB (one body, or every member of a handed set), rotations matching
@@ -313,6 +339,7 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
       : s === 'deco-handle' ? [180, 0, 0]
       : s === 'blockbar-handle-b' ? [90, 0, 0]
       : /-side-cover-/.test(s) ? [0, 0, 90]
+      : /-cabinet-door-/.test(s) ? [90, 0, 0]
       : undefined;
   for (const [s, r] of resolved) {
     if (r.fail || !r.part.platePreview) continue;
