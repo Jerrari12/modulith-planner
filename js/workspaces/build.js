@@ -832,11 +832,15 @@ export function mountBuild(stage, ctx) {
         el('button.seg.sm' + (removedHere === 0 ? '.on' : ''), { text: 'All', onclick: () => setUnitOption(unit.id, (p, s2) => { s2.removedStoppers = s2.removedStoppers.filter((k) => !keys.includes(k)); }) }),
         el('button.seg.sm' + (removedHere === keys.length ? '.on' : ''), { text: 'None', onclick: () => setUnitOption(unit.id, (p, s2) => { s2.removedStoppers = [...new Set([...s2.removedStoppers, ...keys])]; }) }),
       ])]));
-      /* the drawer type (2026-11-07): Standard, Gridfinity (Decor, on its sizes) and Chip (Classic and Decor, 1W-0.5H),
-         on every drawer; behind ?partsdrawer=1 a Decor drawer also offers main's Parts drawer (merged 2026-11-08). An option this
-         size cannot take is greyed with the reason, never hidden. The lit one is the body the stage draws: a variant kept on a
-         size without that body renders, and reads, Standard (the generator's rule). Choosing one opens the drawer, so its body
-         shows (main's rule, ca110f8). */
+      /* the drawer type (2026-11-07): Standard, Gridfinity (Decor, on its sizes) and Chip (Classic and Decor, 1W-0.5H); behind
+         ?partsdrawer=1 a Decor drawer also offers main's Parts drawer (merged 2026-11-08). Gridfinity and Parts drawer are greyed
+         with the reason on a size that cannot take them. Chip is shown only on a chip size and left out everywhere else (Joey,
+         2026-11-23: "can chip only show as an option when it's for a drawer that fits chips, since a majority of all the
+         drawers don't have chip versions"). A drawer only wears chips on a chip size (isChips), so the lit button is never the
+         one left out. With Standard the only type left, as on a Classic drawer off the chip size, there is nothing to choose
+         and the row is not drawn (Joey, asked the same day whether to show Standard alone: "Keep it hidden"). The lit one is
+         the body the stage draws: a variant kept on a size without that body renders, and reads, Standard (the generator's
+         rule). Choosing one opens the drawer, so its body shows (main's rule, ca110f8). */
       const gfOk = unit.fill === 'decor' && Rs.gridfinityOk(unit), chipOk = chipSizeOk(+s.length, unit);
       const pdOn = unit.fill === 'decor' && !!pd, pdOk = pdOn && pd.sizeOk(unit), parts = pdOn && pd.isParts(unit);
       const body = isChips(+s.length, unit) ? 'chips' : parts ? 'parts' : gfOk && unit.variant === 'gridfinity' ? 'gridfinity' : 'standard';
@@ -849,11 +853,11 @@ export function mountBuild(stage, ctx) {
         pdOn ? el('button.seg.sm' + (body === 'parts' ? '.on' : ''), { text: 'Parts drawer', disabled: !pdOk,
           title: pdOk ? 'Compartments, label holders, scoops and ramps inside, generated to your layout' : pd.sizeWhy(unit.w, unit.hh / 2),
           onclick: choose((p) => { p.variant = 'parts'; }) }) : null,
-        el('button.seg.sm' + (body === 'chips' ? '.on' : ''), { text: 'Chip', disabled: !chipOk,
-          title: chipOk ? `Holds up to ${G.chips.lanes * G.chips.slotsPerLane[+s.length]} filament sample chips on edge` : 'Chip drawers are 1W-0.5H',
-          onclick: choose((p) => { p.variant = 'chips'; }) }),
+        chipOk ? el('button.seg.sm' + (body === 'chips' ? '.on' : ''), { text: 'Chip',
+          title: `Holds up to ${G.chips.lanes * G.chips.slotsPerLane[+s.length]} filament sample chips on edge`,
+          onclick: choose((p) => { p.variant = 'chips'; }) }) : null,
       ].filter(Boolean);
-      insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.mini.seg' + types.length, { role: 'group', 'aria-label': 'Drawer type' }, types)]));
+      if (types.length > 1) insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.mini.seg' + types.length, { role: 'group', 'aria-label': 'Drawer type' }, types)]));
       if (parts) insp.appendChild(pd.unitSection(unit));   // the plan thumbnail, the layout code, Edit compartments, the download
     }
     if (unit.fill === 'shelf') {
