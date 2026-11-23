@@ -55,6 +55,11 @@ test('every printed BOM row maps to a stage part type; bought hardware maps to n
   assert.equal(typeOf('GEN2 185 Foot Rail Lower (FR-L) - 1W'), 'FootrailL');
   assert.equal(typeOf('Under-Table Rail 185-2W'), 'Rail');
   assert.equal(chipFor('GEN2 185 Case - 2W-1H'), '#E9E9EC', 'the identification colour is unchanged');
+  // a cabinet's hinges and latches are rows of their own (Joey 2026-11-23), drawn in the QuickLock's hue until picked
+  assert.equal(typeOf('GEN2 Cabinet Hinge (1H) - Left-Hinged Door'), 'CabinetHinge');
+  assert.equal(typeOf('GEN2 Door Latch (1H) - Right-Hinged Door'), 'CabinetLatch');
+  assert.equal(chipFor('GEN2 Cabinet Hinge (1H) - Right-Hinged Door'), chipFor('GEN2 QuickLock - Left'));
+  assert.equal(chipFor('GEN2 Door Latch (1H) - Left-Hinged Door'), chipFor('GEN2 QuickLock - Left'));
 });
 
 /* a stage as the Colors tab sees it: two faceplates, one with its own face colour; one case; bought screws */
@@ -84,7 +89,7 @@ test('the palette snapshot: null with the colours off; per type, its regions wit
   assert.deepEqual([...pal.keys()], ['Case', 'Faceplate', 'QuickLock'], 'the screws are bought');
   assert.deepEqual(pal.get('Case').map((g) => [g.key, g.filaments.map((f) => f.name), g.bare]), [['Case', ['Panchroma Black'], null]]);
   assert.deepEqual(pal.get('Faceplate').map((g) => [g.key, g.zone, g.filaments.map((f) => f.name)]), [['Faceplate', '', ['Panchroma Black', 'Teal']], ['Faceplate:FACE', 'FACE', ['Mystery Orange', 'Teal']]]);
-  assert.deepEqual(pal.get('QuickLock'), [{ key: 'QuickLock', zone: '', ownColor: false, filaments: [], bare: '#b9bcc2' }], 'a region with no pick keeps its identification colour');
+  assert.deepEqual(pal.get('QuickLock'), [{ key: 'QuickLock', zone: '', ownColor: false, follows: null, filaments: [], bare: '#b9bcc2' }], 'a region with no pick keeps its identification colour');
   // a stage without the palette API (the static viewer) reads as colours off
   assert.equal(paletteSnapshot({}), null);
   assert.equal(paletteSnapshot({ palette: () => ({ on: true }), keysInBuild: () => { throw new Error('no scene'); } }), null);

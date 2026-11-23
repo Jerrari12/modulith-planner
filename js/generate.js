@@ -1770,7 +1770,7 @@ export function generateManifest(build, opts = {}) {
       rings3.forEach((ring, k) => {
         inst.push({ id: ids.body[k], node: nodes.body, pos: at(CABINET.hingeBody, ring), owner: u.id, ...stg });
         inst.push({ id: ids.side[k], node: nodes.side, pos: at(CABINET.sideClip, ring), owner: u.id, ...stg });
-        inst.push({ id: ids.claws[k], node: nodes.claws, pos: at(CABINET.claws, ring), owner: u.id, rides: ids.door, type: 'QuickLock', ...stg });   // no row of its own: billed on the body
+        inst.push({ id: ids.claws[k], node: nodes.claws, pos: at(CABINET.claws, ring), owner: u.id, rides: ids.door, type: 'CabinetHinge', billedOn: ids.body[k], ...stg });   // no row of its own: billed on the body (keysInBuild counts the hinge once)
         inst.push({ id: ids.dclip[k], node: nodes.dclip, pos: at(CABINET.doorClip, ring), owner: u.id, rides: ids.door, ...stg });
         // the magnets: the disc's centre at the clip's pocket (the GLB's origin is its bottom edge, 5 below the centre)
         const mag = (m, clip) => [clip[0] + s * m.x, clip[1] + m.y - 5, clip[2] + m.z];
@@ -1808,9 +1808,9 @@ export function generateManifest(build, opts = {}) {
       add(nodes.door, `${ds.label} Door ${u.w}W-${h}H${R ? ' (right-hinged)' : ''}`, 'Faceplate', null, 1, false, false, { requirement: REQ.core('unit.fill') }, 'Not published yet.');
       // the hinge PRINTS AS ONE PART (Joey 2026-11-19): body and claws are two models only so the claws can turn with the
       // door - one row, on the body's node
-      add(nodes.body, `Cabinet Hinge (${side}-hinged door)`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Prints as one part, body and claws together. Optional: a 47 mm length of 1.75 mm filament (PETG slides best) down its barrel, cut flush.');
-      add(nodes.side, `Door Latch (${mark}) - side clip`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
-      add(nodes.dclip, `Door Latch (${mark}) - door clip`, 'QuickLock', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
+      add(nodes.body, `Cabinet Hinge (${side}-hinged door)`, 'CabinetHinge', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Prints as one part, body and claws together. Optional: a 47 mm length of 1.75 mm filament (PETG slides best) down its barrel, cut flush.');
+      add(nodes.side, `Door Latch (${mark}) - side clip`, 'CabinetLatch', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
+      add(nodes.dclip, `Door Latch (${mark}) - door clip`, 'CabinetLatch', null, n, false, false, { requirement: REQ.core('unit.fill') }, 'Takes a 10×2 mm magnet.');
       add('Magnet_10x2mm', 'Magnet 10×2 mm', 'Magnet', { buy: BUY.magnets }, 2 * n, true, false, { requirement: REQ.core('unit.fill') }, 'Two per door latch, one in each clip · each pair must attract.');
       cabBuy.magnets += 2 * n; if (h === 1) cabBuy.knobScrews += 1;
       if (h === 1) add(knob.node, knob.label, 'Handle', null, 1, false, false, { requirement: REQ.core('drawer.grip') }, 'Not published yet.');
@@ -3252,7 +3252,7 @@ function previewColors(L) {
     BackCover: '#c25c28', Label: '#eef0f4',
     // hardware wears the poster orange too (the site's card art) — the K'nex
     // identification palette is an instructions affordance, not a product shot
-    QuickLock: '#ff6f1b', Stopper: '#ff6f1b', MagnetClip: '#ff6f1b', Foot: '#ff6f1b',
+    QuickLock: '#ff6f1b', Stopper: '#ff6f1b', MagnetClip: '#ff6f1b', Foot: '#ff6f1b', CabinetHinge: '#ff6f1b', CabinetLatch: '#ff6f1b',
     // the handle is the SUBJECT of its own product page and previews mounted on a plate, so it
     // takes the poster orange and leaves the Faceplate above in its dark hue: the eye finds the
     // part being sold without a caption. In a build it stays identification yellow.
@@ -3615,6 +3615,18 @@ export function materialTypeOf(type, node) {
 export function paletteKeyOf(key) {
   const s = String(key);
   return s === 'Door' || s.startsWith('Door:') ? 'Faceplate' + s.slice(4) : s;
+}
+
+/* THE KEY A PALETTE KEY FOLLOWS WHILE IT HAS NO PICK OF ITS OWN. A zone follows its part's body ('Faceplate:FACE' ->
+   'Faceplate'). A cabinet's hinges and door latches are rows of their own, 'CabinetHinge' and 'CabinetLatch', so a
+   visitor can colour them apart from the QuickLocks (Joey 2026-11-23: "because they are more visible, especially the
+   hinges are always visible and the closure hardware are only visible once opened"); until they do, both follow the
+   QuickLocks, so every palette, preset and look that never named them paints them as it did when they were QuickLock
+   rows. No identification colour of their own either: the guide shows them in the QuickLock's. Null: follows nothing. */
+export const PALETTE_PARENT = { CabinetHinge: 'QuickLock', CabinetLatch: 'QuickLock' };
+export function paletteParentOf(key) {
+  const s = String(key), i = s.indexOf(':');
+  return i > 0 ? s.slice(0, i) : (Object.hasOwn(PALETTE_PARENT, s) ? PALETTE_PARENT[s] : null);
 }
 
 /**

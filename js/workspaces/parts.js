@@ -67,6 +67,7 @@ export function chipFor(name) {
   if (/Stopper/.test(name)) return '#E040A0';
   if (/Side Cover/.test(name)) return '#c2185b';   // Assemble's own hue for the part (generate.js SIDE_COVER_COLOR)
   if (/QuickLock/.test(name)) return '#14B8A6';
+  if (/Cabinet Hinge|Door Latch/.test(name)) return '#14B8A6';   // Assemble draws them in the QuickLock's hue (generate.js PALETTE_PARENT)
   if (/Magnet Clip/.test(name)) return '#8B5CF6';
   if (/Cover Upper/.test(name)) return '#7CC25A';
   if (/Cover Lower/.test(name)) return '#2E9E4F';
@@ -87,6 +88,8 @@ export function typeOf(name) {
   if (/Stopper/.test(name)) return 'Stopper';
   if (/Side Cover/.test(name)) return 'SideCover';
   if (/QuickLock/.test(name)) return 'QuickLock';
+  if (/Cabinet Hinge/.test(name)) return 'CabinetHinge';   // chosen apart from the QuickLocks since 2026-11-23 (generate.js PALETTE_PARENT)
+  if (/Door Latch/.test(name)) return 'CabinetLatch';
   if (/Magnet Clip/.test(name)) return 'MagnetClip';
   if (/Cover Upper/.test(name)) return 'CoverU';
   if (/Cover Lower/.test(name)) return 'CoverL';
@@ -122,7 +125,7 @@ export function paletteSnapshot(stage) {
     const filaments = fc.filaments.filter((f) => f.keys.includes(k.key));
     const bare = fc.unpicked.find((u) => u.key === k.key && !u.stripe);
     if (!byType.has(k.type)) byType.set(k.type, []);
-    byType.get(k.type).push({ key: k.key, zone: k.zone, ownColor: !!k.ownColor, filaments, bare: bare ? bare.hex : null });
+    byType.get(k.type).push({ key: k.key, zone: k.zone, ownColor: !!k.ownColor, follows: k.follows || null, filaments, bare: bare ? bare.hex : null });
   }
   /* a label stripe in one of the six meanings prints in its spool (the label palette, 2026-10-28): a region of its own on the
      Label row, named by the spool's identity (filamentsInBuild), never by a hex. keysInBuild leaves stripes out (they are no
@@ -150,7 +153,7 @@ export function unitRegions(stage, pal, uid, type) {
   // a stripe is the label's, not a unit's pick: the type row lists the build's stripes, a unit's row leaves them out
   return regions.filter((g) => !/^STRIPE@/.test(g.zone)).map((g) => {
     let own = null; try { own = uid != null ? stage.overrideFor(uid, g.key) : null; } catch { own = null; }
-    const pick = own || colors[g.key] || (g.zone && !g.ownColor ? colors[type] : null);
+    const pick = own || colors[g.key] || (g.zone && !g.ownColor ? colors[type] : null) || (!g.zone && g.follows ? colors[g.follows] : null);   // a cabinet hinge or latch follows the QuickLocks until picked (keysInBuild)
     if (pick && pick.hex) return { key: g.key, zone: g.zone, ownColor: g.ownColor, filaments: [{ name: pick.name || pick.hex, hex: pick.hex, url: pick.url || null }], bare: null };
     return { key: g.key, zone: g.zone, ownColor: g.ownColor, filaments: [], bare: g.bare || idHex(g.key) };
   });

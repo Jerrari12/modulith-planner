@@ -188,3 +188,26 @@ test('the hinges and the case latch clips come in clear of the wall, then out ag
     }
   }
 });
+
+/* THE HINGES AND LATCHES ARE COLOURED APART FROM THE QUICKLOCKS (Joey 2026-11-23: "because they are more visible, especially
+   the hinges are always visible and the closure hardware are only visible once opened"). Rows of their own, with no
+   identification colour of their own, so until a visitor picks them they follow the QuickLocks (paletteParentOf). */
+test('the hinges and latches are rows of their own that follow the QuickLocks until picked', async () => {
+  const { paletteParentOf, PALETTE_PARENT } = await import(new URL('../js/generate.js', import.meta.url).href);
+  const m = generateManifest(build({ placed: [cab({ hinge: 'right' })] })).manifest;
+  const typeOf = Object.fromEntries(m.parts.map((p) => [p.node, p.type]));
+  assert.equal(typeOf.CabinetHinge_Body_R, 'CabinetHinge');
+  assert.equal(typeOf.CabinetLatch_Side_L, 'CabinetLatch');
+  assert.equal(typeOf.CabinetLatch_Door_L, 'CabinetLatch');
+  const claws = m.instances.filter((i) => i.node === 'CabinetHinge_Claws_R');
+  assert.ok(claws.length && claws.every((i) => i.type === 'CabinetHinge' && m.instances.some((b) => b.id === i.billedOn && b.node === 'CabinetHinge_Body_R')), 'the claws are coloured as the hinge and billed on its body');
+  assert.ok(!m.parts.some((p) => p.type === 'QuickLock' && /^Cabinet/.test(p.node)), 'no cabinet part is a QuickLock row any more');
+  assert.ok(!('CabinetHinge' in m.colors) && !('CabinetLatch' in m.colors), 'no identification colour of their own: they take the QuickLock\'s');
+  assert.ok('QuickLock' in m.colors, 'the control: the QuickLock colour is there to follow');
+  assert.equal(paletteParentOf('CabinetHinge'), 'QuickLock');
+  assert.equal(paletteParentOf('CabinetLatch'), 'QuickLock');
+  assert.equal(paletteParentOf('Faceplate:FACE'), 'Faceplate', 'a zone still follows its body');
+  assert.equal(paletteParentOf('QuickLock'), null);
+  assert.equal(paletteParentOf('constructor'), null, 'a name on Object.prototype follows nothing');
+  assert.deepEqual(Object.keys(PALETTE_PARENT).sort(), ['CabinetHinge', 'CabinetLatch']);
+});

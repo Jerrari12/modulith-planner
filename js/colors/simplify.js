@@ -34,12 +34,13 @@ export function worn(colors, keys, over = null) {
   const out = {};
   for (const k of keys) {
     if (k.locked || HARDWARE.has(k.key)) continue;
-    const f = colors[k.key] || (k.key.includes(':') && !k.ownColor ? colors[bodyOf(k.key)] : null);
+    const f = colors[k.key] || (k.key.includes(':') && !k.ownColor ? colors[bodyOf(k.key)] : null) || (!k.key.includes(':') && k.follows ? colors[k.follows] : null);   // a cabinet hinge or latch follows the QuickLocks until picked (keysInBuild)
     if (f && f.hex) out[k.key] = f;
   }
   if (over) for (const [uid, o] of Object.entries(over)) for (const k of keys) {
     if (k.locked || HARDWARE.has(k.key) || !o) continue;
-    const f = o[k.key] || (k.key.includes(':') && !colors[k.key] && !k.ownColor ? o[bodyOf(k.key)] : null);   // a unit's zone follows its own body pick when the build has not picked the zone (the stage's rule)
+    const f = o[k.key] || (k.key.includes(':') && !colors[k.key] && !k.ownColor ? o[bodyOf(k.key)] : null)   // a unit's zone follows its own body pick when the build has not picked the zone (the stage's rule)
+      || (!k.key.includes(':') && k.follows && !colors[k.key] ? o[k.follows] : null);   // and a cabinet hinge or latch the unit's QuickLock pick (overrideFor)
     if (f && f.hex) out[`${uid}@${k.key}`] = f;
   }
   return out;
@@ -118,11 +119,11 @@ export const SUMMARY = [
   ['Case', ['Case', 'CaseExtender', 'SideCover', 'ShelfLip', 'CoverL', 'CoverU', 'FootrailL', 'FootrailU', 'Rail', 'Bracket', 'BackCover']],
   // the visible, recognisable surfaces first (Astra, 2026-10-19: fronts, grips, then the faceplate bodies)
   ['drawers', ['Drawer']], ['fronts', ['Faceplate:FACE', 'SideCover:FACE']], ['grips', ['Faceplate:GRIP']], ['grip accents', ['Faceplate:GRIP ACCENT']], ['faceplate bodies', ['Faceplate']],
-  ['accents', ['Accent']], ['handles', ['Handle']], ['labels', ['Label']], ['label text', ['Label:TEXT']], ['deck', ['ShelfInsert']], ['small parts', ['QuickLock', 'MagnetClip', 'Stopper']],
+  ['accents', ['Accent']], ['handles', ['Handle']], ['labels', ['Label']], ['label text', ['Label:TEXT']], ['deck', ['ShelfInsert']], ['small parts', ['QuickLock', 'CabinetHinge', 'CabinetLatch', 'MagnetClip', 'Stopper']],
   ['feet', ['Foot']],   // TPU, their own filament always (Joey, 2026-10-21)
 ];
 /* a key's own word, for a group whose keys wear more than one filament (Sol 01a151f0: "Case: Black" hid orange feet) */
-const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side covers', ShelfLip: 'lips', CoverL: 'covers', CoverU: 'covers', FootrailL: 'foot rails', FootrailU: 'foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'brackets', BackCover: 'back covers', 'Faceplate:FACE': 'fronts', Faceplate: 'faceplate bodies', 'SideCover:FACE': 'side-cover faces', QuickLock: 'QuickLocks', MagnetClip: 'magnet clips', Stopper: 'stoppers' };
+const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side covers', ShelfLip: 'lips', CoverL: 'covers', CoverU: 'covers', FootrailL: 'foot rails', FootrailU: 'foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'brackets', BackCover: 'back covers', 'Faceplate:FACE': 'fronts', Faceplate: 'faceplate bodies', 'SideCover:FACE': 'side-cover faces', QuickLock: 'QuickLocks', CabinetHinge: 'hinges', CabinetLatch: 'door latches', MagnetClip: 'magnet clips', Stopper: 'stoppers' };
 /* "Case, drawers: Black · Fronts, grips: Orange · Handles: Silk Silver" for a look as worn ([] when nothing is picked); a
    group whose keys wear two filaments splits by key ("Case: Black · feet: Orange"); a unit's own picks are counted by
    the caller, not listed */

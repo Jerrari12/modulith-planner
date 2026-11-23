@@ -51,13 +51,13 @@ const HINTS = {
   surprise: { title: 'Surprise me', text: 'Three colour combinations made for this build under your rules: a style, a filament cap, the filaments you own. Try them on the model first.', video: 'img/hints/colors-surprise.mp4' },
   simplify: { title: 'Simplify', text: 'The same look in fewer filaments: which regions would share one, shown before anything changes. Apply is one undo step.', video: 'img/hints/colors-simplify.mp4' },
 };
-const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
+const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Side cover', Drawer: 'Drawer body', Faceplate: 'Faceplate', Accent: 'Accent', Label: 'Label', Handle: 'Handle', CoverL: 'Cover (lower)', CoverU: 'Cover (upper)', FootrailL: 'Foot rail (lower)', FootrailU: 'Foot rail (upper)', Foot: 'Foot', Rail: 'Rail', Bracket: 'Wall bracket', QuickLock: 'QuickLock', CabinetHinge: 'Cabinet hinge', CabinetLatch: 'Door latch', Stopper: 'Stopper', MagnetClip: 'Magnet clip', Magnet: 'Magnet', Screw: 'Screw', ShelfInsert: 'Shelf deck', ShelfLip: 'Shelf lip', BackCover: 'Back cover' };
 /* ZONE_LABEL, isPaid and short are exported: the Parts list words a row's zones, filament names and buy links as this tab does */
 // a label stripe's zone names its meaning ('STRIPE@sky-blue': label-look.js stripePieceZone) and reads as "Metric stripe"
 const stripeWord = (z) => { const c = /^STRIPE@/.test(z) ? STRIPE_COLOURS.find((x) => 'STRIPE@' + x.colour === z) : null; return c ? c.name + ' stripe' : null; };
 export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : stripeWord(z) || z.charAt(0) + z.slice(1).toLowerCase();
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
-const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', SideCover: 'side covers', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
+const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', SideCover: 'side covers', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', CabinetHinge: 'cabinet hinges', CabinetLatch: 'door latches', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
 const typePlural = (key) => TYPE_PLURAL[key.split(':')[0]] || (key.split(':')[0].toLowerCase() + 's');
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const regionOf = (key) => key.includes(':') ? ZONE_LABEL(key.split(':')[1]) : 'Body';
@@ -377,13 +377,14 @@ export function mountColors(stage, ctx) {
     const inb = el('section');
     inb.appendChild(el('h3.h2', { text: 'Colors in this build' }));
     const rows = el('div.crows');
+    // an unpicked zone follows its body, and an unpicked cabinet hinge or latch the QuickLocks (keysInBuild `follows`)
     for (const k of stage.keysInBuild()) {
       const w = worn(k.key);
       const hex = stage.activeHex(k.key);
       rows.appendChild(el('button.crow.key' + (st.key === k.key ? '.on' : ''), { disabled: k.locked, title: k.locked ? 'Purchased hardware, not printed · no filament to pick' : `Pick a filament for ${keyLabel(k.key).toLowerCase()}`, onclick: () => openPicker(k.key) }, [
         el('span.sw' + finishClass(w && w.name), { style: swatchStyle(w && w.name, hex) }),
         el('span.lbl', {}, [el('b', { text: keyLabel(k.key) }), el('span.cnt', { text: ` ×${k.count}` })]),
-        el('span.fil', {}, [k.locked ? 'Bought' : w ? short(w.name) : p.on && k.zone && !k.ownColor ? 'follows Body' : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
+        el('span.fil', {}, [k.locked ? 'Bought' : w ? short(w.name) : p.on && k.zone && !k.ownColor ? 'follows Body' : p.on && k.follows && !k.zone ? `follows ${keyLabel(k.follows)}` : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
       ]));
     }
     inb.appendChild(rows);

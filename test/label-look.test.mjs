@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { cleanPartItem, stripeColour, cleanStripe, stripePositionOf, assignedLabelOf, wornLabelOf, labelLookOf, labelLooksKey, labelLookNeeds,
   stripeZone, isStripeZone, stripeHexOfKey, stripeMeaningOfKey, STRIPE_POSITIONS, STRIPE_COLOURS, stripeFor } from '../js/label-look.js';
 import { spoolFor, SUGGESTED_V1 } from '../js/label-palette.js';
-import { paletteKeyOf } from '../js/generate.js';
+import { paletteKeyOf, paletteParentOf } from '../js/generate.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STUDIO = process.env.GEN2_LABELSTUDIO_ROOT
@@ -143,13 +143,13 @@ function declAt(src, needle) {
 test('activeHex / activeLabel (main.js, executed): a stripe wears its own colour, never a filament; other keys are unchanged', () => {
   /* the label palette's two (2026-10-28) come after the original eight: a meaning's stripe ('Label:STRIPE@sky-blue') wears
      the build's spool for it, whatever the Colors palette or a shown look says; a stripe of any other colour, its own */
-  /* paletteKeyOf (generate.js, 2026-11-21): a cabinet door's material key reads the faceplate's colour. Bound first, so the
-     positional contexts below are unchanged. */
+  /* paletteKeyOf (generate.js, 2026-11-21): a cabinet door's material key reads the faceplate's colour; paletteParentOf
+     (2026-11-23): the key an unpicked key follows. Bound first, so the positional contexts below are unchanged. */
   const make = (name, labelPalette = null) => {
-    const f = new Function('paletteKeyOf', 'stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest', 'previewLook',
+    const f = new Function('paletteKeyOf', 'paletteParentOf', 'stripeHexOfKey', 'useCustom', 'customColors', 'colorLocked', 'stageTheme', 'DARK_STAGE_PALETTE', 'manifest', 'previewLook',
       'stripeMeaningOfKey', 'spoolFor', 'labelPalette',
       `${declAt(mainSrc, `const ${name} =`)} return ${name};`);
-    return (...a) => f(paletteKeyOf, ...a);
+    return (...a) => f(paletteKeyOf, paletteParentOf, ...a);
   };
   const ctx = [stripeHexOfKey, true, { Label: { hex: '#123456', name: 'Some PLA' }, 'Label:STRIPE#56b4e9': { hex: '#000000', name: 'Black' }, 'Label:STRIPE@sky-blue': { hex: '#000000', name: 'Black' } },
     () => false, 'light', { Case: '#dfe3ec' }, { colors: { Label: '#eef0f4' } }, null, stripeMeaningOfKey, spoolFor, null];
@@ -178,6 +178,17 @@ test('activeHex / activeLabel (main.js, executed): a stripe wears its own colour
   assert.equal(make('activeHex')(...door)('Door:FACE'), '#abcdef', 'an unpicked zone follows the faceplate body');
   assert.equal(make('activeHex')(...door)('Door:GRIP'), '#fedcba', 'a picked zone wears its pick');
   assert.equal(make('activeLabel')(...door)('Door:GRIP'), 'Grip PLA');
+  /* a cabinet's hinges and latches (Joey 2026-11-23): their own pick when they have one, else the QuickLocks' pick, else the
+     QuickLocks' identification colour - they have none of their own (generate.js PALETTE_PARENT) */
+  const ql = { QuickLock: { hex: '#11aa99', name: 'QL PETG' }, CabinetHinge: { hex: '#c0c4ca', name: 'Hinge Silver' } };
+  const cabCtx = [ctx[0], true, ql, ctx[3], ctx[4], ctx[5], { colors: { QuickLock: '#12b5a8' } }, ...ctx.slice(7)];
+  assert.equal(make('activeHex')(...cabCtx)('CabinetHinge'), '#c0c4ca', 'a picked hinge wears its own pick');
+  assert.equal(make('activeLabel')(...cabCtx)('CabinetHinge'), 'Hinge Silver');
+  assert.equal(make('activeHex')(...cabCtx)('CabinetLatch'), '#11aa99', 'an unpicked latch follows the QuickLocks');
+  assert.equal(make('activeLabel')(...cabCtx)('CabinetLatch'), 'QL PETG', 'and wears their filament');
+  const idCtx = [ctx[0], false, ql, ...cabCtx.slice(3)];
+  assert.equal(make('activeHex')(...idCtx)('CabinetHinge'), '#12b5a8', 'colours off: the QuickLocks\' identification colour');
+  assert.equal(make('activeLabel')(...idCtx)('CabinetHinge'), null, 'and no filament');
 });
 
 test('renderZoneChips (main.js) offers no chip for a stripe zone', () => {

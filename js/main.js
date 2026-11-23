@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { generateManifest, migrateOfficialBuild, resolvePartPreview, REQUIREMENT as REQ,
-  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, handlePoseKey, doorPoseKey, materialTypeOf, paletteKeyOf,
+  shelfLipModes, SHELF_LIP_LABEL, buildAxisForType, handlePoseKey, doorPoseKey, materialTypeOf, paletteKeyOf, paletteParentOf,
   gridfinitySizeOk, CHIPS } from './generate.js';
 import { chipFillGroups, chipFillLayout, buildChipFill, titleTexture } from './chip-fill.js';   // the chips in a chip drawer (2026-11-09); stamped in pages.yml
 import { resolveEntry } from './entry.js';
@@ -5275,6 +5275,7 @@ function buildExploded() {
   const SCALE = new THREE.Vector3(1.35, 1.75, 1.35);
   const PUSH = {
     QuickLock: [0, 55, 0], Stopper: [0, 55, 0], MagnetClip: [0, 0, -70], Magnet: [0, 0, -100],
+    CabinetHinge: [0, 55, 0], CabinetLatch: [0, 55, 0],   // as when they were QuickLock rows (generate.js PALETTE_PARENT)
     Foot: [0, -25, 0], FootAdhesive: [0, -25, 0], Drawer: [0, 0, 170], CoverU: [0, 45, 0], FootrailU: [0, 25, 0],
   };
   const RIDER_PUSH = { Faceplate: [0, 0, 70], Handle: [0, 0, 115] };
@@ -6998,8 +6999,8 @@ function overrideFor(uid, key) {
   if (uid == null || !(previewLook || useCustom)) return null;
   const o = (previewLook ? previewLook.over : overrides)[uid]; if (!o) return null;   // a look being shown brings its own layer
   if (o[key]) return o[key];
-  const base = key.split(':')[0];
-  return (base !== key && !(previewLook ? previewLook.colors : customColors)[key] && o[base]) ? o[base] : null;
+  const up = paletteParentOf(key);   // a zone its body, a cabinet hinge or latch the QuickLocks, while the build has not picked the key
+  return (up && !(previewLook ? previewLook.colors : customColors)[key] && o[up]) ? o[up] : null;
 }
 const overrideMats = {};
 function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } }
@@ -8360,8 +8361,8 @@ const activeHex = key => {
   if ((previewLook || useCustom) && cc[key] && !colorLocked(key)) return cc[key].hex;
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key];
   if (manifest.colors[key]) return manifest.colors[key];
-  const base = key.split(':')[0];
-  return base !== key ? activeHex(base) : '#b9bcc2';
+  const up = paletteParentOf(key);   // a zone its body; a cabinet hinge or latch the QuickLocks (generate.js PALETTE_PARENT)
+  return up ? activeHex(up) : '#b9bcc2';
 };
 
 /**
@@ -8393,8 +8394,8 @@ const activeLabel = key => {
   if ((previewLook || useCustom) && cc[key] && !colorLocked(key)) return cc[key].name || null;
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return null;
   if (manifest.colors[key]) return null;
-  const base = key.split(':')[0];
-  return base !== key ? activeLabel(base) : null;
+  const up = paletteParentOf(key);   // as activeHex
+  return up ? activeLabel(up) : null;
 };
 
 /**
@@ -10243,8 +10244,9 @@ function lookMaterialFor(look, it) {
   if (colorLocked(key) || stripeHexOfKey(key) || stripeMeaningOfKey(key)) return (it.alt && !it.zone) ? altMatFor(mt) : baseMatFor(mt, it.zone);   // a stripe is no look's: the live material (its spool, or its own colour)
   const colors = look.colors || {}, over = look.over || {};
   const o = it.uid != null ? over[it.uid] : null;
-  const f = (o ? (o[key] || (it.zone && !colors[key] && o[it.type]) || null) : null)
-    || colors[key] || (it.zone && !manifest.colors[key] ? colors[it.type] : null) || null;
+  const up = paletteParentOf(key);   // a zone its body, a cabinet hinge or latch the QuickLocks (activeHex)
+  const f = (o ? (o[key] || (up && !colors[key] && o[up]) || null) : null)
+    || colors[key] || (up && !manifest.colors[key] ? colors[up] : null) || null;
   const picked = !!(f && f.hex);   // a filament pick, named or not (altLerp's test is the pick, not its name)
   const hex = picked ? f.hex : identificationHex(key), label = picked ? (f.name || null) : null;
   const alt = !picked && it.alt && !it.zone;   // the identification palette lightens alternate tiles; a filament never does
@@ -10441,14 +10443,15 @@ function keysInBuild() {
   for (const inst of instances.values()) {
     const t = typeByNode[inst.cfg.node]; if (!t || !inst.group) continue;
     const zones = new Set(); inst.group.traverse(o => { if (o.isMesh && o.userData.zone && !isStripeZone(o.userData.zone)) zones.add(o.userData.zone); });
-    for (const key of [t, ...[...zones].map(z => zoneKey(t, z))]) { const e = out.get(key) || { key, type: t, zone: key.includes(':') ? key.split(':')[1] : '', count: 0, locked: colorLocked(t) }; if (!key.includes(':')) e.count++; out.set(key, e); }
+    const billed = !inst.cfg.billedOn;   // a model billed on another part (a hinge's claws, on its body: generate.js `billedOn`) is not one more of them
+    for (const key of [t, ...[...zones].map(z => zoneKey(t, z))]) { const e = out.get(key) || { key, type: t, zone: key.includes(':') ? key.split(':')[1] : '', follows: paletteParentOf(key), count: 0, locked: colorLocked(t) }; if (!key.includes(':') && billed) e.count++; out.set(key, e); }
   }
   for (const e of out.values()) {
     if (e.zone) e.count = out.get(e.type) ? out.get(e.type).count : 0;
     e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0;
     e.ownColor = !!(e.zone && manifest.colors[e.key]);   // a zone with a colour of its own (the label text) does not follow its body unpicked
   }
-  const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
+  const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'CabinetHinge', 'CabinetLatch', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
 }
@@ -10457,8 +10460,8 @@ function keysInBuild() {
 function identificationHex(key) {
   if (stageTheme !== 'light' && DARK_STAGE_PALETTE[key]) return DARK_STAGE_PALETTE[key];
   if (manifest.colors[key]) return manifest.colors[key];
-  const base = key.split(':')[0];
-  return base !== key ? identificationHex(base) : '#b9bcc2';
+  const up = paletteParentOf(key);   // as activeHex
+  return up ? identificationHex(up) : '#b9bcc2';
 }
 /* THE FILAMENT COUNT (the Colors plan's decision D2, Joey 2026-10-18): every colour this build is printed in, under a look
    ({ colors, over }) or, with none, the chosen palette, read part by part the way materialFor and activeHex paint them.
@@ -10489,8 +10492,9 @@ function filamentsInBuild(look = null) {
       const stripe = stripeHexOfKey(key);
       if (stripe) { bare(key, stripe, true); continue; }
       const o = on && uid != null ? over[uid] : null;
-      const own = o ? (o[key] || (z && !colors[key] && o[t]) || null) : null;
-      const pick = own || (on ? (colors[key] || (z && !manifest.colors[key] ? colors[t] : null)) : null);
+      const up = paletteParentOf(key);   // a zone its body, a cabinet hinge or latch the QuickLocks (activeHex)
+      const own = o ? (o[key] || (up && !colors[key] && o[up]) || null) : null;
+      const pick = own || (on ? (colors[key] || (up && !manifest.colors[key] ? colors[up] : null)) : null);
       if (pick && pick.hex) wear(pick, key);
       else bare(key, idHex(key));
     }
@@ -10628,10 +10632,10 @@ function slideUnitDrawer(unitId, open, fraction = 0.4, pull = null) {
    not a per-frame cost. The scene turns it on at entry and off at leave; the Colors stage, with its free orbit, does
    not use it (that check is still to do). */
 const INTERIOR_TYPES = new Set(['Drawer', 'Stopper', 'QuickLock', 'MagnetClip', 'Magnet']);
-/* ...but a cabinet's hinges and latches are not inside anything. They carry the QuickLock row's type (generate.js bills and
-   colours them with the QuickLocks) and sit on the case's front beside the door, in plain sight (Joey 2026-11-23: the final
-   scene drew his Essential cabinet with no hinges). Their magnets keep the rule. */
-const isInteriorPart = (inst) => INTERIOR_TYPES.has(typeByNode[inst.cfg.node]) && !/^Cabinet(Hinge|Latch)_/.test(inst.cfg.node);
+/* ...and a cabinet's hinges and latches are not in it: they sit on the case's front beside the door, in plain sight. They
+   were QuickLock rows until 2026-11-23, when this rule hid them and the final scene drew Joey's Essential cabinet with no
+   hinges; they are 'CabinetHinge' and 'CabinetLatch' now (generate.js PALETTE_PARENT). Their magnets keep the rule. */
+const isInteriorPart = (inst) => INTERIOR_TYPES.has(typeByNode[inst.cfg.node]);
 let interiorHidden = false;
 const interiorShown = new Map();   // unit id -> its re-hide timer (0 while the drawer is out)
 function applyInterior() {

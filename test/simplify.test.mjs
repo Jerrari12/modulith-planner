@@ -168,3 +168,18 @@ test('M28: a 27-key look to every target, timed (the laptop mark is median ≤ 5
   assert.equal(Object.keys(AREA).length, 11); assert.equal(PALETTE_KEYS.length, 28); assert.ok(ROLE_KEYS.hardware.includes('Screw'));
   assert.deepEqual(problemsOn({}), []);
 });
+
+/* a cabinet's hinges and latches follow the QuickLocks until picked (keysInBuild `follows`, Joey 2026-11-23), so the look as
+   worn counts them in the QuickLock's filament, a unit's own QuickLock pick included, and their own pick wins */
+test('worn: an unpicked cabinet hinge or latch wears the QuickLock pick; its own pick wins', () => {
+  const ql = { name: 'QL PETG', hex: '#11aa99' }, silver = { name: 'Hinge Silver', hex: '#c0c4ca' }, red = { name: 'Unit Red', hex: '#cc2222' };
+  const keys = [key('QuickLock', { follows: null }), key('CabinetHinge', { follows: 'QuickLock' }), key('CabinetLatch', { follows: 'QuickLock' })];
+  const w = worn({ QuickLock: ql, CabinetHinge: silver }, keys);
+  assert.equal(w.CabinetLatch, ql, 'the latch follows the QuickLocks');
+  assert.equal(w.CabinetHinge, silver, 'the hinge wears its own pick');
+  assert.deepEqual(Object.keys(worn({}, keys)), [], 'nothing picked: nothing worn');
+  assert.equal(worn({ QuickLock: ql }, [key('CabinetHinge')]).CabinetHinge, undefined, 'the control: a key with no `follows` follows nothing');
+  const wo = worn({ QuickLock: ql }, keys, { 7: { QuickLock: red } });
+  assert.equal(wo['7@CabinetLatch'], red, 'a unit\'s own QuickLock pick carries its latches');
+  assert.equal(worn({ QuickLock: ql, CabinetLatch: silver }, keys, { 7: { QuickLock: red } })['7@CabinetLatch'], undefined, 'unless the build picked the latch');
+});
