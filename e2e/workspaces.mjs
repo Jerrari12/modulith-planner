@@ -9097,14 +9097,16 @@ test('Build: a peeked drawer stays open when its type changes to Gridfinity, and
 });
 
 /* THE CHIP DRAWER (2026-11-07, the Filament Sample Chip Drawers, v2611): the inspector's drawer type offers Chip on a 1W-0.5H
-   drawer of either style and greys it with the reason on any other size; Gridfinity is Decor's alone. Chip swaps the body on
-   the same pose, and a Classic chip drawer stays one when it becomes Decor. The chip drawer GLBs are unpublished until Joey's
-   go: run with GEN2_PARTS_LOCAL=1 over a gen2-parts checkout that has them (test/lib/local-parts.mjs). */
-test('Build: the drawer type offers Chip on a 1W-0.5H drawer, greyed with the reason elsewhere, and Chip swaps the body', async () => {
+   drawer of either style and leaves it out on any other size (Joey 2026-11-23: "can chip only show as an option when it's
+   for a drawer that fits chips"); Gridfinity is Decor's alone, so a Classic drawer off the chip size has no drawer-type row
+   at all. Chip swaps the body on the same pose, and a Classic chip drawer stays one when it becomes Decor. The chip drawer
+   GLBs are on the parts host (this case passed against it on 2026-11-23); GEN2_PARTS_LOCAL=1 reads them from a gen2-parts
+   checkout instead (test/lib/local-parts.mjs). */
+test('Build: the drawer type offers Chip on a 1W-0.5H drawer and nowhere else, and Chip swaps the body', async () => {
   const rec = { mount: 'tabletop', length: 240, printer: 'xl', faceStyle: 'essential', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
-    removedStoppers: [], gridW: 3, gridH: 2, sideCovers: true, plateParts: {}, nextId: 4, labelStyle: null, buildId: 'e2echipdrawer1',
+    removedStoppers: [], gridW: 3, gridH: 2, sideCovers: true, plateParts: {}, nextId: 5, labelStyle: null, buildId: 'e2echipdrawer1',
     placed: [{ id: 1, x: 0, y: 3, w: 1, hh: 1, fill: 'decor', shelves: 0 }, { id: 2, x: 1, y: 3, w: 1, hh: 1, fill: 'classic', shelves: 0 },
-      { id: 3, x: 2, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }] };
+      { id: 3, x: 2, y: 2, w: 1, hh: 2, fill: 'decor', shelves: 0 }, { id: 4, x: 0, y: 1, w: 1, hh: 2, fill: 'classic', shelves: 0 }] };
   const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
   const { ctx, page, errors } = await open('build', { query: `#build=${b64}` });
   await page.waitForFunction(() => window.__GEN2_VIEWER__?.manifest?.instances?.length, null, { timeout: 90_000 });
@@ -9135,11 +9137,15 @@ test('Build: the drawer type offers Chip on a 1W-0.5H drawer, greyed with the re
   assert.deepEqual(d1.pos, d0.pos, 'the chip drawer lands on the standard drawer\'s pose');
   await page.waitForFunction(() => document.querySelector('#ws-insp [aria-label="Drawer type"] button.on')?.textContent === 'Chip', null, { timeout: 30_000 });
 
-  // the Decor 1W-1H: Chip greyed, with the reason
+  // the Decor 1W-1H: no Chip at all, Gridfinity still there
   await pick(3, 'Decor Drawer', '1W·1H');
   t = await types();
-  const chip = t.find((b) => b.t === 'Chip');
-  assert.equal(chip.dis, true); assert.equal(chip.title, 'Chip drawers are 1W-0.5H');
+  assert.deepEqual(t.map((b) => b.t), ['Standard', 'Gridfinity'], 'Chip is left out off the chip size: ' + JSON.stringify(t));
+
+  // the Classic 1W-1H: Standard would be the only type, so no drawer-type row; the Closure row shows the drawer's rows are drawn
+  await pick(4, 'Classic Drawer', '1W·1H');
+  assert.equal(await page.locator('#ws-insp .row', { hasText: 'Closure' }).count(), 1, 'the card has its drawer rows');
+  assert.equal(await page.locator('#ws-insp [aria-label="Drawer type"]').count(), 0, 'no drawer-type row on a Classic drawer off the chip size');
 
   // the Classic 1W-0.5H: Standard and Chip only, then Chip, then Decor keeps it a chip drawer
   await pick(2, 'Classic Drawer', '1W·0.5H');
