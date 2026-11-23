@@ -127,10 +127,10 @@ const GEN2 = {
       blurb: "The free Classic series · the grip prints as part of the faceplate, so there's no handle to bolt on and nothing to buy. No labels or accents. Optional back cover." },
     { id: "edgelabel",  label: "EdgeLabel",   integratedHandle: true, club: true, sub: "Swappable labels + accents", labelGen: "https://labels.modulith.systems/",
       img: "img/parts/Faceplate-EdgeLabel.jpg",
-      blurb: "Swappable labels and accents with the signature edge-label look · restyle and relabel any drawer in seconds. Built-in handle. Included with the Club." },
+      blurb: "Swappable labels and accents with the signature edge-label look · restyle and relabel any drawer in seconds. Built-in handle. Included with the Club, or buy the series separately." },
     { id: "classicpro", label: "Classic Pro", integratedHandle: true, club: true, sub: "Swappable labels + accents", labelGen: "https://classic.jerrari3d.com/",
       img: "img/parts/Faceplate-ClassicPro.jpg",
-      blurb: "Swappable labels and accents with a classic, premium finish · restyle and relabel any drawer in seconds. Built-in handle. Included with the Club." },
+      blurb: "Swappable labels and accents with a classic, premium finish · restyle and relabel any drawer in seconds. Built-in handle. Included with the Club, or buy the series separately." },
     // The PREMIUM Chevron series (2026-08-08, Joey's call). club + NO
     // integratedHandle — the first family wearing BOTH markers: the ✦ spark
     // (club) and the wrench (bolt-on handle → computeBom keeps the handle +
@@ -138,7 +138,7 @@ const GEN2 = {
     // label-generator pill.
     { id: "chevron",    label: "Chevron",     club: true, sub: "Continuous pattern · multicolor",
       img: "img/parts/Faceplate-Chevron.jpg",
-      blurb: "The 45 degree chevron runs continuously across drawers · side by side and stacked, the pattern never breaks. Every face strip can take its own filament color in the slicer. Bolt-on handle. Included with the GEN2 Club." },
+      blurb: "The 45 degree chevron runs continuously across drawers · side by side and stacked, the pattern never breaks. Every face strip can take its own filament color in the slicer. Bolt-on handle. Included with the Club, or buy the series separately." },
   ],
   /* Cabinet door styles. Essential and Chevron are the doors that exist as
      models (Fusion "MODULITH Essential Decor Doors" / "MODULITH Chevron Decor
