@@ -838,8 +838,9 @@ export function mountBuild(stage, ctx) {
          2026-11-23: "can chip only show as an option when it's for a drawer that fits chips, since a majority of all the
          drawers don't have chip versions"). A drawer only wears chips on a chip size (isChips), so the lit button is never the
          one left out. With Standard the only type left, as on a Classic drawer off the chip size, there is nothing to choose
-         and the row is not drawn. The lit one is the body the stage draws: a variant kept on a size without that body renders,
-         and reads, Standard (the generator's rule). Choosing one opens the drawer, so its body shows (main's rule, ca110f8). */
+         and the row is not drawn (Joey, asked the same day whether to show Standard alone: "Keep it hidden"). The lit one is
+         the body the stage draws: a variant kept on a size without that body renders, and reads, Standard (the generator's
+         rule). Choosing one opens the drawer, so its body shows (main's rule, ca110f8). */
       const gfOk = unit.fill === 'decor' && Rs.gridfinityOk(unit), chipOk = chipSizeOk(+s.length, unit);
       const pdOn = unit.fill === 'decor' && !!pd, pdOk = pdOn && pd.sizeOk(unit), parts = pdOn && pd.isParts(unit);
       const body = isChips(+s.length, unit) ? 'chips' : parts ? 'parts' : gfOk && unit.variant === 'gridfinity' ? 'gridfinity' : 'standard';
