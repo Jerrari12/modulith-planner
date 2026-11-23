@@ -966,9 +966,13 @@ const LINK_OVERRIDES = {
   "GEN2 Decor - Faceplates - Chevron Series":     { p: "https://www.printables.com/model/968654-gen2-decor-faceplates-chevron-series", t: "https://than.gs/m/1116950" },
 
   // ---- The Essential cabinet doors (2026-11-21): ONE page per store holds all 48 doors (left- and right-hinged), the
-  //      handed hinges and latches and both knobs. Every one of those names resolves here through COLLECTION_RULES.
+  //      handed hinges and latches and both knobs. The doors and knobs resolve here through COLLECTION_RULES.
   //      Both went live 2026-11-21: Printables 1672641 (Joey's link) and Thangs 1537267 (the converted Cabinet Preview page).
   "MODULITH Essential Cabinet Doors": { p: "https://www.printables.com/model/1672641-modulith-essential-cabinet-doors", t: "https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Essential%20Cabinet%20Doors-1537267" },
+  // ---- The cabinet hardware on its own free page per store (2026-11-23): the handed hinges and latches, the same files
+  //      as on the Essential page. They link here, whatever the door style: a Chevron door's hardware is not on its page.
+  //      Both went live 2026-11-23: Printables 1925529 and Thangs 1664246.
+  "MODULITH Cabinet Hardware": { p: "https://www.printables.com/model/1925529-modulith-cabinet-hardware", t: "https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Cabinet%20Hardware-1664246" },
   // ---- The Chevron cabinet doors: ONE paid page per store holds all 48 doors, left- and right-hinged (the hinges, latches,
   //      knobs and handles stay on the free pages). Every Chevron door name resolves here through COLLECTION_RULES.
   "MODULITH Chevron Cabinet Doors": { p: "https://www.printables.com/model/1925578-modulith-chevron-cabinet-doors", t: "https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Chevron%20Cabinet%20Doors-1664247" },
@@ -1065,11 +1069,12 @@ const COLLECTION_RULES = [
   [/^GEN2 (\d+)-.+ Gridfinity Decor Drawer$/, (m) => `MODULITH ${m[1]} Gridfinity Decor Drawers`],
   [/^GEN2 (\d+)-.+ Decor Drawer$/,      (m) => `GEN2 ${m[1]} Decor Drawers - All`],
   // The Essential cabinet doors (2026-11-21): ONE page per store carries all 48 doors, the handed hinges and latches
-  // and both knobs, so every one of those names resolves to it.
+  // and both knobs. The doors and knobs resolve to it.
   [/^GEN2 Essential Door - \dW-\dH( - Right-Hinged)?$/, () => "MODULITH Essential Cabinet Doors"],
-  // The Chevron cabinet doors: their own paid page per store carries all 48. Their hardware is the Essential page's (above).
+  // The Chevron cabinet doors: their own paid page per store carries all 48 doors and no hardware.
   [/^GEN2 Chevron Door - \dW-\dH( - Right-Hinged)?$/, () => "MODULITH Chevron Cabinet Doors"],
-  [/^GEN2 (Cabinet Hinge|Door Latch) \(1H\) - (Left|Right)-Hinged Door$/, () => "MODULITH Essential Cabinet Doors"],
+  // The hinges and latches link their own free page (2026-11-23), for every door style.
+  [/^GEN2 (Cabinet Hinge|Door Latch) \(1H\) - (Left|Right)-Hinged Door$/, () => "MODULITH Cabinet Hardware"],
   [/^GEN2 (Deco|BlockBar) Knob$/,       () => "MODULITH Essential Cabinet Doors"],
   // NB anchored so "GEN2 Decor Faceplate Back Cover - …" (no style token)
   // can't false-match — the back cover links via linkAs instead.

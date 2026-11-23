@@ -111,10 +111,9 @@ test('the Chevron door is released, in both hands, with its hardware', () => {
   for (const r of [...doors, ...find(rs, /Cabinet Hinge|Door Latch|Knob$/)]) assert.ok(!r.unreleased, `${r.name} is released`);
 });
 
-test('every Essential door, hinge, latch and knob name links the one listing page', () => {
+test('every Essential door and knob name links the one listing page', () => {
   const names = [
     ...['1W-1H', '4W-6H'].flatMap((s) => [GEN2.partNames.door(240, s, 'Essential', 'left'), GEN2.partNames.door(240, s, 'Essential', 'right')]),
-    GEN2.partNames.hinge('left'), GEN2.partNames.hinge('right'), GEN2.partNames.latch('left'), GEN2.partNames.latch('right'),
     GEN2.partNames.knob('Deco'), GEN2.partNames.knob('BlockBar'),
   ];
   const pl = vm.runInContext('partLinks', ctx);
@@ -127,6 +126,24 @@ test('every Essential door, hinge, latch and knob name links the one listing pag
   }
   const chev = pl(GEN2.partNames.door(240, '2W-3H', 'Chevron', 'left'));
   assert.notEqual(chev.printables, 'https://www.printables.com/model/1672641-modulith-essential-cabinet-doors', 'a Chevron door does not link the Essential page');
+});
+
+test('the hinges and latches, in both hands, link the Cabinet Hardware page, never a door page', () => {
+  // MODULITH Cabinet Hardware: Printables 1925529, Thangs 1664246 (2026-11-23)
+  const pl = vm.runInContext('partLinks', ctx);
+  const names = [GEN2.partNames.hinge('left'), GEN2.partNames.hinge('right'), GEN2.partNames.latch('left'), GEN2.partNames.latch('right')];
+  for (const n of names) {
+    const l = pl(n);
+    assert.equal(l.printables, 'https://www.printables.com/model/1925529-modulith-cabinet-hardware', n);
+    assert.ok(l.exactP, `${n}: an exact Printables link`);
+    assert.equal(l.thangs, 'https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Cabinet%20Hardware-1664246', n);
+    assert.ok(l.exactT, `${n}: an exact Thangs link`);
+  }
+  // a Chevron cabinet's parts list: its hardware rows link the hardware page too
+  const rs = rows(base({ doorStyle: 'chevron', placed: [cab(1, 0, 2, 3), cab(2, 2, 1, 1, { hinge: 'right' })] }));
+  const hw = find(rs, /Cabinet Hinge|Door Latch/);
+  assert.ok(hw.length >= 2, 'the Chevron build lists its hinges and latches');
+  for (const r of hw) assert.equal(pl(r.name).printables, 'https://www.printables.com/model/1925529-modulith-cabinet-hardware', r.name);
 });
 
 test('every Chevron door, in both hands, links its own paid listing page', () => {
