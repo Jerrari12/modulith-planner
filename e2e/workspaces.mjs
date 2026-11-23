@@ -8396,6 +8396,47 @@ test('Parts and the viewer offer and link only Printables and Thangs (MakerWorld
   await ctx.close();
 });
 
+/* THE CHEVRON CABINET DOORS ON PUBLISH DAY (2026-11-23). The Chevron doors left the unreleased list with their own paid pages
+   (Printables 1925578, Thangs 1664247), in the Club and sold on their own, so a Club row carries FOR SALE beside CLUB (Joey:
+   "its club but also for sale"; he chose two badges). The hinges and latches link the free Cabinet Hardware pages (Printables
+   1925529, Thangs 1664246), not the Essential doors' page, which a Chevron buyer has no reason to visit. Read off a Chevron
+   cabinet's Parts list on both stores. */
+test('Parts: a Chevron cabinet lists its doors released, FOR SALE and CLUB, on their own page, and its hinges and latches on the hardware page', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'essential', doorStyle: 'chevron', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 3, gridH: 3, sideCovers: false, plateParts: {}, nextId: 3, labelStyle: null, buildId: 'e2echevdoors1',
+    placed: [{ id: 1, x: 0, y: 0, w: 2, hh: 6, fill: 'cabinet', shelves: 0 }, { id: 2, x: 2, y: 4, w: 1, hh: 2, fill: 'cabinet', shelves: 0, hinge: 'right' }] };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('parts', { query: `#build=${b64}` });
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-parts .prow')].some((r) => /Chevron Door/.test(r.querySelector('.name')?.textContent || '')), null, { timeout: 60_000 });
+  const read = () => page.evaluate(() => [...document.querySelectorAll('#ws-parts .prow')].map((r) => ({
+    name: r.querySelector('.name').childNodes[0].textContent,
+    badges: [...r.querySelectorAll('.badge')].map((b) => b.textContent),
+    link: r.querySelector('a.link')?.href || null,
+    soon: !!r.querySelector('.link.dim'),
+  })).filter((r) => /Chevron Door|Cabinet Hinge|Door Latch/.test(r.name)));
+  const check = (rows, store, door, hw) => {
+    const doors = rows.filter((r) => /^Chevron Door - /.test(r.name));
+    assert.deepEqual(doors.map((r) => r.name).sort(), ['Chevron Door - 1W-1H - Right-Hinged', 'Chevron Door - 2W-3H'], `${store}: both doors listed`);
+    for (const r of doors) {
+      assert.deepEqual(r.badges, ['FOR SALE', 'CLUB'], `${store} ${r.name}: FOR SALE beside CLUB`);
+      assert.equal(r.link, door, `${store} ${r.name}: the Chevron doors' own page`);
+      assert.ok(!r.soon, `${store} ${r.name}: released`);
+    }
+    const hwRows = rows.filter((r) => /Cabinet Hinge|Door Latch/.test(r.name));
+    assert.equal(hwRows.length, 4, `${store}: a hinge and a latch in each hand`);
+    for (const r of hwRows) {
+      assert.equal(r.link, hw, `${store} ${r.name}: the Cabinet Hardware page`);
+      assert.ok(!r.badges.includes('CLUB'), `${store} ${r.name}: free`);
+    }
+  };
+  check(await read(), 'Printables', 'https://www.printables.com/model/1925578-modulith-chevron-cabinet-doors', 'https://www.printables.com/model/1925529-modulith-cabinet-hardware');
+  await page.locator('#ws-parts .track.sites .seg:has-text("Thangs")').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('#ws-parts a.link')].some((a) => /thangs\.com/.test(a.href)), null, { timeout: 10_000 });
+  check(await read(), 'Thangs', 'https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Chevron%20Cabinet%20Doors-1664247', 'https://thangs.com/designer/Jerrari/3d-model/MODULITH%20Cabinet%20Hardware-1664246');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* BUILD'S PRODUCT PREVIEWS MATCH THE MODEL (PREVIEW-FIDELITY.md, 2026-10-18). A preview is drawn into a render target of its
    own, and three.js r185 tone-maps only the screen and XR-flagged targets: on the tone-mapped tiers (Balanced and up; Very
    High is the default) the previews sat a median 17 to 31 of 255 off the model. They now take the XR flag with RGBA8 storage,

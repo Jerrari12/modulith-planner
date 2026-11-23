@@ -439,10 +439,18 @@ export function mountParts(stage, ctx) {
     body.appendChild(el('p.foot', { text: [disclosureFor(urls), 'Any equivalent hardware works.'].filter(Boolean).join(' ') }));
     panel.appendChild(body);
   }
+  /* a row's badges, both layouts. A Club part is also sold on its own page (data.js doorStyles: "in the Club and for sale
+     on their own", Joey 2026-11-20), so it carries FOR SALE beside CLUB (Joey, 2026-11-23, on the Chevron doors: "its club
+     but also for sale"; he chose two badges) */
+  function badgesFor(r) {
+    return r.club ? [['FOR SALE', 'sale'], ['CLUB', 'club']] : r.unreleased ? [['SOON', '']] : r.hardware ? [['BUY', '']] : r.optional ? [['OPTIONAL', '']] : [];
+  }
+  const badgeEl = ([text, cls]) => el('span.badge' + (cls ? '.' + cls : ''), { text });
   function renderRow(r) {
     const p = st.progress[rowKey(r)] || { had: 0, made: 0 };
     const left = remaining(r, p);
-    const row = el('div.prow.well' + (st.tracking && left === 0 ? '.done' : ''));
+    const badges = badgesFor(r);
+    const row = el('div.prow.well' + (st.tracking && left === 0 ? '.done' : '') + (badges.length > 1 ? '.badges2' : ''));
     const regions = printLook(r);
     row.append(chipEl(r, regions), thumbEl(r), el('span.qty.mono', { text: `×${r.qty}` }));
     const mid = el('div.mid', {}, [el('div.name', { text: rowName(r) })]);
@@ -450,8 +458,7 @@ export function mountParts(stage, ctx) {
     if (r.note) mid.appendChild(el('div.note', { text: noteText(r.note) }));
     const free = tryFreeEl(r); if (free) mid.appendChild(free);
     row.appendChild(mid);
-    const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
-    if (badge) row.appendChild(el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }));
+    for (const b of badges) row.appendChild(badgeEl(b));
     if (st.tracking) {
       const counter = (field, label) => {
         const v = p[field] || 0;
@@ -504,8 +511,7 @@ export function mountParts(stage, ctx) {
     const row = el('div.prow.trow.well' + (left === 0 ? '.done' : ''));
     const regions = printLook(r);
     const chip = chipEl(r, regions);
-    const badge = r.club ? ['CLUB', 'club'] : r.unreleased ? ['SOON', ''] : r.hardware ? ['BUY', ''] : r.optional ? ['OPTIONAL', ''] : null;
-    const mid = el('div.mid', {}, [el('div.name', {}, [rowName(r), badge ? el('span.badge' + (badge[1] ? '.' + badge[1] : ''), { text: badge[0] }) : null])]);
+    const mid = el('div.mid', {}, [el('div.name', {}, [rowName(r), ...badgesFor(r).map(badgeEl)])]);
     if (regions) mid.appendChild(printLine(regions));
     if (r.note) mid.appendChild(el('div.note', { text: noteText(r.note) }));
     const free = tryFreeEl(r); if (free) mid.appendChild(free);

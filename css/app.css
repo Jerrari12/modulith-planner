@@ -329,8 +329,15 @@ html[data-ws="assemble"] #ws-tools { left: 320px; right: 20px; }
 #ws-parts .name { font-size: 13px; font-weight: 600; }
 #ws-parts .note { font-size: 11px; color: var(--ink-2); }
 #ws-parts .note.tryfree a { color: var(--ink); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
-#ws-parts .prow .badge { font-size: 9px; letter-spacing: .06em; padding: 2px 5px; border-radius: 4px; flex: none; }
+#ws-parts .prow .badge { font-size: 9px; letter-spacing: .06em; padding: 2px 5px; border-radius: 4px; flex: none; white-space: nowrap; display: inline-block; }
 #ws-parts .prow .badge.club { background: transparent; color: var(--club); border: 1px solid var(--club); }
+#ws-parts .prow .badge.sale { border: 1px solid transparent; }   /* the same height as CLUB beside it */
+/* a Club row's two badges (FOR SALE, CLUB) and its link go under the name, right-aligned, at every width: beside the name
+   they left it 63 px of the 440 px desktop panel (2026-11-23). The phone rules below do the same for every row. */
+#ws-parts .prow.badges2:not(.trow)::after { content: ''; order: 1; flex-basis: 100%; height: 0; margin-top: -6px; }
+#ws-parts .prow.badges2:not(.trow) > .badge, #ws-parts .prow.badges2:not(.trow) > .link { order: 2; }
+#ws-parts .prow.badges2:not(.trow) > .mid + * { margin-left: auto; }
+#ws-parts .prow.badges2:not(.trow) > .progress { order: 3; }
 #ws-parts .link { font-size: 12px; font-weight: 600; text-decoration: none; color: var(--ink); white-space: nowrap; flex: none; }
 #ws-parts .link.dim { color: var(--ink-3); font-weight: 500; }
 #ws-parts .progress { display: flex; align-items: center; gap: 8px; flex-basis: 100%; padding-left: 104px; }   /* its own line under the name: chip 14 + thumb 36 + qty 34 + three 10 px gaps */
