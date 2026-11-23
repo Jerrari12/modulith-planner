@@ -107,7 +107,7 @@ export function mountBuild(stage, ctx) {
      generated body on the stage, and the compartment editor that takes over the Library, the Inspector, the toolbar and the
      Dock while a drawer is being edited. Null without the flag (ctx.partsDrawer, loaded by app.js only with it, 2026-11-08):
      every branch on `pd` below is then the planner as it was. */
-  const pd = ctx.partsDrawer ? ctx.partsDrawer.partsDrawerTools(stage, { onStop: editStopped, open: () => st.peeking, store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
+  const pd = ctx.partsDrawer ? ctx.partsDrawer.partsDrawerTools(stage, { onStart: editStopped, onStop: editStopped, open: () => st.peeking, store, say, root, length: () => length, edit: (fn, why, o) => edit(fn, why, o), select: (id) => select(id), renderAll: () => renderAll() }) : null;
   const editing = () => !!pd && pd.editing != null;
 
   /* ---------------- the record ↔ the stage ---------------- */
@@ -151,7 +151,7 @@ export function mountBuild(stage, ctx) {
         if (st.selId != null && !stage.selectUnit(st.selId)) { st.selId = null; st.sel = null; }
         // still the peeked unit (a select or a removal during the await may have let it go - Terra 01a175a2); gone, or a
         // shelf now: the button says Peek inside again
-        if (peeked != null && st.peeking === peeked) st.peeking = !st.stageErrors && stage.peekUnit(peeked) ? peeked : null;
+        if (peeked != null && st.peeking === peeked) st.peeking = !st.stageErrors && stage.peekUnit(peeked, { hold: true }) ? peeked : null;
         if (pd) pd.afterUpdate();   // the rebuild replaced every drawer: the parts drawers' bodies, and the edited one's open state, go back on
       }
       renderAll();
@@ -513,8 +513,8 @@ export function mountBuild(stage, ctx) {
   }
   /* a drawer type chosen is a drawer opened, so the choice is seen inside (Joey, 2026-11-06): before the option commits,
      since the rebuild that follows re-opens the drawer it finds in st.peeking */
-  function openDrawer(id) { const u = S().placed.find((p) => p.id === id); if (!u || u.fill === 'shelf' || st.peeking === id) return; stage.peekUnit(id); st.peeking = id; if (pd) pd.sync(); }
-  function editStopped(id) { if (st.peeking === id) st.peeking = null; }   // (hoisted: passed to partsDrawerTools above) edit mode closes the drawer it opened (editor.js stop): the button must not say Close drawer for a closed one (Sol 01a1b264)
+  function openDrawer(id) { const u = S().placed.find((p) => p.id === id); if (!u || u.fill === 'shelf' || st.peeking === id) return; stage.peekUnit(id, { hold: true }); st.peeking = id; if (pd) pd.sync(); }
+  function editStopped() { st.peeking = null; }   // (hoisted: passed to partsDrawerTools above, as onStart and onStop) edit mode's open shuts Build's open drawer, which outlives a pick now and so may be another unit's (Terra 01a20882), and its close shuts the one it opened (editor.js stop): the button must not say Close drawer for a closed one (Sol 01a1b264)
   function gridOp(op) {
     edit((s, Rs) => {
       if (op === 'h+') s.gridH = Math.min(Rs.capH(), s.gridH + 1);
@@ -524,7 +524,7 @@ export function mountBuild(stage, ctx) {
     }, 'grid', { gravity: false });
   }
   function select(id) { if (id == null) { stage.setSelected(null); st.selId = null; st.sel = null; S().selectedUnit = null; ctx.memo.buildSel = null; renderAll(); return; } if (!stage.selectUnit(id)) { st.selId = id; st.sel = { owner: id }; S().selectedUnit = id; renderAll(); } }
-  function togglePeek(id) { if (st.peeking === id) { stage.unpeek(); st.peeking = null; } else { st.peeking = stage.peekUnit(id) ? id : null; } if (pd) pd.sync(); renderInspector(); }   // pd.sync: an open parts drawer wears its compartments, a closed one the shell
+  function togglePeek(id) { if (st.peeking === id) { stage.unpeek(); st.peeking = null; } else { st.peeking = stage.peekUnit(id, { hold: true }) ? id : null; } if (pd) pd.sync(); renderInspector(); }   // pd.sync: an open parts drawer wears its compartments, a closed one the shell
 
   /* ---------------- the issues ---------------- */
   function issues() {
@@ -1115,7 +1115,8 @@ export function mountBuild(stage, ctx) {
       const before = st.selId;
       st.sel = sel; st.selId = sel ? (sel.owner ?? null) : null;
       S().selectedUnit = st.selId; ctx.memo.buildSel = st.selId;
-      if (st.peeking != null && st.peeking !== st.selId) { st.peeking = null; if (pd) pd.sync(); }
+      // an open drawer or door stays open whatever is picked, deselect included (Joey 2026-11-23): the stage keeps it
+      // (peekUnit hold, heldDrawer), so st.peeking does too, and coming back to that unit its button says Close
       const was = st.collapsed; applyNarrow(); if (st.collapsed !== was) renderLib();
       renderInspector(); renderOverlays(); layout();
       // a selection shows as the inspector's handle (its name); a tap on it opens the sheet - never over the model by itself.

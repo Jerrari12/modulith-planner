@@ -969,6 +969,7 @@ export function partsDrawerTools(stage, ctx) {
     const u = unitById(id); if (!u || !isPartsDrawer(L(), u)) return false;
     if (st.editing != null && st.editing !== id) stop({ quiet: true });
     st.editing = id; st.sel = null; st.hover = null; st.view = shortScreen() ? '3d' : '2d';   // a phone on its side has no room for the plan (Terra 01a1b6be)
+    if (ctx.onStart) ctx.onStart(id);   // the Build workspace: the drawer this opens shuts the one it had open (peekUnit, one at a time)
     ensureEngine();
     stage.setSelected(null);
     stage.setTapTargets(tapTargets);

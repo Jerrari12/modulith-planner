@@ -9096,6 +9096,48 @@ test('Build: a peeked drawer stays open when its type changes to Gridfinity, and
   await ctx.close();
 });
 
+/* AN OPEN DRAWER STAYS OPEN UNTIL IT IS CLOSED (Joey, 2026-11-23: "if you click off of an open drawer it doesn't close, or at
+   least until you select close or also try to open another drawer or cabinet", as the cabinet door already behaved; its
+   button said Open door over an open door on the way back). A pick of nothing, or of another unit, leaves the drawer out, and
+   back on it the button says Close drawer; another drawer's Open drawer shuts it; Close drawer closes. */
+test('Build: an open drawer stays open when nothing or another unit is picked, and only Close or another drawer shuts it', async () => {
+  const { ctx, page, errors } = await open('build');
+  const drawers = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, out = [];
+    for (const x of v.manifest.instances) { const p = v.partInfo(x.id); if (p && p.type === 'Drawer' && p.owner != null && !out.some((o) => o.owner === p.owner)) out.push({ id: x.id, owner: p.owner, z0: v.instances.get(x.id).group.position.z }); }
+    return { two: out.slice(0, 2), collection: parseInt(v.manifest.collection, 10) || 185 };
+  });
+  assert.equal(drawers.two.length, 2, 'two drawer units in the default build');
+  const [a, b] = drawers.two, stop = drawers.collection - 13.5;
+  const at = (d, z, why) => page.waitForFunction(([id, z]) => Math.abs(window.__GEN2_VIEWER__.instances.get(id).group.position.z - z) < 0.05, [d.id, z], { timeout: 30_000 })
+    .catch(async () => assert.fail(`${why}: z ${await page.evaluate((id) => window.__GEN2_VIEWER__.instances.get(id).group.position.z, d.id)}, expected ${z}`));
+  const pick = (id) => page.evaluate((id) => window.__GEN2_VIEWER__.setSelected(id), id);
+  await pick(a.id);
+  await page.waitForSelector('#ws-insp:not([hidden])', { timeout: 30_000 });
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
+  await at(a, a.z0 + stop, 'the drawer did not open');
+  await pick(null);
+  await settle(page, 600);
+  await at(a, a.z0 + stop, 'a pick of nothing shut it');
+  await pick(b.id);
+  await settle(page, 600);
+  await at(a, a.z0 + stop, 'a pick of another unit shut it');
+  assert.equal(await btn(page, 'Open drawer', '#ws-insp').count(), 1, 'the other unit offers to open its own drawer');
+  await pick(a.id);
+  await settle(page, 400);
+  assert.equal(await btn(page, 'Close drawer', '#ws-insp').count(), 1, 'back on the open drawer, the button says Close drawer');
+  // one open at a time: the other drawer's Open drawer shuts the first
+  await pick(b.id);
+  await settle(page, 400);
+  await btn(page, 'Open drawer', '#ws-insp').click({ timeout: 30_000 });
+  await at(b, b.z0 + stop, 'the second drawer did not open');
+  await at(a, a.z0, 'the first drawer stayed out when the second opened');
+  await btn(page, 'Close drawer', '#ws-insp').click({ timeout: 30_000 });
+  await at(b, b.z0, 'Close drawer did not close it');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* THE CHIP DRAWER (2026-11-07, the Filament Sample Chip Drawers, v2611): the inspector's drawer type offers Chip on a 1W-0.5H
    drawer of either style and greys it with the reason on any other size; Gridfinity is Decor's alone. Chip swaps the body on
    the same pose, and a Classic chip drawer stays one when it becomes Decor. The chip drawer GLBs are unpublished until Joey's

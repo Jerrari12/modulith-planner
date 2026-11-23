@@ -5248,6 +5248,7 @@ function buildAfterState() {
 function applyState(i) { // instant snap to "after step i" (i = -1 for nothing)
   killTweens();
   openDoor = null;   // the child reset below closes any door the planner had swung open
+  heldDrawer = null;   // and the drawer goes back to its seat below
   const st = i < 0 ? { visible: new Set(), settled: new Set() } : afterState[i];
   for (const inst of instances.values()) {
     inst.group.visible = st.visible.has(inst.cfg.id) && !inst.styleHidden; // styleHidden: bolt-on handles while an EdgeLabel plate is active
@@ -7057,6 +7058,12 @@ function materialFor(inst, highlighted, zone = '') {
 // selecting a seated drawer (or anything riding it — faceplate, handle, clip)
 // slides it open like a real drawer; deselecting slides it shut
 let openCarrier = null;
+/* BUILD'S OPEN DRAWER STAYS OPEN (Joey 2026-11-23: "if you click off of an open drawer it doesn't close ... until you select
+   close or also try to open another drawer or cabinet", as the cabinet door already behaved). The drawer peekUnit opened with
+   { hold: true } - Build's Open drawer - rides every selection change, deselect included, with its inside sizes; only unpeek
+   (Close drawer), another peekUnit or a step change shuts it. The Colors card's Open the drawer passes no hold and has no
+   Close button, so its drawer still shuts on the next pick. */
+let heldDrawer = null;
 /* THE STOP (Joey 2026-10-19: "they should open all the way, until the inside back wall of the drawer collides with the
    drawer stopper, so maybe about 95% open-ish"). Measured in the scene (world mm, the GLBs as placed): the stopper's tab
    hangs 1.72 mm below the drawer's rim 2 mm behind the case front (its rear face at z 89 on a 185 whose front is at
@@ -7382,6 +7389,8 @@ function setSelected(id) {
     prev.group.traverse(o => { if (o.isMesh) o.material = materialFor(prev, false, o.userData.zone); });
   }
   const prevOpen = openCarrier; openCarrier = null; // may re-pull the SAME drawer further below
+  const held = heldDrawer && heldDrawer === prevOpen ? prevOpen : null;   // Build's open drawer: kept whatever is picked
+  if (!held) heldDrawer = null;
   selectedId = id;
   closeFilamentMenu(false); // the new selection's own glow is applied just below
   const card = $('identify-card');
@@ -7389,7 +7398,7 @@ function setSelected(id) {
     slideRitual(ritualInst, false); // label/accent/cover reseats in reverse on deselect/switch
     ritualInst = null;
   }
-  if (!id) { clearSelOutline(); if (prevOpen) slideDrawer(prevOpen, false); exitFaceplateFocus(); exitDrawerFocus(); renderLabelEditor(null); card.classList.add('hidden'); $('pointer-line').classList.add('hidden'); if (typeof opts !== 'undefined' && opts.onSelect) opts.onSelect(null); return; }
+  if (!id) { clearSelOutline(); if (prevOpen && prevOpen !== held) slideDrawer(prevOpen, false); exitFaceplateFocus(); if (held) openCarrier = held; else exitDrawerFocus(); renderLabelEditor(null); card.classList.add('hidden'); $('pointer-line').classList.add('hidden'); if (typeof opts !== 'undefined' && opts.onSelect) opts.onSelect(null); return; }
   if (isMobile() || IS_EMBED) setChecklist(false); // mobile + narrow dock: parts list & identify card are mutually exclusive
   const inst = instances.get(id);
   inst.group.traverse(o => { if (o.isMesh) o.material = materialFor(inst, selGlow(inst), o.userData.zone); });
@@ -7506,7 +7515,7 @@ function setSelected(id) {
   const keepIso = !!fpFocus.id && !isFp && fpFocus.mates.has(id);
   $('identify-open-drawer').classList.toggle('hidden', !((isFp || keepIso) && seatable));
   $('identify-close-drawer').classList.toggle('hidden', !(seatable && carrier === inst));
-  if (prevOpen && (prevOpen !== carrier || isFp)) slideDrawer(prevOpen, false); // switching drawers (or isolating a plate) → shut the old one
+  if (prevOpen && prevOpen !== held && (prevOpen !== carrier || isFp)) slideDrawer(prevOpen, false); // switching drawers (or isolating a plate) → shut the old one; Build's held drawer stays out
   let drawerGliding = false;
   if (!quiet && seatable && !isFp && !keepIso) {
     const travel = drawerStop();
@@ -7534,9 +7543,11 @@ function setSelected(id) {
   // isolation; anything else leaves/never enters either focus
   if (quiet) {
     exitFaceplateFocus();   // a quiet select leaves any earlier focus too
-    // ...but a drawer the planner opened (peekUnit) stays open with its inside sizes while the pick is one of its own parts
-    // other than the faceplate; any other pick shut it above, and its sizes go with it
-    if (dFocus.peek && prevOpen && prevOpen === dFocus.carrier && carrier === prevOpen && !isFp) openCarrier = prevOpen;
+    // ...but Build's held drawer stays open with its inside sizes whatever is picked (heldDrawer), and a drawer the Colors
+    // card opened stays open while the pick is one of its own parts other than the faceplate; any other pick shut it
+    // above, and its sizes go with it
+    if (held) openCarrier = held;
+    else if (dFocus.peek && prevOpen && prevOpen === dFocus.carrier && carrier === prevOpen && !isFp) openCarrier = prevOpen;
     else exitDrawerFocus();
   } else if (isFp) {
     exitDrawerFocus(true); // keep the saved pose — the faceplate focus adopts it
@@ -10569,13 +10580,14 @@ function swingDoor(rig, to) {
   const from = rig.f, tok = ++rig.token, sm = x => x * x * (3 - 2 * x);
   return tween({ duration: 650 * Math.max(0.2, Math.abs(to - from)), onUpdate: k => { if (rig.token === tok) poseDoor(rig, from + (to - from) * sm(Math.min(1, k))); } });
 }
-function peekUnit(unitId, { pills = true } = {}) {   // pills: false - the drawer opens without its inside sizes (the Colors card)
+function peekUnit(unitId, { pills = true, hold = false } = {}) {   // pills: false - the drawer opens without its inside sizes (the Colors card); hold: Build's, kept open across picks (heldDrawer)
   const d = unitInstances(unitId).find(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible);
   if (!d) {
     const door = unitInstances(unitId).find(i => i.cfg.hinge && i.group.visible);
     if (!door) return false;
     // one thing open at a time: a drawer another unit had out goes back in
     if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; if (dFocus.peek) exitDrawerFocus(); }
+    heldDrawer = null;
     if (openDoor && openDoor.door !== door) { swingDoor(openDoor, 0); openDoor = null; }
     if (!openDoor) openDoor = doorRig(door);
     swingDoor(openDoor, 1);
@@ -10584,11 +10596,12 @@ function peekUnit(unitId, { pills = true } = {}) {   // pills: false - the drawe
   if (openDoor) { swingDoor(openDoor, 0); openDoor = null; }   // and a door another unit had open swings shut
   if (openCarrier && openCarrier !== d) slideDrawer(openCarrier, false);
   openCarrier = d; slideDrawer(d, true, drawerStop());   // "Open the drawer": out to the stopper
+  heldDrawer = hold ? d : null;
   enterDrawerFocus(d, { swing: false, peek: true, pills: pills ? 'fit' : 'none' });   // its inside W / L / H on the open drawer, the camera left alone
   invalidateFrame();
   return true;
 }
-function unpeek() { if (openDoor) swingDoor(openDoor, 0); if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; } if (dFocus.peek) exitDrawerFocus(); invalidateFrame(); }
+function unpeek() { heldDrawer = null; if (openDoor) swingDoor(openDoor, 0); if (openCarrier) { slideDrawer(openCarrier, false); openCarrier = null; } if (dFocus.peek) exitDrawerFocus(); invalidateFrame(); }
 /* The Done room's drawer moment (js/scenes/done.js, 2026-10-23): a unit's drawer slides out a FRACTION of its travel and
    back again - no focus, no dims, no selection (the room shows no callouts). unitHasDrawer says whether a unit has one. */
 function unitHasDrawer(unitId) { return unitInstances(unitId).some(i => typeByNode[i.cfg.node] === 'Drawer' && i.group.visible); }
@@ -10615,11 +10628,15 @@ function slideUnitDrawer(unitId, open, fraction = 0.4, pull = null) {
    not a per-frame cost. The scene turns it on at entry and off at leave; the Colors stage, with its free orbit, does
    not use it (that check is still to do). */
 const INTERIOR_TYPES = new Set(['Drawer', 'Stopper', 'QuickLock', 'MagnetClip', 'Magnet']);
+/* ...but a cabinet's hinges and latches are not inside anything. They carry the QuickLock row's type (generate.js bills and
+   colours them with the QuickLocks) and sit on the case's front beside the door, in plain sight (Joey 2026-11-23: the final
+   scene drew his Essential cabinet with no hinges). Their magnets keep the rule. */
+const isInteriorPart = (inst) => INTERIOR_TYPES.has(typeByNode[inst.cfg.node]) && !/^Cabinet(Hinge|Latch)_/.test(inst.cfg.node);
 let interiorHidden = false;
 const interiorShown = new Map();   // unit id -> its re-hide timer (0 while the drawer is out)
 function applyInterior() {
   for (const inst of instances.values()) {
-    if (!INTERIOR_TYPES.has(typeByNode[inst.cfg.node])) continue;
+    if (!isInteriorPart(inst)) continue;
     const hide = interiorHidden && !interiorShown.has(unitOf(inst));
     inst.group.traverse((o) => {
       if (!o.isMesh) return;
@@ -10647,7 +10664,7 @@ function interiorShow(unitId, open, backMs = 320) {
 }
 function interiorState() {
   let hidden = 0, shown = 0;
-  for (const inst of instances.values()) if (INTERIOR_TYPES.has(typeByNode[inst.cfg.node])) inst.group.traverse((o) => { if (o.isMesh) { if (o.visible) shown++; else hidden++; } });
+  for (const inst of instances.values()) if (isInteriorPart(inst)) inst.group.traverse((o) => { if (o.isMesh) { if (o.visible) shown++; else hidden++; } });
   return { on: interiorHidden, hidden, shown, units: [...interiorShown.keys()] };
 }
 
@@ -11719,6 +11736,7 @@ async function mountManifest(m) {
      generated manifests (DECISIONS 2026-10-21), so maps that only grow answer for both builds, and a node in both takes
      the new build's row. drawThumb already adds its previews' parts to the same maps. */
   openDoor = null;   // a remount brings new instances; Build re-opens what it was peeking at through peekUnit
+  heldDrawer = null;
   Object.assign(typeByNode, Object.fromEntries(m.parts.map(p => [p.node, p.type])));
   for (const inst of m.instances) if (inst.type && !typeByNode[inst.node]) typeByNode[inst.node] = inst.type;   // a model billed on another part's row (a hinge's claws)
   Object.assign(partInfoByNode, Object.fromEntries(m.parts.map(p => [p.node, p])));
