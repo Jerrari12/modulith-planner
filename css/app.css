@@ -160,6 +160,20 @@ html.ws-mode-flip #ws *, html.ws-mode-flip #ws *::before, html.ws-mode-flip #ws 
 #ws .faces { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); }
 #ws .face { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; height: 66px; padding: 0; border-radius: 12px; font-size: 11px; font-weight: 600; }
 #ws .face .club { position: absolute; top: 3px; right: 6px; font-size: 11px; color: var(--club); }
+/* Build style in groups (2026-11-23): Drawers, Cabinets, Whole build; a heading that sets every unit says so, or Mixed; its
+   "?" opens the same words the hover bubble shows; a door style still being designed carries Soon */
+#ws-lib .grp { margin: 4px 0 -6px; padding-top: 12px; border-top: 1px solid var(--hair); font-size: 13px; font-weight: 700; color: var(--ink); }
+#ws-lib .grp:first-of-type { padding-top: 0; border-top: 0; }
+#ws-lib section > .h2 { display: flex; align-items: center; gap: 6px; }
+#ws-lib .h2 .setsall, #ws-lib .h2 .mixed { font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; background: var(--badge-bg); color: var(--badge-fg); }
+#ws-lib .h2 .mixed { background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-border); }
+#ws-lib .h2 .qhelp { margin-left: auto; width: 18px; height: 18px; padding: 0; border-radius: 99px; border: 1px solid var(--hair); background: transparent; color: var(--ink-3); font-size: 11px; font-weight: 700; line-height: 16px; cursor: help; flex: none; }
+#ws-lib .h2 .qhelp[aria-expanded="true"] { color: var(--ink); border-color: var(--ink-3); }
+#ws-lib .note.explain { margin: -2px 2px 8px; line-height: 1.4; }
+#ws .face .soon { position: absolute; top: 4px; left: 5px; font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 4px; border-radius: 4px; background: var(--badge-bg); color: var(--badge-fg); }
+#ws .lnk { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+#ws-insp .doorrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+#ws-insp .doorrow .lnk { font-size: 11px; }
 #ws .note { margin: 6px 2px 0; font-size: 12px; color: var(--ink-2); }
 #ws .handles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-ctl); }
 #ws .handle { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 62px; padding: 0; border-radius: 12px; font-size: 11px; font-weight: 600; }

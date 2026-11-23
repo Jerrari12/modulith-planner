@@ -9894,6 +9894,89 @@ test('Build style: Side covers Off removes every side cover from the stage and t
   await ctx.close();
 });
 
+/* THE CABINET DOOR STYLE (2026-11-23, Joey: "i have a decor cabinet door here and i can't figure out how to change it to
+   chevron style"). No control set the build's doorStyle: only a share link could. Build style now has a Cabinets group with
+   the door tiles (EdgeLabel, Classic Pro and Classic as Soon), an offer to match the faceplates, and the handles shared by
+   drawers and doors in Whole build; the cabinet inspector names the door. Two older faults come with it: a cabinet door,
+   billed as a Faceplate, made currentFaceplateStyle read none (no faceplate tile lit, the handles hidden), and a handle
+   series change swapped a 1H door's knob for a bar in place. A Chevron-faceplate build with an Essential-door 1H cabinet. */
+test('Build style: a cabinet build picks its door style - Cabinets group, Soon styles, the match offer, the inspector row; a 1H door keeps a knob when the handles change', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'chevron', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 2, gridH: 1, sideCovers: true, plateParts: {}, nextId: 3, labelStyle: null, buildId: 'e2edoorstyle1',
+    placed: [{ id: 1, x: 0, y: 0, w: 1, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 1, y: 0, w: 1, hh: 2, fill: 'cabinet', shelves: 0 }] };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('build', { query: `#build=${b64}` });
+  const grips = () => page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__;
+    const door = [...v.instances.values()].find((i) => /^Door_/.test(i.cfg.node));
+    return {
+      door: door?.cfg.node || null,
+      doorGrip: door ? [...v.instances.values()].filter((i) => i.cfg.rides === door.cfg.id && /^(Knob|Handle)_/.test(i.cfg.node)).map((i) => i.cfg.node) : [],
+      drawer: [...new Set([...v.instances.values()].filter((i) => /^Handle_/.test(i.cfg.node) && !/^Door_/.test(v.instances.get(i.cfg.rides)?.cfg.node || '')).map((i) => i.cfg.node))],
+    };
+  });
+  await page.waitForFunction(() => [...window.__GEN2_VIEWER__.instances.values()].some((i) => i.cfg.node === 'Door_Essential_1W-1H') && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+  await page.locator('#ws-lib button[role="tab"]:has-text("Build style")').click({ timeout: 30_000 });
+  await page.waitForSelector('#ws-lib section.doors', { timeout: 30_000 });
+  const panel = () => page.evaluate(() => {
+    const lib = document.querySelector('#ws-lib');
+    const heads = [...lib.querySelectorAll('section > .h2')];
+    return {
+      groups: [...lib.querySelectorAll('.grp')].map((g) => g.textContent),
+      faceOn: [...lib.querySelectorAll('.faces button.face.on')].map((b) => b.textContent.replace('✦', '').trim()),
+      doors: [...lib.querySelectorAll('section.doors button.face')].map((b) => ({ t: b.textContent.replace('✦', '').replace('Soon', '').trim(), on: b.classList.contains('on'), dis: b.classList.contains('dis'), soon: !!b.querySelector('.soon') })),
+      match: lib.querySelector('section.doors .note.match')?.textContent || null,
+      handles: heads.map((h) => h.childNodes[0].textContent).find((t) => /handle|knob/i.test(t)) || null,
+      scope: lib.querySelector('.note.scope')?.textContent || null,
+      tags: heads.map((h) => h.childNodes[0].textContent + ':' + (h.querySelector('.setsall') ? 'all' : h.querySelector('.mixed') ? 'mixed' : '')),
+      qs: lib.querySelectorAll('section > .h2 .qhelp').length,
+    };
+  });
+  const p0 = await panel();
+  assert.deepEqual(p0.groups, ['Drawers', 'Cabinets', 'Whole build'], 'the three groups');
+  assert.ok(p0.faceOn.includes('Chevron'), `the Chevron faceplate tile is lit with a cabinet in the build (${JSON.stringify(p0.faceOn)})`);
+  assert.deepEqual(p0.doors.map((d) => [d.t, d.on, d.dis, d.soon]), [['Essential', true, false, false], ['Chevron', false, false, false], ['EdgeLabel', false, true, true], ['Classic Pro', false, true, true], ['Classic', false, true, true]], 'the door tiles: Essential lit, Chevron open, three Soon');
+  assert.match(p0.match || '', /Your Decor faceplates are Chevron\. Use Chevron doors to match/, 'the match offer');
+  assert.equal(p0.handles, 'Handles and knobs', 'the shared handles section');
+  assert.equal(p0.scope, 'Decor drawers and cabinet doors');
+  assert.ok(p0.tags.includes('Drawer type:all') && p0.tags.includes('Door style:all'), `set-all headings say so (${p0.tags.join(', ')})`);
+  assert.ok(p0.qs >= 9, `every heading has its explanation (${p0.qs})`);
+  // the explanation opens on a tap of its "?" and says what a back cover is
+  const backCover = page.locator('#ws-lib section', { has: page.locator('h2:has-text("Back cover")') });
+  await backCover.locator('.qhelp').click();
+  assert.match(await backCover.locator('.note.explain').textContent(), /clips in behind each Decor faceplate/);
+  // the match offer: the record, the stage, and the offer gone
+  await page.locator('#ws-lib section.doors .note.match button.lnk').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.doorStyle === 'chevron' && [...window.__GEN2_VIEWER__.instances.values()].some((i) => i.cfg.node === 'Door_Chevron_1W-1H') && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 60_000 })
+    .catch(async () => assert.fail(`the match did not take: ${JSON.stringify(await grips())}`));
+  const p1 = await panel();
+  assert.equal(p1.match, null, 'no offer once they match');
+  assert.deepEqual(p1.doors.filter((d) => d.on).map((d) => d.t), ['Chevron'], 'the Chevron door tile lit');
+  // a Soon tile does nothing
+  await page.locator('#ws-lib section.doors button.face', { hasText: 'EdgeLabel' }).click({ force: true });
+  await settle(page, 600);
+  assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.doorStyle), 'chevron', 'a Soon style is not taken');
+  // the handles: BlockBar on the drawer, BlockBar's knob on the 1H door (not the bar)
+  assert.deepEqual((await grips()).doorGrip, ['Knob_Deco'], 'the control: a Deco knob on the 1H door');
+  await page.locator('#ws-lib .handles button.handle', { hasText: 'BlockBar A' }).click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.handleStyle === 'blockbar' && !window.__GEN2_VIEWER__.regenBusy && [...window.__GEN2_VIEWER__.instances.values()].some((i) => i.cfg.node === 'Knob_BlockBar'), null, { timeout: 60_000 })
+    .catch(async () => assert.fail(`the 1H door did not get the BlockBar knob: ${JSON.stringify(await grips())}`));
+  const g = await grips();
+  assert.deepEqual(g.doorGrip, ['Knob_BlockBar'], 'the 1H door wears the BlockBar knob');
+  assert.deepEqual(g.drawer, ['Handle_BlockBar_A'], 'the drawer wears the BlockBar A handle');
+  // the cabinet's inspector names the door and opens Build style at it
+  await page.locator('#ws-lib button[role="tab"]:has-text("Add units")').click();
+  await page.locator('#ws-tools button:has-text("2D")').first().click();
+  await page.locator('#ws-board .b-unit[data-id="2"]').click({ timeout: 30_000 });
+  await page.waitForSelector('#ws-insp .doorrow', { timeout: 30_000 });
+  assert.match(await text(page, '#ws-insp .doorrow'), /^Chevron ✦\s*Change in Build style$/);
+  await page.locator('#ws-insp .doorrow button.lnk').click();
+  await page.waitForSelector('#ws-lib section.doors', { timeout: 15_000 });
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-lib button[role=tab]')].find((b) => b.getAttribute('aria-selected') === 'true')?.textContent), 'Build style', 'the link opens Build style');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 /* FEEDBACK & SUPPORT (the cutover parity check's I1, 2026-10-22): the old planner offers the shared MODULITH dialog in its
    nav and its phone menu; the new one had no way in. The top bar has a button where it has room (not 1280-1365, where the
    bar was already full), and the build menu has the entry on every layout - the phone's only one. The desktop is 1366x768,

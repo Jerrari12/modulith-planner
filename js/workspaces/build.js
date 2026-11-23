@@ -59,6 +59,23 @@ const HINTS = {
   fill: { title: 'Fill all', text: 'A 1W case in every red slot at once, so the build can stand or hang. One Undo takes them out again.', video: 'img/hints/build-fill.mp4' },
   sidecovers: { title: 'Side covers', text: 'The panels on the build’s outer walls. Off leaves the case sides open and takes them off the parts list; On brings them back.', video: 'img/hints/build-sidecovers.mp4' },
 };
+/* what each Build style heading means, in the builder's words (2026-11-23): the hover bubble and the "?" note show the same
+   text. Each one is the parts list's own wording for that part (js/rules/bom.js, js/catalog/data.js), shortened. */
+const STYLE_HINTS = {
+  drawertype: { title: 'Drawer type', text: 'Classic drawers have their handle printed in place: no assembly, no extra parts. Decor drawers take a separate faceplate and a handle or knob, so they can be restyled. A choice here converts every drawer; one that can’t change says why.' },
+  faceplate: { title: 'Decor faceplate', text: 'The front of every Decor drawer. A faceplate fits the same size of Decor drawer in every collection. EdgeLabel and Classic Pro take printed labels.' },
+  closures: { title: 'Closures', text: 'Magnets hold each drawer shut: two disc magnets per drawer (10×2 or 6×2 mm), bought separately. Push-Click is coming.' },
+  stoppers: { title: 'Stoppers', text: 'A Left and Right pair for each 1W of drawer width stops a drawer from pulling all the way out. They snap into the base of the case above. Optional, but recommended.' },
+  backcover: { title: 'Back cover', text: 'An optional plate that clips in behind each Decor faceplate to close the open front of the drawer. Take the drawer’s tear-away front out first. Included in the faceplate download.' },
+  decordrawers: { title: 'Decor drawers', text: 'Standard is the plain Decor drawer. Gridfinity gives it a base for Gridfinity bins, in the 115 to 270 collections at 1H, 1.5H and 2H. A choice here sets every Decor drawer.' },
+  doorstyle: { title: 'Door style', text: 'The door on every cabinet in the build: all cabinets share one style, as all drawers share one faceplate style. Chevron is in the Club, or sold on its own. More styles are coming.' },
+  handles: { title: 'Handles and knobs', text: 'The handle on Decor faceplates that take one, and the grip on each cabinet door: a knob on a 1H door, a handle on a taller one. One choice dresses both.' },
+  sidecovers: HINTS.sidecovers,
+  feet: { title: 'Feet', text: 'Feet for a tabletop build, in the slots under the bottom row. Print them in TPU, or buy adhesive rubber feet instead: the same count, in the same spots.' },
+};
+/* door styles still being designed that the catalog has no id for yet (Joey 2026-11-23: Classic, Classic Pro and EdgeLabel
+   doors are to come); a catalog id, when it is added, takes over the tile */
+const DOOR_SOON = [['classic', 'Classic']];
 
 export function mountBuild(stage, ctx) {
   const ac = new AbortController();   // every window/document listener the workspace adds, dropped on unmount
@@ -71,6 +88,7 @@ export function mountBuild(stage, ctx) {
     tab: 'add', collapsed: false,
     unit: S().fill || 'decor', gf: 'standard', addSize: `${S().selected?.w || 1}x${S().selected?.h || 1}`, armed: false,
     view: '3d', eraser: false, sel: null, selId: ctx.memo.buildSel ?? null, issuesOpen: false, stageErrors: null, peeking: null, menu: null, chosen: null, pulse: null,
+    explained: new Set(),   // the Build style headings whose "?" note is open, kept across re-renders
   };
   /* product icons read the LIVE palette, so the tiles, the inspector thumbnail and the model agree */
   const hex = (key, fallback) => { try { return stage.activeHex(key) || fallback; } catch { return fallback; } };
@@ -658,14 +676,49 @@ export function mountBuild(stage, ctx) {
     } else sz.appendChild(el('p.hint', { text: isPhone() ? 'Pick a size to start placing. Tap a greyed size to see why.' : 'Pick a size to start placing. Greyed sizes say why on hover or click.' }));
     lib.appendChild(sz);
   }
+  /* BUILD STYLE IN THREE GROUPS (2026-11-23, Joey: "i have a decor cabinet door here and i can't figure out how to change it
+     to chevron style ... maybe we should have cabinet style under it?"). The tab was one list of drawer settings with the
+     build-wide ones mixed in, and no control set the cabinets' door style at all: only a share link could. Now Drawers,
+     Cabinets (only when the build has one) and Whole build. The door style is its own explicit choice, with a one-click
+     offer to match the faceplates when a door of that style exists: following the faceplates by itself was refused (Sol
+     01a20a9f), since every saved build carries doorStyle "essential" whether or not anyone chose it. Handles and knobs sit
+     in Whole build, because one choice (build.handleStyle) dresses both the drawers' faceplates and the cabinet doors. A
+     section that sets every unit says so, and says Mixed when the units differ; each heading explains itself on hover
+     (attachHint) and on a tap of its "?" (Joey: "like back cover to a new user what does that mean, we should explain on
+     hover for each of these"). */
+  /* the Build style tab, scrolled to one of its sections (the cabinet inspector's "Change in Build style") */
+  function openStyleAt(cls) {
+    st.collapsed = false; st.tab = 'style'; renderLib(); layout();
+    if (phone) phone.open(lib);
+    requestAnimationFrame(() => lib.querySelector('section.' + cls)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  }
+  function head(sec, key, title, { all = false, mixed = false } = {}) {
+    const h = el('h2.h2', {}, [title]);
+    if (mixed) h.appendChild(el('span.mixed', { text: 'Mixed', title: 'Not every unit is the same · a choice below sets them all' }));
+    else if (all) h.appendChild(el('span.setsall', { text: 'Sets all' }));
+    const tip = STYLE_HINTS[key];
+    if (!tip) { sec.appendChild(h); return h; }
+    const open = st.explained.has(key);
+    const note = el('p.note.explain', { text: tip.text, hidden: !open });
+    const q = el('button.qhelp', { type: 'button', text: '?', 'aria-label': `What is ${tip.title}?`, 'aria-expanded': String(open),
+      onclick: () => { const on = note.hidden; note.hidden = !on; q.setAttribute('aria-expanded', String(on)); if (on) st.explained.add(key); else st.explained.delete(key); } });
+    h.appendChild(q);
+    attachHint(h, tip, lib);
+    sec.append(h, note);
+    return h;
+  }
   function renderStyle() {
     lib.appendChild(el('p.intro', { text: 'Applies to every unit. Colors live in the Colors tab.' }));
     const s = S();
     const drawers = s.placed.filter((u) => u.fill === 'classic' || u.fill === 'decor');
+    const cabinets = s.placed.filter((u) => u.fill === 'cabinet');
+    const group = (name) => lib.appendChild(el('h3.grp', { text: name }));
+
+    group('Drawers');
     const fills = drawers.map((u) => u.fill);
     const typeOn = fills.length && fills.every((f) => f === fills[0]) ? fills[0] : null;
     const types = el('section');
-    types.appendChild(el('h2.h2', { text: 'Drawer type' }));
+    head(types, 'drawertype', 'Drawer type', { all: true, mixed: drawers.length > 1 && !typeOn });
     types.appendChild(el('div.types', {}, [['classic', 'Classic drawer', 'classicDrawer'], ['decor', 'Decor drawer', FACEK[stage.currentFaceplateStyle()?.key] || 'edgelabel']].map(([id, name, kind]) =>
       el('button.type.key' + (typeOn === id ? '.on' : ''), { title: `Convert every drawer to ${name}s · a drawer that can’t change says why`, onclick: () => convertAll(id) }, [glyphEl(kind, 36, 24, colors), name]))));
     lib.appendChild(types);
@@ -673,7 +726,7 @@ export function mountBuild(stage, ctx) {
     const cur = stage.currentFaceplateStyle();
     const avail = new Set(stage.availableFaceplateStyles().map((x) => x.key));
     const faces = el('section');
-    faces.appendChild(el('h2.h2', { text: 'Decor faceplate' }));
+    head(faces, 'faceplate', 'Decor faceplate');
     faces.appendChild(el('div.faces', {}, stage.FACEPLATE_STYLES.map((x) => {
       const ok = avail.has(x.key) && drawers.some((u) => u.fill === 'decor');
       const b = el('button.face.key' + (!ok ? '.dis' : cur?.key === x.key ? '.on' : ''), {
@@ -686,20 +739,10 @@ export function mountBuild(stage, ctx) {
     faces.appendChild(el('p.note', { text: cur?.key === 'edgelabel' || cur?.key === 'classicpro' ? `${FACE_LABEL[cur.key]} takes printed labels.` : 'EdgeLabel and Classic Pro take printed labels.' }));
     lib.appendChild(faces);
 
-    if (cur?.hasHandle) {
-      const hs = el('section');
-      hs.appendChild(el('h2.h2', { text: 'Handle series' }));
-      const curH = stage.currentHandleStyle();
-      const shape = (label) => /crystal/i.test(label) ? 'crystal' : /block/i.test(label) ? 'blockbar' : 'deco';
-      hs.appendChild(el('div.handles', {}, stage.HANDLE_STYLES.map((h) => el('button.handle.key' + (curH?.node === h.node ? '.on' : ''), { onclick: async () => { await stage.applyHandleStyle(h); await adopt(); } },
-        [preview(el('span.shape.' + shape(h.label), { style: `background:${colors.handle}` }), { fill: 'decor', w: 1, hh: 2, faceStyle: cur.key, handleStyle: h.planner, handle: h, view: 'three', frame: 'handle', fit: 1.0 }, 'handle'), h.label]))));
-      lib.appendChild(hs);
-    }
-
     const closures = drawers.map((u) => u.closure === 'magnet' ? 'magnet' : 'none');
     const closureOn = closures.length && closures.every((c) => c === closures[0]) ? closures[0] : null;
     const cl = el('section');
-    cl.appendChild(el('h2.h2', { text: 'Closures' }));
+    head(cl, 'closures', 'Closures', { all: true, mixed: closures.length > 1 && !closureOn });
     cl.appendChild(el('div.track.seg3', { role: 'group' }, [
       el('button.seg' + (closureOn === 'none' ? '.on' : ''), { text: 'None', onclick: async () => { await stage.setAllClosure('none'); await adopt(); } }),
       el('button.seg' + (closureOn === 'magnet' ? '.on' : ''), { text: 'Magnets', title: 'Every drawer, and each one you add while all have them · 2 disc magnets per drawer (10×2 or 6×2 mm) · hardware store', onclick: async () => { await stage.setAllClosure('magnet'); await adopt(); } }),
@@ -710,13 +753,13 @@ export function mountBuild(stage, ctx) {
     const removed = new Set(s.removedStoppers || []);
     const two = el('div.two');
     const stp = el('section');
-    stp.appendChild(el('h2.h2', { text: 'Stoppers' }));
+    head(stp, 'stoppers', 'Stoppers');   // its own All / None already say it; a tag would not fit the half column
     stp.appendChild(el('div.track.seg2', { role: 'group' }, [
       el('button.seg.sm' + (removed.size === 0 ? '.on' : ''), { text: 'All', onclick: async () => { await stage.setAllStoppers(true); await adopt(); } }),
       el('button.seg.sm' + (removed.size > 0 ? '.on' : ''), { text: 'None', onclick: async () => { await stage.setAllStoppers(false); await adopt(); } }),
     ]));
     const bc = el('section');
-    bc.appendChild(el('h2.h2', { text: 'Back cover' }));
+    head(bc, 'backcover', 'Back cover');
     bc.appendChild(el('div.track.seg2', { role: 'group' }, [
       el('button.seg.sm' + (!s.backCover ? '.on' : ''), { text: 'Off', onclick: async () => { await stage.setBackCover(false); await adopt(); } }),
       el('button.seg.sm' + (s.backCover ? '.on' : ''), { text: 'On', onclick: async () => { await stage.setBackCover(true); await adopt(); } }),
@@ -736,12 +779,71 @@ export function mountBuild(stage, ctx) {
         chip ? 'Not on the chip drawers: their front is closed.' : ''].filter(Boolean).join(' ');
       if (words) lib.appendChild(el('p.hint.bc-hint', { text: words }));
     }
+    const gridable = s.placed.filter((u) => u.fill === 'decor');
+    if (gridable.length) {
+      const vals = gridable.map((u) => u.variant === 'gridfinity' ? 'gridfinity' : 'standard');
+      const on = vals.every((v) => v === vals[0]) ? vals[0] : null;
+      const gv = el('section');
+      head(gv, 'decordrawers', 'Decor drawers', { all: true, mixed: !on });
+      gv.appendChild(el('div.track.seg2', { role: 'group' }, [
+        el('button.seg.sm' + (on === 'standard' ? '.on' : ''), { text: 'Standard', onclick: async () => { await stage.setAllVariant('standard'); await adopt(); } }),
+        el('button.seg.sm' + (on === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', onclick: async () => { await stage.setAllVariant('gridfinity'); await adopt(); } }),
+      ]));
+      lib.appendChild(gv);
+    }
+
+    if (cabinets.length) {
+      group('Cabinets');
+      const doors = el('section.doors');
+      head(doors, 'doorstyle', 'Door style', { all: true });
+      const door = s.doorStyle || 'essential';
+      const soonDoor = (id) => (G?.unreleased || []).includes('door:' + id);
+      const DOOR_LABEL = Object.fromEntries((G?.doorStyles || []).map((d) => [d.id, d.label]));
+      // the released styles first, then the ones still being designed; Classic has no door id yet, so its tile is the
+      // panel's own (DOOR_SOON) until the catalog lists one
+      const ids = (G?.doorStyles || []).map((d) => d.id);
+      const order = [...ids.filter((id) => !soonDoor(id)), ...ids.filter(soonDoor)];
+      const tiles = order.map((id) => {
+        const soon = soonDoor(id), label = DOOR_LABEL[id] || id;
+        const b = el('button.face.key' + (soon ? '.dis' : door === id ? '.on' : ''), {
+          'aria-disabled': soon ? 'true' : null, 'aria-pressed': soon ? null : String(door === id),
+          title: soon ? `${label} doors · coming soon` : `${label} doors on every cabinet${CLUB[id] ? ' · ✦ Club, or buy the set separately' : ' · Core, free'}`,
+          onclick: soon ? null : async () => { if (await stage.setDoorStyle(id)) await adopt(); },
+        }, [soon ? glyphEl('cabinet', 40, 26, colors) : preview(glyphEl('cabinet', 40, 26, colors), { fill: 'cabinet', w: 1, hh: 2, doorStyle: id, view: 'front' }, 'face'), label]);
+        if (CLUB[id]) b.appendChild(el('span.club', { text: '✦', title: 'Club' }));
+        if (soon) b.appendChild(el('span.soon', { text: 'Soon' }));
+        return b;
+      });
+      for (const [id, label] of DOOR_SOON) if (!ids.includes(id)) tiles.push(el('button.face.key.dis', { 'aria-disabled': 'true', title: `${label} doors · coming soon` }, [glyphEl('cabinet', 40, 26, colors), label, el('span.soon', { text: 'Soon' })]));
+      doors.appendChild(el('div.faces', {}, tiles));
+      // the one-click match: only when the drawers wear a faceplate family that has a released door of its own
+      const match = cur?.key && cur.key !== door && ids.includes(cur.key) && !soonDoor(cur.key) && drawers.some((u) => u.fill === 'decor');
+      if (match) doors.appendChild(el('p.note.match', {}, [`Your Decor faceplates are ${FACE_LABEL[cur.key] || cur.key}. `,
+        el('button.lnk', { type: 'button', text: `Use ${DOOR_LABEL[cur.key]} doors to match`, onclick: async () => { if (await stage.setDoorStyle(cur.key)) await adopt(); } })]));
+      lib.appendChild(doors);
+    }
+
+    group('Whole build');
+    // handles and knobs: the faceplates' bolt-on handle and the cabinet doors' knob (1H) or handle (taller) are one choice,
+    // build.handleStyle (generate.js, the door's grip), so the section names both when both are in the build
+    const drawerHandles = cur?.hasHandle && drawers.some((u) => u.fill === 'decor');
+    if (cur?.hasHandle || cabinets.length) {
+      const hs = el('section');
+      head(hs, 'handles', drawerHandles && cabinets.length ? 'Handles and knobs' : cabinets.length && !drawerHandles ? 'Door knobs and handles' : 'Handle series');
+      if (drawerHandles && cabinets.length) hs.appendChild(el('p.note.scope', { text: 'Decor drawers and cabinet doors' }));
+      const curH = stage.currentHandleStyle();
+      const shape = (label) => /crystal/i.test(label) ? 'crystal' : /block/i.test(label) ? 'blockbar' : 'deco';
+      const faceFor = cur?.hasHandle ? cur.key : 'essential';   // the preview shows the handle on a plate that takes one
+      hs.appendChild(el('div.handles', {}, stage.HANDLE_STYLES.map((h) => el('button.handle.key' + (curH?.node === h.node ? '.on' : ''), { onclick: async () => { await stage.applyHandleStyle(h); await adopt(); } },
+        [preview(el('span.shape.' + shape(h.label), { style: `background:${colors.handle}` }), { fill: 'decor', w: 1, hh: 2, faceStyle: faceFor, handleStyle: h.planner, handle: h, view: 'three', frame: 'handle', fit: 1.0 }, 'handle'), h.label]))));
+      lib.appendChild(hs);
+    }
 
     // side covers: on every build since 2026-10-17; the toggle (2026-10-20) is the record's own field, off only when
     // switched off here. Beside Feet on a tabletop, alone on the other mounts.
     const sc = el('section');
-    sc.appendChild(el('h2.h2', { text: 'Side covers' }));
-    // the hint on the track, so the bubble stays while the mouse crosses from Off to On
+    head(sc, 'sidecovers', 'Side covers');
+    // the hint on the track too, so the bubble (with its clip) stays while the mouse crosses from Off to On
     sc.appendChild(attachHint(el('div.track.seg2', { role: 'group', 'aria-label': 'Side covers', title: 'The panels on the build’s outer walls · Off leaves the case sides open and takes them off the parts list' }, [
       el('button.seg.sm' + (s.sideCovers === false ? '.on' : ''), { text: 'Off', onclick: async () => { await stage.setSideCovers(false); await adopt(); } }),
       el('button.seg.sm' + (s.sideCovers !== false ? '.on' : ''), { text: 'On', onclick: async () => { await stage.setSideCovers(true); await adopt(); } }),
@@ -750,7 +852,7 @@ export function mountBuild(stage, ctx) {
     two2.appendChild(sc);
     if (s.mount === 'tabletop') {
       const ft = el('section');
-      ft.appendChild(el('h2.h2', { text: 'Feet' }));
+      head(ft, 'feet', 'Feet');
       ft.appendChild(el('div.track.seg2', { role: 'group' }, [
         el('button.seg.sm' + (s.feet !== 'adhesive' ? '.on' : ''), { text: 'Print TPU', onclick: async () => { await stage.setFeet('tpu'); await adopt(); } }),
         el('button.seg.sm' + (s.feet === 'adhesive' ? '.on' : ''), { text: 'Buy adhesive', onclick: async () => { await stage.setFeet('adhesive'); await adopt(); } }),
@@ -758,18 +860,6 @@ export function mountBuild(stage, ctx) {
       two2.appendChild(ft);
     }
     lib.appendChild(two2);
-    const gridable = s.placed.filter((u) => u.fill === 'decor');
-    if (gridable.length) {
-      const vals = gridable.map((u) => u.variant === 'gridfinity' ? 'gridfinity' : 'standard');
-      const on = vals.every((v) => v === vals[0]) ? vals[0] : null;
-      const gv = el('section');
-      gv.appendChild(el('h2.h2', { text: 'Decor drawers' }));
-      gv.appendChild(el('div.track.seg2', { role: 'group' }, [
-        el('button.seg.sm' + (on === 'standard' ? '.on' : ''), { text: 'Standard', onclick: async () => { await stage.setAllVariant('standard'); await adopt(); } }),
-        el('button.seg.sm' + (on === 'gridfinity' ? '.on' : ''), { text: 'Gridfinity', onclick: async () => { await stage.setAllVariant('gridfinity'); await adopt(); } }),
-      ]));
-      lib.appendChild(gv);
-    }
   }
 
   /* ---------------- inspector ---------------- */
@@ -873,6 +963,10 @@ export function mountBuild(stage, ctx) {
         el('button.seg.sm' + (hand === 'left' ? '.on' : ''), { text: 'Left', title: 'The door swings open to the left', onclick: () => setUnitOption(unit.id, (p) => { delete p.hinge; }) }),
         el('button.seg.sm' + (hand === 'right' ? '.on' : ''), { text: 'Right', title: 'The door swings open to the right · mirrored door and hardware', onclick: () => setUnitOption(unit.id, (p) => { p.hinge = 'right'; }) }),
       ])]));
+      // the door's style is the build's, one for every cabinet (2026-11-23): named here, with the way to it
+      const ds = (G?.doorStyles || []).find((d) => d.id === (s.doorStyle || 'essential'));
+      insp.appendChild(el('div.row', {}, ['Door', el('div.doorrow', {}, [el('span', { text: (ds?.label || 'Essential') + (CLUB[ds?.id] ? ' ✦' : '') }),
+        el('button.lnk', { type: 'button', text: 'Change in Build style', title: 'Every cabinet shares one door style', onclick: () => openStyleAt('doors') })])]));
     }
     // the alternative to dragging (Astra): one column at a time, past the build's edge too, within the mount's cap
     insp.appendChild(el('div.row', {}, ['Move', el('div.track.mini', { role: 'group', 'aria-label': 'Move this unit', style: 'grid-template-columns: repeat(2, minmax(0, 1fr))' }, [

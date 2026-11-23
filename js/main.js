@@ -8823,6 +8823,23 @@ async function applyHandleStyle(style) {
       return false;
     }
   }
+  /* ⚠ A 1H CABINET DOOR'S GRIP IS THE SERIES' KNOB, NOT ITS HANDLE (generate.js CABINET.knobs; a taller door takes the
+     handle). The in-place swap below puts style.node on every Handle-typed part, so it turned a 1H door's Deco knob into a
+     BlockBar bar, and nothing re-mounted to correct it (seen 2026-11-23, once Build style showed the handles for a cabinet
+     build). A generated build with a cabinet goes through the generator instead, as a faceplate family swap does. */
+  if (build && build.placed.some(u => u.fill === 'cabinet')) {
+    await regenerateLatest();
+    const stale = dropStaleAxisMaterials(['Handle']);
+    if (stale.length) {
+      for (const inst of instances.values()) {
+        if (!stale.includes(typeByNode[inst.cfg.node])) continue;
+        inst.group.traverse((o) => { if (o.isMesh) o.material = materialFor(inst, false, o.userData.zone); });
+      }
+      applyPalette();
+    }
+    syncBuildToPlanner();
+    return;
+  }
   let oldNode = null;
   for (const inst of instances.values()) {
     if (typeByNode[inst.cfg.node] !== 'Handle') continue;
@@ -8960,9 +8977,17 @@ function labelGenInfo() {
   const labels = build ? labelOrder(build.placed.filter(p => p.fill === 'decor' && cleanLabelText(p.label))).map(p => cleanLabelText(p.label)) : [];
   return { href: url + (labels.length ? '#labels=' + btoa(unescape(encodeURIComponent(JSON.stringify(labels)))) : ''), count: labels.length };
 }
+/* the faceplate family on the stage: the first instance whose node is a faceplate family's. ⚠ A cabinet door is billed as a
+   Faceplate too (its own Door_<Style>_ node, generate.js), so "the first Faceplate-typed instance" was the door whenever a
+   cabinet came first, and the family read as none: Build style lit no faceplate tile and hid the handles (2026-11-23,
+   Joey's Chevron build with a 2W-2H cabinet). */
 const currentFaceplateStyle = () => {
-  const inst = [...instances.values()].find(i => typeByNode[i.cfg.node] === 'Faceplate');
-  return inst ? FACEPLATE_STYLES.find(s => inst.cfg.node.startsWith(s.node(''))) || null : null;
+  for (const inst of instances.values()) {
+    if (typeByNode[inst.cfg.node] !== 'Faceplate') continue;
+    const style = FACEPLATE_STYLES.find(s => inst.cfg.node.startsWith(s.node('')));
+    if (style) return style;
+  }
+  return null;
 };
 const nodeDepths = {};
 const nodeDepth = node => {
@@ -10030,11 +10055,11 @@ function paletteSig() { return Object.keys(manifest.colors || {}).sort().map(k =
 /* a preview's spec with its defaults filled in, the handle variant it wears and its cache key. The quality tier is in the
    key: it decides the light rig, the environment and the tone mapping a preview is drawn with, as the model is. */
 function thumbSpec(opts = {}) {
-  const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08, unitId = null } = opts;
+  const { fill = 'decor', w = 1, hh = 2, faceStyle = build.faceStyle, handleStyle = build.handleStyle, doorStyle = build.doorStyle, variant = null, lip = null, view = 'front', size = 384, frame = 'unit', fit = 1.08, unitId = null } = opts;
   const handle = opts.handle || (activeHandleStyle && activeHandleStyle.planner === handleStyle ? activeHandleStyle : null);
   const sig = paletteSig(), tier = quality;
-  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, partPlatesSig(), sig, tier]);
-  return { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier, key };
+  const key = JSON.stringify([build.length, fill, w, hh, faceStyle, handleStyle, doorStyle, variant, lip, view, size, frame, fit, unitId, handle && handle.node, build.buildPlate, partPlatesSig(), sig, tier]);
+  return { fill, w, hh, faceStyle, handleStyle, doorStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier, key };
 }
 async function renderThumb(opts = {}) {
   if (!build) return null;
@@ -10049,11 +10074,11 @@ async function renderThumb(opts = {}) {
    built, as two arrays), cam (the camera it was seen from) }. The box and the camera are for thumbModel. `plain` draws
    into the ordinary render target the previews used before 2026-10-18: the measured control, never a control's choice. */
 async function drawThumb(s, { plain = false } = {}) {
-  const { fill, w, hh, faceStyle, handleStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier } = s;
+  const { fill, w, hh, faceStyle, handleStyle, doorStyle, variant, lip, view, size, frame, fit, unitId, handle, sig, tier } = s;
   const gridH = Math.max(1, Math.ceil(hh / 2));
   const unit = { id: 1, x: 0, y: gridH * 2 - hh, w, hh, fill, shelves: 0 };
   if (variant) unit.variant = variant; if (lip) unit.lip = lip;
-  const rec = { mount: 'tabletop', length: build.length, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null, faceStyle, doorStyle: build.doorStyle, handleStyle, wallStagger: false, backCover: false, feet: 'tpu', buildPlate: build.buildPlate, removedStoppers: [], gridW: w, gridH, placed: [unit], nextId: 2 };
+  const rec = { mount: 'tabletop', length: build.length, printer: 'any', customBed: { x: null, y: null }, spaceW: null, spaceH: null, faceStyle, doorStyle: doorStyle || build.doorStyle, handleStyle, wallStagger: false, backCover: false, feet: 'tpu', buildPlate: build.buildPlate, removedStoppers: [], gridW: w, gridH, placed: [unit], nextId: 2 };
   const gen = generateManifest(rec);
   if (!gen.manifest) throw new Error((gen.errors || []).join(' · ') || 'no preview');
   const m = gen.manifest;
@@ -11772,6 +11797,11 @@ async function mountManifest(m) {
 // regenerate: re-run the generator on the (mutated) build and re-mount, keeping
 // the current step. Generated builds only — static kits have no `build`.
 let regenBusy = false;
+/* a regenerate that waits its turn instead of being dropped: regenerate() returns at once while one is running, so a second
+   quick pick of a door style or a handle series changed the record and never drew it, and the workspace's adopt() then
+   recorded the undrawn build as shown (Sol 01a20ab3). Waiting, the later call draws the build as it stands by then
+   (updateBuild waits the same way). */
+async function regenerateLatest() { while (regenBusy) await new Promise(r => setTimeout(r, 16)); await regenerate(); }
 async function regenerate(pre) {
   if (!build || regenBusy) return;
   const gen = pre || generateManifest(build, { voids: !!document.documentElement.dataset.ws });   // a build with empty slots still takes a Build style toggle (2026-10-21)
@@ -12635,6 +12665,14 @@ for (const m of ['toDataURL', 'toBlob']) {
     async setBackCover(v) { track('opt:backcover:' + (v ? 'on' : 'off')); build.backCover = !!v; await regenerate(); },
     async setSideCovers(v) { track('opt:sidecovers:' + (v ? 'on' : 'off')); build.sideCovers = !!v; await regenerate(); },   // the generator reads build.sideCovers === false
     async setFeet(v) { track('opt:feet:' + v); build.feet = v; await regenerate(); },
+    /* the cabinets' door style (2026-11-23): one per build, like the faceplate family; only a style the catalog lists and
+       has released is taken (a "Soon" style would draw the Essential door with a warning, generate.js CABINET.styles) */
+    async setDoorStyle(id) {
+      const cat = typeof GEN2 !== 'undefined' ? GEN2 : null;   // the planner's catalog (a classic script's global); absent on a bare viewer page
+      const def = cat && (cat.doorStyles || []).find((d) => d.id === id);
+      if (!def || (cat.unreleased || []).includes('door:' + id) || id === build.doorStyle) return false;
+      track('opt:doorstyle:' + id); build.doorStyle = id; await regenerateLatest(); return true;
+    },
     currentFaceplateStyle, availableFaceplateStyles,
     currentHandleStyle() { return HANDLE_STYLES.find(h => h.planner === (build && build.handleStyle)) || activeHandleStyle || HANDLE_STYLES[0]; },
     applyStageTheme, get stageTheme() { return stageTheme; }, applyQuality, QUALITY,
