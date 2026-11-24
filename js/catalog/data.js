@@ -1032,6 +1032,15 @@ const HARDWARE_BUY = {
   "M3×6mm button head screw": [
     { id: "m3-button-head", label: "Buy M3×6 button head", url: "https://amzn.to/4x4opHK" },
   ],
+  // the cabinet doors' knob and handle screws (bom.js: M3x8 on an Essential door, M3x10 on a
+  // Chevron door). Same listing as the M3x6 above, an Fgruh button head assortment (B0GHVDC8GD),
+  // so the same analytics id (Joey, 2026-11-24: "Same kit as M3×6").
+  "M3×8mm button head screw": [
+    { id: "m3-button-head", label: "Buy M3×8 button head", url: "https://amzn.to/4x4opHK" },
+  ],
+  "M3×10mm button head screw": [
+    { id: "m3-button-head", label: "Buy M3×10 button head", url: "https://amzn.to/4x4opHK" },
+  ],
   "Countersunk wood screws (#6/#8)": [
     { id: "woodscrew-6", label: "#6 × 3/4\"", url: "https://amzn.to/4s487gc" },
     { id: "woodscrew-8", label: "#8", url: "https://amzn.to/4pTWDuq" },
@@ -1156,6 +1165,9 @@ const IMAGE_OVERRIDES = {
   "M3×6mm socket head screw": "img/parts/Screw.png",
   "M3×12mm socket head screw": "img/parts/Screw.png",
   "M3×6mm button head screw": "img/parts/ButtonHeadScrew_M3-6.png",
+  // the cabinet doors' M3x8 / M3x10: the same button head screw, one render (as js/workspaces/parts.js HW_THUMB)
+  "M3×8mm button head screw": "img/parts/ButtonHeadScrew_M3-6.png",
+  "M3×10mm button head screw": "img/parts/ButtonHeadScrew_M3-6.png",
   "M3 hex nut": "img/parts/Nut.png",
   "Magnets 10×2mm or 6×2mm": "img/parts/Magnets.png",
   "Countersunk wood screws (#6/#8)": "img/parts/Wood Screw.png",
