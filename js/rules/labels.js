@@ -193,6 +193,15 @@ export function add(L, b, { text, badge } = {}) {
   if (!r.ok) return refuse('bad', r.reason);
   return done(r.state, `Added ${quote(label, caps(b))}`, null, { id: r.id });
 }
+/* words typed on an empty drawer (the Labels redesign's one-drawer editor, 2026-11-23): a new label in the list AND on that
+   drawer, one result, so one history entry and one undo. The drawer must still be empty (`expect`, as place's). */
+export function addOn(L, b, unitId, { text, badge } = {}, expect = null) {
+  const a = add(L, b, { text, badge });
+  if (!a.ok) return a;
+  const p = place(L, { ...b, labelList: a.list, labelAssign: a.assignments }, unitId, a.id, expect, 'drawer');
+  if (!p.ok) return p;
+  return done({ list: p.list, assignments: p.assignments }, p.desc, p.msg, { id: a.id });
+}
 /* edit a label: scope 'all' everywhere it is carried, 'this' (with unitId) only on that drawer (a shared label is cloned) */
 export function edit(L, b, labelId, patch, scope = 'all', unitId) {
   const cur = withList(L, stateOf(b));

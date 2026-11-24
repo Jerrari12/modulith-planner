@@ -11,6 +11,13 @@ Drafted 2026-10-13 from Joey's brief ("keep them all under the same app"), Astra
 2. **The Labels workspace gets two views**: **Label plate** (content, dimensions, appearance, print layout: the Studio's
    work) and **On build** (the same labels on the drawers, placement: today's Labels panel). The selected label survives
    the switch. Creating a label and assigning it to a drawer stay separate actions.
+   **Superseded in part on 2026-11-23** (Joey: "Full redesign now", approving the Labels review's drawer-first flow):
+   - *What changed:* words typed on one drawer create the label and place it in one step, one undo (`js/rules/labels.js`
+     `addOn`).
+   - *What stayed:* the list still holds every label apart from its drawers, a label can sit on several drawers, and
+     batches (a file, a Part Picker batch, a link) still wait in a tray and are placed on their own.
+   - *The views:* the panel is now three steps, Style, Drawers and Print. The Label plate opens from Print, with a Back to
+     the labels; the On build / Label plate toggle went with it.
 3. **One application**: one navigation bar, consistent controls, no second Studio header. An iframe may be the first
    implementation, but it must not dictate the interface.
 4. **One list needs one owner**: stable ids and a defined behaviour for edit, delete, undo and reconnect, or labels get

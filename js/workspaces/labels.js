@@ -4,9 +4,11 @@
    empty drawers previews its exact pairs, every operation is one Undo step with a "Last change" line, and the model is the
    record: the stage redraws the label text in place after each commit (stage.setLabels).
    The list itself: typed labels (words, an icon or a letter), labels from a file (a MODULITH label list, a Part Picker items
-   file, a Label Studio set) or from a #labels-add= link, the set-wide label settings, and exports. Making labels - icons,
-   stripes, part layouts, the print plate - stays the Label Studio's job: Make labels / Part Picker open it, and the LABEL PLATE
-   view (step B1) shows this build's list as the Studio lays it out, in a frame, read-only, with its print file to download. */
+   file, a Label Studio set) or from a #labels-add= link, the set-wide label settings, and exports. The print plate stays the
+   Label Studio's job: the LABEL PLATE view (step B1) shows this build's list as the Studio lays it out, in a frame, with its
+   print file to download, and the Part Picker opens in a modal.
+   SINCE 2026-11-23 (Joey: "Full redesign now") the panel is three steps - Style, Drawers, Print - with a drawer map and a
+   one-drawer editor where typing on a drawer creates and places its label in one step; see THE STEPS below. */
 import { el, makeToast, trapTab } from '../ui/dom.js';
 import { icon } from '../ui/icons.js';
 import { glyphEl, FACEK } from '../ui/glyph.js';
@@ -35,15 +37,6 @@ const PICKER_ICON = () => scene('0 0 16 16', '<path fill="currentColor" d="M4.2 
 /* every scene is 240 x 110 on one 4 s loop; a label strip is the EdgeLabel outline (the slanted right edge) */
 const strip = (x, y, w = 92, h = 34, extra = '') => `<g transform="translate(${x} ${y})" ${extra}><polygon points="0,0 ${w},0 ${w - h * 0.9},${h} 0,${h}" fill="#f4f1ec"/>`;
 const SCENES = {
-  type: () => scene('0 0 240 110', `
-    <rect x="0" y="0" width="240" height="110" rx="8" fill="none"/>
-    ${strip(36, 36, 140, 42)}
-      <text x="12" y="27" font-family="Archivo, system-ui, sans-serif" font-weight="800" font-size="16" fill="#1b1b1b">
-        <tspan opacity="0">M3${appear(0.08)}</tspan><tspan opacity="0"> SCR${appear(0.26)}</tspan><tspan opacity="0">EWS${appear(0.42)}</tspan></text>
-      <rect x="12" y="13" width="2" height="18" fill="#1b1b1b" opacity="0">${appear(0.02, 0.62)}${blink()}</rect>
-      <g opacity="0" transform="translate(100 8)">${appear(0.66)}<path d="M16 4l-5 5 1.5 1.5 5-5A4 4 0 0 1 13 11l-6 6-2-2 6-6A4 4 0 0 1 16 4z" fill="#1b1b1b"/></g>
-    </g>
-    <text x="120" y="98" text-anchor="middle" font-family="IBM Plex Sans, system-ui" font-size="10" fill="#9a9a9a" opacity="0">${appear(0.7)}the icon is guessed from the words</text>`),
   file: () => scene('0 0 240 110', `
     <g opacity="0">${appear(0.02, 0.5)}${moveTo(30, -30, 30, 22, 0.05, 0.25)}
       <path d="M0 0h26l12 12v38H0z" fill="#e9e6df"/><path d="M26 0v12h12" fill="#cfcbc2"/>
@@ -69,10 +62,11 @@ const SCENES = {
 };
 /* a hint plays img/hints/labels-<key>.mp4 when that clip exists (Joey: a 10-15 s recording, as for 3D Printopia); the SVG
    scene is the placeholder until then - see img/hints/README.md */
+/* the clips were recorded on the panel before the 2026-11-23 redesign: the actions they show (a file, the Part Picker, Fill,
+   Place several) work as they did, around an older panel; Type a label's control went with the redesign, and its clip with it */
 const HINTS = {
-  type: { title: 'Type a label', text: 'Words for one drawer; the icon is guessed, or pick one after.', scene: SCENES.type, video: `img/hints/labels-type.mp4` },
-  file: { title: 'Add from a file', text: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set.', scene: SCENES.file, video: `img/hints/labels-file.mp4` },
-  picker: { title: 'Part Picker', text: 'Choose screws, nuts, washers and inserts; each becomes a label laid out from its part record.', scene: SCENES.picker, video: `img/hints/labels-picker.mp4` },
+  file: { title: 'Add from a file', text: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set. They wait in the tray.', scene: SCENES.file, video: `img/hints/labels-file.mp4` },
+  picker: { title: 'Hardware labels', text: 'Choose screws, nuts, washers and inserts in the Part Picker; each becomes a label laid out from its part record, waiting in the tray.', scene: SCENES.picker, video: `img/hints/labels-picker.mp4` },
   fill: { title: 'Fill empty drawers', text: 'Every waiting label onto an empty drawer, top row first, left to right. One Undo takes it back.', scene: SCENES.fill, video: `img/hints/labels-fill.mp4` },
   several: { title: 'Place several', text: 'Arm a label, then tap drawers one after another; the next waiting label follows.', scene: SCENES.several, video: `img/hints/labels-several.mp4` },
 };
@@ -110,9 +104,13 @@ export function mountLabels(stage, ctx) {
   const ac = new AbortController(); const signal = ac.signal;
   const store = ctx.store;
   const S = () => store.state;
-  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, last: null, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null, fresh: null, view: 'build', selLabel: null };
-  // a label stripe's spool tapped in the Colors room (colors.js openSwap): the Label colours open on that meaning's picker
-  if (ctx.memo && ctx.memo.labelPalette) { const p = ctx.memo.labelPalette; delete ctx.memo.labelPalette; Object.assign(st, { palette: true, palEdit: true, palPick: p.pick || null, palQ: '' }); }
+  // step: 'style' | 'drawers' | 'print' (stepNow() resolves it against the faceplates); listOnly: the visitor chose a list
+  // without changing faceplates; draft: { unitId, text } being typed in the one-drawer editor; scope: that editor's reach on
+  // a label several drawers share
+  const st = { selId: null, sel: null, pick: null, edit: null, status: '', warn: false, query: '', letter: '', settings: false, iconsOpen: new Set(), hover: null, drag: null, dragEnd: null, fresh: null, view: 'build', selLabel: null,
+    step: 'drawers', listOnly: false, draft: null, scope: 'all', allStripes: false };
+  // a label stripe's spool tapped in the Colors room (colors.js openSwap): the Print step opens on that meaning's picker
+  if (ctx.memo && ctx.memo.labelPalette) { const p = ctx.memo.labelPalette; delete ctx.memo.labelPalette; Object.assign(st, { step: 'print', palPick: p.pick || null, palQ: '' }); }
   let L = null;   // the label-list module once loaded
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
@@ -152,7 +150,7 @@ export function mountLabels(stage, ctx) {
     const sig = P.labelSig(state, st.print); if (sig !== lastLabelSig) { lastLabelSig = sig; labelRev++; syncPlateSoon(); }   // a label-relevant change: a new rev, the plate follows
     // an undo, a redo or a load: the status line described the state before it ("Removed …" outlived the toolbar's Undo of
     // that remove, the stress test 2026-10-15), so it goes
-    if (why === 'adopt') return; if (why === 'undo' || why === 'redo' || why === 'load') { if (st.pick && !R.labelById(state, st.pick)) st.pick = null; if (st.edit && !R.labelById(state, st.edit.id)) st.edit = null; status(''); } syncStage(); renderAll(); });
+    if (why === 'adopt') return; if (why === 'undo' || why === 'redo' || why === 'load') { st.draft = null; /* words half-typed belong to the state before: the stage redraws from the record below, the editor from it too (Sol 01a20bde) */ if (st.pick && !R.labelById(state, st.pick)) st.pick = null; if (st.edit && !R.labelById(state, st.edit.id)) st.edit = null; status(''); } syncStage(); renderAll(); });
   /* one label operation = one history entry (flushed on both sides of the commit, so the 350 ms coalescing never joins it to a
      neighbour); "Last change" remembers it while the WHOLE record is still what it produced (Sol 01a13518: a later settings
      change, or any other edit, must not be what the panel's Undo takes back). `also(s)` runs inside the same commit, for what
@@ -164,7 +162,6 @@ export function mountLabels(stage, ctx) {
     // the panel state changes INSIDE the commit, so the subscriber's render already sees the armed label and the status
     store.commit((s) => { R.applyResult(L, s, r); if (also) also(s); if ('pick' in r) st.pick = r.pick; status(r.msg || ''); }, why);
     store.flush();
-    st.last = { desc: r.desc, key: JSON.stringify(store.serialize()) };   // after normalize and the push: the entry as the store holds it
     renderAll();
     return true;
   }
@@ -174,15 +171,12 @@ export function mountLabels(stage, ctx) {
     let added = 0;
     store.commit((s) => { added = ctx.partsDrawer.addToList(L, s, +s.length, rows); status(added ? `Added ${added} compartment label${added === 1 ? '' : 's'} to the list.` : 'Nothing to add.'); }, 'label');
     store.flush();
-    st.last = { desc: `Added ${added} compartment label${added === 1 ? '' : 's'}`, key: JSON.stringify(store.serialize()) };
     renderAll();
   }
-  const lastChange = () => (st.last && st.last.key === JSON.stringify(store.serialize()) ? st.last : null);
-  function undoLabel() {
-    if (!lastChange()) { status('The last change was not a label change, so this Undo leaves it alone. Undo in the toolbar takes it back.', true); renderAll(); return; }
-    st.last = null; store.undo();
-  }
-  const status = (msg, warn = false) => { st.status = msg || ''; st.warn = warn; };
+  /* what an operation says: a refusal or a problem stays in the panel's foot until the next operation (the review: errors
+     persist); everything else is a toast, read out politely (#ws-toast is aria-live). The panel's own Undo and its "Last
+     change" line went with the redesign: the toolbar's Undo takes back any step, a label's included. */
+  const status = (msg, warn = false) => { if (warn) { st.status = msg || ''; st.warn = true; } else { st.status = ''; st.warn = false; st.said = msg || ''; if (msg && !st.hush) say(msg); } };   // hush: a message that is about to be composed into another (importOpened) is not read out twice
   const unit = (id) => S().placed.find((u) => u.id === id) || null;
   const assignOf = () => S().labelAssign || {};
   const caps = () => effectiveStyle(S()).allCaps;
@@ -315,7 +309,7 @@ export function mountLabels(stage, ctx) {
   /* ---------------- the panel ---------------- */
   const panel = el('aside.glass', { id: 'ws-labels', 'aria-label': 'Labels' });
   root.appendChild(panel);
-  const fileIn = el('input', { type: 'file', accept: '.json,application/json', hidden: true });
+  const fileIn = el('input', { id: 'ws-labelsfile', type: 'file', accept: '.json,application/json', hidden: true });   // an id of its own: the build switcher has a file input of the same kind
   fileIn.addEventListener('change', async () => { const f = fileIn.files && fileIn.files[0]; fileIn.value = ''; if (!f) return; let doc; try { doc = JSON.parse(await f.text()); } catch { status('That file is not a labels file (it is not JSON).', true); renderAll(); return; } importDoc(doc, 'file'); });
   root.appendChild(fileIn);
   function importDoc(doc, how) {
@@ -324,7 +318,8 @@ export function mountLabels(stage, ctx) {
     // a set file's settings come with its labels, in the same history entry, when this build has none of its own yet
     const style = got.style && Object.keys(got.style).length && !S().labelStyle ? got.style : null;
     const ok = labelCommit(R.importLabels(L, S(), got.labels), 'labels-add', style ? (s) => { for (const [k, v] of Object.entries(style)) styleEdit(s, k, v); } : null);
-    if (ok) { st.pick = null; st.selId = null; stage.setSelected(null); renderAll(); if (phone) phone.open(panel); }
+    // what arrived is in view: the Drawers step, its tray (on faceplates without labels, as a list - nothing else would show them)
+    if (ok) { const fromStyle = stepNow() === 'style'; st.pick = null; st.selId = null; if (!R.faceCarriesLabels(S())) st.listOnly = true; if (fromStyle && st.view !== 'plate') st.step = 'drawers'; stage.setSelected(null); renderAll(); if (phone) phone.open(panel); }   // only off the Style step: Drawers and Print show them already (Terra 01a20bea)
     return ok ? 'added' : 'bad';
   }
   /* a labels link (the Label Studio's "Add to planner build", or a shared labels link): imported once. The one a page opened
@@ -354,8 +349,9 @@ export function mountLabels(stage, ctx) {
       const live = ctx.labelCopy.take();
       if (live && !live.restored && labelCommit(R.restoreCopy(L, S(), live), 'labels-restore')) { ctx.labelCopy.restored(); back = R.labelsOf(S()).length; }
     }
-    importLink(enc, doc);
-    if (back) { status(`Brought back the ${n(back, 'label')} this browser kept for this build. ${st.status}`.trim(), st.warn); renderAll(); }
+    st.hush = !!back;   // the link's own result goes into the message below, read out once (Terra 01a20bea)
+    try { importLink(enc, doc); } finally { st.hush = false; }
+    if (back) { status(`Brought back the ${n(back, 'label')} this browser kept for this build. ${st.warn ? st.status : st.said || ''}`.trim(), st.warn); renderAll(); }   // both in one message: the restore, then what the link did
   }
   function importFromHash() {
     const m = /(?:^#|&)labels-add=([^&]+)/.exec(location.hash || '');
@@ -375,6 +371,7 @@ export function mountLabels(stage, ctx) {
       if (!labelCommit(r, 'labels-add')) { reply({ gen2parts: 'refused', reason: r.msg || 'The planner could not add them.' }); return; }
       reply({ gen2parts: 'added', count: r.added.length + r.updated.length, skipped: r.skipped });
       st.fresh = new Set([...r.added, ...r.updated]); st.pick = null; st.selId = null; stage.setSelected(null);
+      { const fromStyle = stepNow() === 'style'; if (!R.faceCarriesLabels(S())) st.listOnly = true; if (fromStyle && st.view !== 'plate') st.step = 'drawers'; }   // the batch in view, in the tray (see importDoc)
       close(); renderAll(); say(r.msg); if (phone) phone.open(panel);
     },
   });
@@ -383,10 +380,7 @@ export function mountLabels(stage, ctx) {
   // ?return= says where Add to planner build comes back to (this app's address, Labels open); the Studio honours it for this
   // app's exact address (its PLANNER_RETURNS, live since 2026-10-13; DECISIONS.md 2026-10-13)
   const studioHref = (parts) => LABEL_STUDIO_URL + '?from=planner' + (S().faceStyle === 'classicpro' ? '&type=classicpro' : '') + '&return=' + encodeURIComponent(location.origin + location.pathname + '?ws=labels') + (parts ? '#parts' : '');
-  function openStudio(parts) {
-    ctx.builds?.keepCurrent?.();   // its Add to planner build reopens this browser's current build: this one (app.js)
-    try { window.open(studioHref(parts), '_blank', 'noopener'); } catch { say('Your browser blocked the Label Studio. Allow pop-ups for this site, then press it again.'); }   // noopener: the handle is always null, so no "blocked" from it (Sol 01a13518)
-  }
+
   /* THE LABEL PLATE VIEW (docs/redesign/LABELS-INTEGRATION.md, step B1, read-only): the Label Studio in a frame over the
      stage, headerless, showing this build's committed list as it lays it out (its Download print file works there). The
      channel is the Part Picker modal's (js/rules/plate.js): a hello with a session, the Studio's ready with what it can do,
@@ -410,7 +404,7 @@ export function mountLabels(stage, ctx) {
   function setView(v) {
     if (v === st.view) return;
     st.view = v;
-    if (v === 'plate') { openPlate(); if (phone) phone.collapse(panel); } else if (plate) plate.box.hidden = true;
+    if (v === 'plate') { st.step = 'print'; dropDraft(); openPlate(); if (phone) phone.collapse(panel); } else if (plate) plate.box.hidden = true;
     renderAll();
   }
   function openPlate() {
@@ -419,7 +413,7 @@ export function mountLabels(stage, ctx) {
       const frame = el('iframe', { src: STUDIO + '?embed=planner', title: 'Label plate: the Label Studio', referrerpolicy: 'strict-origin-when-cross-origin' });
       const link = el('span.link', { role: 'status', text: 'Connecting to the Label Studio…' });
       const box = el('div.glass', { id: 'ws-plate', role: 'region', 'aria-label': 'Label plate', hidden: true }, [
-        el('div.head', {}, [el('h2', { text: 'Label plate' }), el('span.sub', { text: 'This build’s labels as the Label Studio lays them out. Edit them On build; download the print file here.' }), link]), frame]);
+        el('div.head', {}, [el('button.key.sm.back', { title: 'Back to the labels on the model', onclick: () => setView('build') }, ['Back']), el('h2', { text: 'Label plate' }), el('span.sub', { text: 'Your labels laid out for your printer. Change the words on the drawers; the plate follows. Download the print file here.' }), link]), frame]);
       root.appendChild(box);
       const hello = () => { try { frame.contentWindow.postMessage(P.helloMessage(session), STUDIO_ORIGIN); } catch { /* the frame is not there yet */ } };
       frame.addEventListener('load', hello);
@@ -474,10 +468,6 @@ export function mountLabels(stage, ctx) {
   const syncPlateSoon = () => { clearTimeout(plateTimer); plateTimer = setTimeout(syncPlate, 150); };
   /* the selected label: UI state, one id, set by arming a label, selecting a labelled drawer or a row in the Studio */
   function setSelLabel(id) { if (id === st.selLabel) return; st.selLabel = id; syncPlateSoon(); }
-  function renderViewBar() {
-    return el('div.track.seg2.view', { role: 'group', 'aria-label': 'View' }, [['build', 'On build'], ['plate', 'Label plate']].map(([v, t]) =>
-      el('button.seg.sm' + (st.view === v ? '.on' : ''), { text: t, 'aria-pressed': String(st.view === v), onclick: () => setView(v) })));
-  }
   function download(name, text, type) {
     const a = el('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name });
     document.body.appendChild(a); a.click(); a.remove();
@@ -581,6 +571,247 @@ export function mountLabels(stage, ctx) {
   }
   const ident = (l, ok = true) => el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (ok ? (L.iconOnly(l) ? 'Icon only' : '(empty)') : '(empty)') }), el('span.detail', { text: detail(l) })]);
 
+  /* ---------------- THE STEPS (Joey 2026-11-23, "Full redesign now"; the review and its mockups: D:/Claude - Output/
+     labels-ux-review-2026-11-23/REVIEW.md, Sol 01a20bae) ----------------
+     Style -> Drawers -> Print, a spine at the top of the panel. STYLE is where a build whose faceplates take no labels starts
+     (what a label is, the two families that take one, or a list kept without changing the faceplates); DRAWERS is the drawer
+     map and the one-drawer editor - type, Enter, and the next empty drawer is open - with the labels not yet on a drawer in
+     a tray beneath (a Part Picker batch, a file, a link: those keep their own placing, Fill shows its pairs first); PRINT is
+     the filaments, the fine-tuning and the plate. Typing on a drawer creates the label and places it in one step (Joey
+     approved replacing LABELS-INTEGRATION.md's "creating and assigning stay separate actions" for that case, 2026-11-23);
+     the list still holds every label apart from its drawers, and one label can sit on several. */
+  const STEPS = [['style', 'Style'], ['drawers', 'Drawers'], ['print', 'Print']];
+  function stepNow() {
+    const s = S();
+    if (st.step === 'print' && R.labelsOf(s).length) return 'print';   // a list prints whatever the faceplates are
+    if (!R.faceCarriesLabels(s) && !st.listOnly) return 'style';
+    return st.step === 'style' ? 'style' : 'drawers';
+  }
+  function goStep(k) {
+    if (k !== 'drawers') dropDraft();   // words half-typed on a drawer leave the model with the step
+    st.step = k;
+    if (k !== 'print' && st.view === 'plate') { setView('build'); }
+    if (k === 'drawers') autoSelect();
+    renderAll();
+  }
+  /* the first empty drawer, selected when the Drawers step opens with nothing selected: the editor is already there, waiting
+     for words (the review's finding 2: an empty build gave nothing to tap). Never on the phone, where a selection raises the
+     sheet over the model. */
+  function autoSelect() {
+    const s = S();
+    if (!L || phone || st.pick || st.selId != null || !R.faceCarriesLabels(s)) return;
+    const first = R.emptyDrawers(s)[0];
+    if (first) stage.selectUnit(first.id);
+  }
+  function renderSpine(step, s, onN, slots, labels) {
+    const faceOk = R.faceCarriesLabels(s);
+    const can = { style: true, drawers: faceOk || !!st.listOnly, print: !!labels.length };
+    const done = { style: faceOk, drawers: faceOk && slots > 0 && onN >= slots, print: false };
+    const sub = { style: faceOk ? (FACE_LABEL[s.faceStyle] || 'Labels') : 'Choose one', drawers: faceOk ? `${onN} / ${slots}` : `${labels.length} in the list`, print: labels.length ? n(labels.length, 'label') : 'Nothing yet' };
+    return el('nav.spine', { 'aria-label': 'Label steps' }, STEPS.map(([k, name], i) => {
+      const on = step === k, ok = done[k] && !on;
+      return el('button.step' + (on ? '.on' : '') + (ok ? '.done' : ''), { 'data-step': k, 'aria-current': on ? 'step' : null, disabled: !can[k], onclick: () => goStep(k) },
+        [el('span.n', { 'aria-hidden': 'true', text: ok ? '✓' : String(i + 1) }), el('span.name', { text: name }), el('b', { text: sub[k] })]);
+    }));
+  }
+  /* the art for "what a label is": a drawer front with its printed strip, drawn the way the label family draws it */
+  function labelArt(face) {
+    const cp = face === 'classicpro';
+    const svg = cp
+      ? '<rect x="26" y="14" width="240" height="64" rx="6" fill="#f07a3a"/><rect x="40" y="22" width="212" height="12" rx="2" fill="#c85a22"/><rect x="40" y="40" width="212" height="28" rx="3" fill="#eef1f4"/><text x="146" y="60" text-anchor="middle" font-family="Archivo, system-ui, sans-serif" font-weight="800" font-size="15" fill="#1c1d20">M3 SCREWS</text>'
+      : '<rect x="26" y="14" width="240" height="64" rx="6" fill="#f07a3a"/><polygon points="38,24 178,24 162,54 38,54" fill="#eef1f4"/><text x="48" y="44" font-family="Archivo, system-ui, sans-serif" font-weight="800" font-size="15" fill="#1c1d20">M3 SCREWS</text><rect x="200" y="60" width="54" height="10" rx="5" fill="#1c1d20" opacity=".55"/>';
+    return el('div.art', { 'aria-hidden': 'true', html: `<svg viewBox="0 0 292 92" width="100%" height="92">${svg}</svg>` });
+  }
+  function renderStyleStep(s) {
+    const faceOk = R.faceCarriesLabels(s);
+    const box = el('div.stylestep');
+    box.appendChild(el('p.lead', {}, [el('strong', { text: 'Labels are small printed strips that slide into the drawer front' }), ', so each drawer says what is in it. A relabel is a minute, not a reprint.']));
+    box.appendChild(labelArt(faceOk ? s.faceStyle : 'edgelabel'));
+    // both label families as the Build library's faceplate tiles (Joey 2026-10-19 and 2026-10-27: both clickable, both Club,
+    // the stage's own picture of the faceplate), from the stage's own style list so a family it does not offer gets no tile
+    const LABEL_FAMILIES = ['edgelabel', 'classicpro'];
+    const styles = (stage.availableFaceplateStyles?.() || []).filter((x) => LABEL_FAMILIES.includes(x.key)).sort((a, b) => LABEL_FAMILIES.indexOf(a.key) - LABEL_FAMILIES.indexOf(b.key));
+    const decor = s.placed.filter((u) => u.fill === 'decor').length;
+    // one switch at a time; when it lands, the workspace may be gone (a tab change) or the visitor elsewhere (another step):
+    // the faceplates still change, the panel only follows if it is still there and still on this step (Sol 01a20bde)
+    const switchTo = (style) => async () => {
+      if (st.switching) return;
+      st.switching = true; renderAll();
+      try { await stage.applyFaceplateStyle(style); }
+      catch (e) { st.switching = false; if (!signal.aborted) { status(`${style.label} faceplates did not apply (${(e && e.message) || e}). Try again.`, true); renderAll(); } return; }   // the tiles come back (Terra 01a20bea)
+      st.switching = false;
+      if (signal.aborted) return;
+      stage.setDims(false); store.load(stage.build, 'adopt');
+      lastSig = (() => { const g = tryGen(store.serialize()); return g.manifest ? sigOf(g.manifest) : lastSig; })();
+      st.listOnly = false;
+      if (st.step === 'style' || stepNow() === 'style') st.step = 'drawers';
+      renderAll(); if (st.step === 'drawers') autoSelect();
+      say(`${style.label} faceplates · the drawers can take labels now.`);
+    };
+    const WHAT = { edgelabel: 'Label in an angled window', classicpro: 'Label on the grip slope' };
+    const tile = (style) => {
+      const name = FACE_LABEL[style.key] || style.label, cur = s.faceStyle === style.key;
+      const pic = el('div.pv.face', {}, [glyphEl(FACEK[style.key] || 'edgelabel', 40, 26)]);
+      if (stage.thumb) stage.thumb({ fill: 'decor', w: 1, hh: 2, faceStyle: style.key, view: 'front' }).then((url) => { if (url) pic.replaceChildren(el('img', { src: url, alt: '' })); }).catch(() => {});
+      return el('button.face.key' + (cur ? '.on' : ''), { title: cur ? `Your drawers use ${name} faceplates` : `Switch every Decor drawer to ${name} faceplates · ✦ Club`, 'aria-label': cur ? `${name}, in use` : `Switch to ${name}`, 'aria-pressed': String(cur), disabled: cur || !!st.switching, onclick: switchTo(style) },
+        [pic, name, el('span.what', { text: cur ? 'In use' : WHAT[style.key] || '' }), el('span.club', { text: '✦', title: 'Club' })]);
+    };
+    box.appendChild(el('p.sub', { text: faceOk ? `Your faceplates are ${FACE_LABEL[s.faceStyle]}. Both of these take labels:` : `${FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] + ' faceplates take' : 'These faceplates take'} no labels. These two do:` }));
+    if (styles.length) box.appendChild(el('div.faces.two', {}, styles.map(tile)));
+    if (decor) box.appendChild(el('p.dim', { text: `Switching changes ${decor === 1 ? 'the Decor drawer' : `all ${decor} Decor drawers`}. Undo in the toolbar takes it back.` }));
+    if (!faceOk) box.appendChild(el('button.linkish', { onclick: () => { st.listOnly = true; st.step = 'drawers'; renderAll(); } }, ['Make a label list without changing faceplates']));
+    else box.appendChild(el('div.row', {}, [el('button.key.sm', { onclick: () => goStep('drawers') }, ['Next: Drawers', icon('arrow-right', { size: 16 })])]));
+    return box;
+  }
+  /* THE DRAWER MAP: the build's units where they stand (top row first, as on the model); a Decor drawer is a button that
+     selects it (or, while a label is armed, places it), anything else a plain block for orientation */
+  function renderMap(s, carried, sel) {
+    const units = s.placed || [];
+    if (!units.length) return null;
+    // the grid from the units' own extent (a record's rows need not start at 0: the tabletop grid keeps room above)
+    const x0 = Math.min(...units.map((u) => u.x)), y0 = Math.min(...units.map((u) => u.y));
+    const cols = Math.max(...units.map((u) => u.x + u.w)) - x0, rows = Math.max(...units.map((u) => u.y + u.hh)) - y0;
+    const rowPx = Math.max(12, Math.min(26, Math.floor(168 / rows)));
+    const faceOk = R.faceCarriesLabels(s);
+    const grid = el('div.dmap', { role: 'group', 'aria-label': 'Your drawers, as they stand', style: `grid-template-columns: repeat(${cols}, minmax(0, 1fr)); grid-auto-rows: ${rowPx}px` });
+    for (const u of units) {
+      const pos = `grid-column: ${u.x - x0 + 1} / span ${u.w}; grid-row: ${u.y - y0 + 1} / span ${u.hh}`;
+      if (u.fill !== 'decor') { grid.appendChild(el('div.dcell.inert', { style: pos, title: FILL_LABEL(u.fill), 'aria-hidden': 'true' })); continue; }
+      const l = R.labelById(s, carried[u.id]);
+      const on = !!sel && sel.id === u.id;
+      const words = l ? (shown(R.labelShort(l)) || 'Icon') : '';
+      const name = R.drawerName(s, u.id);
+      grid.appendChild(el('button.dcell' + (l ? '.has' : '.empty') + (on ? '.sel' : '') + (l && st.selLabel === l.id ? '.lsel' : ''), {
+        style: pos, disabled: !faceOk, 'aria-pressed': String(on), 'data-focus': 'cell:' + u.id, 'data-unit': String(u.id),
+        'aria-label': `${name}, ${l ? words : 'no label'}`, title: `${name} · ${l ? words : 'no label yet'}`,
+        onclick: () => { if (st.pick) { tapDrawer(u.id); return; } stage.selectUnit(u.id); },
+      }, [l ? el('span.w', { text: words }) : el('span.plus', { 'aria-hidden': 'true', text: '+' })]));
+    }
+    return grid;
+  }
+  /* the words being typed for a drawer show on it at once, through the stage's mirror alone (the record does not change until
+     Enter; the hover preview's mechanism) */
+  function mirrorTyping(unitId, text) {
+    if (!L) return;
+    const rec = store.serialize(); const p = rec.placed.find((x) => x.id === unitId); if (!p) return;
+    const t = L.cleanText(text, L.MIRROR_MAX);
+    const l = R.labelById(S(), assignOf()[unitId]);
+    const m = t ? L.mirrorOfLabel(l && !R.isPartLabel(l) ? { ...l, text: t } : { text: t }) : null;
+    if (m) { p.label = m.label; if (m.labelBadge) p.labelBadge = m.labelBadge; else delete p.labelBadge; } else { delete p.label; delete p.labelBadge; }
+    st.hover = null; stage.setLabels(rec);
+  }
+  function dropDraft() { if (!st.draft) return; st.draft = null; stage.setLabels(store.serialize()); }
+  /* after a label lands on a drawer from the editor: the next empty drawer in drawer order (wrapping), its editor open; none
+     left, and the Print step is next */
+  function advanceFrom(unitId) {
+    const s = S(); const order = R.drawers(s).filter((u) => R.eligible(s, u));
+    const empties = new Set(R.emptyDrawers(s).map((u) => u.id));
+    const i = order.findIndex((u) => u.id === unitId);
+    const next = [...order.slice(i + 1), ...order.slice(0, Math.max(i, 0))].find((u) => empties.has(u.id));
+    if (next) stage.selectUnit(next.id);
+    else { stage.setSelected(null); say('Every drawer has a label. Next: Print.'); }
+  }
+  /* Enter in the editor: an empty drawer gets the words as a new label (or the waiting label with exactly those words); a
+     labelled drawer's label takes the new words, on every drawer it is on or on this one only (the scope switch) */
+  function commitQuick(u, text) {
+    const s = S(); const l = R.labelById(s, assignOf()[u.id]);
+    const t = L.cleanText(text, L.MIRROR_MAX);
+    if (!l) {
+      if (!t) { status('Type what goes in the drawer first.', true); renderAll(); return; }
+      const same = R.waiting(L, s).find((x) => !R.isPartLabel(x) && R.labelWords(x).toLowerCase() === t.toLowerCase());
+      const r = same ? R.place(L, s, u.id, same.id, null, 'drawer') : R.addOn(L, s, u.id, { text: t });
+      st.draft = null;
+      if (labelCommit(r)) advanceFrom(u.id);
+      return;
+    }
+    if (t === R.labelWords(l)) { dropDraft(); renderAll(); return; }
+    if (!t && !L.visibleBadge(l)) { status('A label needs words, an icon or a letter. Remove takes it off the drawer.', true); renderAll(); return; }
+    st.draft = null;
+    const r = R.edit(L, s, l.id, { text: t }, st.scope === 'this' ? 'this' : 'all', u.id);
+    labelCommit(r);
+    if (full(text).length > L.MIRROR_MAX) say(`Labels made here hold ${L.MIRROR_MAX} characters, so the words were cut to “${t}”.`);
+  }
+  const full = (text) => L.cleanText(text, L.TEXT_MAX);
+  /* THE ONE-DRAWER EDITOR (the 2026-10-06 decision's "compact editor", not built until now): the selected drawer's words,
+     typed in place; its waiting labels as suggestions; More opens the full editor (icon, letter, stripe) */
+  function renderQuick(u, s, readyLabels) {
+    const l = R.labelById(s, assignOf()[u.id]);
+    const name = R.drawerName(s, u.id);
+    const box = el('div.drawer.quick', { 'aria-label': `${name}, selected` });
+    box.appendChild(el('div.dhead', {}, [el('span.tag', { text: name }), el('span.size', { text: [`${u.w}W·${u.hh / 2}H`, FACE_LABEL[s.faceStyle] || ''].filter(Boolean).join(' · ') }),
+      el('button.x', { title: 'Deselect', 'aria-label': 'Deselect the drawer', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })])]));
+    if (!R.eligible(s, u)) { box.appendChild(el('p.none', { text: u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : 'This faceplate style takes no label.' })); return box; }
+    // a part label is laid out from its part record: its words are not typed here (the existing part actions)
+    if (l && R.isPartLabel(l)) {
+      const no = R.drawerNumber(s, u.id);
+      box.appendChild(el('div.dlabel', {}, [preview(l, true, u), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) }), el('span.detail', { text: detail(l) }), el('span.src', { text: 'From the part record' })])]));
+      box.appendChild(el('div.acts', {}, [
+        el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker({ open: l.hardware }) }, ['Edit part details']),
+        el('button.key.sm', { title: 'Replace the part layout with your own words on this drawer', onclick: () => openModal({ title: `Use your own words on drawer ${no}?`, body: ['This label is laid out from its part record. Words you type replace that layout on this drawer only; the part label goes back to your labels, ready to place again.'], ok: 'Use custom wording', field: { placeholder: 'What’s in this drawer?', value: R.labelShort(l) }, onOk: () => { const t = modalField(); closeModal(); labelCommit(R.customWording(L, S(), u.id, t)); }, onCancel: () => closeModal() }) }, ['Use custom wording']),
+        el('button.key.sm', { title: 'Take the label off this drawer; it waits to be placed again', onclick: () => labelCommit(R.unassign(L, S(), u.id, l.id)) }, ['Remove']),
+      ]));
+      return box;
+    }
+    const cur = l ? R.labelWords(l) : '';
+    const typed = st.draft && st.draft.unitId === u.id ? st.draft.text : cur;
+    const inp = el('input.words.qwords', { type: 'text', maxlength: '40', value: typed, placeholder: l ? 'What’s in this drawer?' : 'e.g. M3 screws, batteries, tape', autocomplete: 'off', spellcheck: 'false', 'aria-label': `What’s in ${name}`, 'data-focus': 'quick' });
+    const hintLine = el('p.qhint');
+    const sugg = el('div.qsugg', { role: 'group', 'aria-label': 'Labels waiting for a drawer' });
+    const iconLine = () => {
+      const t = L.cleanText(inp.value, L.MIRROR_MAX);
+      if (l && t === cur) return detail(l);
+      const p = t ? predicted(t) : null;
+      return t ? (p ? `Icon: ${iconName(p).toLowerCase()} (guessed from the words)` : 'No icon matched; More adds one') : (l ? detail(l) : 'The icon is guessed from the words.');
+    };
+    const fillSugg = () => {
+      const t = inp.value.trim().toLowerCase();
+      const pool = readyLabels.filter((x) => !t || R.labelWords(x).toLowerCase().includes(t)).slice(0, 4);
+      sugg.replaceChildren(...(pool.length ? [el('span.dim', { text: l ? 'Or use:' : 'Waiting:' })] : []), ...pool.map((x) => el('button.chip-s', { title: `Put ${quote(x)} on ${name}`, onclick: () => { const was = !assignOf()[u.id]; dropDraft(); chooseLabel(x.id); if (was && assignOf()[u.id] === x.id) advanceFrom(u.id); } }, [shown(R.labelShort(x)) || 'Icon only'])));
+    };
+    inp.addEventListener('input', () => { st.draft = { unitId: u.id, text: inp.value }; mirrorTyping(u.id, inp.value); hintLine.textContent = iconLine(); fillSugg(); });
+    inp.addEventListener('keydown', (ev) => {
+      if (ev.isComposing || ev.keyCode === 229) return;   // an input method's Enter confirms its candidate, never the label (Sol 01a20bde)
+      if (ev.key === 'Enter') { ev.preventDefault(); commitQuick(u, inp.value); return; }
+      // the planner's Undo from the editor only while nothing uncommitted is in the field (the committed words, no draft):
+      // words being typed keep the browser's own text undo, whatever re-render made this field (Sol 01a20bde)
+      const k = ev.key.toLowerCase();
+      if ((ev.ctrlKey || ev.metaKey) && (k === 'z' || k === 'y') && !st.draft && inp.value === cur) { ev.preventDefault(); if (k === 'y' || ev.shiftKey) store.redo(); else store.undo(); }
+    });
+    box.appendChild(el('label.frow.qrow', {}, [el('span.sr', { text: `What’s in ${name}` }), inp]));
+    hintLine.textContent = iconLine();
+    box.appendChild(hintLine);
+    if (l) {
+      const shared = L.assignedUnits({ list: s.labelList, assignments: assignOf() }, l.id);
+      if (shared.length > 1) box.appendChild(el('div.track.seg2.scope', { role: 'group', 'aria-label': 'Which drawers change' }, [
+        el('button.seg.sm' + (st.scope !== 'this' ? '.on' : ''), { 'aria-pressed': String(st.scope !== 'this'), text: `All ${n(shared.length, 'drawer')}`, onclick: () => { st.scope = 'all'; renderAll(); } }),
+        el('button.seg.sm' + (st.scope === 'this' ? '.on' : ''), { 'aria-pressed': String(st.scope === 'this'), text: 'This drawer only', title: 'A copy of the label carries the change; the other drawers keep theirs', onclick: () => { st.scope = 'this'; renderAll(); } }),
+      ]));
+    }
+    const acts = el('div.acts');
+    acts.appendChild(el('button.key.sm.on', { title: l ? 'Save the words (Enter)' : 'Put these words on the drawer and open the next empty one (Enter)', onclick: () => commitQuick(u, inp.value) }, [l ? 'Save' : 'Place', el('span.kbd', { text: 'Enter' })]));
+    if (l) {
+      acts.appendChild(el('button.key.sm', { title: 'Icon, letter and stripe', onclick: () => { dropDraft(); openEdit(l.id, u.id); } }, [icon('pencil-simple', { size: 15 }), 'More']));
+      acts.appendChild(el('button.key.sm', { title: 'Take the label off this drawer; it waits to be placed again', onclick: () => { dropDraft(); labelCommit(R.unassign(L, S(), u.id, l.id)); } }, ['Remove']));
+    } else acts.appendChild(attachHint(el('button.key.sm', { title: 'Choose screws, nuts, washers and inserts in the Part Picker; their labels wait in the tray below', onclick: () => openPicker() }, [PICKER_ICON(), 'Hardware']), HINTS.picker, panel));
+    box.appendChild(acts);
+    fillSugg();
+    box.appendChild(sugg);   // always in the card (empty, it takes no room: app.css): a filter that finds labels later still shows them (Sol 01a20bde)
+    return box;
+  }
+
+  /* COMPARTMENT LABELS (M3, js/parts-drawer/labels.js): a parts drawer's compartments that carry a part, as the Studio's
+     print set; a row in this list per compartment, never on a faceplate - so on the Style step too, whatever the faceplates */
+  function renderCompartments(s) {
+    if (!ctx.partsDrawer) return null;
+    const crows = ctx.partsDrawer.compartmentLabels(+s.length, s);
+    if (!crows.length) return null;
+    const open = crows.filter((r) => !r.linked);
+    return el('div.placed.pd-comp-labels', {}, [
+      el('h4', { text: `Compartment labels (${crows.length})` }),
+      el('div.rows', {}, crows.map((r) => el('div.crow', {}, [el('span.where', { text: `${r.drawer} · ${r.position}` }), el('span.words', { text: r.text }), el('span.state', { text: r.linked ? (r.stale ? 'words changed' : 'In list') : 'not in the list' })]))),
+      open.length ? el('div.fillrow', {}, [el('button.key.tile.wide', { onclick: () => compCommit(open) }, [icon('plus', { size: 16 }), `Add ${open.length === crows.length ? 'all' : open.length} to the list`])]) : el('p.hint', { text: 'Every compartment label is in the list; the Studio prints them with the rest.' }),
+    ]);
+  }
   function renderPanel() {
     if (st.dragEnd) st.dragEnd();   // a rebuild detaches the chip being dragged and its capture with it: the drag ends here, never orphaned (Terra 01a136e5)
     hideHint();   // the control under a bubble is about to be rebuilt; a removed button never fires mouseleave (Terra 01a13529)
@@ -598,26 +829,21 @@ export function mountLabels(stage, ctx) {
     const faceOk = R.faceCarriesLabels(s);
     const picked = R.labelById(s, st.pick);
     const sel = selectedDrawer();
-    const selL = sel ? R.labelById(s, carried[sel.id]) : null;
     const slots = s.placed.filter((u) => R.eligible(s, u)).length;
     const onN = Object.keys(carried).filter((k) => R.labelById(s, carried[k])).length;
+    const step = stepNow();
     panel.classList.toggle('placing', !!picked);
+    panel.dataset.step = step;
     // head
     panel.appendChild(el('div.head', {}, [
       el('h2', { text: 'Labels' }),
-      el('span.count', { text: ready.length ? `${n(ready.length, 'label')} ready to place` : labels.length ? (slots ? `${onN} of ${slots} drawers labelled` : `${n(labels.length, 'label')}`) : '' }),
+      el('span.count', { text: faceOk && slots ? `${onN} of ${slots} drawers` : labels.length ? n(labels.length, 'label') : '' }),
       labels.length ? el('span.tools', {}, [
         el('button.mini', { title: 'Download the list · a MODULITH label list (.json) the Label Studio opens', 'aria-label': 'Download the label list', onclick: () => download(`modulith-${s.length}-labels.json`, JSON.stringify({ ...R.exportDoc(L, s), output: P.printOutput(st.print) }, null, 2), 'application/json') }, [icon('download-simple', { size: 16 })]),
         el('button.mini', { title: 'Copy the labels as text, in drawer order', 'aria-label': 'Copy the labels as text', onclick: async () => { try { await navigator.clipboard.writeText(R.exportText(L, s)); say('Labels copied.'); } catch { say('Could not reach the clipboard.'); } } }, [icon('copy', { size: 16 })]),
       ]) : null,
     ]));
-    panel.appendChild(renderViewBar());
-    const last = lastChange();
-    panel.appendChild(el('div.row.top', {}, [
-      faceOk && ready.length && empties.length && !picked ? attachHint(el('button.key.sm', { onclick: () => { const w = ready[0]; if (w) armPlacing(w.id); } }, [icon('hand-pointing', { size: 16 }), 'Place several']), HINTS.several, panel) : null,
-      last ? el('button.key.sm', { title: 'Undo: ' + last.desc, onclick: undoLabel }, [icon('arrow-counter-clockwise', { size: 16 }), 'Undo']) : null,
-    ]));
-    if (last) panel.appendChild(el('p.last', { text: 'Last change: ' + last.desc }));
+    panel.appendChild(renderSpine(step, s, onN, slots, labels));
     // labels kept aside for this build (a link or a file brought it back without them): offered while the board has none
     const kept = ctx.labelCopy && ctx.labelCopy.copy;
     if (kept && !labels.length) {
@@ -637,114 +863,76 @@ export function mountLabels(stage, ctx) {
       ]));
     }
     if (picked) panel.appendChild(el('div.banner', { role: 'status' }, [el('span', { text: `Place ${quote(picked)} · tap a drawer` }), el('button.key.sm', { text: 'Done placing', onclick: () => armPlacing(null) })]));
-    // no label faceplate: the callout (the spec: never hidden or greyed out)
-    if (!faceOk) {
-      // both label families as buttons (Joey 2026-10-19: "why not show both edgelabel and classic pro as clickable
-      // options?"), from the stage's own style list so a family it does not offer for this collection gets no button;
-      // EdgeLabel first, the Studio's default family. Each is the Build library's faceplate tile: the stage's own picture of
-      // the faceplate (its glyph until the picture is ready) with the name under it, and BOTH carry the Club ✦: both are
-      // Club models (Joey 2026-10-27: "we have a lot of room so i think we should use the same images or icons we used for
-      // selecting faceplates in the build tab ... both are premium models so both should have that")
-      const LABEL_FAMILIES = ['edgelabel', 'classicpro'];
-      const styles = (stage.availableFaceplateStyles?.() || []).filter((x) => LABEL_FAMILIES.includes(x.key)).sort((a, b) => LABEL_FAMILIES.indexOf(a.key) - LABEL_FAMILIES.indexOf(b.key));
-      const switchTo = (style) => async () => { await stage.applyFaceplateStyle(style); stage.setDims(false); store.load(stage.build, 'adopt'); lastSig = (() => { const g = tryGen(store.serialize()); return g.manifest ? sigOf(g.manifest) : lastSig; })(); renderAll(); say(`${style.label} faceplates · the drawers can take labels now.`); };
-      const tile = (style) => {
-        const name = FACE_LABEL[style.key] || style.label;
-        const pic = el('div.pv.face', {}, [glyphEl(FACEK[style.key] || 'edgelabel', 40, 26)]);
-        if (stage.thumb) stage.thumb({ fill: 'decor', w: 1, hh: 2, faceStyle: style.key, view: 'front' }).then((url) => { if (url) pic.replaceChildren(el('img', { src: url, alt: '' })); }).catch(() => {});
-        return el('button.face.key', { title: `Switch every Decor drawer to ${name} faceplates · ✦ Club`, 'aria-label': `Switch to ${name}`, onclick: switchTo(style) }, [pic, name, el('span.club', { text: '✦', title: 'Club' })]);
-      };
-      panel.appendChild(el('div.callout', {}, [
-        el('p', { text: `${FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] + ' faceplates take' : 'These faceplates take'} no printed labels. EdgeLabel and Classic Pro do; the list below can still be built and exported.` }),
-        styles.length ? el('div.faces.two', {}, styles.map(tile)) : null,
-      ]));
-    }
-    // the selected drawer
-    if (sel) panel.appendChild(renderDrawer(sel, selL, ready.length));
-    // the hint. None under the faceplate callout: it already says so and offers the switch (the stress test, 2026-10-15:
-    // on a Classic build the same sentence stood three times and squeezed the list to two rows)
-    // the empty list's sentence carries the one link to the full Label Studio (a new tab; the tile went on 2026-10-20)
-    const hint = !labels.length ? el('p.hint', {}, ['Make your labels in the ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => ctx.builds?.keepCurrent?.(), title: 'Opens the Label Studio in a new tab: icons, stripes, uploads and the print plate. Save its set file and add it here', text: 'Label Studio' }), ', or label hardware with its Part Picker, and add them here from a file. Or add a label by hand below.'])
-      : !faceOk ? null
-      : picked ? `Placing ${quote(picked)}: tap any drawer on the model. The next waiting label follows until you press Done placing.`
-      : sel && R.eligible(s, sel) && ready.length ? (selL ? `${R.drawerName(s, sel.id)} stays selected: a label here replaces ${quote(selL)}. For a row of drawers, use Place several.` : `Click a label to put it on ${R.drawerName(s, sel.id)}. The drawer stays selected afterwards.`)
-      : !ready.length ? 'Tap a drawer on the model to change or remove its label.'
-      : !empties.length ? 'Every drawer has a label. Tap one on the model to replace its label.'
-      : 'Tap a drawer on the model to give it a label, or use Place several to label drawers one after another.';
-    if (hint) panel.appendChild(typeof hint === 'string' ? el('p.hint', { text: hint }) : hint);
-    // the waiting labels
     const scroll = el('div.scroll');
-    scroll.appendChild(el('div.list', {}, waitingAll.map((l) => {
-      const ok = L.assignable(l);
-      const onPick = l.id === st.pick;
-      const b = el('button.chip-l' + (onPick ? '.on' : '') + (st.selLabel === l.id ? '.sel' : '') + (l.hardware ? '.hw' : '') + (st.fresh && st.fresh.has(l.id) ? '.new' : ''), { 'aria-pressed': String(onPick), disabled: !ok, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), 'data-focus': 'chip:' + l.id, onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
-      if (l.hardware && R.hwNotReady(l)) b.appendChild(el('span.tag', { text: 'not ready' }));
-      if (ok) dragFrom(b, l.id);
-      return el('div.item', {}, [b,
-        el('button.mini', { title: 'Edit this label', 'aria-label': 'Edit ' + (R.labelWords(l) || 'this label'), 'data-focus': 'edit:' + l.id, onclick: () => openEdit(l.id, null) }, [icon('pencil-simple', { size: 15 })]),
-        el('button.mini', { title: 'Remove from this build', 'aria-label': 'Remove ' + (R.labelWords(l) || 'this label') + ' from this build', 'data-focus': 'remove:' + l.id, onclick: () => labelCommit(R.remove(L, s, l.id)) }, [icon('x', { size: 15 })])]);
-    })));
-    // on drawers
-    const onUnits = R.drawers(s).filter((u) => carried[u.id] && R.labelById(s, carried[u.id]));
-    if (onUnits.length) scroll.appendChild(el('div.placed', {}, [el('h4', { text: `On drawers (${onUnits.length})` }), el('div.rows', {}, onUnits.map((u) => {
-      const l = R.labelById(s, carried[u.id]); const isSel = !!sel && sel.id === u.id;
-      return el('button.prow' + (isSel ? '.sel' : '') + (st.selLabel === l.id ? '.lsel' : ''), { 'aria-pressed': String(isSel), 'aria-label': `${shown(R.labelWords(l)) || 'Icon-only label'}, on ${R.drawerName(s, u.id)}. Select the drawer`, onclick: () => { st.pick = null; stage.selectUnit(u.id); } },
-        [preview(l, false, u, 56), el('span.words', { text: shown(R.labelShort(l)) || 'Icon only' }), el('span.where', { text: R.drawerName(s, u.id) })]);
-    }))]));
-    /* COMPARTMENT LABELS (M3, js/parts-drawer/labels.js): a parts drawer's compartments that carry a part, as the Studio's
-       print set; a row in this list per compartment, never on a faceplate */
-    if (ctx.partsDrawer) {
-      const crows = ctx.partsDrawer.compartmentLabels(+s.length, s);
-      if (crows.length) {
-        const open = crows.filter((r) => !r.linked);
-        scroll.appendChild(el('div.placed.pd-comp-labels', {}, [
-          el('h4', { text: `Compartment labels (${crows.length})` }),
-          el('div.rows', {}, crows.map((r) => el('div.crow', {}, [el('span.where', { text: `${r.drawer} · ${r.position}` }), el('span.words', { text: r.text }), el('span.state', { text: r.linked ? (r.stale ? 'words changed' : 'In list') : 'not in the list' })]))),
-          open.length ? el('div.fillrow', {}, [el('button.key.tile.wide', { onclick: () => compCommit(open) }, [icon('plus', { size: 16 }), `Add ${open.length === crows.length ? 'all' : open.length} to the list`])]) : el('p.hint', { text: 'Every compartment label is in the list; the Studio prints them with the rest.' }),
-        ]));
+    if (step === 'style') { scroll.appendChild(renderStyleStep(s)); const comp = renderCompartments(s); if (comp) scroll.appendChild(comp); }   // compartment labels need no label faceplate
+    else if (step === 'print') scroll.appendChild(renderPrintStep(s, labels, onN, slots, waitingAll));
+    else {
+      if (!faceOk) scroll.appendChild(el('div.callout.slim', {}, [el('p', { text: `${FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] + ' faceplates take' : 'These faceplates take'} no labels, so these wait in a list you can export.` }), el('button.linkish', { onclick: () => goStep('style'), text: 'Choose a label style' })]));
+      else if (!labels.length && !sel) scroll.appendChild(el('p.lead', { text: 'Tap a drawer, then type what goes in it. The words show on the model as you type, and print as a strip for the drawer front.' }));
+      const map = renderMap(s, carried, sel);
+      if (map && faceOk) scroll.appendChild(map);
+      if (sel && faceOk) scroll.appendChild(renderQuick(sel, s, ready));
+      else if (faceOk && !picked) scroll.appendChild(el('p.hint', { text: !slots ? 'This build has no Decor drawers to label.' : empties.length ? 'Tap a drawer on the model or in the map to label it.' : 'Every drawer has a label. Tap one to change it, or go on to Print.' }));
+      if (!faceOk) {
+        // the list without label faceplates: words go into the list, nowhere else
+        const inp = el('input.words.qwords', { type: 'text', maxlength: '40', placeholder: 'A label for the list', autocomplete: 'off', 'aria-label': 'A label for the list', 'data-focus': 'listadd' });
+        const add = () => { const r = R.add(L, S(), { text: inp.value }); if (!r.ok) { status(r.msg, true); renderAll(); return; } labelCommit(r); };
+        inp.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); add(); } });
+        scroll.appendChild(el('div.drawer.quick', {}, [inp, el('div.acts', {}, [el('button.key.sm.on', { onclick: add }, ['Add', el('span.kbd', { text: 'Enter' })])])]));
       }
+      // THE TRAY: labels not on a drawer yet (a Part Picker batch, a file, a link, a label taken off): their own placing
+      if (waitingAll.length) {
+        const tray = el('div.tray');
+        tray.appendChild(el('div.trayhead', {}, [el('h4', { text: `Not on a drawer yet (${waitingAll.length})` }),
+          faceOk && ready.length && empties.length && !picked ? attachHint(el('button.key.sm', { title: 'Arm the first waiting label, then tap drawers one after another', onclick: () => { const w = ready[0]; if (w) armPlacing(w.id); } }, [icon('hand-pointing', { size: 16 }), 'Place several']), HINTS.several, panel) : null]));
+        tray.appendChild(el('div.list', {}, waitingAll.map((l) => {
+          const ok = L.assignable(l);
+          const onPick = l.id === st.pick;
+          const b = el('button.chip-l' + (onPick ? '.on' : '') + (st.selLabel === l.id ? '.sel' : '') + (l.hardware ? '.hw' : '') + (st.fresh && st.fresh.has(l.id) ? '.new' : ''), { 'aria-pressed': String(onPick), disabled: !ok || !faceOk, title: shown(R.labelWords(l)) + (l.hardware ? ' (laid out from its part record)' : ''), 'data-focus': 'chip:' + l.id, onclick: () => chooseLabel(l.id) }, [preview(l), ident(l, ok)]);
+          if (l.hardware && R.hwNotReady(l)) b.appendChild(el('span.tag', { text: 'not ready' }));
+          if (ok && faceOk) dragFrom(b, l.id);
+          return el('div.item', {}, [b,
+            el('button.mini', { title: 'Edit this label', 'aria-label': 'Edit ' + (R.labelWords(l) || 'this label'), 'data-focus': 'edit:' + l.id, onclick: () => openEdit(l.id, null) }, [icon('pencil-simple', { size: 15 })]),
+            el('button.mini', { title: 'Remove from this build', 'aria-label': 'Remove ' + (R.labelWords(l) || 'this label') + ' from this build', 'data-focus': 'remove:' + l.id, onclick: () => labelCommit(R.remove(L, s, l.id)) }, [icon('x', { size: 15 })])]);
+        })));
+        if (faceOk) {
+          const pairs = R.fillPairs(L, s);
+          tray.appendChild(el('div.fillrow', {}, [
+            attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
+            pairs.length ? null : el('span.why', { text: !ready.length ? 'No labels ready to place' : 'No empty drawers' }),
+          ]));
+        }
+        scroll.appendChild(tray);
+      }
+      const comp = renderCompartments(s); if (comp) scroll.appendChild(comp);
     }
     panel.appendChild(scroll);
-    // the foot: ways in, fill, exports, settings, status
-    const pairs = R.fillPairs(L, s);
+    // the foot: the other ways labels come in (the Drawers step), and a warning that needs reading
     const foot = el('div.foot');
-    /* the ways in, as equal tiles (Joey 2026-10-13: a pile of mismatched buttons read as messy); Fill is an action on the
-       build and gets a row of its own; the exports are the two icon buttons in the head; the settings stay last, collapsed.
-       Three since 2026-10-20 (Joey: "I'd prefer we only have it open as a modal for now which would remove a button from
-       the left menu"): the new-tab Label Studio tile is gone, the Part Picker modal is the one Studio tile and takes the
-       second row whole; the full Studio stays one click away as the link in the intro sentence above. */
-    foot.appendChild(el('div.ways', { role: 'group', 'aria-label': 'Add labels' }, [
-      attachHint(el('button.key.tile', { title: 'Type a label by hand', onclick: () => openAdd() }, [icon('plus', { size: 16 }), 'Type a label']), HINTS.type, panel),
+    if (step === 'drawers') foot.appendChild(el('div.ways', { role: 'group', 'aria-label': 'Add labels' }, [
+      attachHint(el('button.key.tile', { title: 'Opens the Part Picker here: choose screws, nuts and washers; their labels wait in the tray', onclick: () => openPicker() }, [PICKER_ICON(), 'Hardware…']), HINTS.picker, panel),
       attachHint(el('button.key.tile', { title: 'A MODULITH label list, a Part Picker label-items file, or a Label Studio set file', onclick: () => fileIn.click() }, [icon('upload-simple', { size: 16 }), 'From a file…']), HINTS.file, panel),
-      // the Part Picker opens in the page (step A): no new-tab glyph
-      attachHint(el('button.key.tile.brand.span2', { title: 'Opens the Part Picker here: choose screws, nuts and washers, then Add part labels puts them in this build’s list', onclick: () => openPicker() }, [PICKER_ICON(), 'Part Picker']), HINTS.picker, panel),
     ]));
-    if (labels.length) foot.appendChild(el('div.fillrow', {}, [
-      attachHint(el('button.key.tile.wide', { disabled: !pairs.length, onclick: openFill }, [icon('hand-pointing', { size: 16 }), 'Fill empty drawers…']), HINTS.fill, panel),
-      pairs.length ? null : el('span.why', { text: !faceOk ? 'Needs an EdgeLabel or Classic Pro faceplate' : !ready.length ? 'No labels ready to place' : 'No empty drawers' }),
-    ]));
-    foot.appendChild(renderPalette());
-    foot.appendChild(renderSettings());
+    // the full Label Studio, a new tab (its Add to planner build comes back to this build: keepCurrent, app.js)
+    if (step === 'drawers') foot.appendChild(el('a.studiolink', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => ctx.builds?.keepCurrent?.(), title: 'Opens the Label Studio in a new tab: icons of your own, uploads, more layouts. Its Add to planner build brings the labels back here' }, ['Open the full Label Studio', icon('arrow-square-out', { size: 13 })]));
     if (st.status) foot.appendChild(el('p.status' + (st.warn ? '.warn' : ''), { role: 'status', text: st.status }));
-    panel.appendChild(foot);
+    if (foot.childNodes.length) panel.appendChild(foot);
   }
-  function renderDrawer(u, l, readyN) {
-    const s = S();
-    const no = R.drawerNumber(s, u.id);
-    const box = el('div.drawer', { 'aria-label': 'Selected drawer' });
-    box.appendChild(el('div.dhead', {}, [el('span.tag', { text: no ? R.drawerName(s, u.id) : 'Selected' }), el('span.size', { text: [`${u.w}W·${u.hh / 2}H`, FILL_LABEL(u.fill), u.fill === 'decor' && FACE_LABEL[s.faceStyle] ? FACE_LABEL[s.faceStyle] : ''].filter(Boolean).join(' · ') }),
-      el('button.x', { title: 'Deselect', 'aria-label': 'Deselect the drawer', onclick: () => stage.setSelected(null) }, [icon('x', { size: 16 })])]));
-    // a Decor drawer on a faceplate without labels: the callout above the card explains it and offers the switch
-    if (!R.eligible(s, u) && !l) { box.appendChild(el('p.none', { text: u.fill !== 'decor' ? `Labels go on Decor drawers, not on a ${FILL_LABEL(u.fill).toLowerCase()}.` : 'This faceplate style takes no label.' })); return box; }
-    if (!l) { box.appendChild(el('p.none', { text: 'No label yet' + (readyN ? ' · click a label below to put it on this drawer.' : '.') })); return box; }
-    box.appendChild(el('div.dlabel', {}, [preview(l, true, u), el('span.ident', {}, [el('span.words', { text: shown(R.labelShort(l)) || (L.iconOnly(l) ? 'Icon only' : '') }), el('span.detail', { text: detail(l) }), R.isPartLabel(l) ? el('span.src', { text: 'From the part record' }) : null])]));
-    const acts = el('div.acts');
-    if (R.isPartLabel(l)) {
-      acts.appendChild(el('button.key.sm', { title: 'Change the size, length or material in the Part Picker: the same part comes back updated in place', onclick: () => openPicker({ open: l.hardware }) }, ['Edit part details']));
-      acts.appendChild(el('button.key.sm', { title: 'Replace the part layout with your own words on this drawer', onclick: () => openModal({ title: `Use your own words on drawer ${no}?`, body: ['This label is laid out from its part record. Words you type replace that layout on this drawer only; the part label goes back to your labels, ready to place again.'], ok: 'Use custom wording', field: { placeholder: 'What’s in this drawer?', value: R.labelShort(l) }, onOk: () => { const t = modalField(); closeModal(); labelCommit(R.customWording(L, S(), u.id, t)); }, onCancel: () => closeModal() }) }, ['Use custom wording']));
-    } else acts.appendChild(el('button.key.sm', { onclick: () => openEdit(l.id, u.id) }, [icon('pencil-simple', { size: 15 }), 'Edit']));
-    acts.appendChild(el('button.key.sm', { title: 'Take the label off this drawer; it waits to be placed again', onclick: () => labelCommit(R.unassign(L, S(), u.id, l.id)) }, ['Remove']));
-    box.appendChild(acts);
+  /* THE PRINT STEP: what this build prints, the filaments it takes, the fine-tuning, then the plate (the Label Studio lays
+     the labels out for the printer and downloads the .3mf there until it can be driven from here - the review's slice 2) */
+  function renderPrintStep(s, labels, onN, slots, waitingAll) {
+    const box = el('div.printstep');
+    const on = R.faceCarriesLabels(s);
+    box.appendChild(el('p.lead', {}, [el('strong', { text: n(labels.length, 'label') }), on && slots ? ` on ${onN} of ${slots} drawers` : ' in your list', waitingAll.length && on ? ` · ${waitingAll.length} not on a drawer yet` : '', '.']));
+    const firstOn = (id) => R.drawers(s).find((u) => assignOf()[u.id] === id) || null;
+    const shownN = 12;
+    box.appendChild(el('div.thumbs', { 'aria-label': 'Your labels' }, [...labels.slice(0, shownN).map((l) => el('span.thumb' + (st.selLabel === l.id ? '.sel' : ''), { title: shown(R.labelWords(l)) || 'Icon only' }, [preview(l, false, firstOn(l.id), 84)])),
+      labels.length > shownN ? el('span.more', { text: `+${labels.length - shownN} more` }) : null]));
+    box.appendChild(renderFilaments());
+    box.appendChild(renderSettings());
+    box.appendChild(el('button.key.on.wide.big.platego', { title: 'Shows the Label plate: this build’s labels as the Label Studio lays them out, with the print file to download', onclick: () => setView('plate') }, [icon('download-simple', { size: 18 }), 'Open the print plate']));
+    box.appendChild(el('p.dim', { text: 'The plate lays your labels out for your printer and downloads the print file (.3mf).' }));
+    box.appendChild(el('p.dim.studio', {}, ['For icons of your own, uploads and more layouts: ', el('a', { href: studioHref(false), target: '_blank', rel: 'noopener', onclick: () => ctx.builds?.keepCurrent?.(), text: 'the Label Studio' }), ' (a new tab).']));
     return box;
   }
   /* the set-wide label settings (the generator's six inputs), collapsible; a value out of range snaps back */
@@ -753,7 +941,10 @@ export function mountLabels(stage, ctx) {
     const det = el('details.settings', { open: st.settings ? '' : null });
     // opened by the visitor (not re-rendered open): bring the settings into view, down to Printing part labels
     det.addEventListener('toggle', () => { const was = st.settings; st.settings = det.open; if (det.open && !was) { try { det.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } });
-    det.appendChild(el('summary', {}, [icon('sliders-horizontal', { size: 16 }), 'Label settings', el('span.dim', { text: `${eff.capMm} mm · ${eff.allCaps ? 'caps' : 'as typed'}${st.print.band === 'off' ? ' · no stripe' : ''}` })]));
+    det.appendChild(el('summary', {}, [icon('sliders-horizontal', { size: 16 }), 'Fine-tune text and icons', el('span.dim', { text: `${eff.capMm} mm · ${eff.allCaps ? 'caps' : 'as typed'}${st.print.band === 'off' ? ' · no stripe' : ''}` })]));
+    // the label these settings change, drawn as it prints (the selected one, else the first): the review's finding 6, a
+    // millimetre field with nothing beside it to show what it does
+    { const l = R.labelById(s, st.selLabel) || R.labelsOf(s)[0]; if (l) { const u = R.drawers(s).find((x) => assignOf()[x.id] === l.id) || null; det.appendChild(el('div.setprev', {}, [preview(l, true, u)])); } }
     for (const row of LABEL_STYLE_ROWS) {
       const [lo, hi] = lim[row.key] || [0, 99];
       const inp = el('input', { type: 'number', min: String(lo), max: String(hi), step: String(row.step), value: String(eff[row.key]), 'aria-label': row.label });
@@ -829,51 +1020,82 @@ export function mountLabels(stage, ctx) {
   }
   const defaultsDiffer = (d) => !!d && (!samePalette(paletteOfDefaults(d, setOf(S().labelPalette)), S().labelPalette) ||
     ['body', 'text'].some((k) => { const o = regionSpool(REGION[k]); return d[k] && (!o || o.name !== d[k].name || o.hex.toLowerCase() !== d[k].hex.toLowerCase()); }));   // a spool is its name AND its colour (Sol 01a182a1)
-  function renderPalette() {
+  /* the stripe meanings this build's labels actually print: a typed label's stripe, or a part label's own band while the
+     part-label stripe is on */
+  function usedMeanings() {
+    const out = new Set();
+    for (const l of R.labelsOf(S())) {
+      const lk = labelLookOfLabel(l);
+      const band = !lk ? null : lk.kind === 'stripe' ? lk.colours && lk.colours.band : lk.kind === 'part' && st.print.band !== 'off' ? lk.item && lk.item.colours && lk.item.colours.band : null;
+      if (band && LABEL_MEANINGS.includes(band.colour)) out.add(band.colour);
+    }
+    return out;
+  }
+  /* LABEL FILAMENTS (the Print step; was the "Label colours" expander - the review's finding 5: its six rows were the stripe
+     colour code, unnamed). A label drawn in this build's spools, then a row per spool it prints: the body, the words and each
+     stripe colour a label here carries, named for what it marks; the other stripe colours under a disclosure. Every row
+     opens its spool picker (no separate edit mode); defaults for new builds at the foot. */
+  function renderFilaments() {
     const pal = S().labelPalette, rows = spoolsOf(pal);
     const body = stage.activeHex('Label'), text = stage.activeHex('Label:TEXT');
     const warns = paletteWarnings(pal, body, text);
-    const det = el('details.palette', { open: st.palette ? '' : null });
-    det.addEventListener('toggle', () => { const was = st.palette; st.palette = det.open; if (det.open && !was) { try { det.scrollIntoView({ block: 'nearest' }); } catch { /* jsdom */ } } });
-    det.appendChild(el('summary', {}, [icon('palette', { size: 16 }), 'Label colours', el('span.chips', { 'aria-hidden': 'true' }, rows.map((r) => el('span.sw', { style: `--sw:${r.hex}` }))), warns.length ? el('span.warndot', { title: n(warns.length, 'note') }) : null]));
-    det.appendChild(el('p.dim.intro', { text: 'Use the colours you have. These are suggested filament matches. Similar colours from other brands work too—keep your colour coding consistent and easy to tell apart.' }));
+    const used = usedMeanings();
+    const box = el('div.palette.filaments', { 'aria-label': 'Label filaments' });
+    box.appendChild(el('h4', { text: 'Label filaments' }));
+    // the diagram: this build's body, words and (when one is used) first stripe colour, on the family's outline
+    const stripeRow = rows.find((r) => used.has(r.key));
+    const cp = S().faceStyle === 'classicpro';
+    const shape = cp ? `<rect x="0" y="6" width="132" height="40" rx="3" fill="${body}"/>` : `<polygon points="0,4 122,4 102,48 0,48" fill="${body}"/>`;
+    const stripe = stripeRow ? (cp ? `<rect x="0" y="40" width="132" height="6" fill="${stripeRow.hex}"/>` : `<rect x="0" y="4" width="9" height="44" fill="${stripeRow.hex}"/>`) : '';
+    const word = (shown(R.labelShort(R.labelsOf(S())[0] || {})) || 'M3 SCREWS').slice(0, 12);
+    box.appendChild(el('div.diagram', { 'aria-hidden': 'true', html: `<svg viewBox="0 0 132 52" width="132" height="52">${shape}${stripe}<text x="${stripeRow && !cp ? 16 : 8}" y="${cp ? 31 : 32}" font-family="Archivo, system-ui, sans-serif" font-weight="800" font-size="12" fill="${text}">${word.replace(/[<&"]/g, '')}</text></svg>` }));
     const d = readLabelDefaults(storage());
-    if (defaultsDiffer(d)) det.appendChild(el('div.offer', { role: 'status' }, [el('span', { text: 'Your default label filaments differ from this build’s.' }), el('button.key.sm', { text: 'Use them here', onclick: () => useDefaultsHere(d) })]));
+    if (defaultsDiffer(d)) box.appendChild(el('div.offer', { role: 'status' }, [el('span', { text: 'Your default label filaments differ from this build’s.' }), el('button.key.sm', { text: 'Use them here', onclick: () => useDefaultsHere(d) })]));
     const owned = readOwned(storage() || { getItem: () => null }, CATALOG_LABELS);
     const notesFor = (key) => warns.filter((w) => (key === 'text' ? w.kind === 'text' : w.kind !== 'text' && w.keys[0] === key)).map(warningText);
+    const STRIPE_WORD = { 'sky-blue': 'Metric parts stripe', red: 'Inch parts stripe' };
+    const word2 = (key) => REGION_WORD[key] || STRIPE_WORD[key] || `${meaningWord(key)} stripe`;
     const row = (key, sp, suggested) => {
-      const open = st.palEdit && st.palPick === key, word = meaningWord(key);
-      // the spool's whole name, wrapping when it must, and "suggested" as a small tag under it (Joey 2026-10-28: no cut names)
-      const label = [el('span.sw', { style: `--sw:${sp.hex}` }), el('span.mean', { text: word }), el('span.spoolcol', {}, [el('span.spool', { text: sp.name }), suggested ? el('span.dim.sugg', { text: 'suggested' }) : null])];
-      const head = st.palEdit
-        ? el('button.prow.pick' + (open ? '.on' : ''), { 'data-key': key, 'aria-expanded': String(open), 'aria-label': `${word}: ${sp.name}. Change the spool`, onclick: () => { st.palPick = open ? null : key; st.palQ = ''; renderAll(); } }, label)
-        : el('div.prow', { 'data-key': key }, label);
+      const open = st.palPick === key, w = word2(key);
+      const label = [el('span.sw', { style: `--sw:${sp.hex}` }), el('span.mean', { text: w }), el('span.spoolcol', {}, [el('span.spool', { text: sp.name }), suggested ? el('span.dim.sugg', { text: 'suggested' }) : null])];
+      const head = el('button.prow.pick' + (open ? '.on' : ''), { 'data-key': key, 'aria-expanded': String(open), 'aria-label': `${w}: ${sp.name}. Change the spool`, onclick: () => { st.palPick = open ? null : key; st.palQ = ''; renderAll(); } }, label);
       const out = [head, ...notesFor(key).map((t) => el('p.pnote', { 'data-key': key, text: t }))];
       if (open) out.push(pickerFor(key, sp));
       return out;
     };
-    const list = el('div.prows', { 'aria-label': 'Label colours' });
-    for (const r of rows) list.append(...row(r.key, r, r.suggested));
+    const list = el('div.prows', { 'aria-label': 'Label filaments' });
     for (const k of ['body', 'text']) {
       const own = regionSpool(REGION[k]);
       list.append(...row(k, own || { name: SUGGESTED_BODY_TEXT[k].name, hex: stage.activeHex(REGION[k]) }, !own));
     }
-    det.appendChild(list);
+    for (const r of rows) if (used.has(r.key)) list.append(...row(r.key, r, r.suggested));
+    box.appendChild(list);
+    if (used.size) box.appendChild(el('p.dim', { text: 'Stripes mark hardware: blue for metric, red for inch. Each stripe colour prints from its own filament.' }));
+    // the other stripe colours, for labels you may stripe later (and the Colors room's link to any of them)
+    const rest = rows.filter((r) => !used.has(r.key));
+    if (rest.length) {
+      const more = el('details.allstripes', { open: st.allStripes || rest.some((r) => r.key === st.palPick) ? '' : null });
+      more.addEventListener('toggle', () => { st.allStripes = more.open; });
+      more.appendChild(el('summary', {}, [used.size ? 'The other stripe colours' : 'Stripe colours', el('span.chips', { 'aria-hidden': 'true' }, rest.map((r) => el('span.sw', { style: `--sw:${r.hex}` })))]));
+      const l2 = el('div.prows');
+      for (const r of rest) l2.append(...row(r.key, r, r.suggested));
+      more.appendChild(l2);
+      box.appendChild(more);
+    }
     const acts = el('div.pacts');
-    acts.appendChild(el('button.key.sm.mine' + (st.palEdit ? '.on' : ''), { 'aria-pressed': String(!!st.palEdit), onclick: () => { st.palEdit = !st.palEdit; st.palPick = null; renderAll(); } }, [icon(st.palEdit ? 'check' : 'pencil-simple', { size: 14 }), st.palEdit ? 'Done' : 'Use my filaments']));
     // back to the suggestions of the build's OWN set: a build born on v2 keeps v2, an older one v1 (never moved to newer ones)
     if (!samePalette(pal, suggestedPalette(setOf(pal)))) acts.appendChild(el('button.key.sm.suggested', { title: 'The suggested spools for the six stripe colours (the body and the text stay as they are)', onclick: () => paletteCommit(suggestedPalette(setOf(pal)), 'The stripes use the suggested filaments.') }, ['Use the suggested filaments']));
-    det.appendChild(acts);
-    det.appendChild(el('button.key.sm.wide.mydefaults', { title: 'Kept in this browser. New builds start with these; a build you already have keeps its own.', onclick: () => {
+    acts.appendChild(el('button.key.sm.mydefaults', { title: 'Kept in this browser. New builds start with these; a build you already have keeps its own.', onclick: () => {
       const def = { v: 1, spools: Object.fromEntries(rows.map((r) => [r.key, { name: r.name, hex: r.hex }])) };
       for (const k of ['body', 'text']) { const o = regionSpool(REGION[k]); if (o) def[k] = o; }
       const st0 = storage();
       status(st0 && writeLabelDefaults(st0, def) ? 'New builds will start with these label filaments.' : 'This browser cannot keep defaults (private mode?).', !st0); renderAll();
-    } }, ['Use these as my defaults for new builds']));
-    return det;
+    } }, ['Save as my default for new builds']));
+    box.appendChild(acts);
+    return box;
     function pickerFor(key, cur) {
-      const box = el('div.ppick');
-      const q = el('input.search', { type: 'search', value: st.palQ || '', placeholder: 'Search filaments', 'aria-label': `Search filaments for ${meaningWord(key)}`, autocomplete: 'off' });
+      const pk = el('div.ppick');
+      const q = el('input.search', { type: 'search', value: st.palQ || '', placeholder: 'Search filaments', 'aria-label': `Search filaments for ${word2(key)}`, autocomplete: 'off' });
       const items = el('div.pitems');
       const fill = () => {
         const t = (st.palQ || '').trim().toLowerCase();
@@ -883,8 +1105,8 @@ export function mountLabels(stage, ctx) {
       };
       q.addEventListener('input', () => { st.palQ = q.value; fill(); });
       fill();
-      box.append(q, items);
-      return box;
+      pk.append(q, items);
+      return pk;
     }
   }
 
@@ -1047,15 +1269,55 @@ export function mountLabels(stage, ctx) {
       el('span.status' + (labels.length ? '' : '.issue'), {}, [el('span.dot'), labels.length ? `${n(labels.length, 'label')} · ${onN} on drawers` : 'No labels yet']),
       el('div.group', {}, [el('span.big', { text: String(s.placed.length) }), el('span.unit-lbl', { text: 'units' })]),
       el('div.group', {}, [el('span.big', { text: dims }), el('span.unit-lbl', { text: 'mm' })]),
-      labels.length ? el('button.cta', { title: 'Shows the Label plate: this build’s labels as the Label Studio lays them out, with the print file to download', onclick: () => setView('plate') }, ['Print labels', icon('arrow-right', { size: 20 })])
-        : el('button.cta', { title: 'Opens the Label Studio in a new tab', onclick: () => openStudio(false) }, ['Make labels', icon('arrow-right', { size: 20 })]),
+      dockCta(labels),
     );
   }
+  /* the dock's one big button follows the steps (the review's finding 1: it used to open another website at the very first
+     step): nothing to do yet, the next step, the plate, or back from it */
+  function dockCta(labels) {
+    if (!L) return el('button.cta', { disabled: true }, ['Labels']);
+    const step = stepNow();
+    if (st.view === 'plate') return el('button.cta', { title: 'Back to the labels on the model', onclick: () => setView('build') }, ['Back to labels']);
+    if (step === 'style') return el('button.cta.wait', { disabled: true, title: 'Labels need EdgeLabel or Classic Pro faceplates: pick one in the panel' }, ['Pick a label style']);
+    if (step === 'drawers') return labels.length ? el('button.cta', { title: 'The filaments, the fine-tuning and the print file', onclick: () => goStep('print') }, ['Next: Print', icon('arrow-right', { size: 20 })])
+      : el('button.cta.wait', { disabled: true, title: 'Type what goes in a drawer in the panel' }, ['Label a drawer first']);
+    return el('button.cta', { title: 'Shows the Label plate: this build’s labels as the Label Studio lays them out, with the print file to download', onclick: () => setView('plate') }, ['Print labels', icon('arrow-right', { size: 20 })]);
+  }
+
+  /* "+ label" ON THE MODEL (the review's finding 2): a pill over each empty labelable drawer while the Drawers step is up,
+     where the stage says that drawer's front is on the page (stage.unitScreen); the selected one asks what is in it. The
+     pills take no pointer: a tap goes through to the drawer under it, which selects it as any tap on the model does. */
+  const ghosts = el('div', { id: 'ws-ghosts', 'aria-hidden': 'true' });
+  root.insertBefore(ghosts, root.firstChild);
+  const ghostEls = new Map();
+  function placeGhosts() {
+    const s = S();
+    const show = !!L && !root.hidden && !document.hidden && st.view !== 'plate' && !st.edit && stepNow() === 'drawers' && R.faceCarriesLabels(s) && typeof stage.unitScreen === 'function';
+    const want = show ? R.emptyDrawers(s) : [];
+    const keep = new Set();
+    for (const u of want) {
+      const typing = st.draft && st.draft.unitId === u.id && st.draft.text.trim();
+      if (typing) continue;
+      let p = null; try { p = stage.unitScreen(u.id); } catch { p = null; }
+      if (!p) continue;
+      keep.add(u.id);
+      let g = ghostEls.get(u.id);
+      if (!g) { g = el('span.ghost'); ghosts.appendChild(g); ghostEls.set(u.id, g); }
+      const sel = st.selId === u.id;
+      g.classList.toggle('sel', sel);
+      const t = sel ? (phone ? '?' : 'What’s in here?') : (phone ? '+' : '+ label');   // a phone's model is small: a mark, not words
+      if (g.textContent !== t) g.textContent = t;
+      g.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -50%)`;
+    }
+    for (const [id, g] of ghostEls) if (!keep.has(id)) { g.remove(); ghostEls.delete(id); }
+  }
+  const ghostTimer = setInterval(placeGhosts, 150);
+  signal.addEventListener('abort', () => clearInterval(ghostTimer));
 
   /* ---------------- layout ---------------- */
   const narrow = () => innerWidth < 1280;
   const phone = isPhone() ? phoneChrome(root, { ...ctx, active: 'labels', soon }, { panels: [
-    { el: panel, title: () => { if (!L) return 'Labels'; const r = R.waiting(L, S()).length; return st.pick ? `Placing ${quote(R.labelById(S(), st.pick))} · tap a drawer` : r ? `Labels · ${r} ready to place` : 'Labels'; }, open: !!st.palEdit },   // open when a stripe's spool tapped in Colors brought the visitor here (its rows are in this sheet)
+    { el: panel, title: () => { if (!L) return 'Labels'; const r = R.waiting(L, S()).length; const step = { style: 'Style', drawers: 'Drawers', print: 'Print' }[stepNow()]; return st.pick ? `Placing ${quote(R.labelById(S(), st.pick))} · tap a drawer` : `Labels · ${step}` + (r && step === 'Drawers' ? ` · ${r} not on a drawer` : ''); }, open: st.step === 'print' && !!st.palPick },   // open when a stripe's spool tapped in Colors brought the visitor here (its rows are in this sheet)
     // its own title row is hidden on the phone (app.css): the handle names the label and carries the × (the phone tour,
     // 2026-10-27: the two rows took 100 of the 190 px a phone on its side has)
     { el: editor, title: () => { const l = st.edit && R.labelById(S(), st.edit.id); return l ? `${R.isPartLabel(l) ? 'Part label' : 'Edit'} · ${quote(l)}` : 'Edit label'; }, close: () => closeEdit() },
@@ -1098,7 +1360,7 @@ export function mountLabels(stage, ctx) {
   addEventListener('hashchange', () => { if (L) importFromHash(); }, { signal });
   document.addEventListener('keydown', (e) => {
     const tag = (e.target.tagName || '').toLowerCase();
-    if (e.key === 'Escape') { if (pp.isOpen()) { closePicker(); return; } if (modalState) { modalState.onCancel(); return; } if (st.edit) { closeEdit(); return; } if (st.pick) { armPlacing(null); return; } if (tag === 'input') { e.target.blur(); return; } stage.setSelected(null); return; }
+    if (e.key === 'Escape') { if (pp.isOpen()) { closePicker(); return; } if (modalState) { modalState.onCancel(); return; } if (st.edit) { closeEdit(); return; } if (st.pick) { armPlacing(null); return; } if (tag === 'input') { if (st.draft && e.target.matches('.qwords')) { dropDraft(); renderAll(); } e.target.blur(); return; } stage.setSelected(null); return; }
     if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (e.key === '\\') { root.hidden = !root.hidden; return; }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) store.redo(); else store.undo(); return; }
@@ -1125,6 +1387,7 @@ export function mountLabels(stage, ctx) {
     importFromHash();
     // Parts' "Download labels" asks for the Label plate, where the print file downloads; a build with no labels stays On build
     if (ctx.memo && ctx.memo.labelsView === 'plate') { ctx.memo.labelsView = null; if (R.labelsOf(S()).length) setView('plate'); }
+    if (R.faceCarriesLabels(S()) && st.step === 'drawers' && st.view !== 'plate') autoSelect();   // (no label faceplate: stepNow() shows Style, unless a link's labels opened the list)
     renderAll();
     if (R.labelsOf(S()).length) loadLabelFont().then(() => renderAll()).catch(() => {});   // the icon art for the previews
   }).catch((e) => { status(`The label tools did not load (${e.message}). Reload the page to try again.`, true); renderAll(); });
@@ -1135,13 +1398,20 @@ export function mountLabels(stage, ctx) {
       st.sel = sel;
       const owner = sel ? (sel.owner ?? stage.partInfo?.(sel.id)?.owner ?? null) : null;
       if (sel && st.pick && L) { if (owner != null) tapDrawer(owner); stage.setSelected(null); return; }
+      const changed = owner !== st.selId;
+      if (changed) { if (st.draft && st.draft.unitId !== owner) dropDraft(); st.scope = 'all'; }
       st.selId = owner;
       if (owner != null && assignOf()[owner] && R.labelById(S(), assignOf()[owner])) setSelLabel(assignOf()[owner]);   // a labelled drawer selects its label
       if (owner != null && st.edit && st.edit.unitId != null && st.edit.unitId !== owner) st.edit = null;
+      // a drawer selected on the model or in the map, from the Drawers step: the keyboard goes to its editor, so a tap and
+      // the words are the whole of it (not on the phone: the keyboard would cover the model)
+      if (changed && owner != null && L && R.faceCarriesLabels(S()) && st.view !== 'plate' && !st.edit) st.step = 'drawers';
       renderAll();
+      if (!phone && owner != null && stepNow() === 'drawers' && !st.edit) { const q = panel.querySelector('input.qwords'); if (q && document.activeElement !== q) { try { q.focus({ preventScroll: true }); const v = q.value.length; q.setSelectionRange(v, v); } catch { /* jsdom */ } } }
       if (phone && owner != null && !st.pick) phone.open(panel);
     },
     unmount() {
+      if (st.draft) { st.draft = null; try { stage.setLabels(store.serialize()); } catch { /* the stage is going too */ } }   // half-typed words never follow into another workspace
       ac.abort(); unsub();
       if (ctx.memo) ctx.memo.labelsSel = st.selId;
       stage.setSelected(null); stage.setSafeArea(null); stage.watchHover(false);

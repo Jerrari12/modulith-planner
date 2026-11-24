@@ -192,6 +192,37 @@ const units = (page) => page.evaluate(() => window.__GEN2_STORE__.state.placed.l
 const stageUnits = (page) => page.evaluate(() => window.__GEN2_VIEWER__.build.placed.length);
 const text = (page, sel) => page.locator(sel).first().textContent();
 const btn = (page, t, root = 'body') => page.locator(`${root} button:has-text("${t}")`).first();
+/* THE LABELS REDESIGN (2026-11-23): words typed on a drawer through its one-drawer editor (the drawer selected on the stage,
+   the editor's field, Enter: one step that adds the label and places it), and labels that wait for a drawer, brought in
+   through From a file… (the panel's real file input) */
+const typeOnDrawer = async (page, unitId, words) => {
+  await page.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), unitId);
+  const q = page.locator('#ws-labels input.qwords');
+  await q.waitFor({ timeout: 15_000 });
+  await page.waitForFunction((id) => document.querySelector('#ws-labels .dcell.sel')?.getAttribute('data-unit') === String(id), unitId, { timeout: 15_000 });
+  await q.fill(words);
+  await q.press('Enter');
+  await page.waitForFunction(([id, w]) => { const s = window.__GEN2_STORE__.state; const lid = (s.labelAssign || {})[id]; const l = lid && s.labelList.labels.find((x) => x.id === lid); return !!(l && l.text === w); }, [unitId, words], { timeout: 15_000 })
+    .catch(async () => assert.fail(`"${words}" did not land on drawer ${unitId} (${JSON.stringify(await page.evaluate(() => window.__GEN2_STORE__.state.labelAssign))})`));
+};
+const addWaiting = async (page, words) => {
+  const before = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length);
+  const doc = { format: 'modulith-labels', version: 1, batchId: 'e2ewait' + Math.random().toString(36).slice(2, 7).padEnd(5, 'x'), labels: words.map((text) => ({ text })) };
+  await page.setInputFiles('#ws-labelsfile', { name: 'labels.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
+  await page.waitForFunction((n) => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length >= n, before + words.length, { timeout: 15_000 })
+    .catch(async () => assert.fail(`the file did not add ${words.length} labels (${await page.evaluate(() => document.querySelector('#ws-labels .status')?.textContent)})`));
+};
+const toStep = async (page, step) => {
+  await page.locator(`#ws-labels .spine button[data-step="${step}"]`).click();
+  await page.waitForFunction((k) => document.getElementById('ws-labels').dataset.step === k, step, { timeout: 15_000 });
+};
+const openPlateView = async (page) => { await toStep(page, 'print'); await page.locator('#ws-labels button.platego').click(); };
+/* a build whose faceplates take no labels opens on the Style step; its list-only way leads to the Drawers step (Hardware…,
+   From a file…, the full Label Studio), changing nothing in the record */
+const listOnly = async (page) => {
+  const link = page.locator('#ws-labels .linkish', { hasText: 'without changing faceplates' });
+  if (await link.count()) { await link.click(); await page.waitForFunction(() => document.getElementById('ws-labels').dataset.step === 'drawers', null, { timeout: 15_000 }); }
+};
 /* the "no errors" assertion ignores what headless SwiftShader itself prints (WebGL context notes) */
 const clean = (errors) => errors.filter((e) => !/WebGL|GPU|swiftshader|GroupMarkerNotSet|setPointerCapture/i.test(e));
 const settle = (page, ms = 1200) => page.waitForTimeout(ms);
@@ -1793,7 +1824,7 @@ test('Labels: a part label\'s stripe - its own colours, None or one of the six -
       { text: 'M5 × 20', id: 'e2epartstripe03', hardware: ref }] },              // waiting: edited in the panel
     labelAssign: { 1: 'e2epartstripe01', 2: 'e2epartstripe02' } };
   const { ctx, page, errors } = await open('labels', { query: `&done=off#build=${Buffer.from(JSON.stringify(rec), 'utf8').toString('base64')}` });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   // the model: pieces on drawer 1's label (its own colours), none on drawer 2's (null)
   const pieces = (owner) => page.evaluate((o) => { const v = window.__GEN2_VIEWER__;
     const lab = [...v.instances.values()].find((i) => i.cfg.node === 'Label_EdgeLabel' && v.instances.get(i.cfg.rides)?.cfg.owner === o);
@@ -1848,19 +1879,20 @@ const waitBandHex = (page, owner, hex, why) => page.waitForFunction(([o, h]) => 
 
 test('Labels: the label palette - a stripe prints in its meaning\'s spool, a swap repaints it, rides in the record, undoes and survives a reload', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&done=off' + hashOfRec(paletteRec('e2elabpal1')) });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await waitBands(page);
   // ready-made: the record has no palette, the Metric stripe draws in the suggested spool (Polar Light Blue), by meaning
   assert.equal((await S(page)).labelPalette, null);
   assert.deepEqual(await bandOf(page, 1), { zone: 'STRIPE@sky-blue', hex: '14addb' }, 'Metric in the v1 spool, not the scheme hex 56b4e9');
   assert.equal((await S(page)).labelList.labels[0].colours.band.hex, '#56B4E9', 'the label still stores the Studio\'s scheme colour');
   // the section: six meanings, body and text; the White stripe on the white body is noted, nothing is blocked
-  await page.locator('#ws-labels details.palette summary').click();
-  assert.equal(await page.locator('#ws-labels .palette .prow').count(), 8);
+  await toStep(page, 'print');   // Label filaments, the Print step's (the redesign's replacement for the Label colours expander)
+  assert.equal(await page.locator('#ws-labels .palette .prow').count(), 8, 'body, text and the six stripe colours (the four unused under a disclosure)');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ws-labels .palette > .prows .prow')].map((r) => r.dataset.key)), ['body', 'text', 'sky-blue', 'white'], 'in view: the body, the words and the two stripe colours these labels carry');
+  assert.match(await page.locator('#ws-labels .palette .prow[data-key="sky-blue"] .mean').textContent(), /Metric parts stripe/, 'a stripe row says what it marks');
   assert.match(await page.locator('#ws-labels .palette .pnote[data-key="white"]').first().textContent(), /White is hard to see on the label body/);
   assert.equal(await page.locator('#ws-labels .palette .pnote').count(), 1, 'the suggested set warns about White only');
   // swap Metric for Panchroma Aqua Blue
-  await page.locator('#ws-labels .palette button.mine').click();
   await page.locator('#ws-labels .palette button.prow[data-key="sky-blue"]').click();
   await page.locator('#ws-labels .palette .ppick input.search').fill('Aqua Blue');
   await page.locator('#ws-labels .palette .pitem[title="Panchroma Aqua Blue"]').click();
@@ -1895,14 +1927,14 @@ test('Labels: a shared link shows the sender\'s label palette; the recipient\'s 
   await ctx.addInitScript((d) => { try { if (!sessionStorage.getItem('e2e-defaults-set')) { localStorage.setItem('gen2-label-palette', JSON.stringify(d)); sessionStorage.setItem('e2e-defaults-set', '1'); } } catch {} }, DEFAULTS);
   const sender = { v: 1, spools: { 'sky-blue': { name: 'Panchroma Aqua Blue', hex: '#5cc6e0' } } };
   const { page, errors } = await open('labels', { context: ctx, query: '&done=off' + hashOfRec(paletteRec('e2elabpal2', sender)) });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await waitBands(page);
   // the sender's palette, untouched by the recipient's defaults
   await waitBandHex(page, 1, '5cc6e0', 'the recipient does not see the sender\'s Metric spool');
   assert.deepEqual((await S(page)).labelPalette, sender);
   const bodyWas = await page.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name);
   // the offer, then "Use them here": the stripes and the body change together, as ONE undo step
-  await page.locator('#ws-labels details.palette summary').click();
+  await toStep(page, 'print');
   await page.locator('#ws-labels .palette .offer button').click();
   await waitBandHex(page, 1, '2e8fdc', 'the defaults did not reach the stripe');
   assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Label?.name), 'Panchroma Cream', 'the default body');
@@ -1929,19 +1961,21 @@ test('Labels: a shared link shows the sender\'s label palette; the recipient\'s 
    suggested filaments" returns it to v2, and the address keeps it. A record from before (no `set`) stays on v1. */
 test('Labels: a new build starts on the v2 suggestions and keeps them; an older build stays on v1', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&done=off&new=1' });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   const hexOf = (p, k) => p.evaluate((key) => window.__GEN2_VIEWER__.activeHex('Label:STRIPE@' + key).toLowerCase(), k);
   const st = await S(page);
   assert.equal(st.labelPalette?.set, 2, `born on v2 (${JSON.stringify(st.labelPalette)})`);
   assert.equal(await hexOf(page, 'purple'), '#7a4fb0', 'Purple draws in Panchroma Purple');
   assert.equal(await hexOf(page, 'white'), '#787e82', 'the stainless patch draws in Polar Spaceship Steel');
-  await page.locator('#ws-labels details.palette summary').click();
+  // the filaments are the Print step's, and printing takes a label: one from a file (the root kit's faceplates take none)
+  await addWaiting(page, ['Purple test']);
+  await toStep(page, 'print');
+  await page.locator('#ws-labels .palette .allstripes summary').click();   // no label here is striped: every stripe colour under the disclosure
   assert.match(await page.locator('#ws-labels .palette .prow[data-key="purple"]').textContent(), /Panchroma Purple.*suggested/);
   assert.match(await page.locator('#ws-labels .palette .prow[data-key="white"]').textContent(), /Polar Spaceship Steel.*suggested/);
   assert.equal(await page.locator('#ws-labels .palette .pnote').count(), 0, 'the grey patch reads on the white body: no note');
   assert.equal(await page.locator('#ws-labels .palette button.suggested').count(), 0, 'already the suggestions');
   // a swap, then back to the suggestions: v2's, not v1's
-  await page.locator('#ws-labels .palette button.mine').click();
   await page.locator('#ws-labels .palette button.prow[data-key="purple"]').click();
   await page.locator('#ws-labels .palette .ppick input.search').fill('Lavender');
   await page.locator('#ws-labels .palette .pitem[title="Polar Lavender"]').click();
@@ -1993,7 +2027,7 @@ const b64rec = (r) => Buffer.from(JSON.stringify(r), 'utf8').toString('base64');
 test('Share: a build\'s colours ride in its link - body, text, a part, a unit\'s own pick and the stripe - and the recipient\'s own settings stay', async () => {
   const id = 'e2esharelook01';
   const { ctx, page, errors } = await open('labels', { query: `&done=off#build=${b64rec(lookRec(id))}` });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   // the sender picks, each as the workspaces commit a pick (one store entry)
   await page.evaluate(() => {
     const v = window.__GEN2_VIEWER__, st = window.__GEN2_STORE__;
@@ -2015,7 +2049,7 @@ test('Share: a build\'s colours ride in its link - body, text, a part, a unit\'s
   const rctx = await freshContext();
   await rctx.addInitScript(([key, saved, mine]) => { try { if (!sessionStorage.getItem('e2e-seeded')) { localStorage.setItem(key, saved); for (const [k, v] of Object.entries(mine)) localStorage.setItem(k, v); sessionStorage.setItem('e2e-seeded', '1'); } } catch {} }, ['gen2-colors:build-' + id, JSON.stringify(SAVED), MINE]);
   const { page: rp, errors: rerr } = await open('labels', { context: rctx, query: '&done=off#' + link.split('#')[1] });
-  await rp.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await rp.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   const got = await rp.evaluate(() => { const v = window.__GEN2_VIEWER__, p = v.palette();
     return { body: p.colors.Label?.name, text: p.colors['Label:TEXT']?.name, face: p.colors.Faceplate?.name, own: v.overrideFor(1, 'Accent')?.name, on: p.on, bodyHex: v.activeHex('Label'), stripe: v.activeHex('Label:STRIPE@sky-blue'), user: p.user?.Case?.name,
       mine: ['gen2-label-palette', 'gen2-schemes', 'gen2-owned'].map((k) => localStorage.getItem(k)) }; });
@@ -2069,12 +2103,10 @@ test('Share: while Assemble shows Part colors, the build\'s chosen colours are w
    settings give a plain On / Off stripe switch - never EdgeLabel's position names - beside the drawings switch */
 test('Labels: a typed label takes a stripe colour in the editor and None takes it off; Classic Pro offers the stripe with an On / Off switch', async () => {
   const { ctx, page, errors } = await open('labels');
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
-  await btn(page, 'Type a label', '#ws-labels').click();
-  await page.fill('#ws-modal input.field', 'M3 screws');
-  await btn(page, 'Add label', '#ws-modal .box').click();
+  await addWaiting(page, ['M3 screws']);   // a label waiting in the tray, edited from its pencil
   await page.locator('#ws-labels button.mini[title="Edit this label"]').first().click();
   await page.waitForSelector('#ws-labeledit .swatches', { timeout: 15_000 });
   const stripe = () => page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels[0]; return l.colours ? l.colours.band.colour : null; });
@@ -2093,6 +2125,7 @@ test('Labels: a typed label takes a stripe colour in the editor and None takes i
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro', null, { timeout: 60_000 });
   await page.locator('#ws-labels button.mini[title="Edit this label"]').first().click();
   await page.waitForSelector('#ws-labeledit input.words', { timeout: 15_000 });
+  await toStep(page, 'print');   // the settings live in the Print step since the redesign
   await page.locator('#ws-labels details.settings summary').click();
   const cp = await page.evaluate(() => ({ swatches: document.querySelectorAll('#ws-labeledit .swatches button').length, select: !!document.querySelector('#ws-labels select[aria-label="Part label stripe"]'),
     onOff: [...document.querySelectorAll('#ws-labels [role="group"][aria-label="Part label stripe"] button')].map((b) => b.textContent + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')),
@@ -2111,18 +2144,14 @@ test('Labels: a typed label takes a stripe colour in the editor and None takes i
   await ctx.close();
 });
 
-test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the panel Undo, a labels link', async () => {
+test('Labels: EdgeLabel, labels from a file, Place several onto two drawers, Fill, the toolbar Undo, a labels link', async () => {
   const { ctx, page, errors } = await open('labels');
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
-  for (const w of ['M3 screws', 'Hex keys', 'Solder']) {
-    await btn(page, 'Type a label', '#ws-labels').click();
-    await page.fill('#ws-modal input.field', w);
-    await btn(page, 'Add label', '#ws-modal .box').click();
-    await settle(page, 300);
-  }
+  await addWaiting(page, ['M3 screws', 'Hex keys', 'Solder']);
+  await settle(page, 300);
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels.length), 3);
   await btn(page, 'Place several', '#ws-labels').click();
   await settle(page, 200);
@@ -2144,10 +2173,10 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   await btn(page, 'Place ', '#ws-modal .box').click();
   await settle(page, 500);
   assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 3, 'filled');
-  assert.match(await text(page, '#ws-labels .last'), /Filled/);
-  await page.locator('#ws-labels button:text-is("Undo")').click();
+  assert.match(await text(page, '#ws-toast'), /Filled/, 'the fill says so in the toast (a live region)');
+  await page.locator('#ws button[aria-label="Undo"]').first().click();
   await settle(page, 700);
-  assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 2, 'the panel Undo took the fill back');
+  assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 2, 'the toolbar Undo took the fill back');
   // a labels link lands beside the build's own hash
   await page.evaluate(() => { const doc = { format: 'modulith-labels', version: 1, batchId: 'abcdefgh1234', labels: [{ text: 'From a link' }] }; const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(doc)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); location.hash = location.hash + '&labels-add=' + b64; });
   await settle(page, 800);
@@ -2178,6 +2207,7 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   const empty = await p2.evaluate(() => { const s = window.__GEN2_STORE__.state; const u = s.placed.find((x) => x.fill === 'decor' && !(s.labelAssign || {})[x.id]); return u && u.id; });
   assert.ok(empty != null, 'an empty drawer to drop on');
   const chip = p2.locator('#ws-labels .list .chip-l:not([disabled])').first();
+  await chip.scrollIntoViewIfNeeded();   // the tray sits under the map and the editor: it may start below the panel's fold
   const chipText = (await chip.textContent()).trim();
   const from = await chip.boundingBox();
   const to = await p2.evaluate((id) => window.__GEN2_VIEWER__.unitScreen(id), empty);
@@ -2191,7 +2221,7 @@ test('Labels: EdgeLabel, typed labels, Place several onto two drawers, Fill, the
   assert.equal(await p2.locator('#ws .drag-ghost').count(), 0, 'the ghost is gone');
   assert.equal(await p2.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 3, 'the drop placed one more');
   assert.equal(await p2.evaluate(() => !!document.querySelector('#ws-labels.placing')), false, 'a drop does not enter placing mode');
-  assert.match(await text(p2, '#ws-labels .last'), /on drawer \d/, 'the drop is one label change: ' + chipText.slice(0, 30));
+  assert.match(await text(p2, '#ws-toast'), /on drawer \d/, 'the drop is one label change: ' + chipText.slice(0, 30));
   assert.deepEqual(clean(errors), []);
   assert.deepEqual(clean(errors2), []);
   await ctx.close();
@@ -2251,7 +2281,7 @@ test('Labels: the Studio’s Add to planner build opens a fresh page and its lab
   const tabB = await pageIn('ws=labels&debug=1#labels-add=' + link('freshload0005', ['After the kept']));
   await landed(tabB.p, 3, 'tab B: the kept two, then the link');
   assert.deepEqual(await words(tabB.p), ['fresh one', 'fresh two', 'after the kept']);
-  assert.match(await text(tabB.p, '#ws-labels'), /Brought back the 2 labels this browser kept for this build\./, 'the status says both');
+  assert.match(await text(tabB.p, '#ws-toast'), /Brought back the 2 labels this browser kept for this build\. .*\S/, 'the message says both (a toast since the redesign)');
   assert.equal(await tabB.p.locator('#ws-labels .banner.copy').count(), 0, 'no offer left over in tab B');
   assert.equal(await keptCount(tabB.p), 1, 'the stored copy is kept');
   assert.equal(await tabB.p.evaluate(() => Object.values(JSON.parse(localStorage.getItem('gen2-label-copies')).copies)[0].restored), true, 'and marked as restored once');
@@ -2347,12 +2377,12 @@ test('the stale-tab guard: the Studio’s second planner tab saves its labels, t
   const edit = async (p) => { const want = await flip(p); await p.waitForFunction((v) => { try { return JSON.parse(localStorage.getItem('gen2-last-build')).buildPlate === v; } catch { return false; } }, want, { timeout: 30_000 }).catch(() => assert.fail('an edit was not saved within 30 s')); await settled(p); };
   // a new page has nothing stored to be based on
   assert.deepEqual(await guard(A.page), { stale: false, base: null });
-  // Make labels on a build never saved (this untouched kit page): its Add to planner build reopens this browser's CURRENT
+  // the full Label Studio (the Drawers step's link) on a build never saved (this untouched kit page): its Add to planner build reopens this browser's CURRENT
   // build, so the build becomes current, and is saved, as the Studio opens (the guard's review: opening Labels used to
   // save it as a side effect, and no longer does)
   const id0 = await A.page.evaluate(() => window.__GEN2_STORE__.state.buildId);
   assert.equal(await row(A.page, id0), null, 'not saved before');
-  const [studio0] = await Promise.all([context.waitForEvent('page'), A.page.locator('#ws-dock button.cta:has-text("Make labels")').click()]);
+  const [studio0] = await Promise.all([context.waitForEvent('page'), (async () => { await listOnly(A.page); await A.page.locator('#ws-labels a.studiolink').click(); })()]);
   await studio0.close();
   await settled(A.page);
   assert.equal(await A.page.evaluate(() => localStorage.getItem('gen2-current-build')), id0, 'the current build is this one');
@@ -2394,21 +2424,21 @@ test('the stale-tab guard: the Studio’s second planner tab saves its labels, t
   assert.notEqual(await pal(A.page), palBefore, 'a preset is saved with the build');
   // tab A reloads (its own address, its kept base): opening Labels saves nothing, and it is not stale
   await A.page.reload({ waitUntil: 'load' }); await waitBoot(A.page);
-  await A.page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await A.page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await A.page.waitForTimeout(1500); await settled(A.page);
   assert.deepEqual(await row(A.page), rowA, 'opening Labels wrote no new version');
   assert.equal(await A.page.locator('#ws-stale').count(), 0);
   assert.deepEqual(await guard(A.page), { stale: false, base: rowA.savedAt });
-  // Make labels: the Studio opens in a new tab, told where its Add to planner build comes back to
+  // the Label Studio link: the Studio opens in a new tab, told where its Add to planner build comes back to
   let release = null; const gate = new Promise((r) => { release = r; });
   await context.route('**/vendor/label-list.js*', async (route) => { await gate; await route.continue(); });   // tab B imports only once released
-  const [studioTab] = await Promise.all([context.waitForEvent('page'), A.page.locator('#ws-dock button.cta:has-text("Make labels")').click()]);
+  const [studioTab] = await Promise.all([context.waitForEvent('page'), (async () => { await listOnly(A.page); await A.page.locator('#ws-labels a.studiolink').click(); })()]);
   await studioTab.waitForURL(/labels\.modulith\.systems/, { timeout: 30_000 });
   const ret = new URL(studioTab.url()).searchParams.get('return');
   assert.equal(ret, `${base}/index.html?ws=labels`);
   await studioTab.close();
   // the slot holds another build now (as after a switch elsewhere), so tab B's boot changes it: a storage event tab A ignores
-  // (after the click: Make labels writes the slot itself)
+  // (after the click: the Studio link writes the slot itself)
   await A.page.evaluate(() => { const r = JSON.parse(localStorage.getItem('gen2-last-build')); r.buildId = 'e2eother0001'; localStorage.setItem('gen2-last-build', JSON.stringify(r)); });
   // the Studio's Add to planner build: tab B, on the same build
   const linkOf = (batch, words) => Buffer.from(JSON.stringify({ format: 'modulith-labels', version: 1, batchId: batch, labels: words.map((text) => ({ text })) })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -5834,11 +5864,13 @@ test('the phone tour: an open sheet hides what it covers, its handle hides what 
   }
   {
     const { ctx, page, errors } = await open('labels', { phone: true, viewport: SIDE });
-    await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+    await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
     await page.click('#ws-labels .sheet-handle');
     await page.waitForFunction(() => document.getElementById('ws-labels').classList.contains('open'), null, { timeout: 15_000 });
     same(await vis(page, '#ws-dock'), 'hidden', 'on its side the sheet takes the whole column: the dock under it steps out');
-    // Label settings: Off / On at a finger's 32 px
+    // Label settings (Fine-tune text and icons, the Print step's since the redesign; printing takes a label): Off / On at a finger's 32 px
+    await addWaiting(page, ['Phone label']);
+    await toStep(page, 'print');
     const segs = await page.evaluate(() => { const d = [...document.querySelectorAll('#ws-labels details')].find((x) => x.querySelector('.srow .seg.sm')); d.open = true; return [...d.querySelectorAll('.srow .seg.sm')].map((b) => Math.round(b.getBoundingClientRect().height)); });
     assert.ok(segs.length && segs.every((h) => h >= 32), `Label settings' Off / On ${segs.join(', ')} px`);
     await page.click('#ws-labels .sheet-handle');
@@ -6352,22 +6384,30 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
   // the toast is a live region
   assert.equal(await page.evaluate(() => document.getElementById('ws-toast').getAttribute('aria-live')), 'polite');
   // a modal: Tab cycles inside it, Escape closes it and focus goes back where it was
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await btn(page, 'Type a label', '#ws-labels').focus();
-  await btn(page, 'Type a label', '#ws-labels').press('Enter');
-  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 15_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
+  // the root kit's faceplates take no labels: from the keyboard, the Style step's list-only way, then a label typed into the
+  // list; Enter keeps the keyboard in the field for the next one (the stress test, 2026-10-15: a re-render left it at <body>)
+  await page.locator('#ws-labels .linkish', { hasText: 'without changing faceplates' }).focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#ws-labels input.qwords[data-focus="listadd"]', { timeout: 15_000 });
+  await page.focus('#ws-labels input.qwords[data-focus="listadd"]');
+  await page.keyboard.type('Keyboard label');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1, null, { timeout: 15_000 });
+  assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-focus')), 'listadd', 'the keyboard stays in the field after the add');
+  // a modal (Fill empty drawers, once the faceplates take labels): Tab cycles inside it, Escape closes it and focus goes back
+  await page.evaluate(async () => { const v = window.__GEN2_VIEWER__; await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === 'edgelabel')); v.setDims(false); window.__GEN2_STORE__.load(v.build, 'adopt'); });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 60_000 });
+  await toStep(page, 'drawers');   // an 'adopt' load does not redraw the panel (the Style step's tiles do it themselves): the spine's Drawers does
+  await page.waitForFunction(() => !!document.querySelector('#ws-labels .tray button.tile:not([disabled])'), null, { timeout: 15_000 });
+  await btn(page, 'Fill empty drawers', '#ws-labels').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.getElementById('ws-modal').contains(document.activeElement), null, { timeout: 15_000 });
   await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
   assert.ok(await page.evaluate(() => document.getElementById('ws-modal').contains(document.activeElement)), 'three Tabs later focus is still inside the modal');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.getElementById('ws-modal').hidden, null, { timeout: 15_000 });
-  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Type a label/, 'focus returned to the opener');
-  // ...and after an ADD, which re-renders the panel (the stress test, 2026-10-15: the keyboard was left at <body>)
-  await page.keyboard.press('Enter');
-  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 15_000 });
-  await page.keyboard.type('Keyboard label');
-  await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 15_000 });
-  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Type a label/, 'the keyboard stays on the opener after the add');
+  assert.match(await page.evaluate(() => document.activeElement.textContent.trim()), /Fill empty drawers/, 'focus returned to the opener');
   // the label editor from the keyboard: Enter on the pencil moves into its words, Escape closes it and comes back to the pencil
   await page.locator('#ws-labels button[title="Edit this label"]').first().focus();
   await page.keyboard.press('Enter');
@@ -6391,8 +6431,9 @@ test('the keyboard: the switcher menu walks with the arrows and closes on Escape
 
 test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add part labels lands in this build as one undo step, the same part again updates in place', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   const buildId = await page.evaluate(() => window.__GEN2_STORE__.state.buildId);
+  await listOnly(page);   // Hardware… is the Drawers step's: a build without label faceplates goes there by its list-only way
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
   await page.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && p.ready && !p.veil.hidden; }, null, { timeout: 60_000 });   // the Picker loaded and answered the hello
   assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label')), 'Close the Part Picker', 'focus moved into the modal');
@@ -6410,7 +6451,7 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   assert.equal(after1.length, 1, 'one part label');
   assert.ok(after1[0][1] && after1[0][2], 'it carries its part record');
   assert.equal(await page.locator('#ws-labels .chip-l.new').count(), 1, 'the new label is marked in the list');
-  assert.match(await text(page, '#ws-labels .last'), /Added 1 part label/);
+  assert.match(await text(page, '#ws-toast'), /Added 1 part label/);
   assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('ws-partpicker')).display), 'none', 'the modal is really gone from view');
   // the keyboard is back on the Part Picker button, not on the hidden frame (the stress test, 2026-10-15: the add re-rendered
   // the opener before the close looked for it)
@@ -6426,7 +6467,7 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
   await page.waitForFunction(() => window.__GEN2_PICKER__().veil.hidden, null, { timeout: 30_000 });
   const after2 = await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.map((l) => l.id));
   assert.deepEqual(after2, [after1[0][0]], 'the same label, not a second one');
-  assert.match(await text(page, '#ws-labels .last'), /Updated 1 already in the list/);
+  assert.match(await text(page, '#ws-toast'), /Updated 1 already in the list/);
   // one undo takes the batch back
   assert.deepEqual(await page.evaluate(() => { const l = window.__GEN2_STORE__.state.labelList.labels[0]; return [l.text, l.hardware.fields.join()]; }), ['edited by hand', 'M3'], 'the hand-typed words stay, the record is the Picker’s again (an M3 nut now: the flow refine needs a size)');
   await page.click('#ws-tools button[aria-label="Undo"]');
@@ -6471,16 +6512,12 @@ test('the Part Picker modal: the real Picker in a frame, the hello binds it, Add
 
 test('the Label plate view (step B1): the Studio embedded read-only shows this build’s list with its drawers, a row clicked there is the selection here, the plate follows undo, the frame is kept across the toggle', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
-  for (const w of ['Screws', 'Nuts']) {
-    await btn(page, 'Type a label', '#ws-labels').click();
-    await page.fill('#ws-modal input.field', w);
-    await btn(page, 'Add label', '#ws-modal .box').click();
-    await settle(page, 300);
-  }
+  await addWaiting(page, ['Screws', 'Nuts']);
+  await settle(page, 300);
   const [screws, nuts] = await page.evaluate(() => window.__GEN2_STORE__.state.labelList.labels.map((l) => l.id));
   // Screws onto the first drawer (Place several, one tap)
   await btn(page, 'Place several', '#ws-labels').click();
@@ -6490,15 +6527,15 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   await btn(page, 'Done placing', '#ws-labels').click();
   assert.equal(await page.evaluate(() => Object.keys(window.__GEN2_STORE__.state.labelAssign).length), 1, 'Screws placed');
   // the plate: the real Studio in the frame, headerless, the list as rows with the drawer tag, read-only
-  await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+  await openPlateView(page);
   await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });   // the Studio answered the hello with its capabilities
   const frame = page.frameLocator('#ws-plate iframe');
   await frame.locator('#labels .row[data-label-id]').nth(1).waitFor({ timeout: 30_000 });
   assert.equal(await frame.locator('#labels .row[data-label-id]').count(), 2, 'both labels on the plate');
   assert.equal(await frame.locator('#mast').isVisible(), false, 'no Studio masthead inside the planner');
   assert.equal(await frame.locator('#link-bar').isVisible(), false);
-  const where = await text(page, '#ws-labels .prow .where');   // "Drawer N" in label order, as the panel says it
-  assert.equal(await frame.locator(`#labels .row[data-label-id="${screws}"] .utag`).textContent(), '#' + where.replace(/\D/g, ''), 'the drawer tag on the placed label');
+  const where = await page.evaluate((id) => window.__GEN2_STORE__.state.placed.filter((u) => u.fill === 'decor').sort((a, b) => (a.y - b.y) || (a.x - b.x)).findIndex((u) => u.id === id) + 1, first);   // its drawer number, in label order
+  assert.equal(await frame.locator(`#labels .row[data-label-id="${screws}"] .utag`).textContent(), '#' + where, 'the drawer tag on the placed label');
   assert.equal(await frame.locator(`#labels .row[data-label-id="${nuts}"] .utag`).count(), 0, 'none on the waiting one');
   assert.equal(await frame.locator('#labels .row input.label-text').first().evaluate((i) => i.readOnly), true, 'read-only rows');
   assert.equal(await frame.locator('#labels .row .remove').first().isVisible(), false, 'no remove button');
@@ -6513,7 +6550,7 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   // a row clicked in the Studio is the selected label in the planner (the drawer selection and the armed label go)
   await frame.locator(`#labels .row[data-label-id="${nuts}"]`).click();
   await page.waitForFunction((id) => window.__GEN2_PLATE__().selLabel === id, nuts, { timeout: 30_000 });
-  assert.equal(await page.locator('#ws-labels .chip-l.sel').count(), 1, 'the selection shows in the panel');
+  assert.equal(await page.locator('#ws-labels .thumbs .thumb.sel').count(), 1, 'the selection shows in the panel (the Print step\'s labels, beside the plate)');
   assert.equal(await frame.locator(`#labels .row.sel[data-label-id="${nuts}"]`).count(), 1, 'and on the plate');
   // undo in the planner (the placement): the plate follows with a new rev, the drawer tag goes
   const rev = await page.evaluate(() => window.__GEN2_PLATE__().rev);
@@ -6554,13 +6591,13 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
   await frame.locator('body').evaluate((_, r) => { window.parent.postMessage({ gen2plate: 'setting', v: 1, session: EMBED.bind.session, id: 'hw-band', value: 'end', rev: r, buildId: EMBED.snap.buildId }, EMBED.bind.origin); }, revNow);
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('gen2-label-print')).band === 'end', null, { timeout: 15_000 });   // the current rev: taken
   // changed while the plate is hidden: the reopening carries the latest preference
-  await page.locator('#ws-labels .track.view button:text-is("On build")').click();
+  await page.locator('#ws-plate button.back').click();   // the plate's Back (the On build / Label plate toggle went with the redesign)
   await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'off');
-  await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+  await openPlateView(page);
   await settle(page, 600);
   assert.equal(await frame.locator('#hw-band').evaluate((el) => el.value), 'off', 'the plate shows the change made while it was hidden');
   // the toggle keeps the frame; the dock's Print labels shows the plate again
-  await page.locator('#ws-labels .track.view button:text-is("On build")').click();
+  await page.locator('#ws-plate button.back').click();   // the plate's Back (the On build / Label plate toggle went with the redesign)
   await settle(page, 200);
   assert.equal(await page.locator('#ws-plate').count(), 1, 'the frame stays');
   assert.equal(await page.locator('#ws-plate').isVisible(), false, 'hidden');
@@ -6582,7 +6619,7 @@ test('the Label plate view (step B1): the Studio embedded read-only shows this b
    the ordinary autosave, and never the stripe (the planner's print preference) */
 test('the Label plate keeps this browser’s printer settings across a planner reload and a label-type switch (S-F6)', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   // a faceplate applied as the panel's Switch to EdgeLabel applies one. Classic Pro first: the Studio boots on EdgeLabel, so
   // every boot of the frame then switches type
   const face = (key) => page.evaluate(async (k) => {
@@ -6592,8 +6629,9 @@ test('the Label plate keeps this browser’s printer settings across a planner r
   }, key);
   await face('classicpro');
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro', null, { timeout: 60_000 });
+  await addWaiting(page, ['Plate label']);   // the Print step, and the plate from it, open once there is a label to print
   const plate = async () => {   // the plate shown, its Studio answered and the build's snapshot applied: the frame
-    await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+    await openPlateView(page);
     await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });
     const f = await (await page.locator('#ws-plate iframe').elementHandle()).contentFrame();
     await f.waitForFunction(() => !!EMBED.snap && labelType.id === 'classicpro', null, { timeout: 30_000 });
@@ -6621,7 +6659,7 @@ test('the Label plate keeps this browser’s printer settings across a planner r
   await f.locator('#color-text').fill('#ffe000', { force: true });
   await page.reload({ waitUntil: 'load', timeout: 90_000 });
   await waitBoot(page);
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   assert.equal(await page.evaluate(() => window.__GEN2_STORE__.state.buildId), id, 'the same build reopened');
   // a new frame: it boots on EdgeLabel and switches to the build's Classic Pro, and the settings come back through the switch
   const f2 = await plate();
@@ -6644,7 +6682,7 @@ test('the Label plate keeps this browser’s printer settings across a planner r
    the page's own change now: nothing goes back, and a change made on the plate afterwards still does */
 test('the Label plate: a faceplate switch with the plate open leaves this browser’s stripe and drawings as they were; a change on the plate still goes back', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   const face = (key) => page.evaluate(async (k) => {   // as the panel's Switch to EdgeLabel applies a faceplate
     const v = window.__GEN2_VIEWER__;
     await v.applyFaceplateStyle(v.availableFaceplateStyles().find((x) => x.key === k)); v.setDims(false);
@@ -6652,14 +6690,17 @@ test('the Label plate: a faceplate switch with the plate open leaves this browse
   }, key);
   await face('edgelabel');
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 60_000 });
-  // this browser's print preference, set in the panel: the End stripe, the drawings off (neither is the type's default)
+  // this browser's print preference, set in the panel (the Print step's, which opens once there is a label): the End
+  // stripe, the drawings off (neither is the type's default)
+  await addWaiting(page, ['Plate label']);
+  await toStep(page, 'print');
   await page.locator('#ws-labels details.settings summary').click();
   await page.selectOption('#ws-labels select[aria-label="Part label stripe"]', 'end');
   await page.locator('#ws-labels [aria-label="Screw and nut drawings"] .seg:text-is("Off")').click();
   const pref = () => page.evaluate(() => JSON.parse(localStorage.getItem('gen2-label-print') || 'null'));
   await page.waitForFunction(() => { const p = JSON.parse(localStorage.getItem('gen2-label-print') || 'null'); return !!p && p.band === 'end' && p.drawings === false; }, null, { timeout: 15_000 });
   // the plate open on it, showing that preference
-  await page.locator('#ws-labels .track.view button:text-is("Label plate")').click();
+  await openPlateView(page);
   await page.waitForFunction(() => { const p = window.__GEN2_PLATE__ && window.__GEN2_PLATE__(); return p && p.ready && !p.box.hidden; }, null, { timeout: 60_000 });
   const f = await (await page.locator('#ws-plate iframe').elementHandle()).contentFrame();
   await f.waitForFunction(() => !!EMBED.snap && !!EMBED.applied && EMBED.applied['hw-band'] === 'end' && EMBED.applied['hw-profile'] === false, null, { timeout: 30_000 });
@@ -6799,10 +6840,11 @@ test('the top bar fits at every desktop width in its widest case, in every works
    The checkout's published parts/ decides which branch runs. */
 test('Edit part details: the Part Picker opens that part (open/1), or just opens with an older Picker', { skip: haveStudio ? false : 'Label Studio checkout absent' }, async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent(studio) });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
+  await listOnly(page);   // Hardware… is the Drawers step's: a build without label faceplates goes there by its list-only way
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
   await page.waitForFunction(() => { const p = window.__GEN2_PICKER__ && window.__GEN2_PICKER__(); return p && p.ready && !p.veil.hidden; }, null, { timeout: 60_000 });
   const frame = page.frameLocator('#ws-partpicker iframe');
@@ -6829,7 +6871,7 @@ test('Edit part details: the Part Picker opens that part (open/1), or just opens
     await other.addInitScript(() => { try { localStorage.setItem('gen2-quality', 'fast'); localStorage.setItem('gen2-quality:set', '1'); } catch {} });
     const p2 = await other.newPage();
     await p2.goto(`${base}/index.html?ws=labels&debug=1&studio=${encodeURIComponent(studio)}${hash}`, { waitUntil: 'load', timeout: 90_000 });
-    await p2.waitForSelector('#ws-labels .foot', { timeout: 60_000 });
+    await p2.waitForSelector('#ws-labels .spine', { timeout: 60_000 });
     await settle(p2, 1000);
     const unitId = await p2.evaluate(() => Number(Object.keys(window.__GEN2_STORE__.state.labelAssign || {})[0]));
     await p2.evaluate((id) => window.__GEN2_VIEWER__.selectUnit(id), unitId); await settle(p2, 500);
@@ -6848,10 +6890,9 @@ test('Edit part details: the Part Picker opens that part (open/1), or just opens
    nothing changed commits nothing, the editor says what a change will keep, and a change says it cut */
 test('the label editor: a label longer than 40 characters is not cut by an Enter that changes nothing, and a change says it cut', async () => {
   const { ctx, page, errors } = await open('labels');
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await btn(page, 'Type a label', '#ws-labels').click();
-  await page.fill('#ws-modal input.field', 'Short');
-  await btn(page, 'Add label', '#ws-modal .box').click();
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
+  await listOnly(page);   // the root kit's faceplates take no labels: the list-only Drawers step, its tray
+  await addWaiting(page, ['Short']);
   await settle(page, 300);
   const long = 'Long words from a file '.repeat(5).trim();   // 114 characters
   await page.evaluate((t) => { const st = window.__GEN2_STORE__; st.flush(); st.commit((s) => { s.labelList.labels[0].text = t; }, 'edit'); st.flush(); }, long);
@@ -7091,7 +7132,8 @@ test('Build: a tap while the guided camera is moving leaves the camera to the gu
    Now it says the Studio may be slow or down, and offers Try again, which reloads the frame and waits again */
 test('the Part Picker modal with the Studio unreachable: after 8 s it says so and offers Try again', async () => {
   const { ctx, page } = await open('labels', { query: '&new=1&studio=' + encodeURIComponent('http://127.0.0.1:9/') });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
+  await listOnly(page);   // Hardware… is the Drawers step's: a build without label faceplates goes there by its list-only way
   await page.locator('#ws-labels button[title^="Opens the Part Picker here"]').click();
   await page.waitForFunction(() => /hasn’t answered yet/.test(document.querySelector('#ws-partpicker .link').textContent), null, { timeout: 15_000 });
   assert.doesNotMatch(await text(page, '#ws-partpicker .link'), /not on its list/, 'no blame on the address');
@@ -7326,11 +7368,12 @@ test('the phone: the Build library sheet opens on its handle; the Labels sheet c
   await page.click('#ws-lib .sheet-handle');
   await page.waitForFunction(() => getComputedStyle(document.querySelector('#ws-tabbar')).visibility === 'visible', null, { timeout: 15_000 }).catch(() => assert.fail('collapsing the library did not bring the tab bar back'));
   await page.click('#ws-tabbar .tab:has-text("Labels")');
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 600);
-  await page.evaluate(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const b = (t, root = document) => [...root.querySelectorAll('button')].find((x) => !x.closest('[hidden]') && x.textContent.trim().startsWith(t)); b('Type a label').click(); await sleep(80); document.querySelector('#ws-modal input.field').value = 'Phone'; b('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(200); document.querySelector('#ws-labels .sheet-handle').click(); await sleep(300); b('Place several').click(); });
+  await addWaiting(page, ['Phone']);   // a label waiting in the tray (the import opens the Labels sheet)
+  await page.evaluate(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const b = (t, root = document) => [...root.querySelectorAll('button')].find((x) => !x.closest('[hidden]') && x.textContent.trim().startsWith(t)); document.querySelector('#ws-labels .sheet-handle').click(); await sleep(300); b('Place several').click(); });
   await page.waitForFunction(() => !document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 30_000 });   // the sheet collapsed while placing
   assert.match(await text(page, '#ws-labels .sheet-handle .ttl'), /Placing/);
   assert.deepEqual(clean(errors), []);
@@ -7378,12 +7421,11 @@ test('the phone: an open sheet puts the tab bar away, the dock or the player tak
    it refuses a control something else covers. */
 test('the phone: Edit raises the label editor sheet, its close is reachable, and closing brings the Labels sheet back', async () => {
   const { ctx, page, errors } = await open('labels', { phone: true });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.click('#ws-labels .sheet-handle');
   await page.waitForFunction(() => document.querySelector('#ws-labels').classList.contains('open'), null, { timeout: 30_000 });
-  await page.click('#ws-labels button:has-text("Type a label")');
-  await page.fill('#ws-modal input.field', 'Phone edit');
-  await page.click('#ws-modal .box button:has-text("Add label")');
+  await listOnly(page);   // the root kit's faceplates take no labels: the list-only Drawers step, its tray
+  await addWaiting(page, ['Phone edit']);
   await settle(page, 400);
   await page.click('#ws-labels button[title="Edit this label"]');
   await page.waitForFunction(() => { const e = document.querySelector('#ws-labeledit'); return e && !e.hidden && e.classList.contains('open'); }, null, { timeout: 15_000 });
@@ -7415,7 +7457,7 @@ test('the phone: Edit raises the label editor sheet, its close is reachable, and
    from the cached geometry the stage builds - so the list, the drawer card and the model cannot disagree. */
 test('the label previews are drawn from the 3D label\'s own layout and geometry', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
@@ -7466,13 +7508,12 @@ test('a label preview drawn late swaps in place: the editor keeps the keyboard a
   const c = await freshContext();
   await c.route('**/LiberationSansNarrow-Bold.ttf*', async (route) => { await new Promise((r) => setTimeout(r, 4000)); await route.continue(); });
   const { ctx, page, errors } = await open('labels', { query: '&new=1', context: c });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
-  await btn(page, 'Type a label', '#ws-labels').focus();
-  await page.keyboard.press('Enter');
-  await page.waitForFunction(() => !document.getElementById('ws-modal').hidden && document.activeElement === document.querySelector('#ws-modal input.field'), null, { timeout: 15_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
+  await listOnly(page);   // a new build's faceplates take no labels: the list-only Drawers step, a label typed into the list
+  await page.focus('#ws-labels input.qwords[data-focus="listadd"]');
   await page.keyboard.type('Late font');
   await page.keyboard.press('Enter');
-  await page.waitForFunction(() => document.getElementById('ws-modal').hidden && ((window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1), null, { timeout: 15_000 });
+  await page.waitForFunction(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1, null, { timeout: 15_000 });
   assert.equal(await page.evaluate(() => document.querySelectorAll('#ws-labels .lprev.img').length), 0, 'the font is still held back: the CSS stand-in shows');
   await page.locator('#ws-labels button[title="Edit this label"]').first().focus();
   await page.keyboard.press('Enter');
@@ -7491,7 +7532,7 @@ test('a label preview drawn late swaps in place: the editor keeps the keyboard a
    label keeps them, and its icon tiles show the icon as it prints, dark art on the label's light body ("terrible contrast"). */
 test('the label editor: a part label offers no icon choice; an ordinary label\'s icon tiles are dark on light', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
@@ -7822,7 +7863,7 @@ test('Build: a cabinet door prints face down whatever the faceplates are - its f
 
 test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });
   await page.evaluate(() => { const b = [...document.querySelectorAll('#ws-labels button')].find((x) => (x.getAttribute('aria-label') || '').startsWith('Switch to EdgeLabel')); if (b) b.click(); });
   await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'edgelabel', null, { timeout: 90_000 });
   await settle(page, 800);
@@ -9850,26 +9891,66 @@ test('Build: a Parts switch while a layout change still waits on its GLBs throws
   await ctx.close();
 });
 
-/* BOTH LABEL FAMILIES IN THE CALLOUT (2026-10-20, Joey: "why not show both edgelabel and classic pro as clickable options?").
+/* BOTH LABEL FAMILIES (2026-10-20, Joey: "why not show both edgelabel and classic pro as clickable options?"; since the
+   Labels redesign of 2026-11-23 they are the Style step's tiles, and this case walks on through the Drawers and Print steps).
    A build whose faceplates take no labels opens Labels to the callout; it offered Switch to EdgeLabel alone, after naming
    both families. Now both are buttons, EdgeLabel first; Classic Pro applies the Classic Pro faceplate. Since 2026-10-27
    they are the Build library's faceplate tiles (the stage's picture, the name under it) and both carry the Club ✦ (Joey:
    "both are premium models so both should have that"), and the callout promises nothing ("Paper and label-maker labels
    are coming later" went: Joey, "that's still a brainstorm idea") */
-test('Labels: the no-label-faceplate callout offers EdgeLabel and Classic Pro as faceplate tiles, both Club; Classic Pro applies that family and the callout goes', async () => {
+test('Labels: the Style step offers EdgeLabel and Classic Pro as faceplate tiles, both Club; Classic Pro applies, the Drawers step opens on the first empty drawer, words and Enter place labels drawer by drawer, Undo from the editor, the Print step; the dock follows the steps', async () => {
   const { ctx, page, errors } = await open('labels');
-  await page.waitForSelector('#ws-labels .callout', { timeout: 30_000 });
+  await page.waitForSelector('#ws-labels .stylestep', { timeout: 30_000 });
   const before = await S(page);
   assert.notEqual(before.faceStyle, 'classicpro', `the control: the build starts on a no-label faceplate (${before.faceStyle})`);
-  await page.waitForFunction(() => document.querySelectorAll('#ws-labels .callout .faces button img').length === 2, null, { timeout: 30_000 })
+  // THE STYLE STEP (the Labels redesign, 2026-11-23): what a label is, the two families that take one, nothing else to do
+  const st0 = await page.evaluate(() => ({ step: document.getElementById('ws-labels').dataset.step, cta: document.querySelector('#ws-dock .cta').textContent.trim(), ctaOff: document.querySelector('#ws-dock .cta').disabled,
+    spine: [...document.querySelectorAll('#ws-labels .spine .step')].map((b) => b.dataset.step + (b.disabled ? ':off' : '')), lead: document.querySelector('#ws-labels .stylestep .lead').textContent }));
+  assert.deepEqual([st0.step, st0.cta, st0.ctaOff], ['style', 'Pick a label style', true], `the Style step, and the dock waits for it (${JSON.stringify(st0)})`);
+  assert.deepEqual(st0.spine, ['style', 'drawers:off', 'print:off'], 'Drawers and Print wait for a style');
+  assert.match(st0.lead, /printed strips that slide into the drawer front/, 'it says what a label is');
+  await page.waitForFunction(() => document.querySelectorAll('#ws-labels .stylestep .faces button img').length === 2, null, { timeout: 30_000 })
     .catch(() => assert.fail('the two tiles did not get the stage\'s pictures'));
-  const c = await page.evaluate(() => ({ tiles: [...document.querySelectorAll('#ws-labels .callout .faces button.face')].map((b) => [b.getAttribute('aria-label'), b.textContent.trim(), !!b.querySelector('.pv img')]),
-    text: document.querySelector('#ws-labels .callout').textContent }));
-  assert.deepEqual(c.tiles, [['Switch to EdgeLabel', 'EdgeLabel✦', true], ['Switch to Classic Pro', 'Classic Pro✦', true]], `both label families, EdgeLabel first, each a picture, its name and the ✦ (${JSON.stringify(c)})`);
-  assert.ok(!/coming later|paper|label-maker/i.test(c.text), `the callout promises nothing (${c.text})`);
-  await page.locator('#ws-labels .callout button[aria-label="Switch to Classic Pro"]').click({ timeout: 30_000 });
-  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro' && !document.querySelector('#ws-labels .callout'), null, { timeout: 60_000 })
-    .catch(async () => assert.fail(`Classic Pro did not apply: faceStyle ${(await S(page)).faceStyle}, callout ${await page.locator('#ws-labels .callout').count()}`));
+  const c = await page.evaluate(() => ({ tiles: [...document.querySelectorAll('#ws-labels .stylestep .faces button.face')].map((b) => [b.getAttribute('aria-label'), !!b.querySelector('.pv img'), !!b.querySelector('.club')]),
+    text: document.querySelector('#ws-labels .stylestep').textContent }));
+  assert.deepEqual(c.tiles, [['Switch to EdgeLabel', true, true], ['Switch to Classic Pro', true, true]], `both label families, EdgeLabel first, each a picture and the Club ✦ (${JSON.stringify(c)})`);
+  assert.ok(!/coming later|paper|label-maker/i.test(c.text), `the step promises nothing (${c.text})`);
+  assert.match(c.text, /Switching changes (all \d+ Decor drawers|the Decor drawer)/, 'it says what a switch changes');
+  await page.locator('#ws-labels .stylestep button[aria-label="Switch to Classic Pro"]').click({ timeout: 30_000 });
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.faceStyle === 'classicpro' && !document.querySelector('#ws-labels .stylestep') && document.getElementById('ws-labels').dataset.step === 'drawers', null, { timeout: 60_000 })
+    .catch(async () => assert.fail(`Classic Pro did not apply: faceStyle ${(await S(page)).faceStyle}, step ${await page.evaluate(() => document.getElementById('ws-labels').dataset.step)}`));
+  // THE DRAWERS STEP: the first empty drawer is selected, its editor has the keyboard, the empty drawers wear "+ label" on the model
+  await page.waitForFunction(() => document.activeElement && document.activeElement.matches('#ws-labels input.qwords') && !!document.querySelector('#ws-labels .dcell.sel'), null, { timeout: 30_000 })
+    .catch(async () => assert.fail(`no drawer open for typing (active ${await page.evaluate(() => document.activeElement && document.activeElement.outerHTML.slice(0, 120))})`));
+  const decor = await page.evaluate(() => window.__GEN2_STORE__.state.placed.filter((u) => u.fill === 'decor').map((u) => u.id));
+  await page.waitForFunction((n) => document.querySelectorAll('#ws-ghosts .ghost').length === n && document.querySelectorAll('#ws-ghosts .ghost.sel').length === 1, decor.length, { timeout: 15_000 })
+    .catch(async () => assert.fail(`the "+ label" pills (${await page.evaluate(() => [...document.querySelectorAll('#ws-ghosts .ghost')].map((g) => g.textContent).join(', '))})`));
+  const first = await page.evaluate(() => +document.querySelector('#ws-labels .dcell.sel').dataset.unit);
+  await page.keyboard.type('Bits');
+  await page.waitForFunction((id) => window.__GEN2_VIEWER__.build.placed.find((u) => u.id === id)?.label === 'Bits', first, { timeout: 15_000 })
+    .catch(() => assert.fail('the words being typed did not show on the drawer'));
+  assert.equal(await page.evaluate(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length), 0, 'typing alone adds nothing to the record');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction((id) => { const s = window.__GEN2_STORE__.state; const l = s.labelList && s.labelList.labels.find((x) => x.id === (s.labelAssign || {})[id]); return !!l && l.text === 'Bits'; }, first, { timeout: 15_000 })
+    .catch(async () => assert.fail(`Enter did not place "Bits" (${JSON.stringify((await S(page)).labelAssign)})`));
+  if (decor.length > 1) {
+    await page.waitForFunction((id) => { const c = document.querySelector('#ws-labels .dcell.sel'); return !!c && +c.dataset.unit !== id && document.activeElement && document.activeElement.matches('#ws-labels input.qwords') && document.activeElement.value === ''; }, first, { timeout: 15_000 })
+      .catch(() => assert.fail('the editor did not move on to the next empty drawer with the keyboard'));
+    await page.waitForFunction((n) => document.querySelectorAll('#ws-ghosts .ghost').length === n, decor.length - 1, { timeout: 15_000 }).catch(() => assert.fail('one "+ label" fewer'));
+  }
+  assert.equal(await page.locator('#ws-labels .dcell.has').count(), 1, 'the map shows the labelled drawer');
+  // Undo from the editor, with nothing typed: the toolbar's Undo (the panel's own went with the redesign), one step for add + place
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(() => !(window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length, null, { timeout: 15_000 }).catch(() => assert.fail('Ctrl+Z from the editor did not take the label back'));
+  await page.keyboard.press('Control+y');
+  await page.waitForFunction(() => (window.__GEN2_STORE__.state.labelList || { labels: [] }).labels.length === 1, null, { timeout: 15_000 }).catch(() => assert.fail('Ctrl+Y did not bring it back'));
+  // THE PRINT STEP from the dock: the filaments and the plate
+  await page.waitForFunction(() => document.querySelector('#ws-dock .cta')?.textContent.trim() === 'Next: Print', null, { timeout: 15_000 });
+  await page.locator('#ws-dock .cta').click();
+  await page.waitForFunction(() => document.getElementById('ws-labels').dataset.step === 'print' && !!document.querySelector('#ws-labels .filaments') && !!document.querySelector('#ws-labels button.platego'), null, { timeout: 15_000 });
+  assert.equal(await page.locator('#ws-labels .thumbs .thumb').count(), 1, 'the one label to print');
+  assert.equal((await text(page, '#ws-dock .cta')).trim(), 'Print labels');
+  await page.waitForFunction(() => !document.querySelectorAll('#ws-ghosts .ghost').length, null, { timeout: 15_000 }).catch(() => assert.fail('pills outside the Drawers step'));
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });
@@ -10288,7 +10369,7 @@ test('the Parts badge and the size line follow an undo made from Labels: the bad
   assert.ok(b2 && b3 && +b3 > +b2, `the badge grew with the unit: ${b2} -> ${b3}`);
   // to Labels, where the undo of that placement regenerates the build
   await page.evaluate(() => [...document.querySelectorAll('#ws-tabs .tab')].find((b) => /Labels/.test(b.textContent)).click());
-  await page.waitForSelector('#ws-labels .foot', { timeout: 30_000 }); await settle(page, 1500);
+  await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 }); await settle(page, 1500);
   const dims = () => page.evaluate(() => [...document.querySelectorAll('#ws-dock .big')].map((e) => e.textContent).find((s) => /×/.test(s)) || null);
   const d3 = await dims();
   assert.equal(await badge(), b3, 'the Labels bar shows the same count');
@@ -10323,7 +10404,7 @@ const HINTED = {   // per workspace: the panel the hints wait for (Labels render
     }, keys: ['build-fill'] },
   ] },
   colors: { ready: '#ws-colors .row4', steps: [{ keys: ['colors-browse', 'colors-surprise', 'colors-simplify'] }] },   // Simplify: the root kit's look has five filaments
-  labels: { ready: '#ws-labels .foot', steps: [{ keys: ['labels-type', 'labels-file', 'labels-picker'] }] },
+  labels: { ready: '#ws-labels .spine', steps: [{ go: async (page) => { await page.locator('#ws-labels .linkish', { hasText: 'without changing faceplates' }).click(); await page.waitForSelector('[data-hint="labels-file"]', { timeout: 15_000 }); }, keys: ['labels-file', 'labels-picker'] }] },   // the root kit's faceplates take no labels: the list-only Drawers step
   parts: { ready: '#ws-parts .prow', steps: [{ keys: ['parts-track'] }] },
   assemble: { ready: '#ws-tools .cam', steps: [{ keys: ['assemble-camera'] }] },
 };

@@ -1493,6 +1493,95 @@ html[data-ws="assemble"] #ws-toast { bottom: calc(22px + var(--player-h, 126px) 
 #ws-labels .palette .pitem.on { outline: 2px solid var(--orange); outline-offset: -2px; }
 #ws-labels .palette .pitem .own { margin-left: auto; font-size: 11px; }
 
+/* ---- the Labels redesign (2026-11-23; labels.js THE STEPS): the step spine, the Style step, the drawer map and the
+   one-drawer editor, the tray, the Print step and its filaments, the "+ label" pills on the model ---- */
+#ws-labels .spine { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--track); }
+#ws-labels .spine .step { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 5px; min-height: 40px; padding: 4px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-3); font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+#ws-labels .spine .step b { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-labels .spine .step .n { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--ink-3); font-size: 10px; font-weight: 700; }
+#ws-labels .spine .step:hover:not([disabled]) { background: var(--key-bg); }
+#ws-labels .spine .step.on { background: var(--seg-on); color: var(--ink-2); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+#ws-labels .spine .step.on b { color: var(--ink); }
+#ws-labels .spine .step.on .n { background: var(--orange); border-color: var(--orange); color: var(--on-orange); }
+#ws-labels .spine .step.done .n { background: #3fb27f; border-color: #3fb27f; color: #0d1a12; }
+#ws-labels .spine .step[disabled] { opacity: .45; cursor: not-allowed; }
+#ws-labels .scroll > .lead, #ws-labels .lead { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+#ws-labels .lead strong { color: var(--ink); }
+#ws-labels .stylestep, #ws-labels .printstep { display: flex; flex-direction: column; gap: 10px; }
+#ws-labels .stylestep .art { border-radius: 10px; background: var(--track); line-height: 0; }
+#ws-labels .stylestep .sub, #ws-labels .tray h4, #ws-labels .filaments h4 { margin: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+#ws-labels .faces.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+#ws-labels .stylestep .face { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; height: auto; min-height: 120px; padding: 8px 6px; font-size: 13px; font-weight: 700; color: var(--ink); }
+#ws-labels .stylestep .face .pv.face img { width: 84px; height: 63px; margin: -4px 0; }
+#ws-labels .stylestep .face .what { font-size: 10.5px; font-weight: 500; color: var(--ink-3); text-align: center; line-height: 1.25; }
+#ws-labels .stylestep .face .club { position: absolute; top: 6px; right: 8px; font-size: 11px; color: #8fb3ff; }
+#ws-labels .stylestep .face.on { border-color: #3fb27f; opacity: 1; cursor: default; }
+#ws-labels .stylestep .face.on .what { color: #3fb27f; font-weight: 700; }
+#ws-labels .linkish { align-self: flex-start; padding: 2px 0; border: 0; background: none; color: var(--ink-2); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+#ws-labels .linkish:hover { color: var(--ink); }
+#ws-labels .callout.slim { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; }
+#ws-labels .callout.slim p { font-size: 12px; }
+#ws-labels .callout.slim .linkish { color: inherit; flex: none; }
+/* the drawer map: the build's units where they stand */
+#ws-labels .dmap { display: grid; gap: 4px; padding: 6px; border-radius: 12px; background: var(--track); }
+#ws-labels .dcell { position: relative; min-width: 0; padding: 0 4px; border-radius: 6px; border: 1px solid var(--hair); background: rgba(255,255,255,.04); color: var(--ink-3); font: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#ws-labels .dcell.inert { cursor: default; background: repeating-linear-gradient(135deg, transparent 0 4px, rgba(128,128,128,.12) 4px 6px); }
+#ws-labels .dcell.empty { border-style: dashed; }
+#ws-labels .dcell.empty:hover { color: var(--ink); border-color: var(--ink-3); }
+#ws-labels .dcell .plus { font-size: 16px; font-weight: 300; line-height: 1; }
+#ws-labels .dcell.has { justify-content: flex-start; background: #eef1f4; border-color: transparent; color: #1c1d20; }
+#ws-labels .dcell.has .w { font-family: var(--font-display); font-weight: 800; font-size: 9.5px; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-labels .dcell.sel { border: 2px solid var(--orange); box-shadow: 0 0 0 2px var(--orange-edge); color: var(--orange); }
+#ws-labels .dcell.has.sel { color: #1c1d20; }
+#ws-labels .dcell[disabled] { cursor: not-allowed; opacity: .5; }
+/* the one-drawer editor */
+#ws-labels .quick .qwords { width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--orange); background: var(--input-bg); color: var(--ink); font: inherit; font-size: 15px; }
+#ws-labels .quick .qwords:focus { outline: 2px solid var(--orange-edge); outline-offset: 1px; }
+#ws-labels .quick .qrow { display: block; }
+#ws-labels .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#ws-labels .qhint { margin: -2px 0 0; font-size: 11.5px; color: var(--ink-3); }
+#ws-labels .qsugg { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+#ws-labels .qsugg:empty { display: none; }
+#ws-labels .chip-s { height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid var(--hair); background: transparent; color: var(--ink-2); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ws-labels .chip-s:hover { border-color: var(--ink-3); color: var(--ink); }
+#ws-labels .kbd { margin-left: 2px; padding: 0 4px; border-radius: 4px; border: 1px solid currentColor; font-family: var(--font-mono); font-size: 9.5px; font-weight: 500; opacity: .7; }
+#ws-labels .quick .scope { margin: 0; }
+/* the tray: labels not on a drawer yet */
+#ws-labels .tray { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
+#ws-labels .trayhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#ws-labels .foot .ways { grid-template-columns: 1fr 1fr; }
+#ws-labels .ways .tile > svg:first-child, #ws-labels .quick .acts svg { flex: none; width: 16px; height: 16px; }
+#ws-labels .studiolink { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; font-size: 11.5px; color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
+#ws-labels .studiolink:hover { color: var(--ink); }
+/* the Print step */
+#ws-labels .thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+#ws-labels .thumbs .thumb { min-width: 0; display: flex; }
+#ws-labels .thumbs .thumb .lprev { width: 100%; }
+#ws-labels .thumbs .thumb.sel { outline: 2px solid var(--orange); outline-offset: 2px; border-radius: 2px; }
+#ws-labels .thumbs .more { align-self: center; font-size: 11.5px; color: var(--ink-3); }
+#ws-labels .filaments { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; border: 1px solid var(--hair); }
+#ws-labels .filaments .diagram { line-height: 0; }
+#ws-labels .filaments .prow .mean { width: 112px; }
+#ws-labels .filaments .allstripes summary { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; list-style: none; padding: 2px 0; }
+#ws-labels .filaments .allstripes summary::-webkit-details-marker { display: none; }
+#ws-labels .filaments .allstripes .prows { margin-top: 6px; }
+#ws-labels .filaments .pacts { margin: 0; }
+#ws-labels .filaments .mydefaults { width: auto; }
+#ws-labels .printstep .settings { padding: 6px 10px; border-radius: 12px; border: 1px solid var(--hair); }
+#ws-labels .setprev { display: flex; justify-content: center; padding: 6px 0 4px; }
+#ws-labels .platego { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 46px; border-radius: 12px; font-size: 15px; font-weight: 700; }
+#ws-labels .printstep .dim { margin: -4px 0 0; }
+#ws-labels .printstep .studio a { color: var(--ink-2); }
+#ws-labels[data-step="print"] .scroll, #ws-labels[data-step="style"] .scroll { gap: 10px; }
+#ws-plate .head .back { flex: none; height: 28px; }
+#ws-dock .cta.wait, #ws-dock .cta[disabled] { background: var(--key-bg); border-color: var(--hair); color: var(--ink-3); box-shadow: none; cursor: default; font-size: 15px; }
+/* "+ label" on the model: pills over the empty labelable drawers, under the panels, taking no pointer */
+#ws-ghosts { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+#ws-ghosts .ghost { position: absolute; left: 0; top: 0; height: 24px; padding: 0 9px; border-radius: 12px; border: 1.5px dashed rgba(255,255,255,.6); background: rgba(13,14,33,.62); color: #fff; font-size: 11.5px; font-weight: 600; line-height: 21px; white-space: nowrap; box-sizing: border-box; }
+#ws-ghosts .ghost.sel { border: 2px solid var(--orange); background: var(--orange); color: var(--on-orange); font-weight: 700; }
+#ws.view-plate #ws-ghosts { display: none; }
+@media (max-width: 1023px) { #ws-ghosts .ghost { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; font-size: 13px; line-height: 19px; text-align: center; } }
+
 /* ---- the parts drawer (M2, 2026-11-05; js/parts-drawer/editor.js, plan.js), behind ?partsdrawer=1 ---- */
 #ws .seg5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 #ws-tools[hidden] { display: none; }   /* the edit toolbar stands in for the Build one; an explicit display beats the hidden attribute */

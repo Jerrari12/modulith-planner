@@ -34,6 +34,24 @@ test('drawer first: the label goes on, the mirror follows, a second label replac
   assert.equal(R.waiting(L, b).map((l) => l.text).join(), 'Screws');   // the replaced label is ready again
 });
 
+test('words typed on an empty drawer (the one-drawer editor): one result adds the label and places it; a drawer no longer empty, a non-label drawer and empty words are refused', () => {
+  const b = build();
+  const r = R.addOn(L, b, 1, { text: 'M3 screws' });
+  assert.equal(r.ok, true, r.msg);
+  assert.ok(r.id, 'the new label’s id comes back');
+  apply(b, r);
+  assert.deepEqual(R.labelsOf(b).map((l) => l.text), ['M3 screws']);
+  assert.equal(b.labelAssign['1'], r.id);
+  assert.equal(b.placed[0].label, 'M3 screws', 'the mirror follows');
+  assert.match(r.desc, /on drawer 1/);
+  // the drawer is labelled now: a second add-on expecting it empty is refused and leaves nothing behind
+  const again = R.addOn(L, b, 1, { text: 'Nuts' });
+  assert.equal(again.ok, false); assert.equal(again.reason, 'stale');
+  assert.equal(R.addOn(L, b, 4, { text: 'Bits' }).ok, false, 'a Classic drawer takes no label');
+  assert.equal(R.addOn(L, b, 2, { text: '   ' }).reason, 'empty');
+  assert.equal(R.addOn(L, build({ faceStyle: 'essential' }), 1, { text: 'Bits' }).ok, false, 'no label faceplate, no placing');
+});
+
 test('place several: advances to the next waiting label and stops when drawers or labels run out', () => {
   const b = withLabels(['A', 'B', 'C']);
   const [a, bb, c] = ids(b);

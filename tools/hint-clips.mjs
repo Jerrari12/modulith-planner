@@ -94,12 +94,12 @@ async function openPage(ctx, base, ws, query = '') {
   await page.waitForTimeout(1200);
   return page;
 }
+/* labels waiting in the tray, through the panel's own file input (the Labels redesign of 2026-11-23 took the Type a label
+   modal away: typing now happens on a drawer). The labels clips themselves were recorded on the panel before the redesign
+   and want recording again on it. */
 async function addLabels(page, words) {
-  await page.evaluate(async (ws) => {
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const btn = (t, root = document) => [...root.querySelectorAll('button')].find((b) => !b.closest('[hidden]') && b.textContent.trim().startsWith(t));
-    for (const w of ws) { btn('Type a label').click(); await sleep(60); document.querySelector('#ws-modal input.field').value = w; btn('Add label', document.querySelector('#ws-modal .box')).click(); await sleep(150); }
-  }, words);
+  const doc = { format: 'modulith-labels', version: 1, batchId: 'hintclips001', labels: words.map((text) => ({ text })) };
+  await page.setInputFiles('#ws-labelsfile', { name: 'labels.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
   await page.waitForTimeout(400);
 }
 
@@ -116,15 +116,6 @@ const LIB_TOP = [20, 170, 700, 321], MODEL_D = [230, 180, 700, 321], GAP = [290,
 const LIST = [20, 150, 700, 321], ROWS = [20, 290, 700, 321];
 const WIDE = [20, 150, 960, 440], WIDE_LOW = [20, 250, 960, 440], WIDE_DOCK = [20, 360, 960, 440], SIMP = [160, 260, 960, 440], TOOLS = [460, 60, 700, 321];
 const CLIPS = {
-  'labels-type': {
-    crop: PANEL,
-    async run(page, d) {
-      await d.to(tile('Type a label'), 700); await sleep(500); await d.click(); await sleep(500);
-      await d.type('M3 screws'); await sleep(600);
-      await d.to('#ws-modal .btns .key.on', 500); await sleep(250); await d.click(); await sleep(900);
-      await d.to('#ws-labels .list .chip-l', 600); await sleep(1800);
-    },
-  },
   /* From a file… opens the computer's own file chooser, which no screencast can capture (headless Chrome shows none; a real
      one is the operating system's window). Joey, 2026-10-23: the clip "looks wrong, instead it should open a desktop folder
      explorer window". So the clip draws a stand-in: an Open window in the planner's own glass style over the stage, a short
