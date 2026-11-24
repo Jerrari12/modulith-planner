@@ -9317,7 +9317,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-colors .crow').first().click();
   await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
   const caseHeads = await heads();
-  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['Panchroma™ Galaxy PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
+  assert.deepEqual(caseHeads, [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['PETG', ['PETG']], ['Panchroma™ Translucent PLA', ['PLA']], ['Panchroma™ Galaxy PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']], ['rPLA', ['PLA']]], 'every line but TPU, each tagged (the last PLA is Polar Filament, 2026-10-26; then Prusament Galaxy, 2026-11-01, and Prusament rPLA, 2026-11-23)');
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sw')].filter((e) => / TPU/.test(e.getAttribute('aria-label') || '')).length), 0, 'no TPU swatch for the case');
   // THE MATERIAL CHIPS (Joey, 2026-10-23: "a way to filter by material type when applicable"): a case's lines sell PLA and
   // PETG, so a row of All · PLA · PETG stands above the list, All pressed, 8 px between the chips (the planner's floor)
@@ -9350,7 +9350,7 @@ test('Colors: the feet are TPU - TPU95 Black by default, from a PLA palette and 
   await page.locator('#ws-picker .mrow .mchip', { hasText: /^PLA$/ }).focus();
   await page.keyboard.press('Space');
   assert.deepEqual(await page.evaluate(() => [document.activeElement.textContent.trim(), document.activeElement.getAttribute('aria-pressed')]), ['PLA', 'true'], 'Space presses the focused chip and keeps the focus on it');
-  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['Panchroma™ Galaxy PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26; then Prusament, 2026-11-01)');
+  assert.deepEqual(await heads(), [['Panchroma™ PLA', ['PLA']], ['Panchroma™ Silk PLA', ['PLA']], ['Panchroma™ Translucent PLA', ['PLA']], ['Panchroma™ Galaxy PLA', ['PLA']], ['PLA / PETG', ['PLA', 'PETG']], ['PLA', ['PLA']], ['Burnt Titanium PLA', ['PLA']], ['PLA', ['PLA']], ['Galaxy PLA', ['PLA']], ['rPLA', ['PLA']]], 'PLA: every line but the Polymaker PETG one (the last PLA is Polar Filament, 2026-10-26; then Prusament Galaxy, 2026-11-01, and Prusament rPLA, 2026-11-23)');
   // a shared or uploaded palette can name a filament the catalogue does not know: its own words place it under a chip (Terra 01a16a51)
   await page.evaluate(() => { const v = window.__GEN2_VIEWER__; const p = v.palette(); v.setPalette({ on: true, colors: { ...p.colors, Accent: { name: 'PETG Blue (custom)', hex: '#2f66b8' } }, over: p.over || {} }); });
   await page.locator('#ws-colors .crow').first().click();   // the case picker opened again: it reads the palette afresh and starts at All
@@ -9973,6 +9973,72 @@ test('Build style: a cabinet build picks its door style - Cabinets group, Soon s
   await page.locator('#ws-insp .doorrow button.lnk').click();
   await page.waitForSelector('#ws-lib section.doors', { timeout: 15_000 });
   assert.equal(await page.evaluate(() => [...document.querySelectorAll('#ws-lib button[role=tab]')].find((b) => b.getAttribute('aria-selected') === 'true')?.textContent), 'Build style', 'the link opens Build style');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE CHEVRON STRIP COLOURS (2026-11-23, Joey: "I want to be able to assign Prusament rPLA colors like we did in our hero and
+   thumbnail render", live for everyone). A Chevron build's Colors tab has a Chevron strips row and, on a Chevron part's
+   card, Backer and Strips chips; Strips opens the Strip colours panel: the ladder (One colour / Two-tone / Strip mix), the
+   count, a swatch per strip colour with its F number, palettes and Shuffle. The colours ride in the palette (`Faceplate:FACE`
+   and `/2`..`/9`), the arrangement in the record's stripSeed; both survive a reload through the link. */
+test('Colors: Chevron strip colours - the Coffee palette mixes every Chevron faceplate and door, the ladder steps and sets aside, Shuffle and Undo, the link keeps them', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'chevron', doorStyle: 'chevron', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 3, gridH: 1, sideCovers: true, plateParts: {}, nextId: 3, labelStyle: null, buildId: 'e2estrips001',
+    placed: [{ id: 1, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 2, y: 0, w: 1, hh: 2, fill: 'cabinet', shelves: 0 }] };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('colors', { query: `#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().parts === 2 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+  const info = () => page.evaluate(() => { const i = window.__GEN2_VIEWER__.stripInfo(); return { k: i.k, mixing: i.mixing, slots: i.slots.map((s) => s.name), backer: i.backer.name }; });
+  const step = () => page.evaluate(() => document.querySelector('#ws-picker .sstep.on')?.dataset.v || null);
+  const mixedFaces = () => page.evaluate(() => { let n = 0; for (const i of window.__GEN2_VIEWER__.instances.values()) i.group.traverse((o) => { if (o.isMesh && o.userData.zone === 'FACE' && o.material?.userData?.stripMix) n++; }); return n; });
+  const dock = () => page.evaluate(() => +(document.querySelector('#ws-dock')?.textContent.match(/(\d+) filaments?/) || [])[1]);
+  // the Chevron strips row opens the panel, on its own colour: one strip colour, two-tone
+  await page.locator('#ws-colors .crow.stripsrow').click();
+  await page.waitForSelector('#ws-picker .sladder');
+  assert.equal(await step(), 'two', 'a preset dresses the strips and the backer apart: two-tone');
+  assert.equal(await mixedFaces(), 0, 'one colour: no part draws the mix');
+  const d0 = await dock();
+  // Coffee: the four rPLA colours and black on the black backer the build already has (no second black spool)
+  await page.locator('#ws-picker .spal', { hasText: 'Coffee' }).click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 5);
+  const c = await info();
+  assert.deepEqual(c.slots.slice(0, 4), ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine']);
+  assert.equal(c.slots[4], c.backer, 'the black strip is the backer’s own filament');
+  assert.equal(c.mixing, 2, 'the faceplate and the door both mix');
+  assert.equal(await mixedFaces(), 2);
+  assert.equal(await dock(), d0 + 4, 'the Dock counts the four rPLA spools, each once');
+  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#ws-picker .sslot')].map((b) => [...b.querySelectorAll('.fnum')].map((x) => x.textContent).join(' '))), ['F2', 'F3', 'F4', 'F5', 'F1 = backer', 'F1']);
+  assert.match(await text(page, '#ws-picker .takes'), /5 strip colours with this backer: 5 filaments at once/);
+  // the ladder: One colour sets 2..5 aside, Two-tone brings the backer back, Strip mix brings 2..5 back
+  await page.locator('#ws-picker .sstep[data-v="one"]').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 1);
+  assert.equal((await info()).backer, 'Prusament rPLA Algae', 'one colour: the backer in strip colour 1’s filament');
+  await page.locator('#ws-picker .sstep[data-v="two"]').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().backer.name !== 'Prusament rPLA Algae');
+  assert.equal((await info()).backer, c.backer, 'two-tone: the backer One colour replaced');
+  await page.locator('#ws-picker .sstep[data-v="mix"]').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 5);
+  assert.deepEqual((await info()).slots, c.slots, 'the strip colours set aside come back');
+  // the count: 3, then the More half, then back
+  await page.locator('#ws-picker .scount[data-v="c3"]').click();
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().slots.length === 3);
+  // Shuffle: a new arrangement in the record and on the stage; Undo puts both back
+  await page.locator('#ws-picker .shuffle').click();
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.stripSeed > 0 && window.__GEN2_VIEWER__.stripInfo().seed === window.__GEN2_STORE__.state.stripSeed);
+  await page.evaluate(() => window.__GEN2_STORE__.undo());
+  await page.waitForFunction(() => window.__GEN2_STORE__.state.stripSeed === null && window.__GEN2_VIEWER__.stripInfo().seed === 1);
+  assert.equal((await info()).slots.length, 3, 'Undo of the Shuffle leaves the colours');
+  // a Chevron part's card: Backer and Strips
+  await page.evaluate(() => { const fp = [...window.__GEN2_VIEWER__.instances.values()].find((i) => /^Faceplate_Chevron/.test(i.cfg.node)); window.__GEN2_VIEWER__.setSelected(fp.cfg.id); });
+  await page.waitForSelector('#ws-partcard .zchip.strips');
+  assert.deepEqual((await page.locator('#ws-partcard .zchip').allTextContents()).map((t) => t.replace(/\d+$/, '')), ['Backer', 'Strips']);
+  // the link carries the strip colours: a reload of the address draws the same three
+  await page.evaluate(() => window.__GEN2_STORE__.flush());
+  await settle(page, 600);
+  await page.reload({ waitUntil: 'load' });
+  await waitBoot(page);
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 3 && window.__GEN2_VIEWER__.stripInfo().mixing === 2, null, { timeout: 60_000 });
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

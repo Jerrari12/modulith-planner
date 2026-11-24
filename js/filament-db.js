@@ -377,6 +377,17 @@ const FILAMENT_DB = [
     { name: 'Galaxy Green',  hex: '#426639', url: 'https://www.prusa3d.com/product/prusament-pla-galaxy-green-1kg-nfc/' },
     { name: 'Galaxy Red',    hex: '#9D1817', url: 'https://www.prusa3d.com/product/prusament-pla-galaxy-red-1kg-nfc/' },
   ].map(f => ({ ...f, finish: 'glitter', label: `Prusament ${f.name}` })) },
+  // Prusament rPLA Natural Pigments (2026-11-23, for the Chevron strip colours: Joey's coffee station is a Chevron whose strips are
+  // each a different rPLA, on black). The whole line, four colours, as the store and prusament.com list it; plain store links, the 1 kg
+  // spools. ⚠ THE HEXES ARE PRUSA'S OWN CHART (help.prusa3d.com article 762314, "HueForge filament transparency values and hexcodes",
+  // read 2026-11-23), which marks every rPLA row "Inconsistent color": the natural pigments vary by batch, so a print can differ.
+  // PrusaSlicer has one generic rPLA profile (#AA845D) and no colour per spool. No finish is stated: an ordinary one.
+  { brand: 'Prusament', line: 'rPLA', url: 'https://prusament.com/materials/prusament-rpla/', colors: [
+    { name: 'Algae',   hex: '#674B41', url: 'https://www.prusa3d.com/product/prusament-rpla-algae-pigment-1kg/' },
+    { name: 'Corn',    hex: '#B37B46', url: 'https://www.prusa3d.com/product/prusament-rpla-corn-pigment-1kg/' },
+    { name: 'Risotto', hex: '#CCC9BF', url: 'https://www.prusa3d.com/product/prusament-rpla-risotto-pigment-1kg/' },
+    { name: 'Wine',    hex: '#5E493F', url: 'https://www.prusa3d.com/product/prusament-rpla-wine-pigment-1kg/' },
+  ].map(f => ({ ...f, label: `Prusament rPLA ${f.name}` })) },
 ];
 
 /* The surface family a label's filament belongs to ('silk', 'glitter'), or null for an ordinary one and for a label the catalog

@@ -162,6 +162,9 @@ export async function boot() {
   /* the label palette (2026-10-28, docs/redesign/LABEL-PALETTE.md): the stage keeps its own copy, handed over on EVERY store
      change - an edit, an undo or a redo, a load - and only repainted (setLabelPalette compares first) */
   store.subscribe((state) => stage.setLabelPalette?.(state.labelPalette));
+  /* the Chevron strip arrangement (2026-11-23, the record's stripSeed): handed over on every store change the same way - a
+     Shuffle, its Undo, a load - and redrawn only when it moved (setStripSeed compares first) */
+  store.subscribe((state) => stage.setStripSeed?.(state.stripSeed));
   /* every settled change: the Recent entry (its name kept), the current id, the planner's slot; the cap is never crossed
      silently - a new build that would push the oldest out waits in the switcher's notice until the visitor saves or drops it */
   let capPending = null;   // { drop: entry } while a new build is held back by the cap
@@ -305,6 +308,7 @@ export async function boot() {
     }
   }
   stage.setLabelPalette?.(store.state.labelPalette);
+  stage.setStripSeed?.(store.state.stripSeed);
   if (QS.get('debug')) { window.__GEN2_STORE__ = store; window.__GEN2_CTX__ = () => ctx; }   // for the shot tool and end-to-end checks, like the stage's own hook
   let kitTitle = stage.manifest?.title || null;
   if (KIT && location.hash.startsWith('#build=')) { try { kitTitle = (await (await fetch(`builds/${encodeURIComponent(KIT)}.json`)).json()).title || kitTitle; document.title = tabTitle(kitTitle); } catch { /* the hash's own name stands */ } }

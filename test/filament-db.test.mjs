@@ -34,6 +34,7 @@ const LABEL_PREFIX = {
   PLA: 'Printed Solid ',
   'Burnt Titanium PLA': null,         // ERYONE, explicit per row
   'Galaxy PLA': 'Prusament ',         // 2026-11-01
+  rPLA: 'Prusament rPLA ',            // 2026-11-23, the Chevron strip colours
 };
 /* a line name two brands share ("PLA": Printed Solid and Polar Filament, 2026-10-26) is told apart by its brand */
 const BRAND_LINE_PREFIX = { 'Polar Filament|PLA': 'Polar ' };
@@ -41,7 +42,7 @@ const prefixOf = (b) => Object.hasOwn(BRAND_LINE_PREFIX, `${b.brand}|${b.line}`)
 
 test('the catalog is the shape main.js reads', () => {
   assert.ok(Array.isArray(FILAMENT_DB), 'FILAMENT_DB is an array');
-  assert.equal(FILAMENT_DB.length, 12, 'twelve brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26, Prusament Galaxy PLA 2026-11-01, Panchroma Galaxy PLA 2026-11-04)');
+  assert.equal(FILAMENT_DB.length, 13, 'thirteen brand entries (the two PolyFlex TPU lines joined 2026-10-21, Polar Filament PLA 2026-10-26, Prusament Galaxy PLA 2026-11-01, Panchroma Galaxy PLA 2026-11-04, Prusament rPLA 2026-11-23)');
 
   for (const b of FILAMENT_DB) {
     const where = `${b.brand} / ${b.line}`;
@@ -72,7 +73,7 @@ test('every colour carries the four fields a consumer may rely on', () => {
       if ('pickNote' in c) assert.ok(c.pick === true, `${where}: pickNote without pick`);
     }
   }
-  assert.equal(n, 177, 'one hundred and seventy-seven colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21, 44 Polar PLA 2026-10-26, 5 Prusament Galaxy PLA 2026-11-01, 6 Panchroma Galaxy PLA 2026-11-04)');
+  assert.equal(n, 181, 'one hundred and eighty-one colours (Jessie Neon Yellow joined 2026-10-18, ten PolyFlex TPU 2026-10-21, 44 Polar PLA 2026-10-26, 5 Prusament Galaxy PLA 2026-11-01, 6 Panchroma Galaxy PLA 2026-11-04, 4 Prusament rPLA 2026-11-23)');
 });
 
 test('⚔ every label is unique across every brand', () => {
@@ -85,7 +86,7 @@ test('⚔ every label is unique across every brand', () => {
     }
   }
   assert.deepEqual(clashes, [], 'labels collide, and customColors keys on them');
-  assert.equal(seen.size, 177, 'every colour contributed a distinct label');
+  assert.equal(seen.size, 181, 'every colour contributed a distinct label');
 });
 
 test('⚔ each brand builds its labels the way its block says it does', () => {

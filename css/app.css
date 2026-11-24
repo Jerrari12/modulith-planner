@@ -582,6 +582,40 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
   75% { background-position: calc(var(--gx) + var(--sx, 0px) + 19px) calc(var(--gy) + var(--sy, 0px) + 13px), var(--gx) var(--gy); }
 }
 #ws-picker .find { display: contents; }   /* the search and the chips: rows of the column on a desktop, one row on a phone */
+/* the Chevron strip colours (2026-11-23, colors.js renderStrips): the panel takes the picker's place and scrolls as one */
+#ws-picker .sbody { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-inline: 4px; margin-inline: -4px -2px; }
+#ws-picker .sbody .brands { flex: none; overflow: visible; padding-inline: 0; margin-inline: 0; }
+#ws-picker .sladder { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--track); }
+#ws-picker .sstep { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 48px; padding: 6px 8px; border: none; border-radius: 9px; background: transparent; color: var(--ink-2); font: inherit; text-align: left; cursor: pointer; }
+#ws-picker .sstep b { font-size: 12px; font-weight: 700; color: inherit; }
+#ws-picker .sstep span { font-size: 10.5px; line-height: 1.25; color: var(--ink-3); }
+#ws-picker .sstep.on { background: var(--seg-on); box-shadow: var(--seg-on-shadow); color: var(--ink); }
+#ws-picker .sstep.on span { color: var(--ink-2); }
+#ws-picker .scounts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--track); }
+#ws-picker .scount { height: 32px; border: none; border-radius: 9px; background: transparent; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+#ws-picker .scount.on { background: var(--seg-on); box-shadow: var(--seg-on-shadow); color: var(--ink); }
+#ws-picker .scount.more { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+#ws-picker .sstep:focus-visible, #ws-picker .scount:focus-visible, #ws-picker .sslot:focus-visible, #ws-picker .spal:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+#ws-picker .note.takes { margin: 0; font-size: 12px; line-height: 1.4; color: var(--ink); }
+#ws-picker .note.warn { margin: 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--warn-border); background: var(--warn-bg); color: var(--warn-fg); }
+#ws-picker .sslots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+#ws-picker .sslot { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px 5px; border-radius: 10px; border: 1px solid var(--key-border); background: var(--key-bg); color: var(--ink); font: inherit; cursor: pointer; min-width: 0; }
+#ws-picker .sslot.on { border-color: var(--orange); background: var(--key-on-bg); box-shadow: var(--key-on-shadow); }
+#ws-picker .sslot .sw { width: 26px; height: 26px; aspect-ratio: auto; cursor: inherit; }
+#ws-picker .sslot .snm { font-size: 11px; font-weight: 600; white-space: nowrap; }
+#ws-picker .sslot .fnum { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+#ws-picker .note.editing { margin: 2px 0 0; color: var(--ink); }
+#ws-picker .spals { display: flex; flex-wrap: wrap; gap: 6px; }
+#ws-picker .spal { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 6px; border-radius: 999px; border: 1px solid var(--key-border); background: var(--key-bg); color: var(--ink); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+#ws-picker .spal[disabled] { opacity: .45; cursor: not-allowed; }
+#ws-picker .spal .sws, #ws-colors .crow .sws { display: inline-flex; flex: none; }
+#ws-picker .spal .sws i { width: 10px; height: 20px; }
+#ws-picker .spal .sws i:first-child { border-radius: 5px 0 0 5px; } #ws-picker .spal .sws i:last-child { border-radius: 0 5px 5px 0; }
+#ws-picker .shuffle { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+#ws-picker .note.buyer { margin: 0; line-height: 1.4; }
+#ws-picker .note.buyer a { color: var(--ink); font-weight: 600; }
+#ws-colors .crow .sws .sw { width: 10px; border-radius: 0; margin-left: -1px; }
+#ws-colors .crow .sws .sw:first-child { border-radius: 5px 0 0 5px; margin-left: 0; } #ws-colors .crow .sws .sw:last-child { border-radius: 0 5px 5px 0; }
 #ws-picker .foot { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--hair); }
 /* THE BUY BUTTON AND THE POLYMAKER OFFER (colors.js buyArea; Joey 2026-11-04: "it just feels like hidden text at the moment"). The Buy
    line is a button for good. While the offer shows, on a phone it is a card round the foot's Buy, at the end of the sheet's own scroll
@@ -1159,6 +1193,7 @@ select option, select optgroup { background: var(--menu-bg); color: var(--ink); 
      its own overflow), and in a sheet capped at 56vh the rows around it - the material chips, Printed on, the buy line,
      the resets - left it no height at all */
   #ws .sheet#ws-picker .brands { flex: none; overflow: visible; }
+  #ws .sheet#ws-picker .sbody { flex: none; overflow: visible; }   /* the strip colours scroll with the sheet, as the filaments do */
   /* and the Parts list the same way (Joey 2026-10-27: "sometimes I only get a sliver of the menu to work with"): its
      desktop rule made it the scroller, one row tall (83 px) in the sheet. The phone audit of every sheet (Build library,
      Colors, Labels, Parts, Assemble's steps) found nothing else clipping its own content */

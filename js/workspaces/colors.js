@@ -42,6 +42,8 @@ import { STRIPE_COLOURS } from '../label-look.js';   // a stripe meaning's word 
 import { simplify, worn as wornLook, byFilament, SUMMARY } from '../colors/simplify.js';   // `worn` is this file's palette helper
 import { lineMaterials, materialsIn, filterByMaterial, labelMaterials, wordMaterial } from '../colors/materials.js';
 import { finishClass, glitterClass, swatchStyle, sparkleOnScroll } from '../colors/swatch.js';   // a swatch's silk sheen, glitter specks and sparkle
+import { dE } from '../colors/colour.js';
+import { fNumbers, filamentsAtOnce, stripStep, filamentId, slotOfKey, MAX_STRIPS, STRIP_KEY, BACKER_KEY } from '../chevron-mix.js';   // the Chevron strip colours (2026-11-23)
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
 /* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/colors-*.mp4 from
@@ -55,7 +57,7 @@ const TYPE_LABEL = { Case: 'Case', CaseExtender: 'Case extender', SideCover: 'Si
 /* ZONE_LABEL, isPaid and short are exported: the Parts list words a row's zones, filament names and buy links as this tab does */
 // a label stripe's zone names its meaning ('STRIPE@sky-blue': label-look.js stripePieceZone) and reads as "Metric stripe"
 const stripeWord = (z) => { const c = /^STRIPE@/.test(z) ? STRIPE_COLOURS.find((x) => 'STRIPE@' + x.colour === z) : null; return c ? c.name + ' stripe' : null; };
-export const ZONE_LABEL = (z) => z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : stripeWord(z) || z.charAt(0) + z.slice(1).toLowerCase();
+export const ZONE_LABEL = (z) => /^FACE\/[2-9]$/.test(z) ? `Strip colour ${z.slice(5)}` : z === 'FACE' ? 'Face' : z === 'GRIP' ? 'Grip' : z === 'GRIP ACCENT' ? 'Grip accent' : z === 'TEXT' ? 'Label text' : stripeWord(z) || z.charAt(0) + z.slice(1).toLowerCase();
 const keyLabel = (key) => { const [t, z] = key.split(':'); return (TYPE_LABEL[t] || t) + (z ? ' · ' + ZONE_LABEL(z) : ''); };
 const TYPE_PLURAL = { Case: 'cases', CaseExtender: 'case extenders', SideCover: 'side covers', Drawer: 'drawer bodies', Faceplate: 'faceplates', Accent: 'accents', Label: 'labels', Handle: 'handles', CoverL: 'lower covers', CoverU: 'upper covers', FootrailL: 'lower foot rails', FootrailU: 'upper foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'wall brackets', QuickLock: 'QuickLocks', CabinetHinge: 'cabinet hinges', CabinetLatch: 'door latches', Stopper: 'stoppers', MagnetClip: 'magnet clips', Magnet: 'magnets', Screw: 'screws', ShelfInsert: 'shelf decks', ShelfLip: 'shelf lips', BackCover: 'back covers' };
 const typePlural = (key) => TYPE_PLURAL[key.split(':')[0]] || (key.split(':')[0].toLowerCase() + 's');
@@ -199,7 +201,7 @@ export function mountColors(stage, ctx) {
   // tray: the compare tray is open; flip: the index of the finalist shown on the model (null = the chosen look)
   // surprise: the Surprise me panel is open; owning: its owned-filaments editor is up (oq its search); sshow: the index of
   // the candidate pinned on the model (null = none)
-  const st = { picks: 0, scHint: false, scHintDue: false, key: null, sel: null, expanded: null, query: '', mat: 'all', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null, swap: null };   // swap: the spool whose filament the picker changes everywhere (openSwap); simp: the Simplify panel is open, simpTarget its filament count
+  const st = { picks: 0, scHint: false, scHintDue: false, key: null, sel: null, expanded: null, query: '', mat: 'all', shop: false, saving: false, scope: 'all', gallery: false, detail: null, gq: '', fmax: 0, more: false, tray: false, flip: null, surprise: false, owning: false, oq: '', sshow: null, ownedWas: '', simp: false, simpTarget: null, swap: null, strips: false, stripSel: 1, stripMore: false };   // swap: the spool whose filament the picker changes everywhere (openSwap); simp: the Simplify panel is open, simpTarget its filament count; strips: the Strip colours panel is open in the picker's place, stripSel the swatch it edits (a slot number or 'backer'), stripMore its count row's 6-9 half
   const root = el('div', { id: 'ws' });
   document.body.appendChild(root);
   const { say, soon } = makeToast(root);
@@ -261,7 +263,7 @@ export function mountColors(stage, ctx) {
   // the key is the build's own first; the store snapshots the palette with the build. A whole look (a preset, a scheme,
   // ★ My palette, an upload) is always its OWN undo step: the store merges changes made within 350 ms, so the history is
   // flushed on both sides of it (the Colors plan's step 1, 2026-10-18)
-  const LOOK = new Set(['preset', 'scheme']);
+  const LOOK = new Set(['preset', 'scheme', 'strips']);   // 'strips': a strip-colour step, count or palette (each its own undo step)
   function commitColors(why, fn) {
     if (ctx.ownPaletteKey) ctx.ownPaletteKey();
     stage.endPreview?.();   // a look being shown never outlives a real change
@@ -378,7 +380,9 @@ export function mountColors(stage, ctx) {
     inb.appendChild(el('h3.h2', { text: 'Colors in this build' }));
     const rows = el('div.crows');
     // an unpicked zone follows its body, and an unpicked cabinet hinge or latch the QuickLocks (keysInBuild `follows`)
+    const SI = stage.stripInfo ? stage.stripInfo() : null;
     for (const k of stage.keysInBuild()) {
+      if (k.slot) continue;   // strip colours 2..n: the Chevron strips row below the Face row stands for them
       const w = worn(k.key);
       const hex = stage.activeHex(k.key);
       rows.appendChild(el('button.crow.key' + (st.key === k.key ? '.on' : ''), { disabled: k.locked, title: k.locked ? 'Purchased hardware, not printed · no filament to pick' : `Pick a filament for ${keyLabel(k.key).toLowerCase()}`, onclick: () => openPicker(k.key) }, [
@@ -386,6 +390,8 @@ export function mountColors(stage, ctx) {
         el('span.lbl', {}, [el('b', { text: keyLabel(k.key) }), el('span.cnt', { text: ` ×${k.count}` })]),
         el('span.fil', {}, [k.locked ? 'Bought' : w ? short(w.name) : p.on && k.zone && !k.ownColor ? 'follows Body' : p.on && k.follows && !k.zone ? `follows ${keyLabel(k.follows)}` : 'Instruction colour', k.own ? el('span.own', { text: `${k.own} own`, title: `${n(k.own, 'unit')} with ${k.own === 1 ? 'its' : 'their'} own colour for this region` }) : null]),
       ]));
+      // the Chevron strips (2026-11-23): one row under the faceplate face, for the strip colours as a set
+      if (k.key === STRIP_KEY && SI && SI.parts) rows.appendChild(stripsRow(SI));
     }
     inb.appendChild(rows);
     panel.appendChild(inb);
@@ -913,8 +919,8 @@ export function mountColors(stage, ctx) {
     };
     if (!picker.classList.contains('open')) { phone.open(picker); requestAnimationFrame(() => requestAnimationFrame(go)); } else go();
   } }), 'offer:polymaker:shown');
-  function openPicker(key) { st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
-  function closePicker() { st.key = null; st.swap = null; renderAll(); if (phone) phone.collapse(picker); if (st.scHintDue) { st.scHintDue = false; showcaseHint(); } }
+  function openPicker(key) { st.strips = false; st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
+  function closePicker() { st.key = null; st.swap = null; st.strips = false; renderAll(); if (phone) phone.collapse(picker); if (st.scHintDue) { st.scHintDue = false; showcaseHint(); } }
   /* THE SPOOL'S FILAMENT, EVERYWHERE (Joey 2026-10-26: "what if i could select a spool and change it's color, and doing so
      would replace everything in the build that used that same color, kind of a handy feature"). A spool in the room is a
      colour (done.js onSpool); what the build prints in it is every filament picked in that colour and every region still
@@ -943,7 +949,7 @@ export function mountColors(stage, ctx) {
       if (fc.unpicked.some((u) => u.stripe && u.hex.toLowerCase() === h)) say('That spool prints the label stripes: their colour is set on each label, in Labels.');
       return;
     }
-    st.swap = t; st.key = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker);
+    st.swap = t; st.key = null; st.strips = false; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker);
   }
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_SPOOL_TAP__ = openSwap;   // the room's spool tap, for checks (done.js onSpool)
   function swapTo(f) {
@@ -964,15 +970,16 @@ export function mountColors(stage, ctx) {
     // brought by Joey 2026-10-28: "selecting its row could also briefly highlight the corresponding spool")
     if (room && room.handle && room.handle.selectSpool) room.handle.selectSpool(swap ? swap.hex : key && stage.activeHex ? stage.activeHex(key) : null);
     offer.live = false; floatBuy = null;   // the foot's buyArea says again whether the offer shows
-    if (!key && !swap) { picker.hidden = true; st.offerFor = null; return; }
+    if (!key && !swap && !st.strips) { picker.hidden = true; st.offerFor = null; return; }
     // another tab may have retired it since this page loaded: each opening (another region, another spool) reads the browser's word
     // again, once, so no pick inside an opening takes the card away unasked
-    const opening = key ? 'key:' + key : 'spool:' + swap.hex;
+    const opening = st.strips ? 'strips' : key ? 'key:' + key : 'spool:' + swap.hex;
     if (opening !== st.offerFor) {
       st.offerFor = opening;
       if (!offer.retired) { try { if (localStorage.getItem(OFFER_KEY)) offer.retired = true; } catch { /* storage that throws keeps this page's word */ } }
     }
     picker.hidden = false;
+    if (st.strips) { renderStrips(); return; }
     if (swap) { renderSwap(swap); return; }
     const keys = stage.keysInBuild(); const k = keys.find((x) => x.key === key); const count = k ? k.count : 0; const own = k ? k.own : 0;
     const uid = unitOfSel(); if (uid == null) st.scope = 'all';
@@ -1092,6 +1099,215 @@ export function mountColors(stage, ctx) {
     }
   }
 
+  /* ---------------- the Chevron strip colours (2026-11-23) ----------------
+     Joey: "I want to be able to assign Prusament rPLA colors like we did in our hero and thumbnail render" (live for
+     everyone). The spec is docs/redesign/CHEVRON-STRIP-COLOURS.md: one control with three steps that each say what printing
+     takes (One colour / Two-tone / Strip mix), 2 to 9 strip colours, a swatch per strip colour with the slicer's F number,
+     palettes and Shuffle. It opens in the picker's place, from a Chevron part's Strips chip or the Chevron strips row.
+     The step is read from the colours, never stored (chevron-mix.js stripStep). Every step, count and palette change is
+     one undo step; a strip colour or the backer picked from the list is an ordinary colour pick. */
+  const stripAside = [];   // strip colours set aside this session, by slot number: stepping down sets the top ones aside, stepping up brings them back
+  let stripPrevBacker = null;   // the backer before One colour made it strip colour 1's filament: Two-tone brings it back
+  const byLabel = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, c])));
+  const filOf = (label) => { const c = byLabel.get(label); return c ? { name: c.label, hex: c.hex, url: c.url } : null; };
+  /* the palettes: named catalog filaments only. Coffee is the hero and thumbnail renders' coffee station (category_art.py
+     "coffee"): the four Prusament rPLA colours and black strips on a black backer */
+  const STRIP_PALETTES = [
+    { id: 'coffee', name: 'Coffee', title: 'Prusament rPLA Algae, Corn, Risotto and Wine, with black strips on a black backer', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine', 'Panchroma Black'], backer: 'Panchroma Black' },
+    { id: 'rpla', name: 'Prusament rPLA', title: 'The four Prusament rPLA colours, on the backer you have', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine'] },
+  ];
+  const sameFil = (a, b) => !!filamentId(a) && filamentId(a) === filamentId(b);
+  const stripState = () => { const S = stage.stripInfo(st.sel ? st.sel.id : null); return { S, slots: S.slots, backer: S.backer, step: stripStep(S.slots, S.backer) }; };
+  const stepWord = (step, nslots) => step === 'one' ? 'One colour' : step === 'two' ? 'Two-tone' : `${nslots} colours`;
+  function openStrips() { st.strips = true; st.key = null; st.swap = null; st.query = ''; st.mat = 'all'; st.stripSel = 1; st.stripMore = stripState().slots.length > 5; renderAll(); if (phone) phone.open(picker); }
+  function commitStrips(slots, backer) { commitColors('strips', () => stage.setStrips({ slots, backer })); }
+  const colorMaterialOf = (b, c) => (lineMaterials(b.line).length <= 1 ? lineMaterials(b.line)[0] : wordMaterial(`${c.name} ${c.label}`));
+  /* a new strip colour, in the spec's fill order: a filament already in this build, else the catalog (the rPLA line first),
+     never one that looks almost like a colour already there (CIEDE2000 under 10, the Surprise me rule) */
+  function nextStripFilament(taken) {
+    const used = taken.filter((f) => f && f.hex);
+    const far = (f) => used.every((u) => !sameFil(u, f) && dE(u.hex, f.hex) >= 10);
+    for (const f of stage.filamentsInBuild().filaments) { if (TPU_LABELS.has(f.name) || materialOfName(f.name) === 'PETG') continue; const g = { name: f.name, hex: f.hex, url: f.url }; if (far(g)) return g; }
+    const lines = [...FILAMENT_DB.filter((b) => b.line === 'rPLA'), ...FILAMENT_DB.filter((b) => b.line !== 'rPLA')];
+    for (const b of lines) {
+      if (/TPU/.test(b.line)) continue;
+      for (const c of b.colors) { if (colorMaterialOf(b, c) !== 'PLA') continue; const g = { name: c.label, hex: c.hex, url: c.url }; if (far(g)) return g; }
+    }
+    return null;
+  }
+  /* the ladder (the spec's table): One colour puts the backer in strip colour 1's filament; Two-tone keeps a backer that
+     differs, else brings back the one One colour replaced, else the first filament in the build unlike strip colour 1;
+     Strip mix brings back the strip colours set aside, else adds one (from Two-tone, the backer's filament). Stepping down
+     sets strip colours 2..n aside. */
+  function setStep(step) {
+    const { slots, backer, step: was } = stripState();
+    if (step === was) return;
+    stage.track('strips:step:' + (step === 'two' ? 'twotone' : step));
+    const s1 = slots[0];
+    if (step !== 'mix') slots.slice(1).forEach((f, i) => { stripAside[i + 2] = f; });
+    if (step === 'one') {
+      if (!sameFil(backer, s1)) stripPrevBacker = backer;
+      commitStrips([s1], { ...s1 });
+      say('One colour · the backer is strip colour 1’s filament.');
+    } else if (step === 'two') {
+      let b = backer;
+      if (sameFil(b, s1)) b = stripPrevBacker && !sameFil(stripPrevBacker, s1) ? stripPrevBacker : (nextStripFilament([s1]) || filOf('Panchroma Black'));
+      commitStrips([s1], b);
+    } else {
+      const back = [];
+      for (let i = 2; i <= MAX_STRIPS && stripAside[i]; i++) back.push(stripAside[i]);
+      const add = back.length ? back : [was === 'two' && !sameFil(backer, s1) ? backer : nextStripFilament([s1, backer])].filter(Boolean);
+      commitStrips([s1, ...add]);
+      if (!back.length && !st.mixSeen) { st.mixSeen = true; say('From here, colours change inside every strip layer, so a strip mix needs a printer that switches filament by itself: an MMU, an AMS or several tool heads.'); }
+    }
+  }
+  function setCount(nNew) {
+    const { slots, backer } = stripState();
+    if (nNew === slots.length) return;
+    stage.track('strips:count:' + nNew);
+    let next = slots.slice();
+    if (nNew < next.length) { next.slice(nNew).forEach((f, i) => { stripAside[nNew + 1 + i] = f; }); next = next.slice(0, nNew); }
+    else while (next.length < nNew) {
+      const i = next.length + 1, kept = stripAside[i];
+      const f = kept && !next.some((g) => sameFil(g, kept)) ? kept : nextStripFilament([...next, backer]);
+      if (!f) break;
+      next.push(f);
+    }
+    commitStrips(next);
+  }
+  /* a strip colour or the backer from the list. Picking a filament another strip colour already has swaps the two, so a
+     mix never loses a colour to a duplicate by accident */
+  function pickStrip(f) {
+    const fil = { name: f.label || f.name, hex: f.hex, url: f.url };
+    const { slots } = stripState();
+    if (st.stripSel === 'backer') { commitColors('color', () => stage.setStrips({ backer: fil })); return; }
+    const i = st.stripSel - 1, next = slots.slice();
+    const j = next.findIndex((g, q) => q !== i && sameFil(g, fil));
+    if (j >= 0 && !sameFil(next[i], fil)) { next[j] = next[i]; next[i] = fil; commitColors('color', () => stage.setStrips({ slots: next })); say(`Swapped strip colours ${i + 1} and ${j + 1}.`); return; }
+    next[i] = fil;
+    commitColors('color', () => stage.setStrips({ slots: next }));
+  }
+  function applyStripPalette(pal0) {
+    /* a backer already in a filament that looks like the palette's (another brand's black) stays, and stands in for it
+       among the strips too: the palette brings its colours, not a second black spool */
+    const cur = stripState().backer, want = pal0.backer ? filOf(pal0.backer) : null;
+    const keep = want && cur && cur.name && dE(cur.hex, want.hex) < 10 ? { name: cur.name, hex: cur.hex, url: cur.url } : null;
+    const strips = pal0.strips.map((l) => (keep && l === pal0.backer ? keep : filOf(l))).filter(Boolean);
+    if (strips.length < 2) return;
+    stage.track('strips:palette:' + pal0.id);
+    commitStrips(strips, want ? (keep || want) : undefined);
+    st.stripSel = 1; st.stripMore = strips.length > 5;
+    say(`${pal0.name} strips · Undo to go back.`);
+  }
+  /* the build's own filaments as strip colours: every one it prints in but the backer and TPU, up to 9 */
+  function buildStripColours(backer) {
+    return stage.filamentsInBuild().filaments.filter((f) => !TPU_LABELS.has(f.name) && !sameFil(f, backer)).slice(0, MAX_STRIPS).map((f) => ({ name: f.name, hex: f.hex, url: f.url }));
+  }
+  function shuffleStrips() {
+    stage.track('strips:shuffle');
+    const cur = store.state.stripSeed || 1;
+    let s = cur;
+    while (s === cur) s = 1 + Math.floor(Math.random() * 0xFFFFFFFE);
+    store.flush(); store.commit((state) => { state.stripSeed = s; }, 'strips'); store.flush();
+    say('New strip arrangement · Undo to go back.');
+  }
+  // a radio group's arrow keys: the next or previous option is chosen and takes the focus, as a native radio group does
+  const radioKeys = (e) => {
+    const k = e.key; if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(k)) return;
+    e.preventDefault();
+    const opts = [...e.currentTarget.parentElement.querySelectorAll('[role=radio]:not([disabled])')];
+    const i = opts.indexOf(e.currentTarget), to = opts[(i + (k === 'ArrowRight' || k === 'ArrowDown' ? 1 : opts.length - 1)) % opts.length];
+    st.focusStrip = to.dataset.v; to.click();
+  };
+  /* the Colors list's row for the strips as a set: its swatches, the step and the parts */
+  function stripsRow(SI) {
+    const step = stripStep(SI.slots, SI.backer);
+    return el('button.crow.key.stripsrow' + (st.strips ? '.on' : ''), { title: 'Strip colours: one colour, two-tone or a mix of up to 9', onclick: openStrips }, [
+      el('span.sws', {}, SI.slots.slice(0, 5).map((f) => el('i.sw' + finishClass(f.name), { style: swatchStyle(f.name, f.hex) }))),
+      el('span.lbl', {}, [el('b', { text: 'Chevron strips' }), el('span.cnt', { text: ` ×${SI.parts}` })]),
+      el('span.fil', { text: SI.on ? stepWord(step, SI.slots.length) : 'Instruction colour' }),
+    ]);
+  }
+  function renderStrips() {
+    const { S, slots, backer, step } = stripState();
+    const nS = slots.length;
+    if (st.stripSel !== 'backer' && !(st.stripSel >= 1 && st.stripSel <= nS)) st.stripSel = 1;
+    const fnum = fNumbers(slots, backer), need = filamentsAtOnce(slots, backer);
+    const body = el('div.sbody');
+    picker.append(
+      el('div.head', {}, [el('h2.h2', {}, [el('b.region', { text: 'Strip colours' }), ` · ${n(S.parts, 'Chevron part')}`]), el('button.x', { title: 'Close', 'aria-label': 'Close strip colours', onclick: closePicker }, [icon('x', { size: 16 })])]),
+      body,
+    );
+    // the ladder: three steps, each saying what printing it takes
+    const STEPS = [['one', 'One colour', 'any printer'], ['two', 'Two-tone', 'one filament change'], ['mix', 'Strip mix', 'switches filament by itself']];
+    body.appendChild(el('div.sladder', { role: 'radiogroup', 'aria-label': 'How the strips print' }, STEPS.map(([id, t, sub]) => el('button.sstep' + (step === id ? '.on' : ''), {
+      role: 'radio', 'aria-checked': String(step === id), tabindex: step === id ? '0' : '-1', 'data-v': id, onclick: () => setStep(id), onkeydown: radioKeys,
+    }, [el('b', { text: t }), el('span', { text: sub })]))));
+    // the count, in a mix: [2] [3] [4] [5] [More], or [‹] [6] [7] [8] [9]
+    if (step === 'mix') {
+      const nums = st.stripMore ? [6, 7, 8, 9] : [2, 3, 4, 5];
+      const opt = (v) => el('button.scount' + (nS === v ? '.on' : ''), { role: 'radio', 'aria-checked': String(nS === v), 'aria-label': `${v} strip colours`, tabindex: nS === v || (!nums.includes(nS) && v === nums[0]) ? '0' : '-1', 'data-v': 'c' + v, text: String(v), onclick: () => setCount(v), onkeydown: radioKeys });
+      const flip = st.stripMore
+        ? el('button.scount.more', { text: '‹', 'aria-label': 'Fewer strip colours: 2 to 5', onclick: () => { st.stripMore = false; st.focusStrip = 'c5'; renderPicker(); } })
+        : el('button.scount.more', { text: 'More', 'aria-label': 'More strip colours: 6 to 9', onclick: () => { st.stripMore = true; st.focusStrip = 'c6'; renderPicker(); } });
+      body.appendChild(el('div.scounts', { role: 'radiogroup', 'aria-label': 'Strip colours' }, st.stripMore ? [flip, ...nums.map(opt)] : [...nums.map(opt), flip]));
+      if (st.stripMore) body.appendChild(el('p.note', { text: `Most strip colours: ${MAX_STRIPS} · the smallest faceplate (1W-0.5H) has 10 strips, so all ${MAX_STRIPS} can show. Each extra colour adds filament changes in every strip layer.` }));
+    }
+    // what it takes
+    const takes = step === 'one' ? 'Prints in one filament, on any printer.'
+      : step === 'two' ? 'One filament change where the backer starts: the first layer above 2.0 mm (2.2 mm with 0.2 mm layers), on any printer that can pause for it.'
+        : `${n(nS, 'strip colour')} with this backer: ${need} filaments at once. It needs a printer that switches filament by itself, such as one with an MMU, an AMS or several tool heads.`;
+    body.appendChild(el('p.note.takes', { role: 'status', 'aria-live': 'polite', text: takes }));
+    if (S.others) body.appendChild(el('p.note', { text: `The backer and strip colour 1 also colour ${n(S.others, 'other faceplate-shaped part')} in this build.` }));
+    if (S.own) body.appendChild(el('p.note', { text: `Mix on ${S.parts - S.own} of ${S.parts} Chevron parts · ${S.own} ${S.own === 1 ? 'has its' : 'have their'} own colour.` }));
+    // the swatches: Strip 1 .. Strip n | Backer, each with its F number
+    const sw = (sel, f, label, fn) => el('button.sslot' + (st.stripSel === sel ? '.on' : ''), { 'aria-pressed': String(st.stripSel === sel), 'aria-label': `${label}: ${f.name || 'instruction colour'}`, title: `${label}: ${f.name || 'instruction colour'} · pick its filament below`, onclick: () => { st.stripSel = sel; renderPicker(); } }, [
+      el('i.sw' + finishClass(f.name), { style: swatchStyle(f.name, f.hex) }), el('span.snm', { text: label }), ...String(fn).split(' = ').map((t, i) => el('span.fnum', { text: i ? '= ' + t : t })),   // "F1 = backer" on two lines: a swatch is 55 px wide
+    ]);
+    body.appendChild(el('div.sslots', {}, [
+      ...slots.map((f, i) => sw(i + 1, f, nS > 1 ? `Strip ${i + 1}` : 'Strips', fnum[i] === 1 ? 'F1 = backer' : `F${fnum[i]}`)),
+      sw('backer', backer, 'Backer', 'F1'),
+    ]));
+    // the notes a mix needs: a duplicate counts once, look-alikes, the finish the preview draws
+    if (step === 'mix') {
+      const ids = slots.map(filamentId);
+      const dup = ids.findIndex((id, i) => ids.indexOf(id) !== i);
+      if (dup >= 0) body.appendChild(el('p.note.warn', { text: `Strip colours ${ids.indexOf(ids[dup]) + 1} and ${dup + 1} are the same filament · it counts once.` }));
+      let alike = null;
+      for (let i = 0; i < nS && !alike; i++) for (let j = i + 1; j < nS && !alike; j++) if (ids[i] !== ids[j] && dE(slots[i].hex, slots[j].hex) < 10) alike = `Strip colours ${i + 1} and ${j + 1} look almost alike.`;
+      if (alike) body.appendChild(el('p.note.warn', { text: alike }));
+      const fins = new Set(slots.map((f) => finishClass(f.name)));
+      if (fins.size > 1) body.appendChild(el('p.note', { text: 'The preview shows every strip in strip colour 1’s finish.' }));
+    }
+    // the filament list, for the swatch being edited
+    const selF = st.stripSel === 'backer' ? backer : slots[st.stripSel - 1];
+    const selName = st.stripSel === 'backer' ? 'Backer' : nS > 1 ? `Strip colour ${st.stripSel}` : 'Strip colour';
+    body.appendChild(el('p.note.editing', {}, [el('b', { text: selName }), ` · ${selF && selF.name ? short(selF.name) : 'instruction colour'}`]));
+    body.appendChild(el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } })]));
+    const brands = el('div.brands');
+    body.appendChild(brands);
+    const renderBrands = () => fillBrands(brands, { tpu: false, active: selF ? selF.name : null, onPick: pickStrip, mat: 'all' });
+    renderBrands();
+    // palettes and Shuffle
+    const own = buildStripColours(backer);
+    const palBtn = (name, title, hexes, on, dis = false) => el('button.spal', { title, disabled: dis, onclick: on }, [el('span.sws', {}, hexes.slice(0, 6).map((h) => el('i', { style: `background:${h}` }))), el('span', { text: name })]);
+    body.appendChild(el('div.spals', {}, [
+      ...STRIP_PALETTES.map((pp) => palBtn(pp.name, pp.title, pp.strips.map((l) => (filOf(l) || {}).hex || '#888888'), () => applyStripPalette(pp))),
+      palBtn('This build’s colours', own.length >= 2 ? `The ${own.length} filaments this build already prints in, as strip colours` : 'Needs two filaments in the build besides the backer', own.map((f) => f.hex), () => { stage.track('strips:palette:build'); commitStrips(own); st.stripSel = 1; st.stripMore = own.length > 5; say('This build’s colours on the strips · Undo to go back.'); }, own.length < 2),
+    ]));
+    if (step === 'mix') body.appendChild(el('button.key.sm.shuffle', { title: 'Every Chevron part rolls new strips in the same colours', onclick: shuffleStrips }, [icon('arrow-clockwise', { size: 14 }), 'Shuffle strips']));
+    // what a buyer gets
+    if (step === 'mix' && S.part) {
+      const links = stage.partInfo(S.part.id)?.links || [];
+      body.appendChild(el('p.note.buyer', {}, [
+        `The planner’s arrangement is a guide. In the slicer you give each strip its filament: ${S.part.strips} strips on this ${S.part.size}${S.part.door ? ' door' : ''}. The Chevron files are Club files, also for sale.`,
+        links[0] ? el('a', { href: links[0].url, target: '_blank', rel: 'noopener', text: ` ${links[0].label || 'Chevron files'} ↗` }) : null,
+      ]));
+    }
+    if (selF && selF.url) picker.appendChild(el('div.foot', {}, [buyArea(selF.url, `Buy ${short(selF.name)} →`, selF)]));
+    if (st.focusStrip) { const f = picker.querySelector(`[data-v="${st.focusStrip}"]`); st.focusStrip = null; if (f) f.focus(); }
+  }
+
   /* ---------------- the part card on the stage ---------------- */
   const card = el('div.glass', { id: 'ws-partcard', role: 'dialog', 'aria-label': 'Part', hidden: true });
   root.appendChild(card);
@@ -1116,8 +1332,18 @@ export function mountColors(stage, ctx) {
     if (!info.locked) {
       const chips = el('div.chips');
       const chip = (label, key) => { const ov = info.owner != null ? stage.overrideFor(info.owner, key) : null; chips.appendChild(el('button.zchip' + (st.key === key ? '.on' : '') + (ov ? '.own' : ''), { title: ov ? `${label} · this ${unitWord()}’s own colour (${ov.name})` : `Pick a filament for the ${label.toLowerCase()}`, onclick: () => openPicker(key) }, [el('i', { style: `background:${ov ? ov.hex : stage.activeHex(key)}` }), label, ov ? el('span.tag', { text: 'OWN' }) : null])); };
-      chip('Body', info.type);
-      for (const z of info.zones) chip(ZONE_LABEL(z), `${info.type}:${z}`);
+      /* a Chevron part's two regions are its backer and its strips (2026-11-23): Backer picks the body's filament as Body does,
+         Strips opens the Strip colours panel (one colour, two-tone or a mix) */
+      if (stage.isStripPart?.(sel.id)) {
+        chip('Backer', info.type);
+        const S = stage.stripInfo(sel.id), hexes = S.slots.map((f) => f.hex);
+        const fill = hexes.length > 1 ? `linear-gradient(90deg, ${hexes.map((h, i) => `${h} ${Math.round(i / hexes.length * 100)}% ${Math.round((i + 1) / hexes.length * 100)}%`).join(', ')})` : hexes[0];
+        chips.appendChild(el('button.zchip.strips' + (st.strips ? '.on' : ''), { title: 'Strip colours: one colour, two-tone or a mix of up to 9', onclick: openStrips }, [el('i', { style: `background:${fill}` }), 'Strips', hexes.length > 1 ? el('span.tag', { text: String(S.k) }) : null]));
+        for (const z of info.zones) if (z !== 'FACE') chip(ZONE_LABEL(z), `${info.type}:${z}`);
+      } else {
+        chip('Body', info.type);
+        for (const z of info.zones) chip(ZONE_LABEL(z), `${info.type}:${z}`);
+      }
       card.appendChild(chips);
     }
     const acts = el('div.cacts');
@@ -1209,7 +1435,7 @@ export function mountColors(stage, ctx) {
     { el: panel, title: 'Colors', open: !back || back.sheetUp },
     // the handle stands in for the picker's own title row on a phone (app.css hides that row), so it says what the row
     // said - the unit's number, the spool's filament - and carries the close
-    { el: picker, title: () => st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}${unitNo()}` : typePlural(st.key)}` : st.swap ? `Spool · ${swapName(st.swap)}` : 'Filament', badge: offerBadge, close: () => closePicker() },
+    { el: picker, title: () => st.strips ? 'Strip colours' : st.key ? `${regionOf(st.key)} · ${st.scope === 'unit' ? `this ${unitWord()}${unitNo()}` : typePlural(st.key)}` : st.swap ? `Spool · ${swapName(st.swap)}` : 'Filament', badge: offerBadge, close: () => closePicker() },
     { el: gallery, title: () => st.detail ? st.detail.name : 'Looks' },
     { el: tray, title: () => `Compare · ${trayLooks.length} of ${TRAY_MAX}` },
     { el: sur, title: () => st.owning ? 'Filaments I own' : 'Find your next look' },
@@ -1227,7 +1453,7 @@ export function mountColors(stage, ctx) {
     const r = card.getBoundingClientRect(), under = Math.round(innerHeight - r.top) + 8;
     return r.height && under > b && innerHeight - phone.top() - under >= 120 ? under : b;
   }
-  function safeArea() { if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phoneBottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
+  function safeArea() { if (phone) { stage.setSafeArea({ left: phone.left(), right: phone.right(), top: phone.top(), bottom: phoneBottom() }); return; } stage.setSafeArea({ left: 304 + 28, right: (st.key || st.strips ? 324 : 0) + 28, top: narrow() ? 134 : 90, bottom: st.tray ? 118 + 200 : 118 }); }
   function safe() { safeArea(); if (room && room.handle) room.handle.refit(); }   // the room's shot follows the free region too (the picker opening narrows it)
   function renderAll() { renderPanel(); renderGallery(); renderTray(); renderSurprise(); renderSimplify(); renderPicker(); renderCard(); renderDock(); renderShop(); bar.sync(); if (phone) phone.refresh(); safe(); placeFloat(); }
   addEventListener('resize', safe, { signal });

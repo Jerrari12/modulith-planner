@@ -12,6 +12,7 @@ import { chipFillGroups, chipFillLayout, buildChipFill, titleTexture } from './c
 import { resolveEntry } from './entry.js';
 import { tabTitle, buildName } from './ui/names.js';   // the tab title's shape, shared with app.js (stamped in pages.yml like every main.js import)
 import { createPlannerRelay } from './relay-auth.js';
+import { faceplateRule, stripIdOf, rollPart, hashSeed, stripSlots, stripPalette, slotKey, filamentId, STRIP_KEY, BACKER_KEY, MAX_STRIPS, MIX_BANDS, MIX_ROWS } from './chevron-mix.js';   // Chevron strip colours (2026-11-23); stamped in pages.yml
 import { FILAMENT_DB } from './filament-db.js';
 import { partMaterialSpec } from './part-material.js';
 import { applyLayerDetail, LAYER_DETAIL_DEFAULTS } from './vendor/layer-detail.js';
@@ -4271,7 +4272,7 @@ function syncRelief() {
    mesh from the rebuilt registries. `keepClones`: the relief's flips drop the per-unit clones from
    their registry without disposing them, so their programs stay (see syncRelief). */
 function purgePartMaterials({ keepClones = false } = {}) {
-  if (keepClones) { for (const k of Object.keys(overrideMats)) delete overrideMats[k]; }
+  if (keepClones) { for (const k of Object.keys(overrideMats)) delete overrideMats[k]; mixMats.clear(); }
   else purgeOverrideMats();   // the per-unit clones die with the shared materials they came from
   purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   for (const map of [materials, highlightMats, altMaterials, altHighlightMats,
@@ -4720,8 +4721,13 @@ function adoptTemplate(sceneRoot, type, node) {
     if (!o.isMesh) return;
     const zone = (o.material?.name && o.material.name !== 'BODY') ? o.material.name : '';
     if (zone) o.userData.zone = zone;
+    // a Chevron face's strip rule: a door carries its own on the FACE material (GLB extras); a faceplate's is the table's
+    if (zone === 'FACE') { const rule = o.material?.userData?.chevronRule || faceplateRule(node); if (rule) o.userData.chevronRule = rule; }
     o.material = baseMatFor(mt, zone);
   });
+  // the same rule as the bed finish below: a face whose strips cannot be stamped draws in strip colour 1, it does not fail the load
+  try { stampStrips(sceneRoot, node); }
+  catch (e) { stripNodes.delete(node); console.warn(`[chevron strips] ${node}: ${(e && e.message) || e} - one colour`); }
   /* ⚠ A PART WHOSE BED FACES CANNOT BE STAMPED STAYS PLAIN, IT DOES NOT FAIL THE LOAD. This runs
      inside loadTemplates' per-node try, whose catch reports a MISSING GLB - a throw here would tell
      the user a file is absent that is not. Without the attribute the finish's contact weight reads
@@ -4736,6 +4742,39 @@ function adoptTemplate(sceneRoot, type, node) {
   }
   skinMaps.adopt(node, sceneRoot);   // its baked top layer, fetched on the mount's sync while the tier is Very High (skinMaps)
   return sceneRoot;
+}
+/* aStrip: which Chevron strip each FACE triangle lies on (js/chevron-mix.js stripIdOf), for the strip colours. The strips
+   are one material zone, so the rule says where each one is; per TRIANGLE, so the FACE geometry is de-indexed: 0..63 the
+   bands left of the seam, 64..127 right of it. Sampled at the triangle's centre 0.3 mm inside the surface, so a strip's side
+   wall reads as its own strip (the table's check sampled the same way). Per TEMPLATE, like aSeam: every instance of the
+   node shares it. `stripNodes` keeps, per node, the bands its FACE uses on each side: the window the roll covers. */
+const stripNodes = new Map();   // node -> { left: [bands], right: [bands] }
+function stampStrips(root, node) {
+  root.updateMatrixWorld(true);   // the template is not in the scene: its world IS the part frame
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3(), e = new THREE.Vector3(), f = new THREE.Vector3();
+  const left = new Set(), right = new Set();
+  let stamped = false;
+  root.traverse(o => {
+    const rule = o.isMesh && o.userData.chevronRule;
+    if (!rule) return;
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+    const pos = g.attributes.position, out = new Float32Array(pos.count);
+    for (let t = 0; t + 2 < pos.count; t += 3) {
+      a.fromBufferAttribute(pos, t).applyMatrix4(o.matrixWorld);
+      b.fromBufferAttribute(pos, t + 1).applyMatrix4(o.matrixWorld);
+      c.fromBufferAttribute(pos, t + 2).applyMatrix4(o.matrixWorld);
+      n.crossVectors(e.subVectors(b, a), f.subVectors(c, a)).normalize();
+      const p = a.add(b).add(c).multiplyScalar(1 / 3).addScaledVector(n, -0.3);
+      const id = stripIdOf(p.x, p.y, rule);
+      out[t] = out[t + 1] = out[t + 2] = id;
+      (id < MIX_BANDS ? left : right).add(id % MIX_BANDS);
+    }
+    g.setAttribute('aStrip', new THREE.BufferAttribute(out, 1));
+    if (g !== o.geometry) { o.geometry.dispose(); o.geometry = g; }
+    stamped = true;
+  });
+  if (stamped) stripNodes.set(node, { left: [...left].sort((x, y) => x - y), right: [...right].sort((x, y) => x - y) });
+  else stripNodes.delete(node);
 }
 /* the cover edges' aSeam (js/cover-seam.js): x and the part's half-width, mm, in the part frame. Per TEMPLATE, like
    the bed-finish attributes, so every instance of the node shares it. */
@@ -7003,7 +7042,10 @@ function overrideFor(uid, key) {
   return (up && !(previewLook ? previewLook.colors : customColors)[key] && o[up]) ? o[up] : null;
 }
 const overrideMats = {};
-function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } }
+// the Chevron strip mix's clones (mixMatFor, 2026-11-23): base uuid | row | k | hexes | strip colour 1's filament -> the base's mixed clone.
+// Declared here, beside the per-unit clones it dies with, because the purges can run before the strip block's lines have
+const mixMats = new Map();
+function purgeOverrideMats() { for (const k of Object.keys(overrideMats)) { overrideMats[k].dispose(); delete overrideMats[k]; } for (const m of mixMats.values()) m.dispose(); mixMats.clear(); }
 // the look cards' state (lookCard, the Colors plan's step 2), here because the purges above can run before lookCard is defined
 let lookScene = null, lookCam = null, lookItems = null, lookBox = null, lookCmpRT = null, lookRig = null;
 let lookQueue = Promise.resolve();   // lookCard runs one card at a time
@@ -7027,7 +7069,102 @@ function overrideMatFor(key, ov, zone, alt) {
   }
   return overrideMats[k];
 }
+/* ---- CHEVRON STRIP COLOURS (2026-11-23; js/chevron-mix.js, docs/redesign/CHEVRON-STRIP-COLOURS.md) ----
+   With two or more strip colours (the palette's `Faceplate:FACE` and `Faceplate:FACE/2`..`/9`), every Chevron face that
+   carries aStrip takes each strip's colour from a table: one row pair per part, rolled from the record's `stripSeed` and
+   the part's own key (rollPart), and a palette of the k distinct strip filaments (uMixPal). Only the colour changes: the
+   mixed material is a clone of the one the face would wear in strip colour 1, every other patch and property kept, so
+   every strip wears strip colour 1's finish (the Strip colours panel says so when the finishes differ).
+   A part leaves the mix when its unit has its own Face pick ("This drawer only"), and planned (see-through) parts never
+   mix. One table per colour count, so a look card with another count than the build's draws its own arrangement. */
+const stripTables = new Map();   // k -> { data, tex, rolled: row -> "<part>|<node>|<seed>" }
+let stripRows = { rev: -1, map: new Map() };   // part key -> its row pair, for the parts of this scene revision
+const stripPals = new Map();     // the hexes, joined -> uMixPal's MAX_STRIPS colours
+const stripSeedOf = () => (build && Number.isInteger(build.stripSeed) && build.stripSeed >= 1 ? build.stripSeed : 1);
+/* a part's own key, so adding or removing a unit never moves another part's strips: a faceplate by its drawer unit, a door
+   by its cabinet unit (one door each); a part with no unit by its instance id */
+const stripPartKey = (inst) => { const u = unitOf(inst); return (/^Door_/.test(inst.cfg.node) ? 'd' : 'f') + (u != null ? u : ':' + inst.cfg.id); };
+function stripRowOf(pk) {
+  if (stripRows.rev !== sceneRev) stripRows = { rev: sceneRev, map: new Map() };
+  let r = stripRows.map.get(pk);
+  if (r == null) { r = stripRows.map.size % MIX_ROWS; stripRows.map.set(pk, r); }
+  return r;
+}
+function stripTable(k) {
+  let t = stripTables.get(k);
+  if (!t) {
+    const data = new Uint8Array(MIX_BANDS * 2 * MIX_ROWS);
+    const tex = new THREE.DataTexture(data, MIX_BANDS, 2 * MIX_ROWS, THREE.RedFormat, THREE.UnsignedByteType);
+    tex.minFilter = tex.magFilter = THREE.NearestFilter; tex.generateMipmaps = false;
+    stripTables.set(k, t = { data, tex, rolled: new Map() });
+  }
+  return t;
+}
+function rollStrips(k, row, pk, node) {
+  const t = stripTable(k), seed = stripSeedOf(), sig = `${pk}|${node}|${seed}`;
+  if (t.rolled.get(row) === sig) return;
+  rollPart(t.data, row, k, hashSeed(seed, pk), stripNodes.get(node) || null);
+  t.rolled.set(row, sig); t.tex.needsUpdate = true;
+}
+function stripPalFor(hexes) {
+  const key = hexes.join(',');
+  let a = stripPals.get(key);
+  if (!a) stripPals.set(key, a = Array.from({ length: MAX_STRIPS }, (_, i) => new THREE.Color(hexes[i % hexes.length])));
+  return a;
+}
+/* `tag` is strip colour 1's filament: the base's finish follows it in place (applyPalette re-finishes the shared material), so a
+   clone made under another filament with the same hexes would keep the old finish (Sol 01a20b17) */
+function mixMatFor(base, row, k, hexes, tag = '') {
+  const key = base.uuid + '|' + row + '|' + k + '|' + hexes.join(',') + '|' + tag;
+  let m = mixMats.get(key);
+  if (m) return m;
+  m = cloneMaterial(base);
+  const own = { uMixTab: { value: stripTable(k).tex }, uMixPal: { value: stripPalFor(hexes) }, uMixVar: { value: row } };
+  // chained, as bed-finish.js does: the prior patch and its program key run first, this one adds to them
+  const prior = Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile') ? m.onBeforeCompile : null;
+  const priorKey = Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey') ? m.customProgramCacheKey : null;
+  const priorKeyText = priorKey ? null : (prior ? String(prior) : '');
+  m.onBeforeCompile = function (shader, renderer) {
+    if (prior) prior.call(this, shader, renderer);
+    Object.assign(shader.uniforms, own);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aStrip;\nvarying float vStrip;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvStrip = aStrip;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nuniform sampler2D uMixTab;\nuniform vec3 uMixPal[${MAX_STRIPS}];\nuniform float uMixVar;\nvarying float vStrip;`)
+      .replace('#include <color_fragment>', `#include <color_fragment>\n{ int s = int(vStrip + 0.5); int side = s / ${MIX_BANDS}; int band = s - side * ${MIX_BANDS};\n`
+        + '  int idx = int(texelFetch(uMixTab, ivec2(band, int(uMixVar + 0.5) * 2 + side), 0).r * 255.0 + 0.5);\n'
+        + `  diffuseColor.rgb = uMixPal[idx < ${MAX_STRIPS} ? idx : 0]; }`);
+  };
+  m.customProgramCacheKey = function () { return (priorKey ? priorKey.call(this) : priorKeyText) + '|strips'; };
+  m.userData.stripMix = true;
+  if (mixMats.size >= 1000) { for (const x of mixMats.values()) x.dispose(); mixMats.clear(); }   // palettes tried and gone: the live ones are made again on the next refresh
+  mixMats.set(key, m);
+  return m;
+}
+/* the strip palette a part wears under a palette (`colors`, `over`, colours `on`), or null when it draws in one colour:
+   no strips stamped, a planned part, colours off, its unit's own Face pick, or fewer than two distinct strip filaments */
+function stripsFor(inst, colors, over, on) {
+  if (!on || inst.cfg.planned || !stripNodes.has(inst.cfg.node)) return null;
+  const uid = unitOf(inst);
+  if (uid != null && over && over[uid] && over[uid][STRIP_KEY]) return null;
+  const slots = stripSlots(colors || {});
+  if (slots.length < 2) return null;
+  const p = stripPalette(slots, { hex: identificationHex(STRIP_KEY) });
+  return p.k >= 2 ? { ...p, slots } : null;
+}
+/* the live palette's (a look being shown wears its own, as overrideFor reads it) */
+const liveStrips = (inst) => stripsFor(inst, previewLook ? previewLook.colors : customColors, previewLook ? previewLook.over : overrides, !!(previewLook || useCustom));
 function materialFor(inst, highlighted, zone = '') {
+  const m = materialForBase(inst, highlighted, zone);
+  if (zone !== 'FACE') return m;
+  const p = liveStrips(inst);
+  if (!p) return m;
+  const pk = stripPartKey(inst), row = stripRowOf(pk);
+  rollStrips(p.k, row, pk, inst.cfg.node);
+  return mixMatFor(m, row, p.k, p.hexes, filamentId(p.slots[0]));
+}
+function materialForBase(inst, highlighted, zone = '') {
   const type = typeByNode[inst.cfg.node];
   const key = zoneKey(type, zone);   // the PALETTE's key: locks and a unit's own colours are filed by the row's type
   /* the MATERIAL's key: the row's type, but 'Door' for a cabinet door (generate.js materialTypeOf), whose print pose is its
@@ -8434,6 +8571,7 @@ function applyPalette() {
   for (const e of Object.values(plannedMats)) { e.mat.color.copy(e.src.color); copyFinish(e.mat, e.src); }
   for (const e of Object.values(plannedHighlightMats)) { e.mat.color.copy(e.src.color); copyFinish(e.mat, e.src); }
   attachChipFills();   // a chip drawer's chips are the build's filaments: a colour or a name just moved
+  if (liveStripSig() !== stripSigApplied) refreshMaterials();   // the Chevron strip colours moved: their mix is a material (refreshMaterials)
   renderChecklist();
   updateColorToggle();
   renderPresets(); // keep the active preset / My-palette chip highlight in step
@@ -10258,7 +10396,7 @@ function lookSnapshot() {
     lookScene.add(g);
     const t = typeByNode[inst.cfg.node], uid = inst.cfg.planned ? null : unitOf(inst);
     const mt = materialTypeOf(t, inst.cfg.node);   // the material's type: a cabinet door's own (materialFor)
-    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; lookItems.push({ mesh: o, type: t, mt, zone: o.userData.zone || '', uid, alt: !!inst.alt }); } });
+    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; lookItems.push({ mesh: o, type: t, mt, zone: o.userData.zone || '', uid, alt: !!inst.alt, inst }); } });
     g.updateWorldMatrix(true, true); lookBox.expandByObject(g);
   }
   lookRev = sceneRev;
@@ -10284,6 +10422,9 @@ function lookMaterialFor(look, it) {
     applyFinish(m, silkFinish(mkey, partMaterialSpec(mkey, { holographicPlate: plateActive(), plateContact: plateContactKey(mkey), label }), label));
     lookMats.set(k, m);
   }
+  // a Chevron face in the look's strip mix: its own arrangement, as the stage draws it (materialFor)
+  const s = it.zone === 'FACE' && it.inst ? stripsFor(it.inst, colors, over, true) : null;
+  if (s) { const pk = stripPartKey(it.inst), row = stripRowOf(pk); rollStrips(s.k, row, pk, it.inst.cfg.node); return mixMatFor(m, row, s.k, s.hexes, filamentId(s.slots[0])); }
   return m;
 }
 /* one card: { width, height, pixels (RGBA, GL rows bottom-up), ms: { draw, read }, programs }. `compare` also renders the
@@ -10388,7 +10529,12 @@ async function lookCardRead(d) {
    every panel read one source. */
 function palette() { return { on: useCustom, colors: structuredClone(customColors), user: structuredClone(userPalette), over: structuredClone(overrides) }; }
 /* re-assign every instance's materials (an override came or went; a scheme replaced the layer) */
+/* the live strip colours as a signature: a repaint that moves them (applyPalette from any path, the relay's included, which
+   repaints without reassigning) reassigns the materials, since a strip mix is a material of its own, not a colour */
+let stripSigApplied = '';
+const liveStripSig = () => { const on = !!(previewLook || useCustom); const c = previewLook ? previewLook.colors : customColors; return on ? JSON.stringify(stripSlots(c || {}).map((f) => f && f.hex)) : ''; };
 function refreshMaterials() {
+  stripSigApplied = liveStripSig();
   for (const inst of instances.values()) inst.group.traverse(o => { if (o.isMesh && !(o.material && o.material.userData && o.material.userData.fpFade)) o.material = materialFor(inst, inst.cfg.id === selectedId && selGlow(inst), o.userData.zone); });
   invalidateFrame();
 }
@@ -10449,6 +10595,62 @@ function setPalette(p) {   // the whole working palette (a scheme, an upload, an
   saveColors(); applyPalette(); refreshMaterials();
 }
 function setUseCustom(on) { previewLook = null; useCustom = !!on && (Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0); saveColors(); applyPalette(); refreshMaterials(); }
+/* THE STRIP COLOURS, AS ONE CHANGE (2026-11-23; js/chevron-mix.js): `slots` the strip colours in order (slot 1, the FACE key,
+   may be null for the instruction colour; from slot 2 on the list stops at the first empty one, so the keys never have a
+   gap), `backer` the Faceplate key's filament (undefined leaves it, null resets it). One palette write, one save. */
+function setStrips({ slots, backer } = {}) {
+  previewLook = null;
+  const fil = (f) => ({ name: String(f.name || ''), hex: f.hex, ...(typeof f.url === 'string' && /^https?:\/\//.test(f.url) ? { url: f.url } : {}) });
+  if (Array.isArray(slots)) {
+    for (let i = 1; i <= MAX_STRIPS; i++) delete customColors[slotKey(i)];
+    if (slots[0] && slots[0].hex) customColors[STRIP_KEY] = fil(slots[0]);
+    for (let i = 1; i < Math.min(slots.length, MAX_STRIPS); i++) { if (!slots[i] || !slots[i].hex) break; customColors[slotKey(i + 1)] = fil(slots[i]); }
+  }
+  if (backer !== undefined) { if (backer && backer.hex) customColors[BACKER_KEY] = fil(backer); else delete customColors[BACKER_KEY]; }
+  useCustom = Object.keys(customColors).length > 0 || Object.keys(overrides).length > 0;
+  snapshotUserPalette(); saveColors(); applyPalette(); refreshMaterials();
+  if (selectedId && instances.has(selectedId)) refreshSelHighlight();
+}
+/* the record's arrangement (`stripSeed`, a uint32 >= 1, or null for the first one): handed over on every store change and
+   compared first (app.js), so Shuffle, an Undo of it and a loaded link all redraw the strips; a new arrangement is a new
+   look of the finished build, so the look cards re-snapshot */
+function setStripSeed(seed) {
+  const s = Number.isInteger(seed) && seed >= 1 && seed <= 0xFFFFFFFF ? seed : null;
+  if (!build || (build.stripSeed ?? null) === s) return false;
+  build.stripSeed = s;
+  sceneRev++;
+  refreshMaterials();
+  return true;
+}
+/* what the Strip colours panel needs: the Chevron parts on the stage (`parts`; `own` of them with their unit's own Face),
+   the strip colours (slot 1 resolved to the colour it shows when unpicked), the backer, k, whether any part mixes now,
+   the other faceplate-typed parts the two shared keys also colour, and one part's strip count and size: `instId`'s if it
+   is a Chevron part, else the first one's */
+function stripInfo(instId = null) {
+  const colors = previewLook ? previewLook.colors : customColors, over = previewLook ? previewLook.over : overrides;
+  const on = !!(previewLook || useCustom);
+  let parts = 0, doors = 0, own = 0, others = 0, mixing = 0, part = null;
+  const partOf = (inst) => {
+    const w = stripNodes.get(inst.cfg.node), m = /_(\dW-\d+H)(_RH)?$/.exec(inst.cfg.node);
+    return { id: inst.cfg.id, node: inst.cfg.node, door: /^Door_/.test(inst.cfg.node), strips: w ? w.left.length + w.right.length : 0, size: m ? m[1].replace('05H', '0.5H').replace('15H', '1.5H') : '' };
+  };
+  for (const inst of instances.values()) {
+    if (!inst.group || inst.cfg.planned) continue;
+    const t = typeByNode[inst.cfg.node];
+    if (!stripNodes.has(inst.cfg.node)) { if (t === 'Faceplate') others++; continue; }
+    parts++;
+    if (/^Door_/.test(inst.cfg.node)) doors++;
+    const uid = unitOf(inst);
+    if (uid != null && over && over[uid] && over[uid][STRIP_KEY]) own++;
+    if (stripsFor(inst, colors, over, on)) mixing++;
+    if (!part || inst.cfg.id === instId) part = partOf(inst);
+  }
+  const slots = stripSlots(on ? colors : {});
+  const slot1 = slots[0] || { name: '', hex: activeHex(STRIP_KEY) };
+  const backer = (on && colors[BACKER_KEY]) || { name: '', hex: activeHex(BACKER_KEY) };
+  return { parts, doors, own, others, mixing, on, slots: [slot1, ...slots.slice(1)], picked1: !!slots[0], backer, pickedBacker: !!(on && colors[BACKER_KEY]), k: stripPalette(slots, slot1).k, part, seed: stripSeedOf() };
+}
+const isStripPart = (instId) => { const inst = instances.get(instId); return !!(inst && stripNodes.has(inst.cfg.node)); };
 /* Show a look without choosing it (previewLook): checked like any outside palette, never saved, relayed or put in the
    history. The workspace that shows one ends it before it commits anything or unmounts; a real palette change ends it
    too. Returns whether a look was being shown. */
@@ -10476,6 +10678,12 @@ function keysInBuild() {
     e.own = useCustom ? Object.values(overrides).filter(o => o && o[e.key]).length : 0;
     e.ownColor = !!(e.zone && manifest.colors[e.key]);   // a zone with a colour of its own (the label text) does not follow its body unpicked
   }
+  /* strip colours 2..n while a Chevron face mixes (2026-11-23): a region each, `slot` its number, counted over the parts that
+     mix. Always written (never following a body), so every reader that walks the keys (Simplify, the Parts list, the summary)
+     sees each strip filament; the Colors list folds them into one Chevron strips row. */
+  let mixing = 0, slots = null;
+  for (const inst of instances.values()) { if (!inst.group) continue; const s = liveStrips(inst); if (s) { mixing++; slots = s.slots; } }
+  if (mixing) for (let i = 2; i <= slots.length; i++) out.set(slotKey(i), { key: slotKey(i), type: 'Faceplate', zone: `FACE/${i}`, follows: null, count: mixing, locked: false, own: 0, ownColor: true, slot: i });
   const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'CabinetHinge', 'CabinetLatch', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
@@ -10522,6 +10730,8 @@ function filamentsInBuild(look = null) {
       const pick = own || (on ? (colors[key] || (up && !manifest.colors[key] ? colors[up] : null)) : null);
       if (pick && pick.hex) wear(pick, key);
       else bare(key, idHex(key));
+      // a Chevron face in a strip mix prints in every strip colour, each counted once by its filament (stripsFor)
+      if (key === STRIP_KEY) { const s = stripsFor(inst, colors, over, on); if (s) s.slots.forEach((f, i) => { if (i && f) wear(f, slotKey(i + 1)); }); }
     }
   }
   const unpicked = [...loose.values()];
@@ -12702,6 +12912,7 @@ for (const m of ['toDataURL', 'toBlob']) {
     thumbDraw: (o, x) => drawThumb(thumbSpec(o), x), thumbModel,
     // the Colors workspace (phase 4): the palette, its keys, one part's facts, the plate
     palette, setColor, setPalette, setUseCustom, restoreUserPalette, keysInBuild, partInfo, setBuildPlate, setPartPlate, setPartPlates, colorLocked,
+    setStrips, setStripSeed, stripInfo, isStripPart,   // the Chevron strip colours (2026-11-23)
     // a part's build plate finish (2026-10-26): the one it wears, its own (null = follows the build), and whether it has a
     // printed bed face at all (no known build axis, no finish - withBedFinish's rule)
     plateFinishFor, ownPlateOf, hasBedFace: (key) => !!build && !!buildAxisForKey(String(key)),

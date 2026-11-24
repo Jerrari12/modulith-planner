@@ -20,7 +20,8 @@ import { dE, contrast } from './colour.js';
 import { ROLE_KEYS, AREA, shortName } from './surprise.js';
 
 const MIN_CONTRAST = 4.5;
-const roleOf = (() => { const m = new Map(); for (const [role, keys] of Object.entries(ROLE_KEYS)) for (const k of keys) m.set(k, role); return (key) => m.get(key) || null; })();
+// a Chevron strip colour (Faceplate:FACE/2..9, 2026-11-23) weighs as the face it is part of, not as nothing: merged first otherwise
+const roleOf = (() => { const m = new Map(); for (const [role, keys] of Object.entries(ROLE_KEYS)) for (const k of keys) m.set(k, role); return (key) => m.get(key) || m.get(String(key).replace(/\/[2-9]$/, '')) || null; })();
 const HARDWARE = new Set(ROLE_KEYS.hardware);
 const bodyOf = (key) => key.split(':')[0];
 const onFeet = (key) => bodyOf(key.includes('@') ? key.split('@')[1] : key) === 'Foot';   // a worn key, a unit's own included
@@ -115,15 +116,17 @@ export function simplify({ colors = {}, over = {}, keys = [], target = 2 } = {})
 }
 
 /* the summary groups, in the order the line reads them */
+// a Chevron mix's strip colours 2..9 (2026-11-23): their own group, after the fronts strip colour 1 belongs to
+const STRIP_SLOTS = [2, 3, 4, 5, 6, 7, 8, 9].map((i) => `Faceplate:FACE/${i}`);
 export const SUMMARY = [
   ['Case', ['Case', 'CaseExtender', 'SideCover', 'ShelfLip', 'CoverL', 'CoverU', 'FootrailL', 'FootrailU', 'Rail', 'Bracket', 'BackCover']],
   // the visible, recognisable surfaces first (Astra, 2026-10-19: fronts, grips, then the faceplate bodies)
-  ['drawers', ['Drawer']], ['fronts', ['Faceplate:FACE', 'SideCover:FACE']], ['grips', ['Faceplate:GRIP']], ['grip accents', ['Faceplate:GRIP ACCENT']], ['faceplate bodies', ['Faceplate']],
+  ['drawers', ['Drawer']], ['fronts', ['Faceplate:FACE', 'SideCover:FACE']], ['strips', STRIP_SLOTS], ['grips', ['Faceplate:GRIP']], ['grip accents', ['Faceplate:GRIP ACCENT']], ['faceplate bodies', ['Faceplate']],
   ['accents', ['Accent']], ['handles', ['Handle']], ['labels', ['Label']], ['label text', ['Label:TEXT']], ['deck', ['ShelfInsert']], ['small parts', ['QuickLock', 'CabinetHinge', 'CabinetLatch', 'MagnetClip', 'Stopper']],
   ['feet', ['Foot']],   // TPU, their own filament always (Joey, 2026-10-21)
 ];
 /* a key's own word, for a group whose keys wear more than one filament (Sol 01a151f0: "Case: Black" hid orange feet) */
-const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side covers', ShelfLip: 'lips', CoverL: 'covers', CoverU: 'covers', FootrailL: 'foot rails', FootrailU: 'foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'brackets', BackCover: 'back covers', 'Faceplate:FACE': 'fronts', Faceplate: 'faceplate bodies', 'SideCover:FACE': 'side-cover faces', QuickLock: 'QuickLocks', CabinetHinge: 'hinges', CabinetLatch: 'door latches', MagnetClip: 'magnet clips', Stopper: 'stoppers' };
+const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side covers', ShelfLip: 'lips', CoverL: 'covers', CoverU: 'covers', FootrailL: 'foot rails', FootrailU: 'foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'brackets', BackCover: 'back covers', 'Faceplate:FACE': 'fronts', Faceplate: 'faceplate bodies', 'SideCover:FACE': 'side-cover faces', QuickLock: 'QuickLocks', CabinetHinge: 'hinges', CabinetLatch: 'door latches', MagnetClip: 'magnet clips', Stopper: 'stoppers', ...Object.fromEntries(STRIP_SLOTS.map((k) => [k, 'strips'])) };
 /* "Case, drawers: Black · Fronts, grips: Orange · Handles: Silk Silver" for a look as worn ([] when nothing is picked); a
    group whose keys wear two filaments splits by key ("Case: Black · feet: Orange"); a unit's own picks are counted by
    the caller, not listed */

@@ -687,8 +687,10 @@ test('main.js gives the door its own material at every place a part takes one, a
   assert.match(fnBody('adoptTemplate'), /stampBedFaces\(sceneRoot, mt, node\)/);
   assert.match(fnBody('stampBedFaces'), /buildAxisForType\([^;]*doorPoseKey\(node\) \|\| doorPoseNow\(\)/);
   assert.match(fnBody('buildAxisForKey'), /buildAxisForType\([^;]*doorPoseNow\(\)\)/);
-  /* materialFor: the palette's key for locks and a unit's colours, the material's key for every registry */
-  const mf = fnBody('materialFor');
+  /* materialFor: the palette's key for locks and a unit's colours, the material's key for every registry. Since 2026-11-23
+     materialFor wraps materialForBase (the Chevron strip mix clones what the base returns), and the base holds these reads */
+  assert.match(fnBody('materialFor'), /const m = materialForBase\(inst, highlighted, zone\)/);
+  const mf = fnBody('materialForBase');
   assert.match(mf, /const mt = materialTypeOf\(type, inst\.cfg\.node\), mkey = zoneKey\(mt, zone\)/);
   assert.match(mf, /overrideFor\(unitOf\(inst\), key\)/);
   assert.match(mf, /overrideMatFor\(mkey,/);
