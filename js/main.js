@@ -8414,6 +8414,54 @@ const PRESETS = [
     Stopper: _db('Printed Solid Neon Yellow'),
     Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
   } },
+  /* THE CHEVRON STRIP-MIX LOOKS (2026-11-23, Joey: "can we make these presets that have this multi color mode toggled
+     on?"). Each carries strip colours 2..5 (`Faceplate:FACE/2`..`/5`, js/chevron-mix.js), so a build with Chevron
+     faceplates or doors wears the mix the moment the look is applied; on any other faceplate the extra strip colours are
+     not drawn and not counted. A black shell and backer with black strips among the colours, as the hero renders'
+     Chevron fronts (category_art.py: black body, coloured strips, a Deco handle). */
+  // Coffee station: Joey's coffee station, each strip a Prusament rPLA, on black; the handle black, as the renders'
+  { name: 'Coffee station', swatches: ['#1c1d20', '#674B41', '#B37B46', '#CCC9BF', '#5E493F'], colors: {
+    Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
+    Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db(FEET_TPU),
+    Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
+    // the deck in Risotto, a strip colour (10.2:1 against the black case)
+    ShelfInsert: _db('Prusament rPLA Risotto'), ShelfLip: _db('Elegoo PLA Black'),
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Prusament rPLA Algae'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Prusament rPLA Algae'),
+    'Faceplate:FACE/2': _db('Prusament rPLA Corn'), 'Faceplate:FACE/3': _db('Prusament rPLA Risotto'),
+    'Faceplate:FACE/4': _db('Prusament rPLA Wine'), 'Faceplate:FACE/5': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Prusament rPLA Algae'), 'Faceplate:GRIP ACCENT': _db('Prusament rPLA Corn'),
+    Accent: _db('Prusament rPLA Corn'), Label: _db('Prusament rPLA Risotto'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Elegoo PLA Black'),
+    Handle: _db('Elegoo PLA Black'),
+    QuickLock: _db('Prusament rPLA Corn'), MagnetClip: _db('Prusament rPLA Corn'),
+    Stopper: _db('Prusament rPLA Corn'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
+  // Teal & orange: Joey's teal / orange / cream / grey Chevron photo as named filaments (the renders' "retro" palette,
+  // nearest by CIEDE2000: colors.js STRIP_PALETTES); its brown handle in Prusament rPLA Wine (7.8 from #6B5B4A)
+  { name: 'Teal & orange', swatches: ['#1c1d20', '#00a5a5', '#ff8a40', '#ddc9a3', '#CCC9BF'], colors: {
+    Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
+    CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
+    Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
+    FootrailU: _db('Elegoo PLA Black'), Foot: _db(FEET_TPU),
+    Rail: _db('Elegoo PLA Black'), CaseExtender: _db('Elegoo PLA Black'),
+    // the deck in Beige, a strip colour (10.4:1 against the black case)
+    ShelfInsert: _db('Panchroma Beige'), ShelfLip: _db('Elegoo PLA Black'),
+    SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Panchroma Polymaker Teal'),
+    Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Panchroma Polymaker Teal'),
+    'Faceplate:FACE/2': _db('Panchroma Orange'), 'Faceplate:FACE/3': _db('Panchroma Beige'),
+    'Faceplate:FACE/4': _db('Prusament rPLA Risotto'), 'Faceplate:FACE/5': _db('Elegoo PLA Black'),
+    'Faceplate:GRIP': _db('Panchroma Polymaker Teal'), 'Faceplate:GRIP ACCENT': _db('Panchroma Orange'),
+    Accent: _db('Panchroma Orange'), Label: _db('Panchroma Beige'), 'Label:TEXT': _db('Elegoo PLA Black'),
+    BackCover: _db('Elegoo PLA Black'),
+    Handle: _db('Prusament rPLA Wine'),
+    QuickLock: _db('Panchroma Orange'), MagnetClip: _db('Panchroma Orange'),
+    Stopper: _db('Panchroma Orange'),
+    Magnet: _db('Panchroma Silk Silver'), Screw: _db('Panchroma Silk Silver'),
+  } },
 ];
 
 // official kits get their own palette slot (keyed by kit id) so a saved color

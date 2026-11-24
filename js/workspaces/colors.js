@@ -1113,7 +1113,12 @@ export function mountColors(stage, ctx) {
   /* the palettes: named catalog filaments only. Coffee is the hero and thumbnail renders' coffee station (category_art.py
      "coffee"): the four Prusament rPLA colours and black strips on a black backer */
   const STRIP_PALETTES = [
-    { id: 'coffee', name: 'Coffee', title: 'Prusament rPLA Algae, Corn, Risotto and Wine, with black strips on a black backer', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine', 'Panchroma Black'], backer: 'Panchroma Black' },
+    { id: 'coffee', name: 'Coffee', title: 'Prusament rPLA Algae, Corn, Risotto and Wine, with black strips on a black backer', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
+    /* Teal & orange (2026-11-23, Joey: "add a teal and orange palette too"): the renders' "retro" palette, read by eye off
+       Joey's teal / orange / cream / grey Chevron photo (category_art.py), as the nearest named filaments by CIEDE2000:
+       teal #2F8F8B -> Panchroma Polymaker Teal (7.4), orange #E8772E -> Panchroma Orange (5.9), cream #DCC9A8 -> Panchroma
+       Beige (1.5), grey #C9CBCC -> Prusament rPLA Risotto (5.6), black #1A1A1A -> Elegoo PLA Black (2.4) */
+    { id: 'teal-orange', name: 'Teal & orange', title: 'Panchroma Polymaker Teal, Orange and Beige, Prusament rPLA Risotto and black strips on a black backer', strips: ['Panchroma Polymaker Teal', 'Panchroma Orange', 'Panchroma Beige', 'Prusament rPLA Risotto', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
     { id: 'rpla', name: 'Prusament rPLA', title: 'The four Prusament rPLA colours, on the backer you have', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine'] },
   ];
   const sameFil = (a, b) => !!filamentId(a) && filamentId(a) === filamentId(b);

@@ -8266,7 +8266,7 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
   const { ctx, page, errors } = await open('colors');
   await page.waitForSelector('#ws-colors .summary', { timeout: 30_000 });
   await settle(page, 800);
-  // M26: the twelve presets, applied through the stage (no history noise), each read off the panel against the Dock
+  // M26: every preset (fourteen since the two Chevron strip-mix looks, 2026-11-23), applied through the stage (no history noise), each read off the panel against the Dock
   const presets = await page.evaluate(async () => {
     const v = window.__GEN2_VIEWER__; const out = [];
     for (const p of v.PRESETS) {
@@ -8278,7 +8278,7 @@ test('Colors step 6: the summary line matches the Dock for every preset; Simplif
     }
     return out;
   });
-  assert.equal(presets.length, 12);
+  assert.equal(presets.length, 14);
   for (const p of presets) {
     assert.ok(p.line.startsWith(`${p.count} filament${p.count === 1 ? '' : 's'} used`), `${p.name}: "${p.line}" against a count of ${p.count}`);
     assert.ok(p.dock.startsWith(`${p.count} filament`), `${p.name}: the Dock says ${p.dock}`);
@@ -10039,6 +10039,15 @@ test('Colors: Chevron strip colours - the Coffee palette mixes every Chevron fac
   await page.reload({ waitUntil: 'load' });
   await waitBoot(page);
   await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 3 && window.__GEN2_VIEWER__.stripInfo().mixing === 2, null, { timeout: 60_000 });
+  // the strip-mix looks (Joey: "can we make these presets that have this multi color mode toggled on?"): Teal & orange mixes
+  // both parts in its five strip colours, The Jerrari takes the mix off
+  const look = (name) => page.evaluate((nm) => { const v = window.__GEN2_VIEWER__, S = window.__GEN2_STORE__; S.flush(); v.applyPreset(v.PRESETS.find((p) => p.name === nm)); S.commit(() => {}, 'preset'); S.flush(); }, name);
+  await look('Teal & orange');
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 5 && window.__GEN2_VIEWER__.stripInfo().mixing === 2);
+  assert.equal((await info()).slots[0], 'Panchroma Polymaker Teal');
+  await look('The Jerrari');
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 1 && window.__GEN2_VIEWER__.stripInfo().mixing === 0);
+  assert.equal(await mixedFaces(), 0, 'a look without strip colours takes the mix off');
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

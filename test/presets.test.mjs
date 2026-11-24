@@ -92,8 +92,8 @@ test('the extraction actually found the catalog and the presets', () => {
   assert.ok(FILAMENT_DB.reduce((a, b) => a + b.colors.length, 0) > 50, 'too few catalog colours - check the extraction');
   /* the four of 2026-08 plus the palette study's seven (the Colors plan §2, landed with the gallery in step 3, 2026-10-18).
      Tool-chest red is not among them: the plan admits it only once it is scored as a full palette */
-  assert.equal(PRESETS.length, 12, 'expected twelve presets');
-  assert.deepEqual(PRESETS.slice(4).map((p) => p.name), ['Racing silver & teal', 'Grey & sunlight yellow', 'Safety yellow & black', 'Printer black & red', 'Tri-stripe racing white', 'Black & gold', 'Flight-team navy & gold', 'Neon yellow & black']);   // the last: Joey's 3D Printopia build, 2026-10-18
+  assert.equal(PRESETS.length, 14, 'expected fourteen presets');
+  assert.deepEqual(PRESETS.slice(4).map((p) => p.name), ['Racing silver & teal', 'Grey & sunlight yellow', 'Safety yellow & black', 'Printer black & red', 'Tri-stripe racing white', 'Black & gold', 'Flight-team navy & gold', 'Neon yellow & black', 'Coffee station', 'Teal & orange']);   // Neon: Joey's 3D Printopia build, 2026-10-18; the two Chevron strip-mix looks, 2026-11-23
   assert.ok(COLORS && Object.keys(COLORS).length > 10, 'COLORS did not extract');
   assert.ok(TYPES.includes('ShelfInsert') && TYPES.includes('CaseExtender') && TYPES.includes('SideCover'),
     'the type list is missing the newest parts - the extraction is stale');
@@ -228,4 +228,24 @@ test('the deck colour comes from INSIDE the preset, not a new filament', () => {
       `${p.name}: deck ${p.colors.ShelfInsert.name} is used by no other part - ` +
       'that is a whole extra spool for one deck');
   }
+});
+
+/* THE CHEVRON STRIP-MIX LOOKS (2026-11-23, Joey: "can we make these presets that have this multi color mode toggled on?"):
+   Coffee station and Teal & orange carry strip colours 2..5 with no gap (the stage reads /2../9 up to the first gap,
+   js/chevron-mix.js stripSlots), five distinct filaments, black among them as on the renders; every other look carries
+   none, so applying it takes a mix off. */
+test('the strip-mix looks carry five distinct strip colours with no gap, and the other looks none', () => {
+  const slotsOf = (p) => { const out = [p.colors['Faceplate:FACE']]; for (let i = 2; i <= 9 && p.colors[`Faceplate:FACE/${i}`]; i++) out.push(p.colors[`Faceplate:FACE/${i}`]); return out; };
+  const stray = (p) => Object.keys(p.colors).filter((k) => /^Faceplate:FACE\//.test(k));
+  for (const p of PRESETS) {
+    if (p.name === 'Coffee station' || p.name === 'Teal & orange') {
+      const sl = slotsOf(p);
+      assert.equal(sl.length, 5, `${p.name}: five strip colours`);
+      assert.equal(stray(p).length, 4, `${p.name}: no strip key after a gap`);
+      assert.equal(new Set(sl.map((f) => f.name)).size, 5, `${p.name}: five distinct filaments`);
+      assert.ok(sl.some((f) => f.name === p.colors.Faceplate.name), `${p.name}: one strip in the backer's black`);
+    } else assert.deepEqual(stray(p), [], `${p.name} carries strip colours`);
+  }
+  const coffee = PRESETS.find((p) => p.name === 'Coffee station');
+  assert.deepEqual(slotsOf(coffee).slice(0, 4).map((f) => f.name), ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine']);
 });
