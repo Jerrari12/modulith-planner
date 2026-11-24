@@ -782,8 +782,11 @@ test('the Polymaker offer on a phone: a pill on the sheet\'s handle, clear of it
   await page.waitForFunction(() => !document.querySelector('#ws-picker .sheet-handle .hbadge') && !document.querySelector('#ws-picker .foot .offer'), null, { timeout: 10_000 }).catch(() => assert.fail('the ✕ left the pill or the card'));
   const afterX = await offerFoot(page);
   assert.deepEqual([afterX.buy, afterX.discs], ['Buy Polymaker PLA Black →', [POLYMAKER_LINE]], 'closed: the Buy and its line back');
-  assert.deepEqual(await page.evaluate(() => [Math.round(document.querySelector('#ws-picker').scrollTop), Math.round(document.querySelector('#ws-picker .foot .resets').getBoundingClientRect().top)]), endAt,
-    'the sheet\'s scroll where it was, and the reset on its own row, not risen to where the card\'s × was (Sol 01a1aa10)');
+  /* the reset's row to the pixel (nothing slides under the finger); the scroll within one, because the sheet's end can sit on a
+     fraction of a pixel and round either way (2026-11-23: 1949 against 1950 once the catalog grew by the Prusament lines) */
+  const afterAt = await page.evaluate(() => [Math.round(document.querySelector('#ws-picker').scrollTop), Math.round(document.querySelector('#ws-picker .foot .resets').getBoundingClientRect().top)]);
+  assert.ok(Math.abs(afterAt[0] - endAt[0]) <= 1 && afterAt[1] === endAt[1],
+    `the sheet's scroll where it was, and the reset on its own row, not risen to where the card's × was (Sol 01a1aa10): ${JSON.stringify({ endAt, afterAt })}`);
   assert.deepEqual(clean(errors), []);
   await c.close();
 });
@@ -9430,9 +9433,11 @@ test('Colors: silk filaments wear a sheen in the picker and in the rows, plain o
   const { ctx, page, errors } = await open('colors');
   await page.locator('#ws-colors .crow').first().click();
   await page.waitForSelector('#ws-picker .brands .sw', { timeout: 15_000 });
-  const r = await page.evaluate(() => {
+  const r = await page.evaluate(async () => {
     const sws = [...document.querySelectorAll('#ws-picker .brands .sw')];
-    const isSilk = (e) => (e.getAttribute('aria-label') || '').split(' ').includes('Silk');
+    // the catalog's silk family (2026-11-23: Prusament's PLA Blend is silk and its labels do not say so), as the swatch reads it
+    const { finishOfLabel } = await import('/js/filament-db.js');
+    const isSilk = (e) => finishOfLabel(e.getAttribute('aria-label') || '') === 'silk';
     const sheen = (e) => getComputedStyle(e, '::before').backgroundImage;
     const silk = sws.filter(isSilk), plain = sws.filter((e) => !isSilk(e));
     return { silk: silk.length, plain: plain.length,
