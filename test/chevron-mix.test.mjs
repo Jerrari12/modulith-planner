@@ -140,3 +140,23 @@ test('the ladder\'s step is read from the colours: two or more strip colours a m
   assert.equal(stripStep([black], black), 'one');
   assert.equal(stripStep([algae], black), 'two');
 });
+
+/* ---- the strip palettes (js/chevron-mix.js STRIP_PALETTES) ---- */
+test('every strip palette names real catalog filaments, 2 to 9 strips, no two colours look alike but Coffee\'s Algae and Wine', async () => {
+  const { STRIP_PALETTES } = await import('../js/chevron-mix.js');
+  const { FILAMENT_DB } = await import('../js/filament-db.js');
+  const { dE } = await import('../js/colors/colour.js');
+  const by = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, c])));
+  const ACCEPTED = new Set(['Prusament rPLA Algae|Prusament rPLA Wine']);   // Prusa's own hexes, 3.2 apart (decisions.md, rPLA)
+  assert.ok(STRIP_PALETTES.length >= 9, 'Coffee, Teal & orange, rPLA and the six themed sets');
+  assert.equal(new Set(STRIP_PALETTES.map((p) => p.id)).size, STRIP_PALETTES.length, 'ids unique');
+  for (const p of STRIP_PALETTES) {
+    assert.ok(p.strips.length >= 2 && p.strips.length <= MAX_STRIPS, `${p.name}: 2 to 9 strips`);
+    for (const l of [...p.strips, ...(p.backer ? [p.backer] : [])]) { assert.ok(by.has(l), `${p.name}: ${l} is not in the catalog`); assert.match(by.get(l).url, /^https:\/\//, `${p.name}: ${l} has a buy link`); }
+    assert.equal(new Set(p.strips).size, p.strips.length, `${p.name}: no strip twice`);
+    for (let i = 0; i < p.strips.length; i++) for (let j = i + 1; j < p.strips.length; j++) {
+      const pair = [p.strips[i], p.strips[j]].sort().join('|');
+      if (!ACCEPTED.has(pair)) assert.ok(dE(by.get(p.strips[i]).hex, by.get(p.strips[j]).hex) >= 10, `${p.name}: ${pair} look alike`);
+    }
+  }
+});

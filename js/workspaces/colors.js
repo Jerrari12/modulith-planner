@@ -32,7 +32,7 @@ import { el, makeToast } from '../ui/dom.js';
 import { topbar } from '../ui/topbar.js';
 import { toolbar } from '../ui/toolbar.js';
 import { attachHint, hideHint } from '../ui/hint.js';
-import { FILAMENT_DB } from '../filament-db.js';
+import { FILAMENT_DB, finishOfLabel } from '../filament-db.js';
 import { PLATE_FINISHES, PLATE_LABELS } from '../bed-finish.js';
 import { isPhone, phoneChrome } from '../ui/phone.js';
 import { surprise, LOCKS, CAPS, shortName } from '../colors/surprise.js';
@@ -43,7 +43,7 @@ import { simplify, worn as wornLook, byFilament, SUMMARY } from '../colors/simpl
 import { lineMaterials, materialsIn, filterByMaterial, labelMaterials, wordMaterial } from '../colors/materials.js';
 import { finishClass, glitterClass, swatchStyle, sparkleOnScroll } from '../colors/swatch.js';   // a swatch's silk sheen, glitter specks and sparkle
 import { dE } from '../colors/colour.js';
-import { fNumbers, filamentsAtOnce, stripStep, filamentId, slotOfKey, MAX_STRIPS, STRIP_KEY, BACKER_KEY } from '../chevron-mix.js';   // the Chevron strip colours (2026-11-23)
+import { fNumbers, filamentsAtOnce, stripStep, filamentId, slotOfKey, MAX_STRIPS, STRIP_KEY, BACKER_KEY, STRIP_PALETTES } from '../chevron-mix.js';   // the Chevron strip colours (2026-11-23)
 
 const SCHEMES_KEY = 'gen2-schemes';   // the visitor's own saved looks, in this browser
 /* the hover hints (js/ui/hint.js): a bubble beside the panel with a clip of the control in use, img/hints/colors-*.mp4 from
@@ -1110,17 +1110,7 @@ export function mountColors(stage, ctx) {
   let stripPrevBacker = null;   // the backer before One colour made it strip colour 1's filament: Two-tone brings it back
   const byLabel = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, c])));
   const filOf = (label) => { const c = byLabel.get(label); return c ? { name: c.label, hex: c.hex, url: c.url } : null; };
-  /* the palettes: named catalog filaments only. Coffee is the hero and thumbnail renders' coffee station (category_art.py
-     "coffee"): the four Prusament rPLA colours and black strips on a black backer */
-  const STRIP_PALETTES = [
-    { id: 'coffee', name: 'Coffee', title: 'Prusament rPLA Algae, Corn, Risotto and Wine, with black strips on a black backer', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
-    /* Teal & orange (2026-11-23, Joey: "add a teal and orange palette too"): the renders' "retro" palette, read by eye off
-       Joey's teal / orange / cream / grey Chevron photo (category_art.py), as the nearest named filaments by CIEDE2000:
-       teal #2F8F8B -> Panchroma Polymaker Teal (7.4), orange #E8772E -> Panchroma Orange (5.9), cream #DCC9A8 -> Panchroma
-       Beige (1.5), grey #C9CBCC -> Prusament rPLA Risotto (5.6), black #1A1A1A -> Elegoo PLA Black (2.4) */
-    { id: 'teal-orange', name: 'Teal & orange', title: 'Panchroma Polymaker Teal, Orange and Beige, Prusament rPLA Risotto and black strips on a black backer', strips: ['Panchroma Polymaker Teal', 'Panchroma Orange', 'Panchroma Beige', 'Prusament rPLA Risotto', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
-    { id: 'rpla', name: 'Prusament rPLA', title: 'The four Prusament rPLA colours, on the backer you have', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine'] },
-  ];
+  // the strip palettes: js/chevron-mix.js STRIP_PALETTES (named catalog filaments; test/chevron-mix.test.mjs checks them)
   const sameFil = (a, b) => !!filamentId(a) && filamentId(a) === filamentId(b);
   const stripState = () => { const S = stage.stripInfo(st.sel ? st.sel.id : null); return { S, slots: S.slots, backer: S.backer, step: stripStep(S.slots, S.backer) }; };
   const stepWord = (step, nslots) => step === 'one' ? 'One colour' : step === 'two' ? 'Two-tone' : `${nslots} colours`;
@@ -1281,18 +1271,9 @@ export function mountColors(stage, ctx) {
       let alike = null;
       for (let i = 0; i < nS && !alike; i++) for (let j = i + 1; j < nS && !alike; j++) if (ids[i] !== ids[j] && dE(slots[i].hex, slots[j].hex) < 10) alike = `Strip colours ${i + 1} and ${j + 1} look almost alike.`;
       if (alike) body.appendChild(el('p.note.warn', { text: alike }));
-      const fins = new Set(slots.map((f) => finishClass(f.name)));
+      const fins = new Set(slots.map((f) => finishOfLabel(f.name) || 'plain'));   // the catalog's finish family ('silk', 'glitter'), not the swatch's class, which also carries a flake tint
       if (fins.size > 1) body.appendChild(el('p.note', { text: 'The preview shows every strip in strip colour 1’s finish.' }));
     }
-    // the filament list, for the swatch being edited
-    const selF = st.stripSel === 'backer' ? backer : slots[st.stripSel - 1];
-    const selName = st.stripSel === 'backer' ? 'Backer' : nS > 1 ? `Strip colour ${st.stripSel}` : 'Strip colour';
-    body.appendChild(el('p.note.editing', {}, [el('b', { text: selName }), ` · ${selF && selF.name ? short(selF.name) : 'instruction colour'}`]));
-    body.appendChild(el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } })]));
-    const brands = el('div.brands');
-    body.appendChild(brands);
-    const renderBrands = () => fillBrands(brands, { tpu: false, active: selF ? selF.name : null, onPick: pickStrip, mat: 'all' });
-    renderBrands();
     // palettes and Shuffle
     const own = buildStripColours(backer);
     const palBtn = (name, title, hexes, on, dis = false) => el('button.spal', { title, disabled: dis, onclick: on }, [el('span.sws', {}, hexes.slice(0, 6).map((h) => el('i', { style: `background:${h}` }))), el('span', { text: name })]);
@@ -1309,6 +1290,15 @@ export function mountColors(stage, ctx) {
         links[0] ? el('a', { href: links[0].url, target: '_blank', rel: 'noopener', text: ` ${links[0].label || 'Chevron files'} ↗` }) : null,
       ]));
     }
+    // the filament list, for the swatch being edited
+    const selF = st.stripSel === 'backer' ? backer : slots[st.stripSel - 1];
+    const selName = st.stripSel === 'backer' ? 'Backer' : nS > 1 ? `Strip colour ${st.stripSel}` : 'Strip colour';
+    body.appendChild(el('p.note.editing', {}, [el('b', { text: selName }), ` · ${selF && selF.name ? short(selF.name) : 'instruction colour'}`]));
+    body.appendChild(el('div.find', {}, [el('input.search', { type: 'search', placeholder: 'Search filaments', value: st.query, 'aria-label': 'Search filaments', oninput: (e) => { st.query = e.target.value; renderBrands(); } })]));
+    const brands = el('div.brands');
+    body.appendChild(brands);
+    const renderBrands = () => fillBrands(brands, { tpu: false, active: selF ? selF.name : null, onPick: pickStrip, mat: 'all' });
+    renderBrands();
     if (selF && selF.url) picker.appendChild(el('div.foot', {}, [buyArea(selF.url, `Buy ${short(selF.name)} →`, selF)]));
     if (st.focusStrip) { const f = picker.querySelector(`[data-v="${st.focusStrip}"]`); st.focusStrip = null; if (f) f.focus(); }
   }

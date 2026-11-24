@@ -191,3 +191,28 @@ export function stripStep(slots, backer) {
   const a = filamentId(slots[0]), b = filamentId(backer);
   return a && a === b ? 'one' : 'two';
 }
+
+/* ---------------- the strip palettes ----------------
+   One tap in the Strip colours panel sets the strip colours (and, where given, the backer) as one undo step. Named catalog
+   filaments only, by label (js/filament-db.js), so every one has a buy link; within a palette no two colours sit closer than
+   CIEDE2000 10, the panel's look-alike line, except Coffee's Algae and Wine (Prusa's own hexes, 3.2 apart). A palette's
+   backer is kept as the build's own when the build's backer already looks like it (colors.js applyStripPalette), so a
+   black-backed build never gains a second black spool. test/chevron-mix.test.mjs checks the labels and the distances. */
+export const STRIP_PALETTES = [
+  // the hero and thumbnail renders' coffee station (category_art.py "coffee"): Prusament rPLA strips and black, on black
+  { id: 'coffee', name: 'Coffee', title: 'Prusament rPLA Algae, Corn, Risotto and Wine, with black strips on a black backer', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
+  /* Teal & orange (Joey: "add a teal and orange palette too"): the renders' "retro" palette, read by eye off Joey's teal /
+     orange / cream / grey Chevron photo (category_art.py), as the nearest named filaments by CIEDE2000: teal #2F8F8B ->
+     Panchroma Polymaker Teal (7.4), orange #E8772E -> Panchroma Orange (5.9), cream #DCC9A8 -> Panchroma Beige (1.5), grey
+     #C9CBCC -> Prusament rPLA Risotto (5.6), black #1A1A1A -> Elegoo PLA Black (2.4) */
+  { id: 'teal-orange', name: 'Teal & orange', title: 'Panchroma Polymaker Teal, Orange and Beige, Prusament rPLA Risotto and black strips on a black backer', strips: ['Panchroma Polymaker Teal', 'Panchroma Orange', 'Panchroma Beige', 'Prusament rPLA Risotto', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
+  { id: 'rpla', name: 'Prusament rPLA', title: 'The four Prusament rPLA colours, on the backer you have', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine'] },
+  // Joey: "add a few more strip palettes" (2026-11-23): themed sets, mostly the Panchroma line; the closest pair in each in ()
+  { id: 'mono', name: 'Monochrome', title: 'White, grey, steel grey, dark grey and black strips on a black backer (Panchroma)', strips: ['Panchroma White', 'Panchroma Grey', 'Panchroma Steel Grey', 'Panchroma Dark Grey', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },   // (13.5)
+  { id: 'ocean', name: 'Ocean', title: 'Teal, aqua, azure, stone blue and cold white strips on a black backer (Panchroma)', strips: ['Panchroma Polymaker Teal', 'Panchroma Aqua Blue', 'Panchroma Azure Blue', 'Panchroma Stone Blue', 'Panchroma Cold White'], backer: 'Elegoo PLA Black' },   // (14.7)
+  { id: 'sunset', name: 'Sunset', title: 'Wine red, red, orange, yellow and cream strips on a black backer (Panchroma)', strips: ['Panchroma Wine Red', 'Panchroma Red', 'Panchroma Orange', 'Panchroma Yellow', 'Panchroma Cream'], backer: 'Elegoo PLA Black' },   // (20.7)
+  { id: 'forest', name: 'Forest', title: 'Jungle green, green, olive, tan and brown strips on a black backer (Panchroma)', strips: ['Panchroma Jungle Green', 'Panchroma Green', 'Panchroma Olive Green', 'Panchroma Tan', 'Panchroma Brown'], backer: 'Elegoo PLA Black' },   // (13.7)
+  // every strip and the backer glitter, so the preview's one finish (strip colour 1's) is every strip's own here
+  { id: 'galaxy', name: 'Galaxy', title: 'Prusament Galaxy purple, green, silver and red strips on a Galaxy Black backer (all glitter)', strips: ['Prusament Galaxy Purple', 'Prusament Galaxy Green', 'Prusament Galaxy Silver', 'Prusament Galaxy Red'], backer: 'Prusament Galaxy Black' },   // (33.2)
+  { id: 'pastel', name: 'Pastel', title: 'Pink, mint, lavender, lemon and aqua strips on a white backer (Polar, Panchroma)', strips: ['Polar Pink', 'Polar Mint', 'Polar Lavender', 'Polar Lemon Drop', 'Panchroma Aqua Blue'], backer: 'Panchroma White' },   // (20.2)
+];
