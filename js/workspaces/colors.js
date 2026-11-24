@@ -1278,9 +1278,19 @@ export function mountColors(stage, ctx) {
     const own = buildStripColours(backer);
     const palBtn = (name, title, hexes, on, dis = false) => el('button.spal', { title, disabled: dis, onclick: on }, [el('span.sws', {}, hexes.slice(0, 6).map((h) => el('i', { style: `background:${h}` }))), el('span', { text: name })]);
     body.appendChild(el('div.spals', {}, [
-      ...STRIP_PALETTES.map((pp) => palBtn(pp.name, pp.title, pp.strips.map((l) => (filOf(l) || {}).hex || '#888888'), () => applyStripPalette(pp))),
+      ...STRIP_PALETTES.filter((pp) => !pp.group).map((pp) => palBtn(pp.name, pp.title, pp.strips.map((l) => (filOf(l) || {}).hex || '#888888'), () => applyStripPalette(pp))),
       palBtn('This build’s colours', own.length >= 2 ? `The ${own.length} filaments this build already prints in, as strip colours` : 'Needs two filaments in the build besides the backer', own.map((f) => f.hex), () => { stage.track('strips:palette:build'); commitStrips(own); st.stripSel = 1; st.stripMore = own.length > 5; say('This build’s colours on the strips · Undo to go back.'); }, own.length < 2),
     ]));
+    /* POPULAR COMBOS (2026-11-23): the most liked Coolors palettes as named filaments (chevron-mix.js), behind a disclosure so the
+       panel's own palettes stay short; open or shut is remembered for the session */
+    const popular = STRIP_PALETTES.filter((pp) => pp.group === 'popular');
+    if (popular.length) {
+      body.appendChild(el('button.spopular', { 'aria-expanded': String(!!st.popOpen), onclick: () => { st.popOpen = !st.popOpen; renderPicker(); } }, [el('span', { text: `Popular combos · ${popular.length}` }), el('span.chev', { text: st.popOpen ? '▾' : '▸' })]));
+      if (st.popOpen) {
+        body.appendChild(el('p.note', { text: 'The most liked palettes on Coolors, each colour matched to the nearest filament you can buy.' }));
+        body.appendChild(el('div.spals', {}, popular.map((pp) => palBtn(pp.name, pp.title, pp.strips.map((l) => (filOf(l) || {}).hex || '#888888'), () => applyStripPalette(pp)))));
+      }
+    }
     if (step === 'mix') body.appendChild(el('button.key.sm.shuffle', { title: 'Every Chevron part rolls new strips in the same colours', onclick: shuffleStrips }, [icon('arrow-clockwise', { size: 14 }), 'Shuffle strips']));
     // what a buyer gets
     if (step === 'mix' && S.part) {

@@ -160,3 +160,18 @@ test('every strip palette names real catalog filaments, 2 to 9 strips, no two co
     }
   }
 });
+
+test('every popular combo keeps its Coolors source: one strip per source colour, each within CIEDE2000 12 of it', async () => {
+  const { STRIP_PALETTES } = await import('../js/chevron-mix.js');
+  const { FILAMENT_DB } = await import('../js/filament-db.js');
+  const { dE } = await import('../js/colors/colour.js');
+  const by = new Map(FILAMENT_DB.flatMap((b) => b.colors.map((c) => [c.label, c])));
+  const popular = STRIP_PALETTES.filter((p) => p.group === 'popular');
+  assert.ok(popular.length >= 12, 'a dozen or more');
+  for (const p of popular) {
+    const src = p.src.split('-').map((h) => '#' + h);
+    assert.equal(src.length, p.strips.length, `${p.name}: one strip per source colour`);
+    p.strips.forEach((l, i) => assert.ok(dE(src[i], by.get(l).hex) < 12, `${p.name}: ${l} is ${dE(src[i], by.get(l).hex).toFixed(1)} from ${src[i]}`));
+    assert.equal(p.backer, undefined, `${p.name}: the build keeps its own backer`);
+  }
+});

@@ -65,13 +65,13 @@ test('a chip narrows the groups: brand groups stay with the colours of that mate
   assert.equal(filterByMaterial(CASE, null), CASE);
   assert.equal(filterByMaterial(CASE, undefined), CASE);
   const petg = filterByMaterial(CASE, 'PETG');
-  assert.deepEqual(petg.map((g) => [g.brand, g.line]), [['Polymaker', 'PETG'], ['Elegoo', 'PLA / PETG']], 'PETG keeps the Polymaker PETG line and Elegoo');
+  assert.deepEqual(petg.map((g) => [g.brand, g.line]), [['Polymaker', 'PETG'], ['Elegoo', 'PLA / PETG'], ['Prusament', 'PETG']], 'PETG keeps the Polymaker PETG line, Elegoo and the Prusament PETG line (2026-11-23)');
   assert.deepEqual(petg[1].colors.map((c) => c.label), ['Elegoo PETG Black'], 'Elegoo narrowed to its PETG colour');
   assert.equal(petg[0].colors.length, FILAMENT_DB.find((b) => b.line === 'PETG').colors.length, 'a one-material line keeps every colour');
   assert.equal(petg[1].url, FILAMENT_DB.find((b) => b.brand === 'Elegoo').url, 'a group keeps its other fields');
   for (const g of petg) for (const c of g.colors) assert.equal(colorMaterial(g.line, c), 'PETG');
   const pla = filterByMaterial(CASE, 'PLA');
-  assert.deepEqual(pla.map((g) => g.line), ['Panchroma™ PLA', 'Panchroma™ Silk PLA', 'Panchroma™ Translucent PLA', 'Panchroma™ Galaxy PLA', 'PLA / PETG', 'PLA', 'Burnt Titanium PLA', 'PLA', 'Galaxy PLA', 'rPLA'], 'PLA drops the Polymaker PETG line and keeps the order (Panchroma Galaxy PLA after Translucent, 2026-11-04; the last PLA is Polar Filament, 2026-10-26; then Prusament Galaxy, 2026-11-01, and Prusament rPLA, 2026-11-23)');
+  assert.deepEqual(pla.map((g) => g.line), ['Panchroma™ PLA', 'Panchroma™ Silk PLA', 'Panchroma™ Translucent PLA', 'Panchroma™ Galaxy PLA', 'PLA / PETG', 'PLA', 'Burnt Titanium PLA', 'PLA', 'Galaxy PLA', 'rPLA', 'PLA', 'PLA Blend'], 'PLA drops the PETG lines and keeps the order (Panchroma Galaxy PLA after Translucent, 2026-11-04; the last PLA is Polar Filament, 2026-10-26; then Prusament Galaxy, 2026-11-01, and Prusament rPLA, PLA and PLA Blend, 2026-11-23)');
   assert.deepEqual(pla.find((g) => g.brand === 'Elegoo').colors.map((c) => c.label), ['Elegoo PLA Black', 'Elegoo PLA Grey']);
   assert.deepEqual(filterByMaterial(CASE, 'TPU'), [], 'no TPU outside the feet');
   assert.deepEqual(filterByMaterial(FEET, 'TPU').map((g) => g.line), ['PolyFlex™ TPU95', 'PolyFlex™ TPU90']);
@@ -91,5 +91,5 @@ test('label -> material over the catalogue: what the "In this build" row keys on
   assert.equal(by.get('Polymaker PolyFlex TPU95 Black'), 'TPU');
   assert.equal(by.get('Printed Solid Mystery Orange'), 'PLA');
   assert.equal(by.get('not a filament'), undefined);
-  assert.equal([...by.values()].filter((m) => m === 'PETG').length, FILAMENT_DB.find((b) => b.line === 'PETG').colors.length + 1, 'the PETG labels: the Polymaker line and Elegoo’s one');
+  assert.equal([...by.values()].filter((m) => m === 'PETG').length, FILAMENT_DB.filter((b) => b.line === 'PETG').reduce((a, b) => a + b.colors.length, 0) + 1, 'the PETG labels: the Polymaker and Prusament lines and Elegoo’s one');
 });

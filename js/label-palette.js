@@ -43,7 +43,8 @@ export const catalogSpool = (name) => BY_NAME.get(name) || null;
 export const urlFor = (name) => (BY_NAME.get(name) || {}).url || null;
 
 /* plain PLA: the line names PLA and not Silk or Translucent, the colour is not PETG or TPU, and it has no translucent flag */
-export const isPlainPla = (c) => /PLA/.test(c.line) && !/Silk|Translucent/.test(c.line) && !/PETG|TPU/.test(c.label) && !c.translucent;
+// a silk-finish row whose line name does not say so (Prusament's PLA Blend, 2026-11-23) is not plain either
+export const isPlainPla = (c) => /PLA/.test(c.line) && !/Silk|Translucent/.test(c.line) && !/PETG|TPU/.test(c.label) && !c.translucent && c.finish !== 'silk';
 /* the suggestion rule: the nearest plain PLA to `hex` by ΔE00, ties to the first in catalog order */
 export function suggestFor(hex, catalog = CATALOG) {
   let best = null, bd = Infinity;

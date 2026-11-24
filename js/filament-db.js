@@ -388,6 +388,72 @@ const FILAMENT_DB = [
     { name: 'Risotto', hex: '#CCC9BF', url: 'https://www.prusa3d.com/product/prusament-rpla-risotto-pigment-1kg/' },
     { name: 'Wine',    hex: '#5E493F', url: 'https://www.prusa3d.com/product/prusament-rpla-wine-pigment-1kg/' },
   ].map(f => ({ ...f, label: `Prusament rPLA ${f.name}` })) },
+  /* Prusament PLA, PLA Blend and PETG (2026-11-23, Joey: "can we add in prusament pla and petg colors"). Every hex is Prusa's own
+     chart (help.prusa3d.com article 762314, "HueForge filament transparency values and hexcodes", read 2026-11-23); every link is
+     the 1 kg spool's store page, read the same day (EU store, a sale running; stock moves). ⚠ WHAT IS LEFT OUT, AND WHY:
+     - colours with no chart row (PLA Electric Green, Emerald Green, Sakura Pink, Blend Coppercabana, the CMYK and ColorMix
+       sets; PETG Electric Green, Emerald Green, Matte Noctua Beige and Brown, Ultraglow, ESD Black): only a swatch photo, which
+       misses badly on saturated and dark colours (Jet Black reads 121212 against the chart's 24292A);
+     - PETG Prusa Pro Green (chart 00FA9A, exactly CSS mediumspringgreen, likely a placeholder) and Shimmering Violet (chart
+       1D1991 against a swatch of 2B3042);
+     - the transparent PETGs (Clear, Orange Transparent, Neon Green, Ultramarine Blue, Carmine Red), as the Translucent line's
+       semi-transparent colours are: nothing here says how they print translucent (see that line's note);
+     - the filled and engineering PETGs (Carbon Fiber, Magnetite, Tungsten, V0, Recycled), Mystic (polychromatic), and the
+       High Speed and Lightweight PLAs, which have no chart rows of their own.
+     Some chart rows read as unmeasured (an 8-digit hex ending FF, no TD): PLA Anthracite Grey, Blood Red, Chalky Blue, Natural,
+     Noctua Beige and Brown, Pistachio Green, Pro Green; PETG Sky Blue. They are Prusa's published values all the same.
+     `finish` is the family the store tags (Glitter; the Blend line is Prusa's silk), as for the Galaxy rows above. */
+  { brand: 'Prusament', line: 'PLA', url: 'https://www.prusa3d.com/category/prusament-pla/', colors: [
+    { name: 'Anthracite Grey', hex: '#3F4647', url: 'https://www.prusa3d.com/product/prusament-pla-anthracite-grey-1kg-nfc/' },
+    { name: 'Army Green', hex: '#5E6344', url: 'https://www.prusa3d.com/product/prusament-pla-army-green-1kg-nfc/' },
+    { name: 'Azure Blue', hex: '#0682AC', url: 'https://www.prusa3d.com/product/prusament-pla-azure-blue-1kg-nfc/' },
+    { name: 'Blood Red', hex: '#990303', url: 'https://www.prusa3d.com/product/prusament-pla-blood-red-1kg-nfc/' },
+    { name: 'Chalky Blue', hex: '#6F9AAA', url: 'https://www.prusa3d.com/product/prusament-pla-chalky-blue-1kg-nfc/' },
+    { name: 'Gentleman\'s Grey', hex: '#354046', url: 'https://www.prusa3d.com/product/prusament-pla-gentleman-s-grey-1kg-nfc/' },
+    { name: 'Gravity Grey', hex: '#9FA4A7', url: 'https://www.prusa3d.com/product/prusament-pla-gravity-grey-1kg-nfc/' },
+    { name: 'Jet Black', hex: '#24292A', url: 'https://www.prusa3d.com/product/prusament-pla-jet-black-1kg-nfc/' },
+    { name: 'Lipstick Red', hex: '#D03036', url: 'https://www.prusa3d.com/product/prusament-pla-lipstick-red-1kg-nfc/' },   // out of stock in the EU store, 2026-11-23
+    { name: 'Natural', hex: '#DFDFD3', url: 'https://www.prusa3d.com/product/prusament-pla-natural-1kg-nfc/' },
+    { name: 'Noctua Beige', hex: '#E7CEB4', url: 'https://www.prusa3d.com/product/prusament-pla-noctua-beige-1kg-nfc/' },
+    { name: 'Noctua Brown', hex: '#653525', url: 'https://www.prusa3d.com/product/prusament-pla-noctua-brown-1kg-nfc/' },
+    { name: 'Pearl Mouse', hex: '#A49D8D', url: 'https://www.prusa3d.com/product/prusament-pla-pearl-mouse-1kg-nfc/' },
+    { name: 'Pineapple Yellow', hex: '#EFD006', url: 'https://www.prusa3d.com/product/prusament-pla-pineapple-yellow-1kg-nfc/' },
+    { name: 'Pistachio Green', hex: '#93A683', url: 'https://www.prusa3d.com/product/prusament-pla-pistachio-green-1kg-nfc/' },
+    { name: 'Pristine White', hex: '#E6EAED', url: 'https://www.prusa3d.com/product/prusament-pla-pristine-white-1kg-nfc/' },
+    { name: 'Prusa Orange', hex: '#FE6E31', url: 'https://www.prusa3d.com/product/prusament-pla-prusa-orange-1kg-nfc/' },
+    { name: 'Prusa Pro Green', hex: '#00C389', url: 'https://www.prusa3d.com/product/prusament-pla-prusa-pro-green-1kg-nfc/' },
+    { name: 'Simply Green', hex: '#70A640', url: 'https://www.prusa3d.com/product/prusament-pla-simply-green-1kg-nfc/' },
+    { name: 'Vanilla White', hex: '#D9D4C4', url: 'https://www.prusa3d.com/product/prusament-pla-vanilla-white-1kg-nfc/' },
+    { name: 'Marble Grey', hex: '#B0B4B4', url: 'https://www.prusa3d.com/product/prusament-pla-marble-grey-1kg-nfc/', finish: 'glitter' },
+    { name: 'Opal Green', hex: '#075B49', url: 'https://www.prusa3d.com/product/prusament-pla-opal-green-1kg-nfc/', finish: 'glitter' },
+  ].map(f => ({ ...f, label: `Prusament PLA ${f.name}` })) },
+  { brand: 'Prusament', line: 'PLA Blend', url: 'https://www.prusa3d.com/category/prusament-pla/', colors: [
+    { name: 'Blend Lime Green', hex: '#A7B852', url: 'https://www.prusa3d.com/product/prusament-pla-blend-lime-green-1kg-nfc/', finish: 'silk' },
+    { name: 'Blend Ms. Pink', hex: '#E34A93', url: 'https://www.prusa3d.com/product/prusament-pla-blend-ms-pink-1kg-nfc/', finish: 'silk' },
+    { name: 'Blend My Silverness', hex: '#AEB8C0', url: 'https://www.prusa3d.com/product/prusament-pla-blend-my-silverness-1kg-nfc/', finish: 'silk' },
+    { name: 'Blend Oh My Gold', hex: '#CE9F2D', url: 'https://www.prusa3d.com/product/prusament-pla-blend-oh-my-gold-1kg-nfc/', finish: 'silk' },   // out of stock in the EU store, 2026-11-23
+    { name: 'Blend Pearl White', hex: '#D0D7D6', url: 'https://www.prusa3d.com/product/prusament-pla-blend-pearl-white-1kg-nfc/', finish: 'silk' },
+    { name: 'Blend Royal Blue', hex: '#04518E', url: 'https://www.prusa3d.com/product/prusament-pla-blend-royal-blue-1kg-nfc/', finish: 'silk' },   // out of stock in the EU store, 2026-11-23
+    { name: 'Blend Viva La Bronze', hex: '#B38E3E', url: 'https://www.prusa3d.com/product/prusament-pla-blend-viva-la-bronze-1kg-nfc/', finish: 'silk' },   // out of stock in the EU store, 2026-11-23
+  ].map(f => ({ ...f, label: `Prusament PLA ${f.name}` })) },
+  { brand: 'Prusament', line: 'PETG', url: 'https://www.prusa3d.com/category/prusament-petg/', colors: [
+    { name: 'Anthracite Grey', hex: '#3F4646', url: 'https://www.prusa3d.com/product/prusament-petg-anthracite-grey-1kg-nfc/' },
+    { name: 'Chalky Blue', hex: '#6F9AA9', url: 'https://www.prusa3d.com/product/prusament-petg-chalky-blue-1kg-nfc/' },
+    { name: 'Jet Black', hex: '#292B2B', url: 'https://www.prusa3d.com/product/prusament-petg-jet-black-1kg-nfc/' },
+    { name: 'Jungle Green', hex: '#007248', url: 'https://www.prusa3d.com/product/prusament-petg-jungle-green-1kg-nfc/' },
+    { name: 'Lipstick Red', hex: '#BB2E32', url: 'https://www.prusa3d.com/product/prusament-petg-lipstick-red-1kg-nfc/' },
+    { name: 'Mango Yellow', hex: '#F2B706', url: 'https://www.prusa3d.com/product/prusament-petg-mango-yellow-1kg-nfc/' },
+    { name: 'Ocean Blue', hex: '#1A4C54', url: 'https://www.prusa3d.com/product/prusament-petg-ocean-blue-1kg-nfc/' },
+    { name: 'Pistachio Green', hex: '#93A682', url: 'https://www.prusa3d.com/product/prusament-petg-pistachio-green-1kg-nfc/' },
+    { name: 'Prusa Orange', hex: '#EB5403', url: 'https://www.prusa3d.com/product/prusament-petg-prusa-orange-1kg-nfc/' },
+    { name: 'Signal White', hex: '#E5E0E1', url: 'https://www.prusa3d.com/product/prusament-petg-signal-white-1kg-nfc/' },
+    { name: 'Sky Blue', hex: '#346CE3', url: 'https://www.prusa3d.com/product/prusament-petg-sky-blue-1kg-nfc/' },
+    { name: 'Terracotta Light', hex: '#B87F69', url: 'https://www.prusa3d.com/product/prusament-petg-terracotta-light-1kg-nfc/' },
+    { name: 'Urban Grey', hex: '#95908C', url: 'https://www.prusa3d.com/product/prusament-petg-urban-grey-1kg-nfc/' },
+    { name: 'Matte Black', hex: '#303635', url: 'https://www.prusa3d.com/product/prusament-petg-matte-black-1kg-nfc/' },
+    { name: 'Prusa Galaxy Black', hex: '#494546', url: 'https://www.prusa3d.com/product/prusament-petg-prusa-galaxy-black-1kg-nfc/', finish: 'glitter' },
+    { name: 'Yellow Gold', hex: '#9A8523', url: 'https://www.prusa3d.com/product/prusament-petg-yellow-gold-1kg-nfc/', finish: 'glitter' },
+  ].map(f => ({ ...f, label: `Prusament PETG ${f.name}` })) },
 ];
 
 /* The surface family a label's filament belongs to ('silk', 'glitter'), or null for an ordinary one and for a label the catalog

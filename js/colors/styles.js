@@ -22,7 +22,8 @@ const any = (...ps) => (c) => ps.some((p) => p(c));
 /* the warm neutrals: cream, beige, tan, natural (low chroma, hue 40-125, light) */
 const warmNeutral = (c) => c.C >= 10 && c.C < 30 && between(c.h, 55, 125) && c.L >= 60;   // from 55°: rose gold (48°) is an accent, not a shell
 /* the earths: brown, olive, bronze, rose gold, tan (hue 40-125, chroma 15-50, not light; brass at C 53 is too loud for "gentle contrasts") */
-const earth = (c) => between(c.h, 40, 125) && c.C >= 15 && c.C < 50 && c.L < 75;
+// chroma under 45, where surprise.js's 'vivid' starts (2026-11-23: Prusament Blend Viva La Bronze, C 45-50, was the first colour in that gap)
+const earth = (c) => between(c.h, 40, 125) && c.C >= 15 && c.C < 45 && c.L < 75;
 /* the quiet blues: stone, slate, dark blue, periwinkle, aqua (hue 200-300, chroma 15-50) */
 const quietBlue = (c) => between(c.h, 200, 300) && c.C >= 15 && c.C <= 50;
 /* the deep blues a workshop shell may wear */

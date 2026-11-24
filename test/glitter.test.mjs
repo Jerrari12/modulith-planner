@@ -158,7 +158,9 @@ test('the catalog decides: Prusament\'s five Galaxy colours, Polymaker\'s four P
   const family = FILAMENT_DB.flatMap((b) => b.colors.filter((c) => c.finish === 'glitter').map((c) => c.label)).sort();
   assert.deepEqual(family, ['Panchroma Galaxy Black', 'Panchroma Galaxy Dark Blue', 'Panchroma Galaxy Dark Green', 'Panchroma Galaxy Dark Grey', 'Panchroma Galaxy Dark Red',
     'Panchroma Hedgehog Makes - Galaxy Red', 'Polymaker PETG Galaxy Black', 'Polymaker PETG Galaxy Blue', 'Polymaker PETG Galaxy Dark Grey', 'Polymaker PETG Galaxy Red',
-    'Prusament Galaxy Black', 'Prusament Galaxy Green', 'Prusament Galaxy Purple', 'Prusament Galaxy Red', 'Prusament Galaxy Silver']);
+    'Prusament Galaxy Black', 'Prusament Galaxy Green', 'Prusament Galaxy Purple', 'Prusament Galaxy Red', 'Prusament Galaxy Silver',
+    // the store's Glitter tag on the Prusament PLA and PETG lines (2026-11-23)
+    'Prusament PETG Prusa Galaxy Black', 'Prusament PETG Yellow Gold', 'Prusament PLA Marble Grey', 'Prusament PLA Opal Green']);
   assert.equal(finishOfLabel('Prusament Galaxy Black'), 'glitter');
   /* the plastic round the flakes is the ordinary part's, a label-free call and an unknown one answer no glitter */
   const { glitter, ...rest } = partMaterialSpec('Faceplate:GRIP', { label: 'Prusament Galaxy Black' });
@@ -169,7 +171,7 @@ test('the catalog decides: Prusament\'s five Galaxy colours, Polymaker\'s four P
   /* the plate's transfer wins on the face it made, as it does for silk */
   assert.equal(partMaterialSpec('Faceplate:GRIP', { label: 'Prusament Galaxy Black', holographicPlate: true, plateContact: 'Faceplate:GRIP' }).glitter, undefined);
   /* each Prusament row has its own product page, a plain link on the store's own host */
-  const prusa = FILAMENT_DB.find((b) => b.brand === 'Prusament');
+  const prusa = FILAMENT_DB.find((b) => b.brand === 'Prusament' && b.line === 'Galaxy PLA');   // the Galaxy line (the PLA, Blend and PETG lines came 2026-11-23)
   for (const c of prusa.colors) assert.match(c.url, /^https:\/\/www\.prusa3d\.com\/product\/prusament-pla-[a-z-]*galaxy-[a-z]+-1kg-nfc\/$/, c.label);
   assert.equal(new Set(prusa.colors.map((c) => c.url)).size, prusa.colors.length, 'two colours share a page');
   assert.equal(new Set(prusa.colors.map((c) => c.hex.toLowerCase())).size, prusa.colors.length);

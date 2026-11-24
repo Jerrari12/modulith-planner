@@ -26,16 +26,18 @@ const { applyLayerDetail } = await import(url('js', 'vendor', 'layer-detail.js')
 const BF = await import(url('js', 'bed-finish.js'));
 const SA = await import(url('js', 'silk-axis.js'));
 const { FILAMENT_DB, finishOfLabel } = await import(url('js', 'filament-db.js'));
+const { finishClass } = await import(url('js', 'colors', 'swatch.js'));   // the swatch's sheen, held to the model's rule on the catalog
 const { partMaterialSpec, SILK_APPROX } = await import(url('js', 'part-material.js'));
 const { FILAMENT_PROFILES } = await import(url('js', 'filament-profiles.js'));
 
 const main = readFileSync(join(root, 'js', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
 const count = (s, needle) => s.split(needle).length - 1;
 
-test('the catalog decides silk: exactly the Silk PLA line, all 24, and nothing else', () => {
+test('the catalog decides silk: exactly the Silk PLA line (24) and the Prusament PLA Blend line (7, 2026-11-23), and nothing else', () => {
   const silk = FILAMENT_DB.flatMap((b) => b.colors.filter((c) => c.finish === 'silk').map((c) => [b.line, c.label]));
-  assert.equal(silk.length, 24);
-  assert.ok(silk.every(([line]) => line === 'Panchroma™ Silk PLA'), 'a filament outside the Silk PLA line is marked silk');
+  assert.equal(silk.length, 31);
+  assert.ok(silk.every(([line]) => line === 'Panchroma™ Silk PLA' || line === 'PLA Blend'), 'a filament outside the silk lines is marked silk');
+  assert.ok(FILAMENT_DB.filter((b) => b.line === 'PLA Blend').every((b) => b.colors.every((c) => c.finish === 'silk')));
   assert.ok(FILAMENT_DB.filter((b) => b.line === 'Panchroma™ Silk PLA').every((b) => b.colors.every((c) => c.finish === 'silk')));
   for (const c of FILAMENT_DB.flatMap((b) => b.colors)) assert.ok(c.finish === undefined || c.finish === 'silk' || c.finish === 'glitter', `${c.label}: finish ${c.finish}`);
   assert.equal(finishOfLabel('Panchroma Silk Gold'), 'silk');
@@ -45,10 +47,14 @@ test('the catalog decides silk: exactly the Silk PLA line, all 24, and nothing e
 });
 
 test('the picker\'s swatch sheen and the model agree on every catalog label', () => {
-  /* swatch.js `finishClass()` reads the word, because a saved palette can name a filament the catalog lacks; on the catalog's own
-     labels the two rules must not disagree, or the swatch and the model would tell two stories */
+  /* swatch.js `finishClass()` reads the catalog first and the word for a label the catalog lacks (a saved palette can name one); on
+     the catalog's own labels the swatch and the model must not disagree, or they would tell two stories. The word alone no longer
+     covers the catalog: Prusament's Blend labels do not say Silk (2026-11-23) */
   const word = (name) => String(name || '').split(' ').includes('Silk');
-  for (const c of FILAMENT_DB.flatMap((b) => b.colors)) assert.equal(word(c.label), finishOfLabel(c.label) === 'silk', c.label);
+  for (const c of FILAMENT_DB.flatMap((b) => b.colors)) {
+    assert.equal(finishClass(c.label) === '.silk', finishOfLabel(c.label) === 'silk', c.label);
+    if (word(c.label)) assert.equal(finishOfLabel(c.label), 'silk', `${c.label}: a label saying Silk is a silk filament`);
+  }
 });
 
 test('a silk label gets the silk approximation; a label-free call and an ordinary label are unchanged', () => {

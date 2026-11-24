@@ -612,6 +612,8 @@ html.ws-parts-wide[data-ws="parts"] #ws-tools { left: 860px; }
 #ws-picker .spal .sws i { width: 10px; height: 20px; }
 #ws-picker .spal .sws i:first-child { border-radius: 5px 0 0 5px; } #ws-picker .spal .sws i:last-child { border-radius: 0 5px 5px 0; }
 #ws-picker .shuffle { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
+#ws-picker .spopular { display: flex; justify-content: space-between; align-items: center; padding: 6px 2px 2px; border: none; background: transparent; color: var(--ink-2); font: inherit; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; cursor: pointer; text-align: left; }
+#ws-picker .spopular:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
 #ws-picker .note.buyer { margin: 0; line-height: 1.4; }
 #ws-picker .note.buyer a { color: var(--ink); font-weight: 600; }
 #ws-colors .crow .sws .sw { width: 10px; border-radius: 0; margin-left: -1px; }

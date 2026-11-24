@@ -83,7 +83,7 @@ export function catalog(db = FILAMENT_DB) {
   const list = [];
   for (const b of db) for (const c of b.colors) {
     const [L, C, h] = lch(c.hex);
-    list.push({ i: list.length, name: c.label, hex: c.hex, url: c.url, L, C, h, lab: hexToLab(c.hex), silk: /Silk/.test(b.line), tpu: /TPU/.test(b.line), translucent: !!c.translucent, cls: C < 10 ? 'neutral' : C < 25 ? 'muted' : C < 45 ? 'mid' : 'vivid' });
+    list.push({ i: list.length, name: c.label, hex: c.hex, url: c.url, L, C, h, lab: hexToLab(c.hex), silk: /Silk/.test(b.line) || c.finish === 'silk', tpu: /TPU/.test(b.line), translucent: !!c.translucent, cls: C < 10 ? 'neutral' : C < 25 ? 'muted' : C < 45 ? 'mid' : 'vivid' });
   }
   const n = list.length, de = new Float32Array(n * n);
   for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) de[a * n + b] = de[b * n + a] = deltaE00(list[a].lab, list[b].lab);

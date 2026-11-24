@@ -3,8 +3,9 @@
    =========================================================================
    SILK (Joey, 2026-10-21: "give the silk material squares a gloss effect, like a sheen on half of it or something? To help
    differentiate it from regular material"): a swatch whose filament is a silk one wears `.silk`, drawn in app.css as a highlight
-   over its upper-left half. Every silk filament's label carries the word ("Panchroma Silk Gold"), and the word is the rule on
-   purpose: a saved palette can name a filament the catalog lacks (test/silk.test.mjs holds the two rules together on the catalog).
+   over its upper-left half. The catalog's silk family decides first (finishOfLabel), as it does for the model: Prusament's PLA Blend
+   is Prusa's silk and its labels do not say so ("Prusament PLA Blend Lime Green", 2026-11-23). The word stays the rule for a
+   label the catalog lacks, on purpose: a saved palette can name such a filament (test/silk.test.mjs holds the rules together).
 
    GLITTER (Joey, 2026-11-01: "how to represent glitter filaments square swatches next rather than just a solid color"; of the
    candidates, "I like c from first sheet", fine specks with four-point glints; and "it might be cool if when scrolling down the
@@ -25,7 +26,7 @@ const hash = (s) => { let h = 2166136261; for (const c of String(s)) h = Math.im
 /** The class for the 12 px swatches, where silk's sheen does not read and a glint still does; '' for anything but glitter. */
 export const glitterClass = (name) => (finishOfLabel(name) === 'glitter' ? (GLITTER_TINTS[name] ? '.glitter.warm' : '.glitter') : '');
 /** The class a swatch of this filament wears: `.silk`, `.glitter`, `.glitter.warm` or ''. */
-export const finishClass = (name) => (String(name || '').split(' ').includes('Silk') ? '.silk' : glitterClass(name));
+export const finishClass = (name) => (finishOfLabel(name) === 'silk' || String(name || '').split(' ').includes('Silk') ? '.silk' : glitterClass(name));
 /** A swatch's inline style: its colour and, for glitter, its window on the tiles. */
 export function swatchStyle(name, hex) {
   if (finishOfLabel(name) !== 'glitter') return `background:${hex}`;
