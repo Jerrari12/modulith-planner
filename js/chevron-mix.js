@@ -158,15 +158,15 @@ export function stripSlots(colors) {
    their hexes, and each slot's palette index. A duplicate slot counts once, so the roll never puts one filament on two
    neighbouring strips. */
 export function stripPalette(slots, slot1 = null) {
-  const ids = [], hexes = [], idx = [];
+  const ids = [], hexes = [], names = [], idx = [];
   slots.forEach((f, i) => {
     const g = f || (i === 0 ? slot1 : null);
     const id = filamentId(g) || '#none';
     let j = ids.indexOf(id);
-    if (j < 0) { j = ids.length; ids.push(id); hexes.push(g && g.hex ? g.hex : '#888888'); }
+    if (j < 0) { j = ids.length; ids.push(id); hexes.push(g && g.hex ? g.hex : '#888888'); names.push((g && g.name) || null); }
     idx.push(j);
   });
-  return { k: ids.length, hexes, idx };
+  return { k: ids.length, hexes, names, idx };   // names: each palette colour's filament label (null unpicked), for its own finish
 }
 
 /* the slicer's filament number per slot: the backer is F1; the strips take F2, F3 ... in slot order, one number per
@@ -204,8 +204,9 @@ export const STRIP_PALETTES = [
   /* Teal & orange (Joey: "add a teal and orange palette too"): the renders' "retro" palette, read by eye off Joey's teal /
      orange / cream / grey Chevron photo (category_art.py), as the nearest named filaments by CIEDE2000: teal #2F8F8B ->
      Panchroma Polymaker Teal (7.4), orange #E8772E -> Panchroma Orange (5.9), cream #DCC9A8 -> Panchroma Beige (1.5), grey
-     #C9CBCC -> Prusament rPLA Risotto (5.6), black #1A1A1A -> Elegoo PLA Black (2.4) */
-  { id: 'teal-orange', name: 'Teal & orange', title: 'Panchroma Polymaker Teal, Orange and Beige, Prusament rPLA Risotto and black strips on a black backer', strips: ['Panchroma Polymaker Teal', 'Panchroma Orange', 'Panchroma Beige', 'Prusament rPLA Risotto', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
+     #C9CBCC -> Prusament rPLA Risotto (5.6), black #1A1A1A -> Elegoo PLA Black (2.4); then Joey, the same day: "lets make the strip 4
+     Panchroma Silk silver", so the grey strip is a silk one */
+  { id: 'teal-orange', name: 'Teal & orange', title: 'Panchroma Polymaker Teal, Orange and Beige, Panchroma Silk Silver and black strips on a black backer', strips: ['Panchroma Polymaker Teal', 'Panchroma Orange', 'Panchroma Beige', 'Panchroma Silk Silver', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },
   { id: 'rpla', name: 'Prusament rPLA', title: 'The four Prusament rPLA colours, on the backer you have', strips: ['Prusament rPLA Algae', 'Prusament rPLA Corn', 'Prusament rPLA Risotto', 'Prusament rPLA Wine'] },
   // Joey: "add a few more strip palettes" (2026-11-23): themed sets, mostly the Panchroma line; the closest pair in each in ()
   { id: 'mono', name: 'Monochrome', title: 'White, grey, steel grey, dark grey and black strips on a black backer (Panchroma)', strips: ['Panchroma White', 'Panchroma Grey', 'Panchroma Steel Grey', 'Panchroma Dark Grey', 'Elegoo PLA Black'], backer: 'Elegoo PLA Black' },   // (13.5)

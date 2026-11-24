@@ -10050,9 +10050,63 @@ test('Colors: Chevron strip colours - the Coffee palette mixes every Chevron fac
   await look('Teal & orange');
   await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 5 && window.__GEN2_VIEWER__.stripInfo().mixing === 2);
   assert.equal((await info()).slots[0], 'Panchroma Polymaker Teal');
+  /* each strip its own finish (Joey: "only the silk color should be acting like silk"): strip 4 is Panchroma Silk Silver, the only
+     silk one, drawn at silk's roughness and metalness with the silk sheen; the others plain. Then Silk Silver as strip colour 1:
+     still only its own strips silk */
+  const fins = () => page.evaluate(() => { for (const i of window.__GEN2_VIEWER__.instances.values()) { let f = null; i.group.traverse((o) => { if (!f && o.isMesh && o.userData.zone === 'FACE' && o.material?.userData?.stripMix) f = { fins: o.material.userData.stripFins, aniso: o.material.anisotropy, sheen: 'SILK_SHEEN' in (o.material.defines || {}) }; }); if (f) return f; } return null; });
+  let f = await fins();
+  assert.equal((await info()).slots[3], 'Panchroma Silk Silver');
+  assert.deepEqual(f.fins.map((x) => x.silk), [false, false, false, true, false], 'only strip 4 is silk');
+  assert.ok(f.fins[3].roughness < 0.3 && f.fins[3].metalness > 0.5 && f.fins[0].roughness > 0.4 && f.fins[0].metalness < 0.2, `silk and plain finishes (${JSON.stringify(f.fins)})`);
+  assert.ok(f.sheen && f.aniso > 0, 'the mix carries the silk sheen and anisotropy for its silk strip');
+  await page.evaluate(() => { const v = window.__GEN2_VIEWER__, s = v.stripInfo().slots.slice(); [s[0], s[3]] = [s[3], s[0]]; v.setStrips({ slots: s }); });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().slots[0].name === 'Panchroma Silk Silver');
+  f = await fins();
+  assert.deepEqual(f.fins.map((x) => x.silk), [true, false, false, false, false], 'Silk Silver as strip colour 1: still only its own strips silk');
+  assert.ok(f.fins[3].roughness > 0.4 && f.fins[3].metalness < 0.2, 'the teal strip stays plain');
   await look('The Jerrari');
   await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().k === 1 && window.__GEN2_VIEWER__.stripInfo().mixing === 0);
   assert.equal(await mixedFaces(), 0, 'a look without strip colours takes the mix off');
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
+/* THE FILAMENT LIST KEEPS ITS PLACE (2026-11-23, Joey: "when you place a color the filament list scrolls to the top each time,
+   which become annoying the larger the list grows"). A pick re-renders the picker; the scroll is carried across, and only
+   opening the picker afresh (another region, the strip panel) starts it at the top. Desktop, where the brand list scrolls. */
+test('Colors: a pick keeps the filament list where it was; opening another region starts it at the top; the strip panel too', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'chevron', doorStyle: 'chevron', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 3, gridH: 1, sideCovers: true, plateParts: {}, nextId: 3, labelStyle: null, buildId: 'e2escroll001',
+    placed: [{ id: 1, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 2, y: 0, w: 1, hh: 2, fill: 'cabinet', shelves: 0 }] };
+  const b64 = Buffer.from(JSON.stringify(rec), 'utf8').toString('base64');
+  const { ctx, page, errors } = await open('colors', { query: `#build=${b64}` });
+  await page.waitForFunction(() => window.__GEN2_VIEWER__.stripInfo().parts === 2 && !window.__GEN2_VIEWER__.regenBusy, null, { timeout: 90_000 });
+  // the case's own row (the first): its picker, the brand list scrolled well down
+  await page.locator('#ws-colors .crow').first().click();
+  await page.waitForSelector('#ws-picker .brands .sw');
+  const top = () => page.evaluate(() => document.querySelector('#ws-picker .brands').scrollTop);
+  await page.evaluate(() => { const b = document.querySelector('#ws-picker .brands'); b.scrollTop = Math.min(900, b.scrollHeight - b.clientHeight - 10); });
+  const before = await top();
+  assert.ok(before > 200, `the list scrolled (${before})`);
+  // a swatch in view, picked: the build changes and the list stays
+  const label = await page.evaluate(() => { const b = document.querySelector('#ws-picker .brands'), r = b.getBoundingClientRect(); const sw = [...b.querySelectorAll('.sw')].find((x) => { const q = x.getBoundingClientRect(); return q.top > r.top + 20 && q.bottom < r.bottom - 20; }); sw.click(); return sw.getAttribute('aria-label'); });
+  await settle(page, 300);
+  assert.equal(await page.evaluate(() => window.__GEN2_VIEWER__.palette().colors.Case?.name), label, 'the pick took');
+  assert.ok(Math.abs((await top()) - before) <= 2, `the list stayed where it was (${before} -> ${await top()})`);
+  // another region's picker starts at the top
+  await page.locator('#ws-colors .crow').nth(1).click();
+  await settle(page, 200);
+  assert.equal(await top(), 0, 'a new region opens at the top');
+  // the strip panel: its body keeps its place across a strip pick
+  await page.locator('#ws-colors .crow.stripsrow').click();
+  await page.waitForSelector('#ws-picker .sbody .brands .sw');
+  const sbTop = () => page.evaluate(() => document.querySelector('#ws-picker .sbody').scrollTop);
+  await page.evaluate(() => { const s = document.querySelector('#ws-picker .sbody'); s.scrollTop = Math.min(1200, s.scrollHeight - s.clientHeight - 10); });
+  const sb0 = await sbTop();
+  assert.ok(sb0 > 200, `the strip panel scrolled (${sb0})`);
+  await page.evaluate(() => { const s = document.querySelector('#ws-picker .sbody'), r = s.getBoundingClientRect(); const sw = [...s.querySelectorAll('.brands .sw')].find((x) => { const q = x.getBoundingClientRect(); return q.top > r.top + 20 && q.bottom < r.bottom - 20; }); sw.click(); });
+  await settle(page, 300);
+  assert.ok(Math.abs((await sbTop()) - sb0) <= 2, `the strip panel stayed where it was (${sb0} -> ${await sbTop()})`);
   assert.deepEqual(clean(errors), []);
   await ctx.close();
 });

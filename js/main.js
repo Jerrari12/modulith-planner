@@ -7073,8 +7073,9 @@ function overrideMatFor(key, ov, zone, alt) {
    With two or more strip colours (the palette's `Faceplate:FACE` and `Faceplate:FACE/2`..`/9`), every Chevron face that
    carries aStrip takes each strip's colour from a table: one row pair per part, rolled from the record's `stripSeed` and
    the part's own key (rollPart), and a palette of the k distinct strip filaments (uMixPal). Only the colour changes: the
-   mixed material is a clone of the one the face would wear in strip colour 1, every other patch and property kept, so
-   every strip wears strip colour 1's finish (the Strip colours panel says so when the finishes differ).
+   mixed material is a clone of the one the face would wear in strip colour 1, every other patch and property kept; since
+   the evening of 2026-11-23 each strip wears its own filament's roughness, metalness and silk (mixMatFor), and only the
+   environment map and glitter stay strip colour 1's.
    A part leaves the mix when its unit has its own Face pick ("This drawer only"), and planned (see-through) parts never
    mix. One table per colour count, so a look card with another count than the build's draws its own arrangement. */
 const stripTables = new Map();   // k -> { data, tex, rolled: row -> "<part>|<node>|<seed>" }
@@ -7112,14 +7113,33 @@ function stripPalFor(hexes) {
   if (!a) stripPals.set(key, a = Array.from({ length: MAX_STRIPS }, (_, i) => new THREE.Color(hexes[i % hexes.length])));
   return a;
 }
-/* `tag` is strip colour 1's filament: the base's finish follows it in place (applyPalette re-finishes the shared material), so a
-   clone made under another filament with the same hexes would keep the old finish (Sol 01a20b17) */
-function mixMatFor(base, row, k, hexes, tag = '') {
-  const key = base.uuid + '|' + row + '|' + k + '|' + hexes.join(',') + '|' + tag;
+/* EACH STRIP WEARS ITS OWN FILAMENT'S FINISH (2026-11-23, Joey: "the silk silver doesn't appear to shine or reflect like silk
+   filament ... on this strip mix", and with Silk Silver as strip colour 1, "they all might be acting a bit like silk ... only the
+   silk color should be acting like silk"). A finish lives on a material (roughness, metalness, anisotropy, the SILK_SHEEN light,
+   the SILK_ENV studio scale), and the mix is ONE material, a clone of strip colour 1's: so every strip wore strip colour 1's
+   finish, a silk among plain strips drew flat and a silk strip colour 1 made every strip metallic. `fins` is each palette
+   colour's own finish (stripFins: partMaterialSpec through silkFinish, as any part's), and the patch sets roughness and
+   metalness per strip before the plate's and the layers' patches read them, scales the anisotropy per strip (the clone carries
+   the strongest), and gates the silk light and the studio scale per strip. Left as strip colour 1's: the environment map
+   (a silk strip 1 reflects the silk studio on every strip, at each strip's own roughness and metalness) and glitter.
+   `tag` keeps a clone per strip colour 1 filament: the base's finish follows it in place (Sol 01a20b17). */
+function mixMatFor(base, row, k, hexes, tag = '', fins = null) {
+  const fsig = fins ? fins.map((f) => `${f.roughness}/${f.metalness}/${f.anisotropy || 0}/${f.silk ? 1 : 0}`).join(',') : '';
+  const key = base.uuid + '|' + row + '|' + k + '|' + hexes.join(',') + '|' + tag + '|' + fsig;
   let m = mixMats.get(key);
   if (m) return m;
   m = cloneMaterial(base);
-  const own = { uMixTab: { value: stripTable(k).tex }, uMixPal: { value: stripPalFor(hexes) }, uMixVar: { value: row } };
+  const fin = (i) => (fins && fins[i]) || { roughness: base.roughness, metalness: base.metalness, anisotropy: base.anisotropy || 0, silk: false };
+  const aMax = Math.max(0, ...Array.from({ length: k }, (_, i) => fin(i).anisotropy || 0));
+  const silky = Array.from({ length: k }, (_, i) => !!fin(i).silk).some(Boolean);
+  const arr = (f) => Array.from({ length: MAX_STRIPS }, (_, i) => f(fin(i < k ? i : 0)));
+  const own = {
+    uMixTab: { value: stripTable(k).tex }, uMixPal: { value: stripPalFor(hexes) }, uMixVar: { value: row },
+    uMixRough: { value: arr((f) => f.roughness) }, uMixMetal: { value: arr((f) => f.metalness) },
+    uMixAniso: { value: arr((f) => (aMax > 0 ? (f.anisotropy || 0) / aMax : 0)) }, uMixSilk: { value: arr((f) => (f.silk ? 1 : 0)) },
+  };
+  if (m.isMeshPhysicalMaterial) m.anisotropy = aMax;   // the strongest strip's; the patch scales each strip to its own
+  if (silky && SILK_ARM !== 'nolight' && !(m.defines && 'SILK_SHEEN' in m.defines)) m.defines = { ...(m.defines || {}), SILK_SHEEN: '' };
   // chained, as bed-finish.js does: the prior patch and its program key run first, this one adds to them
   const prior = Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile') ? m.onBeforeCompile : null;
   const priorKey = Object.prototype.hasOwnProperty.call(m, 'customProgramCacheKey') ? m.customProgramCacheKey : null;
@@ -7131,13 +7151,22 @@ function mixMatFor(base, row, k, hexes, tag = '') {
       .replace('#include <common>', '#include <common>\nattribute float aStrip;\nvarying float vStrip;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvStrip = aStrip;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform sampler2D uMixTab;\nuniform vec3 uMixPal[${MAX_STRIPS}];\nuniform float uMixVar;\nvarying float vStrip;`)
+      .replace('#include <common>', `#include <common>\nuniform sampler2D uMixTab;\nuniform vec3 uMixPal[${MAX_STRIPS}];\nuniform float uMixVar;\nvarying float vStrip;\n`
+        + `uniform float uMixRough[${MAX_STRIPS}], uMixMetal[${MAX_STRIPS}], uMixAniso[${MAX_STRIPS}], uMixSilk[${MAX_STRIPS}];\nint mixIdx = 0;\nfloat mixSilkW = 0.0;`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n{ int s = int(vStrip + 0.5); int side = s / ${MIX_BANDS}; int band = s - side * ${MIX_BANDS};\n`
         + '  int idx = int(texelFetch(uMixTab, ivec2(band, int(uMixVar + 0.5) * 2 + side), 0).r * 255.0 + 0.5);\n'
-        + `  diffuseColor.rgb = uMixPal[idx < ${MAX_STRIPS} ? idx : 0]; }`);
+        + `  mixIdx = idx < ${MAX_STRIPS} ? idx : 0; mixSilkW = uMixSilk[mixIdx];\n  diffuseColor.rgb = uMixPal[mixIdx]; }`)
+      // the strip's own roughness and metalness, before the plate's and the layers' patches (which read roughnessFactor) run
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nroughnessFactor = uMixRough[mixIdx];\nmetalnessFactor = uMixMetal[mixIdx];')
+      // the strip's own anisotropy: the clone carries the strongest strip's, scaled here (the silk axis sets the direction after)
+      .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\n#ifdef USE_ANISOTROPY\nmaterial.anisotropy = saturate( material.anisotropy * uMixAniso[mixIdx] );\nmaterial.alphaT = mix( pow2( material.roughness ), 1.0, pow2( material.anisotropy ) );\n#endif')
+      // the silk light and the silk studio's scale, on silk strips only (silk-axis.js FRAG_END; a text that is not there is left as it is)
+      .replace('reflectedLight.directSpecular += sNL * uSilkLight * BRDF_GGX', 'reflectedLight.directSpecular += sNL * uSilkLight * mixSilkW * BRDF_GGX')
+      .replace('reflectedLight.indirectSpecular *= uSilkEnv;', 'reflectedLight.indirectSpecular *= mix( 1.0, uSilkEnv, mixSilkW );');
   };
   m.customProgramCacheKey = function () { return (priorKey ? priorKey.call(this) : priorKeyText) + '|strips'; };
   m.userData.stripMix = true;
+  m.userData.stripFins = Array.from({ length: k }, (_, i) => { const f = fin(i); return { roughness: f.roughness, metalness: f.metalness, anisotropy: f.anisotropy || 0, silk: !!f.silk }; });   // each palette colour's finish, as drawn (the e2e reads it)
   if (mixMats.size >= 1000) { for (const x of mixMats.values()) x.dispose(); mixMats.clear(); }   // palettes tried and gone: the live ones are made again on the next refresh
   mixMats.set(key, m);
   return m;
@@ -7153,6 +7182,12 @@ function stripsFor(inst, colors, over, on) {
   const p = stripPalette(slots, { hex: identificationHex(STRIP_KEY) });
   return p.k >= 2 ? { ...p, slots } : null;
 }
+/* each palette colour's own finish, read the way any part's is (overrideMatFor): the filament's spec on this material key, the
+   plate's transfer and the silk axis included; an unpicked strip colour 1 (no name) the base's */
+function stripFins(inst, names) {
+  const mkey = zoneKey(materialTypeOf(typeByNode[inst.cfg.node], inst.cfg.node), 'FACE');
+  return names.map((label) => silkFinish(mkey, partMaterialSpec(mkey, { holographicPlate: plateActive(), plateContact: plateContactKey(mkey), label: label || null }), label || null));
+}
 /* the live palette's (a look being shown wears its own, as overrideFor reads it) */
 const liveStrips = (inst) => stripsFor(inst, previewLook ? previewLook.colors : customColors, previewLook ? previewLook.over : overrides, !!(previewLook || useCustom));
 function materialFor(inst, highlighted, zone = '') {
@@ -7162,7 +7197,7 @@ function materialFor(inst, highlighted, zone = '') {
   if (!p) return m;
   const pk = stripPartKey(inst), row = stripRowOf(pk);
   rollStrips(p.k, row, pk, inst.cfg.node);
-  return mixMatFor(m, row, p.k, p.hexes, filamentId(p.slots[0]));
+  return mixMatFor(m, row, p.k, p.hexes, filamentId(p.slots[0]), stripFins(inst, p.names));
 }
 function materialForBase(inst, highlighted, zone = '') {
   const type = typeByNode[inst.cfg.node];
@@ -8442,7 +8477,7 @@ const PRESETS = [
   } },
   // Teal & orange: Joey's teal / orange / cream / grey Chevron photo as named filaments (the renders' "retro" palette,
   // nearest by CIEDE2000: colors.js STRIP_PALETTES); its brown handle in Prusament rPLA Wine (7.8 from #6B5B4A)
-  { name: 'Teal & orange', swatches: ['#1c1d20', '#00a5a5', '#ff8a40', '#ddc9a3', '#CCC9BF'], colors: {
+  { name: 'Teal & orange', swatches: ['#1c1d20', '#00a5a5', '#ff8a40', '#ddc9a3', '#cdd2d9'], colors: {
     Case: _db('Elegoo PLA Black'), Drawer: _db('Elegoo PLA Black'),
     CoverL: _db('Elegoo PLA Black'), CoverU: _db('Elegoo PLA Black'),
     Bracket: _db('Elegoo PLA Black'), FootrailL: _db('Elegoo PLA Black'),
@@ -8453,7 +8488,7 @@ const PRESETS = [
     SideCover: _db('Elegoo PLA Black'), 'SideCover:FACE': _db('Panchroma Polymaker Teal'),
     Faceplate: _db('Elegoo PLA Black'), 'Faceplate:FACE': _db('Panchroma Polymaker Teal'),
     'Faceplate:FACE/2': _db('Panchroma Orange'), 'Faceplate:FACE/3': _db('Panchroma Beige'),
-    'Faceplate:FACE/4': _db('Prusament rPLA Risotto'), 'Faceplate:FACE/5': _db('Elegoo PLA Black'),
+    'Faceplate:FACE/4': _db('Panchroma Silk Silver'), 'Faceplate:FACE/5': _db('Elegoo PLA Black'),   // strip 4 silk (Joey, 2026-11-23: "lets make the strip 4 Panchroma Silk silver")
     'Faceplate:GRIP': _db('Panchroma Polymaker Teal'), 'Faceplate:GRIP ACCENT': _db('Panchroma Orange'),
     Accent: _db('Panchroma Orange'), Label: _db('Panchroma Beige'), 'Label:TEXT': _db('Elegoo PLA Black'),
     BackCover: _db('Elegoo PLA Black'),
@@ -10472,7 +10507,7 @@ function lookMaterialFor(look, it) {
   }
   // a Chevron face in the look's strip mix: its own arrangement, as the stage draws it (materialFor)
   const s = it.zone === 'FACE' && it.inst ? stripsFor(it.inst, colors, over, true) : null;
-  if (s) { const pk = stripPartKey(it.inst), row = stripRowOf(pk); rollStrips(s.k, row, pk, it.inst.cfg.node); return mixMatFor(m, row, s.k, s.hexes, filamentId(s.slots[0])); }
+  if (s) { const pk = stripPartKey(it.inst), row = stripRowOf(pk); rollStrips(s.k, row, pk, it.inst.cfg.node); return mixMatFor(m, row, s.k, s.hexes, filamentId(s.slots[0]), stripFins(it.inst, s.names)); }
   return m;
 }
 /* one card: { width, height, pixels (RGBA, GL rows bottom-up), ms: { draw, read }, programs }. `compare` also renders the

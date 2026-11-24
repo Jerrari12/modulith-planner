@@ -919,7 +919,7 @@ export function mountColors(stage, ctx) {
     };
     if (!picker.classList.contains('open')) { phone.open(picker); requestAnimationFrame(() => requestAnimationFrame(go)); } else go();
   } }), 'offer:polymaker:shown');
-  function openPicker(key) { st.strips = false; st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
+  function openPicker(key) { st.pickToken = (st.pickToken || 0) + 1; st.strips = false; st.key = key; st.swap = null; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker); }   // the search and the material chip start afresh per region
   function closePicker() { st.key = null; st.swap = null; st.strips = false; renderAll(); if (phone) phone.collapse(picker); if (st.scHintDue) { st.scHintDue = false; showcaseHint(); } }
   /* THE SPOOL'S FILAMENT, EVERYWHERE (Joey 2026-10-26: "what if i could select a spool and change it's color, and doing so
      would replace everything in the build that used that same color, kind of a handy feature"). A spool in the room is a
@@ -949,7 +949,7 @@ export function mountColors(stage, ctx) {
       if (fc.unpicked.some((u) => u.stripe && u.hex.toLowerCase() === h)) say('That spool prints the label stripes: their colour is set on each label, in Labels.');
       return;
     }
-    st.swap = t; st.key = null; st.strips = false; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker);
+    st.pickToken = (st.pickToken || 0) + 1; st.swap = t; st.key = null; st.strips = false; st.query = ''; st.mat = 'all'; renderAll(); if (phone) phone.open(picker);
   }
   if (new URLSearchParams(location.search).get('debug')) window.__GEN2_SPOOL_TAP__ = openSwap;   // the room's spool tap, for checks (done.js onSpool)
   function swapTo(f) {
@@ -963,7 +963,23 @@ export function mountColors(stage, ctx) {
     st.swap = swapTarget(fil.hex) || null;   // the picker stays on the spool, now in its new filament, for another try
     renderAll();
   }
+  /* THE LIST KEEPS ITS PLACE (Joey, 2026-11-23: "when you place a color the filament list scrolls to the top each time, which
+     become annoying the larger the list grows"). A pick re-renders the picker, and its scroller is rebuilt with it (the brand
+     list on a desktop, the strip panel's body; the sheet itself on a phone, emptied and refilled), so it came back at the top.
+     The scroll is carried across a re-render; only opening the picker afresh (another region, spool or the strip panel, each
+     through openPicker / openSwap / openStrips) starts it at the top, as before. */
   function renderPicker() {
+    // the same opening as the last render drew (no openPicker / openSwap / openStrips since): its scroll carries over
+    const same = st.pickToken === st.pickDrawn;
+    const at = { picker: picker.scrollTop, brands: picker.querySelector('.brands')?.scrollTop || 0, sbody: picker.querySelector('.sbody')?.scrollTop || 0 };
+    renderPickerBody();
+    st.pickDrawn = st.pickToken;
+    if (!same || picker.hidden) return;
+    const b = picker.querySelector('.brands'), sb = picker.querySelector('.sbody');
+    if (sb) sb.scrollTop = at.sbody; else if (b) b.scrollTop = at.brands;
+    picker.scrollTop = at.picker;
+  }
+  function renderPickerBody() {
     picker.replaceChildren();
     const key = st.key, swap = st.swap;
     // the spool whose picker this is, lit in the room; and a region's row picked, the spool it prints in (Astra's review,
@@ -1114,7 +1130,7 @@ export function mountColors(stage, ctx) {
   const sameFil = (a, b) => !!filamentId(a) && filamentId(a) === filamentId(b);
   const stripState = () => { const S = stage.stripInfo(st.sel ? st.sel.id : null); return { S, slots: S.slots, backer: S.backer, step: stripStep(S.slots, S.backer) }; };
   const stepWord = (step, nslots) => step === 'one' ? 'One colour' : step === 'two' ? 'Two-tone' : `${nslots} colours`;
-  function openStrips() { st.strips = true; st.key = null; st.swap = null; st.query = ''; st.mat = 'all'; st.stripSel = 1; st.stripMore = stripState().slots.length > 5; renderAll(); if (phone) phone.open(picker); }
+  function openStrips() { st.pickToken = (st.pickToken || 0) + 1; st.strips = true; st.key = null; st.swap = null; st.query = ''; st.mat = 'all'; st.stripSel = 1; st.stripMore = stripState().slots.length > 5; renderAll(); if (phone) phone.open(picker); }
   function commitStrips(slots, backer) { commitColors('strips', () => stage.setStrips({ slots, backer })); }
   const colorMaterialOf = (b, c) => (lineMaterials(b.line).length <= 1 ? lineMaterials(b.line)[0] : wordMaterial(`${c.name} ${c.label}`));
   /* a new strip colour, in the spec's fill order: a filament already in this build, else the catalog (the rPLA line first),
@@ -1271,8 +1287,10 @@ export function mountColors(stage, ctx) {
       let alike = null;
       for (let i = 0; i < nS && !alike; i++) for (let j = i + 1; j < nS && !alike; j++) if (ids[i] !== ids[j] && dE(slots[i].hex, slots[j].hex) < 10) alike = `Strip colours ${i + 1} and ${j + 1} look almost alike.`;
       if (alike) body.appendChild(el('p.note.warn', { text: alike }));
-      const fins = new Set(slots.map((f) => finishOfLabel(f.name) || 'plain'));   // the catalog's finish family ('silk', 'glitter'), not the swatch's class, which also carries a flake tint
-      if (fins.size > 1) body.appendChild(el('p.note', { text: 'The preview shows every strip in strip colour 1’s finish.' }));
+      /* each strip draws its own silk or plain finish (main.js mixMatFor, 2026-11-23); glitter is still strip colour 1's, on every
+         strip or on none, so only a mix that glitters in part says so (the catalog's family, not the swatch class's flake tint) */
+      const glit = new Set(slots.map((f) => finishOfLabel(f.name) === 'glitter'));
+      if (glit.size > 1) body.appendChild(el('p.note', { text: 'Glitter shows as strip colour 1’s in the preview: on every strip or on none.' }));
     }
     // palettes and Shuffle
     const own = buildStripColours(backer);

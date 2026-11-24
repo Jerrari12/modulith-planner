@@ -192,15 +192,16 @@ test('main.js patches only behind the flag, every finish path passes the label, 
   assert.equal(count(main, "if (GLITTER_ARM) applyGlitter(m, { uniforms: glitterU });"), 1);
   assert.equal(count(main, 'applyGlitter('), 1, 'a second patch site, perhaps without the flag');
   assert.equal(count(main, "if (GLITTER_ARM) { setDefine(m, 'GLITTER', !!spec.glitter); setGlitterTint(m, spec.glitterTint || null); }"), 1);
-  /* `mkey`: the look card reads its finish by the MATERIAL's key, which is a cabinet door's own (main.js materialFor) */
-  assert.equal(count(main, 'silkFinish(key, partMaterialSpec(') + count(main, 'silkFinish(mkey, partMaterialSpec('), 3 + 1, 'a finish path was added or lost');
+  /* `mkey`: the look card reads its finish by the MATERIAL's key, which is a cabinet door's own (main.js materialFor); and since
+     2026-11-23 each Chevron strip's own finish (main.js stripFins) */
+  assert.equal(count(main, 'silkFinish(key, partMaterialSpec(') + count(main, 'silkFinish(mkey, partMaterialSpec('), 3 + 2, 'a finish path was added or lost');
   assert.equal(count(main, 'function silkFinish(key, spec, label = null)'), 1);
   /* ?glitterAmount=0 means no glitter, not the default (Sol 01a194a1), and ?silk=off must not take the glitter with it */
   assert.doesNotMatch(main, /get\('glitterAmount'\)[^\n]*\|\| 1/);
   assert.match(main, /SILK_ARM === 'off'\) return spec\.glitter \? \{ \.\.\.partMaterialSpec\(key\), glitter: spec\.glitter, glitterTint: spec\.glitterTint \}/);
   /* every caller hands the label over, or a repaint would drop the glitter the first paint gave */
   for (const line of main.split('\n').filter((l) => /silkFinish\(m?key, partMaterialSpec\(/.test(l) && l.trim().endsWith(');') )) {
-    assert.match(line, /, (label|ov\.name \|\| null)\)\)?\)?;$/, line.trim());
+    assert.match(line, /, (label|label \|\| null|ov\.name \|\| null)\)\)?\)?;$/, line.trim());
   }
   assert.ok(pages.includes(`sed -i "s|'./glitter.js'|'./glitter.js?v=$V'|" js/main.js`), 'the deploy leaves the new import unstamped');
 });
