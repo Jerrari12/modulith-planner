@@ -7861,6 +7861,60 @@ test('Build: a cabinet door prints face down whatever the faceplates are - its f
   await ctx.close();
 });
 
+/* A 1H CABINET'S KNOB AND THE DECO HANDLES' FINISH (2026-11-25). A 1H door's knob is billed as a 'Handle' row, and its row
+   comes before the drawers' handle rows. The shared 'Handle' material took its build axis from the FIRST Handle row - the
+   knob, which has no print pose - so beside a 1H cabinet every Deco handle lost its confirmed finish (Joey 2026-09-14: the
+   Deco handle prints top-down): stamped [0, -1, 0], shaded along nothing. The knob now draws a material of its own
+   ('Knob', generate.js materialTypeOf), plain and coloured as a handle, and the build's handle style is read past it.
+   Read off the live meshes: the Deco handle's stamp and material agree on [0, -1, 0] with the finish on, the knob carries
+   neither, both wear the handle's colour, and the finish check finds no mismatch. */
+test('Build: a 1H cabinet\'s knob leaves the Deco handles their print finish, and wears none itself, in the handle colour', async () => {
+  const rec = { mount: 'tabletop', length: 185, printer: 'any', faceStyle: 'essential', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu', buildPlate: 'powder',
+    removedStoppers: [], gridW: 3, gridH: 1, sideCovers: false, plateParts: {}, nextId: 3, labelStyle: null, buildId: 'e2eknobfinish1',
+    placed: [{ id: 1, x: 0, y: 0, w: 2, hh: 2, fill: 'decor', shelves: 0 }, { id: 2, x: 2, y: 0, w: 1, hh: 2, fill: 'cabinet', shelves: 0 }] };
+  const { ctx, page, errors } = await open('build', { query: `#build=${Buffer.from(JSON.stringify(rec), 'utf8').toString('base64')}` });
+  await page.waitForFunction(() => {
+    const v = window.__GEN2_VIEWER__;
+    if (v.regenBusy) return false;
+    const all = [...v.instances.values()];
+    let stamped = false;
+    all.find((i) => i.cfg.node === 'Handle_Deco')?.group.traverse((o) => { if (o.isMesh && o.geometry.userData.bedAxis) stamped = true; });
+    return stamped && all.some((i) => i.cfg.node === 'Knob_Deco');
+  }, null, { timeout: 90_000 });
+  const s = await page.evaluate(() => {
+    const v = window.__GEN2_VIEWER__, out = { rows: v.manifest.parts.filter((p) => p.type === 'Handle').map((p) => p.node), parts: {}, check: v.bedFinish.check() };
+    for (const inst of v.instances.values()) {
+      if (!/^(Knob|Handle)_/.test(inst.cfg.node)) continue;
+      inst.group.traverse((o) => {
+        if (!o.isMesh) return;
+        (out.parts[inst.cfg.node] ||= []).push({ stamp: o.geometry.userData.bedAxis || null, mat: o.material.userData.buildAxis ?? null,
+          finish: o.material.userData.bedFinish || null, hex: o.material.color.getHexString() });
+      });
+    }
+    out.handle = new v.THREE.Color(v.activeHex('Handle')).getHexString();
+    return out;
+  });
+  assert.deepEqual(s.rows, ['Knob_Deco', 'Handle_Deco'], 'the premise: the knob row comes first');
+  assert.ok(s.parts.Handle_Deco?.length, `the Deco handles are on the stage: ${JSON.stringify(s.parts)}`);
+  for (const h of s.parts.Handle_Deco) {
+    assert.deepEqual(h.stamp, [0, -1, 0], `a Deco handle is stamped top-down: ${JSON.stringify(h)}`);
+    assert.equal(h.mat, '[0,-1,0]', `and its material tests the same axis, beside the knob: ${JSON.stringify(h)}`);
+    assert.equal(h.finish, 'profile', 'and carries the plate finish');
+    assert.equal(h.hex, s.handle, 'in the handle colour');
+  }
+  assert.ok(s.parts.Knob_Deco?.length, 'the knob is on the stage');
+  for (const k of s.parts.Knob_Deco) {
+    assert.equal(k.stamp, null, `the knob has no print pose, so no plate face: ${JSON.stringify(k)}`);
+    assert.equal(k.mat, 'null', `and its material grows along nothing: ${JSON.stringify(k)}`);
+    assert.equal(k.finish, null, 'and carries no plate finish');
+    assert.equal(k.hex, s.handle, 'and it still wears the handle colour');
+  }
+  assert.deepEqual(s.check.axisMismatch, [], `no part is stamped along one axis and shaded along another: ${JSON.stringify(s.check)}`);
+  assert.deepEqual(s.check.noAttribute, []);
+  assert.deepEqual(clean(errors), []);
+  await ctx.close();
+});
+
 test('Colors: the Dock and a preset\'s Shop list count what this build prints - never bought hardware; the label text and a stripe count', async () => {
   const { ctx, page, errors } = await open('labels', { query: '&new=1' });
   await page.waitForSelector('#ws-labels .spine', { timeout: 30_000 });

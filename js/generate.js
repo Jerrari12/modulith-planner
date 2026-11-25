@@ -3628,7 +3628,7 @@ export function doorPoseKey(node) {
 }
 
 /**
- * THE MATERIAL TYPE OF A PART, which is its BOM type except for a cabinet door.
+ * THE MATERIAL TYPE OF A PART, which is its BOM type except for a cabinet door and a cabinet knob.
  *
  * The door was added as a 'Faceplate' row (2026-11-19) so that it is listed, billed and coloured as one: one filament
  * pick paints the faceplates and the doors, and the Colors workspace shows no region of its own for it. But the
@@ -3638,18 +3638,33 @@ export function doorPoseKey(node) {
  * door face yet?"). A door prints face-down whatever the faceplates are, so it draws a material of its own, 'Door',
  * whose build axis is the door's (PLATE_POSE 'door:<style>').
  *
+ * THE KNOB (2026-11-25) is the same case the other way round. A 1H door's knob is billed as a 'Handle' row (CABINET.knobs),
+ * so it is listed and coloured with the handles, and it drew the shared 'Handle' material, whose build axis is the
+ * build's handle style's (handlePoseNow in main.js reads it off the first Handle row). The knob row comes before the
+ * drawers' handle rows, so in any build with a 1H cabinet that read found the knob, which has no pose, and every Deco
+ * handle in the build lost its confirmed print finish (seen 2026-11-25: a Decor drawer beside a 1H cabinet, Deco
+ * handles, High: the handle material carried no axis and no finish; without the cabinet it carries [0, -1, 0]). Reading
+ * past the knob would have handed the knob the Deco handle's axis instead, and no knob has a confirmed print pose. So a
+ * knob draws a material of its own, 'Knob', with no pose (plateRotForType knows no 'Knob'): plain, coloured as a handle.
+ *
  * ⚠ ONLY THE MATERIAL. typeByNode, the parts list, the palette, the per-unit colours, the per-part plate finishes and
- * the Colors regions all keep the row's 'Faceplate'; paletteKeyOf maps a material key back to the palette's key, and
- * every colour or finish read of a material key goes through it.
+ * the Colors regions all keep the row's 'Faceplate' or 'Handle'; paletteKeyOf maps a material key back to the palette's
+ * key, and every colour or finish read of a material key goes through it.
  */
+const KNOB_NODES = new Set(Object.values(CABINET.knobs).map((k) => k.node));
 export function materialTypeOf(type, node) {
-  return type === 'Faceplate' && doorPoseKey(node) ? 'Door' : type;
+  if (type === 'Faceplate' && doorPoseKey(node)) return 'Door';
+  if (type === 'Handle' && KNOB_NODES.has(node)) return 'Knob';
+  return type;
 }
 
-/** The palette key a material key is coloured by: 'Door' -> 'Faceplate', 'Door:FACE' -> 'Faceplate:FACE', else itself. */
+/** The palette key a material key is coloured by: 'Door' -> 'Faceplate', 'Door:FACE' -> 'Faceplate:FACE', 'Knob' ->
+    'Handle', 'Knob:FACE' -> 'Handle:FACE', else itself. */
 export function paletteKeyOf(key) {
   const s = String(key);
-  return s === 'Door' || s.startsWith('Door:') ? 'Faceplate' + s.slice(4) : s;
+  if (s === 'Door' || s.startsWith('Door:')) return 'Faceplate' + s.slice(4);
+  if (s === 'Knob' || s.startsWith('Knob:')) return 'Handle' + s.slice(4);
+  return s;
 }
 
 /* THE KEY A PALETTE KEY FOLLOWS WHILE IT HAS NO PICK OF ITS OWN. A zone follows its part's body ('Faceplate:FACE' ->

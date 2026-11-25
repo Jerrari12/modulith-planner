@@ -4053,7 +4053,10 @@ const faceStyleNow = () =>
 /* The style the build's handles ARE: the manifest's Handle row, which a handle swap renames in place
    (applyHandleStyle) and every regenerate re-emits - so a swap, a relayed style, a planner layout and
    Reset all answer from the one place that describes what is on screen. */
-const handlePoseNow = () => handlePoseKey(manifest?.parts?.find((p) => p.type === 'Handle')?.node);
+/* ⚠ A HANDLE ROW, NOT A KNOB ROW (2026-11-25): a 1H cabinet door's knob is billed as a 'Handle' too, and its row comes
+   before the drawers' handle rows, so reading the first Handle row found the knob - no pose - and every Deco handle in a
+   build with a 1H cabinet lost its finish. The knob draws its own 'Knob' material (generate.js materialTypeOf). */
+const handlePoseNow = () => handlePoseKey(manifest?.parts?.find((p) => p.type === 'Handle' && materialTypeOf(p.type, p.node) === 'Handle')?.node);
 /* ⚠ AND THE DOOR'S STYLE (2026-11-21): the 'Door' material is the cabinet doors' own (generate.js materialTypeOf), and its
    pose is filed by door style. Read from the build's door rows, the way the handle's is: a build has one door style
    (build.doorStyle), so every door row names it. */
@@ -4071,6 +4074,7 @@ function dropFaceplateMaterials(types = ['Faceplate']) {
   purgeLookCards();      // and so do the look cards' (the Colors plan's step 2)
   const drop = new Set(types);   // the see-into rebuild also names 'Accent', a part of its own that a pick can make translucent
   if (drop.has('Faceplate')) drop.add('Door');   // the doors' material is coloured, finished and made translucent as a faceplate's (materialTypeOf)
+  if (drop.has('Handle')) drop.add('Knob');      // and the knobs' as a handle's
   for (const k of Object.keys(materials)) if (drop.has(k.split(':')[0])) delete materials[k];
   for (const k of Object.keys(highlightMats)) if (drop.has(k.split(':')[0])) delete highlightMats[k];
   for (const k of [...layerHandles.keys()]) if (drop.has(k.split(':')[0])) layerHandles.delete(k);
@@ -4804,7 +4808,8 @@ function stampSeams(root) {
    a static-kit swap loads the new family's nodes before it shows them.
    ⚠ `type` IS THE MATERIAL TYPE (materialTypeOf): a cabinet door is stamped as a 'Door', with its own face-down pose,
    because that is the material it draws - stamped as a 'Faceplate' it would take the faceplate FAMILY's axis, and under
-   Classic, Classic Pro and EdgeLabel its back would wear the finish (2026-11-21). */
+   Classic, Classic Pro and EdgeLabel its back would wear the finish (2026-11-21). A cabinet knob is a 'Knob', which has
+   no pose, so it is not stamped: as a 'Handle' its node has no handle key, and handlePoseNow would have answered for it. */
 const faceFamilyOfNode = node => (node && FACEPLATE_STYLES.find(s => node.startsWith(s.node('')))?.key) || null;
 function stampBedFaces(root, type, node) {
   const axis = type
