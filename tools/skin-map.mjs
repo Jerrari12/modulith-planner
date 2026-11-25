@@ -98,9 +98,18 @@ const RULES = [
   [/^UnderTableRail_(\d+)-(\dW)$/, (m) => ({ type: 'Rail', names: [`gen2 rails ${m[1]} ${m[2]}`, `gen2 rail ${m[1]} ${m[2]}`, `gen2 ${m[1]} ${m[2]} rails`, `${m[1]} ${m[2]} rail full`] })],
   [new RegExp(`^BackCover_EdgeLabel_${SIZE}$`), (m) => ({ type: 'BackCover', names: [`${m[1]} back cover`], prefer: 'Classic/Back Covers/' })],
   [new RegExp(`^Accent_EdgeLabel_${SIZE}$`), (m) => ({ type: 'Accent', names: [`${m[1]} accent`], prefer: 'EdgeLabel/' })],
-  /* side covers print face-down, so their printed top is the clip side against the case wall - never seen; and their
-     GLB carries the panel's surface twice (41,050 mm2 against the STL's 21,467), which no frame match can read */
-  [/^SideCover_(\d+)-(\d+H)$/, () => ({ skip: 'a side cover prints face-down: its top skin faces the case wall and is never seen' })],
+  /* cabinet doors (2026-11-25): the v2611 release STLs, `<Style> Door - <W>W-<H>H[ - Right-Hinged].stl`. A door's material
+     type is 'Door' and its pose is filed by door style (generate.js materialTypeOf / doorPoseKey), so its axis is asked for
+     with the style; the Chevron door ships face up and face down, and the face-down file is the one that prints */
+  [new RegExp(`^Door_(Essential|Chevron)_${SIZE}(_RH)?$`), (m) => ({ type: 'Door', door: m[1].toLowerCase(),
+    names: [`${m[1]} door ${m[2]}${m[3] ? ' right hinged' : ''}`], prefer: m[1] === 'Chevron' ? 'Chevron/v2611/STL/Face Down/' : 'Essential/v2611/STL/' })],
+  /* side covers (v2609, 27 sizes) print face-down: the first layer is the face the room sees, the top skin the clip side
+     against the case wall. Skipped until 2026-11-25 because the GLB carries the panel's surface twice (41,050 mm2 against
+     the STL's 21,467): that is the 0.8 mm FACE body's split, a surface inside the part, as on the Essential door. The frame
+     reads from the outside: every size wins its match by 0.025-0.109 against a runner-up at 1.26 or more, and on all 27
+     every STL point lies on the GLB within 0.017 mm (vault decisions.md, "The side covers get their print beads"). The
+     release files: `Side Covers Upload/<L>/STL/<L>-<H> Side Cover.stl` */
+  [/^SideCover_(\d+)-(\d+H)$/, (m) => ({ type: 'SideCover', names: [`${m[1]} ${m[2]} side cover`], prefer: `Side Covers Upload/${m[1]}/STL/` })],
   [/^WallMount_Lite_(\dW)$/, (m) => ({ type: 'Bracket', names: [`wall mount lite ${m[1]} v2602`, `wall mount lite ${m[1]}`] })],
   [/^Handle_Deco$/, () => ({ type: 'Handle', handle: 'deco', names: ['deco handle self tapping'] })],
 ];
@@ -172,7 +181,7 @@ async function plan() {
     const spec = classify(node);
     if (!spec) { row.skip = 'no rule: not a part that takes a top-layer map (hardware, a label, a handle without a pose)'; continue; }
     if (spec.skip) { row.skip = spec.skip; continue; }
-    const axis = buildAxisForType(spec.type, spec.family, spec.handle);
+    const axis = buildAxisForType(spec.type, spec.family, spec.handle, spec.door);
     if (!axis) { row.skip = `no confirmed print pose for ${spec.type}${spec.family ? ' ' + spec.family : ''}`; continue; }
     row.type = spec.type; row.family = spec.family || null; row.axis = axis;
     const stl = resolveStl(spec, paths);
