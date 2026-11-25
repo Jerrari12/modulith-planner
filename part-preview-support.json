@@ -2896,19 +2896,19 @@
     },
     "cabinet-hinge-left-hinged-door": {
       "preview": true,
-      "platePreview": false
+      "platePreview": true
     },
     "cabinet-hinge-right-hinged-door": {
       "preview": true,
-      "platePreview": false
+      "platePreview": true
     },
     "door-latch-left-hinged-door": {
       "preview": true,
-      "platePreview": false
+      "platePreview": true
     },
     "door-latch-right-hinged-door": {
       "preview": true,
-      "platePreview": false
+      "platePreview": true
     },
     "deco-knob": {
       "preview": true,

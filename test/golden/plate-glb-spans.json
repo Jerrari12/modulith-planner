@@ -1129,6 +1129,46 @@
   5.7,
   185
  ],
+ "185/CabinetHinge_Body_L": [
+  8.5,
+  48,
+  26.7
+ ],
+ "185/CabinetHinge_Body_R": [
+  8.5,
+  48,
+  26.7
+ ],
+ "185/CabinetHinge_Claws_L": [
+  20.5,
+  36,
+  8.5
+ ],
+ "185/CabinetHinge_Claws_R": [
+  20.5,
+  36,
+  8.5
+ ],
+ "185/CabinetLatch_Door_L": [
+  12.4,
+  42,
+  14.6
+ ],
+ "185/CabinetLatch_Door_R": [
+  12.4,
+  42,
+  14.6
+ ],
+ "185/CabinetLatch_Side_L": [
+  5.1,
+  42,
+  18
+ ],
+ "185/CabinetLatch_Side_R": [
+  5.1,
+  42,
+  18
+ ],
  "185/CaseExtender_185-1W-1H": [
   88,
   59,

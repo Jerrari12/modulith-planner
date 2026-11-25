@@ -45,7 +45,8 @@ const plateSet = new Map(); // "<coll>/<node>" -> {file, spans, slugSample}
 for (const s of SLUGS) {
   const r = resolvePartPreview(s);
   if (r.fail || !r.part.platePreview) continue;
-  for (const node of r.part.set || [r.part.node]) {
+  // ...and a set of pieces' companions (r.part.assembled: a cabinet hinge's claws, a latch's door clip, 2026-11-25)
+  for (const node of r.part.set || [r.part.node, ...(r.part.assembled || [])]) {
     const key = r.manifest.collection + '/' + node;
     if (!plateSet.has(key)) {
       const file = join(root, 'parts', r.manifest.collection, node + '.lib.glb');

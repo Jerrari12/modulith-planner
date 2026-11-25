@@ -6333,7 +6333,7 @@
     "collection": "185",
     "type": "CabinetHinge",
     "label": "Cabinet Hinge (left-hinged door)",
-    "platePreview": false,
+    "platePreview": true,
     "instances": [
       {
         "id": "p0",
@@ -6361,7 +6361,7 @@
     "collection": "185",
     "type": "CabinetHinge",
     "label": "Cabinet Hinge (right-hinged door)",
-    "platePreview": false,
+    "platePreview": true,
     "instances": [
       {
         "id": "p0",
@@ -6389,7 +6389,7 @@
     "collection": "185",
     "type": "CabinetLatch",
     "label": "Door Latch (R)",
-    "platePreview": false,
+    "platePreview": true,
     "instances": [
       {
         "id": "p0",
@@ -6416,7 +6416,7 @@
     "collection": "185",
     "type": "CabinetLatch",
     "label": "Door Latch (L)",
-    "platePreview": false,
+    "platePreview": true,
     "instances": [
       {
         "id": "p0",

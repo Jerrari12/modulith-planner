@@ -3319,6 +3319,41 @@ const HARDWARE_PREVIEW = {
     plateRot: [],           // prints upright as authored (20.6 × 20.6 footprint, 10.6 tall)
   },
 };
+/* THE CABINET HINGES' AND LATCHES' PRINT JOBS (2026-11-25; Joey: "add print views for the hinges and latches"). Each is
+   one STL of two bodies, printed as supplied (knowledge pack print-orientation.md): the hinge's "mounting plate on the bed
+   with its four pegs up, and the claws flat beside it around the barrel", printed in place; the latch's side clip "with
+   its plate on the bed and its pegs up, and the door clip standing beside it". That is the pose of the test plates Joey
+   printed (farm plates 64 and 72), not words of his. So the print view shows the RELEASE FILE's own layout, piece by piece:
+   - MEASURED 2026-11-25, not chosen: each piece's GLB registered onto the release STL in the model library
+     (`GEN2/Hardware/Cabinet Door Hardware/`: `Cabinet Hinge (1H) - Left-Hinged Door.stl` and `... - Right-Hinged Door.stl`,
+     the right one as replaced on 2026-11-23; `Door Latch (1H) - Left-Hinged Door.stl` and `... - Right-Hinged Door.stl`)
+     over the 24 axis-aligned rotations, bounding boxes aligned. Each piece took exactly one of its STL's two bodies, with
+     a mean surface distance of 0.22-0.25 mm (the sampling) and every point within 0.9 mm (the loose clips), and the
+     next-best body scored 1.6 mm or more.
+   - `rot` is three's Euler XYZ in degrees with the plate's up +Y; `pos` is where the piece's GLB origin sits in the STL's
+     frame turned Y-up (x, z, -y). The plate view lifts and centres the job as one rigid body (main.js seatOnPlate), so
+     only the pieces' offsets from each other matter.
+   - A left-hinged door's latch is the R pair, as in the build (the generator's `mark`).
+   The STL footprints (x by z on the plate, then the height): hinge 48.0 x 39.2, 8.5 tall; latch 59.4 x 42.0, 14.55 tall.
+   test/part-preview.test.mjs holds the resolved job to them, and each piece to its STL body's box. */
+const HARDWARE_PLATE_JOBS = {
+  'cabinet-hinge-left-hinged-door': {
+    CabinetHinge_Body_L: { rot: [0, 0, -90], pos: [0, 4.25, -25.85] },
+    CabinetHinge_Claws_L: { rot: [-90, 0, -90], pos: [6.5, 4.25, -10.25] },
+  },
+  'cabinet-hinge-right-hinged-door': {
+    CabinetHinge_Body_R: { rot: [0, 0, 90], pos: [48, 4.25, -25.85] },
+    CabinetHinge_Claws_R: { rot: [-90, 0, 90], pos: [41.5, 4.25, -10.25] },
+  },
+  'door-latch-left-hinged-door': {
+    CabinetLatch_Side_R: { rot: [0, 0, 90], pos: [42, 2.525, -9] },
+    CabinetLatch_Door_R: { rot: [-90, 0, 0], pos: [53.2, 7.275, 0] },
+  },
+  'door-latch-right-hinged-door': {
+    CabinetLatch_Side_L: { rot: [0, 0, -90], pos: [0, 2.525, -9] },
+    CabinetLatch_Door_L: { rot: [-90, 0, 0], pos: [53.2, 7.275, 0] },
+  },
+};
 // slug → { build: <probe planner-build>, pick: {type, suffix?} } | { fail }
 function previewProbe(slug) {
   const s = String(slug || '').toLowerCase();
@@ -3368,18 +3403,19 @@ function previewProbe(slug) {
        taller door takes a handle instead). It previews mounted on that door, as a handle page shows its handle on a
        faceplate (`context` in resolvePartPreview).
      The magnets, the optional filament pin and the knob's screw are bought or optional, not in the download, and stay
-     out. None of the six has a confirmed print pose here, so each fails closed on ?plate=. */
+     out. The hinges and latches print as their release STLs lay them out (HARDWARE_PLATE_JOBS, `pick.plate`); the knobs
+     have no print pose and fail closed on ?plate=. */
   if ((m = s.match(/^(cabinet-hinge|door-latch)-(left|right)-hinged-door$/)) || (m = s.match(/^(deco|blockbar)-knob$/))) {
     const right = m[2] === 'right';
     const build = { mount: 'wall', length: 185, gridH: 1, doorStyle: 'essential',
                     placed: [{ ...unit(1, 2, 'cabinet'), ...(right ? { hinge: 'right' } : {}) }] };
     if (m[1] === 'cabinet-hinge') {
       const k = right ? 'R' : 'L';
-      return { build, pick: { type: 'CabinetHinge', node: `CabinetHinge_Body_${k}`, with: [`CabinetHinge_Claws_${k}`] } };
+      return { build, pick: { type: 'CabinetHinge', node: `CabinetHinge_Body_${k}`, with: [`CabinetHinge_Claws_${k}`], plate: HARDWARE_PLATE_JOBS[s] } };
     }
     if (m[1] === 'door-latch') {
       const k = right ? 'L' : 'R';
-      return { build, pick: { type: 'CabinetLatch', node: `CabinetLatch_Side_${k}`, with: [`CabinetLatch_Door_${k}`], label: `Door Latch (${k})` } };
+      return { build, pick: { type: 'CabinetLatch', node: `CabinetLatch_Side_${k}`, with: [`CabinetLatch_Door_${k}`], label: `Door Latch (${k})`, plate: HARDWARE_PLATE_JOBS[s] } };
     }
     return { build: { ...build, handleStyle: m[1] }, pick: { type: 'Handle', node: CABINET.knobs[m[1]].node } };
   }
@@ -3783,6 +3819,8 @@ function platePoseFor(probe) {
   // hardware poses live on the entry ([] = as authored); the probe already found it, and
   // plateRotForType would find the same one by type.
   if (probe.hw) return probe.hw.plateRot;
+  // a set of pieces brings its own print job, each piece posed and placed (HARDWARE_PLATE_JOBS)
+  if (probe.pick.plate) return probe.pick.plate;
   // the handle's style matters as much as the faceplate family does: only Deco and BlockBar B have
   // a confirmed print pose, so the seven other handle pages ship turntable-only and fail closed on
   // ?plate= - and without this argument even Deco would, which is what it did until handles
@@ -3898,14 +3936,17 @@ export function resolvePartPreview(slug, opts = {}) {
      the pick fails closed unless the whole product, and only it, is there: the primary and each named model placed
      exactly once, a model with no row of its own billed on the primary, and every row of the pick's type the primary
      or a named model. They keep their build offsets from the primary - the product as installed. A third claim beside
-     `extras` and `context`: these ARE the product. On the plate they would need a print arrangement of their own (the
-     hinge prints with its claws laid flat beside the body, not as installed), so a set fails closed there even if a
-     pose for its type is added later: the plate path below poses the primary alone. */
+     `extras` and `context`: these ARE the product. On the plate they need a print arrangement of their own (the hinge
+     prints with its claws laid flat beside the body, not as installed): `pick.plate` gives every piece its pose and its
+     place in the release STL (HARDWARE_PLATE_JOBS), and a set without one fails closed there, even if a pose for its
+     type is added later. */
   const assembled = [];
   if (probe.pick.with) {
     const placed = (n) => gen.manifest.instances.filter(i => i.node === n);
     const refuse = (message) => ({ fail: { reason: 'unsupported', message } });
-    if (opts.plate) return refuse("This part's pieces don't have a confirmed print arrangement yet.");
+    if (opts.plate && !probe.pick.plate) return refuse("This part's pieces don't have a confirmed print arrangement yet.");
+    if (probe.pick.plate && Object.keys(probe.pick.plate).sort().join('|') !== [row.node, ...probe.pick.with].sort().join('|'))
+      return refuse('Part set print job does not name exactly its pieces.');
     if (placed(row.node).length !== 1) return refuse(`Part set lookup was ambiguous (${placed(row.node).length} ${row.node}).`);
     for (const n of probe.pick.with) {
       const xs = placed(n);
@@ -3922,6 +3963,7 @@ export function resolvePartPreview(slug, opts = {}) {
   const rowOf = (n) => gen.manifest.parts.find(p => p.node === n);
   // a set is named for the product, not for its primary's row ('Door Latch (R)', not '... - side clip')
   const label = probe.pick.label || row.label;
+  const job = opts.plate && probe.pick.with ? probe.pick.plate : null;   // checked above: names exactly the set's pieces
   const L = gen.manifest.collection;
   /* MOUNTED CONTEXT READS AS CONTEXT: only the subject wears the poster orange. A faceplate's zones are orange in the
      poster palette (its face and grip are the subject on its own page), and a cabinet door carries a FACE zone where
@@ -3933,7 +3975,7 @@ export function resolvePartPreview(slug, opts = {}) {
     for (const k of Object.keys(colors)) if (k.startsWith('Faceplate:')) colors[k] = colors.Faceplate;
   return {
     part: { node: row.node, label, type: row.type,
-            platePreview: !!platePose && !probe.pick.with,
+            platePreview: !!platePose && (!probe.pick.with || !!probe.pick.plate),
             ...(extras.length ? { extras: extras.map(x => x.node) } : {}),
             ...(context.length ? { context: context.map(x => x.node) } : {}),
             ...(assembled.length ? { assembled: assembled.map(x => x.node) } : {}) },
@@ -3961,12 +4003,14 @@ export function resolvePartPreview(slug, opts = {}) {
       // there IS context to be out-framed by; a dressed faceplate's extras sit inside the plate's
       // own bounds, so naming a focus there would change nothing and claim something.
       ...(context.length ? { previewFocus: 'p0' } : {}),
+      // a set's print job places every piece where its release STL has it; otherwise the primary sits at the origin and
+      // its companions keep their build offsets from it
       instances: [
-        { id: 'p0', node: row.node, pos: [0, 0, 0],
-          ...(opts.plate && platePose.length ? { rot: platePose } : {}) },
+        { id: 'p0', node: row.node, pos: job ? job[row.node].pos : [0, 0, 0],
+          ...(job ? { rot: job[row.node].rot } : opts.plate && platePose.length ? { rot: platePose } : {}) },
         ...withPart.map((x, n) => ({ id: 'p' + (n + 1), node: x.node,
-          pos: [x.pos[0] - primary.pos[0], x.pos[1] - primary.pos[1], x.pos[2] - primary.pos[2]],
-          ...(x.rot ? { rot: x.rot } : {}),
+          pos: job ? job[x.node].pos : [x.pos[0] - primary.pos[0], x.pos[1] - primary.pos[1], x.pos[2] - primary.pos[2]],
+          ...(job ? { rot: job[x.node].rot } : x.rot ? { rot: x.rot } : {}),
           // a model with no row is typed by its instance, as in a build (main.js reads inst.type)
           ...(!rowOf(x.node) && x.type ? { type: x.type } : {}) })),
       ],

@@ -115,8 +115,8 @@ test('a cabinet door page previews that door: its style, size and hand, and noth
 /* The cabinet door hardware (2026-11-24): each page previews its whole product as installed, the door shut, and nothing
    else. A hinge is its body and the claws billed on it, a latch its side clip and door clip (a left-hinged door takes
    the R pair), a knob is mounted on the 1H door it rides. Each offset is checked against a real 1W-1H cabinet of that
-   hand, so the preview cannot drift from the build; the golden pins the numbers. None has a confirmed print pose, so
-   none has a print view. */
+   hand, so the preview cannot drift from the build; the golden pins the numbers. The knobs have no confirmed print pose,
+   so no print view; the hinges and latches print as their release STLs lay them out (2026-11-25, the next test). */
 test('a cabinet hardware page previews that product as installed: its pieces, in its hand, and nothing else', () => {
   const hw = [...resolved].filter(([s]) => /^((cabinet-hinge|door-latch)-(left|right)-hinged-door|(deco|blockbar)-knob)$/.test(s));
   assert.equal(hw.length, 6, 'the site lists 2 hinges, 2 latches and 2 knobs');
@@ -135,8 +135,11 @@ test('a cabinet hardware page previews that product as installed: its pieces, in
   for (const [s, r] of hw) {
     assert.ok(!r.fail, `${s}: ${r.fail?.message}`);
     const ins = r.manifest.instances, m = /^(cabinet-hinge|door-latch)-(left|right)/.exec(s);
-    assert.equal(r.part.platePreview, false, s + ': no confirmed print pose');
-    assert.equal(resolvePartPreview(s, { plate: true }).fail?.reason, 'unsupported', s + ': the print view fails closed');
+    if (m) assert.equal(r.part.platePreview, true, s + ': prints as its release STL lays it out');
+    else {
+      assert.equal(r.part.platePreview, false, s + ': no confirmed print pose');
+      assert.equal(resolvePartPreview(s, { plate: true }).fail?.reason, 'unsupported', s + ': the print view fails closed');
+    }
     if (m) {
       const R = m[2] === 'right';
       const [a, b, rows] = m[1] === 'cabinet-hinge'
@@ -161,6 +164,81 @@ test('a cabinet hardware page previews that product as installed: its pieces, in
       assert.equal(r.manifest.previewFocus, 'p0', s + ': framed on the knob');
     }
   }
+});
+
+/* The hinges' and latches' print views (2026-11-25; Joey: "add print views for the hinges and latches") are the release
+   STLs' own layout, piece by piece (generate.js HARDWARE_PLATE_JOBS). Judged on the RESOLVED OUTCOME, as the footprint law
+   below judges the handed sets: each piece's measured GLB box, turned through its resolved pose (three's Euler XYZ) and
+   placed at its resolved position, must land on its STL body's box within 0.5 mm. The boxes are the release STLs' two
+   bodies (model library, `GEN2/Hardware/Cabinet Door Hardware/`, read 2026-11-25), in the STL frame turned Y-up
+   (x, z, -y). The plate view lifts and centres the whole job (seatOnPlate), so the frame's origin does not matter; the
+   pieces' boxes, and so the footprint, the height and the gap between the pieces, do.
+   A box cannot tell a piece from itself turned over: the claws' and clips' boxes are symmetric, so a flip that puts the
+   wrong face on the bed keeps the box. So each piece's area-weighted surface centroid must also land within 0.5 mm of
+   its STL body's (measured 2026-11-25 on the meshes: every piece within 0.28 mm; flipped about either plate axis, 1.9 to
+   4.5 mm off). */
+test("a hinge's or latch's print view is its release STL's layout: each piece on its STL body", async () => {
+  const { worldExtents } = await import('./lib/glb-spans.mjs');
+  const rad = (d) => (d * Math.PI) / 180;
+  const Rx = (a) => [[1, 0, 0], [0, Math.cos(a), -Math.sin(a)], [0, Math.sin(a), Math.cos(a)]];
+  const Ry = (a) => [[Math.cos(a), 0, Math.sin(a)], [0, 1, 0], [-Math.sin(a), 0, Math.cos(a)]];
+  const Rz = (a) => [[Math.cos(a), -Math.sin(a), 0], [Math.sin(a), Math.cos(a), 0], [0, 0, 1]];
+  const mul = (A, B) => A.map((row) => B[0].map((_, j) => row.reduce((t, v, k) => t + v * B[k][j], 0)));
+  const box = (node, rot, pos) => {
+    const { lo, hi } = worldExtents(join(root, 'parts', '185', node + '.lib.glb'));
+    const M = mul(mul(Rx(rad(rot[0])), Ry(rad(rot[1]))), Rz(rad(rot[2])));   // three's Euler 'XYZ' = Rx * Ry * Rz
+    const out = [[Infinity, Infinity, Infinity], [-Infinity, -Infinity, -Infinity]];
+    for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) {
+      const v = M.map((row) => row[0] * x + row[1] * y + row[2] * z);
+      for (let k = 0; k < 3; k++) { out[0][k] = Math.min(out[0][k], v[k] + pos[k]); out[1][k] = Math.max(out[1][k], v[k] + pos[k]); }
+    }
+    return out;
+  };
+  const { readGlbTriangles } = await import(new URL('file://' + join(root, 'tools', 'lib', 'skin-geometry.mjs').replace(/\\/g, '/')).href);
+  const centroid = async (node, rot, pos) => {
+    const g = await readGlbTriangles(join(root, 'parts', '185', node + '.lib.glb'));
+    const M = mul(mul(Rx(rad(rot[0])), Ry(rad(rot[1]))), Rz(rad(rot[2])));
+    const P = g.positions, I = g.indices, at = (v) => M.map((row, k) => row[0] * P[3 * v] + row[1] * P[3 * v + 1] + row[2] * P[3 * v + 2] + pos[k]);
+    const sum = [0, 0, 0]; let area = 0;
+    for (let t = 0; t < I.length; t += 3) {
+      const [a, b, c] = [at(I[t]), at(I[t + 1]), at(I[t + 2])];
+      const u = [0, 1, 2].map((k) => b[k] - a[k]), w = [0, 1, 2].map((k) => c[k] - a[k]);
+      const A = Math.hypot(u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]) / 2;
+      for (let k = 0; k < 3; k++) sum[k] += A * (a[k] + b[k] + c[k]) / 3;
+      area += A;
+    }
+    return sum.map((v) => v / area);
+  };
+  const CENTROID = {   // each STL body's area-weighted surface centroid, Y-up
+    CabinetHinge_Body_L: [24.18, 2.71, -25.36], CabinetHinge_Claws_L: [24.23, 3.08, -12.16],
+    CabinetHinge_Body_R: [23.83, 2.71, -25.36], CabinetHinge_Claws_R: [23.77, 3.08, -12.16],
+    CabinetLatch_Side_R: [20.96, 1.54, -9.1], CabinetLatch_Door_R: [52.01, 7.55, -19.85],
+    CabinetLatch_Side_L: [21.03, 1.54, -9.12], CabinetLatch_Door_L: [54.4, 7.55, -19.83],
+  };
+  const HINGE_BODY = [[0, 0, -39.2], [48, 8.5, -12.5]], LATCH_SIDE = [[0, 0, -18], [42, 5.05, 0]], LATCH_DOOR = [[47, 0, -42], [59.4, 14.55, 0]];
+  const STL = {
+    'cabinet-hinge-left-hinged-door': { CabinetHinge_Body_L: HINGE_BODY, CabinetHinge_Claws_L: [[6.5, 0, -20.5], [42.5, 8.5, 0]] },
+    'cabinet-hinge-right-hinged-door': { CabinetHinge_Body_R: HINGE_BODY, CabinetHinge_Claws_R: [[5.5, 0, -20.5], [41.5, 8.5, 0]] },
+    'door-latch-left-hinged-door': { CabinetLatch_Side_R: LATCH_SIDE, CabinetLatch_Door_R: LATCH_DOOR },
+    'door-latch-right-hinged-door': { CabinetLatch_Side_L: LATCH_SIDE, CabinetLatch_Door_L: LATCH_DOOR },
+  };
+  const bad = [];
+  for (const [slug, want] of Object.entries(STL)) {
+    const pb = resolvePartPreview(slug, { plate: true });
+    if (pb.fail) { bad.push(`${slug}: ${pb.fail.message}`); continue; }
+    assert.deepEqual(pb.manifest.instances.map((i) => i.node).sort(), Object.keys(want).sort(), `${slug}: the print job is the set's pieces`);
+    assert.equal(pb.manifest.platePose, true, `${slug}: a plate boot`);
+    for (const i of pb.manifest.instances) {
+      const got = box(i.node, i.rot, i.pos), w = want[i.node];
+      for (let e = 0; e < 2; e++) for (let k = 0; k < 3; k++)
+        if (Math.abs(got[e][k] - w[e][k]) > 0.5) bad.push(`${slug} ${i.node}: ${'xyz'[k]} ${e ? 'max' : 'min'} ${got[e][k].toFixed(2)}, the STL's ${w[e][k]}`);
+      const c = await centroid(i.node, i.rot, i.pos), off = Math.hypot(...c.map((v, k) => v - CENTROID[i.node][k]));
+      if (off > 0.5) bad.push(`${slug} ${i.node}: centroid ${c.map((v) => v.toFixed(2))} is ${off.toFixed(2)} mm off the STL body's - turned over?`);
+    }
+    // the claws keep their row-less type on the plate too, so the viewer can type them
+    for (const i of pb.manifest.instances) if (/Claws/.test(i.node) && i.type !== 'CabinetHinge') bad.push(`${slug}: ${i.node} untyped on the plate`);
+  }
+  assert.deepEqual(bad, []);
 });
 
 test('every resolved preview references GLBs that exist in its collection pool', () => {
@@ -366,25 +444,23 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
   // other handle family's, and BlockBar B's on 2026-11-01, so seven of the nine handle
   // pages ship turntable-only - the mechanism working on live slugs, not a spare part. Named one by one
   // rather than counted, because which slugs are plate-less is the claim.
-  // The cabinet door hardware joined them on 2026-11-24 (3D only): the knowledge pack has words for how the hinge
-  // and latch print ("as supplied", the hinge's claws laid flat beside its body), but not as a pose of these models,
-  // and none for the knobs.
+  // The cabinet knobs joined them on 2026-11-24 (3D only): the knowledge pack has no print pose for them. The hinges
+  // and latches joined them the same day and left on 2026-11-25, printed as their release STLs lay them out.
   const caps = [...resolved.values()].filter(r => !r.fail);
   assert.deepEqual(
     [...resolved].filter(([, r]) => !r.fail && !r.part.platePreview).map(([s]) => s).sort(),
     ['blockbar-handle-a', 'blockbar-handle-c', 'blockbar-handle-d',
      'blockbar-handle-e', 'blockbar-handle-f', 'blockbar-knob',
-     'cabinet-hinge-left-hinged-door', 'cabinet-hinge-right-hinged-door',
-     'crystal-handle-a', 'crystal-handle-b-wide', 'deco-knob',
-     'door-latch-left-hinged-door', 'door-latch-right-hinged-door'],
-    'the slugs with no confirmed print pose - the other BlockBar and Crystal handles, and the cabinet door hardware');
+     'crystal-handle-a', 'crystal-handle-b-wide', 'deco-knob'],
+    'the slugs with no confirmed print pose - the other BlockBar and Crystal handles, and the cabinet knobs');
   // full census: 94 cases + 94 classic + 94 decor + 60 Gridfinity decor + 90
   // faceplates + 4 hardware + 24 covers + 20 foot rails + 24 under-table rails
   // + 22 case extenders + 22 shelf inserts + 4 shelf lips + 18 back covers + 3
   // wall brackets + 1 Deco handle + 1 BlockBar B + 27 side covers (face-down, the plateRot entry's release notes)
   // + 12 chip drawers (floor-down as exported, the standard drawer's pose)
   // + 96 cabinet doors (face down, the door's own pose; 2026-11-23)
-  assert.equal(caps.filter(r => r.part.platePreview).length, 710, 'plate-capable slug count');
+  // + 2 hinges and 2 latches (their release STLs' layout; 2026-11-25)
+  assert.equal(caps.filter(r => r.part.platePreview).length, 714, 'plate-capable slug count');
 
   // sweep EVERY plate-capable slug's plate boot (not just samples): the bare
   // print JOB (one body, or every member of a handed set), rotations matching
@@ -403,12 +479,15 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
       : s === 'blockbar-handle-b' ? [90, 0, 0]
       : /-side-cover-/.test(s) ? [0, 0, 90]
       : /-cabinet-door-/.test(s) ? [90, 0, 0]
-      : undefined;
+      // the hinges and latches: each piece its own pose in the release STL (generate.js HARDWARE_PLATE_JOBS)
+      : ({ CabinetHinge_Body_L: [0, 0, -90], CabinetHinge_Claws_L: [-90, 0, -90], CabinetHinge_Body_R: [0, 0, 90],
+           CabinetHinge_Claws_R: [-90, 0, 90], CabinetLatch_Side_R: [0, 0, 90], CabinetLatch_Side_L: [0, 0, -90],
+           CabinetLatch_Door_R: [-90, 0, 0], CabinetLatch_Door_L: [-90, 0, 0] })[node];
   for (const [s, r] of resolved) {
     if (r.fail || !r.part.platePreview) continue;
     const pb = resolvePartPreview(s, { plate: true });
     assert.ok(!pb.fail, s + ': plate boot must resolve');
-    assert.equal(pb.manifest.instances.length, (r.part.set || [1]).length, s + ': plate boot is the bare print job');
+    assert.equal(pb.manifest.instances.length, (r.part.set || [r.part.node, ...(r.part.assembled || [])]).length, s + ': plate boot is the bare print job');
     for (const i of pb.manifest.instances)
       assert.deepEqual(i.rot, expectRot(s, i.node), s + ': confirmed pose');
   }
