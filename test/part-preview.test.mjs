@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { resolvePartPreview } = await import(
+const { resolvePartPreview, generateManifest } = await import(
   new URL('file://' + join(root, 'js', 'generate.js').replace(/\\/g, '/')).href
 );
 
@@ -48,14 +48,13 @@ const glbExists = (L, node) => existsSync(join(root, 'parts', String(L), node + 
    The filament sample chip (2026-11-07) joins them: its GLB exists, but no build
    places a chip yet, so no probe can pick one. And its title pieces (2026-11-08):
    a set that ships as 3MFs, with no GLB at all.
-   The cabinet door hardware (2026-11-20, coming soon): the handed hinges and
-   latches, the two knobs. Their GLBs are in the pools and a cabinet build draws
-   them, but no probe picks one out of a cabinet yet. The 96 doors left this list
-   on 2026-11-23: a one-cabinet probe picks each door out by its exact node. */
+   The cabinet door parts left this list in two steps: the 96 doors on 2026-11-23
+   (a one-cabinet probe picks each door out by its exact node), and the door
+   hardware on 2026-11-24 (the handed hinges and latches and the two knobs, picked
+   out of the same probe). */
 const expectUnsupported = s =>
   /^59-case-extender-[34]w-1h$/.test(s) ||
-  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip|filament-sample-chip-title-pieces)$/.test(s) ||
-  /^((cabinet-hinge|door-latch)-(left|right)-hinged-door|deco-knob|blockbar-knob)$/.test(s);
+  /^(magnet-insert-6x2mm|quicklock-b-bi-directional-optional|filament-sample-chip|filament-sample-chip-title-pieces)$/.test(s);
 
 // resolve the whole catalog once — every test reads from this
 const resolved = new Map();
@@ -91,8 +90,9 @@ test('every production slug is accounted for — resolved or intentionally unsup
   // 2026-11-20: the 102 coming-soon cabinet parts, unsupported (6 → 108): 96 doors, 2 hinges, 2 latches, 2 knobs
   // 2026-11-23: +96 cabinet doors (621 → 717; 108 → 12), 48 Essential and 48 Chevron, both hands, picked out of a
   // one-cabinet probe; the 6 hardware parts stay unsupported
-  assert.equal(supported, 717, 'supported preview count');
-  assert.equal(unsupported, 12, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip + its title pieces + 6 cabinet hardware parts)');
+  // 2026-11-24: +6 cabinet door hardware (717 → 723; 12 → 6), the two hinges, two latches and two knobs, out of the same probe
+  assert.equal(supported, 723, 'supported preview count');
+  assert.equal(unsupported, 6, 'intentionally-unsupported (59-3W/4W extenders + 2 no-GLB hardware + the chip + its title pieces)');
 });
 
 /* The cabinet doors (2026-11-23): each of the 96 pages previews its own door - the style, the size and the hand its slug
@@ -110,6 +110,57 @@ test('a cabinet door page previews that door: its style, size and hand, and noth
     if (!r.part.platePreview) bad.push(`${s}: no print view`);
   }
   assert.deepEqual(bad, []);
+});
+
+/* The cabinet door hardware (2026-11-24): each page previews its whole product as installed, the door shut, and nothing
+   else. A hinge is its body and the claws billed on it, a latch its side clip and door clip (a left-hinged door takes
+   the R pair), a knob is mounted on the 1H door it rides. Each offset is checked against a real 1W-1H cabinet of that
+   hand, so the preview cannot drift from the build; the golden pins the numbers. None has a confirmed print pose, so
+   none has a print view. */
+test('a cabinet hardware page previews that product as installed: its pieces, in its hand, and nothing else', () => {
+  const hw = [...resolved].filter(([s]) => /^((cabinet-hinge|door-latch)-(left|right)-hinged-door|(deco|blockbar)-knob)$/.test(s));
+  assert.equal(hw.length, 6, 'the site lists 2 hinges, 2 latches and 2 knobs');
+  const near = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+  // where `b` sits from `a` in a real cabinet of this hand and knob style: the only placement a preview may show
+  const installed = (R, a, b, handleStyle = 'deco') => {
+    const ins = generateManifest({ mount: 'wall', length: 185, gridH: 1, doorStyle: 'essential', handleStyle,
+      placed: [{ id: 'u1', x: 0, y: 0, w: 1, hh: 2, fill: 'cabinet', ...(R ? { hinge: 'right' } : {}) }] }).manifest.instances;
+    const [pa, pb] = [a, b].map(n => ins.filter(i => i.node === n));
+    assert.ok(pa.length === 1 && pb.length === 1, `${a} and ${b} once each in a 1H cabinet`);
+    return pb[0].pos.map((v, i) => v - pa[0].pos[i]);
+  };
+  // on a door's own page the face is the subject and keeps the poster orange
+  const door = resolved.get('essential-cabinet-door-1w-1h').manifest.colors;
+  assert.notEqual(door['Faceplate:FACE'], door.Faceplate, 'a door page keeps its orange face');
+  for (const [s, r] of hw) {
+    assert.ok(!r.fail, `${s}: ${r.fail?.message}`);
+    const ins = r.manifest.instances, m = /^(cabinet-hinge|door-latch)-(left|right)/.exec(s);
+    assert.equal(r.part.platePreview, false, s + ': no confirmed print pose');
+    assert.equal(resolvePartPreview(s, { plate: true }).fail?.reason, 'unsupported', s + ': the print view fails closed');
+    if (m) {
+      const R = m[2] === 'right';
+      const [a, b, rows] = m[1] === 'cabinet-hinge'
+        ? [`CabinetHinge_Body_${R ? 'R' : 'L'}`, `CabinetHinge_Claws_${R ? 'R' : 'L'}`, 1]
+        : [`CabinetLatch_Side_${R ? 'L' : 'R'}`, `CabinetLatch_Door_${R ? 'L' : 'R'}`, 2];
+      assert.deepEqual(ins.map(i => i.node), [a, b], s + ': the pieces of the product, primary first');
+      assert.deepEqual(r.part.assembled, [b], s + ': the second piece is the product, not context');
+      assert.ok(near(ins[1].pos, installed(R, a, b)), `${s}: ${b} as installed, at ${ins[1].pos}`);
+      // the hinge's claws have no row (billed on the body) and are typed by their instance; the latch bills both clips
+      assert.equal(r.manifest.parts.length, rows, s + ': rows');
+      if (rows === 1) assert.equal(ins[1].type, 'CabinetHinge', s + ': the claws are typed for the viewer');
+    } else {
+      const [k, knob] = s.startsWith('deco') ? ['deco', 'Knob_Deco'] : ['blockbar', 'Knob_BlockBar'];
+      assert.deepEqual(ins.map(i => i.node), [knob, 'Door_Essential_1W-1H'], s + ': the knob, on its door');
+      assert.ok(near(ins[1].pos, installed(false, knob, 'Door_Essential_1W-1H', k)), `${s}: the door where the knob is fitted to it`);
+      assert.equal(r.manifest.parts.length, 2, s + ': the knob and its door, not the screw');
+      // the door is context: its FACE zone wears the door's dark body hue, and only the knob is orange
+      const c = r.manifest.colors;
+      assert.equal(c['Faceplate:FACE'], c.Faceplate, s + ': the door face reads as context');
+      assert.notEqual(c.Handle, c.Faceplate, s + ': the knob is the subject');
+      assert.deepEqual(r.part.context, ['Door_Essential_1W-1H'], s + ': the door is context');
+      assert.equal(r.manifest.previewFocus, 'p0', s + ': framed on the knob');
+    }
+  }
 });
 
 test('every resolved preview references GLBs that exist in its collection pool', () => {
@@ -144,9 +195,14 @@ test('preview manifests are canonical: primary at the origin, no assembly contex
       // Classic Pro), `context` is the plate a HANDLE is shown mounted on and
       // is not in the handle's download at all. Same geometry rules, so they
       // are counted together and asserted apart.
+      // `assembled` is a third claim (2026-11-24): the other pieces of the product itself - a cabinet hinge's claws, a
+      // latch's door clip. A piece with no row of its own (the claws, billed on the body) adds an instance and no row.
       const nExtras = r.part.extras?.length || 0, nContext = r.part.context?.length || 0;
-      const nWith = nExtras + nContext;
-      if (m.parts.length !== 1 + nWith || m.parts.some(p => !p || p.qty !== 1)) bad.push(`${s}: parts rows`);
+      const nAssembled = r.part.assembled?.length || 0;
+      const nWith = nExtras + nContext + nAssembled;
+      const rowless = m.instances.filter(i => !m.parts.some(p => p.node === i.node));
+      if (rowless.some(i => !r.part.assembled?.includes(i.node) || !i.type)) bad.push(`${s}: an untyped or unclaimed model with no row`);
+      if (m.parts.length !== 1 + nWith - rowless.length || m.parts.some(p => !p || p.qty !== 1)) bad.push(`${s}: parts rows`);
       if (m.instances.length !== 1 + nWith) bad.push(`${s}: instance count`);
       const [prim, ...companions] = m.instances;
       if (prim.pos.join() !== '0,0,0') bad.push(`${s}: primary pos ${prim.pos}`);
@@ -161,7 +217,8 @@ test('preview manifests are canonical: primary at the origin, no assembly contex
       // context only ever mounts a handle, and never both on one part
       if (nExtras && (m.parts[0].type !== 'Faceplate')) bad.push(`${s}: extras on a non-faceplate`);
       if (nContext && (m.parts[0].type !== 'Handle')) bad.push(`${s}: mounted context on a non-handle`);
-      if (nExtras && nContext) bad.push(`${s}: dressed AND mounted`);
+      if ([nExtras, nContext, nAssembled].filter(Boolean).length > 1) bad.push(`${s}: more than one kind of companion`);
+      if (nAssembled && m.parts.some(p => p.type !== m.parts[0].type)) bad.push(`${s}: a set piece of another type`);
       // a focus is a framing claim and only a mounted preview has one to make
       if ((m.previewFocus === 'p0') !== (nContext > 0)) bad.push(`${s}: previewFocus ${m.previewFocus}`);
     }
@@ -205,7 +262,7 @@ test('catalog output matches the golden snapshot (UPDATE_GOLDEN=1 to refresh)', 
           // stayed green (review catch, 2026-08-19). A MOUNTED preview is the
           // same exposure: the handle's plate sits at a generator-derived
           // offset, so its seat is pinned here too.
-          ...(r.part.extras || r.part.context ? { instances: r.manifest.instances } : {}) };
+          ...(r.part.extras || r.part.context || r.part.assembled ? { instances: r.manifest.instances } : {}) };
   }
   if (process.env.UPDATE_GOLDEN) {
     writeFileSync(GOLDEN_PATH, JSON.stringify(now, null, 2) + '\n');
@@ -309,12 +366,18 @@ test('plate view: confirmed print poses only, bare primary, fail-closed elsewher
   // other handle family's, and BlockBar B's on 2026-11-01, so seven of the nine handle
   // pages ship turntable-only - the mechanism working on live slugs, not a spare part. Named one by one
   // rather than counted, because which slugs are plate-less is the claim.
+  // The cabinet door hardware joined them on 2026-11-24 (3D only): the knowledge pack has words for how the hinge
+  // and latch print ("as supplied", the hinge's claws laid flat beside its body), but not as a pose of these models,
+  // and none for the knobs.
   const caps = [...resolved.values()].filter(r => !r.fail);
   assert.deepEqual(
     [...resolved].filter(([, r]) => !r.fail && !r.part.platePreview).map(([s]) => s).sort(),
     ['blockbar-handle-a', 'blockbar-handle-c', 'blockbar-handle-d',
-     'blockbar-handle-e', 'blockbar-handle-f', 'crystal-handle-a', 'crystal-handle-b-wide'],
-    'the slugs with no confirmed print pose - only the other BlockBar and Crystal handles');
+     'blockbar-handle-e', 'blockbar-handle-f', 'blockbar-knob',
+     'cabinet-hinge-left-hinged-door', 'cabinet-hinge-right-hinged-door',
+     'crystal-handle-a', 'crystal-handle-b-wide', 'deco-knob',
+     'door-latch-left-hinged-door', 'door-latch-right-hinged-door'],
+    'the slugs with no confirmed print pose - the other BlockBar and Crystal handles, and the cabinet door hardware');
   // full census: 94 cases + 94 classic + 94 decor + 60 Gridfinity decor + 90
   // faceplates + 4 hardware + 24 covers + 20 foot rails + 24 under-table rails
   // + 22 case extenders + 22 shelf inserts + 4 shelf lips + 18 back covers + 3

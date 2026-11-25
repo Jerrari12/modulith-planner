@@ -6329,21 +6329,167 @@
     "platePreview": true
   },
   "cabinet-hinge-left-hinged-door": {
-    "unsupported": "unsupported"
+    "node": "CabinetHinge_Body_L",
+    "collection": "185",
+    "type": "CabinetHinge",
+    "label": "Cabinet Hinge (left-hinged door)",
+    "platePreview": false,
+    "instances": [
+      {
+        "id": "p0",
+        "node": "CabinetHinge_Body_L",
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "id": "p1",
+        "node": "CabinetHinge_Claws_L",
+        "pos": [
+          6.000999999999998,
+          6.5,
+          9.099999999999994
+        ],
+        "type": "CabinetHinge"
+      }
+    ]
   },
   "cabinet-hinge-right-hinged-door": {
-    "unsupported": "unsupported"
+    "node": "CabinetHinge_Body_R",
+    "collection": "185",
+    "type": "CabinetHinge",
+    "label": "Cabinet Hinge (right-hinged door)",
+    "platePreview": false,
+    "instances": [
+      {
+        "id": "p0",
+        "node": "CabinetHinge_Body_R",
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "id": "p1",
+        "node": "CabinetHinge_Claws_R",
+        "pos": [
+          -6.000999999999998,
+          6.5,
+          9.099999999999994
+        ],
+        "type": "CabinetHinge"
+      }
+    ]
   },
   "door-latch-left-hinged-door": {
-    "unsupported": "unsupported"
+    "node": "CabinetLatch_Side_R",
+    "collection": "185",
+    "type": "CabinetLatch",
+    "label": "Door Latch (R)",
+    "platePreview": false,
+    "instances": [
+      {
+        "id": "p0",
+        "node": "CabinetLatch_Side_R",
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "id": "p1",
+        "node": "CabinetLatch_Door_R",
+        "pos": [
+          -5.224000000000004,
+          0,
+          4.275000000000006
+        ]
+      }
+    ]
   },
   "door-latch-right-hinged-door": {
-    "unsupported": "unsupported"
+    "node": "CabinetLatch_Side_L",
+    "collection": "185",
+    "type": "CabinetLatch",
+    "label": "Door Latch (L)",
+    "platePreview": false,
+    "instances": [
+      {
+        "id": "p0",
+        "node": "CabinetLatch_Side_L",
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "id": "p1",
+        "node": "CabinetLatch_Door_L",
+        "pos": [
+          5.224000000000004,
+          0,
+          4.275000000000006
+        ]
+      }
+    ]
   },
   "deco-knob": {
-    "unsupported": "unsupported"
+    "node": "Knob_Deco",
+    "collection": "185",
+    "type": "Handle",
+    "label": "Deco Knob",
+    "platePreview": false,
+    "instances": [
+      {
+        "id": "p0",
+        "node": "Knob_Deco",
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "id": "p1",
+        "node": "Door_Essential_1W-1H",
+        "pos": [
+          -17.5,
+          -12.000000000000002,
+          -14.5
+        ]
+      }
+    ]
   },
   "blockbar-knob": {
-    "unsupported": "unsupported"
+    "node": "Knob_BlockBar",
+    "collection": "185",
+    "type": "Handle",
+    "label": "BlockBar Knob",
+    "platePreview": false,
+    "instances": [
+      {
+        "id": "p0",
+        "node": "Knob_BlockBar",
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "id": "p1",
+        "node": "Door_Essential_1W-1H",
+        "pos": [
+          -17.5,
+          -16.5,
+          -7
+        ]
+      }
+    ]
   }
 }

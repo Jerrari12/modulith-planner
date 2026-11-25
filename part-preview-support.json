@@ -2895,28 +2895,28 @@
       "platePreview": true
     },
     "cabinet-hinge-left-hinged-door": {
-      "preview": false,
-      "reason": "The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build."
+      "preview": true,
+      "platePreview": false
     },
     "cabinet-hinge-right-hinged-door": {
-      "preview": false,
-      "reason": "The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build."
+      "preview": true,
+      "platePreview": false
     },
     "door-latch-left-hinged-door": {
-      "preview": false,
-      "reason": "The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build."
+      "preview": true,
+      "platePreview": false
     },
     "door-latch-right-hinged-door": {
-      "preview": false,
-      "reason": "The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build."
+      "preview": true,
+      "platePreview": false
     },
     "deco-knob": {
-      "preview": false,
-      "reason": "The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build."
+      "preview": true,
+      "platePreview": false
     },
     "blockbar-knob": {
-      "preview": false,
-      "reason": "The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build."
+      "preview": true,
+      "platePreview": false
     }
   }
 }

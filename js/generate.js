@@ -3356,11 +3356,33 @@ function previewProbe(slug) {
                       placed: [{ ...unit(w, h * 2, 'cabinet'), ...(right ? { hinge: 'right' } : {}) }] },
              pick: { type: 'Faceplate', node: `Door_${CABINET.styles[style].label}_${w}W-${h}H${right ? '_RH' : ''}` } };
   }
-  /* the door hardware (site slugs minted 2026-11-20, coming soon): the handed hinges and latches, the two knobs. Their
-     GLBs are in the pools and a cabinet build draws them, but no probe picks one out of a cabinet yet, so the site shows
-     the render */
-  if (/^(cabinet-hinge|door-latch)-(left|right)-hinged-door$/.test(s) || /^(deco|blockbar)-knob$/.test(s))
-    return un('The cabinet door hardware has no 3D preview yet: no probe picks it out of a cabinet build.');
+  /* The door hardware (site slugs minted 2026-11-20; Joey 2026-11-24: "add 3D previews for the hinges, latches and
+     knobs"). Each is picked out of the same one-cabinet probe as the doors, a 1W-1H wall cabinet on the 185 with the
+     Essential door, in the hand the slug names, and shown AS INSTALLED, THE DOOR SHUT - the build's own offsets, no
+     layout invented here:
+     - A hinge is its body and the claws billed on it (one row: it prints as one part, body and claws together), so the
+       pick demands the claws back with the body (`with`).
+     - A latch is its side clip and door clip, two rows of one product, so the pick demands both. A left-hinged door's
+       latch is the R pair (the generator's `mark`): its clips sit on the right wall.
+     - A knob goes on a 1H door's centre hole, so the 1H probe places exactly one, in the build's handle style (a
+       taller door takes a handle instead). It previews mounted on that door, as a handle page shows its handle on a
+       faceplate (`context` in resolvePartPreview).
+     The magnets, the optional filament pin and the knob's screw are bought or optional, not in the download, and stay
+     out. None of the six has a confirmed print pose here, so each fails closed on ?plate=. */
+  if ((m = s.match(/^(cabinet-hinge|door-latch)-(left|right)-hinged-door$/)) || (m = s.match(/^(deco|blockbar)-knob$/))) {
+    const right = m[2] === 'right';
+    const build = { mount: 'wall', length: 185, gridH: 1, doorStyle: 'essential',
+                    placed: [{ ...unit(1, 2, 'cabinet'), ...(right ? { hinge: 'right' } : {}) }] };
+    if (m[1] === 'cabinet-hinge') {
+      const k = right ? 'R' : 'L';
+      return { build, pick: { type: 'CabinetHinge', node: `CabinetHinge_Body_${k}`, with: [`CabinetHinge_Claws_${k}`] } };
+    }
+    if (m[1] === 'door-latch') {
+      const k = right ? 'L' : 'R';
+      return { build, pick: { type: 'CabinetLatch', node: `CabinetLatch_Side_${k}`, with: [`CabinetLatch_Door_${k}`], label: `Door Latch (${k})` } };
+    }
+    return { build: { ...build, handleStyle: m[1] }, pick: { type: 'Handle', node: CABINET.knobs[m[1]].node } };
+  }
   // hardware (sets + singles) — the probe mounts are chosen so the REAL
   // generator bills exactly the expected rows: a wall single-unit emits the
   // QuickLock pair AND the stopper pair (bench covers carry the stopper
@@ -3752,8 +3774,13 @@ function platePoseFor(probe) {
   // had product pages to reach it.
   // and a cabinet door, billed as a 'Faceplate' row, prints in its own pose, not the faceplate family's: its material
   // type is 'Door' (materialTypeOf, from the picked node), filed by the build's door style
+  // a pick that names its node is posed by THAT node: a cabinet knob is a 'Handle' row probed in the 'deco' or
+  // 'blockbar' handle style, and the build's style would hand the Deco knob the Deco handle's pose; handlePoseKey of
+  // a knob is null, so a knob has none
+  const handleKey = probe.pick.node ? handlePoseKey(probe.pick.node)
+    : handlePoseKey(probe.build.handleVariant) || probe.build.handleStyle;
   return plateRotForType(materialTypeOf(probe.pick.type, probe.pick.node), probe.build.faceStyle,
-    handlePoseKey(probe.build.handleVariant) || probe.build.handleStyle, probe.build.doorStyle);
+    handleKey, probe.build.doorStyle);
 }
 
 export function resolvePartPreview(slug, opts = {}) {
@@ -3844,19 +3871,59 @@ export function resolvePartPreview(slug, opts = {}) {
      would be hidden behind the plate anyway. The handle wears the poster orange against the
      plate's dark poster hue (previewColors), so the subject reads with no caption; `context`
      is there for the site to caption it anyway. */
+  /* A cabinet KNOB (2026-11-24) rides its door rather than sharing a rider with a plate, and the door is its
+     'Faceplate' row, so the knob is mounted on the door it rides by the same rule. A drawer handle rides its drawer,
+     which is no faceplate, so this adds nothing to a handle page. */
   const context = row.type === 'Handle' && !opts.plate
-    ? gen.manifest.instances.filter(i => i.rides === primary.rides && typeOf[i.node] === 'Faceplate')
+    ? gen.manifest.instances.filter(i => typeOf[i.node] === 'Faceplate' &&
+        (i.rides === primary.rides || (primary.rides && i.id === primary.rides)))
     : [];
-  // one list for the geometry - only one of the two is ever non-empty - two keys for the claim
-  const withPart = [...extras, ...context];
+  /* A PRODUCT OF SEVERAL MODELS (2026-11-24): a cabinet hinge is its body and the claws billed on it (one row, one
+     print), a door latch its side clip and door clip (two rows, one product). `pick.with` names the other models, and
+     the pick fails closed unless the whole product, and only it, is there: the primary and each named model placed
+     exactly once, a model with no row of its own billed on the primary, and every row of the pick's type the primary
+     or a named model. They keep their build offsets from the primary - the product as installed. A third claim beside
+     `extras` and `context`: these ARE the product. On the plate they would need a print arrangement of their own (the
+     hinge prints with its claws laid flat beside the body, not as installed), so a set fails closed there even if a
+     pose for its type is added later: the plate path below poses the primary alone. */
+  const assembled = [];
+  if (probe.pick.with) {
+    const placed = (n) => gen.manifest.instances.filter(i => i.node === n);
+    const refuse = (message) => ({ fail: { reason: 'unsupported', message } });
+    if (opts.plate) return refuse("This part's pieces don't have a confirmed print arrangement yet.");
+    if (placed(row.node).length !== 1) return refuse(`Part set lookup was ambiguous (${placed(row.node).length} ${row.node}).`);
+    for (const n of probe.pick.with) {
+      const xs = placed(n);
+      if (xs.length !== 1) return refuse(`Part set lookup was ambiguous (${xs.length} ${n}).`);
+      const ownRow = gen.manifest.parts.some(p => p.node === n && p.type === row.type);
+      if (!ownRow && xs[0].billedOn !== primary.id) return refuse(`Part set member ${n} is not billed on ${row.node}.`);
+      assembled.push(xs[0]);
+    }
+    const strays = gen.manifest.parts.filter(p => p.type === row.type && p.node !== row.node && !probe.pick.with.includes(p.node));
+    if (strays.length) return refuse(`Part set membership was ambiguous (${strays.map(p => p.node).join('|')}).`);
+  }
+  // one list for the geometry - only one of the three is ever non-empty - three keys for the claim
+  const withPart = [...extras, ...context, ...assembled];
+  const rowOf = (n) => gen.manifest.parts.find(p => p.node === n);
+  // a set is named for the product, not for its primary's row ('Door Latch (R)', not '... - side clip')
+  const label = probe.pick.label || row.label;
   const L = gen.manifest.collection;
+  /* MOUNTED CONTEXT READS AS CONTEXT: only the subject wears the poster orange. A faceplate's zones are orange in the
+     poster palette (its face and grip are the subject on its own page), and a cabinet door carries a FACE zone where
+     the Essential faceplate under a handle carries none (GLBs 2026-11-24: Door_Essential_1W-1H has BODY and FACE
+     materials, Faceplate_Essential_1W-1H none), so a knob's door wore an orange face behind an orange knob. Under
+     context, the zones take the body's dark hue; a zoneless faceplate looks as it did. */
+  const colors = previewColors(L);
+  if (context.length)
+    for (const k of Object.keys(colors)) if (k.startsWith('Faceplate:')) colors[k] = colors.Faceplate;
   return {
-    part: { node: row.node, label: row.label, type: row.type,
-            platePreview: !!platePose,
+    part: { node: row.node, label, type: row.type,
+            platePreview: !!platePose && !probe.pick.with,
             ...(extras.length ? { extras: extras.map(x => x.node) } : {}),
-            ...(context.length ? { context: context.map(x => x.node) } : {}) },
+            ...(context.length ? { context: context.map(x => x.node) } : {}),
+            ...(assembled.length ? { assembled: assembled.map(x => x.node) } : {}) },
     manifest: {
-      title: row.label,
+      title: label,
       collection: L,
       generated: true,
       preview: true,
@@ -3864,8 +3931,9 @@ export function resolvePartPreview(slug, opts = {}) {
       // float and must not trigger main.js's wall/under-table backdrop machinery
       mount: 'tabletop',
       pitch: { x: PITCH_X, y: 56 },
-      colors: previewColors(L),
-      parts: [{ ...row, qty: 1 }, ...withPart.map(x => ({ ...gen.manifest.parts.find(p => p.node === x.node), qty: 1 }))],
+      colors,
+      // one row per node that has one: a hinge's claws are billed on its body and add none
+      parts: [{ ...row, qty: 1 }, ...withPart.filter(x => rowOf(x.node)).map(x => ({ ...rowOf(x.node), qty: 1 }))],
       // canonical pose: the primary sits identity at the origin (parts are
       // bottom-anchored, X/Z-centered). Assembly context — pos, stage, rides,
       // owner, yaw — is deliberately NOT inherited; every previewable family's
@@ -3883,7 +3951,9 @@ export function resolvePartPreview(slug, opts = {}) {
           ...(opts.plate && platePose.length ? { rot: platePose } : {}) },
         ...withPart.map((x, n) => ({ id: 'p' + (n + 1), node: x.node,
           pos: [x.pos[0] - primary.pos[0], x.pos[1] - primary.pos[1], x.pos[2] - primary.pos[2]],
-          ...(x.rot ? { rot: x.rot } : {}) })),
+          ...(x.rot ? { rot: x.rot } : {}),
+          // a model with no row is typed by its instance, as in a build (main.js reads inst.type)
+          ...(!rowOf(x.node) && x.type ? { type: x.type } : {}) })),
       ],
       stages: {},
       steps: [{ title: row.label, note: '', camera: { t: 32, p: 64, r: 600, target: [0, 0, 0] },
