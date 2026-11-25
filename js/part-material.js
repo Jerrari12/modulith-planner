@@ -102,6 +102,13 @@ export function partMaterialSpec(key, ctx = {}) {
      the light stage were not looked at, and Fast has no environment to reflect). Bought, so colorLocked keeps the
      silver and no filament profile reaches it. */
   if (baseType(key) === 'Magnet') return { kind: 'physical', roughness: 0.32, metalness: 0.55, clearcoat: 0, clearcoatRoughness: 0, envMapIntensity: 1.6 };
+  /* The bought tempered glass board of a glass top (Joey, 2026-11-25: "Being that's it's glass does it sheen or reflect
+     in the planner?"). Polished and clearcoated, so the key light glints off it and the studio reflects in it on the
+     tiers that have an environment; main.js glassPatched makes the same material see-through. The finish lives HERE
+     because applyFinish re-applies a spec's scalars on every repaint: set on the material alone, the first palette
+     change put the ordinary 0.55 roughness back. Chosen by eye on the dark stage at High, 2026-11-25: with the
+     environment at 2.4 the reflection hid the cups under the glass; at 1.1 the sheen and the cups both read. */
+  if (baseType(key) === 'GlassTop') return { kind: 'physical', roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.1 };
 
   /* ⚠ THE ORDINARY PRINTED PART — every case, drawer, shelf and handle in the
      viewer. 0.55 / 0.05 is a plausible plastic and nothing more: no layer lines,

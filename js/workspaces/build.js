@@ -36,7 +36,7 @@ import { layoutRules } from '../rules/layout.js';
 import { refusalReason, standUp, openCells, armedSpots } from '../rules/stand.js';   // hand-written: layout.js is generated from the old planner
 import { settleToward, settleWord } from '../rules/settle.js';
 import { serializeBuild , unitName, cleanUnitName, UNIT_NAME_MAX } from '../rules/schema.js';
-import { generateManifest, isGridfinity, chipSizeOk, isChips } from '../generate.js';
+import { generateManifest, isGridfinity, chipSizeOk, isChips, glassTopOk, GLASS_TOP } from '../generate.js';
 
 /* `const GEN2` at a classic script's top level is a global LEXICAL binding: visible to modules by name, absent from globalThis */
 // eslint-disable-next-line no-undef
@@ -860,6 +860,27 @@ export function mountBuild(stage, ctx) {
       two2.appendChild(ft);
     }
     lib.appendChild(two2);
+    /* the top cover (2026-11-25): the standard two-layer covers, or a Glass Top Cover with a tempered glass board on
+       each top case. Shown wherever the frame exists at all (a tabletop build in its length); inside that, Glass is
+       greyed with what this layout is missing. Glass reads as on only where the generator draws it (glassTopOk). */
+    if (s.mount === 'tabletop' && GLASS_TOP.lengths.includes(+s.length)) {
+      const can = glassTopOk(s), on = s.topCover === 'glass' && can;
+      const why = can ? 'A printed frame on each top case with a tempered glass cutting board resting on it'
+        : `A glass top needs a level top row of ${GLASS_TOP.widths.map((w) => w + 'W').join(' or ')} cases · those are the two glass boards that exist`;
+      const tc = el('section');
+      head(tc, 'topcover', 'Top cover');
+      tc.appendChild(el('div.track.seg2', { role: 'group', 'aria-label': 'Top cover' }, [
+        el('button.seg.sm' + (!on ? '.on' : ''), { text: 'Standard', title: 'Lower and upper covers, staggered so they tie the cases together',
+          onclick: async () => { await stage.setTopCover('standard'); await adopt(); } }),
+        el('button.seg.sm' + (on ? '.on' : ''), { text: 'Glass top', disabled: !can, title: why,
+          onclick: async () => { await stage.setTopCover('glass'); await adopt(); } }),
+      ]));
+      tc.appendChild(el('p.note.scope', { text: !can ? why + '.'
+        : on ? 'No stoppers under the glass' + (s.placed.filter((u) => u.y === Math.min(...s.placed.map((q) => q.y))).length > 1
+            ? ', and the frames don’t tie the cases together across the top · only the foot rails do.' : '.')
+          : 'Glass top: a printed frame and a tempered glass cutting board on each top case.' }));
+      lib.appendChild(tc);
+    }
   }
 
   /* ---------------- inspector ---------------- */
@@ -948,6 +969,21 @@ export function mountBuild(stage, ctx) {
           onclick: choose((p) => { p.variant = 'chips'; }) }) : null,
       ].filter(Boolean);
       if (types.length > 1) insp.appendChild(el('div.row', {}, ['Drawer', el('div.track.mini.seg' + types.length, { role: 'group', 'aria-label': 'Drawer type' }, types)]));
+      /* the drawer's insert (2026-11-25): a dropdown, because more inserts are planned (Joey). Only on a plain drawer of
+         a size an insert exists in; absence IS no insert, so "None" deletes the field. Choosing one opens the drawer. */
+      const insOpts = body === 'standard' ? (G.inserts || []).filter((k) => k.lengths.includes(+s.length) && k.widths.includes(unit.w) && k.heights.includes(unit.hh / 2)) : [];
+      if (insOpts.length) {
+        /* ⚠ a `variant` can be KEPT on a size that has no such body (the generator's rule): the drawer then draws, and
+           reads here, Standard, yet the generator and the bill give a drawer with ANY variant no insert. So the picker
+           reads None while one is kept, and choosing an insert drops the idle variant - the drawer is plain from then on,
+           which is what the visitor was already looking at (Sol 01a214c5). */
+        const curIns = !unit.variant && insOpts.some((k) => k.id === unit.insert) ? unit.insert : '';
+        const selEl = el('select.ins', { 'aria-label': 'Drawer insert', onchange: (e) => { const v = e.target.value; openDrawer(unit.id);
+          setUnitOption(unit.id, (p) => { if (v) { p.insert = v; delete p.variant; } else delete p.insert; }); } },
+          [el('option', { value: '', text: 'None' }), ...insOpts.map((k) => el('option', { value: k.id, text: k.label }))]);
+        selEl.value = curIns;
+        insp.appendChild(el('div.row', {}, ['Insert', selEl]));
+      }
       if (parts) insp.appendChild(pd.unitSection(unit));   // the plan thumbnail, the layout code, Edit compartments, the download
     }
     if (unit.fill === 'shelf') {

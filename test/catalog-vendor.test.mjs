@@ -18,8 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VENDORED = join(root, 'js', 'catalog', 'data.js');
-const PINNED_SHA256 = '9fcca829c5a615869ba1eb4c3245e8bed68d7e76fa66d423f9b461d459b5fb37';
-const SOURCE = 'this repo, 2026-11-24: the cabinet doors\' M3x8 and M3x10 button head screws get buy links (the M3x6 kit) and the button head render';
+const PINNED_SHA256 = '3290817d45e321a79264d0aa985d10c8fe9465d7f2ee7b0b17e464599eb93062';
+const SOURCE = 'this repo, 2026-11-25: the glass top (GEN2.glassTop, buildGlassTopItems, the two glass boards and their buy links) and drawer inserts (GEN2.inserts), linked to the kit page';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
 test(`the vendored catalog matches its pin (${SOURCE})`, () => {

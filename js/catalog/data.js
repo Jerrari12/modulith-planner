@@ -389,7 +389,8 @@ const GEN2 = {
     "tabletop": (ctx) => {
       const P = GEN2.partNames;
       const kit = `GEN2 Table Top Kit V2 - ${ctx.len}`;
-      const cov = buildCoverItems(ctx.len, ctx.runs, { hasStoppers: ctx.hasStoppers });
+      const cov = ctx.glassTop ? buildGlassTopItems(ctx.len, ctx.glassTop)
+        : buildCoverItems(ctx.len, ctx.runs, { hasStoppers: ctx.hasStoppers });
       const items = cov.items.slice();
 
       // Foot rails only where a run's bottom row is more than one case (separate
@@ -454,11 +455,11 @@ const GEN2 = {
          build stands and works without any of this. Nothing selected promises
          a bolted top - it is extra rigidity for anyone who wants it. */
       const fastening = { requirement: GEN2.req.enhancement("top.fastening") };
-      items.push(Object.assign({ name: "M3×6mm socket head screw", qty: cov.screws, hardware: true, optional: true,
+      if (cov.screws) items.push(Object.assign({ name: "M3×6mm socket head screw", qty: cov.screws, hardware: true, optional: true,
         note: "Optional · secures the covers, 1 per 1W (threads into an M3 nut in the Cover Lower). Socket head · any M3 head style that clears the pocket works." }, fastening));
       if (frUsed) items.push(Object.assign({ name: "M3×12mm socket head screw", qty: frScrews, hardware: true, optional: true,
         note: "Optional · screws the foot rails into the case's M3 nut slots, 1 per 1W. Socket head · any M3 head style that clears the slot works." }, fastening));
-      items.push(Object.assign({ name: "M3 hex nut", qty: nuts, hardware: true, optional: true,
+      if (nuts) items.push(Object.assign({ name: "M3 hex nut", qty: nuts, hardware: true, optional: true,
         note: "Optional · pairs with the M3 cover / foot-rail screws above." }, fastening));
       return items;
     },
@@ -681,6 +682,26 @@ const GEN2 = {
     label: "Gridfinity Decor Drawer",
   },
 
+  /* GLASS TOP and DRAWER INSERTS (Joey, 2026-11-25).
+     topCover "glass": one printed Glass Top Cover per top case, in place of BOTH cover layers, with a bought
+     tempered glass cutting board resting on it. Only where it can be built: a 240 tabletop build with a level
+     top whose top cases are each 2W or 4W (the two boards that exist). Under a glass top a drawer takes no
+     stoppers, and the frames tie nothing together across the top.
+     inserts: a printed insert dropped into a plain 1H drawer, Classic or Decor. A list, because more are planned.
+     Both fields are ADDITIVE and absent on every older build, which reads as the standard covers / no insert.
+     ⚠ Mirrored as GLASS_TOP and INSERTS in js/generate.js - keep the two in step. */
+  glassTop: {
+    lengths: [240], widths: [2, 4],
+    board: { 2: "7 × 10 in", 4: "14 × 10 in" },
+    page: "MODULITH Glass Top Coffee Station Kit 240",
+  },
+  inserts: [
+    { id: "kcup", label: "K-cup", lengths: [240], widths: [2, 4], heights: [1],
+      part: (len, w) => `GEN2 ${len} K-cup Insert - ${w}W`,
+      note: "Drops into the drawer, holes up, and holds K-cups upright.",
+      page: "MODULITH Glass Top Coffee Station Kit 240" },
+  ],
+
   /* Which collections' shelf decks carry a SECOND lip slot pair, so a shelf
      there can take a mid lip as well as the front one. MEASURED off the shipped
      inserts by rasterising the deck and locating the openings the lip's tabs
@@ -821,6 +842,25 @@ function buildCoverItems(len, runs, opts) {
   return { items, screws };
 }
 
+/* A glass top's rows: one frame and one bought board per top case (GEN2.glassTop). No screws: the frame is
+   held by the case's QuickLocks and the board only rests on it. `widths` = the top cases' widths. */
+function buildGlassTopItems(len, widths) {
+  const G = GEN2.glassTop, mix = {};
+  widths.forEach((w) => { mix[w] = (mix[w] || 0) + 1; });
+  const items = [];
+  Object.keys(mix).map(Number).sort((a, b) => a - b).forEach((w) => {
+    items.push({ name: `GEN2 ${len} Glass Top Cover - ${w}W`, qty: mix[w], linkAs: G.page,
+      note: "Slides over its case from the back in place of both the lower and the upper cover. A drawer under it takes no stoppers.",
+      requirement: core('top.enclosure') });
+  });
+  Object.keys(mix).map(Number).sort((a, b) => a - b).forEach((w) => {
+    items.push({ name: `Tempered glass cutting board ${G.board[w]}`, qty: mix[w], hardware: true,
+      note: "Rests on the Glass Top Cover · about 3 mm thick, its own rubber feet sit in the frame's grooves.",
+      requirement: core('top.enclosure') });
+  });
+  return { items, screws: 0 };
+}
+
 /* ---------------------------------------------------------------------------
    Download links. Keyed by the generated part name OR by a shared "collection"
    key that many sizes resolve to (see partLinks / COLLECTION_RULES below —
@@ -914,6 +954,9 @@ const LINK_OVERRIDES = {
   "MODULITH 240 Decor Filament Sample Chip Drawers":   { p: "https://www.printables.com/model/1347927-modulith-240-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1378535" },
   "MODULITH 270 Classic Filament Sample Chip Drawers": { p: "https://www.printables.com/model/1907129-modulith-270-classic-filament-sample-chip-drawers", t: "https://than.gs/m/1654510" },
   "MODULITH 270 Decor Filament Sample Chip Drawers":   { p: "https://www.printables.com/model/1907133-modulith-270-decor-filament-sample-chip-drawers", t: "https://than.gs/m/1654511" },
+
+  // ---- The Glass Top Coffee Station Kit: its Glass Top Cover and K-cup Insert rows funnel here ----
+  "MODULITH Glass Top Coffee Station Kit 240": { p: "https://www.printables.com/model/1507379-modulith-glass-top-coffee-station-kit-240" },
 
   // ---- Covers — dedicated per-length pages (Thangs added 2026-07-12; CL/CU rows funnel here) ----
   "GEN2 59 Covers":  { p: "https://www.printables.com/model/1777881-gen2-59-cover", t: "https://than.gs/m/1574324", m: "https://makerworld.com/en/models/3094116-gen2-59-covers" },
@@ -1015,6 +1058,13 @@ const TRY_FREE = {
    whole optional cover / foot-rail hardware list. Adding a row here is what
    swaps its plain "hardware store" tag for buy buttons. */
 const HARDWARE_BUY = {
+  // the two boards a Glass Top Cover seats (the listing's own links; ids mirror generate.js BUY.glassBoard)
+  "Tempered glass cutting board 7 × 10 in": [
+    { id: "glass-board-7x10", label: "7×10 in board", url: "https://amzn.to/4iMTHNp" },
+  ],
+  "Tempered glass cutting board 14 × 10 in": [
+    { id: "glass-board-14x10", label: "14×10 in board", url: "https://amzn.to/4a1GRZf" },
+  ],
   "M3×6mm socket head screw": [
     { id: "m3-assort-stainless", label: "Stainless", url: "https://amzn.to/4ymX5G8" },
     { id: "m3-assort-steel", label: "Steel", url: "https://amzn.to/4gA0NWl" },

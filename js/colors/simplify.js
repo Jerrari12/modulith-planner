@@ -126,7 +126,7 @@ export const SUMMARY = [
   ['feet', ['Foot']],   // TPU, their own filament always (Joey, 2026-10-21)
 ];
 /* a key's own word, for a group whose keys wear more than one filament (Sol 01a151f0: "Case: Black" hid orange feet) */
-const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side covers', ShelfLip: 'lips', CoverL: 'covers', CoverU: 'covers', FootrailL: 'foot rails', FootrailU: 'foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'brackets', BackCover: 'back covers', 'Faceplate:FACE': 'fronts', Faceplate: 'faceplate bodies', 'SideCover:FACE': 'side-cover faces', QuickLock: 'QuickLocks', CabinetHinge: 'hinges', CabinetLatch: 'door latches', MagnetClip: 'magnet clips', Stopper: 'stoppers', ...Object.fromEntries(STRIP_SLOTS.map((k) => [k, 'strips'])) };
+const KEY_WORD = { Case: 'case', CaseExtender: 'extenders', SideCover: 'side covers', ShelfLip: 'lips', CoverL: 'covers', CoverU: 'covers', CoverGlass: 'glass top covers', Insert: 'drawer inserts', FootrailL: 'foot rails', FootrailU: 'foot rails', Foot: 'feet', Rail: 'rails', Bracket: 'brackets', BackCover: 'back covers', 'Faceplate:FACE': 'fronts', Faceplate: 'faceplate bodies', 'SideCover:FACE': 'side-cover faces', QuickLock: 'QuickLocks', CabinetHinge: 'hinges', CabinetLatch: 'door latches', MagnetClip: 'magnet clips', Stopper: 'stoppers', ...Object.fromEntries(STRIP_SLOTS.map((k) => [k, 'strips'])) };
 /* "Case, drawers: Black · Fronts, grips: Orange · Handles: Silk Silver" for a look as worn ([] when nothing is picked); a
    group whose keys wear two filaments splits by key ("Case: Black · feet: Orange"); a unit's own picks are counted by
    the caller, not listed */

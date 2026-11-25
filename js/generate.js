@@ -206,6 +206,54 @@ export const gridfinitySizeOk = (L, u) =>
   !!u && u.fill === 'decor' && GRIDFINITY.lengths.includes(+L) && GRIDFINITY.hh.includes(u.hh);
 export const isGridfinity = (L, u) => gridfinitySizeOk(L, u) && u.variant === 'gridfinity';
 
+/* GLASS TOP and DRAWER INSERTS (Joey, 2026-11-25; vault decisions.md, "The Glass Top Coffee Station").
+   Two ADDITIVE build fields, both absent on every build that predates them:
+     build.topCover === 'glass'   one printed Glass Top Cover per top case, in place of BOTH cover layers, and a
+                                  bought tempered glass cutting board resting on it. Anything else, absence
+                                  included, is the standard covers (the record keeps 'standard').
+     u.insert === 'kcup'          a printed insert dropped into a 1H drawer. Absence IS no insert.
+   ⚠ A glass top is offered only where it can be built: tabletop, a length the frame exists in, a level top, and
+   every top case 2W or 4W wide (the two boards Joey could find). Anywhere else the field is ignored and the
+   standard covers are drawn, with a warning, so a hand-edited link can never bill a part that does not exist.
+   ⚠ Under a glass top a drawer takes NO stoppers (they would show through the glass and snag the cups), and the
+   frames do not overlap, so they tie nothing together across the top. Both are Joey's, not a simplification here. */
+export const GLASS_TOP = {
+  lengths: [240], widths: [2, 4],
+  frameH: 8.75,          // the frame's height (release STL)
+  glassSeat: 7.75,       // the underside of the glass feet above the frame's underside: they sit in its grooves
+  board: { 2: '7 × 10 in', 4: '14 × 10 in' },
+};
+export function glassTopOk(build) {
+  if (!build || build.mount !== 'tabletop' || !GLASS_TOP.lengths.includes(+build.length)) return false;
+  const placed = Array.isArray(build.placed) ? build.placed : [];
+  if (!placed.length) return false;
+  const top = Math.min(...placed.map(u => u.y)), floor = Math.max(...placed.map(u => u.y + u.hh));
+  // every occupied column is a SOLID stack from the floor to the one top row: level, and with no gap inside it. A
+  // gap would leave a drawer with neither a case nor a Cover Lower above it to seat its stoppers in (Sol 01a214c5).
+  const cols = new Map();   // column -> the half-rows its units fill
+  for (const u of placed) for (let c = u.x; c < u.x + u.w; c++) cols.set(c, (cols.get(c) || 0) + u.hh);
+  if ([...cols.values()].some(h => h !== floor - top)) return false;
+  return placed.filter(u => u.y === top).every(u => GLASS_TOP.widths.includes(u.w));
+}
+/* holes: the cup positions, measured off the release STLs (GLB Pipeline/derive_glass_top.py prints them);
+   shown: which of them carry a cup in the guide - "we can show a few, that would illustrate it better" (Joey).
+   cavity: the drawer cavity's centre and floor in each drawer GLB's own frame (same script, by rays). */
+const KCUP_Z = [-80.5, -27.5, 25.5, 78.5];
+export const INSERTS = {
+  kcup: {
+    label: 'K-cup Insert', lengths: [240], widths: [2, 4], hh: 2,
+    node: (L, w) => `KCupInsert_${L}-${w}W`,
+    holesX: { 2: [-53, 0, 53], 4: [-132.5, -79.5, -26.5, 26.5, 79.5, 132.5] },
+    shown: { 2: [[0, 3], [1, 3], [2, 3], [0, 2], [2, 2]], 4: [[0, 3], [1, 3], [2, 3], [3, 3], [4, 3], [5, 3], [0, 2], [2, 2], [5, 2]] },
+    cavity: { decor: { cz: -0.15, floor: 1.8 }, classic: { cz: -8, floor: 2.0 } },
+  },
+};
+export const insertOf = (L, u) => {
+  const k = u && INSERTS[u.insert];
+  // a plain drawer only: a Gridfinity, chip or parts drawer has its own interior (the planner's insertOf, rules/bom.js)
+  return k && (u.fill === 'decor' || u.fill === 'classic') && !u.variant && u.hh === k.hh && k.lengths.includes(+L) && k.widths.includes(u.w) ? k : null;
+};
+
 /* ---- Filament Sample Chip Drawers (v2611, 2026-11-07) -----------------------
    A per-unit VARIANT of the Classic AND the Decor drawer, the Gridfinity rule's
    shape: `u.variant === 'chips'`, its ABSENCE is the standard drawer. A 1W-0.5H
@@ -497,6 +545,11 @@ const BUY = {
   rubberFeet: [
     { id: 'rubber-feet', label: 'Buy rubber feet', url: 'https://amzn.to/4cEanSB' },
   ],
+  // the tempered glass cutting boards a Glass Top Cover seats: the two on the kit's listing (Printables 1507379)
+  glassBoard: {
+    2: [{ id: 'glass-board-7x10', label: 'Buy 7×10 in board', url: 'https://amzn.to/4iMTHNp' }],
+    4: [{ id: 'glass-board-14x10', label: 'Buy 14×10 in board', url: 'https://amzn.to/4a1GRZf' }],
+  },
 };
 // Under-table rails bill ONLY the #6 × 3/4" listing: it is the specific
 // recommendation (SCREW_UT), not a gauge choice. Wall rows keep both gauges.
@@ -893,6 +946,8 @@ export function generateManifest(build, opts = {}) {
     wall:    LINKS_BY_LEN.wall[L] || LINKS.wall,
     rail:    LINKS_BY_LEN.rail[L] || LINKS.rail,
     sideCover: LINKS_BY_LEN.sideCover[L] || null,       // no fallback - see the table
+    // the Glass Top Cover and the K-cup Insert ship on the kit's own page
+    glassTop: { p: 'https://www.printables.com/model/1507379-modulith-glass-top-coffee-station-kit-240' },
   };
   // ---- faceplate family (planner `faceStyle`, carried in share links) -----
   // essential: flat 5 mm plate + bolt-on handle. classic (2026-07-25): the FREE
@@ -1187,6 +1242,11 @@ export function generateManifest(build, opts = {}) {
   const completion = hangs ? null : TABLETOP.completion(build.placed);
   const unfinishedTop = !!completion && !completion.complete;
   const incomplete = unfinishedTop || voids;
+  // glassTopOk alone decides, as in the bill (rules/bom.js glassTopOn): a level top is part of it, so an unfinished
+  // top can never pass, and nothing else about the layout changes the answer
+  const glassTop = build.topCover === 'glass' && glassTopOk(build);
+  if (build.topCover === 'glass' && !glassTop)
+    warnings.push('A glass top needs a level 240 tabletop build whose top cases are each 2W or 4W wide · the standard covers are shown instead.');
   // sanity cap: each unit becomes ~9 parts and its own step — beyond this the
   // instructions stop being instructions
   if (units.length > 80)
@@ -2425,6 +2485,7 @@ export function generateManifest(build, opts = {}) {
     // the CU); under-table top-row drawers need none at all — the rail has
     // stoppers built in (planner note).
     if (hangs && u.topIdx === maxTop) return;
+    if (glassTop && u.topIdx === maxTop) return;   // no stoppers under a glass top (GLASS_TOP)
     const sy = row0 + u.topIdx * PITCH_HALF_Y - 2;
     for (let c = u.col; c < u.col + u.w; c++) {
       if (stopperOff(u, c)) continue; // user removed this 1W's stopper pair
@@ -2484,7 +2545,20 @@ export function generateManifest(build, opts = {}) {
     else run = null;
   }
   const plannedTile = t => [...Array(t.w).keys()].some(k => shortCols.has(t.col + k));
-  coverRuns.forEach(r => {
+  const gtcIds = [], glassIds = [];
+  if (glassTop) units.filter(u => u.topIdx === maxTop).forEach(u => {
+    // one frame per top case, where the Cover Lower would sit, and the board on it. No brick stagger: a frame
+    // is as wide as its case and overlaps nothing.
+    const i = gtcIds.length, y = row0 + maxTop * PITCH_HALF_Y, x = spanCenter(u);
+    inst.push({ id: `gtc${i}`, node: `GlassTopCover_${L}-${u.w}W`, pos: [x, y, 0] });
+    inst.push({ id: `glass${i}`, node: `GlassTop_${L}-${u.w}W`, pos: [x, y + GLASS_TOP.glassSeat, 0] });
+    gtcIds.push(`gtc${i}`); glassIds.push(`glass${i}`);
+    add(`GlassTopCover_${L}-${u.w}W`, `Glass Top Cover ${L}-${u.w}W`, 'CoverGlass', links.glassTop, 1, false, false,
+      { requirement: REQ.core('top.enclosure') });
+    add(`GlassTop_${L}-${u.w}W`, `Tempered glass cutting board ${GLASS_TOP.board[u.w]}`, 'GlassTop', { buy: BUY.glassBoard[u.w] }, 1, true, false,
+      { requirement: REQ.core('top.enclosure') }, 'About 3 mm thick · its own rubber feet sit in the frame’s grooves.');
+  });
+  if (!glassTop) coverRuns.forEach(r => {
     const n = r.c1 - r.c0 + 1;
     const clY = row0 + r.top * PITCH_HALF_Y;
     // CL/CU brick-stagger like the rails: seams offset so the CU ties the CLs
@@ -2570,6 +2644,23 @@ export function generateManifest(build, opts = {}) {
       inst.push({ id: `dm${i}`, node: 'Magnet_10x2mm', pos: [dx, bottom + 5.72 + drwH - 15, -84 + dz + drwFwd], rides: `drw${i}`, owner: u.id });
     }
     const magIds = hasMag ? [{ id: `dc${i}` }, { id: `dm${i}` }] : []; // clip+magnet riders, or none
+    // a drawer insert drops onto the drawer's floor and rides it; a few cups stand in it for illustration
+    const ins = insertOf(L, u), insIds = [];
+    if (ins) {
+      const cav = ins.cavity[isClassic ? 'classic' : 'decor'];
+      const ix = cx + 0.16, iy = bottom + 5.72 + cav.floor, iz = (isClassic ? classicZ : 5.24) + drwFwd + cav.cz;
+      inst.push({ id: `ins${i}`, node: ins.node(L, u.w), pos: [ix, iy + 0.1, iz], rides: `drw${i}`, owner: u.id });
+      insIds.push(`ins${i}`);
+      add(ins.node(L, u.w), `${ins.label} ${L}-${u.w}W`, 'Insert', links.glassTop, 1, false, false, {
+        requirement: REQ.option('drawer.insert', `drawer.insert.${u.insert}`),
+        basis: REQ.basis('drawer.insert', u.insert, 'unit', 1),
+      });
+      ins.shown[u.w].forEach(([a, b], k) => {
+        inst.push({ id: `kc${i}_${k}`, node: 'KCup', pos: [ix + ins.holesX[u.w][a], iy, iz + KCUP_Z[b]], rides: `drw${i}`, type: 'KCup', prop: true });   // no row of its own: an illustration, never billed
+        insIds.push(`kc${i}_${k}`);
+      });
+    }
+    const cupIds = insIds.slice(1);
     if (firstDrawerDemo === null) {
       firstDrawerDemo = i;
       drawerPhases.push({ enter: [{ id: `drw${i}`, at: [0, 0, drwPop], from: [0, 0, 60] }] });
@@ -2578,9 +2669,14 @@ export function generateManifest(build, opts = {}) {
         { enter: [{ id: `dm${i}`, at: [0, 35, drwPop], from: [0, 0, 30] }] },
         { move: [{ id: `dc${i}`, by: [0, -35, 0] }, { id: `dm${i}`, by: [0, -35, 0] }] },
       );
-      drawerPhases.push({ move: [{ id: `drw${i}`, by: [0, 0, -drwPop] }, ...magIds.map(m => ({ id: m.id, by: [0, 0, -drwPop] }))] });
+      if (ins) drawerPhases.push(
+        { enter: [{ id: insIds[0], at: [0, 0, drwPop], from: [0, 70, 0] }] },
+        { enter: cupIds.map(id => ({ id, at: [0, 0, drwPop], from: [0, 60, 0] })) },
+      );
+      drawerPhases.push({ move: [{ id: `drw${i}`, by: [0, 0, -drwPop] }, ...[...magIds.map(m => m.id), ...insIds].map(id => ({ id, by: [0, 0, -drwPop] }))] });
     } else {
       if (hasMag) drawerFades.push({ id: `dc${i}` }, { id: `dm${i}` });
+      insIds.forEach(id => drawerFades.push({ id }));
       drawerPhases._laterDrawers = (drawerPhases._laterDrawers || []).concat({ id: `drw${i}`, from: [0, 0, drwPop + 10] });
     }
     if (isClassic) return; // the classic drawer IS its own front — no plate, no dressing
@@ -2889,7 +2985,34 @@ export function generateManifest(build, opts = {}) {
   // wall covers were already attached to the top cases (before hanging), so they
   // aren't a separate step here.
   const postSteps = [];
-  if (!hangs) {
+  if (glassTop) {
+    const topQls = [];
+    units.forEach((v, j) => { if (v.topIdx === maxTop) topQls.push(`ql${j}L`, `ql${j}R`); });
+    postSteps.push({
+      title: gtcIds.length > 1 ? 'Glass top covers' : 'Glass top cover',
+      // Joey's words where he has them (the kit video, uploaded 2025-12-10, transcribed 2026-11-25): "our frame for our
+      // tempered glass ... you slide this on and snaps in place"
+      note: (gtcIds.length > 1 ? 'Slide a frame for the tempered glass onto each top case from the back until it snaps in place.'
+        : 'Slide the frame for the tempered glass onto the top from the back until it snaps in place.') +
+        ' One frame takes the place of both the lower and the upper cover, and the drawer under it gets no stoppers.' +
+        (gtcIds.length > 1 ? ' The frames don’t overlap, so they don’t tie the cases together across the top · only the foot rails do.' : ''),
+      camera: cam(0, H_MM, totalW, gridBottom, FIT),
+      phases: [
+        { enter: gtcIds.map(id => ({ id, from: [0, 0, slideBack] })), dip: dipItems(topQls, Math.abs(slideBack)) },
+        { pop: popItems(topQls) },
+      ],
+    });
+    postSteps.push({
+      title: 'Set the glass',
+      // "it's got the indents for the rubber feet on the cutting board ... It's just sitting on there and it's not going
+      // anywhere unless you take it off ... If the feet don't match ... they're just stuck on there" (Joey, same video)
+      note: (glassIds.length > 1 ? 'Set a tempered glass cutting board on each frame' : 'Set the tempered glass cutting board on the frame') +
+        ', feet down · its rubber feet sit in the frame’s indents. It just sits there and is not going anywhere unless you take it off.' +
+        ' If the feet on your board don’t line up, they are only stuck on: peel them off and move them.',
+      camera: cam(0, H_MM, totalW, gridBottom, FIT),
+      phases: [{ enter: glassIds.map(id => ({ id, from: [0, 60, 0] })) }],
+    });
+  } else if (!hangs) {
     postSteps.push({
       title: clIds.length > 1 ? 'Lower covers' : 'Lower cover',
       note: 'The lower covers slide over the top from the back · the top cases’ QuickLocks lock them.' +
@@ -2936,6 +3059,7 @@ export function generateManifest(build, opts = {}) {
       note: (anyMagnet
         ? 'Before a magnet-closure drawer goes in: snap a clip into its back-wall slot and press in the magnet, front to back. Then slide each drawer in from the front.'
         : 'Slide each drawer in from the front.') +
+        (units.some(u => insertOf(L, u)) ? ' A drawer with an insert gets it first: drop the insert in, holes up, then stand the cups in it.' : '') +
         // classic-only builds end here — no faceplate step follows
         (firstFpDemo === null ? ' The build is done · tap any part to see its name and download links.' : ''),
       // under-table drawers live below eye level — shoot from just under the horizon
@@ -3032,6 +3156,11 @@ export function generateManifest(build, opts = {}) {
       // only when a cover is drawn: a build whose exposed ends are all too tall for one emits no colour for it
       ...(inst.some(i => i.node.startsWith('SideCover_')) ? SIDE_COVER_COLOR : {}),
       ...(cabinets.length ? CABINET_COLORS : {}),
+      // the bought glass board and the illustration cups ride in conditionally too, shown as what they are. The
+      // printed frame and the insert carry NO colour of their own: they follow the Cover Lower and the drawer body
+      // (PALETTE_PARENT), in the guide's colours and in a palette alike (Joey: "use the cl instruction color").
+      ...(glassTop ? { GlassTop: '#cfe9ee' } : {}),
+      ...(units.some(u => insertOf(L, u)) ? { KCup: '#f1ede4' } : {}),
     },
     parts: [...bom.values()],
     instances: inst,
@@ -3709,7 +3838,10 @@ export function paletteKeyOf(key) {
    hinges are always visible and the closure hardware are only visible once opened"); until they do, both follow the
    QuickLocks, so every palette, preset and look that never named them paints them as it did when they were QuickLock
    rows. No identification colour of their own either: the guide shows them in the QuickLock's. Null: follows nothing. */
-export const PALETTE_PARENT = { CabinetHinge: 'QuickLock', CabinetLatch: 'QuickLock' };
+export const PALETTE_PARENT = { CabinetHinge: 'QuickLock', CabinetLatch: 'QuickLock',
+  // a glass top's printed frame is a cover and a drawer's insert is drawer plastic (2026-11-25): each follows that
+  // part until it is picked apart, and the guide shows it in that part's colour
+  CoverGlass: 'CoverL', Insert: 'Drawer' };
 export function paletteParentOf(key) {
   const s = String(key), i = s.indexOf(':');
   return i > 0 ? s.slice(0, i) : (Object.hasOwn(PALETTE_PARENT, s) ? PALETTE_PARENT[s] : null);

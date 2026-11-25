@@ -3490,7 +3490,18 @@ const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xb9bcc2, roughness:
 const zoneKey = (type, zone) => zone ? `${type}:${zone}` : type;
 function ensureMaterials() { // one shared material per type/zone key (idempotent across re-mounts)
   for (const [key, hex] of Object.entries(manifest.colors))
-    if (!materials[key]) materials[key] = skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key))));
+    if (!materials[key]) materials[key] = glassPatched(key, skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key)))));
+}
+/* The bought tempered glass board of a glass top (generate.js GLASS_TOP) is the one part drawn see-through: it is
+   glass, and the whole point of the top is the view of what is under it. depthWrite stays off so the frame, the
+   drawer and the cups behind it are never culled by the pane in front of them. */
+const GLASS_OPACITY = 0.26;
+function glassPatched(key, m) {
+  if (key !== 'GlassTop') return m;
+  // its polish and reflection are its FINISH (part-material.js, 'GlassTop'); here it only becomes see-through. The
+  // rest opacity is recorded for the step fades (restOf), which would otherwise fade it back in to solid.
+  m.transparent = true; m.opacity = GLASS_OPACITY; m.userData.rest = GLASS_OPACITY; m.depthWrite = false;
+  return m;
 }
 /* the see-into experiment's patch on the back cover material, or the material unchanged (see-into.js) */
 /* ---------------------------------------------------------------- supported translucent previews (Astra 2026-09-17)
@@ -3654,7 +3665,7 @@ function seeIntoPatched(key, m) {
 }
 function baseMatFor(type, zone = '') { // shared material per (type, zone) — zones build lazily off the active palette
   const key = zoneKey(type, zone);
-  if (!materials[key]) materials[key] = skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key))));
+  if (!materials[key]) materials[key] = glassPatched(key, skinPatched(key, seamPatched(key, seeIntoPatched(key, newPartMaterial(key)))));
   return materials[key];
 }
 /* COVER SEAMS (2026-10-21, js/cover-seam.js): the Cover Lower and Cover Upper tiles butt with no gap, so in one filament a
@@ -9864,7 +9875,7 @@ canvas.addEventListener('pointerup', e => {
   ), camera);
   // faceplate isolation: only the plate + its dressing are tappable (mid-fade
   // parts are still technically visible — anything else counts as empty space)
-  const pickable = [...instances.values()].filter(i => i.group.visible &&
+  const pickable = [...instances.values()].filter(i => i.group.visible && !i.cfg.prop &&
     (!fpFocus.id || i.cfg.id === fpFocus.id || fpFocus.mates.has(i.cfg.id)));
   const hits = ray.intersectObjects(pickable.map(i => i.group), true);
   if (measure.on) { // measure mode swallows taps: surface point, not part identity
@@ -10772,7 +10783,7 @@ function keysInBuild() {
   let mixing = 0, slots = null;
   for (const inst of instances.values()) { if (!inst.group) continue; const s = liveStrips(inst); if (s) { mixing++; slots = s.slots; } }
   if (mixing) for (let i = 2; i <= slots.length; i++) out.set(slotKey(i), { key: slotKey(i), type: 'Faceplate', zone: `FACE/${i}`, follows: null, count: mixing, locked: false, own: 0, ownColor: true, slot: i });
-  const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'CabinetHinge', 'CabinetLatch', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
+  const order = ['Case', 'CaseExtender', 'SideCover', 'Drawer', 'Faceplate', 'Accent', 'Label', 'Handle', 'ShelfInsert', 'ShelfLip', 'BackCover', 'CoverU', 'CoverL', 'CoverGlass', 'Insert', 'FootrailU', 'FootrailL', 'Foot', 'Rail', 'Bracket', 'QuickLock', 'CabinetHinge', 'CabinetLatch', 'Stopper', 'MagnetClip', 'Magnet', 'Screw'];
   const rank = k => { const i = order.indexOf(k.split(':')[0]); return (i < 0 ? 99 : i) * 10 + (k.includes(':') ? 1 : 0); };
   return [...out.values()].sort((a, b) => rank(a.key) - rank(b.key) || a.key.localeCompare(b.key));
 }
@@ -12147,7 +12158,7 @@ async function regenerate(pre) {
 // the site's square 300px column and a full-width phone both fill correctly.
 const PART_CAM = {
   Faceplate: { t: 24, p: 72 }, BackCover: { t: 24, p: 72 },
-  CoverL: { t: 30, p: 52 }, CoverU: { t: 30, p: 52 },
+  CoverL: { t: 30, p: 52 }, CoverU: { t: 30, p: 52 }, CoverGlass: { t: 30, p: 52 },
   FootrailL: { t: 30, p: 52 }, FootrailU: { t: 30, p: 52 }, Rail: { t: 30, p: 52 },
   Bracket: { t: 30, p: 52 }, // wall-bracket sections read like rails (2026-08-20)
   // hardware (2026-08-20): stoppers lie flat — the default 3/4 box angle reads
@@ -12963,6 +12974,8 @@ for (const m of ['toDataURL', 'toBlob']) {
     async setBackCover(v) { track('opt:backcover:' + (v ? 'on' : 'off')); build.backCover = !!v; await regenerate(); },
     async setSideCovers(v) { track('opt:sidecovers:' + (v ? 'on' : 'off')); build.sideCovers = !!v; await regenerate(); },   // the generator reads build.sideCovers === false
     async setFeet(v) { track('opt:feet:' + v); build.feet = v; await regenerate(); },
+    // the top cover style: 'glass' or 'standard', the two cover layers (generate.js GLASS_TOP)
+    async setTopCover(v) { track('opt:topcover:' + (v === 'glass' ? 'glass' : 'standard')); build.topCover = v === 'glass' ? 'glass' : 'standard'; await regenerate(); },
     /* the cabinets' door style (2026-11-23): one per build, like the faceplate family; only a style the catalog lists and
        has released is taken (a "Soon" style would draw the Essential door with a warning, generate.js CABINET.styles) */
     async setDoorStyle(id) {

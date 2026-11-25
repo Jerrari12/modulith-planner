@@ -209,5 +209,5 @@ test('the hinges and latches are rows of their own that follow the QuickLocks un
   assert.equal(paletteParentOf('Faceplate:FACE'), 'Faceplate', 'a zone still follows its body');
   assert.equal(paletteParentOf('QuickLock'), null);
   assert.equal(paletteParentOf('constructor'), null, 'a name on Object.prototype follows nothing');
-  assert.deepEqual(Object.keys(PALETTE_PARENT).sort(), ['CabinetHinge', 'CabinetLatch']);
+  assert.deepEqual(Object.keys(PALETTE_PARENT).sort(), ['CabinetHinge', 'CabinetLatch', 'CoverGlass', 'Insert']);   // + the glass top's frame and the drawer insert (2026-11-25)
 });

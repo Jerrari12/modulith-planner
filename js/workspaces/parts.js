@@ -70,7 +70,8 @@ export function chipFor(name) {
   if (/Cabinet Hinge|Door Latch/.test(name)) return '#14B8A6';   // Assemble draws them in the QuickLock's hue (generate.js PALETTE_PARENT)
   if (/Magnet Clip/.test(name)) return '#8B5CF6';
   if (/Cover Upper/.test(name)) return '#7CC25A';
-  if (/Cover Lower/.test(name)) return '#2E9E4F';
+  if (/Cover Lower|Glass Top Cover/.test(name)) return '#2E9E4F';   // the glass top's frame wears the Cover Lower's hue (generate.js PALETTE_PARENT)
+  if (/K-cup Insert/.test(name)) return '#2F4A9E';                   // a drawer insert the drawer's
   if (/Foot ?rail/i.test(name)) return '#3B82F6';
   if (/Faceplate|Back Cover/.test(name)) return '#F28C28';
   if (/Handle/.test(name)) return '#2BB3A3';
@@ -93,6 +94,8 @@ export function typeOf(name) {
   if (/Magnet Clip/.test(name)) return 'MagnetClip';
   if (/Cover Upper/.test(name)) return 'CoverU';
   if (/Cover Lower/.test(name)) return 'CoverL';
+  if (/Glass Top Cover/.test(name)) return 'CoverGlass';
+  if (/K-cup Insert/.test(name)) return 'Insert';   // before the Drawer rule: its page name carries no "Drawer", but keep it explicit
   if (/Foot ?rail Upper/i.test(name)) return 'FootrailU';
   if (/Foot ?rail Lower/i.test(name)) return 'FootrailL';
   if (/Back Cover/.test(name)) return 'BackCover';

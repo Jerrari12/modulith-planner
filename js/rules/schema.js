@@ -51,6 +51,9 @@ export const BUILD_FIELDS = ["mount", "length", "printer", "customBed", "spaceW"
   // the planner's own field (2026-10-20), not the old planner's: side covers on (the 2026-10-17 default, every build) or
   // off; absent in every older record and share link, which read as on
   "sideCovers",
+  // the top cover style (2026-11-25): "standard" = the two cover layers, "glass" = Glass Top Covers with a glass board
+  // on each top case (GEN2.glassTop); absent in every older record and share link, which read as "standard"
+  "topCover",
   // the planner's own field (2026-10-26): a part type's own build plate finish, { Faceplate: "holographic" }; a type
   // not in it follows buildPlate. Absent in every older record and share link, which read as {} - every part follows
   "plateParts",
@@ -285,6 +288,7 @@ export function sanitizeBuild(d, GEN2) {
   d.backCover = !!d.backCover;
   d.sideCovers = d.sideCovers !== false;   // only an explicit false switches them off; anything else is the default, on
   d.feet = d.feet === "adhesive" ? "adhesive" : "tpu";
+  d.topCover = d.topCover === "glass" ? "glass" : "standard";   // only an explicit "glass" switches it on; anything else is the standard covers
   /* ⚠ "powder" for a build with no stored plate, the same default a new build gets - including every
      share link, saved file and session from before the field existed. Joey's call, 2026-09-14:
      "yes, powder-coat as default"; the viewer's DEFAULT_PLATE reads them the same way, so the two
@@ -384,6 +388,8 @@ export function sanitizeBuild(d, GEN2) {
        unchanged. KEPT on a size with no Gridfinity version (billed standard
        there), the way "both" is kept on a lip, so the choice survives. */
     if (u.fill === "decor" && u.variant === "gridfinity") unit.variant = "gridfinity";
+    // drawer insert (2026-11-25): drawers only, a known id; ABSENCE is no insert, so nothing is written for it
+    if ((u.fill === "classic" || u.fill === "decor") && GEN2.inserts.some((k) => k.id === u.insert)) unit.insert = u.insert;
     // the parts drawer (M3): the third variant and its layout, the record's own fields; see cleanPartsLayout above
     if (u.fill === "decor" && u.variant === "parts") {
       unit.variant = "parts";

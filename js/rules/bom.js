@@ -59,6 +59,30 @@ export function computeBom(build, GEN2) {
       return true;
     });
   }
+  /* The glass top (GEN2.glassTop, 2026-11-25): on only where it can be built - a tabletop build in a length the frame
+     exists in, with a level top whose top cases are each a width a board exists for. Anywhere else the record's
+     topCover is ignored and the standard covers are billed, as the stage draws them (generate.js glassTopOk). */
+  function glassTopOn() {
+    const G = GEN2.glassTop;
+    if (build.topCover !== "glass" || build.mount !== "tabletop" || !G.lengths.includes(+build.length) || !build.placed.length) return false;
+    // ⚠ the SAME rule, step for step, as generate.js glassTopOk: every occupied column is a solid stack from the floor
+    // to the one top row, and every unit on that row is a width a board exists for. (Not topCases(): a 2W case on a
+    // 4W one is its only "top case", and would pass while half the lower case stands uncovered.)
+    const top = Math.min(...build.placed.map((p) => p.y)), floor = Math.max(...build.placed.map((p) => p.y + p.hh));
+    const cols = new Map();   // column -> the half-rows its units fill: a solid stack from the floor to the top row
+    build.placed.forEach((p) => { for (let c = p.x; c < p.x + p.w; c++) cols.set(c, (cols.get(c) || 0) + p.hh); });
+    if ([...cols.values()].some((h) => h !== floor - top)) return false;
+    return build.placed.filter((p) => p.y === top).every((p) => G.widths.includes(p.w));
+  }
+  // under the glass = on the top row. The stage's rule exactly (generate.js: u.topIdx === maxTop), not "nothing above".
+  const underGlass = (p) => p.y === Math.min(...build.placed.map((q) => q.y));
+  /* Drawer inserts (GEN2.inserts): the one a drawer is wearing, where its size takes it. A plain drawer only: a
+     Gridfinity, chip or parts drawer has its own interior. Kept on the record anywhere else, and billed as none. */
+  function insertOf(p) {
+    if ((p.fill !== "decor" && p.fill !== "classic") || p.variant) return null;
+    return GEN2.inserts.find((k) => k.id === p.insert && k.lengths.includes(+build.length) &&
+      k.widths.includes(p.w) && k.heights.includes(p.hh / 2)) || null;
+  }
   function columnRuns() {
     const cols = occupiedColumns();
     const runs = [];
@@ -244,6 +268,25 @@ export function computeBom(build, GEN2) {
         requirement: GEN2.req.enhancement("drawer.sample_chip_titles"),
       });
       sections.push({ title: "Drawers", items });
+    }
+    /* Drawer inserts (2026-11-25): one printed insert per drawer that chose one (GEN2.inserts). An OPTION of that
+       drawer: the drawer works without it, and nothing else in the build depends on it. */
+    {
+      const byPart = new Map();
+      build.placed.forEach((p) => {
+        const k = insertOf(p);
+        if (!k) return;
+        const name = k.part(len, p.w), cur = byPart.get(name) || { k, qty: 0 };
+        cur.qty += 1; byPart.set(name, cur);
+      });
+      if (byPart.size) sections.push({
+        title: "Drawer inserts",
+        items: [...byPart.entries()].sort().map(([name, { k, qty }]) => ({
+          name, qty, note: k.note, linkAs: k.page,
+          requirement: GEN2.req.option("drawer.insert", `drawer.insert.${k.id}`),
+          basis: GEN2.req.basis("drawer.insert", k.id, "unit", qty),
+        })),
+      });
     }
 
     if (inserts.size || lips.size || doors.size) {
@@ -489,6 +532,7 @@ export function computeBom(build, GEN2) {
        (stoppers seat into it, which is one of the reasons it can be required).
        One definition, so the stopper rows and the cover row cannot disagree
        about whether this build has stoppers at all. */
+    const glassOn = glassTopOn();   // a glass top: no stoppers under it, and a frame + a board per top case
     const hasUnitAbove = (p) => {
       for (let cx = p.x; cx < p.x + p.w; cx++) if (unitAt(cx, p.y - 1)) return true;
       return false;
@@ -576,7 +620,8 @@ export function computeBom(build, GEN2) {
       const keptCols = (p) => { let n = 0; for (let k = 0; k < p.w; k++) if (!removedStop.has(`${p.id}:${k}`) && !shelfAbove(p, p.x + k)) n++; return n; };
       const stopperW = build.placed
         .filter((p) => (p.fill === "classic" || p.fill === "decor") &&
-                       (build.mount !== "under-table" || hasUnitAbove(p)))
+                       (build.mount !== "under-table" || hasUnitAbove(p)) &&
+                       !(glassOn && underGlass(p)))           // no stoppers under a glass top
         .reduce((sum, p) => sum + keptCols(p), 0);
       if (stopperW) items.push(
         {
@@ -619,6 +664,7 @@ export function computeBom(build, GEN2) {
     const hasStoppers = build.placed.some((p) =>
       (p.fill === "classic" || p.fill === "decor") &&
       (build.mount !== "under-table" || hasUnitAbove(p)) &&
+      !(glassOn && underGlass(p)) &&
       Array.from({ length: p.w }, (_, k) => k)
         .some((k) => !removedStopCtx.has(`${p.id}:${k}`) && !shelfAbove(p, p.x + k)));
     const ctx = {
@@ -629,6 +675,8 @@ export function computeBom(build, GEN2) {
       wallStagger: build.wallStagger,
       feet: build.feet,                       // tabletop: "tpu" | "adhesive" (the BOM bills the pick)
       topCases: topCases().map((p) => p.w),   // top-row case widths (per-column covers)
+      // a glass top bills one frame + one board per top case: on a level top those are exactly the units on the top row
+      glassTop: glassOn ? build.placed.filter(underGlass).map((p) => p.w) : null,
       railMix: mix,
       railScrews: Object.entries(mix).reduce((sum, [w, n]) => sum + n * GEN2.railScrews(+w), 0),
       wallMix: mixOf(wallSections()),
