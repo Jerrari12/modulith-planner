@@ -629,6 +629,42 @@ test('a door row stays a Faceplate row with no colour of its own; only its MATER
   assert.equal(materialTypeOf('QuickLock', 'Door_Essential_1W-1H'), 'QuickLock', 'only a Faceplate row becomes a door material');
 });
 
+/* ── 8b. the cabinet knobs' own material (2026-11-25) ───────────────────────────────────── */
+
+/* A 1H door's knob is billed as a 'Handle' row, and drew the shared 'Handle' material, whose axis main.js's handlePoseNow
+   read off the FIRST Handle row. The knob row comes first, so in any build with a 1H cabinet the Deco handles lost their
+   confirmed finish (seen on screen 2026-11-25, High: the handle material carried no axis beside a 1H cabinet, [0, -1, 0]
+   without one). The knob now draws 'Knob', which has no pose, and handlePoseNow reads past it. */
+test("a cabinet knob draws its own plain material, coloured as a handle, and no longer decides the handles' pose", () => {
+  for (const node of ['Knob_Deco', 'Knob_BlockBar']) {
+    assert.equal(materialTypeOf('Handle', node), 'Knob', `${node} draws the knob material`);
+    assert.equal(materialTypeOf('Faceplate', node), 'Faceplate', 'only a Handle row becomes a knob material');
+  }
+  for (const node of ['Handle_Deco', 'Handle_BlockBar_B', 'Handle_Crystal_A']) assert.equal(materialTypeOf('Handle', node), 'Handle', `${node} stays a handle`);
+  /* no knob has a confirmed print pose, so its material carries no axis whatever the build's handle style */
+  for (const h of ['deco', 'blockbar_b', null]) assert.equal(buildAxisForType('Knob', 'essential', h), null, `a knob under ${h} handles`);
+  assert.deepEqual(buildAxisForType('Handle', 'essential', 'deco'), [0, -1, 0], 'and the Deco handle keeps its own');
+  for (const z of ['', ':FACE']) assert.equal(paletteKeyOf('Knob' + z), 'Handle' + z);
+  assert.equal(paletteKeyOf('Knobbly'), 'Knobbly', 'only the knob key and its zones map');
+  /* the premise of the fault, pinned: a build with a 1H cabinet and Deco-handle drawers lists the knob row first, whichever
+     unit is placed first, so a read of "the first Handle row" finds the knob */
+  const base = { mount: 'tabletop', length: 185, faceStyle: 'essential', doorStyle: 'essential', handleStyle: 'deco', feet: 'tpu',
+    removedStoppers: [], gridW: 3, gridH: 1, nextId: 3 };
+  const decor = { id: 'u1', x: 0, y: 0, w: 2, hh: 2, fill: 'decor' }, cab = { id: 'u2', x: 2, y: 0, w: 1, hh: 2, fill: 'cabinet' };
+  for (const placed of [[decor, cab], [{ ...cab, x: 0 }, { ...decor, x: 1 }]]) {
+    const gen = generateManifest({ ...base, placed });
+    assert.ok(gen.manifest, (gen.errors || []).join('; '));
+    const rows = gen.manifest.parts.filter((p) => p.type === 'Handle').map((p) => p.node);
+    assert.deepEqual(rows, ['Knob_Deco', 'Handle_Deco'], `the Handle rows, in order (${placed.map((u) => u.fill)})`);
+    assert.equal(rows.find((n) => materialTypeOf('Handle', n) === 'Handle'), 'Handle_Deco', 'reading past the knob finds the handle');
+    assert.equal('Knob' in gen.manifest.colors, false, 'the palette has no knob key: the knob follows the handle');
+  }
+  /* main.js: the build's handle style is read from a handle row, never a knob's, and the knob material is dropped with the handles' */
+  const main = readFileSync(join(root, 'js', 'main.js'), 'utf8');
+  assert.match(main, /const handlePoseNow = \(\) => handlePoseKey\(manifest\?\.parts\?\.find\(\(p\) => p\.type === 'Handle' && materialTypeOf\(p\.type, p\.node\) === 'Handle'\)/);
+  assert.match(main, /if \(drop\.has\('Handle'\)\) drop\.add\('Knob'\);/);
+});
+
 /* The real triangles, through bed-finish.js's own rule: a face takes the finish when its geometric normal points down the
    build axis and it lies within CONTACT_BAND_MM of the part's lowest plane along it. Areas in mm², by zone. */
 async function doorContact(node, axis) {
