@@ -20,6 +20,7 @@ import { lensDisk, lensShear, lightStride } from './lens.js';   // Very High's t
 import { PLATE_FINISHES, PLATE_LABELS, HOLO_OPACITY, plateFinishOf, createBedFinishUniforms, setBedFinish,
   setSettleDetail, settleDetailIsOn, applyBedFinish, bedFaceAttributes } from './bed-finish.js';
 import { SEAM_TYPES, createCoverSeamUniforms, applyCoverSeam, seamAttributes } from './cover-seam.js';
+import { GLASS_PANE, createGlassPaneUniforms, applyGlassPane } from './glass-pane.js';
 import { createSilkUniforms, applySilkAxis, silkTier } from './silk-axis.js';
 import { createGlitterUniforms, applyGlitter, glitterArm, glitterWanted, glitterTier, glitterTintOf } from './glitter.js';
 import { SKIN_MAP, createSkinMapUniforms, applySkinMap, packAtlas, showsFront, resampleMap, resampleFirstField, resampleField, decodePng, tableRows, firstRows, topRows, surfaceRows } from './skin-map.js';
@@ -3494,14 +3495,18 @@ function ensureMaterials() { // one shared material per type/zone key (idempoten
 }
 /* The bought tempered glass board of a glass top (generate.js GLASS_TOP) is the one part drawn see-through: it is
    glass, and the whole point of the top is the view of what is under it. depthWrite stays off so the frame, the
-   drawer and the cups behind it are never culled by the pane in front of them. */
-const GLASS_OPACITY = 0.26;
+   drawer and the cups behind it are never culled by the pane in front of them.
+   What makes it read as glass and not as air is js/glass-pane.js (Joey 2026-11-25: "it feels like air"): its
+   reflection at full strength, a mirror at a shallow angle, and a green edge. ?glass=flat draws the plain sheet
+   again, for comparison. */
+const GLASS_OPACITY = GLASS_PANE.rest;
+const glassU = createGlassPaneUniforms({ on: new URLSearchParams(location.search).get('glass') !== 'flat' });
 function glassPatched(key, m) {
   if (key !== 'GlassTop') return m;
-  // its polish and reflection are its FINISH (part-material.js, 'GlassTop'); here it only becomes see-through. The
-  // rest opacity is recorded for the step fades (restOf), which would otherwise fade it back in to solid.
+  // its polish and reflection are its FINISH (part-material.js, 'GlassTop'); here it becomes see-through. The rest
+  // opacity is recorded for the step fades (restOf), which would otherwise fade it back in to solid.
   m.transparent = true; m.opacity = GLASS_OPACITY; m.userData.rest = GLASS_OPACITY; m.depthWrite = false;
-  return m;
+  return applyGlassPane(m, { uniforms: glassU });
 }
 /* the see-into experiment's patch on the back cover material, or the material unchanged (see-into.js) */
 /* ---------------------------------------------------------------- supported translucent previews (Astra 2026-09-17)
